@@ -1,0 +1,16 @@
+name: flutter_studio
+description: A simple command-line application.
+version: 1.0.0
+# homepage: https://www.example.com
+
+environment:
+  sdk: '>=2.16.2 <3.0.0'
+  flutter: '>=2.10.0'
+
+dependencies:
+  flutter_test:
+    sdk: flutter
+  test:
+
+dev_dependencies:
+  lints: ^1.0.0
