@@ -1,4 +1,4 @@
-name: app
+name: flutter_studio_app
 description: A new Flutter project.
 
 # The following line prevents the package from being accidentally published to
@@ -27,8 +27,22 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  device_frame:
+  file_selector:
   flutter:
     sdk: flutter
+  flutter_highlight:
+  flutter_studio:
+    path: ../flutter_studio
+  flutter_svg:
+  flutter_web_plugins:
+    sdk: flutter
+  logging:
+  os_detect:
+  rxdart:
+  shelf:
+  shelf_router:
+  url_launcher:
 
 dev_dependencies:
   flutter_test:

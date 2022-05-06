@@ -1,10 +1,9 @@
-
-
 import 'package:flutter_studio/test.dart';
+import 'package:flutter_studio_example/main.dart';
 
 void main() {
   test('On-boarding', (tester) async {
-    // A test
+    await tester.pumpWidget(MyApp());
     await tester.tap(find.text(''));
   });
 

@@ -1,0 +1,16 @@
+.*
+_*
+
+!.gitignore
+!.github
+
+*.iml
+
+# Flutter-related
+**/Flutter/ephemeral/
+**/Pods/
+generated_plugin_registrant.dart
+
+# don't check in golden failure output
+**/failures/*.png
+

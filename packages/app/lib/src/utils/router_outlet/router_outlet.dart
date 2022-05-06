@@ -1,0 +1,121 @@
+import 'package:flutter/material.dart';
+import 'extensions.dart';
+import 'loading_page.dart';
+import 'path.dart';
+import 'provider.dart';
+import 'router_root.dart';
+
+typedef _RouteBuilder = Widget Function(MatchedPath);
+
+class RouterOutlet extends StatefulWidget {
+  final Map<String, _RouteBuilder> routes;
+  final String? Function(OnNotFoundEvent)? onNotFound;
+
+  const RouterOutlet(this.routes, {Key? key, this.onNotFound})
+      : super(key: key);
+
+  static Widget root({required Widget child}) => RouterRootAuto(child: child);
+
+  @override
+  _RouterOutletState createState() => _RouterOutletState();
+
+  static _RouterOutletState? parentOf(BuildContext context) {
+    return context.findAncestorStateOfType<_RouterOutletState>();
+  }
+}
+
+class _RouterOutletState extends State<RouterOutlet> {
+  final _entries = <_RouteEntry>[];
+  SubMatchTrackerState? _tracker;
+  MatchedPath? _lastMatched;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupEntries();
+  }
+
+  @override
+  void didUpdateWidget(covariant RouterOutlet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _setupEntries();
+  }
+
+  void _setupEntries() {
+    _entries.clear();
+
+    for (var route in widget.routes.entries) {
+      _entries.add(_RouteEntry(PathPattern(route.key), route.value));
+    }
+    _entries.sort((a, b) => b.pattern.length.compareTo(a.pattern.length));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var tracker = _tracker = SubMatchTracker.of(context);
+    var parentPath = MatchedPathProvider.of(context);
+
+    Exception? error;
+
+    try {
+      for (var routeEntry in _entries) {
+        var matched = parentPath.matchesRemaining(routeEntry.pattern);
+        if (matched != null) {
+          var widget = routeEntry.builder(matched);
+          if (matched != _lastMatched) {
+            tracker.removeSubMatch(_lastMatched);
+            tracker.addSubMatch(matched);
+            _lastMatched = matched;
+          }
+          return MatchedPathProvider(path: matched, child: widget);
+        }
+      }
+    } on Exception catch (e, stackTrace) {
+      debugPrint(
+          'Fail to build widget for route $parentPath:\n$e\n$stackTrace');
+      error = e;
+    }
+    tracker.removeSubMatch(_lastMatched);
+    _lastMatched = null;
+
+    var redirect =
+        widget.onNotFound?.call(OnNotFoundEvent(parentPath, error: error));
+    if (redirect != null) {
+      context.go(redirect);
+    } else {
+      // TODO(xha): Up the chain to call onNotFound. If nothing found, back to
+      // the root (and take the first path)
+    }
+
+    //TODO(xha): allow to customize (provide a builder at root) + provide a builder
+    // in outlet
+    // TODO(xha): allow _RouteBuilder to return a FutureOr<Widget> and return
+    // a RouteLoader() which handle the LoadingState & ErrorState
+    // => Maybe just easier to provide it as a utility class to return in the builder
+    // itself
+    return const LoadingPage();
+  }
+
+  @override
+  void dispose() {
+    _tracker?.removeSubMatch(_lastMatched);
+    super.dispose();
+  }
+}
+
+class OnNotFoundEvent {
+  final MatchedPath path;
+  final Exception? error;
+
+  OnNotFoundEvent(this.path, {this.error});
+}
+
+class _RouteEntry {
+  final PathPattern pattern;
+  final _RouteBuilder builder;
+
+  _RouteEntry(this.pattern, this.builder);
+
+  @override
+  String toString() => '_RouteEntry($pattern)';
+}
