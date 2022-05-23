@@ -6,7 +6,7 @@ part of 'run_args.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<RunArgs> _$runArgsSerializer = _$RunArgsSerializer();
+Serializer<RunArgs> _$runArgsSerializer = new _$RunArgsSerializer();
 
 class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
   @override
@@ -22,7 +22,8 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
       serializers.serialize(object.id, specifiedType: const FullType(int)),
       'scenarioName',
       serializers.serialize(object.scenarioName,
-          specifiedType: const FullType(BuiltList, [FullType(String)])),
+          specifiedType:
+              const FullType(BuiltList, const [const FullType(String)])),
       'device',
       serializers.serialize(object.device,
           specifiedType: const FullType(DeviceInfo)),
@@ -46,21 +47,22 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
   @override
   RunArgs deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = RunArgsBuilder();
+    final result = new RunArgsBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
-      final key = iterator.current as String;
+      final key = iterator.current! as String;
       iterator.moveNext();
       final Object? value = iterator.current;
       switch (key) {
         case 'id':
           result.id = serializers.deserialize(value,
-              specifiedType: const FullType(int)) as int;
+              specifiedType: const FullType(int))! as int;
           break;
         case 'scenarioName':
           result.scenarioName.replace(serializers.deserialize(value,
-                  specifiedType: const FullType(BuiltList, [FullType(String)]))!
+                  specifiedType: const FullType(
+                      BuiltList, const [const FullType(String)]))!
               as BuiltList<Object?>);
           break;
         case 'device':
@@ -74,15 +76,15 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
           break;
         case 'imageRatio':
           result.imageRatio = serializers.deserialize(value,
-              specifiedType: const FullType(double)) as double;
+              specifiedType: const FullType(double))! as double;
           break;
         case 'language':
           result.language = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String;
+              specifiedType: const FullType(String))! as String;
           break;
         case 'onlyWithDocumentationKey':
           result.onlyWithDocumentationKey = serializers.deserialize(value,
-              specifiedType: const FullType(bool)) as bool;
+              specifiedType: const FullType(bool))! as bool;
           break;
       }
     }
@@ -108,7 +110,7 @@ class _$RunArgs extends RunArgs {
   final bool onlyWithDocumentationKey;
 
   factory _$RunArgs([void Function(RunArgsBuilder)? updates]) =>
-      (RunArgsBuilder()..update(updates)).build();
+      (new RunArgsBuilder()..update(updates))._build();
 
   _$RunArgs._(
       {required this.id,
@@ -136,7 +138,7 @@ class _$RunArgs extends RunArgs {
       (toBuilder()..update(updates)).build();
 
   @override
-  RunArgsBuilder toBuilder() => RunArgsBuilder()..replace(this);
+  RunArgsBuilder toBuilder() => new RunArgsBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -188,17 +190,17 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
 
   ListBuilder<String>? _scenarioName;
   ListBuilder<String> get scenarioName =>
-      _$this._scenarioName ??= ListBuilder<String>();
+      _$this._scenarioName ??= new ListBuilder<String>();
   set scenarioName(ListBuilder<String>? scenarioName) =>
       _$this._scenarioName = scenarioName;
 
   DeviceInfoBuilder? _device;
-  DeviceInfoBuilder get device => _$this._device ??= DeviceInfoBuilder();
+  DeviceInfoBuilder get device => _$this._device ??= new DeviceInfoBuilder();
   set device(DeviceInfoBuilder? device) => _$this._device = device;
 
   AccessibilityConfigBuilder? _accessibility;
   AccessibilityConfigBuilder get accessibility =>
-      _$this._accessibility ??= AccessibilityConfigBuilder();
+      _$this._accessibility ??= new AccessibilityConfigBuilder();
   set accessibility(AccessibilityConfigBuilder? accessibility) =>
       _$this._accessibility = accessibility;
 
@@ -244,11 +246,13 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
   }
 
   @override
-  _$RunArgs build() {
+  RunArgs build() => _build();
+
+  _$RunArgs _build() {
     _$RunArgs _$result;
     try {
       _$result = _$v ??
-          _$RunArgs._(
+          new _$RunArgs._(
               id: BuiltValueNullFieldError.checkNotNull(id, 'RunArgs', 'id'),
               scenarioName: scenarioName.build(),
               device: device.build(),
@@ -271,7 +275,7 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
         _$failedField = 'accessibility';
         accessibility.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError(
+        throw new BuiltValueNestedFieldError(
             'RunArgs', _$failedField, e.toString());
       }
       rethrow;
@@ -281,4 +285,4 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new

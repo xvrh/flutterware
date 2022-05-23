@@ -290,10 +290,7 @@ class WidgetTester extends WidgetController
       'therefore no restoration data has been collected to restore from. Did you forget to wrap '
       'your widget tree in a RootRestorationScope?',
     );
-    final Widget widget = (binding.renderViewElement!
-            as RenderObjectToWidgetElement<RenderObject>)
-        .widget
-        .child!;
+    final Widget widget = ((binding.renderViewElement! as RenderObjectToWidgetElement<RenderObject>).widget as RenderObjectToWidgetAdapter<RenderObject>).child!;
     final TestRestorationData restorationData =
         binding.restorationManager.restorationData;
     runApp(Container(key: UniqueKey()));

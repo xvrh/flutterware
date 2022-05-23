@@ -6,9 +6,9 @@ part of 'message.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-const MessageType _$request = MessageType._('request');
-const MessageType _$response = MessageType._('response');
-const MessageType _$error = MessageType._('error');
+const MessageType _$request = const MessageType._('request');
+const MessageType _$response = const MessageType._('response');
+const MessageType _$error = const MessageType._('error');
 
 MessageType _$valueOf(String name) {
   switch (name) {
@@ -19,23 +19,23 @@ MessageType _$valueOf(String name) {
     case 'error':
       return _$error;
     default:
-      throw ArgumentError(name);
+      throw new ArgumentError(name);
   }
 }
 
 final BuiltSet<MessageType> _$values =
-    BuiltSet<MessageType>(const <MessageType>[
+    new BuiltSet<MessageType>(const <MessageType>[
   _$request,
   _$response,
   _$error,
 ]);
 
-Serializers _$messageSerializers = (Serializers().toBuilder()
+Serializers _$messageSerializers = (new Serializers().toBuilder()
       ..add(Message.serializer)
       ..add(MessageType.serializer))
     .build();
-Serializer<Message> _$messageSerializer = _$MessageSerializer();
-Serializer<MessageType> _$messageTypeSerializer = _$MessageTypeSerializer();
+Serializer<Message> _$messageSerializer = new _$MessageSerializer();
+Serializer<MessageType> _$messageTypeSerializer = new _$MessageTypeSerializer();
 
 class _$MessageSerializer implements StructuredSerializer<Message> {
   @override
@@ -83,33 +83,33 @@ class _$MessageSerializer implements StructuredSerializer<Message> {
   @override
   Message deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = MessageBuilder();
+    final result = new MessageBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
-      final key = iterator.current as String;
+      final key = iterator.current! as String;
       iterator.moveNext();
       final Object? value = iterator.current;
       switch (key) {
         case 'type':
           result.type = serializers.deserialize(value,
-              specifiedType: const FullType(MessageType)) as MessageType;
+              specifiedType: const FullType(MessageType))! as MessageType;
           break;
         case 'id':
           result.id = serializers.deserialize(value,
-              specifiedType: const FullType(int)) as int;
+              specifiedType: const FullType(int))! as int;
           break;
         case 'channel':
           result.channel = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String;
+              specifiedType: const FullType(String))! as String;
           break;
         case 'method':
           result.method = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String;
+              specifiedType: const FullType(String))! as String;
           break;
         case 'serializedParameter1':
           result.serializedParameter1 = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String;
+              specifiedType: const FullType(String))! as String;
           break;
         case 'serializedParameter2':
           result.serializedParameter2 = serializers.deserialize(value,
@@ -160,7 +160,7 @@ class _$Message extends Message {
   final String? serializedParameter3;
 
   factory _$Message([void Function(MessageBuilder)? updates]) =>
-      (MessageBuilder()..update(updates)).build();
+      (new MessageBuilder()..update(updates))._build();
 
   _$Message._(
       {required this.type,
@@ -184,7 +184,7 @@ class _$Message extends Message {
       (toBuilder()..update(updates)).build();
 
   @override
-  MessageBuilder toBuilder() => MessageBuilder()..replace(this);
+  MessageBuilder toBuilder() => new MessageBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -290,9 +290,11 @@ class MessageBuilder implements Builder<Message, MessageBuilder> {
   }
 
   @override
-  _$Message build() {
+  Message build() => _build();
+
+  _$Message _build() {
     final _$result = _$v ??
-        _$Message._(
+        new _$Message._(
             type:
                 BuiltValueNullFieldError.checkNotNull(type, 'Message', 'type'),
             id: BuiltValueNullFieldError.checkNotNull(id, 'Message', 'id'),
@@ -309,4 +311,4 @@ class MessageBuilder implements Builder<Message, MessageBuilder> {
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new

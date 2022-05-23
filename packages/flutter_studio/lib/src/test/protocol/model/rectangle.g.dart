@@ -6,7 +6,7 @@ part of 'rectangle.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<Rectangle> _$rectangleSerializer = _$RectangleSerializer();
+Serializer<Rectangle> _$rectangleSerializer = new _$RectangleSerializer();
 
 class _$RectangleSerializer implements StructuredSerializer<Rectangle> {
   @override
@@ -36,29 +36,29 @@ class _$RectangleSerializer implements StructuredSerializer<Rectangle> {
   @override
   Rectangle deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = RectangleBuilder();
+    final result = new RectangleBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
-      final key = iterator.current as String;
+      final key = iterator.current! as String;
       iterator.moveNext();
       final Object? value = iterator.current;
       switch (key) {
         case 'left':
           result.left = serializers.deserialize(value,
-              specifiedType: const FullType(double)) as double;
+              specifiedType: const FullType(double))! as double;
           break;
         case 'top':
           result.top = serializers.deserialize(value,
-              specifiedType: const FullType(double)) as double;
+              specifiedType: const FullType(double))! as double;
           break;
         case 'right':
           result.right = serializers.deserialize(value,
-              specifiedType: const FullType(double)) as double;
+              specifiedType: const FullType(double))! as double;
           break;
         case 'bottom':
           result.bottom = serializers.deserialize(value,
-              specifiedType: const FullType(double)) as double;
+              specifiedType: const FullType(double))! as double;
           break;
       }
     }
@@ -78,7 +78,7 @@ class _$Rectangle extends Rectangle {
   final double bottom;
 
   factory _$Rectangle([void Function(RectangleBuilder)? updates]) =>
-      (RectangleBuilder()..update(updates)).build();
+      (new RectangleBuilder()..update(updates))._build();
 
   _$Rectangle._(
       {required this.left,
@@ -97,7 +97,7 @@ class _$Rectangle extends Rectangle {
       (toBuilder()..update(updates)).build();
 
   @override
-  RectangleBuilder toBuilder() => RectangleBuilder()..replace(this);
+  RectangleBuilder toBuilder() => new RectangleBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -172,9 +172,11 @@ class RectangleBuilder implements Builder<Rectangle, RectangleBuilder> {
   }
 
   @override
-  _$Rectangle build() {
+  Rectangle build() => _build();
+
+  _$Rectangle _build() {
     final _$result = _$v ??
-        _$Rectangle._(
+        new _$Rectangle._(
             left: BuiltValueNullFieldError.checkNotNull(
                 left, 'Rectangle', 'left'),
             top: BuiltValueNullFieldError.checkNotNull(top, 'Rectangle', 'top'),
@@ -187,4 +189,4 @@ class RectangleBuilder implements Builder<Rectangle, RectangleBuilder> {
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new

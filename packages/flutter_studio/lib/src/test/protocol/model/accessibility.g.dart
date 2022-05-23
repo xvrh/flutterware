@@ -7,7 +7,7 @@ part of 'accessibility.dart';
 // **************************************************************************
 
 Serializer<AccessibilityConfig> _$accessibilityConfigSerializer =
-    _$AccessibilityConfigSerializer();
+    new _$AccessibilityConfigSerializer();
 
 class _$AccessibilityConfigSerializer
     implements StructuredSerializer<AccessibilityConfig> {
@@ -39,21 +39,21 @@ class _$AccessibilityConfigSerializer
   AccessibilityConfig deserialize(
       Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = AccessibilityConfigBuilder();
+    final result = new AccessibilityConfigBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
-      final key = iterator.current as String;
+      final key = iterator.current! as String;
       iterator.moveNext();
       final Object? value = iterator.current;
       switch (key) {
         case 'textScale':
           result.textScale = serializers.deserialize(value,
-              specifiedType: const FullType(double)) as double;
+              specifiedType: const FullType(double))! as double;
           break;
         case 'boldText':
           result.boldText = serializers.deserialize(value,
-              specifiedType: const FullType(bool)) as bool;
+              specifiedType: const FullType(bool))! as bool;
           break;
       }
     }
@@ -70,7 +70,7 @@ class _$AccessibilityConfig extends AccessibilityConfig {
 
   factory _$AccessibilityConfig(
           [void Function(AccessibilityConfigBuilder)? updates]) =>
-      (AccessibilityConfigBuilder()..update(updates)).build();
+      (new AccessibilityConfigBuilder()..update(updates))._build();
 
   _$AccessibilityConfig._({required this.textScale, required this.boldText})
       : super._() {
@@ -87,7 +87,7 @@ class _$AccessibilityConfig extends AccessibilityConfig {
 
   @override
   AccessibilityConfigBuilder toBuilder() =>
-      AccessibilityConfigBuilder()..replace(this);
+      new AccessibilityConfigBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -147,9 +147,11 @@ class AccessibilityConfigBuilder
   }
 
   @override
-  _$AccessibilityConfig build() {
+  AccessibilityConfig build() => _build();
+
+  _$AccessibilityConfig _build() {
     final _$result = _$v ??
-        _$AccessibilityConfig._(
+        new _$AccessibilityConfig._(
             textScale: BuiltValueNullFieldError.checkNotNull(
                 textScale, 'AccessibilityConfig', 'textScale'),
             boldText: BuiltValueNullFieldError.checkNotNull(
@@ -159,4 +161,4 @@ class AccessibilityConfigBuilder
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new

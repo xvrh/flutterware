@@ -74,7 +74,7 @@ class _RunViewState extends State<RunView> {
       stream: run.onUpdated,
       initialData: run.value,
       builder: (context, snapshot) {
-        WidgetsBinding.instance!.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
           ProjectView.of(context).header.setScreen(null);
           ProjectView.of(context).header.setRun(null);
         });
@@ -89,7 +89,7 @@ class _RunViewState extends State<RunView> {
           contentWidget = Container();
         } else {
           var run = snapshot.requireData;
-          WidgetsBinding.instance!.addPostFrameCallback((_) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
             ProjectView.of(context).header.setRun(run);
           });
           if (toolbarScope.isCollapsed) {

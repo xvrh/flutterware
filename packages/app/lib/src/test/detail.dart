@@ -21,7 +21,7 @@ class DetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var screen = run.screens[screenId];
-    WidgetsBinding.instance!.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       ProjectView.of(context).header.setScreen(screen);
     });
 

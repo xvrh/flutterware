@@ -6,8 +6,8 @@ part of 'device_info.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-const DevicePlatform _$android = DevicePlatform._('android');
-const DevicePlatform _$ios = DevicePlatform._('iOS');
+const DevicePlatform _$android = const DevicePlatform._('android');
+const DevicePlatform _$ios = const DevicePlatform._('iOS');
 
 DevicePlatform _$vlOf(String name) {
   switch (name) {
@@ -16,19 +16,19 @@ DevicePlatform _$vlOf(String name) {
     case 'iOS':
       return _$ios;
     default:
-      throw ArgumentError(name);
+      throw new ArgumentError(name);
   }
 }
 
 final BuiltSet<DevicePlatform> _$vls =
-    BuiltSet<DevicePlatform>(const <DevicePlatform>[
+    new BuiltSet<DevicePlatform>(const <DevicePlatform>[
   _$android,
   _$ios,
 ]);
 
-Serializer<DeviceInfo> _$deviceInfoSerializer = _$DeviceInfoSerializer();
+Serializer<DeviceInfo> _$deviceInfoSerializer = new _$DeviceInfoSerializer();
 Serializer<DevicePlatform> _$devicePlatformSerializer =
-    _$DevicePlatformSerializer();
+    new _$DevicePlatformSerializer();
 
 class _$DeviceInfoSerializer implements StructuredSerializer<DeviceInfo> {
   @override
@@ -67,37 +67,37 @@ class _$DeviceInfoSerializer implements StructuredSerializer<DeviceInfo> {
   @override
   DeviceInfo deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = DeviceInfoBuilder();
+    final result = new DeviceInfoBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
-      final key = iterator.current as String;
+      final key = iterator.current! as String;
       iterator.moveNext();
       final Object? value = iterator.current;
       switch (key) {
         case 'id':
           result.id = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String;
+              specifiedType: const FullType(String))! as String;
           break;
         case 'name':
           result.name = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String;
+              specifiedType: const FullType(String))! as String;
           break;
         case 'platform':
           result.platform = serializers.deserialize(value,
-              specifiedType: const FullType(DevicePlatform)) as DevicePlatform;
+              specifiedType: const FullType(DevicePlatform))! as DevicePlatform;
           break;
         case 'width':
           result.width = serializers.deserialize(value,
-              specifiedType: const FullType(double)) as double;
+              specifiedType: const FullType(double))! as double;
           break;
         case 'height':
           result.height = serializers.deserialize(value,
-              specifiedType: const FullType(double)) as double;
+              specifiedType: const FullType(double))! as double;
           break;
         case 'pixelRatio':
           result.pixelRatio = serializers.deserialize(value,
-              specifiedType: const FullType(double)) as double;
+              specifiedType: const FullType(double))! as double;
           break;
         case 'safeArea':
           result.safeArea.replace(serializers.deserialize(value,
@@ -145,7 +145,7 @@ class _$DeviceInfo extends DeviceInfo {
   final Rectangle safeArea;
 
   factory _$DeviceInfo([void Function(DeviceInfoBuilder)? updates]) =>
-      (DeviceInfoBuilder()..update(updates)).build();
+      (new DeviceInfoBuilder()..update(updates))._build();
 
   _$DeviceInfo._(
       {required this.id,
@@ -171,7 +171,7 @@ class _$DeviceInfo extends DeviceInfo {
       (toBuilder()..update(updates)).build();
 
   @override
-  DeviceInfoBuilder toBuilder() => DeviceInfoBuilder()..replace(this);
+  DeviceInfoBuilder toBuilder() => new DeviceInfoBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -242,7 +242,7 @@ class DeviceInfoBuilder implements Builder<DeviceInfo, DeviceInfoBuilder> {
   set pixelRatio(double? pixelRatio) => _$this._pixelRatio = pixelRatio;
 
   RectangleBuilder? _safeArea;
-  RectangleBuilder get safeArea => _$this._safeArea ??= RectangleBuilder();
+  RectangleBuilder get safeArea => _$this._safeArea ??= new RectangleBuilder();
   set safeArea(RectangleBuilder? safeArea) => _$this._safeArea = safeArea;
 
   DeviceInfoBuilder();
@@ -274,11 +274,13 @@ class DeviceInfoBuilder implements Builder<DeviceInfo, DeviceInfoBuilder> {
   }
 
   @override
-  _$DeviceInfo build() {
+  DeviceInfo build() => _build();
+
+  _$DeviceInfo _build() {
     _$DeviceInfo _$result;
     try {
       _$result = _$v ??
-          _$DeviceInfo._(
+          new _$DeviceInfo._(
               id: BuiltValueNullFieldError.checkNotNull(id, 'DeviceInfo', 'id'),
               name: BuiltValueNullFieldError.checkNotNull(
                   name, 'DeviceInfo', 'name'),
@@ -297,7 +299,7 @@ class DeviceInfoBuilder implements Builder<DeviceInfo, DeviceInfoBuilder> {
         _$failedField = 'safeArea';
         safeArea.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError(
+        throw new BuiltValueNestedFieldError(
             'DeviceInfo', _$failedField, e.toString());
       }
       rethrow;
@@ -307,4 +309,4 @@ class DeviceInfoBuilder implements Builder<DeviceInfo, DeviceInfoBuilder> {
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new

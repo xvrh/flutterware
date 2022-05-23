@@ -15,8 +15,6 @@ class ListingHost {
     var result = (await _channel.sendRequest<BuiltList>('list'))
         .cast<ScenarioReference>();
 
-    //TODO(xha): should only update the names of the scenario + a flag saying that it may be dirty.
-    // + remove the one not there anymore.
     var oldMap = allScenarios.value;
     var newScenarios = oldMap.rebuild((b) {
       b.clear();

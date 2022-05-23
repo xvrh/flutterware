@@ -389,6 +389,7 @@ abstract class Scenario {
 
     var device = args.device;
     var window = binding.window;
+    var platformDispatcher = binding.platformDispatcher;
     window.physicalSizeTestValue = Size(
         device.width * device.pixelRatio, device.height * device.pixelRatio);
     window.devicePixelRatioTestValue = device.pixelRatio;
@@ -399,10 +400,10 @@ abstract class Scenario {
           device.safeArea.right * device.pixelRatio,
           device.safeArea.bottom * device.pixelRatio),
     );
-    window.textScaleFactorTestValue = args.accessibility.textScale;
-    window.accessibilityFeaturesTestValue =
+    platformDispatcher.textScaleFactorTestValue = args.accessibility.textScale;
+    platformDispatcher.accessibilityFeaturesTestValue =
         _FakeAccessibilityFeatures(args.accessibility);
-    window.localesTestValue = [Locale('en', 'US')];
+    platformDispatcher.localesTestValue = [Locale('en', 'US')];
 
     _pathTracker = PathTracker();
     _previousScreens.clear();
@@ -485,4 +486,7 @@ class _FakeAccessibilityFeatures implements ui.AccessibilityFeatures {
 
   @override
   bool get reduceMotion => false;
+
+  @override
+  bool get onOffSwitchLabels => false;
 }
