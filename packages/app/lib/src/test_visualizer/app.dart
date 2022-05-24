@@ -15,7 +15,7 @@ class ScenarioAppWithServer extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _ScenarioAppWithServerState createState() => _ScenarioAppWithServerState();
+  State<ScenarioAppWithServer> createState() => _ScenarioAppWithServerState();
 }
 
 class _ScenarioAppWithServerState extends State<ScenarioAppWithServer> {
@@ -63,7 +63,6 @@ class ScenarioApp extends StatelessWidget {
         if (clients.isEmpty) {
           return _WaitingConnectionScreen();
         } else {
-          //TODO(xha): add a tab bar to handle several clients
           var client = clients.last;
           return ConnectedScreen(
             service,

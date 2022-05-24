@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:flutter_studio/src/server.dart';
-import 'package:flutter_studio/src/test/entry_point.dart';
-import 'package:flutter_studio/src/test/flutter_run_process.dart';
+import 'test_visualizer/server.dart';
+import 'package:flutter_studio/src/test_ui/entry_point.dart';
+import 'package:flutter_studio_app/src/utils/flutter_run_process.dart';
 import 'package:logging/logging.dart';
 import 'package:io/ansi.dart';
 import 'dart:io' as io;
@@ -24,10 +24,9 @@ void runCommandLine(List<String> args) async {
   //TODO(xha): we drop the server part
   // This is converted to be a tool for alternate purposes:
   //   dart run flutter_studio test_ui build web (deploy Web build of test_ui)
+  //   dart run flutter_studio test_ui test --name="xx"
   // Maybe move the code in app? and find a way to expose the CLI in the PATH
 
-
-  var server = await Server.start(port: port);
 
   // 1. Start a server with a random port
   // 2. Listen on a websocket for the UI to connect (allow multiple UI)

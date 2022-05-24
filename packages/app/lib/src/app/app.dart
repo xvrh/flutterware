@@ -1,7 +1,7 @@
 import '../utils/router_outlet.dart';
 import 'package:flutter/material.dart';
-import '../test/app.dart';
-import '../test/service.dart';
+import '../test_visualizer/app.dart';
+import '../test_visualizer/service.dart';
 import 'dashboard.dart';
 
 class DevStudioApp extends StatelessWidget {

@@ -46,7 +46,7 @@ class DirectGraph extends StatefulWidget {
   final EdgePathBuilder? pathBuilder;
 
   @override
-  _DirectGraphState createState() => _DirectGraphState();
+  State<DirectGraph> createState() => _DirectGraphState();
 
   static DirectGraph of(BuildContext context) =>
       context.findAncestorWidgetOfExactType<DirectGraph>()!;

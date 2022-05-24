@@ -10,7 +10,7 @@ class GraphiteGrid extends StatefulWidget {
     required this.matrix,
   });
   @override
-  _GraphiteGridState createState() => _GraphiteGridState();
+  State<GraphiteGrid> createState() => _GraphiteGridState();
 }
 
 class _GraphiteGridState extends State<GraphiteGrid> {

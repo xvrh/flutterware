@@ -37,14 +37,19 @@ dependencies:
   flutter_svg:
   flutter_web_plugins:
     sdk: flutter
+  io:
+  json_annotation:
   logging:
   os_detect:
+  path:
   rxdart:
   shelf:
   shelf_router:
   url_launcher:
 
 dev_dependencies:
+  build_runner:
+  json_serializable:
   flutter_test:
     sdk: flutter
   lints:

@@ -1,2 +1,2 @@
-export '../src/test/runtime/setup_web.dart';
-export '../src/test/web_channel.dart';
+export '../src/test_ui/runtime/setup_web.dart';
+export '../src/test_ui/web_channel.dart';

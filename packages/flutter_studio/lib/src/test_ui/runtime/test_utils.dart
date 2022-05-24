@@ -1,7 +1,7 @@
 import 'package:test/test.dart';
 
 void check(actual, matcher, {String? reason}) {
-  var formatter = (actual, Matcher matcher, String? reason, Map matchState) {
+  String formatter(actual, Matcher matcher, String? reason, Map matchState) {
     var mismatchDescription = StringDescription();
     matcher.describeMismatch(actual, mismatchDescription, matchState, false);
 

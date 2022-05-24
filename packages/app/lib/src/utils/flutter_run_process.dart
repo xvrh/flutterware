@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter_studio/src/daemon/commands.dart';
+import 'daemon/commands.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
-import '../daemon/events.dart';
-import '../daemon/protocol.dart';
+import 'daemon/events.dart';
+import 'daemon/protocol.dart';
 
 final _logger = Logger('flutter_daemon_process');
 
