@@ -1,25 +1,36 @@
+import 'package:flutter_studio_app/src/app/project_tabs.dart';
+
 import '../utils/router_outlet.dart';
 import 'package:flutter/material.dart';
 import '../test_visualizer/app.dart';
 import '../test_visualizer/service.dart';
-import 'dashboard.dart';
+import 'home.dart';
 
-class DevStudioApp extends StatelessWidget {
-  const DevStudioApp({Key? key}) : super(key: key);
+class StudioApp extends StatelessWidget {
+  const StudioApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return RouterOutlet.root(
       child: MaterialApp(
-        title: 'Dev Studio',
-        home: DashboardScreen(
-          scenario: ScenarioAppWithServer(
-            serviceFactory: (clients) => ScenarioService(clients),
-          ),
-        ),
+        title: 'Flutter Studio',
+        home: Scaffold(body: _App()),
         initialRoute: '/',
         debugShowCheckedModeBanner: false,
       ),
+    );
+  }
+}
+
+class _App extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ProjectTabs(),
+        Expanded(child: HomeScreen()),
+      ],
     );
   }
 }
