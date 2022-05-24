@@ -40,6 +40,7 @@ dependencies:
   io:
   json_annotation:
   logging:
+  flutter_markdown:
   os_detect:
   path:
   rxdart:

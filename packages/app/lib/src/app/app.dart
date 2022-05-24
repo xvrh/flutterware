@@ -1,5 +1,10 @@
-import 'package:flutter_studio_app/src/app/project_tabs.dart';
+import 'dart:io';
+import 'dart:math';
 
+import 'package:flutter_studio_app/src/app/project_tabs.dart';
+import 'package:flutter_studio_app/src/workspace.dart';
+
+import '../ui.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter/material.dart';
 import '../test_visualizer/app.dart';
@@ -14,7 +19,10 @@ class StudioApp extends StatelessWidget {
     return RouterOutlet.root(
       child: MaterialApp(
         title: 'Flutter Studio',
-        home: Scaffold(body: _App()),
+        theme: appTheme(),
+        home: Scaffold(
+          body: _App(),
+        ),
         initialRoute: '/',
         debugShowCheckedModeBanner: false,
       ),
@@ -22,15 +30,30 @@ class StudioApp extends StatelessWidget {
   }
 }
 
-class _App extends StatelessWidget {
+class _App extends StatefulWidget {
+  @override
+  State<_App> createState() => _AppState();
+}
+
+class _AppState extends State<_App> {
+  //TODO(xha): load workspace from json file
+  final workspace = Workspace(File('todo.json'));
+
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ProjectTabs(),
-        Expanded(child: HomeScreen()),
-      ],
+    var mediaQuery = MediaQuery.of(context);
+    return FittedBox(
+      child: SizedBox(
+        width: max(mediaQuery.size.width, 450),
+        height: max(mediaQuery.size.height, 200),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ProjectTabs(workspace),
+            Expanded(child: HomeScreen()),
+          ],
+        ),
+      ),
     );
   }
 }

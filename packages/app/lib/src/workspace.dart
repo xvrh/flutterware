@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'sdk.dart';
@@ -8,9 +9,14 @@ part 'workspace.g.dart';
 
 class Workspace {
   final File file;
-  final projects = <Project>[];
+  final _projects = ValueNotifier<List<Project>>([]);
+  final _selectedProject = ValueNotifier<Project?>(null);
 
   Workspace(this.file);
+
+  ValueListenable<List<Project>> get projects => _projects;
+
+  ValueListenable<Project?> get selectedProject => _selectedProject;
 
   // 1. Save the workspace in a workspace.json file
   // 2. When add project, dispatch Stream event and save the file
