@@ -14,6 +14,17 @@ class AppColors {
   static const lightText = Color(0xff808080);
 }
 
+class AppTheme {
+  static ButtonStyle filledButton(BuildContext context) {
+    return ElevatedButton.styleFrom(
+      // Foreground color
+      onPrimary: Theme.of(context).colorScheme.onPrimary,
+      // Background color
+      primary: Theme.of(context).colorScheme.primary,
+    ).copyWith(elevation: ButtonStyleButton.allOrNull(0.0));
+  }
+}
+
 ThemeData appTheme() {
   var theme = ThemeData.from(
     colorScheme: ColorScheme.fromSeed(seedColor: AppColors.selection),
@@ -21,13 +32,13 @@ ThemeData appTheme() {
   );
   theme = theme.copyWith(
     textTheme: theme.textTheme.apply(displayColor: Colors.black),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(5),
-        ),
-      ),
-    ),
+    //outlinedButtonTheme: OutlinedButtonThemeData(
+    //  style: OutlinedButton.styleFrom(
+    //    shape: RoundedRectangleBorder(
+    //      borderRadius: BorderRadius.circular(5),
+    //    ),
+    //  ),
+    //),
   );
 
   return theme;

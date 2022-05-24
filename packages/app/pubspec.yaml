@@ -32,6 +32,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_highlight:
+  flutter_markdown:
   flutter_studio:
     path: ../flutter_studio
   flutter_svg:
@@ -40,9 +41,9 @@ dependencies:
   io:
   json_annotation:
   logging:
-  flutter_markdown:
   os_detect:
   path:
+  pub_semver:
   rxdart:
   shelf:
   shelf_router:

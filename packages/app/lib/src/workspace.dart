@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:json_annotation/json_annotation.dart';
 
-import 'sdk.dart';
+import 'utils/flutter_sdk.dart';
 
 part 'workspace.g.dart';
 
@@ -17,6 +17,13 @@ class Workspace {
   ValueListenable<List<Project>> get projects => _projects;
 
   ValueListenable<Project?> get selectedProject => _selectedProject;
+
+  Future<Set<FlutterSdk>> possibleFlutterSdks() async {
+    return {
+      ...await FlutterSdk.findSdks(),
+      ...projects.value.map((p) => p.flutterSdk)
+    };
+  }
 
   // 1. Save the workspace in a workspace.json file
   // 2. When add project, dispatch Stream event and save the file

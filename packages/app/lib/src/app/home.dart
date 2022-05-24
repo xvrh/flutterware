@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_studio_app/src/workspace.dart';
 import '../ui.dart';
+import 'add_project.dart';
+import 'home/changelog.dart';
+import 'home/feature_tour.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  final Workspace workspace;
+
+  const HomeScreen(this.workspace, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -43,9 +48,9 @@ class HomeScreen extends StatelessWidget {
             color: Colors.white,
             child: RouterOutlet(
               {
-                'projects': (_) => _ProjectsTab(),
-                'tour': (_) => _FeaturesTab(),
-                'changelog': (_) => _ChangeLogTab(),
+                'projects': (_) => _ProjectsTab(workspace),
+                'tour': (_) => const FeatureTourTab(),
+                'changelog': (_) => const ChangeLogTab(),
               },
               onNotFound: (_) => 'projects',
             ),
@@ -116,6 +121,10 @@ class _AppVersion extends StatelessWidget {
 }
 
 class _ProjectsTab extends StatelessWidget {
+  final Workspace workspace;
+
+  const _ProjectsTab(this.workspace);
+
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
@@ -133,7 +142,7 @@ class _ProjectsTab extends StatelessWidget {
                 ),
               ),
               OutlinedButton(
-                onPressed: () {},
+                onPressed: () => openProject(context, workspace),
                 child: Text('Open project'),
               )
             ],
@@ -164,59 +173,5 @@ class _ProjectsTab extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _FeaturesTab extends StatelessWidget {
-  const _FeaturesTab({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Markdown(data: '''
-### TODO(xha): Explain all features:
-test_ui
- - Run normal test (without screenshots)
- - Allow to run integration_test
- - Fully inspect each screenshot
- - Capture animation
- - Display how many frames between each screenshot. Display how expensive it is. Allow to access the detailed timeline for the transition.
- - Export screenshots with “device_frame” in all languages. Allow to create “marketing material” (from UI and from CLI)
- - Export full animation of the whole test
-Launcher
- - Preview (example folder)
- - Create new example
- - Devbar in the UI (change language, etc...)
-Theme
- - Synchronisation with Figma
-Timeline
- - Editor
- - New animation API
-Assets
- - Optimization + resize
- - Available with CLI
- - Generate constants
- - Synchronisation with Figma
-Pubspec
- - Upgrade packages
- - See changelogs etc...
-Flutter version management
- - Download flutter installations
- - Set system path to main version
-Translations
- - Synchronize with Translation platform
-''');
-  }
-}
-
-class _ChangeLogTab extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Markdown(data: '''
-## Changelog
-
-#### v0.1.0
-- Initial launching
-
-''');
   }
 }

@@ -42,6 +42,8 @@ class _AppState extends State<_App> {
   @override
   Widget build(BuildContext context) {
     var mediaQuery = MediaQuery.of(context);
+    //TODO(xha): put it higher in the tree to resize also the Dialogs
+    // And keep the correct aspect ratio
     return FittedBox(
       child: SizedBox(
         width: max(mediaQuery.size.width, 450),
@@ -50,7 +52,7 @@ class _AppState extends State<_App> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             ProjectTabs(workspace),
-            Expanded(child: HomeScreen()),
+            Expanded(child: HomeScreen(workspace)),
           ],
         ),
       ),
