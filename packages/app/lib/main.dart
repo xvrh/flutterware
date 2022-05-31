@@ -1,10 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'src/app/app.dart';
 
-void main() {
+void main() async {
   Logger.root
-    ..level = Level.INFO
+    ..level = Level.ALL
     ..onRecord.listen(print);
   runApp(StudioApp());
 }

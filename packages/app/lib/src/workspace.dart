@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:json_annotation/json_annotation.dart';
 
-import 'utils/flutter_sdk.dart';
+import 'flutter_sdk.dart';
 
 part 'workspace.g.dart';
 
@@ -24,6 +24,8 @@ class Workspace {
       ...projects.value.map((p) => p.flutterSdk)
     };
   }
+
+  void dispose() {}
 
   // 1. Save the workspace in a workspace.json file
   // 2. When add project, dispatch Stream event and save the file

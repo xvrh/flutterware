@@ -1,15 +1,47 @@
 import 'dart:io';
 
+import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:pub_semver/pub_semver.dart';
+import 'package:collection/collection.dart';
+
+import 'utils/data_loader.dart';
+
+final _logger = Logger('flutter_sdk');
 
 class FlutterSdk {
   final String root;
+  late DataLoader<Version> _version;
 
-  FlutterSdk(String root) : root = p.canonicalize(root);
+  FlutterSdk(String path) : root = p.canonicalize(path) {
+    _version = DataLoader<Version>(
+      debugName: 'Flutter SDK version',
+      loader: _readVersion,
+      lazy: true,
+    );
+  }
 
   factory FlutterSdk.fromJson(Map<String, dynamic> json) =>
       FlutterSdk(json['root'] as String);
+
+  static Future<FlutterSdk?> tryFind(String path) async {
+    if (await FileSystemEntity.isDirectory(path)) {
+      var dir = Directory(path);
+      while (await dir.exists()) {
+        var sdk = FlutterSdk(dir.path);
+        if (await isValid(sdk)) {
+          return sdk;
+        } else {
+          var parent = dir.parent;
+          if (parent.path == dir.path) return null;
+          dir = parent;
+        }
+      }
+    } else if (await FileSystemEntity.isFile(path)) {
+      return tryFind(File(path).parent.path);
+    }
+    return null;
+  }
 
   Map<String, dynamic> toJson() => {'root': root};
 
@@ -19,7 +51,9 @@ class FlutterSdk {
   String get dart =>
       p.join(root, 'bin', 'dart${Platform.isWindows ? '.bat' : ''}');
 
-  Future<Version> get version async {
+  DataLoader<Version> get version => _version;
+
+  Future<Version> _readVersion() async {
     var rawVersion = await File(p.join(root, 'version')).readAsString();
     return Version.parse(rawVersion.trim());
   }
@@ -32,7 +66,7 @@ class FlutterSdk {
 
   static Future<bool> isValid(FlutterSdk sdk) async {
     try {
-      if (await sdk.version < Version(1, 0, 0)) {
+      if (await sdk._readVersion() < Version(1, 0, 0)) {
         return false;
       }
     } catch (e) {
@@ -42,39 +76,37 @@ class FlutterSdk {
   }
 
   static Future<Set<FlutterSdk>> findSdks() async {
-    var toTry = <FlutterSdk>[];
+    var sdks = <FlutterSdk?>[];
 
     var homeEnvironment = Platform.environment['FLUTTER_HOME'];
     if (homeEnvironment != null && homeEnvironment.isNotEmpty) {
-      toTry.add(FlutterSdk(homeEnvironment));
+      sdks.add(await FlutterSdk.tryFind(homeEnvironment));
     }
     await for (var sdk in _whichFlutter()) {
-      toTry.add(sdk);
+      sdks.add(sdk);
     }
 
-    var result = <FlutterSdk>{};
-    for (var sdk in toTry) {
-      if (await isValid(sdk)) {
-        result.add(sdk);
-      }
-    }
-    return result;
+    return sdks.whereNotNull().toSet();
   }
 
   static Stream<FlutterSdk> _whichFlutter() async* {
-    for (var command in ['which', 'where']) {
+    for (var command in [
+      'which',
+      if (Platform.isWindows) 'where',
+    ]) {
       try {
         var result = await Process.run(command, ['flutter'], runInShell: true);
-        print(
-            "Out ${result.exitCode} ${result.stderr} ${result.stdout} ${result.stdout.runtimeType}");
         if (result.exitCode == 0) {
           var out = result.stdout;
           if (out is String && out.isNotEmpty) {
-            yield FlutterSdk(out.trim());
+            var sdk = await FlutterSdk.tryFind(out.trim());
+            if (sdk != null) {
+              yield sdk;
+            }
           }
         }
       } catch (e) {
-        print("Error $e");
+        _logger.fine('Error which flutter: $e');
         // Skip error
       }
     }

@@ -7,8 +7,6 @@ import 'package:flutter_studio_app/src/workspace.dart';
 import '../ui.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter/material.dart';
-import '../test_visualizer/app.dart';
-import '../test_visualizer/service.dart';
 import 'home.dart';
 
 class StudioApp extends StatelessWidget {
@@ -57,5 +55,11 @@ class _AppState extends State<_App> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    workspace.dispose();
+    super.dispose();
   }
 }
