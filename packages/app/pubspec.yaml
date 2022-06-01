@@ -44,12 +44,15 @@ dependencies:
   logging:
   os_detect:
   path:
+  path_provider:
   pool:
   pub_semver:
   rxdart:
   shelf:
   shelf_router:
   url_launcher:
+  watcher:
+  yaml:
 
 dev_dependencies:
   build_runner:

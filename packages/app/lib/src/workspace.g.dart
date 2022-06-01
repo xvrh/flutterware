@@ -8,10 +8,10 @@ part of 'workspace.dart';
 
 Project _$ProjectFromJson(Map<String, dynamic> json) => Project(
       json['directory'] as String,
-      FlutterSdk.fromJson(json['flutterSdk'] as Map<String, dynamic>),
+      FlutterSdkPath.fromJson(json['flutterSdkPath'] as Map<String, dynamic>),
     );
 
 Map<String, dynamic> _$ProjectToJson(Project instance) => <String, dynamic>{
       'directory': instance.directory,
-      'flutterSdk': instance.flutterSdk,
+      'flutterSdkPath': instance.flutterSdkPath,
     };

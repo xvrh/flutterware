@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_studio_app/src/app/add_project.dart';
 
 import '../ui.dart';
+import '../utils/data_loader.dart';
 import '../workspace.dart';
+import 'package:path/path.dart' as p;
 
-class ProjectTabs extends StatelessWidget {
+class MainTabBar extends StatelessWidget {
   final Workspace workspace;
 
-  const ProjectTabs(this.workspace, {super.key});
+  const MainTabBar(this.workspace, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,17 +32,25 @@ class ProjectTabs extends StatelessWidget {
                   child: Row(children: [
                     _HomeTab(
                       isSelected: selected == null,
-                      onTap: () {},
+                      onTap: () {
+                        workspace.unselectProject();
+                      },
                     ),
                     for (var project in projects)
                       _Tab(
-                        'some_project',
+                        project,
                         isSelected: project == selected,
-                        onTap: () {},
-                        onClose: () {},
+                        onTap: () {
+                          workspace.selectProject(project);
+                        },
+                        onClose: () {
+                          workspace.closeProject(project);
+                        },
                       ),
                     IconButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        openProject(context, workspace);
+                      },
                       icon: Icon(Icons.add),
                       padding:
                           EdgeInsets.symmetric(horizontal: 15, vertical: 5),
@@ -61,13 +72,13 @@ class ProjectTabs extends StatelessWidget {
 const _tabHeight = 40.0;
 
 class _Tab extends StatelessWidget {
-  final String title;
+  final Project project;
   final bool isSelected;
   final void Function() onClose;
   final void Function() onTap;
 
   const _Tab(
-    this.title, {
+    this.project, {
     required this.isSelected,
     required this.onClose,
     required this.onTap,
@@ -81,44 +92,52 @@ class _Tab extends StatelessWidget {
         width: 3,
       ),
     );
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white : null,
-          border: selectedBorder,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 5),
-        height: _tabHeight,
-        child: Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 3),
-              child: Icon(
-                Icons.folder,
-                size: 20,
-                color: Color(0xffabb6bd),
-              ),
+    return ValueListenableBuilder<Snapshot<Pubspec>>(
+      valueListenable: project.pubspec,
+      builder: (context, snapshot, child) {
+        var projectName = snapshot.data?.name ?? p.basename(project.directory);
+        return InkWell(
+          onTap: onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.white : null,
+              border: selectedBorder,
             ),
-            Text(
-              title,
-              style: const TextStyle(fontSize: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 5),
+            height: _tabHeight,
+            child: Row(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: Icon(
+                    Icons.folder,
+                    size: 20,
+                    color: Color(0xffabb6bd),
+                  ),
+                ),
+                Text(
+                  projectName,
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: snapshot.hasError ? Colors.red : null),
+                ),
+                IconButton(
+                  onPressed: onClose,
+                  iconSize: 13,
+                  color: Color(0xffbec4c6),
+                  padding: EdgeInsets.all(5),
+                  splashRadius: 10,
+                  splashColor: Colors.black87,
+                  hoverColor: Colors.black12,
+                  constraints: BoxConstraints(),
+                  tooltip: 'Close $projectName',
+                  icon: Icon(Icons.close),
+                ),
+              ],
             ),
-            IconButton(
-              onPressed: onClose,
-              iconSize: 13,
-              color: Color(0xffbec4c6),
-              padding: EdgeInsets.all(5),
-              splashRadius: 10,
-              splashColor: Colors.black87,
-              hoverColor: Colors.black12,
-              constraints: BoxConstraints(),
-              tooltip: 'Close $title',
-              icon: Icon(Icons.close),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

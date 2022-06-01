@@ -9,26 +9,19 @@ import 'utils/data_loader.dart';
 
 final _logger = Logger('flutter_sdk');
 
-class FlutterSdk {
+class FlutterSdkPath {
   final String root;
-  late DataLoader<Version> _version;
 
-  FlutterSdk(String path) : root = p.canonicalize(path) {
-    _version = DataLoader<Version>(
-      debugName: 'Flutter SDK version',
-      loader: _readVersion,
-      lazy: true,
-    );
-  }
+  FlutterSdkPath(String path) : root = p.canonicalize(path);
 
-  factory FlutterSdk.fromJson(Map<String, dynamic> json) =>
-      FlutterSdk(json['root'] as String);
+  factory FlutterSdkPath.fromJson(Map<String, dynamic> json) =>
+      FlutterSdkPath(json['root'] as String);
 
-  static Future<FlutterSdk?> tryFind(String path) async {
+  static Future<FlutterSdkPath?> tryFind(String path) async {
     if (await FileSystemEntity.isDirectory(path)) {
       var dir = Directory(path);
       while (await dir.exists()) {
-        var sdk = FlutterSdk(dir.path);
+        var sdk = FlutterSdkPath(dir.path);
         if (await isValid(sdk)) {
           return sdk;
         } else {
@@ -51,20 +44,18 @@ class FlutterSdk {
   String get dart =>
       p.join(root, 'bin', 'dart${Platform.isWindows ? '.bat' : ''}');
 
-  DataLoader<Version> get version => _version;
-
   Future<Version> _readVersion() async {
     var rawVersion = await File(p.join(root, 'version')).readAsString();
     return Version.parse(rawVersion.trim());
   }
 
   @override
-  bool operator ==(other) => other is FlutterSdk && other.root == root;
+  bool operator ==(other) => other is FlutterSdkPath && other.root == root;
 
   @override
   int get hashCode => root.hashCode;
 
-  static Future<bool> isValid(FlutterSdk sdk) async {
+  static Future<bool> isValid(FlutterSdkPath sdk) async {
     try {
       if (await sdk._readVersion() < Version(1, 0, 0)) {
         return false;
@@ -75,12 +66,12 @@ class FlutterSdk {
     return File(sdk.flutter).existsSync() && File(sdk.dart).existsSync();
   }
 
-  static Future<Set<FlutterSdk>> findSdks() async {
-    var sdks = <FlutterSdk?>[];
+  static Future<Set<FlutterSdkPath>> findSdks() async {
+    var sdks = <FlutterSdkPath?>[];
 
     var homeEnvironment = Platform.environment['FLUTTER_HOME'];
     if (homeEnvironment != null && homeEnvironment.isNotEmpty) {
-      sdks.add(await FlutterSdk.tryFind(homeEnvironment));
+      sdks.add(await FlutterSdkPath.tryFind(homeEnvironment));
     }
     await for (var sdk in _whichFlutter()) {
       sdks.add(sdk);
@@ -89,7 +80,7 @@ class FlutterSdk {
     return sdks.whereNotNull().toSet();
   }
 
-  static Stream<FlutterSdk> _whichFlutter() async* {
+  static Stream<FlutterSdkPath> _whichFlutter() async* {
     for (var command in [
       'which',
       if (Platform.isWindows) 'where',
@@ -99,7 +90,7 @@ class FlutterSdk {
         if (result.exitCode == 0) {
           var out = result.stdout;
           if (out is String && out.isNotEmpty) {
-            var sdk = await FlutterSdk.tryFind(out.trim());
+            var sdk = await FlutterSdkPath.tryFind(out.trim());
             if (sdk != null) {
               yield sdk;
             }
@@ -110,5 +101,39 @@ class FlutterSdk {
         // Skip error
       }
     }
+  }
+}
+
+class FlutterSdk {
+  final FlutterSdkPath path;
+  late DataLoader<Version> _version;
+
+  FlutterSdk(this.path) {
+    _version = DataLoader<Version>(
+      debugName: 'Flutter SDK version',
+      loader: path._readVersion,
+      lazy: true,
+    );
+  }
+
+  factory FlutterSdk.fromJson(Map<String, dynamic> json) =>
+      FlutterSdk(FlutterSdkPath.fromJson(json));
+
+  Map<String, dynamic> toJson() => path.toJson();
+
+  String get flutter => path.flutter;
+
+  String get dart => path.dart;
+
+  DataLoader<Version> get version => _version;
+
+  @override
+  bool operator ==(other) => other is FlutterSdk && other.path == path;
+
+  @override
+  int get hashCode => path.hashCode;
+
+  void dispose() {
+    _version.dispose();
   }
 }

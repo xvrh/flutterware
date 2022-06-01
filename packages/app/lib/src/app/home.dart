@@ -5,6 +5,7 @@ import '../ui.dart';
 import 'add_project.dart';
 import 'home/changelog.dart';
 import 'home/feature_tour.dart';
+import 'home/projects.dart';
 
 class HomeScreen extends StatelessWidget {
   final Workspace workspace;
@@ -48,7 +49,7 @@ class HomeScreen extends StatelessWidget {
             color: Colors.white,
             child: RouterOutlet(
               {
-                'projects': (_) => _ProjectsTab(workspace),
+                'projects': (_) => ProjectsTab(workspace),
                 'tour': (_) => const FeatureTourTab(),
                 'changelog': (_) => const ChangeLogTab(),
               },
@@ -116,62 +117,6 @@ class _AppVersion extends StatelessWidget {
           ),
         )
       ],
-    );
-  }
-}
-
-class _ProjectsTab extends StatelessWidget {
-  final Workspace workspace;
-
-  const _ProjectsTab(this.workspace);
-
-  @override
-  Widget build(BuildContext context) {
-    var theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(15),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Projects',
-                  style: theme.textTheme.headlineSmall,
-                ),
-              ),
-              OutlinedButton(
-                onPressed: () => openProject(context, workspace),
-                child: Text('Open project'),
-              )
-            ],
-          ),
-          Divider(),
-          Expanded(
-            child: ListView(
-              children: [
-                ListTile(
-                  title: Text('some project'),
-                  onTap: () {},
-                  subtitle: Text(
-                    'full/path/to/the/project',
-                    style: const TextStyle(color: AppColors.lightText),
-                  ),
-                ),
-                ListTile(
-                  title: Text('some project'),
-                  onTap: () {},
-                  subtitle: Text(
-                    'full/path/to/the/project',
-                    style: const TextStyle(color: AppColors.lightText),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

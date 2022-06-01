@@ -36,8 +36,10 @@ class AddProjectScreen extends StatefulWidget {
 class _AddProjectScreenState extends State<AddProjectScreen> {
   final _projectFolderController = TextEditingController();
   final _flutterSdkController = TextEditingController();
-  FlutterSdk? _selectedSdk;
-  Set<FlutterSdk>? _knownSdks;
+  FlutterSdkPath? _selectedSdk;
+  Set<FlutterSdkPath>? _knownSdks;
+  String? _projectError;
+  String? _sdkError;
 
   @override
   void initState() {
@@ -62,7 +64,7 @@ class _AddProjectScreenState extends State<AddProjectScreen> {
     }
   }
 
-  void _setSdk(FlutterSdk? sdk) {
+  void _setSdk(FlutterSdkPath? sdk) {
     setState(() {
       _selectedSdk = sdk;
       _flutterSdkController.text = sdk?.root ?? '';
@@ -92,7 +94,13 @@ class _AddProjectScreenState extends State<AddProjectScreen> {
                       border: OutlineInputBorder(),
                       labelText: 'Flutter project path',
                       floatingLabelBehavior: FloatingLabelBehavior.always,
+                      errorText: _projectError,
                     ),
+                    onChanged: (s) {
+                      setState(() {
+                        _projectError = null;
+                      });
+                    },
                   ),
                 ),
                 IconButton(
@@ -101,7 +109,10 @@ class _AddProjectScreenState extends State<AddProjectScreen> {
                   onPressed: () async {
                     var newPath = await getDirectoryPath();
                     if (newPath != null) {
-                      _projectFolderController.text = newPath;
+                      setState(() {
+                        _projectError = null;
+                        _projectFolderController.text = newPath;
+                      });
                     }
                   },
                 ),
@@ -119,33 +130,14 @@ class _AddProjectScreenState extends State<AddProjectScreen> {
                       labelText: 'Flutter SDK',
                       floatingLabelBehavior: FloatingLabelBehavior.always,
                       suffixIcon: knownSdks != null && knownSdks.isNotEmpty
-                          ? PopupMenuButton<FlutterSdk>(
-                              constraints: const BoxConstraints(
-                                minWidth: 2 * 56,
-                                maxWidth: 10 * 56,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                  side: BorderSide(
-                                      width: 1, color: Colors.black26)),
-                              itemBuilder: (context) => [
-                                for (var sdk in knownSdks)
-                                  PopupMenuItem(
-                                    value: sdk,
-                                    child: ListTile(
-                                      title: Text(sdk.root),
-                                      subtitle: _SdkVersionText(sdk),
-                                    ),
-                                  ),
-                              ],
-                              onSelected: (sdk) {
-                                _setSdk(sdk);
-                              },
-                            )
+                          ? _sdkPickerIcon(knownSdks)
                           : null,
+                      errorText: _sdkError,
                     ),
                     onChanged: (s) {
                       setState(() {
-                        _selectedSdk = FlutterSdk(s);
+                        _sdkError = null;
+                        _selectedSdk = FlutterSdkPath(s);
                       });
                     },
                   ),
@@ -170,17 +162,41 @@ class _AddProjectScreenState extends State<AddProjectScreen> {
         ),
         ElevatedButton(
           style: AppTheme.filledButton(context),
-          onPressed: () {},
+          onPressed: _submit,
           child: Text('Open'),
         ),
       ],
     );
   }
 
+  Widget _sdkPickerIcon(Set<FlutterSdkPath> knownSdks) {
+    return PopupMenuButton<FlutterSdkPath>(
+      constraints: const BoxConstraints(
+        minWidth: 2 * 56,
+        maxWidth: 10 * 56,
+      ),
+      shape: RoundedRectangleBorder(
+          side: BorderSide(width: 1, color: Colors.black26)),
+      itemBuilder: (context) => [
+        for (var sdk in knownSdks)
+          PopupMenuItem(
+            value: sdk,
+            child: ListTile(
+              title: Text(sdk.root),
+              subtitle: _SdkVersionText(sdk),
+            ),
+          ),
+      ],
+      onSelected: (sdk) {
+        _setSdk(sdk);
+      },
+    );
+  }
+
   void _pickSdk() async {
     var sdkPath = await getDirectoryPath();
     if (sdkPath != null) {
-      var flutterSdk = await FlutterSdk.tryFind(sdkPath);
+      var flutterSdk = await FlutterSdkPath.tryFind(sdkPath);
 
       if (!mounted) return;
       if (flutterSdk == null) {
@@ -188,6 +204,29 @@ class _AddProjectScreenState extends State<AddProjectScreen> {
             message: 'This folder is not recognized as a Flutter SDK path');
       }
       _setSdk(flutterSdk);
+    }
+  }
+
+  void _submit() async {
+    var projectPath = _projectFolderController.text;
+    var isProjectValid = await Project.isValid(projectPath);
+    var selectedSdk = _selectedSdk;
+    var isSdkValid =
+        selectedSdk != null && await FlutterSdkPath.isValid(selectedSdk);
+    setState(() {
+      _sdkError = null;
+      _projectError = null;
+      if (!isSdkValid) {
+        _sdkError = 'Select a Flutter SDK';
+      }
+      if (!isProjectValid) {
+        _projectError = 'Select a folder with a pubspec.yaml file';
+      }
+    });
+
+    if (mounted && _sdkError == null && _projectError == null) {
+      widget.workspace.addProject(Project(projectPath, selectedSdk!));
+      Navigator.pop(context);
     }
   }
 
@@ -199,15 +238,38 @@ class _AddProjectScreenState extends State<AddProjectScreen> {
   }
 }
 
-class _SdkVersionText extends StatelessWidget {
-  final FlutterSdk sdk;
+class _SdkVersionText extends StatefulWidget {
+  final FlutterSdkPath sdk;
 
   const _SdkVersionText(this.sdk);
 
   @override
+  State<_SdkVersionText> createState() => _SdkVersionTextState();
+}
+
+class _SdkVersionTextState extends State<_SdkVersionText> {
+  late FlutterSdk _temporarySdk;
+
+  @override
+  void initState() {
+    super.initState();
+    _temporarySdk = FlutterSdk(widget.sdk);
+  }
+
+  @override
+  void didUpdateWidget(_SdkVersionText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.sdk != widget.sdk) {
+      _temporarySdk.dispose();
+      _temporarySdk = FlutterSdk(widget.sdk);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<Snapshot<Version>>(
-      valueListenable: sdk.version,
+      valueListenable: _temporarySdk.version,
       builder: (context, value, child) {
         if (value.hasError) {
           return Tooltip(
@@ -226,5 +288,11 @@ class _SdkVersionText extends StatelessWidget {
         return Text('Flutter v$data');
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _temporarySdk.dispose();
+    super.dispose();
   }
 }
