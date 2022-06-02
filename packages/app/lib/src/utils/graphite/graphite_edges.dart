@@ -13,7 +13,7 @@ class GraphiteEdges extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _GraphiteEdgesState createState() => _GraphiteEdgesState();
+  State<GraphiteEdges> createState() => _GraphiteEdgesState();
 }
 
 class _GraphiteEdgesState extends State<GraphiteEdges> {

@@ -18,7 +18,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ">=2.16.2 <3.0.0"
+  sdk: '>=2.17.0 <3.0.0'
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -27,27 +27,39 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  collection:
   device_frame:
   file_selector:
   flutter:
     sdk: flutter
   flutter_highlight:
+  flutter_markdown:
   flutter_studio:
     path: ../flutter_studio
   flutter_svg:
   flutter_web_plugins:
     sdk: flutter
+  io:
+  json_annotation:
   logging:
   os_detect:
+  path:
+  path_provider:
+  pool:
+  pub_semver:
   rxdart:
   shelf:
   shelf_router:
   url_launcher:
+  watcher:
+  yaml:
 
 dev_dependencies:
+  build_runner:
+  json_serializable:
   flutter_test:
     sdk: flutter
-  lints: ^1.0.0
+  lints:
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

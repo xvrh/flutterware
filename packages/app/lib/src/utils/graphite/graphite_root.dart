@@ -10,7 +10,7 @@ class GraphiteRoot extends StatefulWidget {
     required this.mtx,
   });
   @override
-  _GraphiteRootState createState() => _GraphiteRootState();
+  State<GraphiteRoot> createState() => _GraphiteRootState();
 }
 
 class _GraphiteRootState extends State<GraphiteRoot> {

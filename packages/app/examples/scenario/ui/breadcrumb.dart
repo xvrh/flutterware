@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/test/ui/breadcrumb.dart';
+import 'package:flutter_studio_app/src/test_visualizer/ui/breadcrumb.dart';
 import 'package:flutter_studio_app/src/utils/debug.dart';
 
 void main() => runDebugApp(BreadcrumbExample());

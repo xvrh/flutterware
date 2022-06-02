@@ -5,10 +5,10 @@ import 'path.dart';
 import 'provider.dart';
 import 'router_root.dart';
 
-typedef _RouteBuilder = Widget Function(MatchedPath);
+typedef RouteBuilder = Widget Function(MatchedPath);
 
 class RouterOutlet extends StatefulWidget {
-  final Map<String, _RouteBuilder> routes;
+  final Map<String, RouteBuilder> routes;
   final String? Function(OnNotFoundEvent)? onNotFound;
 
   const RouterOutlet(this.routes, {Key? key, this.onNotFound})
@@ -17,9 +17,9 @@ class RouterOutlet extends StatefulWidget {
   static Widget root({required Widget child}) => RouterRootAuto(child: child);
 
   @override
-  _RouterOutletState createState() => _RouterOutletState();
+  State<RouterOutlet> createState() => _RouterOutletState();
 
-  static _RouterOutletState? parentOf(BuildContext context) {
+  static State<RouterOutlet>? parentOf(BuildContext context) {
     return context.findAncestorStateOfType<_RouterOutletState>();
   }
 }
@@ -112,7 +112,7 @@ class OnNotFoundEvent {
 
 class _RouteEntry {
   final PathPattern pattern;
-  final _RouteBuilder builder;
+  final RouteBuilder builder;
 
   _RouteEntry(this.pattern, this.builder);
 
