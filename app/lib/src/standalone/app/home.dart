@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
-import 'package:flutter_studio_app/src/workspace.dart';
-import '../ui.dart';
-import 'add_project.dart';
+import 'package:flutter_studio_app/src/standalone/workspace.dart';
+import '../../ui.dart';
 import 'home/changelog.dart';
 import 'home/feature_tour.dart';
 import 'home/projects.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../workspace.dart';
+import '../../../project.dart';
 
 class ProjectScreen extends StatelessWidget {
   final Project project;

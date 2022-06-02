@@ -1,8 +1,0 @@
-
-
-- Rename RouterOutlet
-- Replace UrlRouter with RouterOutlet.root()
-- Publish package. As "A web (desktop) router package"
-
-
-- Test unit the whole path.dart part

@@ -261,7 +261,7 @@ packages:
   flutter_studio:
     dependency: "direct main"
     description:
-      path: "../flutter_studio"
+      path: ".."
       relative: true
     source: path
     version: "1.0.0"

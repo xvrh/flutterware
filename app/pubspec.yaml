@@ -35,7 +35,7 @@ dependencies:
   flutter_highlight:
   flutter_markdown:
   flutter_studio:
-    path: ../flutter_studio
+    path: ../
   flutter_svg:
   flutter_web_plugins:
     sdk: flutter

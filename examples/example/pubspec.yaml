@@ -32,7 +32,7 @@ dependencies:
 
 dev_dependencies:
   flutter_studio:
-    path: ../../packages/flutter_studio
+    path: ../..
   flutter_test:
     sdk: flutter
   lints:

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter_studio_app/src/utils/ui/message_dialog.dart';
-import 'package:flutter_studio_app/src/workspace.dart';
+import 'package:flutter_studio_app/src/standalone/workspace.dart';
 import 'package:pub_semver/pub_semver.dart';
 
-import '../ui.dart';
-import '../flutter_sdk.dart';
-import '../utils/data_loader.dart';
+import '../../project.dart';
+import '../../ui.dart';
+import '../../flutter_sdk.dart';
+import '../../utils/data_loader.dart';
 
 Future<void> openProject(BuildContext context, Workspace workspace) async {
   var path = await getDirectoryPath();

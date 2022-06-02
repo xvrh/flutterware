@@ -1,15 +1,16 @@
 import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter_studio_app/src/app/main_tab_bar.dart';
+import '../../project.dart';
+import 'main_tab_bar.dart';
 import 'package:flutter_studio_app/src/utils/fitted_app.dart';
-import 'package:flutter_studio_app/src/workspace.dart';
+import 'package:flutter_studio_app/src/standalone/workspace.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
-import '../ui.dart';
-import '../utils/router_outlet.dart';
+import '../../ui.dart';
+import '../../utils/router_outlet.dart';
 import 'package:flutter/material.dart';
 import 'home.dart';
 import 'project/screen.dart';

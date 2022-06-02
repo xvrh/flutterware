@@ -17,6 +17,7 @@ dependencies:
   path:
   stream_channel:
   test:
+  process_runner:
 
 dev_dependencies:
   build_runner:

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/app/add_project.dart';
+import 'package:flutter_studio_app/src/standalone/app/add_project.dart';
 
-import '../ui.dart';
-import '../utils/data_loader.dart';
+import '../../project.dart';
+import '../../ui.dart';
+import '../../utils/data_loader.dart';
 import '../workspace.dart';
 import 'package:path/path.dart' as p;
 
