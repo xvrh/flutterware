@@ -151,13 +151,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.0.2"
-  http_methods:
-    dependency: transitive
-    description:
-      name: http_methods
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "1.1.0"
   http_multi_server:
     dependency: transitive
     description:
@@ -186,13 +179,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.6.4"
-  json_annotation:
-    dependency: transitive
-    description:
-      name: json_annotation
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "4.5.0"
   lints:
     dependency: "direct dev"
     description:
@@ -256,13 +242,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.8.1"
-  platform:
-    dependency: transitive
-    description:
-      name: platform
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "3.1.0"
   pool:
     dependency: transitive
     description:
@@ -270,20 +249,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.5.0"
-  process:
-    dependency: transitive
-    description:
-      name: process
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "4.2.4"
-  process_runner:
-    dependency: transitive
-    description:
-      name: process_runner
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "4.1.2"
   pub_semver:
     dependency: transitive
     description:
@@ -305,13 +270,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "3.0.0"
-  shelf_router:
-    dependency: transitive
-    description:
-      name: shelf_router
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "1.1.2"
   shelf_static:
     dependency: transitive
     description:
