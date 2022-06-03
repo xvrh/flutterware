@@ -1,4 +1,4 @@
-import 'package:flutter_studio_app/src/test_visualizer/ui/menu_tree.dart';
+import 'package:flutter_studio_app/src/app/ui/menu_tree.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

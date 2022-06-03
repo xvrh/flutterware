@@ -1,17 +1,12 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:html';
-import 'package:flutter_studio/internal.dart';
 import 'package:flutter_studio/internals/web.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
-import 'package:http/http.dart';
 import 'package:rxdart/rxdart.dart';
-import 'src/test_visualizer/app.dart';
-import 'src/test_visualizer/app_connected.dart';
-import 'src/test_visualizer/protocol/api.dart';
-import 'src/test_visualizer/service.dart';
+import 'src/test_runner/app_connected.dart';
+import 'src/test_runner/protocol/api.dart';
+import 'src/test_runner/service.dart';
 
 void main() async {
   late BehaviorSubject<List<TestRunnerApi>> subject;

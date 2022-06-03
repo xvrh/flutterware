@@ -1,7 +1,7 @@
 import 'package:flutter_studio/internal.dart';
 import 'package:flutter/material.dart';
 import '../detail.dart';
-import '../ui/side_bar.dart';
+import '../../app/ui/side_bar.dart';
 import 'shared/documentation_section.dart';
 import 'shared/link.dart';
 import 'shared/translation_key.dart';
@@ -15,7 +15,7 @@ class ImageDetail extends StatefulWidget {
       : super(key: key);
 
   @override
-  _ImageDetailState createState() => _ImageDetailState();
+  State<ImageDetail> createState() => _ImageDetailState();
 }
 
 class _ImageDetailState extends State<ImageDetail> {

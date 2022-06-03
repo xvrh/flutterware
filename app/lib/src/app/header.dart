@@ -6,10 +6,10 @@ import 'ui/breadcrumb.dart';
 import 'ui/menu_tree.dart';
 
 class Header extends StatefulWidget {
-  final ProjectInfo project;
+  final String projectName;
 
   const Header(
-    this.project, {
+    this.projectName, {
     Key? key,
   }) : super(key: key);
 
@@ -37,6 +37,7 @@ class HeaderState extends State<Header> {
         padding: const EdgeInsets.symmetric(horizontal: 8.0),
         child: Breadcrumb(
           children: [
+            BreadcrumbItem(Text(widget.projectName)),
             if (run != null) ..._runBreadcrumb(run),
             if (screen != null) BreadcrumbItem(Text(screen.name)),
           ],
@@ -68,6 +69,7 @@ class HeaderState extends State<Header> {
     }
   }
 
+  //TODO(xha): make this widget generic that accept Breadcrumb item
   void setRun(ScenarioRun? run) {
     setState(() {
       _run = run;

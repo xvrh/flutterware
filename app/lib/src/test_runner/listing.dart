@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:built_collection/built_collection.dart';
 import 'package:collection/collection.dart';
+import '../app/ui/side_bar.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter_studio/internal.dart';
 import 'package:flutter/material.dart';
 import 'protocol/api.dart';
 import 'protocol/listing.dart';
-import 'ui/menu_tree.dart';
-import 'ui/side_bar.dart';
+import '../app/ui/menu_tree.dart';
 
 class TestListingView extends StatefulWidget {
   final TestRunnerApi client;

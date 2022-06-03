@@ -10,6 +10,7 @@ class AppColors {
   static const selection = Color(0xff2675bf);
 
   static const sideBarHeader = Color(0xffe1e6ec);
+  static const menuBackground = Color(0xffe6ebf0);
 
   static const lightText = Color(0xff808080);
 }

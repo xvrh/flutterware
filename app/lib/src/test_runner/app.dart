@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:os_detect/os_detect.dart' as platform;
 import 'package:rxdart/rxdart.dart';
-import 'app_connected.dart';
 import 'protocol/api.dart';
 import 'server.dart';
 import 'service.dart';

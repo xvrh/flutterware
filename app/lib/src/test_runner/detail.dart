@@ -1,9 +1,9 @@
 import 'package:collection/collection.dart';
+import '../app/project_view.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter_studio/internal.dart';
 import 'package:flutter/material.dart';
 import '../ui.dart';
-import 'app_connected.dart';
 import 'detail/image.dart';
 import 'detail/json.dart';
 import 'service.dart';

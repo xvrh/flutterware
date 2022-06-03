@@ -2,8 +2,8 @@ import 'package:collection/collection.dart';
 import 'package:flutter_studio/internal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../../ui/side_bar.dart';
+
+import '../../../app/ui/side_bar.dart';
 
 class TranslationsSidebar extends StatelessWidget {
   final List<Widget> children;

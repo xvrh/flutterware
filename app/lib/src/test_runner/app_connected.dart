@@ -1,15 +1,15 @@
 import 'package:built_collection/built_collection.dart';
+import '../app/header.dart';
+import '../app/ui/menu_tree.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter_studio/internal.dart';
 import 'package:flutter/material.dart';
 import '../ui.dart';
 import 'flow_graph.dart';
-import 'header.dart';
 import 'listing.dart';
 import 'protocol/api.dart';
 import 'service.dart';
 import 'toolbar.dart';
-import 'ui/menu_tree.dart';
 
 class ConnectedScreen extends StatefulWidget {
   final TestService service;
@@ -78,10 +78,7 @@ class ProjectViewState extends State<ProjectView> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Header(
-          widget.projectInfo,
-          key: _headerKey,
-        ),
+        Header(widget.projectInfo.name, key: _headerKey),
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,

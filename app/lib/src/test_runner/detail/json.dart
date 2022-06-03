@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import '../detail.dart';
-import '../ui/side_bar.dart';
+import '../../app/ui/side_bar.dart';
 import 'shared/link.dart';
 
 class JsonDetail extends StatelessWidget {

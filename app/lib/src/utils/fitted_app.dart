@@ -29,11 +29,29 @@ class _FittedAppState extends State<FittedApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     var size = window.physicalSize / window.devicePixelRatio;
 
-    //TODO(xha): improve to keep the aspect ratio
+    const minWidth = 450.0;
+    const minHeight = 400.0;
+
+    var widthRatio = size.width / minWidth;
+    var heightRatio = size.height / minHeight;
+
+    var width = size.width;
+    var height = size.height;
+
+    if (min(widthRatio, heightRatio) < 1) {
+      if (widthRatio < heightRatio) {
+        width = minWidth;
+        height = size.height / widthRatio;
+      } else {
+        height = minHeight;
+        width = size.width / heightRatio;
+      }
+    }
+
     return FittedBox(
       child: SizedBox(
-        width: max(size.width, 450),
-        height: max(size.height, 200),
+        width: width,
+        height: height,
         child: widget.child,
       ),
     );

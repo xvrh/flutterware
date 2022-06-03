@@ -9,8 +9,14 @@ const projectPath = String.fromEnvironment(projectDefineKey);
 const flutterSdkPath = String.fromEnvironment(flutterSdkDefineKey);
 
 void main() async {
+  if (projectPath.isEmpty || flutterSdkPath.isEmpty) {
+    throw Exception(
+        'This entry point need to be run with some --dart-define parameters. Use main_dev.dart for development.');
+  }
+
   Logger.root
     ..level = Level.ALL
     ..onRecord.listen(print);
-  runApp(SingleProjectApp(Project(projectPath, FlutterSdkPath(flutterSdkPath))));
+  runApp(
+      SingleProjectApp(Project(projectPath, FlutterSdkPath(flutterSdkPath))));
 }

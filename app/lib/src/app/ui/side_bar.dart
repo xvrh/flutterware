@@ -13,9 +13,7 @@ class SideBar extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SidebarHeader(
-          title: header,
-        ),
+        SidebarHeader(title: header),
         Expanded(child: child),
       ],
     );

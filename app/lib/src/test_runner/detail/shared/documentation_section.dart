@@ -1,8 +1,8 @@
 import 'package:flutter_studio/internal.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../app/ui/side_bar.dart';
 import '../../../utils/assets.dart';
-import '../../ui/side_bar.dart';
 
 class DocumentationSection extends StatelessWidget {
   final ProjectInfo project;

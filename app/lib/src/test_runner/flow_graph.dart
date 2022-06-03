@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:built_collection/built_collection.dart';
+import '../app/project_view.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter_studio/internal.dart';
 import 'package:flutter/material.dart' hide InteractiveViewer;
@@ -8,7 +9,6 @@ import 'package:flutter/services.dart';
 import '../ui.dart';
 import '../utils/assets.dart';
 import '../utils/graphite.dart';
-import 'app_connected.dart';
 import 'detail.dart';
 import 'protocol/api.dart';
 import 'protocol/run.dart';

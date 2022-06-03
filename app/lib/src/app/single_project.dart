@@ -13,6 +13,8 @@ import '../ui.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter/material.dart';
 
+import 'project_view.dart';
+
 final _logger = Logger('app');
 
 class SingleProjectApp extends StatelessWidget {
@@ -28,28 +30,12 @@ class SingleProjectApp extends StatelessWidget {
           title: 'Flutter Studio',
           theme: appTheme(),
           home: Scaffold(
-            body: _App(project),
+            body: ProjectView(project),
           ),
           initialRoute: '/',
           debugShowCheckedModeBanner: false,
         ),
       ),
-    );
-  }
-}
-
-class _App extends StatelessWidget {
-  final Project project;
-
-  const _App(this.project);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('Again, new start. The good one this time! ${Directory.current} ${project.directory} ${project.flutterSdkPath.root}'),
-      ],
     );
   }
 }
