@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_studio_app/src/project_info/screen.dart';
+import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 
+import '../dependencies/screen.dart';
 import '../project.dart';
 import '../ui.dart';
 import '../utils/data_loader.dart';
@@ -47,7 +50,12 @@ class ProjectViewState extends State<ProjectView> {
                 width: 1,
               ),
               Expanded(
-                child: Text('TODO'),
+                child: RouterOutlet(
+                  {
+                    'home': (route) => ProjectInfoScreen(),
+                    'dependencies': (route) => DependenciesScreen(),
+                  },
+                ),
               ),
             ],
           ),

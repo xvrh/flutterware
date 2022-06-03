@@ -10,40 +10,90 @@ class Menu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    context.router.isSelected('home');
-
-    return MenuTree(
-      entries: [
-        MenuEntry('Home'),
-        MenuEntry('Dependencies'),
-        MenuEntry('Tests', children: [
-          MenuEntry('Onboarding', children: [
-            MenuEntry('One'),
-            MenuEntry('Two'),
-          ]),
-        ]),
-        MenuEntry('Run app'),
-        MenuEntry('Themes'),
-        MenuEntry('Assets'),
-        MenuEntry('Animations'),
-        MenuEntry('Easing'),
-        MenuEntry('Shaders'),
-        MenuEntry('Particles'),
-        MenuEntry('Path'),
-        MenuEntry('App icon'),
-        MenuEntry('Benchmarks'),
-        MenuEntry('Wysiwyg'),
+    return ListView(
+      children: [
+        MenuLine(
+          selected: context.router.isSelected('home'),
+          onTap: () {
+            context.router.go('home');
+          },
+          type: LineType.expanded,
+          depth: 0,
+          child: Row(
+            children: [
+              FlutterLogo(size: 15),
+              Expanded(
+                child: Text(
+                  'flutter_studio_example',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+        MenuLine(
+          selected: context.router.isSelected('dependencies'),
+          onTap: () {
+            context.router.go('dependencies');
+          },
+          type: LineType.leaf,
+          depth: 1,
+          child: Text('Dependencies'),
+        ),
+        MenuLine(
+          selected: context.router.isSelected('dependencies'),
+          onTap: () {},
+          onExpand: () {},
+          type: LineType.collapsed,
+          depth: 1,
+          child: Text('Tests'),
+        ),
+        MenuLine(
+          selected: false,
+          onTap: () {},
+          type: LineType.collapsed,
+          depth: 1,
+          child: Text('Run on device'),
+        ),
       ],
-      onSelected: (s) {},
     );
+    //return MenuTree(
+    //  entries: [
+    //    MenuEntry('Home'),
+    //    MenuEntry('Dependencies'),
+    //    MenuEntry('Tests', children: [
+    //      MenuEntry('Onboarding', children: [
+    //        MenuEntry('One'),
+    //        MenuEntry('Two'),
+    //      ]),
+    //    ]),
+    //    MenuEntry('Run app'),
+    //    MenuEntry('Themes'),
+    //    MenuEntry('Assets'),
+    //    MenuEntry('Animations'),
+    //    MenuEntry('Easing'),
+    //    MenuEntry('Shaders'),
+    //    MenuEntry('Particles'),
+    //    MenuEntry('Path'),
+    //    MenuEntry('App icon'),
+    //    MenuEntry('Benchmarks'),
+    //    MenuEntry('Wysiwyg'),
+    //    MenuEntry('Icons (GoogleFont, Fontawesome, custom font creation...)'),
+    //    MenuEntry('Fonts'),
+    //    MenuEntry('Build runner (generic persistent scripts?)'),
+    //    MenuEntry('Compilation (mobile, web etc...?)'),
+    //  ],
+    //  onSelected: (s) {},
+    //);
   }
 }
 
-enum LineType { none, collapsed, expanded }
+enum LineType { leaf, collapsed, expanded }
 
 class MenuLine extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
+  final VoidCallback? onExpand;
   final LineType type;
   final int depth;
   final Widget child;
@@ -52,6 +102,7 @@ class MenuLine extends StatelessWidget {
     Key? key,
     required this.selected,
     required this.onTap,
+    this.onExpand,
     required this.type,
     required this.depth,
     required this.child,
@@ -68,16 +119,25 @@ class MenuLine extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(width: 12.0 * depth),
-            Icon(
-              type == LineType.expanded
-                  ? Icons.keyboard_arrow_down
-                  : Icons.keyboard_arrow_right,
-              size: 17,
-              color:
-                  type == LineType.none ? Colors.transparent : Colors.black54,
+            GestureDetector(
+              onTap: onExpand,
+              child: Icon(
+                type == LineType.expanded
+                    ? Icons.keyboard_arrow_down
+                    : Icons.keyboard_arrow_right,
+                size: 17,
+                color: type == LineType.leaf
+                    ? Colors.transparent
+                    : (selected ? Colors.white : Colors.black54),
+              ),
             ),
             const SizedBox(width: 1),
-            Expanded(child: child),
+            Expanded(
+              child: DefaultTextStyle.merge(
+                style: TextStyle(color: selected ? Colors.white : null),
+                child: child,
+              ),
+            ),
           ],
         ),
       ),
