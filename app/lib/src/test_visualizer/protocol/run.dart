@@ -7,7 +7,7 @@ class RunHost {
   final _currentRuns = <int, RunReference>{};
 
   RunHost(Connection connection)
-      : _channel = connection.createChannel('ScenarioRun') {
+      : _channel = connection.createChannel('TestRun') {
     _channel.registerMethod('addScreen', _addScreen);
     _channel.registerMethod('complete', _onCompleted);
   }

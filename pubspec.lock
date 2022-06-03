@@ -191,7 +191,7 @@ packages:
     source: hosted
     version: "1.0.1"
   flutter:
-    dependency: transitive
+    dependency: "direct main"
     description: flutter
     source: sdk
     version: "0.0.0"
@@ -271,7 +271,7 @@ packages:
     source: hosted
     version: "2.0.0"
   logging:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: logging
       url: "https://pub.dartlang.org"
@@ -334,7 +334,7 @@ packages:
     source: hosted
     version: "3.1.0"
   pool:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: pool
       url: "https://pub.dartlang.org"
@@ -535,7 +535,7 @@ packages:
     source: hosted
     version: "1.0.1"
   web_socket_channel:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: web_socket_channel
       url: "https://pub.dartlang.org"

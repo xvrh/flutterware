@@ -7,14 +7,18 @@ import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
+import '../flutter_sdk.dart';
+import '../project.dart';
 import '../ui.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter/material.dart';
 
 final _logger = Logger('app');
 
-class StudioApp extends StatelessWidget {
-  const StudioApp({Key? key}) : super(key: key);
+class SingleProjectApp extends StatelessWidget {
+  final Project project;
+
+  const SingleProjectApp(this.project, {Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +28,7 @@ class StudioApp extends StatelessWidget {
           title: 'Flutter Studio',
           theme: appTheme(),
           home: Scaffold(
-            body: _App(),
+            body: _App(project),
           ),
           initialRoute: '/',
           debugShowCheckedModeBanner: false,
@@ -35,12 +39,16 @@ class StudioApp extends StatelessWidget {
 }
 
 class _App extends StatelessWidget {
+  final Project project;
+
+  const _App(this.project);
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Again, new start'),
+        Text('Again, new start. The good one this time! ${Directory.current} ${project.directory} ${project.flutterSdkPath.root}'),
       ],
     );
   }

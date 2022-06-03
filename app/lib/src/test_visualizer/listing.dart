@@ -9,16 +9,16 @@ import 'protocol/listing.dart';
 import 'ui/menu_tree.dart';
 import 'ui/side_bar.dart';
 
-class ScenarioListingView extends StatefulWidget {
-  final ScenarioApi client;
+class TestListingView extends StatefulWidget {
+  final TestRunnerApi client;
 
-  const ScenarioListingView(this.client, {Key? key}) : super(key: key);
+  const TestListingView(this.client, {Key? key}) : super(key: key);
 
   @override
-  State<ScenarioListingView> createState() => _ScenarioListingViewState();
+  State<TestListingView> createState() => _TestListingViewState();
 }
 
-class _ScenarioListingViewState extends State<ScenarioListingView> {
+class _TestListingViewState extends State<TestListingView> {
   ListingHost get listing => widget.client.listing;
   late StreamSubscription _reloadSubscription;
 
@@ -98,7 +98,7 @@ class _ScenarioListingViewState extends State<ScenarioListingView> {
 }
 
 class ScenarioRow extends StatelessWidget {
-  final ScenarioApi client;
+  final TestRunnerApi client;
 
   final ScenarioReference scenario;
 

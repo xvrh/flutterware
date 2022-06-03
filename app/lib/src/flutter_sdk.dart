@@ -55,6 +55,9 @@ class FlutterSdkPath {
   @override
   int get hashCode => root.hashCode;
 
+  @override
+  String toString() => 'Flutter SDK ($root)';
+
   static Future<bool> isValid(FlutterSdkPath sdk) async {
     try {
       if (await sdk._readVersion() < Version(1, 0, 0)) {

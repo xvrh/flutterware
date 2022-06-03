@@ -27,6 +27,8 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  args:
+  built_collection:
   collection:
   device_frame:
   file_selector:
@@ -50,8 +52,11 @@ dependencies:
   rxdart:
   shelf:
   shelf_router:
+  shelf_web_socket:
+  stream_channel:
   url_launcher:
   watcher:
+  web_socket_channel:
   yaml:
 
 dev_dependencies:

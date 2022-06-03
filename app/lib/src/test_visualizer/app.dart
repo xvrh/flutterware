@@ -6,8 +6,9 @@ import 'protocol/api.dart';
 import 'server.dart';
 import 'service.dart';
 
+/*
 class ScenarioAppWithServer extends StatefulWidget {
-  final ScenarioService Function(ValueStream<List<ScenarioApi>>) serviceFactory;
+  final TestService Function(ValueStream<List<TestRunnerApi>>) serviceFactory;
 
   const ScenarioAppWithServer({
     Key? key,
@@ -19,7 +20,7 @@ class ScenarioAppWithServer extends StatefulWidget {
 }
 
 class _ScenarioAppWithServerState extends State<ScenarioAppWithServer> {
-  ScenarioService? _service;
+  TestService? _service;
 
   @override
   void initState() {
@@ -49,13 +50,13 @@ class _ScenarioAppWithServerState extends State<ScenarioAppWithServer> {
 }
 
 class ScenarioApp extends StatelessWidget {
-  final ScenarioService service;
+  final TestService service;
 
   const ScenarioApp(this.service, {Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<ScenarioApi>>(
+    return StreamBuilder<List<TestRunnerApi>>(
       stream: service.clients,
       initialData: service.clients.value,
       builder: (context, snapshot) {
@@ -117,3 +118,5 @@ class _LoadingScreen extends StatelessWidget {
     );
   }
 }
+
+*/

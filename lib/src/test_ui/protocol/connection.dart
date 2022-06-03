@@ -133,7 +133,7 @@ class Channel {
         callback is Function()) {
       _methods[methodName] = callback;
     } else {
-      throw Exception('Method must have 3 or less parameters');
+      throw Exception('Method must have maximum 3 parameters');
     }
   }
 

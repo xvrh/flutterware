@@ -1,7 +1,7 @@
 import 'package:flutter_studio/test.dart';
 import 'package:flutter_studio_example/main.dart';
 
-// Start test_ui tool to run those tests:
+// Start flutter_studio tool to run those tests:
 // dart run test_ui
 void main() {
   test('On-boarding', (tester) async {

@@ -12,12 +12,16 @@ dependencies:
   built_collection:
   built_value:
   collection:
+  flutter:
+    sdk: flutter
   flutter_test:
     sdk: flutter
+  logging:
   path:
+  pool:
   stream_channel:
   test:
-  process_runner:
+  web_socket_channel:
 
 dev_dependencies:
   build_runner:

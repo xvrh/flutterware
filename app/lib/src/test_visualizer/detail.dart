@@ -9,7 +9,7 @@ import 'detail/json.dart';
 import 'service.dart';
 
 class DetailPage extends StatelessWidget {
-  final ScenarioService service;
+  final TestService service;
   final ProjectInfo project;
   final ScenarioRun run;
   final String screenId;

@@ -1,77 +1,71 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'package:flutter_studio/internals/constants.dart';
 import 'package:path/path.dart' as p;
 import 'package:io/io.dart';
 import 'package:args/args.dart';
 
-void main() async {
-  var packageUri =
+void main(List<String> arguments) async {
+  var studioPackage =
       await Isolate.resolvePackageUri(Uri.parse('package:flutter_studio/lib'));
-  var packageRoot = packageUri!.resolve('..').toFilePath();
+  var packageRoot = studioPackage!.resolve('..').toFilePath();
   var appPath = p.join(packageRoot, 'app');
-  assert(Directory(appPath).existsSync());
-
-  var flutterSdk = FlutterSdk.tryFind(Platform.resolvedExecutable);
-  if (flutterSdk == null) {
-    throw Exception('Flutter command not found. '
-        'Make sure you are using the dart command from a Flutter SDK (instead of a standalone Dart SDK).\nSearched ${Platform.resolvedExecutable}');
+  if (!File(p.join(packageRoot, 'pubspec.yaml')).existsSync() ||
+      !File(p.join(appPath, 'pubspec.yaml')).existsSync()) {
+    throw Exception('Failed to resolve flutter_studio (root: $packageRoot)');
   }
 
-  var argParser = ArgParser()..addFlag('verbose');
-  var appCommand = argParser.addCommand('app');
+  var isVerbose = arguments.any((e) => ['-v', '--verbose'].contains(e));
 
-  print('''Flutter Studio
-Commands:
-- app: start the graphic user interface
-- screenshots: run the test and generate the screenshots  
-${Platform.resolvedExecutable}
-${Platform.script}
-$packageUri
-$packageRoot
+  if (isVerbose) {
+    print('''
+Platform.resolvedExecutable: ${Platform.resolvedExecutable}
+Platform.script: ${Platform.script}
+StudioPackage: $studioPackage
+PackageRoot: $packageRoot
 ''');
+  }
 
-  var processManager = ProcessManager();
-  var process = await processManager.spawn(
-      flutterSdk.flutter, ['run', '-d', 'macos', '--release'],
-      workingDirectory: appPath, runInShell: false);
-  unawaited(process.exitCode.then(exit));
-}
-
-class FlutterSdk {
-  final String root;
-
-  FlutterSdk(String path) : root = p.canonicalize(path);
-
-  static FlutterSdk? tryFind(String path) {
-    if (FileSystemEntity.isDirectorySync(path)) {
-      var dir = Directory(path);
-      while (dir.existsSync()) {
-        var sdk = FlutterSdk(dir.path);
-        if (isValid(sdk)) {
-          return sdk;
-        } else {
-          var parent = dir.parent;
-          if (parent.path == dir.path) return null;
-          dir = parent;
-        }
-      }
-    } else if (FileSystemEntity.isFileSync(path)) {
-      return tryFind(File(path).parent.path);
+  var compiledCliPath = 'build/compiled_cli${Platform.isWindows ? '.exe' : ''}';
+  var compiledCliFile = File(p.join(appPath, compiledCliPath));
+  if (!compiledCliFile.existsSync() ||
+      arguments.contains('--$forceCompileCliOption')) {
+    compiledCliFile.parent.createSync(recursive: true);
+    try {
+      compiledCliFile.deleteSync();
+    } catch (e) {
+      // Don't care if the file doesn't exist
     }
-    return null;
+
+    var pubGetResult = Process.runSync(
+        Platform.resolvedExecutable, ['pub', 'get'],
+        workingDirectory: appPath);
+    if (pubGetResult.exitCode != 0) {
+      throw Exception('Pub get failed ${pubGetResult.stderr}');
+    }
+    var compiledResult = Process.runSync(Platform.resolvedExecutable,
+        ['compile', 'exe', '-o', compiledCliPath, 'bin/flutter_studio.dart'],
+        workingDirectory: appPath);
+    if (compiledResult.exitCode != 0) {
+      throw Exception(
+          'Failed to compile flutter_studio CLI ${compiledResult.stderr}');
+    }
   }
 
-  String get flutter =>
-      p.join(root, 'bin', 'flutter${Platform.isWindows ? '.bat' : ''}');
+  var process = await Process.start(
+    compiledCliFile.path,
+    arguments,
+    environment: {
+      dartExecutableEnvironmentKey: Platform.resolvedExecutable,
+      studioAppPathEnvironmentKey: p.absolute(appPath),
+    },
+    runInShell: true,
+  );
 
-  @override
-  bool operator ==(other) => other is FlutterSdk && other.root == root;
-
-  @override
-  int get hashCode => root.hashCode;
-
-  static bool isValid(FlutterSdk sdk) {
-    return File(sdk.flutter).existsSync();
-  }
+  //TODO(xha): try to keep the command line colors by using a json protocol with the
+  // formatting information and converting to ansi code here.
+  unawaited(stdin.pipe(process.stdin));
+  unawaited(stdout.addStream(process.stdout));
+  unawaited(stderr.addStream(process.stderr));
 }

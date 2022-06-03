@@ -19,8 +19,8 @@ import 'ui/collapse_button.dart';
 import 'ui/interactive_viewer.dart';
 
 class RunView extends StatefulWidget {
-  final ScenarioService service;
-  final ScenarioApi client;
+  final TestService service;
+  final TestRunnerApi client;
   final BuiltList<String> scenarioName;
 
   RunView(this.service, this.client, this.scenarioName)
@@ -238,7 +238,7 @@ class _FlowMaster extends StatelessWidget {
 }
 
 class _FlowGraph extends StatefulWidget {
-  final ScenarioService service;
+  final TestService service;
   final ScenarioRun run;
 
   const _FlowGraph(this.service, this.run, {Key? key}) : super(key: key);
@@ -371,7 +371,7 @@ class __FlowGraphState extends State<_FlowGraph> {
 }
 
 class _ScreenView extends StatelessWidget {
-  final ScenarioService service;
+  final TestService service;
   final ScenarioRun run;
   final Screen screen;
 

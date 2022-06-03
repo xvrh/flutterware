@@ -35,8 +35,6 @@ class DocumentationSection extends StatelessWidget {
           onTap: () {
             var confluenceInfo = project.confluence;
             if (confluenceInfo != null) {
-              //https://riiotlabs.atlassian.net/wiki/search?text=FP%20doc%20-%20Onboarding%20%3E%20Splash
-
               var confluenceUrl = Uri.https(
                   '${confluenceInfo.site}.atlassian.net', 'wiki/search', {
                 'text': '${confluenceInfo.docPrefix} ${[

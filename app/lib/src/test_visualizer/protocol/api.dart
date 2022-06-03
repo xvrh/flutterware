@@ -5,13 +5,13 @@ import 'listing.dart';
 import 'project.dart';
 import 'run.dart';
 
-class ScenarioApi {
+class TestRunnerApi {
   final Connection _connection;
   late final ListingHost _listing;
   late final ProjectHost _project;
   late final RunHost _runHost;
 
-  ScenarioApi(StreamChannel<String> channel, {required void Function() onClose})
+  TestRunnerApi(StreamChannel<String> channel, {required void Function() onClose})
       : _connection = Connection(channel, modelSerializers) {
     _connection.listen(onClose: () {
       onClose();

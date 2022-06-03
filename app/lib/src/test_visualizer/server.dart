@@ -11,7 +11,7 @@ import 'protocol/api.dart';
 
 class Server {
   late HttpServer _server;
-  final _clients = BehaviorSubject<List<ScenarioApi>>.seeded([]);
+  final _clients = BehaviorSubject<List<TestRunnerApi>>.seeded([]);
 
   Server._();
 
@@ -39,15 +39,15 @@ class Server {
   }
 
   void _onScenarioConnect(Request request, WebSocketChannel channel) async {
-    late ScenarioApi client;
-    client = ScenarioApi(channel.cast<String>(), onClose: () {
+    late TestRunnerApi client;
+    client = TestRunnerApi(channel.cast<String>(), onClose: () {
       _clients.add(_clients.value..remove(client));
     });
 
     _clients.add(_clients.value..add(client));
   }
 
-  ValueStream<List<ScenarioApi>> get clients => _clients;
+  ValueStream<List<TestRunnerApi>> get clients => _clients;
 
   void dispose() {
     _clients.close();

@@ -12,8 +12,8 @@ import 'toolbar.dart';
 import 'ui/menu_tree.dart';
 
 class ConnectedScreen extends StatefulWidget {
-  final ScenarioService service;
-  final ScenarioApi client;
+  final TestService service;
+  final TestRunnerApi client;
 
   const ConnectedScreen(
     this.service,
@@ -57,8 +57,8 @@ class _ConnectedScreenState extends State<ConnectedScreen> {
 }
 
 class ProjectView extends StatefulWidget {
-  final ScenarioService service;
-  final ScenarioApi client;
+  final TestService service;
+  final TestRunnerApi client;
   final ProjectInfo projectInfo;
 
   const ProjectView(this.service, this.client, this.projectInfo, {Key? key})
@@ -86,7 +86,7 @@ class ProjectViewState extends State<ProjectView> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(width: 220, child: ScenarioListingView(widget.client)),
+              SizedBox(width: 220, child: TestListingView(widget.client)),
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.separator,

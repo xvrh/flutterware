@@ -2,8 +2,8 @@ import 'package:rxdart/rxdart.dart';
 
 import 'protocol/api.dart';
 
-class ScenarioService {
-  final ValueStream<List<ScenarioApi>> clients;
+class TestService {
+  final ValueStream<List<TestRunnerApi>> clients;
 
-  ScenarioService(this.clients);
+  TestService(this.clients);
 }
