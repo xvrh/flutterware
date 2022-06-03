@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_studio_app/src/app/ui/side_bar.dart';
+import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 
 import '../ui.dart';
 import 'ui/menu_tree.dart';
@@ -9,6 +10,8 @@ class Menu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.router.isSelected('home');
+
     return MenuTree(
       entries: [
         MenuEntry('Home'),

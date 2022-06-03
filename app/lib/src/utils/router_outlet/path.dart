@@ -91,6 +91,8 @@ class PathPattern {
   int get hashCode => pattern.hashCode;
 }
 
+enum PathSelection {selected, ancestor, none}
+
 class MatchedPath {
   final PathPattern pattern;
   final PagePath full;
@@ -126,7 +128,7 @@ class MatchedPath {
     return newPath;
   }
 
-  bool isSelected(String url) {
+  PathSelection selection(String url) {
     PagePath toMatch;
     if (url.startsWith('/')) {
       toMatch = PagePath(url);
@@ -136,7 +138,16 @@ class MatchedPath {
 
     var toMatchUrl = toMatch.toString();
     var fullUrl = full.toString();
-    return toMatchUrl == fullUrl || p.isWithin(toMatchUrl, fullUrl);
+    if (toMatchUrl == fullUrl) {
+      return PathSelection.selected;
+    } else if (toMatchUrl == fullUrl || p.isWithin(toMatchUrl, fullUrl)) {
+      return PathSelection.ancestor;
+    }
+    return PathSelection.none;
+  }
+
+  bool isSelected(String url) {
+    return selection(url) != PathSelection.none;
   }
 
   static final _findParameters = RegExp(r':([a-zA-Z0-9_]+)');

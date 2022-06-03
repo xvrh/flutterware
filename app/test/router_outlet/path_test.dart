@@ -175,6 +175,22 @@ void main() {
     expect(matched.isSelected('/home'), true);
   });
 
+  test('MatchedPath.isSelected 3', () {
+    var path = PagePath('/home/profile/1');
+    var rootMatch = path.rootMatch;
+    var profileMatch = path.rootMatch.matchesRemaining(PathPattern('home/profile'))!;
+
+    expect(rootMatch.selection('home'), PathSelection.ancestor);
+    expect(rootMatch.selection('users'), PathSelection.none);
+    expect(rootMatch.selection('home/profile'), PathSelection.ancestor);
+    expect(rootMatch.selection('/home/profile/'), PathSelection.ancestor);
+    expect(rootMatch.selection('/home/profile'), PathSelection.ancestor);
+    expect(profileMatch.selection(''), PathSelection.ancestor);
+    expect(profileMatch.selection('1'), PathSelection.selected);
+    expect(profileMatch.selection('1/'), PathSelection.selected);
+    expect(profileMatch.selection('/1'), PathSelection.none);
+  });
+
   test('MatchedPath.selectedIndex', () {
     var path = PagePath('/users/1');
     var matched = path.rootMatch;
