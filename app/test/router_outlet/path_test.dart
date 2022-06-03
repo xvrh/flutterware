@@ -178,17 +178,18 @@ void main() {
   test('MatchedPath.isSelected 3', () {
     var path = PagePath('/home/profile/1');
     var rootMatch = path.rootMatch;
-    var profileMatch = path.rootMatch.matchesRemaining(PathPattern('home/profile'))!;
+    var profileMatch =
+        path.rootMatch.matchesRemaining(PathPattern('home/profile'))!;
 
-    expect(rootMatch.selection('home'), PathSelection.ancestor);
-    expect(rootMatch.selection('users'), PathSelection.none);
-    expect(rootMatch.selection('home/profile'), PathSelection.ancestor);
-    expect(rootMatch.selection('/home/profile/'), PathSelection.ancestor);
-    expect(rootMatch.selection('/home/profile'), PathSelection.ancestor);
-    expect(profileMatch.selection(''), PathSelection.ancestor);
-    expect(profileMatch.selection('1'), PathSelection.selected);
-    expect(profileMatch.selection('1/'), PathSelection.selected);
-    expect(profileMatch.selection('/1'), PathSelection.none);
+    expect(rootMatch.selection('home'), SelectionType.ancestor);
+    expect(rootMatch.selection('users'), SelectionType.none);
+    expect(rootMatch.selection('home/profile'), SelectionType.ancestor);
+    expect(rootMatch.selection('/home/profile/'), SelectionType.ancestor);
+    expect(rootMatch.selection('/home/profile'), SelectionType.ancestor);
+    expect(profileMatch.selection(''), SelectionType.ancestor);
+    expect(profileMatch.selection('1'), SelectionType.selected);
+    expect(profileMatch.selection('1/'), SelectionType.selected);
+    expect(profileMatch.selection('/1'), SelectionType.none);
   });
 
   test('MatchedPath.selectedIndex', () {

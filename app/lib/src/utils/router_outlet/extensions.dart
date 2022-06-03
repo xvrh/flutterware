@@ -1,4 +1,7 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_studio_app/src/utils/router_outlet/path.dart';
+export 'package:flutter_studio_app/src/utils/router_outlet/path.dart'
+    show SelectionType;
 import 'provider.dart';
 import 'router_root.dart';
 
@@ -29,6 +32,10 @@ class RouterReference {
 
   bool isSelected(String url) {
     return path.isSelected(url);
+  }
+
+  SelectionType selection(String url) {
+    return path.selection(url);
   }
 
   int? selectedIndex(Iterable<String> urls) {

@@ -4,10 +4,16 @@ import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 
 import '../dependencies/screen.dart';
 import '../project.dart';
+import '../test_runner/screen.dart';
 import '../ui.dart';
 import '../utils/data_loader.dart';
 import 'header.dart';
 import 'menu.dart';
+import 'ui/breadcrumb.dart';
+import 'ui/side_bar.dart';
+import 'paths.dart' as paths;
+
+export 'ui/breadcrumb.dart';
 
 class ProjectView extends StatefulWidget {
   final Project project;
@@ -29,19 +35,27 @@ class ProjectViewState extends State<ProjectView> {
     return Column(
       children: [
         ValueListenableBuilder<Snapshot<Pubspec>>(
-            valueListenable: widget.project.pubspec,
-            builder: (context, snapshot, child) {
-              return Header(
-                  snapshot.data?.name ?? snapshot.error?.toString() ?? '',
-                  key: _headerKey);
-            }),
+          valueListenable: widget.project.pubspec,
+          builder: (context, snapshot, child) {
+            return Header(
+              snapshot.data?.name ?? snapshot.error?.toString() ?? '',
+              key: _headerKey,
+            );
+          },
+        ),
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: 220,
-                child: Menu(),
+                width: 250,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SidebarHeader(title: Text('Project')),
+                    Expanded(child: Menu(widget.project)),
+                  ],
+                ),
               ),
               Container(
                 decoration: BoxDecoration(
@@ -52,9 +66,11 @@ class ProjectViewState extends State<ProjectView> {
               Expanded(
                 child: RouterOutlet(
                   {
-                    'home': (route) => ProjectInfoScreen(),
-                    'dependencies': (route) => DependenciesScreen(),
+                    paths.home: (route) => ProjectInfoScreen(),
+                    paths.dependencies: (route) => DependenciesScreen(),
+                    paths.tests: (route) => TestRunnerScreen(),
                   },
+                  onNotFound: (_) => paths.home,
                 ),
               ),
             ],
@@ -65,4 +81,10 @@ class ProjectViewState extends State<ProjectView> {
   }
 
   HeaderState get header => _headerKey.currentState!;
+
+  void setBreadcrumb(Iterable<BreadcrumbItem> breadcrumb) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      header.setItemsBuilder((context) => breadcrumb);
+    });
+  }
 }

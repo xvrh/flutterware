@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../app/project_view.dart';
+
 class ProjectInfoScreen extends StatelessWidget {
   const ProjectInfoScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    ProjectView.of(context).setBreadcrumb([]);
     return Text('''
 ## Project name
    Path

@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 
 class FittedApp extends StatefulWidget {
   final Widget child;
+  final Size minimumSize;
 
-  const FittedApp({super.key, required this.child});
+  const FittedApp({super.key, required this.child, required this.minimumSize});
 
   @override
   State<FittedApp> createState() => _FittedAppState();
@@ -28,22 +29,18 @@ class _FittedAppState extends State<FittedApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     var size = window.physicalSize / window.devicePixelRatio;
-
-    const minWidth = 450.0;
-    const minHeight = 400.0;
-
-    var widthRatio = size.width / minWidth;
-    var heightRatio = size.height / minHeight;
+    var widthRatio = size.width / widget.minimumSize.width;
+    var heightRatio = size.height / widget.minimumSize.height;
 
     var width = size.width;
     var height = size.height;
 
     if (min(widthRatio, heightRatio) < 1) {
       if (widthRatio < heightRatio) {
-        width = minWidth;
+        width = widget.minimumSize.width;
         height = size.height / widthRatio;
       } else {
-        height = minHeight;
+        height = widget.minimumSize.height;
         width = size.width / heightRatio;
       }
     }

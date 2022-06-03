@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:built_collection/built_collection.dart';
 import '../app/project_view.dart';
+import '../app/ui/breadcrumb.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter_studio/internal.dart';
 import 'package:flutter/material.dart' hide InteractiveViewer;
@@ -17,6 +18,16 @@ import 'service.dart';
 import 'toolbar.dart';
 import 'ui/collapse_button.dart';
 import 'ui/interactive_viewer.dart';
+
+Iterable<BreadcrumbItem> breadcrumbForRun(ScenarioRun run) sync* {
+  for (var i = 0; i < run.scenario.name.length; i++) {
+    var part = run.scenario.name[i];
+    yield BreadcrumbItem(
+      Text(part),
+      onTap: null,
+    );
+  }
+}
 
 class RunView extends StatefulWidget {
   final TestService service;
@@ -75,8 +86,7 @@ class _RunViewState extends State<RunView> {
       initialData: run.value,
       builder: (context, snapshot) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          ProjectView.of(context).header.setScreen(null);
-          ProjectView.of(context).header.setRun(null);
+          ProjectView.of(context).header.setItemsBuilder(null);
         });
 
         var toolbarScope = ToolBarScope.of(context);
@@ -90,7 +100,9 @@ class _RunViewState extends State<RunView> {
         } else {
           var run = snapshot.requireData;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            ProjectView.of(context).header.setRun(run);
+            ProjectView.of(context)
+                .header
+                .setItemsBuilder((context) => breadcrumbForRun(run));
           });
           if (toolbarScope.isCollapsed) {
             run = run.collapse();

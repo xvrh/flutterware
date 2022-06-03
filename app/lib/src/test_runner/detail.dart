@@ -1,5 +1,7 @@
 import 'package:collection/collection.dart';
+import 'package:flutter_studio_app/src/test_runner/flow_graph.dart';
 import '../app/project_view.dart';
+import '../app/ui/breadcrumb.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter_studio/internal.dart';
 import 'package:flutter/material.dart';
@@ -22,7 +24,10 @@ class DetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     var screen = run.screens[screenId];
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ProjectView.of(context).header.setScreen(screen);
+      ProjectView.of(context).header.setItemsBuilder((context) => [
+            ...breadcrumbForRun(run),
+            if (screen != null) BreadcrumbItem(Text(screen.name)),
+          ]);
     });
 
     if (screen == null) {
