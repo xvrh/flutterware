@@ -6,7 +6,6 @@ import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 import 'package:rxdart/rxdart.dart';
 import 'src/test_runner/app_connected.dart';
 import 'src/test_runner/protocol/api.dart';
-import 'src/test_runner/service.dart';
 
 void main() async {
   late BehaviorSubject<List<TestRunnerApi>> subject;
@@ -32,9 +31,7 @@ void main() async {
   document.body!.children.add(iframe);
 
   subject = BehaviorSubject.seeded([]);
-
-  var service = TestService(subject.stream);
-  runApp(_StandaloneApp(_App(service)));
+  runApp(_StandaloneApp(_App(subject.stream)));
 }
 
 class _StandaloneApp extends StatelessWidget {
@@ -56,15 +53,15 @@ class _StandaloneApp extends StatelessWidget {
 }
 
 class _App extends StatelessWidget {
-  final TestService service;
+  final ValueStream<List<TestRunnerApi>> clients;
 
-  const _App(this.service, {Key? key}) : super(key: key);
+  const _App(this.clients, {Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<TestRunnerApi>>(
-      stream: service.clients,
-      initialData: service.clients.value,
+      stream: clients,
+      initialData: clients.value,
       builder: (context, snapshot) {
         var clients = snapshot.requireData;
         if (clients.isEmpty) {
@@ -74,7 +71,6 @@ class _App extends StatelessWidget {
         } else {
           var client = clients.last;
           return ConnectedScreen(
-            service,
             client,
             key: ValueKey(client),
           );

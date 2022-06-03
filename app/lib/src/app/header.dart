@@ -34,7 +34,7 @@ class HeaderState extends State<Header> {
         padding: const EdgeInsets.symmetric(horizontal: 8.0),
         child: Breadcrumb(
           children: [
-            BreadcrumbItem(Text(widget.projectName)),
+            BreadcrumbItem(Text(widget.projectName), onTap: () => context.router.go('/home'),),
             if (itemsBuilder != null) ...itemsBuilder(context),
           ],
         ),

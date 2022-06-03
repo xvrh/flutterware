@@ -8,15 +8,12 @@ import '../ui.dart';
 import 'flow_graph.dart';
 import 'listing.dart';
 import 'protocol/api.dart';
-import 'service.dart';
 import 'toolbar.dart';
 
 class ConnectedScreen extends StatefulWidget {
-  final TestService service;
   final TestRunnerApi client;
 
   const ConnectedScreen(
-    this.service,
     this.client, {
     Key? key,
   }) : super(key: key);
@@ -44,8 +41,7 @@ class _ConnectedScreenState extends State<ConnectedScreen> {
           if (snapshot.hasError) {
             return ErrorWidget(snapshot.error!);
           }
-          return ProjectView(
-              widget.service, widget.client, snapshot.requireData);
+          return ProjectView( widget.client, snapshot.requireData);
         } else {
           return Center(
             child: Text('Loading project...'),
@@ -57,11 +53,10 @@ class _ConnectedScreenState extends State<ConnectedScreen> {
 }
 
 class ProjectView extends StatefulWidget {
-  final TestService service;
   final TestRunnerApi client;
   final ProjectInfo projectInfo;
 
-  const ProjectView(this.service, this.client, this.projectInfo, {Key? key})
+  const ProjectView(this.client, this.projectInfo, {Key? key})
       : super(key: key);
 
   @override
@@ -97,7 +92,6 @@ class ProjectViewState extends State<ProjectView> {
                     {
                       'scenario/:scenarioId': (args) {
                         return RunView(
-                          widget.service,
                           widget.client,
                           BuiltList(
                               TreePath.fromEncoded(args['scenarioId']).nodes),

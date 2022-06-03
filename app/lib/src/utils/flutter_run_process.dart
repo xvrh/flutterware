@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter_studio_app/src/flutter_sdk.dart';
+
 import 'daemon/commands.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
@@ -17,11 +19,8 @@ class FlutterRunProcess {
   FlutterRunProcess._(this._process, this._protocol, this.appId);
 
   static Future<FlutterRunProcess> start(Directory directory,
-      {required String target, required String device}) async {
-    var sdkBinDirectory = File(Platform.resolvedExecutable).parent;
-    var flutterBin = p.join(sdkBinDirectory.path, '../../..', 'flutter');
-
-    var process = await Process.start(flutterBin,
+      {required String target, required String device, required FlutterSdkPath flutterSdk}) async {
+    var process = await Process.start(flutterSdk.flutter,
         ['run', '--machine', '--target', target, '--device-id', device],
         workingDirectory: directory.path);
     var protocol = DaemonProtocol(

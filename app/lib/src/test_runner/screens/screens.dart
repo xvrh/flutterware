@@ -4,8 +4,7 @@ import '../service.dart';
 import '../ui/device_frame.dart';
 import 'json.dart';
 
-Widget? widgetForScreen(ScenarioRun run, Screen screen,
-    {required TestService service}) {
+Widget? widgetForScreen(ScenarioRun run, Screen screen) {
   var bytes = screen.imageBytes;
   if (bytes != null) {
     return Image.memory(bytes);

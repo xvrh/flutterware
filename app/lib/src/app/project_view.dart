@@ -47,7 +47,8 @@ class ProjectViewState extends State<ProjectView> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
+              Container(
+                color: AppColors.menuBackground,
                 width: 250,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -66,7 +67,7 @@ class ProjectViewState extends State<ProjectView> {
               Expanded(
                 child: RouterOutlet(
                   {
-                    paths.home: (route) => ProjectInfoScreen(),
+                    paths.home: (route) => ProjectInfoScreen(widget.project),
                     paths.dependencies: (route) => DependenciesScreen(),
                     paths.tests: (route) => TestRunnerScreen(),
                   },

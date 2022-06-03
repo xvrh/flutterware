@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 import 'package:yaml/yaml.dart';
 import 'flutter_sdk.dart';
+import 'test_runner/service.dart';
 import 'utils/data_loader.dart';
 
 part 'project.g.dart';
@@ -16,6 +17,7 @@ class Project {
   final String directory;
   final FlutterSdkPath flutterSdkPath;
   final FlutterSdk _flutterSdk;
+  final tests = TestService();
   late DataLoader<Pubspec> _pubspec;
   late StreamSubscription _pubspecWatcher;
 

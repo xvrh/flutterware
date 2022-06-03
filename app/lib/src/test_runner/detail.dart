@@ -11,12 +11,11 @@ import 'detail/json.dart';
 import 'service.dart';
 
 class DetailPage extends StatelessWidget {
-  final TestService service;
   final ProjectInfo project;
   final ScenarioRun run;
   final String screenId;
 
-  const DetailPage(this.service, this.project, this.run, this.screenId,
+  const DetailPage(this.project, this.run, this.screenId,
       {Key? key})
       : super(key: key);
 

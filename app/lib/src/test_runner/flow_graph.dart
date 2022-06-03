@@ -30,11 +30,10 @@ Iterable<BreadcrumbItem> breadcrumbForRun(ScenarioRun run) sync* {
 }
 
 class RunView extends StatefulWidget {
-  final TestService service;
   final TestRunnerApi client;
   final BuiltList<String> scenarioName;
 
-  RunView(this.service, this.client, this.scenarioName)
+  RunView(this.client, this.scenarioName)
       : super(key: Key(scenarioName.join('-')));
 
   @override
@@ -110,7 +109,7 @@ class _RunViewState extends State<RunView> {
           contentWidget = RouterOutlet({
             '': (_) => _FlowMaster(this, run),
             'detail/:screen': (detail) =>
-                DetailPage(widget.service, project, run, detail['screen']),
+                DetailPage(project, run, detail['screen']),
           });
         }
         var isCompleted = snapshot.data?.isCompleted ?? false;
@@ -221,7 +220,7 @@ class _FlowMaster extends StatelessWidget {
             children: [
               Container(
                 color: Colors.black.withOpacity(0.02),
-                child: _FlowGraph(parent.widget.service, run),
+                child: _FlowGraph(run),
               ),
               Positioned(
                 right: 5,
@@ -250,10 +249,9 @@ class _FlowMaster extends StatelessWidget {
 }
 
 class _FlowGraph extends StatefulWidget {
-  final TestService service;
   final ScenarioRun run;
 
-  const _FlowGraph(this.service, this.run, {Key? key}) : super(key: key);
+  const _FlowGraph(this.run, {Key? key}) : super(key: key);
 
   @override
   __FlowGraphState createState() => __FlowGraphState();
@@ -346,7 +344,6 @@ class __FlowGraphState extends State<_FlowGraph> {
               context.go('detail/${screen.id}');
             },
             child: _ScreenView(
-              widget.service,
               widget.run,
               screen,
               key: Key(node.id),
@@ -383,15 +380,14 @@ class __FlowGraphState extends State<_FlowGraph> {
 }
 
 class _ScreenView extends StatelessWidget {
-  final TestService service;
   final ScenarioRun run;
   final Screen screen;
 
-  const _ScreenView(this.service, this.run, this.screen, {Key? key})
+  const _ScreenView(this.run, this.screen, {Key? key})
       : super(key: key);
 
   Widget? _widgetForScreen(Screen screen) {
-    return widgetForScreen(run, screen, service: service);
+    return widgetForScreen(run, screen);
   }
 
   @override
