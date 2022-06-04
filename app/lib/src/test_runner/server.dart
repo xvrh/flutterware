@@ -21,6 +21,11 @@ class Server {
     return server;
   }
 
+  Uri get socketUri => Uri(
+      scheme: 'ws',
+      host: '${_server.address.host}:${_server.port}',
+      path: 'socket');
+
   Future<void> _init({int? port}) async {
     port ??= 0;
 
