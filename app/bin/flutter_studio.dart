@@ -1,12 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:args/args.dart';
 import 'package:flutter_studio/internals/constants.dart';
 import 'package:flutter_studio_app/src/constants.dart';
-import 'package:io/io.dart';
-import 'package:flutter_studio/src/test_ui/entry_point.dart';
-import 'package:flutter_studio_app/src/utils/flutter_run_process.dart';
 import 'package:logging/logging.dart';
 import 'package:io/ansi.dart';
 import 'dart:io' as io;
@@ -53,8 +49,6 @@ void main(List<String> args) async {
 
   var verbose = argResults['verbose'] as bool;
   _setupLogger(verbose: verbose);
-
-  _logger.severe('BLA LBA');
 
   await commandRunner.runCommand(argResults);
 }

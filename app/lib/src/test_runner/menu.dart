@@ -19,7 +19,7 @@ class TestMenuLine extends StatelessWidget {
           constraints: BoxConstraints(),
           padding: EdgeInsets.zero,
           icon: Icon(
-            Icons.info_outline,
+            Icons.build,
             size: 18,
           ),
         )

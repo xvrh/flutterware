@@ -29,6 +29,7 @@ PackageRoot: $packageRoot
 
   var compiledCliPath = 'build/compiled_cli${Platform.isWindows ? '.exe' : ''}';
   var compiledCliFile = File(p.join(appPath, compiledCliPath));
+  //TODO(xha): we should detect if any file has changed and re-compile as needed.
   if (!compiledCliFile.existsSync() ||
       arguments.contains('--$forceCompileCliOption')) {
     compiledCliFile.parent.createSync(recursive: true);
