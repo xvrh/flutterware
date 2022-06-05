@@ -48,9 +48,9 @@ import 'package:flutter_studio/internals/test_runner.dart';
   }
   code.writeln('''
 };
-const _cliServer = Uri.ws('${serverUri.toString()}'); // Inject url server
+final _cliServer = Uri.parse('${serverUri.toString()}');
 void main() {
-  runServer(allTests, _cliServer);
+  runServer(_cliServer, allTests);
 }
 ''');
   return '$code';

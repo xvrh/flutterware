@@ -242,13 +242,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.8.1"
-  platform:
-    dependency: transitive
-    description:
-      name: platform
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "3.1.0"
   pool:
     dependency: transitive
     description:
@@ -256,20 +249,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.5.0"
-  process:
-    dependency: transitive
-    description:
-      name: process
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "4.2.4"
-  process_runner:
-    dependency: transitive
-    description:
-      name: process_runner
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "4.1.2"
   pub_semver:
     dependency: transitive
     description:

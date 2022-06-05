@@ -18,8 +18,12 @@ class FlutterRunProcess {
 
   FlutterRunProcess._(this._process, this._protocol, this.appId);
 
-  static Future<FlutterRunProcess> start(Directory directory,
-      {required String target, required String device, required FlutterSdkPath flutterSdk}) async {
+  static Future<FlutterRunProcess> start(
+    Directory directory, {
+    required String target,
+    required String device,
+    required FlutterSdkPath flutterSdk,
+  }) async {
     var process = await Process.start(flutterSdk.flutter,
         ['run', '--machine', '--target', target, '--device-id', device],
         workingDirectory: directory.path);

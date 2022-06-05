@@ -23,14 +23,15 @@ class Server {
 
   Uri get socketUri => Uri(
       scheme: 'ws',
-      host: '${_server.address.host}:${_server.port}',
+      host: _server.address.host,
+      port: _server.port,
       path: 'socket');
 
   Future<void> _init({int? port}) async {
     port ??= 0;
 
     var router = Router();
-    router.get('/socket', _scenarioSocketHandler);
+    router.get('/socket', _socketHandler);
 
     _server = await io.serve(router, InternetAddress.anyIPv4, port);
     _server.defaultResponseHeaders.set('Access-Control-Allow-Origin', '*');
@@ -38,12 +39,12 @@ class Server {
     print('Server started ws://${_server.address.host}:${_server.port}');
   }
 
-  FutureOr<Response> _scenarioSocketHandler(Request request) {
-    return webSocketHandler((WebSocketChannel channel) =>
-        _onScenarioConnect(request, channel))(request);
+  FutureOr<Response> _socketHandler(Request request) {
+    return webSocketHandler(
+        (WebSocketChannel channel) => _onConnect(request, channel))(request);
   }
 
-  void _onScenarioConnect(Request request, WebSocketChannel channel) async {
+  void _onConnect(Request request, WebSocketChannel channel) async {
     late TestRunnerApi client;
     client = TestRunnerApi(channel.cast<String>(), onClose: () {
       _clients.add(_clients.value..remove(client));

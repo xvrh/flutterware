@@ -17,7 +17,7 @@ class Project {
   final String directory;
   final FlutterSdkPath flutterSdkPath;
   final FlutterSdk _flutterSdk;
-  final tests = TestService();
+  late final tests = TestService(this);
   late DataLoader<Pubspec> _pubspec;
   late StreamSubscription _pubspecWatcher;
 

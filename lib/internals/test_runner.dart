@@ -1,5 +1,3 @@
-
-
-void runServer(Uri serverUri, Map<String, Function> allTests) {
-
+void runServer(Uri serverUri, Map<String, Function> Function() allTests) {
+  print('RUn server');
 }

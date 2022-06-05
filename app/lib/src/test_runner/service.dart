@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -21,7 +22,8 @@ class TestService {
 
   TestService(this.project)
       : _projectRoot = Directory(project.directory),
-        _entryPoint = File(p.join(project.directory, 'build', 'flutter_studio', 'test_entry_point.dart')) {
+        _entryPoint = File(p.join(project.directory, 'build', 'flutter_studio',
+            'test_entry_point.dart')) {
     _entryPoint.parent.createSync(recursive: true);
   }
 
@@ -52,7 +54,12 @@ class TestService {
           target: p.relative(_entryPoint.path, from: _projectRoot.path),
           device: 'flutter-tester',
           flutterSdk: project.flutterSdkPath);
+      _logger.severe('flutter run -d flutter-tester started');
       _state.value = DaemonState$Connected(daemon);
+
+      unawaited(daemon.onExit.then((_) {
+        _state.value = DaemonState$Stopped();
+      }));
     } catch (e, s) {
       _logger.severe('Fail to start flutter run -d flutter-tester', e, s);
       _state.value = DaemonState$Stopped(error: e);
