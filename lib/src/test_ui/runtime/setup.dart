@@ -6,7 +6,7 @@ import 'setup_io.dart' if (dart.library.html) 'setup_web.dart';
 export '../protocol/models.dart' show ConfluenceInfo;
 
 void runScenarios(
-  Map<String, dynamic> Function() scenarios, {
+  Map<String, Function> Function() scenarios, {
   bool Function(String)? translationPredicate,
   required String projectName,
   required List<String> supportedLanguages,
@@ -24,7 +24,7 @@ void runScenarios(
   );
   Runner(
     createChannel,
-    scenarios: scenarios,
+    tests: scenarios,
     bundle: () async => createBundle(bundleParams),
     onConnected: onConnected,
     project: ProjectInfo(

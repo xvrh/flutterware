@@ -26,9 +26,41 @@ class TestMenuLine extends StatelessWidget {
                 },
                 constraints: BoxConstraints(),
                 padding: EdgeInsets.zero,
-                icon: Icon(Icons.settings, size: 12),
+                icon: Icon(Icons.more_vert, size: 12),
               );
             } else {
+              return IntrinsicHeight(
+                child: Container(
+                  // decoration: BoxDecoration(
+                  //     color: Colors.blueAccent,
+                  //     borderRadius: BorderRadius.circular(5)),
+                  // Put all this on the top of the main tab.
+                  // Just keep the
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.bolt,
+                        color: Colors.orange,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 5),
+                      Icon(
+                        Icons.restart_alt,
+                        color: Colors.green,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 5),
+                      VerticalDivider(),
+                      const SizedBox(width: 5),
+                      Icon(
+                        Icons.more_vert,
+                        size: 20,
+                        //color: Colors.white,
+                      ),
+                    ],
+                  ),
+                ),
+              );
               return const SizedBox();
             }
           },

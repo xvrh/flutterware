@@ -19,8 +19,6 @@ import 'scenario.dart';
 
 final _logger = Logger('runner');
 
-//TODO(xha): This should try to connect permanently to the server when connection
-// is lost (ie due to hot-restart of app). => rearchitecture
 StreamChannel<String> connectToServer(Uri serverUri) {
   return WebSocketChannel.connect(serverUri).cast<String>();
 }
@@ -29,7 +27,7 @@ StreamChannel<String> connectToServer(Uri serverUri) {
 /// with the server.
 class Runner implements RunContext {
   final StreamChannel<String> Function() connectionFactory;
-  final Map<String, dynamic> Function() scenarios;
+  final Map<String, Function> Function() tests;
   final ProjectInfo project;
   late final ScenarioBinding _binding;
   final void Function()? onConnected;
@@ -40,7 +38,7 @@ class Runner implements RunContext {
   late final ScenarioBundle _bundle;
 
   Runner(this.connectionFactory,
-      {required this.scenarios,
+      {required this.tests,
       required this.project,
       required Future<ScenarioBundle> Function() bundle,
       this.onConnected})
@@ -103,19 +101,20 @@ class Runner implements RunContext {
   }
 
   Iterable<ScenarioReference> _list() {
-    var allScenario = scenarios();
-    return _listScenarios([], allScenario);
+    var allTests = tests();
+    return _listTests([], allTests);
   }
 
-  Iterable<ScenarioReference> _listScenarios(
-      List<String> parents, Map<String, dynamic> scenarios) sync* {
+  Iterable<ScenarioReference> _listTests(
+      List<String> parents, Map<String, Function> scenarios) sync* {
+    testWidgets('description', () => null);
     for (var entry in scenarios.entries) {
       var value = entry.value;
       var name = [...parents, entry.key];
       if (value is Scenario) {
-        yield ScenarioReference(name, description: value.description);
+        //yield ScenarioReference(name, description: value.description);
       } else if (value is Map<String, dynamic>) {
-        yield* _listScenarios(name, value);
+        //yield* _listTests(name, value);
       } else {
         throw StateError(
             'Scenarios map should only contains Scenario or Map<String, dynamic>');
@@ -127,14 +126,13 @@ class Runner implements RunContext {
   Future<void> addScreen(RunArgs run, NewScreen screen) =>
       _runClient!.addScreen(run, screen);
 
-  Scenario? _findScenario(
-      Map<String, dynamic> scenarios, BuiltList<String> name) {
+  Scenario? _findTest(Map<String, dynamic> tests, BuiltList<String> name) {
     for (var namePart in name) {
-      var value = scenarios[namePart];
+      var value = tests[namePart];
       if (value is Scenario) {
         return value;
       } else if (value is Map<String, dynamic>) {
-        scenarios = value;
+        tests = value;
       }
     }
     return null;
@@ -142,11 +140,11 @@ class Runner implements RunContext {
 
   final _currentScenario = <RunArgs, Scenario>{};
   ScenarioRun _createRun(RunArgs args) {
-    _logger.fine('RunScenario ${args.scenarioName.join('/')}');
-    var allScenario = scenarios();
-    var scenario = _findScenario(allScenario, args.scenarioName);
+    _logger.fine('RunTest ${args.scenarioName.join('/')}');
+    var allScenario = tests();
+    var scenario = _findTest(allScenario, args.scenarioName);
     if (scenario == null) {
-      throw Exception('No scenario ${args.scenarioName.join('/')} found.');
+      throw Exception('No test ${args.scenarioName.join('/')} found.');
     }
 
     var run = ScenarioRun(
@@ -172,13 +170,12 @@ class Runner implements RunContext {
           result = RunResult.error(zoneError, null);
         }
       } catch (e, stackTrace) {
-        _logger.warning('Failed to run scenario', e);
+        _logger.warning('Failed to run test', e);
         result = RunResult.error(e, stackTrace);
       } finally {
         result = result.rebuild((b) => b..duration = stopwatch.elapsed);
         await runClient.complete(args, result);
-        _logger
-            .finer('End scenario ${args.scenarioName} in ${stopwatch.elapsed}');
+        _logger.finer('End test ${args.scenarioName} in ${stopwatch.elapsed}');
         _currentScenario.remove(args);
       }
     });
