@@ -1,5 +1,5 @@
 import 'package:stream_channel/stream_channel.dart';
-import 'package:flutter_studio/internal.dart';
+import 'package:flutter_studio/internals/test_runner.dart';
 
 import 'listing.dart';
 import 'project.dart';
@@ -11,7 +11,8 @@ class TestRunnerApi {
   late final ProjectHost _project;
   late final RunHost _runHost;
 
-  TestRunnerApi(StreamChannel<String> channel, {required void Function() onClose})
+  TestRunnerApi(StreamChannel<String> channel,
+      {required void Function() onClose})
       : _connection = Connection(channel, modelSerializers) {
     _connection.listen(onClose: () {
       onClose();

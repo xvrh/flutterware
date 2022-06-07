@@ -15,6 +15,7 @@ import '../protocol/models.dart';
 import 'asset_bundle.dart';
 import 'binding.dart';
 import 'fonts.dart';
+import 'list_tests.dart';
 import 'scenario.dart';
 
 final _logger = Logger('runner');
@@ -27,7 +28,7 @@ StreamChannel<String> connectToServer(Uri serverUri) {
 /// with the server.
 class Runner implements RunContext {
   final StreamChannel<String> Function() connectionFactory;
-  final Map<String, Function> Function() tests;
+  final Map<String, void Function()> Function() tests;
   final ProjectInfo project;
   late final ScenarioBinding _binding;
   final void Function()? onConnected;
@@ -102,24 +103,7 @@ class Runner implements RunContext {
 
   Iterable<ScenarioReference> _list() {
     var allTests = tests();
-    return _listTests([], allTests);
-  }
-
-  Iterable<ScenarioReference> _listTests(
-      List<String> parents, Map<String, Function> scenarios) sync* {
-    testWidgets('description', () => null);
-    for (var entry in scenarios.entries) {
-      var value = entry.value;
-      var name = [...parents, entry.key];
-      if (value is Scenario) {
-        //yield ScenarioReference(name, description: value.description);
-      } else if (value is Map<String, dynamic>) {
-        //yield* _listTests(name, value);
-      } else {
-        throw StateError(
-            'Scenarios map should only contains Scenario or Map<String, dynamic>');
-      }
-    }
+    return listTests(allTests);
   }
 
   @override

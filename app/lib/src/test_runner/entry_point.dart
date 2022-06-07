@@ -32,7 +32,7 @@ class TestFile {
 String entryPointCode(List<TestFile> files, Uri serverUri) {
   var code = StringBuffer()..writeln('''
 // GENERATED-CODE: Flutter Studio - Test runner feature
-import 'package:flutter_studio/internals/test_runner.dart';
+import 'package:flutter_studio/internals/test_runner_daemon.dart';
 ''');
 
   var index = 0;
@@ -40,7 +40,7 @@ import 'package:flutter_studio/internals/test_runner.dart';
     code.writeln("import '../../${file.relativePath}' as i$index;");
     ++index;
   }
-  code.writeln('Map<String, Function> allTests() => {');
+  code.writeln('Map<String, void Function()> allTests() => {');
   index = 0;
   for (var file in files) {
     code.writeln("'${file.relativePath}': i$index.main,");
@@ -50,7 +50,7 @@ import 'package:flutter_studio/internals/test_runner.dart';
 };
 final _cliServer = Uri.parse('${serverUri.toString()}');
 void main() {
-  runServer(_cliServer, allTests);
+  runTests(_cliServer, allTests);
 }
 ''');
   return '$code';

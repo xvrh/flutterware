@@ -1,4 +1,4 @@
-import 'package:flutter_studio/internal.dart';
+import 'package:flutter_studio/internals/test_runner.dart';
 import 'package:flutter/material.dart';
 import '../service.dart';
 import '../ui/device_frame.dart';

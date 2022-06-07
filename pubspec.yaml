@@ -21,6 +21,7 @@ dependencies:
   pool:
   stream_channel:
   test:
+  test_api:
   web_socket_channel:
 
 dev_dependencies:

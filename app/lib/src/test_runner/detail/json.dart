@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:flutter_studio/internal.dart' hide TextInfo;
+import 'package:flutter_studio/internals/test_runner.dart' hide TextInfo;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/src/all_elements.dart';
 import 'package:flutter_test/src/binding.dart';
 import 'package:flutter_test/src/controller.dart';
+import 'package:flutter_test/src/widget_tester.dart' as original;
 import 'package:flutter_test/src/finders.dart';
 import 'package:flutter_test/src/restoration.dart';
 import 'package:flutter_test/src/test_async_utils.dart';
@@ -80,6 +81,9 @@ E? _lastWhereOrNull<E>(Iterable<E> list, bool Function(E) test) {
 class WidgetTester extends WidgetController
     implements HitTestDispatcher, TickerProvider {
   WidgetTester(AutomatedTestWidgetsFlutterBinding binding) : super(binding);
+
+  WidgetTester.fromOriginal(original.WidgetTester tester)
+      : super(tester.binding);
 
   /// The binding instance used by the testing framework.
   @override
@@ -290,7 +294,10 @@ class WidgetTester extends WidgetController
       'therefore no restoration data has been collected to restore from. Did you forget to wrap '
       'your widget tree in a RootRestorationScope?',
     );
-    final Widget widget = ((binding.renderViewElement! as RenderObjectToWidgetElement<RenderObject>).widget as RenderObjectToWidgetAdapter<RenderObject>).child!;
+    final Widget widget = ((binding.renderViewElement!
+                as RenderObjectToWidgetElement<RenderObject>)
+            .widget as RenderObjectToWidgetAdapter<RenderObject>)
+        .child!;
     final TestRestorationData restorationData =
         binding.restorationManager.restorationData;
     runApp(Container(key: UniqueKey()));

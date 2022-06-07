@@ -5,11 +5,13 @@ import 'setup_io.dart' if (dart.library.html) 'setup_web.dart';
 
 export '../protocol/models.dart' show ConfluenceInfo;
 
-void runScenarios(
-  Map<String, Function> Function() scenarios, {
+void runTests(
+  Uri serverUri,
+  Map<String, void Function()> Function() scenarios, {
+  required String flutterBinPath,
   bool Function(String)? translationPredicate,
-  required String projectName,
-  required List<String> supportedLanguages,
+  String? projectName,
+  List<String>? supportedLanguages,
   String? rootProjectPath,
   String? projectPackageName,
   Brightness? defaultStatusBarBrightness,
@@ -18,19 +20,20 @@ void runScenarios(
   FirebaseInfo? firebase,
 }) async {
   var bundleParams = BundleParameters(
+    flutterBinPath: flutterBinPath,
     translationPredicate: translationPredicate,
     rootProjectPath: rootProjectPath,
     projectPackageName: projectPackageName,
   );
   Runner(
-    createChannel,
+    () => createChannel(serverUri),
     tests: scenarios,
     bundle: () async => createBundle(bundleParams),
     onConnected: onConnected,
     project: ProjectInfo(
-      projectName,
+      'projectName',
       rootPath: rootProjectPath,
-      supportedLanguages: supportedLanguages,
+      supportedLanguages: supportedLanguages ?? [],
       defaultStatusBarBrightness: defaultStatusBarBrightness?.index,
       poEditorProjectId: poEditorProjectId,
       confluence: confluence,
@@ -41,11 +44,13 @@ void runScenarios(
 
 class BundleParameters {
   final bool Function(String) translationPredicate;
+  final String flutterBinPath;
   final String? rootProjectPath;
   final String? projectPackageName;
 
   BundleParameters({
     required this.rootProjectPath,
+    required this.flutterBinPath,
     bool Function(String)? translationPredicate,
     required this.projectPackageName,
   }) : translationPredicate =

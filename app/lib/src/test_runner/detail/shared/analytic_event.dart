@@ -1,4 +1,4 @@
-import 'package:flutter_studio/internal.dart';
+import 'package:flutter_studio/internals/test_runner.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../utils/assets.dart';

@@ -2,7 +2,7 @@ import 'package:built_collection/built_collection.dart';
 import '../app/header.dart';
 import '../app/ui/menu_tree.dart';
 import '../utils/router_outlet.dart';
-import 'package:flutter_studio/internal.dart';
+import 'package:flutter_studio/internals/test_runner.dart';
 import 'package:flutter/material.dart';
 import '../ui.dart';
 import 'flow_graph.dart';
@@ -41,7 +41,7 @@ class _ConnectedScreenState extends State<ConnectedScreen> {
           if (snapshot.hasError) {
             return ErrorWidget(snapshot.error!);
           }
-          return ProjectView( widget.client, snapshot.requireData);
+          return ProjectView(widget.client, snapshot.requireData);
         } else {
           return Center(
             child: Text('Loading project...'),

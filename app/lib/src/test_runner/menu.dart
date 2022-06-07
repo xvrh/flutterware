@@ -29,6 +29,14 @@ class TestMenuLine extends StatelessWidget {
                 icon: Icon(Icons.more_vert, size: 12),
               );
             } else {
+              return IconButton(
+                onPressed: () {
+                  project.tests.ensureStarted();
+                },
+                constraints: BoxConstraints(),
+                padding: EdgeInsets.zero,
+                icon: Icon(Icons.more_vert, size: 12),
+              );
               return IntrinsicHeight(
                 child: Container(
                   // decoration: BoxDecoration(

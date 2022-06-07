@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_studio_app/src/test_runner/entry_point.dart';
 import 'package:logging/logging.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:path/path.dart' as p;
 import '../project.dart';
 import '../utils/flutter_run_process.dart';
@@ -35,8 +34,7 @@ class TestService {
     }
   }
 
-  Future<void> _writeEntryPoint() async {
-    var testFiles = collectTestFiles(_projectRoot);
+  Future<void> _writeEntryPoint(List<TestFile> testFiles) async {
     var code = entryPointCode(testFiles, _server.socketUri);
     await _entryPoint.writeAsString(code);
   }
@@ -47,7 +45,9 @@ class TestService {
     _state.value = DaemonState$Starting('');
 
     _server = await Server.start();
-    await _writeEntryPoint();
+    //TODO(xha): at launch, don't import any tests (to minimize chances of failure)
+    // then do a hot-reload with the imports
+    await _writeEntryPoint(collectTestFiles(_projectRoot));
 
     try {
       var daemon = await FlutterRunProcess.start(_projectRoot,
@@ -55,9 +55,18 @@ class TestService {
           device: 'flutter-tester',
           flutterSdk: project.flutterSdkPath);
       _logger.severe('flutter run -d flutter-tester started');
-      _state.value = DaemonState$Connected(daemon);
+
+      //TODO(xha): refactor to manage a daemon + the server separately and allow
+      // to clean up resources.
+      _server.client.addListener(() {
+        var client = _server.client.value;
+        if (client != null) {
+          _state.value = DaemonState$Connected(daemon, client);
+        }
+      });
 
       unawaited(daemon.onExit.then((_) {
+        //TODO(xha): stop & clean server
         _state.value = DaemonState$Stopped();
       }));
     } catch (e, s) {
@@ -96,6 +105,7 @@ class DaemonState$Stopped implements DaemonState {
 
 class DaemonState$Connected implements DaemonState {
   final FlutterRunProcess daemon;
+  final TestRunnerApi client;
 
-  DaemonState$Connected(this.daemon);
+  DaemonState$Connected(this.daemon, this.client);
 }

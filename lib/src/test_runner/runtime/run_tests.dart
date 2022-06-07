@@ -45,6 +45,7 @@ class TestRunner {
     _bundle = IOAssetBundle(
       'build/unit_test_assets',
       bundleParams: BundleParameters(
+        flutterBinPath: 'flutter',
         rootProjectPath: projectRoot,
         projectPackageName: projectPackageName,
       ),

@@ -29,6 +29,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_studio:
+    path: ../..
 
 dev_dependencies:
   flutter_studio:

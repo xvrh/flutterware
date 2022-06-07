@@ -1,15 +1,49 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter_studio_app/src/flutter_sdk.dart';
 
-import 'daemon/commands.dart';
-import 'package:logging/logging.dart';
-import 'package:path/path.dart' as p;
-import 'daemon/events.dart';
-import 'daemon/protocol.dart';
+import '../flutter_sdk.dart';
+import '../utils/daemon/commands.dart';
+import '../utils/daemon/events.dart';
+import '../utils/daemon/protocol.dart';
+import 'protocol/api.dart';
+import 'server.dart';
 
-final _logger = Logger('flutter_daemon_process');
+class Daemon {
+  TestRunnerApi _client;
+
+  Daemon._(this._client);
+
+  static Future<Daemon> start({int? port}) async* {
+    var server = await Server.start();
+
+    // 1. Start daemon
+    // 2. Wait for server connection && AppStarted
+    // 3. If onExit, close server and emit Daemon error
+    //    Expose Stream<DaemonEvent> as protocol for upper communication
+    // 4. Manage entry point code (with collect files)
+    // 5. Save pid in file to delete on App hot restart
+
+    // New start:
+    //  - Solidify: daemon, entry point & server
+    //  - Create strong UI against the state: stop, hot restart, hot reload, watch directories
+    //  -
+  }
+
+  void reload({required bool fullRestart}) {
+    // Write new end point
+    // reload
+    // Events will come from the Stream
+  }
+
+  void forceStop() {
+    // Stop the server to stop, kill the flutter run, end the stream
+  }
+
+  void dispose() {
+    _client.dispose();
+  }
+}
 
 class FlutterRunProcess {
   final Process _process;

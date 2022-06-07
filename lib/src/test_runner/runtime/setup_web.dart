@@ -10,11 +10,8 @@ Future<ScenarioBundle> createBundle(BundleParameters params) {
   return WebAssetBundle.create(params);
 }
 
-const environmentWebSocket = 'scenario-server-url';
-
-StreamChannel<String> createChannel() {
-  var serverUrl = const String.fromEnvironment(environmentWebSocket);
-  if (serverUrl.isNotEmpty) {
+StreamChannel<String> createChannel(Uri? serverUrl) {
+  if (serverUrl != null) {
     return connectToServer(Uri.parse('ws://$serverUrl/socket'));
   } else {
     return createWebChannel(window.parent!);

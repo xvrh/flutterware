@@ -3,7 +3,7 @@ import 'package:built_collection/built_collection.dart';
 import 'package:collection/collection.dart';
 import '../app/ui/side_bar.dart';
 import '../utils/router_outlet.dart';
-import 'package:flutter_studio/internal.dart';
+import 'package:flutter_studio/internals/test_runner.dart';
 import 'package:flutter/material.dart';
 import 'protocol/api.dart';
 import 'protocol/listing.dart';

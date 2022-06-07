@@ -3,7 +3,7 @@ import 'package:flutter_studio_app/src/test_runner/flow_graph.dart';
 import '../app/project_view.dart';
 import '../app/ui/breadcrumb.dart';
 import '../utils/router_outlet.dart';
-import 'package:flutter_studio/internal.dart';
+import 'package:flutter_studio/internals/test_runner.dart';
 import 'package:flutter/material.dart';
 import '../ui.dart';
 import 'detail/image.dart';
@@ -15,8 +15,7 @@ class DetailPage extends StatelessWidget {
   final ScenarioRun run;
   final String screenId;
 
-  const DetailPage(this.project, this.run, this.screenId,
-      {Key? key})
+  const DetailPage(this.project, this.run, this.screenId, {Key? key})
       : super(key: key);
 
   @override
