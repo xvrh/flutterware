@@ -69,7 +69,7 @@ class ProjectViewState extends State<ProjectView> {
                   {
                     paths.home: (route) => ProjectInfoScreen(widget.project),
                     paths.dependencies: (route) => DependenciesScreen(),
-                    paths.tests: (route) => TestRunnerScreen(),
+                    paths.tests: (route) => TestRunnerScreen(widget.project),
                   },
                   onNotFound: (_) => paths.home,
                 ),

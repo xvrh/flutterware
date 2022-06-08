@@ -25,7 +25,7 @@ class Method {
 class DaemonProtocol {
   final StringSink write;
   final Stream<String> read;
-  final _eventController = StreamController<Event>();
+  final _eventController = StreamController<Event>.broadcast();
   late StreamSubscription _subscription;
   final _inFlightCommands = <int, _InFlightCommand>{};
   int _commandId = 0;
@@ -60,14 +60,14 @@ class DaemonProtocol {
   }
 
   Stream<Event> get onEvent => _eventController.stream;
-  
+
   Future<TResult> sendCommand<TResult>(Command<TResult> command) {
     var id = _commandId++;
     var inflight = _inFlightCommands[id] = _InFlightCommand<TResult>(command);
     _write(Method(command.methodName, id, command.toJson()));
     return inflight.completer.future;
   }
-  
+
   void _write(Object object) {
     write.writeln('[${jsonEncode(object)}]');
   }
@@ -80,10 +80,10 @@ class DaemonProtocol {
 
 class _InFlightCommand<TResult> {
   final Command<TResult> command;
-  final  completer = Completer<TResult>(); 
+  final completer = Completer<TResult>();
 
   _InFlightCommand(this.command);
-  
+
   void complete(Object? result) {
     var decoded = command.decodeResult(result);
     completer.complete(decoded);

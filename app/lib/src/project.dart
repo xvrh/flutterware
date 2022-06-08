@@ -56,6 +56,7 @@ class Project {
     _pubspecWatcher.cancel();
     _flutterSdk.dispose();
     _pubspec.dispose();
+    tests.dispose();
   }
 }
 

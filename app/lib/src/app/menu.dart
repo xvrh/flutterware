@@ -75,12 +75,16 @@ class _MenuState extends State<Menu> {
               _expanded.add(paths.tests);
             });
           },
-          onExpand: () => _toggle(paths.tests),
+          onExpand: widget.project.tests.isStarted
+              ? () {
+                  _toggle(paths.tests);
+                }
+              : null,
           type: _expanded.contains(paths.tests)
               ? LineType.expanded
               : LineType.collapsed,
           depth: 1,
-          child: TestMenuLine(widget.project),
+          child: Text('Tests'),
         ),
         if (_expanded.contains(paths.tests)) TestMenu(widget.project),
         MenuLine(

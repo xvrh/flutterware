@@ -11,23 +11,25 @@ import 'protocol/api.dart';
 
 class Server {
   late HttpServer _server;
+  bool _isStarted = false;
   final _clients = BehaviorSubject<List<TestRunnerApi>>.seeded([]);
 
-  Server._();
-
-  static Future<Server> start({int? port}) async {
-    var server = Server._();
-    await server._init(port: port);
-    return server;
+  Uri? get socketUri {
+    if (_isStarted) {
+      return Uri(
+          scheme: 'ws',
+          host: _server.address.host,
+          port: _server.port,
+          path: 'socket');
+    }
+    return null;
   }
 
-  Uri get socketUri => Uri(
-      scheme: 'ws',
-      host: _server.address.host,
-      port: _server.port,
-      path: 'socket');
+  bool get isStarted => _isStarted;
 
-  Future<void> _init({int? port}) async {
+  Future<void> start({int? port}) async {
+    if (_isStarted) return;
+    _isStarted = true;
     port ??= 0;
 
     var router = Router();
@@ -55,7 +57,10 @@ class Server {
 
   ValueStream<List<TestRunnerApi>> get clients => _clients;
 
-  void dispose() {
+  void close() {
     _clients.close();
+    if (_isStarted) {
+      _server.close();
+    }
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_studio_app/src/constants.dart';
 import 'package:flutter_studio_app/src/flutter_sdk.dart';
 import 'package:logging/logging.dart';
 import 'src/app/single_project.dart';
+import 'src/globals.dart';
 import 'src/project.dart';
 
 const projectPath = String.fromEnvironment(projectDefineKey);
@@ -17,6 +18,8 @@ void main() async {
   Logger.root
     ..level = Level.ALL
     ..onRecord.listen(print);
+
+  await globals.resourceCleaner.initialize();
   runApp(
       SingleProjectApp(Project(projectPath, FlutterSdkPath(flutterSdkPath))));
 }

@@ -91,30 +91,29 @@ class _MenuTreeState extends State<MenuTree> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: _visibleLines.length,
-      itemBuilder: (context, i) {
-        var line = _visibleLines[i];
-        return _LineView(
-          line,
-          expanded: _expanded.contains(line.path),
-          selected: widget.selected == line.path,
-          onTap: () {
-            if (!line.isLeaf) {
-              setState(() {
-                if (_expanded.contains(line.path)) {
-                  _expanded.remove(line.path);
-                } else {
-                  _expanded.add(line.path);
-                }
-                _refresh();
-              });
-            } else {
-              widget.onSelected(line.path);
-            }
-          },
-        );
-      },
+    return Column(
+      children: [
+        for (var line in _visibleLines)
+          _LineView(
+            line,
+            expanded: _expanded.contains(line.path),
+            selected: widget.selected == line.path,
+            onTap: () {
+              if (!line.isLeaf) {
+                setState(() {
+                  if (_expanded.contains(line.path)) {
+                    _expanded.remove(line.path);
+                  } else {
+                    _expanded.add(line.path);
+                  }
+                  _refresh();
+                });
+              } else {
+                widget.onSelected(line.path);
+              }
+            },
+          ),
+      ],
     );
   }
 }
@@ -143,7 +142,7 @@ class _LineView extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            SizedBox(width: 12.0 * (line.depth)),
+            SizedBox(width: 12.0 * (line.depth + 2)),
             Icon(
               expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
               size: 17,

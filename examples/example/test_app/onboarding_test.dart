@@ -9,12 +9,16 @@ void main() {
     await tester.tap(find.text(''));
   });
 
-  testWidgets('Login', (tester) async {
+  testWidgets('Login test test', (tester) async {
+    //
+  });
+
+  testWidgets('Logout test', (tester) async {
     //
   });
 
   group('My group', () {
-    testWidgets('More', (tester) async {
+    testWidgets('More sub', (tester) async {
       print('bla');
     });
   });

@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_studio_app/src/test_runner/protocol/api.dart';
 import '../app/ui/menu.dart';
 import '../project.dart';
+import '../ui.dart';
+import 'daemon.dart';
+import 'listing.dart';
 import 'service.dart';
 
-class TestMenuLine extends StatelessWidget {
+class _TestMenuLine extends StatelessWidget {
   final Project project;
 
-  const TestMenuLine(this.project, {super.key});
+  const _TestMenuLine(this.project, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -14,21 +18,8 @@ class TestMenuLine extends StatelessWidget {
       children: [
         Expanded(child: Text('Tests')),
         ValueListenableBuilder<DaemonState>(
-          valueListenable: project.tests.state,
-          builder: (context, state, child) {
-            if (state is! DaemonState$Initial) {
-              return IconButton(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => _DaemonDialog(project),
-                  );
-                },
-                constraints: BoxConstraints(),
-                padding: EdgeInsets.zero,
-                icon: Icon(Icons.more_vert, size: 12),
-              );
-            } else {
+            valueListenable: project.tests.state,
+            builder: (context, state, child) {
               return IconButton(
                 onPressed: () {
                   project.tests.ensureStarted();
@@ -70,9 +61,7 @@ class TestMenuLine extends StatelessWidget {
                 ),
               );
               return const SizedBox();
-            }
-          },
-        ),
+            }),
       ],
     );
   }
@@ -85,128 +74,172 @@ class TestMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return StreamBuilder<List<TestRunnerApi>>(
+      stream: project.tests.clients,
+      initialData: project.tests.clients.value,
+      builder: (context, snapshot) {
+        var clients = snapshot.requireData;
+        if (clients.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1,
+                ),
+              ),
+            ),
+          );
+        } else {
+          var client = clients.last;
+          return TestListingView(client);
+        }
+      },
+    );
+  }
+}
+
+class DaemonToolbar extends StatelessWidget {
+  final Project project;
+
+  const DaemonToolbar(this.project, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    project.tests.ensureStarted();
+
+    return Container(
+      height: 28,
+      decoration: BoxDecoration(
+        color: AppColors.backgroundGrey,
+        border: Border(
+          bottom: BorderSide(color: AppColors.separator, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text('Test runner'),
+          const SizedBox(width: 20),
+          Expanded(
+            child: ValueListenableBuilder<DaemonState>(
+              valueListenable: project.tests.state,
+              builder: (context, state, child) {
+                if (state is DaemonState$Connected) {
+                  return _DaemonConnectedToolbar(state.daemon);
+                } else if (state is DaemonState$Stopped) {
+                  return _DaemonStoppedToolbar(project);
+                } else {
+                  return _DaemonStartingToolbar();
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DaemonConnectedToolbar extends StatelessWidget {
+  final Daemon daemon;
+
+  const _DaemonConnectedToolbar(this.daemon, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    //TODO(xha): disable buttons when isReloading is true
+    return Row(
       children: [
-        ...[
-          Text('''
-When Tests is expanded or clicked
- => ensureStarted
-Show loader in the expanded menu
-Menu only comes from Daemon
-'''),
-          //MenuLine(
-          //  selected: false,
-          //  onTap: () {},
-          //  type: LineType.collapsed,
-          //  depth: 2,
-          //  child: Row(
-          //    children: [
-          //      Icon(
-          //        Icons.folder,
-          //        size: 16,
-          //        color: Color(0xff8cd3ec),
-          //      ),
-          //      const SizedBox(width: 4),
-          //      Expanded(child: Text('onboarding_test.dart')),
-          //    ],
-          //  ),
-          //),
-          MenuLine(
-            selected: false,
-            onTap: () {},
-            type: LineType.collapsed,
-            depth: 2,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.folder,
-                  size: 16,
-                  color: Color(0xff8cd3ec),
-                ),
-                const SizedBox(width: 4),
-                Expanded(child: Text('app_test.dart')),
-              ],
-            ),
+        IconButton(
+          onPressed: () {
+            daemon.reload(fullRestart: false);
+          },
+          constraints: BoxConstraints(),
+          padding: EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+          icon: Icon(
+            Icons.bolt,
+            color: Colors.orange,
+            size: 20,
           ),
-          MenuLine(
-            selected: false,
-            onTap: () {},
-            type: LineType.collapsed,
-            depth: 2,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.folder,
-                  size: 16,
-                  color: Color(0xff8cd3ec),
-                ),
-                const SizedBox(width: 4),
-                Expanded(child: Text('app_test.dart')),
-              ],
-            ),
+          tooltip: 'Hot reload',
+        ),
+        IconButton(
+          onPressed: () {
+            daemon.reload(fullRestart: true);
+          },
+          constraints: BoxConstraints(),
+          padding: EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+          icon: Icon(
+            Icons.restart_alt,
+            size: 20,
+            color: Colors.green,
           ),
-        ]
+          tooltip: 'Hot restart',
+        ),
+        //TODO(xha): open a dropdown with option to watch lib/** & test_app/**
+        Text('Auto reload'),
+        Checkbox(value: true, onChanged: (v) {}),
+        OutlinedButton(onPressed: () {}, child: Text('Auto reload')),
+        Expanded(
+          child: const SizedBox(),
+        ),
+        IconButton(
+          onPressed: () {
+            daemon.stop();
+          },
+          constraints: BoxConstraints(),
+          padding: EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+          icon: Icon(
+            Icons.stop,
+            color: Colors.red,
+            size: 20,
+          ),
+          tooltip: 'Stop test runner',
+        ),
       ],
     );
   }
 }
 
-class _DaemonDialog extends StatelessWidget {
+class _DaemonStoppedToolbar extends StatelessWidget {
   final Project project;
 
-  const _DaemonDialog(this.project);
+  const _DaemonStoppedToolbar(this.project, {super.key});
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('Test daemon'),
-      content: ValueListenableBuilder<DaemonState>(
-        valueListenable: project.tests.state,
-        builder: (context, state, child) {
-          if (state is DaemonState$Connected) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ElevatedButton(
-                  onPressed: () {
-                    state.daemon.stop();
-                    Navigator.pop(context);
-                  },
-                  child: Text('Stop daemon'),
-                ),
-              ],
-            );
-          } else if (state is DaemonState$Stopped) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ElevatedButton(
-                  onPressed: () {
-                    project.tests.start();
-                    Navigator.pop(context);
-                  },
-                  child: Text('Start daemon'),
-                ),
-              ],
-            );
-          } else if (state is DaemonState$Starting) {
-            return Text('Daemon is starting...');
-          } else {
-            return Text('State is ${state.runtimeType}');
-          }
-        },
-      ),
-      actions: [
-        TextButton(
+    return Row(
+      children: [
+        IconButton(
           onPressed: () {
-            Navigator.pop(context);
+            project.tests.start();
           },
-          child: Text('OK'),
+          constraints: BoxConstraints(),
+          padding: EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+          icon: Icon(
+            Icons.play_arrow,
+            color: Colors.green,
+            size: 20,
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _DaemonStartingToolbar extends StatelessWidget {
+  const _DaemonStartingToolbar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Launching test runner...',
+      style: TextStyle(
+        color: Colors.black26,
+        fontSize: 13,
+      ),
     );
   }
 }

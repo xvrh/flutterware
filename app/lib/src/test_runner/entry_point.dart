@@ -1,8 +1,11 @@
+import 'package:flutter_studio_app/src/utils/source_code.dart';
 import 'package:path/path.dart' as p;
 
 import 'dart:io';
 
-const _testLocation = 'test_ui';
+import '../project.dart';
+
+const _testLocation = 'test_app';
 
 List<TestFile> collectTestFiles(Directory projectRoot) {
   var testFolder = Directory(p.join(projectRoot.path, _testLocation));
@@ -29,7 +32,7 @@ class TestFile {
       p.relative(file.absolute.path, from: projectRoot.absolute.path);
 }
 
-String entryPointCode(List<TestFile> files, Uri serverUri) {
+String entryPointCode(Project project, List<TestFile> files, Uri serverUri) {
   var code = StringBuffer()..writeln('''
 // GENERATED-CODE: Flutter Studio - Test runner feature
 import 'package:flutter_studio/internals/test_runner_daemon.dart';
@@ -43,14 +46,15 @@ import 'package:flutter_studio/internals/test_runner_daemon.dart';
   code.writeln('Map<String, void Function()> allTests() => {');
   index = 0;
   for (var file in files) {
-    code.writeln("'${file.relativePath}': i$index.main,");
+    code.writeln(
+        "'${p.relative(file.relativePath, from: _testLocation)}': i$index.main,");
     ++index;
   }
   code.writeln('''
 };
 final _cliServer = Uri.parse('${serverUri.toString()}');
 void main() {
-  runTests(_cliServer, allTests);
+  runTests(_cliServer, allTests, flutterBinPath: ${escapeDartString(project.flutterSdkPath.flutter)});
 }
 ''');
   return '$code';

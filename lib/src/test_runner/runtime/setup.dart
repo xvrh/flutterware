@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
 import '../protocol/models.dart';
 import 'runner.dart';
 import 'setup_io.dart' if (dart.library.html) 'setup_web.dart';
@@ -7,7 +10,7 @@ export '../protocol/models.dart' show ConfluenceInfo;
 
 void runTests(
   Uri serverUri,
-  Map<String, void Function()> Function() scenarios, {
+  Map<String, void Function()> Function() tests, {
   required String flutterBinPath,
   bool Function(String)? translationPredicate,
   String? projectName,
@@ -19,6 +22,7 @@ void runTests(
   ConfluenceInfo? confluence,
   FirebaseInfo? firebase,
 }) async {
+  _setupLogger();
   var bundleParams = BundleParameters(
     flutterBinPath: flutterBinPath,
     translationPredicate: translationPredicate,
@@ -27,13 +31,13 @@ void runTests(
   );
   Runner(
     () => createChannel(serverUri),
-    tests: scenarios,
+    tests: tests,
     bundle: () async => createBundle(bundleParams),
     onConnected: onConnected,
     project: ProjectInfo(
       'projectName',
       rootPath: rootProjectPath,
-      supportedLanguages: supportedLanguages ?? [],
+      supportedLanguages: supportedLanguages ?? ['en'],
       defaultStatusBarBrightness: defaultStatusBarBrightness?.index,
       poEditorProjectId: poEditorProjectId,
       confluence: confluence,
@@ -58,4 +62,21 @@ class BundleParameters {
 
   static bool _defaultTranslationPredicate(String key) =>
       key.endsWith('.json') && key.contains('translations');
+}
+
+void _setupLogger() {
+  Logger.root
+    ..level = Level.ALL
+    ..onRecord.listen((e) {
+      var errorSuffix = '';
+      if (e.error != null) {
+        errorSuffix = ' (${e.error})';
+      }
+
+      debugPrint('[${e.level.name}] ${e.loggerName}: ${e.message}$errorSuffix');
+
+      if (e.stackTrace != null) {
+        debugPrint('${e.stackTrace}');
+      }
+    });
 }

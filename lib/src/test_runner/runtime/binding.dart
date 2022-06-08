@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 class ScenarioBinding extends AutomatedTestWidgetsFlutterBinding {
@@ -10,8 +13,15 @@ class ScenarioBinding extends AutomatedTestWidgetsFlutterBinding {
 
   @override
   Future<void> performReassemble() {
-    onReloaded?.call();
+    // In order for Hot reload to work, we need to schedule a test
+    Timer.run(_afterHotReload);
     return super.performReassemble();
+  }
+
+  void _afterHotReload() async {
+    await runTest(() async {}, () {});
+    postTest();
+    onReloaded?.call();
   }
 
   @override

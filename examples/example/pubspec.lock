@@ -126,7 +126,7 @@ packages:
     source: sdk
     version: "0.0.0"
   flutter_studio:
-    dependency: "direct main"
+    dependency: "direct dev"
     description:
       path: "../.."
       relative: true

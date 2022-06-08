@@ -7,7 +7,8 @@ import 'package:flutter_studio/internals/test_runner.dart';
 import 'package:flutter/material.dart';
 import 'protocol/api.dart';
 import 'protocol/listing.dart';
-import '../app/ui/menu_tree.dart';
+import 'ui/menu_tree.dart';
+import '../app/paths.dart' as paths;
 
 class TestListingView extends StatefulWidget {
   final TestRunnerApi client;
@@ -39,21 +40,19 @@ class _TestListingViewState extends State<TestListingView> {
       stream: listing.allScenarios,
       initialData: listing.allScenarios.value,
       builder: (context, snapshot) {
-        var selectedScenario = context.router.allArgs['scenarioId'];
+        var selectedScenario = context.router.allArgs['testId'];
         TreePath? selectedPath;
         if (selectedScenario != null) {
           selectedPath = TreePath.fromEncoded(selectedScenario);
         }
 
-        return SideBar(
-          header: Text('Scenarios'),
-          child: MenuTree(
-            selected: selectedPath,
-            entries: _menu(snapshot.requireData),
-            onSelected: (path) {
-              context.go('scenario/${Uri.encodeComponent(path.encoded)}');
-            },
-          ),
+        return MenuTree(
+          selected: selectedPath,
+          entries: _menu(snapshot.requireData),
+          onSelected: (path) {
+            context
+                .go('${paths.tests}/run/${Uri.encodeComponent(path.encoded)}');
+          },
         );
       },
     );
