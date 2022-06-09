@@ -15,6 +15,7 @@ class TranslationsSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return const SizedBox();
     return SideBar(
       header: Text('Translations'),
       child: ScrollConfiguration(

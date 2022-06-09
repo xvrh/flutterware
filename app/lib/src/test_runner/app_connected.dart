@@ -34,6 +34,8 @@ class _ConnectedScreenState extends State<ConnectedScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // refactor, no need to load info like that?
+    "";
     return FutureBuilder<ProjectInfo>(
       future: _project,
       builder: (context, snapshot) {

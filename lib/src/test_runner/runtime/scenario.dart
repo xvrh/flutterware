@@ -17,11 +17,26 @@ import 'path_tracker.dart';
 import 'widget_tester.dart';
 import 'widget_tester_extension.dart';
 
+abstract class RunContext {
+  RunArgs get args;
+  Future<void> addScreen(NewScreen newScreen);
+}
+
+class EmptyRunContext implements RunContext {
+  @override
+  Future<void> addScreen(NewScreen newScreen) async {}
+
+  @override
+  final args = RunArgs(['scenarioName'],
+      device: DeviceInfo.iPhoneX,
+      accessibility: AccessibilityConfig(),
+      language: 'en',
+      imageRatio: 1);
+}
+
+/*
 final _logger = Logger('scenario');
 
-abstract class RunContext {
-  Future<void> addScreen(RunArgs args, NewScreen newScreen);
-}
 
 abstract class Scenario {
   late RunContext _runContext;
@@ -490,3 +505,4 @@ class _FakeAccessibilityFeatures implements ui.AccessibilityFeatures {
   @override
   bool get onOffSwitchLabels => false;
 }
+*/

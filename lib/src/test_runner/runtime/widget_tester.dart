@@ -1,669 +1,639 @@
-// Copyright 2014 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_test/src/all_elements.dart';
-import 'package:flutter_test/src/binding.dart';
-import 'package:flutter_test/src/controller.dart';
-import 'package:flutter_test/src/widget_tester.dart' as original;
-import 'package:flutter_test/src/finders.dart';
-import 'package:flutter_test/src/restoration.dart';
-import 'package:flutter_test/src/test_async_utils.dart';
-import 'package:flutter_test/src/test_pointer.dart';
-import 'package:flutter_test/src/test_text_input.dart';
-// The test_api package is not for general use... it's literally for our use.
-// ignore: deprecated_member_use
-import 'package:test_api/test_api.dart' as test_package;
+import 'package:flutter/widgets.dart';
+import 'package:flutter_studio/src/test_runner/protocol/models.dart';
+import 'package:flutter_studio/src/test_runner/runtime/binding.dart';
+import 'package:flutter_test/flutter_test.dart' as flutter;
 
-// Keep users from needing multiple imports to test semantics.
-export 'package:flutter/rendering.dart' show SemanticsHandle;
-// We re-export the test package minus some features that we reimplement.
-//
-// Specifically:
-//
-//  - test, group, setUpAll, tearDownAll, setUp, tearDown, and expect would
-//    conflict with our own implementations in test_compat.dart. This handles
-//    setting up a declarer when one is not defined, which can happen when a
-//    test is executed via `flutter run`.
-//
-//  - expect is reimplemented below, to catch incorrect async usage.
-//
-//  - isInstanceOf is reimplemented in matchers.dart because we don't want to
-//    mark it as deprecated (ours is just a method, not a class).
-//
-// The test_api package has a deprecation warning to discourage direct use but
-// that doesn't apply here.
-// ignore: deprecated_member_use
-export 'package:test_api/test_api.dart'
-    hide
-        test,
-        group,
-        setUpAll,
-        tearDownAll,
-        setUp,
-        tearDown,
-        expect,
-        isInstanceOf;
+import '../protocol/model/screen.dart';
+import 'fake_window_padding.dart';
+import 'path_tracker.dart';
+import 'scenario.dart';
 
-// ignore_for_file: prefer_single_quotes
-// ignore_for_file: omit_local_variable_types
-// ignore_for_file: implementation_imports
-// ignore_for_file: only_throw_errors
-// ignore_for_file: curly_braces_in_flow_control_structures
+const String _defaultPlatform = kIsWeb ? 'web' : 'android';
 
-/// Signature for callback to [testWidgets] and [benchmarkWidgets].
-typedef WidgetTesterCallback = Future<void> Function(WidgetTester widgetTester);
-
-// Return the last element that satisifes `test`, or return null if not found.
-E? _lastWhereOrNull<E>(Iterable<E> list, bool Function(E) test) {
-  late E result;
-  bool foundMatching = false;
-  for (final E element in list) {
-    if (test(element)) {
-      result = element;
-      foundMatching = true;
-    }
+Future<ui.Image> captureImage(Element element) {
+  assert(element.renderObject != null);
+  RenderObject renderObject = element.renderObject!;
+  while (!renderObject.isRepaintBoundary) {
+    renderObject = renderObject.parent! as RenderObject;
   }
-  if (foundMatching) return result;
-  return null;
+  assert(!renderObject.debugNeedsPaint);
+  final OffsetLayer layer = renderObject.debugLayer! as OffsetLayer;
+  return layer.toImage(renderObject.paintBounds, pixelRatio: 1);
 }
 
-/// Class that programmatically interacts with widgets and the test environment.
-///
-/// For convenience, instances of this class (such as the one provided by
-/// `testWidgets`) can be used as the `vsync` for `AnimationController` objects.
-class WidgetTester extends WidgetController
-    implements HitTestDispatcher, TickerProvider {
-  WidgetTester(AutomatedTestWidgetsFlutterBinding binding) : super(binding);
+//TODO(xha): should come from Zone (injected by the runner). If direct tests:
+// Default to EnvironmentVariable to define the behavior (device size etc...).
+var _a = "";
+RunContext runContext = EmptyRunContext();
+PathTracker _pathTracker = PathTracker();
+late WidgetTester tester;
 
-  WidgetTester.fromOriginal(original.WidgetTester tester)
-      : super(tester.binding);
+Future<void> Function(flutter.WidgetTester) wrapTestBody(
+    Future<void> Function(WidgetTester) body) {
+  return (originalTester) async {
+    var args = runContext.args;
+    var device = args.device;
+    var binding = flutter.AutomatedTestWidgetsFlutterBinding.instance;
+    var window = binding.window;
+    var platformDispatcher = binding.platformDispatcher;
+    window.physicalSizeTestValue = Size(
+        device.width * device.pixelRatio, device.height * device.pixelRatio);
+    window.devicePixelRatioTestValue = device.pixelRatio;
+    window.paddingTestValue = FakeWindowPadding(
+      EdgeInsets.fromLTRB(
+          device.safeArea.left * device.pixelRatio,
+          device.safeArea.top * device.pixelRatio,
+          device.safeArea.right * device.pixelRatio,
+          device.safeArea.bottom * device.pixelRatio),
+    );
+    platformDispatcher.textScaleFactorTestValue = args.accessibility.textScale;
+    platformDispatcher.accessibilityFeaturesTestValue =
+        _FakeAccessibilityFeatures(args.accessibility);
+    platformDispatcher.localesTestValue = [Locale('en', 'US')];
+    debugDefaultTargetPlatformOverride = device.platform.toTargetPlatform();
+    debugDisableShadows = false;
+    tester = WidgetTester.delegated(originalTester);
 
-  /// The binding instance used by the testing framework.
-  @override
-  TestWidgetsFlutterBinding get binding =>
-      super.binding as TestWidgetsFlutterBinding;
-
-  /// Renders the UI from the given [widget].
-  ///
-  /// Calls [runApp] with the given widget, then triggers a frame and flushes
-  /// microtasks, by calling [pump] with the same `duration` (if any). The
-  /// supplied [EnginePhase] is the final phase reached during the pump pass; if
-  /// not supplied, the whole pass is executed.
-  ///
-  /// Subsequent calls to this is different from [pump] in that it forces a full
-  /// rebuild of the tree, even if [widget] is the same as the previous call.
-  /// [pump] will only rebuild the widgets that have changed.
-  ///
-  /// This method should not be used as the first parameter to an [expect] or
-  /// [expectLater] call to test that a widget throws an exception. Instead, use
-  /// [TestWidgetsFlutterBinding.takeException].
-  ///
-  /// {@tool snippet}
-  /// ```dart
-  /// testWidgets('MyWidget asserts invalid bounds', (WidgetTester tester) async {
-  ///   await tester.pumpWidget(MyWidget(-1));
-  ///   expect(tester.takeException(), isAssertionError); // or isNull, as appropriate.
-  /// });
-  /// ```
-  /// {@end-tool}
-  ///
-  /// See also [LiveTestWidgetsFlutterBindingFramePolicy], which affects how
-  /// this method works when the test is run with `flutter run`.
-  Future<void> pumpWidget(
-    Widget widget, [
-    Duration? duration,
-    EnginePhase phase = EnginePhase.sendSemanticsUpdate,
-  ]) {
-    return TestAsyncUtils.guard<void>(() {
-      binding.attachRootWidget(widget);
-      binding.scheduleFrame();
-      return binding.pump(duration, phase);
-    });
-  }
-
-  @override
-  Future<List<Duration>> handlePointerEventRecord(
-      Iterable<PointerEventRecord> records) {
-    assert(records.isNotEmpty);
-    return TestAsyncUtils.guard<List<Duration>>(() async {
-      final List<Duration> handleTimeStampDiff = <Duration>[];
-      DateTime? startTime;
-      for (final PointerEventRecord record in records) {
-        final DateTime now = binding.clock.now();
-        startTime ??= now;
-        // So that the first event is promised to receive a zero timeDiff
-        final Duration timeDiff = record.timeDelay - now.difference(startTime);
-        if (timeDiff.isNegative) {
-          // Flush all past events
-          handleTimeStampDiff.add(-timeDiff);
-          for (final PointerEvent event in record.events) {
-            binding.handlePointerEventForSource(event,
-                source: TestBindingEventSource.test);
-          }
-        } else {
-          await binding.pump();
-          await binding.delayed(timeDiff);
-          handleTimeStampDiff.add(
-            binding.clock.now().difference(startTime) - record.timeDelay,
-          );
-          for (final PointerEvent event in record.events) {
-            binding.handlePointerEventForSource(event,
-                source: TestBindingEventSource.test);
-          }
-        }
-      }
-      await binding.pump();
-      // This makes sure that a gesture is completed, with no more pointers
-      // active.
-      return handleTimeStampDiff;
-    });
-  }
-
-  /// Triggers a frame after `duration` amount of time.
-  ///
-  /// This makes the framework act as if the application had janked (missed
-  /// frames) for `duration` amount of time, and then received a "Vsync" signal
-  /// to paint the application.
-  ///
-  /// For a [FakeAsync] environment (typically in `flutter test`), this advances
-  /// time and timeout counting; for a live environment this delays `duration`
-  /// time.
-  ///
-  /// This is a convenience function that just calls
-  /// [TestWidgetsFlutterBinding.pump].
-  ///
-  /// See also [LiveTestWidgetsFlutterBindingFramePolicy], which affects how
-  /// this method works when the test is run with `flutter run`.
-  @override
-  Future<void> pump([
-    Duration? duration,
-    EnginePhase phase = EnginePhase.sendSemanticsUpdate,
-  ]) {
-    return TestAsyncUtils.guard<void>(() => binding.pump(duration, phase));
-  }
-
-  /// Triggers a frame after `duration` amount of time, return as soon as the frame is drawn.
-  ///
-  /// This enables driving an artificially high CPU load by rendering frames in
-  /// a tight loop. It must be used with the frame policy set to
-  /// [LiveTestWidgetsFlutterBindingFramePolicy.benchmark].
-  ///
-  /// Similarly to [pump], this doesn't actually wait for `duration`, just
-  /// advances the clock.
-  Future<void> pumpBenchmark(Duration duration) async {
-    assert(() {
-      final TestWidgetsFlutterBinding widgetsBinding = binding;
-      return widgetsBinding is LiveTestWidgetsFlutterBinding &&
-          widgetsBinding.framePolicy ==
-              LiveTestWidgetsFlutterBindingFramePolicy.benchmark;
-    }());
-
-    dynamic caughtException;
-    void handleError(dynamic error, StackTrace stackTrace) =>
-        caughtException ??= error;
-
-    await Future<void>.microtask(() {
-      binding.handleBeginFrame(duration);
-    }).catchError(handleError);
-    await idle();
-    await Future<void>.microtask(() {
-      binding.handleDrawFrame();
-    }).catchError(handleError);
-    await idle();
-
-    if (caughtException != null) {
-      throw caughtException as Object; // ignore: rethrowing caught exception.
-    }
-  }
-
-  @override
-  Future<int> pumpAndSettle([
-    Duration duration = const Duration(milliseconds: 100),
-    EnginePhase phase = EnginePhase.sendSemanticsUpdate,
-    Duration timeout = const Duration(minutes: 10),
-  ]) {
-    assert(duration > Duration.zero);
-    assert(timeout > Duration.zero);
-    assert(() {
-      final WidgetsBinding binding = this.binding;
-      if (binding is LiveTestWidgetsFlutterBinding &&
-          binding.framePolicy ==
-              LiveTestWidgetsFlutterBindingFramePolicy.benchmark) {
-        test_package.fail(
-          'When using LiveTestWidgetsFlutterBindingFramePolicy.benchmark, '
-          'hasScheduledFrame is never set to true. This means that pumpAndSettle() '
-          'cannot be used, because it has no way to know if the application has '
-          'stopped registering new frames.',
-        );
-      }
-      return true;
-    }());
-    return TestAsyncUtils.guard<int>(() async {
-      final DateTime endTime = binding.clock.fromNowBy(timeout);
-      int count = 0;
+    //TODO(xha): move that around the test so we can run the teardown & setup
+    // between each run.
+    _pathTracker = PathTracker();
+    try {
       do {
-        if (binding.clock.now().isAfter(endTime))
-          throw FlutterError('pumpAndSettle timed out');
-        await binding.pump(duration, phase);
-        count += 1;
-      } while (binding.hasScheduledFrame);
-      return count;
-    });
-  }
-
-  /// Repeatedly pump frames that render the `target` widget with a fixed time
-  /// `interval` as many as `maxDuration` allows.
-  ///
-  /// The `maxDuration` argument is required. The `interval` argument defaults to
-  /// 16.683 milliseconds (59.94 FPS).
-  Future<void> pumpFrames(
-    Widget target,
-    Duration maxDuration, [
-    Duration interval = const Duration(milliseconds: 16, microseconds: 683),
-  ]) {
-    // The interval following the last frame doesn't have to be within the fullDuration.
-    Duration elapsed = Duration.zero;
-    return TestAsyncUtils.guard<void>(() async {
-      binding.attachRootWidget(target);
-      binding.scheduleFrame();
-      while (elapsed < maxDuration) {
-        await binding.pump(interval);
-        elapsed += interval;
-      }
-    });
-  }
-
-  /// Simulates restoring the state of the widget tree after the application
-  /// is restarted.
-  ///
-  /// The method grabs the current serialized restoration data from the
-  /// [RestorationManager], takes down the widget tree to destroy all in-memory
-  /// state, and then restores the widget tree from the serialized restoration
-  /// data.
-  Future<void> restartAndRestore() async {
-    assert(
-      binding.restorationManager.debugRootBucketAccessed,
-      'The current widget tree did not inject the root bucket of the RestorationManager and '
-      'therefore no restoration data has been collected to restore from. Did you forget to wrap '
-      'your widget tree in a RootRestorationScope?',
-    );
-    final Widget widget = ((binding.renderViewElement!
-                as RenderObjectToWidgetElement<RenderObject>)
-            .widget as RenderObjectToWidgetAdapter<RenderObject>)
-        .child!;
-    final TestRestorationData restorationData =
-        binding.restorationManager.restorationData;
-    runApp(Container(key: UniqueKey()));
-    await pump();
-    binding.restorationManager.restoreFrom(restorationData);
-    return pumpWidget(widget);
-  }
-
-  /// Retrieves the current restoration data from the [RestorationManager].
-  ///
-  /// The returned [TestRestorationData] describes the current state of the
-  /// widget tree under test and can be provided to [restoreFrom] to restore
-  /// the widget tree to the state described by this data.
-  Future<TestRestorationData> getRestorationData() async {
-    assert(
-      binding.restorationManager.debugRootBucketAccessed,
-      'The current widget tree did not inject the root bucket of the RestorationManager and '
-      'therefore no restoration data has been collected. Did you forget to wrap your widget tree '
-      'in a RootRestorationScope?',
-    );
-    return binding.restorationManager.restorationData;
-  }
-
-  /// Restores the widget tree under test to the state described by the
-  /// provided [TestRestorationData].
-  ///
-  /// The data provided to this method is usually obtained from
-  /// [getRestorationData].
-  Future<void> restoreFrom(TestRestorationData data) {
-    binding.restorationManager.restoreFrom(data);
-    return pump();
-  }
-
-  /// Runs a [callback] that performs real asynchronous work.
-  ///
-  /// This is intended for callers who need to call asynchronous methods where
-  /// the methods spawn isolates or OS threads and thus cannot be executed
-  /// synchronously by calling [pump].
-  ///
-  /// If callers were to run these types of asynchronous tasks directly in
-  /// their test methods, they run the possibility of encountering deadlocks.
-  ///
-  /// If [callback] completes successfully, this will return the future
-  /// returned by [callback].
-  ///
-  /// If [callback] completes with an error, the error will be caught by the
-  /// Flutter framework and made available via [takeException], and this method
-  /// will return a future that completes with `null`.
-  ///
-  /// Re-entrant calls to this method are not allowed; callers of this method
-  /// are required to wait for the returned future to complete before calling
-  /// this method again. Attempts to do otherwise will result in a
-  /// [TestFailure] error being thrown.
-  ///
-  /// If your widget test hangs and you are using [runAsync], chances are your
-  /// code depends on the result of a task that did not complete. Fake async
-  /// environment is unable to resolve a future that was created in [runAsync].
-  /// If you observe such behavior or flakiness, you have a number of options:
-  ///
-  /// * Consider restructuring your code so you do not need [runAsync]. This is
-  ///   the optimal solution as widget tests are designed to run in fake async
-  ///   environment.
-  ///
-  /// * Expose a [Future] in your application code that signals the readiness of
-  ///   your widget tree, then await that future inside [callback].
-  Future<T?> runAsync<T>(Future<T> Function() callback) =>
-      binding.runAsync<T?>(callback);
-
-  /// Whether there are any transient callbacks scheduled.
-  ///
-  /// This essentially checks whether all animations have completed.
-  ///
-  /// See also:
-  ///
-  ///  * [pumpAndSettle], which essentially calls [pump] until there are no
-  ///    scheduled frames.
-  ///  * [SchedulerBinding.transientCallbackCount], which is the value on which
-  ///    this is based.
-  ///  * [SchedulerBinding.hasScheduledFrame], which is true whenever a frame is
-  ///    pending. [SchedulerBinding.hasScheduledFrame] is made true when a
-  ///    widget calls [State.setState], even if there are no transient callbacks
-  ///    scheduled. This is what [pumpAndSettle] uses.
-  bool get hasRunningAnimations => binding.transientCallbackCount > 0;
-
-  @override
-  HitTestResult hitTestOnBinding(Offset location) {
-    location = binding.localToGlobal(location);
-    return super.hitTestOnBinding(location);
-  }
-
-  @override
-  Future<void> sendEventToBinding(PointerEvent event) {
-    return TestAsyncUtils.guard<void>(() async {
-      binding.handlePointerEventForSource(event,
-          source: TestBindingEventSource.test);
-    });
-  }
-
-  /// Handler for device events caught by the binding in live test mode.
-  @override
-  void dispatchEvent(PointerEvent event, HitTestResult result) {
-    if (event is PointerDownEvent) {
-      final RenderObject innerTarget = result.path
-          .map((HitTestEntry candidate) => candidate.target)
-          .whereType<RenderObject>()
-          .first;
-      final Element? innerTargetElement = _lastWhereOrNull(
-        collectAllElementsFrom(binding.renderViewElement!, skipOffstage: true),
-        (Element element) => element.renderObject == innerTarget,
-      );
-      if (innerTargetElement == null) {
-        printToConsole('No widgets found at ${event.position}.');
-        return;
-      }
-      final List<Element> candidates = <Element>[];
-      innerTargetElement.visitAncestorElements((Element element) {
-        candidates.add(element);
-        return true;
-      });
-      assert(candidates.isNotEmpty);
-      String? descendantText;
-      int numberOfWithTexts = 0;
-      int numberOfTypes = 0;
-      int totalNumber = 0;
-      printToConsole(
-          'Some possible finders for the widgets at ${event.position}:');
-      for (final Element element in candidates) {
-        if (totalNumber >
-            13) // an arbitrary number of finders that feels useful without being overwhelming
-          break;
-        totalNumber += 1; // optimistically assume we'll be able to describe it
-
-        final Widget widget = element.widget;
-        if (widget is Tooltip) {
-          final String message =
-              widget.message ?? widget.richMessage!.toPlainText();
-          final Iterable<Element> matches = find.byTooltip(message).evaluate();
-          if (matches.length == 1) {
-            printToConsole("  find.byTooltip('$message')");
-            continue;
-          }
-        }
-
-        if (widget is Text) {
-          assert(descendantText == null);
-          assert(widget.data != null || widget.textSpan != null);
-          final String text = widget.data ?? widget.textSpan!.toPlainText();
-          final Iterable<Element> matches = find.text(text).evaluate();
-          descendantText = widget.data;
-          if (matches.length == 1) {
-            printToConsole("  find.text('$text')");
-            continue;
-          }
-        }
-
-        final Key? key = widget.key;
-        if (key is ValueKey<dynamic>) {
-          String? keyLabel;
-          if (key is ValueKey<int> ||
-              key is ValueKey<double> ||
-              key is ValueKey<bool>) {
-            keyLabel = 'const ${key.runtimeType}(${key.value})';
-          } else if (key is ValueKey<String>) {
-            keyLabel = "const Key('${key.value}')";
-          }
-          if (keyLabel != null) {
-            final Iterable<Element> matches = find.byKey(key).evaluate();
-            if (matches.length == 1) {
-              printToConsole('  find.byKey($keyLabel)');
-              continue;
-            }
-          }
-        }
-
-        if (!_isPrivate(widget.runtimeType)) {
-          if (numberOfTypes < 5) {
-            final Iterable<Element> matches =
-                find.byType(widget.runtimeType).evaluate();
-            if (matches.length == 1) {
-              printToConsole('  find.byType(${widget.runtimeType})');
-              numberOfTypes += 1;
-              continue;
-            }
-          }
-
-          if (descendantText != null && numberOfWithTexts < 5) {
-            final Iterable<Element> matches = find
-                .widgetWithText(widget.runtimeType, descendantText)
-                .evaluate();
-            if (matches.length == 1) {
-              printToConsole(
-                  "  find.widgetWithText(${widget.runtimeType}, '$descendantText')");
-              numberOfWithTexts += 1;
-              continue;
-            }
-          }
-        }
-
-        if (!_isPrivate(element.runtimeType)) {
-          final Iterable<Element> matches =
-              find.byElementType(element.runtimeType).evaluate();
-          if (matches.length == 1) {
-            printToConsole('  find.byElementType(${element.runtimeType})');
-            continue;
-          }
-        }
-
-        totalNumber -=
-            1; // if we got here, we didn't actually find something to say about it
-      }
-      if (totalNumber == 0)
-        printToConsole('  <could not come up with any unique finders>');
+        tester._screenIndex = 0;
+        tester._previousTap = null;
+        // Reset between the runs
+        await tester.pumpWidget(const SizedBox());
+        await body(tester);
+      } while (_pathTracker.resetAndCheck());
+    } catch (e, stackTrace) {
+      print("Here fail $e");
+      //await tester.screenshot();
+      //await tester.pumpWidget(ErrorWidget(e));
+      //await tester.screenshot();
+      rethrow;
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      debugDisableShadows = true;
     }
+  };
+}
+
+Future<void> splitTest(Map<String, Future<void> Function()> paths) async {
+  var index = _pathTracker.split(paths.length);
+  var path = paths.entries.elementAt(index);
+  tester._currentPathName = path.key;
+  await path.value();
+}
+
+class WidgetTester implements flutter.WidgetTester {
+  final flutter.WidgetTester delegate;
+  int _screenIndex = 0;
+  String? _previousId;
+  Rect? _previousTap;
+  String? _currentPathName;
+
+  WidgetTester.delegated(this.delegate);
+  final _previousScreens = <String>{};
+  Future<void> screenshot() async {
+    var index = ++_screenIndex;
+    var parentIds = _pathTracker.id;
+
+    var screenId = [...parentIds, index].join('-');
+
+    var parentId = _previousId;
+    _previousId = screenId;
+
+    var isDuplicatedScreen = _previousScreens.contains(screenId);
+
+    if (isDuplicatedScreen) {
+      // Early exit. In "splits", we capture the same screen. To speed-up we skip
+      // the screenshot part.
+      _currentPathName = null;
+      return;
+    }
+    _previousScreens.add(screenId);
+    //var boundary = _boundaryKey.currentContext!.findRenderObject()!
+    //  as RenderRepaintBoundary;
+
+    await runAsync(() async {
+      "pixel ratio from args";
+      //var image = await boundary.toImage(pixelRatio: 1);
+      var image = await captureImage(allElements.first);
+      Future<void> f() async {
+        Uint8List? pngBytes;
+        var byteData =
+            (await image.toByteData(format: ui.ImageByteFormat.png))!;
+        pngBytes = byteData.buffer.asUint8List();
+
+        var screen = Screen(screenId, "$screenId", isCollapsable: false)
+            .rebuild((s) => s..pathName = _currentPathName);
+
+        // File('_screenshots/$screenId-rawStraightRgba.bmp')
+        //     .writeAsBytes(pngBytes);
+        var newScreen = NewScreen((b) {
+          b
+            ..screen.replace(screen)
+            ..imageBase64 = pngBytes != null ? base64Encode(pngBytes) : null
+            ..parent = parentId;
+        });
+        //_logger.info('Add screen [$name] (id: $screenId, parent: $parentId)');
+        await runContext.addScreen(newScreen);
+      }
+
+      await f();
+    });
   }
 
-  bool _isPrivate(Type type) {
-    // used above so that we don't suggest matchers for private types
-    return '_'.matchAsPrefix(type.toString()) != null;
+  @override
+  Iterable<Element> get allElements => delegate.allElements;
+
+  @override
+  Iterable<RenderObject> get allRenderObjects => delegate.allRenderObjects;
+
+  @override
+  Iterable<State<StatefulWidget>> get allStates => delegate.allStates;
+
+  @override
+  Iterable<Widget> get allWidgets => delegate.allWidgets;
+
+  @override
+  bool any(flutter.Finder finder) {
+    return delegate.any(finder);
   }
 
-  /// Returns the exception most recently caught by the Flutter framework.
-  ///
-  /// See [TestWidgetsFlutterBinding.takeException] for details.
-  dynamic takeException() {
-    return binding.takeException();
-  }
+  @override
+  flutter.TestWidgetsFlutterBinding get binding => delegate.binding;
 
-  /// Acts as if the application went idle.
-  ///
-  /// Runs all remaining microtasks, including those scheduled as a result of
-  /// running them, until there are no more microtasks scheduled. Then, runs any
-  /// previously scheduled timers with zero time, and completes the returned future.
-  ///
-  /// May result in an infinite loop or run out of memory if microtasks continue
-  /// to recursively schedule new microtasks. Will not run any timers scheduled
-  /// after this method was invoked, even if they are zero-time timers.
-  Future<void> idle() {
-    return TestAsyncUtils.guard<void>(() => binding.idle());
+  @override
+  flutter.Future<flutter.TestGesture> createGesture(
+      {int? pointer,
+      PointerDeviceKind kind = PointerDeviceKind.touch,
+      int buttons = kPrimaryButton}) {
+    return delegate.createGesture(
+        pointer: pointer, kind: kind, buttons: buttons);
   }
-
-  Set<Ticker>? _tickers;
 
   @override
   Ticker createTicker(TickerCallback onTick) {
-    _tickers ??= <_TestTicker>{};
-    final _TestTicker result = _TestTicker(onTick, _removeTicker);
-    _tickers!.add(result);
-    return result;
+    return delegate.createTicker(onTick);
   }
 
-  void _removeTicker(_TestTicker ticker) {
-    assert(_tickers != null);
-    assert(_tickers!.contains(ticker));
-    _tickers!.remove(ticker);
+  @override
+  void dispatchEvent(PointerEvent event, HitTestResult result) {
+    delegate.dispatchEvent(event, result);
   }
 
-  /// Throws an exception if any tickers created by the [WidgetTester] are still
-  /// active when the method is called.
-  ///
-  /// An argument can be specified to provide a string that will be used in the
-  /// error message. It should be an adverbial phrase describing the current
-  /// situation, such as "at the end of the test".
-  void verifyTickersWereDisposed([String when = 'when none should have been']) {
-    if (_tickers != null) {
-      for (final Ticker ticker in _tickers!) {
-        if (ticker.isActive) {
-          throw FlutterError.fromParts(<DiagnosticsNode>[
-            ErrorSummary('A Ticker was active $when.'),
-            ErrorDescription('All Tickers must be disposed.'),
-            ErrorHint('Tickers used by AnimationControllers '
-                'should be disposed by calling dispose() on the AnimationController itself. '
-                'Otherwise, the ticker will leak.'),
-            ticker.describeForError('The offending ticker was')
-          ]);
-        }
-      }
-    }
+  @override
+  flutter.Future<void> drag(flutter.Finder finder, flutter.Offset offset,
+      {int? pointer,
+      int buttons = kPrimaryButton,
+      double touchSlopX = flutter.kDragSlopDefault,
+      double touchSlopY = flutter.kDragSlopDefault,
+      bool warnIfMissed = true,
+      PointerDeviceKind kind = PointerDeviceKind.touch}) {
+    return delegate.drag(finder, offset,
+        pointer: pointer,
+        buttons: buttons,
+        touchSlopX: touchSlopX,
+        touchSlopY: touchSlopY,
+        warnIfMissed: warnIfMissed,
+        kind: kind);
   }
 
-  void endOfTestVerifications() {
-    verifyTickersWereDisposed('at the end of the test');
+  @override
+  flutter.Future<void> dragFrom(
+      flutter.Offset startLocation, flutter.Offset offset,
+      {int? pointer,
+      int buttons = kPrimaryButton,
+      double touchSlopX = flutter.kDragSlopDefault,
+      double touchSlopY = flutter.kDragSlopDefault,
+      PointerDeviceKind kind = PointerDeviceKind.touch}) {
+    return delegate.dragFrom(startLocation, offset,
+        pointer: pointer,
+        buttons: buttons,
+        touchSlopX: touchSlopX,
+        touchSlopY: touchSlopY,
+        kind: kind);
   }
 
-  /// Returns the TestTextInput singleton.
-  ///
-  /// Typical app tests will not need to use this value. To add text to widgets
-  /// like [TextField] or [TextFormField], call [enterText].
-  ///
-  /// Some of the properties and methods on this value are only valid if the
-  /// binding's [TestWidgetsFlutterBinding.registerTestTextInput] flag is set to
-  /// true as a test is starting (meaning that the keyboard is to be simulated
-  /// by the test framework). If those members are accessed when using a binding
-  /// that sets this flag to false, they will throw.
-  TestTextInput get testTextInput => binding.testTextInput;
-
-  /// Give the text input widget specified by [finder] the focus, as if the
-  /// onscreen keyboard had appeared.
-  ///
-  /// Implies a call to [pump].
-  ///
-  /// The widget specified by [finder] must be an [EditableText] or have
-  /// an [EditableText] descendant. For example `find.byType(TextField)`
-  /// or `find.byType(TextFormField)`, or `find.byType(EditableText)`.
-  ///
-  /// Tests that just need to add text to widgets like [TextField]
-  /// or [TextFormField] only need to call [enterText].
-  Future<void> showKeyboard(Finder finder) async {
-    return TestAsyncUtils.guard<void>(() async {
-      final EditableTextState editable = state<EditableTextState>(
-        find.descendant(
-          of: finder,
-          matching:
-              find.byType(EditableText, skipOffstage: finder.skipOffstage),
-          matchRoot: true,
-        ),
-      );
-      // Setting focusedEditable causes the binding to call requestKeyboard()
-      // on the EditableTextState, which itself eventually calls TextInput.attach
-      // to establish the connection.
-      binding.focusedEditable = editable;
-      await pump();
-    });
+  @override
+  flutter.Future<void> dragUntilVisible(
+      flutter.Finder finder, flutter.Finder view, flutter.Offset moveStep,
+      {int maxIteration = 50,
+      Duration duration = const Duration(milliseconds: 50)}) {
+    return delegate.dragUntilVisible(finder, view, moveStep,
+        maxIteration: maxIteration, duration: duration);
   }
 
-  /// Give the text input widget specified by [finder] the focus and replace its
-  /// content with [text], as if it had been provided by the onscreen keyboard.
-  ///
-  /// The widget specified by [finder] must be an [EditableText] or have
-  /// an [EditableText] descendant. For example `find.byType(TextField)`
-  /// or `find.byType(TextFormField)`, or `find.byType(EditableText)`.
-  ///
-  /// When the returned future completes, the text input widget's text will be
-  /// exactly `text`, and the caret will be placed at the end of `text`.
-  ///
-  /// To just give [finder] the focus without entering any text,
-  /// see [showKeyboard].
-  ///
-  /// To enter text into other widgets (e.g. a custom widget that maintains a
-  /// TextInputConnection the way that a [EditableText] does), first ensure that
-  /// that widget has an open connection (e.g. by using [tap] to to focus it),
-  /// then call `testTextInput.enterText` directly (see
-  /// [TestTextInput.enterText]).
-  Future<void> enterText(Finder finder, String text) async {
-    return TestAsyncUtils.guard<void>(() async {
-      await showKeyboard(finder);
-      testTextInput.enterText(text);
-      await idle();
-    });
+  @override
+  T element<T extends Element>(flutter.Finder finder) {
+    return delegate.element(finder);
+  }
+
+  @override
+  Iterable<T> elementList<T extends Element>(flutter.Finder finder) {
+    return delegate.elementList(finder);
+  }
+
+  @override
+  flutter.SemanticsHandle ensureSemantics() {
+    return delegate.ensureSemantics();
+  }
+
+  @override
+  flutter.Future<void> ensureVisible(flutter.Finder finder) {
+    return delegate.ensureVisible(finder);
+  }
+
+  @override
+  flutter.Future<void> enterText(flutter.Finder finder, String text) {
+    return delegate.enterText(finder, text);
+  }
+
+  @override
+  T firstElement<T extends Element>(flutter.Finder finder) {
+    return delegate.firstElement(finder);
+  }
+
+  @override
+  T firstRenderObject<T extends RenderObject>(flutter.Finder finder) {
+    return delegate.firstRenderObject(finder);
+  }
+
+  @override
+  T firstState<T extends State<StatefulWidget>>(flutter.Finder finder) {
+    return delegate.firstState(finder);
+  }
+
+  @override
+  T firstWidget<T extends Widget>(flutter.Finder finder) {
+    return delegate.firstWidget(finder);
+  }
+
+  @override
+  flutter.Future<void> fling(
+      flutter.Finder finder, flutter.Offset offset, double speed,
+      {int? pointer,
+      int buttons = kPrimaryButton,
+      Duration frameInterval = const Duration(milliseconds: 16),
+      flutter.Offset initialOffset = Offset.zero,
+      Duration initialOffsetDelay = const Duration(seconds: 1),
+      bool warnIfMissed = true}) {
+    return delegate.fling(finder, offset, speed,
+        pointer: pointer,
+        buttons: buttons,
+        frameInterval: frameInterval,
+        initialOffset: initialOffset,
+        initialOffsetDelay: initialOffsetDelay,
+        warnIfMissed: warnIfMissed);
+  }
+
+  @override
+  flutter.Future<void> flingFrom(
+      flutter.Offset startLocation, flutter.Offset offset, double speed,
+      {int? pointer,
+      int buttons = kPrimaryButton,
+      Duration frameInterval = const Duration(milliseconds: 16),
+      flutter.Offset initialOffset = Offset.zero,
+      Duration initialOffsetDelay = const Duration(seconds: 1)}) {
+    return delegate.flingFrom(startLocation, offset, speed,
+        pointer: pointer,
+        buttons: buttons,
+        frameInterval: frameInterval,
+        initialOffset: initialOffset,
+        initialOffsetDelay: initialOffsetDelay);
+  }
+
+  @override
+  flutter.Offset getBottomLeft(flutter.Finder finder,
+      {bool warnIfMissed = false, String callee = 'getBottomLeft'}) {
+    return delegate.getBottomLeft(finder,
+        warnIfMissed: warnIfMissed, callee: callee);
+  }
+
+  @override
+  flutter.Offset getBottomRight(flutter.Finder finder,
+      {bool warnIfMissed = false, String callee = 'getBottomRight'}) {
+    return delegate.getBottomRight(finder,
+        warnIfMissed: warnIfMissed, callee: callee);
+  }
+
+  @override
+  flutter.Offset getCenter(flutter.Finder finder,
+      {bool warnIfMissed = false, String callee = 'getCenter'}) {
+    return delegate.getCenter(finder,
+        warnIfMissed: warnIfMissed, callee: callee);
+  }
+
+  @override
+  Rect getRect(flutter.Finder finder) {
+    return delegate.getRect(finder);
+  }
+
+  @override
+  flutter.Future<flutter.TestRestorationData> getRestorationData() {
+    return delegate.getRestorationData();
+  }
+
+  @override
+  SemanticsNode getSemantics(flutter.Finder finder) {
+    return delegate.getSemantics(finder);
+  }
+
+  @override
+  Size getSize(flutter.Finder finder) {
+    return delegate.getSize(finder);
+  }
+
+  @override
+  flutter.Offset getTopLeft(flutter.Finder finder,
+      {bool warnIfMissed = false, String callee = 'getTopLeft'}) {
+    return delegate.getTopLeft(finder,
+        warnIfMissed: warnIfMissed, callee: callee);
+  }
+
+  @override
+  flutter.Offset getTopRight(flutter.Finder finder,
+      {bool warnIfMissed = false, String callee = 'getTopRight'}) {
+    return delegate.getTopRight(finder,
+        warnIfMissed: warnIfMissed, callee: callee);
+  }
+
+  @override
+  flutter.Future<List<Duration>> handlePointerEventRecord(
+      Iterable<flutter.PointerEventRecord> records) {
+    return delegate.handlePointerEventRecord(records);
+  }
+
+  @override
+  bool get hasRunningAnimations => delegate.hasRunningAnimations;
+
+  @override
+  HitTestResult hitTestOnBinding(flutter.Offset location) {
+    return delegate.hitTestOnBinding(location);
+  }
+
+  @override
+  flutter.Future<void> idle() {
+    return delegate.idle();
+  }
+
+  @override
+  List<Layer> get layers => delegate.layers;
+
+  @override
+  flutter.Future<void> longPress(flutter.Finder finder,
+      {int? pointer, int buttons = kPrimaryButton, bool warnIfMissed = true}) {
+    return delegate.longPress(finder,
+        pointer: pointer, buttons: buttons, warnIfMissed: warnIfMissed);
+  }
+
+  @override
+  flutter.Future<void> longPressAt(flutter.Offset location,
+      {int? pointer, int buttons = kPrimaryButton}) {
+    return delegate.longPressAt(location, pointer: pointer, buttons: buttons);
+  }
+
+  @override
+  int get nextPointer => delegate.nextPointer;
+
+  @override
+  flutter.Future<void> pageBack() {
+    return delegate.pageBack();
+  }
+
+  @override
+  flutter.Future<flutter.TestGesture> press(flutter.Finder finder,
+      {int? pointer, int buttons = kPrimaryButton, bool warnIfMissed = true}) {
+    return delegate.press(finder,
+        pointer: pointer, buttons: buttons, warnIfMissed: warnIfMissed);
   }
 
   @override
   void printToConsole(String message) {
-    binding.debugPrintOverride(message);
+    delegate.printToConsole(message);
+  }
+
+  @override
+  flutter.Future<void> pump(
+      [Duration? duration,
+      flutter.EnginePhase phase = flutter.EnginePhase.sendSemanticsUpdate]) {
+    return delegate.pump(duration, phase);
+  }
+
+  @override
+  flutter.Future<int> pumpAndSettle(
+      [Duration duration = const Duration(milliseconds: 100),
+      flutter.EnginePhase phase = flutter.EnginePhase.sendSemanticsUpdate,
+      Duration timeout = const Duration(minutes: 10)]) {
+    return delegate.pumpAndSettle(duration, phase, timeout);
+  }
+
+  @override
+  flutter.Future<void> pumpBenchmark(Duration duration) {
+    return delegate.pumpBenchmark(duration);
+  }
+
+  @override
+  flutter.Future<void> pumpFrames(Widget target, Duration maxDuration,
+      [Duration interval =
+          const Duration(milliseconds: 16, microseconds: 683)]) {
+    return delegate.pumpFrames(target, maxDuration, interval);
+  }
+
+  @override
+  flutter.Future<void> pumpWidget(Widget widget,
+      [Duration? duration,
+      flutter.EnginePhase phase = flutter.EnginePhase.sendSemanticsUpdate]) {
+    return delegate.pumpWidget(widget, duration, phase);
+  }
+
+  @override
+  T renderObject<T extends RenderObject>(flutter.Finder finder) {
+    return delegate.renderObject(finder);
+  }
+
+  @override
+  Iterable<T> renderObjectList<T extends RenderObject>(flutter.Finder finder) {
+    return delegate.renderObjectList(finder);
+  }
+
+  @override
+  flutter.Future<void> restartAndRestore() {
+    return delegate.restartAndRestore();
+  }
+
+  @override
+  flutter.Future<void> restoreFrom(flutter.TestRestorationData data) {
+    return delegate.restoreFrom(data);
+  }
+
+  @override
+  flutter.Future<T?> runAsync<T>(flutter.Future<T> Function() callback,
+      {Duration additionalTime = const Duration(milliseconds: 1000)}) {
+    return delegate.runAsync(callback, additionalTime: additionalTime);
+  }
+
+  @override
+  flutter.Future<void> scrollUntilVisible(flutter.Finder finder, double delta,
+      {flutter.Finder? scrollable,
+      int maxScrolls = 50,
+      Duration duration = const Duration(milliseconds: 50)}) {
+    return delegate.scrollUntilVisible(finder, delta,
+        scrollable: scrollable, maxScrolls: maxScrolls, duration: duration);
+  }
+
+  @override
+  flutter.Future<void> sendEventToBinding(PointerEvent event) {
+    return delegate.sendEventToBinding(event);
+  }
+
+  @override
+  flutter.Future<bool> sendKeyDownEvent(LogicalKeyboardKey key,
+      {String? character, String platform = _defaultPlatform}) {
+    return delegate.sendKeyDownEvent(key,
+        character: character, platform: platform);
+  }
+
+  @override
+  flutter.Future<bool> sendKeyEvent(LogicalKeyboardKey key,
+      {String platform = _defaultPlatform}) {
+    return delegate.sendKeyEvent(key, platform: platform);
+  }
+
+  @override
+  flutter.Future<bool> sendKeyRepeatEvent(LogicalKeyboardKey key,
+      {String? character, String platform = _defaultPlatform}) {
+    return delegate.sendKeyRepeatEvent(key,
+        character: character, platform: platform);
+  }
+
+  @override
+  flutter.Future<bool> sendKeyUpEvent(LogicalKeyboardKey key,
+      {String platform = _defaultPlatform}) {
+    return delegate.sendKeyUpEvent(key, platform: platform);
+  }
+
+  @override
+  flutter.Future<void> showKeyboard(flutter.Finder finder) {
+    return delegate.showKeyboard(finder);
+  }
+
+  @override
+  flutter.Future<flutter.TestGesture> startGesture(flutter.Offset downLocation,
+      {int? pointer,
+      PointerDeviceKind kind = PointerDeviceKind.touch,
+      int buttons = kPrimaryButton}) {
+    return delegate.startGesture(downLocation,
+        pointer: pointer, kind: kind, buttons: buttons);
+  }
+
+  @override
+  T state<T extends State<StatefulWidget>>(flutter.Finder finder) {
+    return delegate.state(finder);
+  }
+
+  @override
+  Iterable<T> stateList<T extends State<StatefulWidget>>(
+      flutter.Finder finder) {
+    return delegate.stateList(finder);
+  }
+
+  @override
+  dynamic takeException() {
+    return delegate.takeException();
+  }
+
+  @override
+  flutter.Future<void> tap(flutter.Finder finder,
+      {int? pointer, int buttons = kPrimaryButton, bool warnIfMissed = true}) {
+    return delegate.tap(finder,
+        pointer: pointer, buttons: buttons, warnIfMissed: warnIfMissed);
+  }
+
+  @override
+  flutter.Future<void> tapAt(flutter.Offset location,
+      {int? pointer, int buttons = kPrimaryButton}) {
+    return delegate.tapAt(location, pointer: pointer, buttons: buttons);
+  }
+
+  @override
+  String get testDescription => delegate.testDescription;
+
+  @override
+  flutter.TestTextInput get testTextInput => delegate.testTextInput;
+
+  @override
+  flutter.Future<void> timedDrag(
+      flutter.Finder finder, flutter.Offset offset, Duration duration,
+      {int? pointer,
+      int buttons = kPrimaryButton,
+      double frequency = 60.0,
+      bool warnIfMissed = true}) {
+    return delegate.timedDrag(finder, offset, duration,
+        pointer: pointer,
+        buttons: buttons,
+        frequency: frequency,
+        warnIfMissed: warnIfMissed);
+  }
+
+  @override
+  flutter.Future<void> timedDragFrom(
+      flutter.Offset startLocation, flutter.Offset offset, Duration duration,
+      {int? pointer, int buttons = kPrimaryButton, double frequency = 60.0}) {
+    return delegate.timedDragFrom(startLocation, offset, duration,
+        pointer: pointer, buttons: buttons, frequency: frequency);
+  }
+
+  @override
+  void verifyTickersWereDisposed([String when = 'when none should have been']) {
+    delegate.verifyTickersWereDisposed(when);
+  }
+
+  @override
+  T widget<T extends Widget>(flutter.Finder finder) {
+    return delegate.widget(finder);
+  }
+
+  @override
+  Iterable<T> widgetList<T extends Widget>(flutter.Finder finder) {
+    return delegate.widgetList(finder);
   }
 }
 
-typedef _TickerDisposeCallback = void Function(_TestTicker ticker);
+class _FakeAccessibilityFeatures implements ui.AccessibilityFeatures {
+  final AccessibilityConfig config;
 
-class _TestTicker extends Ticker {
-  _TestTicker(TickerCallback onTick, this._onDispose) : super(onTick);
-
-  final _TickerDisposeCallback _onDispose;
+  _FakeAccessibilityFeatures(this.config);
 
   @override
-  void dispose() {
-    _onDispose(this);
-    super.dispose();
-  }
+  bool get accessibleNavigation => false;
+
+  @override
+  bool get boldText => config.boldText;
+
+  @override
+  bool get disableAnimations => false;
+
+  @override
+  bool get highContrast => false;
+
+  @override
+  bool get invertColors => false;
+
+  @override
+  bool get reduceMotion => false;
+
+  @override
+  bool get onOffSwitchLabels => false;
 }

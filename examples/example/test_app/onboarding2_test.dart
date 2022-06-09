@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_studio/flutter_test.dart';
 import 'package:flutter_studio_example/main.dart';
-import 'package:flutter_test/flutter_test.dart' hide testWidgets;
 
 // Start flutter_studio tool to run those tests:
 // dart run flutter_studio app
 void main() {
-  setUp(() {
-    print('Some code to configure the mocks');
-  });
-
-  testWidgets('On-boarding should do this and should to that', (tester) async {
+  testWidgets('On-boarding', (tester) async {
     await tester.pumpWidget(MyApp());
     await tester.screenshot();
     await tester.tap(find.byIcon(Icons.add));
@@ -24,7 +19,6 @@ void main() {
         await tester.tap(find.byIcon(Icons.add));
         await tester.pumpAndSettle();
         await tester.screenshot();
-        fail('This is a failure');
       },
       'not ok': () async {
         await tester.tap(find.byIcon(Icons.add));
@@ -36,8 +30,6 @@ void main() {
 
   testWidgets('Login', (tester) async {
     print('Login test');
-
-    expect(1, 0);
   });
 
   testWidgets('Dashboard', (tester) async {
@@ -48,7 +40,7 @@ void main() {
     //
   });
 
-  group('Basket of all the products', () {
+  group('Basket', () {
     testWidgets('Empty', (tester) async {
       //
     });

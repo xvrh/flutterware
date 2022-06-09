@@ -3,11 +3,12 @@ import 'package:built_collection/built_collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart' as flutter;
 import 'package:logging/logging.dart';
 import 'package:pool/pool.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import '../api.dart';
 import '../protocol/connection.dart';
 import '../protocol/domains/listing.dart';
 import '../protocol/domains/project.dart';
@@ -17,13 +18,19 @@ import 'asset_bundle.dart';
 import 'binding.dart';
 import 'fonts.dart';
 import 'list_tests.dart';
+import 'run_group.dart';
 import 'scenario.dart';
+import 'package:test_api/src/backend/group.dart';
+
+import 'widget_tester.dart'; // ignore: implementation_imports
 
 final _logger = Logger('runner');
 
 StreamChannel<String> connectToServer(Uri serverUri) {
   return WebSocketChannel.connect(serverUri).cast<String>();
 }
+
+typedef TestCallback = Future<void> Function(WidgetTester);
 
 /// The class responsible to hold all the tests and coordinate the communication
 /// with the server.
@@ -45,9 +52,9 @@ class Runner implements RunContext {
       required Future<ScenarioBundle> Function() bundle,
       this.onConnected})
       : _bundleFactory = bundle {
-    FlutterError.onError = (error) {
-      _logger.severe('FLUTTER ERROR: $error');
-    };
+    //FlutterError.onError = (error) {
+    //  _logger.severe('FLUTTER ERROR: $error');
+    //};
 
     _binding = ScenarioBinding(onReloaded: notifyReloaded);
     _setup();
@@ -71,7 +78,7 @@ class Runner implements RunContext {
       });
     }
     await loadAppFonts(bundle);
-    WidgetController.hitTestWarningShouldBeFatal = true;
+    flutter.WidgetController.hitTestWarningShouldBeFatal = true;
     WidgetsApp.debugAllowBannerOverride = false;
     _startConnection();
   }
@@ -108,23 +115,28 @@ class Runner implements RunContext {
     return listTests(allTests);
   }
 
+  late RunArgs _currentRun;
+  RunArgs get args => _currentRun;
   @override
-  Future<void> addScreen(RunArgs run, NewScreen screen) =>
-      _runClient!.addScreen(run, screen);
+  Future<void> addScreen(/*RunArgs run,*/ NewScreen screen) =>
+      _runClient!.addScreen(_currentRun, screen);
 
-  Scenario? _findTest(Map<String, dynamic> tests, BuiltList<String> name) {
-    for (var namePart in name) {
+  Group? _findTest(Map<String, void Function()> tests, BuiltList<String> name) {
+    return findTest(tests, name.join(' '));
+    /*for (var namePart in name) {
       var value = tests[namePart];
-      if (value is Scenario) {
+      if (value is TestCallback) {
         return value;
       } else if (value is Map<String, dynamic>) {
         tests = value;
+      } else {
+        _logger.severe('Unsupported test type $value');
       }
     }
-    return null;
+    return null;*/
   }
 
-  final _currentScenario = <RunArgs, Scenario>{};
+  final _currentScenario = <RunArgs, Group>{};
   ScenarioRun _createRun(RunArgs args) {
     _logger.fine('RunTest ${args.scenarioName.join('/')}');
     var allScenario = tests();
@@ -133,9 +145,7 @@ class Runner implements RunContext {
       throw Exception('No test ${args.scenarioName.join('/')} found.');
     }
 
-    var run = ScenarioRun(
-        ScenarioReference(args.scenarioName, description: scenario.description),
-        args);
+    var run = ScenarioRun(ScenarioReference(args.scenarioName), args);
     _currentScenario[args] = scenario;
     return run;
   }
@@ -143,18 +153,26 @@ class Runner implements RunContext {
   void _executeRun(RunArgs args) {
     var runClient = _runClient!;
     var scenario = _currentScenario[args]!;
+    _currentRun = args;
+    runContext = this;
 
     _runPool.withResource(() async {
       var stopwatch = Stopwatch()..start();
       late RunResult result;
       try {
-        var zoneError =
-            await scenario.execute(this, binding, bundle, project, args);
-        if (zoneError == null) {
-          result = RunResult.success();
-        } else {
-          result = RunResult.error(zoneError, null);
-        }
+        await runZonedGuarded(() async {
+          var tests = await runGroup(scenario).toList();
+          print("Tests ${tests.map((t) => t.state.result).join(',')}");
+          if (tests.any((t) => t.state.result.isFailing)) {
+            result = RunResult.error(tests.map((t) => t.errors).toList(), null);
+          } else {
+            result = RunResult.success();
+          }
+        }, (e, stackTrace) {
+          print('Error $e');
+          result = RunResult.error(e, stackTrace);
+          _logger.warning('Zone error $e $stackTrace');
+        });
       } catch (e, stackTrace) {
         _logger.warning('Failed to run test', e);
         result = RunResult.error(e, stackTrace);

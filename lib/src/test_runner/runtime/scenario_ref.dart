@@ -1,8 +1,10 @@
+import 'package:flutter_studio/src/test_runner/runtime/runner.dart';
+
 import 'scenario.dart';
 
 class ScenarioRef {
   final List<String> name;
-  final Scenario scenario;
+  final TestCallback scenario;
 
   ScenarioRef(this.name, this.scenario);
 
@@ -15,7 +17,7 @@ class ScenarioRef {
     for (var entry in scenarios.entries) {
       var value = entry.value;
       var name = [...parents, entry.key];
-      if (value is Scenario) {
+      if (value is TestCallback) {
         yield ScenarioRef(name, value);
       } else if (value is Map<String, dynamic>) {
         yield* _listScenarios(name, value);

@@ -37,7 +37,8 @@ class _ImageDetailState extends State<ImageDetail> {
         selectedTextInfo: _overTextInfo,
         selectedLink: _overLink,
       ),
-      sidebar: [
+      sidebar: [],
+      /*sidebar: [
         Expanded(
           flex: 2,
           child: TranslationsSidebar(
@@ -95,7 +96,7 @@ class _ImageDetailState extends State<ImageDetail> {
           DocumentationSection(widget.project, widget.run,
               documentationKey: documentationKey),
         ]
-      ],
+      ],*/
     );
   }
 }

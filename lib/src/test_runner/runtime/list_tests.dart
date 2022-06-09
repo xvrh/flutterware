@@ -6,6 +6,16 @@ import 'package:test_api/src/backend/group_entry.dart'; // ignore: implementatio
 import 'package:test_api/src/backend/group.dart'; // ignore: implementation_imports
 import 'package:test_api/src/backend/test.dart'; // ignore: implementation_imports
 
+Group findTest(Map<String, void Function()> allTests, String fullTestName) {
+  var declarer = Declarer(fullTestName: fullTestName);
+  declarer.declare(() {
+    for (var main in allTests.entries) {
+      group(main.key, main.value);
+    }
+  });
+  return declarer.build();
+}
+
 Iterable<ScenarioReference> listTests(Map<String, void Function()> allTests) {
   var declarer = Declarer();
   declarer.declare(() {
@@ -20,7 +30,7 @@ Iterable<ScenarioReference> listTests(Map<String, void Function()> allTests) {
 Iterable<ScenarioReference> _listTests(
     List<String> parents, Group group) sync* {
   for (var entry in group.entries) {
-    var simpleName = individualName(entry, group);
+    var simpleName = _individualName(entry, group);
     var name = [...parents, simpleName];
     if (entry is Test) {
       yield ScenarioReference(name);
@@ -32,7 +42,7 @@ Iterable<ScenarioReference> _listTests(
   }
 }
 
-String individualName(GroupEntry test, Group group) {
+String _individualName(GroupEntry test, Group group) {
   if (group.name.isEmpty) return test.name;
   if (!test.name.startsWith(group.name)) return test.name;
 
