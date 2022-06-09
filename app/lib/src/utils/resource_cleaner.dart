@@ -9,15 +9,15 @@ class ResourceCleanerService {
 
   Future<void> initialize() async {
     var directory = Directory(_basePath);
-
-    print('Kill process $directory ${directory.listSync()} after Hot restart');
-    await for (var file in directory.list()) {
-      var pid = int.tryParse(p.basenameWithoutExtension(file.path));
-      if (pid != null) {
-        Process.killPid(pid);
-        _logger.fine('Kill process $pid after Hot restart');
+    if (await directory.exists()) {
+      await for (var file in directory.list()) {
+        var pid = int.tryParse(p.basenameWithoutExtension(file.path));
+        if (pid != null) {
+          Process.killPid(pid);
+          _logger.fine('Kill process $pid after Hot restart');
+        }
+        await file.delete();
       }
-      await file.delete();
     }
   }
 

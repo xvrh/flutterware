@@ -31,6 +31,7 @@ class Daemon {
   Daemon(this._starter, this._process, this._protocol, this._appId) {
     _eventSubscription = _protocol.onEvent.listen((event) {
       //TODO(xha): dispatch messages etc...
+      print("Event ${event.runtimeType}");
     });
   }
 
@@ -42,15 +43,18 @@ class Daemon {
     _isReloading.value = true;
     var testFiles = collectTestFiles(Directory(_project.directory));
     await _starter.writeEntryPoint(testFiles);
-    await _protocol.sendCommand(
-        AppRestartCommand(appId: _appId, fullRestart: fullRestart));
-    await _protocol.onEvent
+    var endOfReload = _protocol.onEvent
         .where((e) =>
             e is AppProgressEvent &&
             e.appId == _appId &&
             e.progressId == (fullRestart ? 'hot.restart' : 'hot.reload') &&
             e.finished)
         .first;
+    await _protocol.sendCommand(
+        AppRestartCommand(appId: _appId, fullRestart: fullRestart));
+    print("Will wait for reload");
+    await endOfReload;
+    print("End of reload");
     _isReloading.value = false;
   }
 

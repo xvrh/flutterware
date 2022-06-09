@@ -26,7 +26,7 @@ class SingleProjectApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return RouterOutlet.root(
       child: FittedApp(
-        minimumSize: Size(550, 400),
+        minimumSize: Size(700, 400),
         child: MaterialApp(
           title: 'Flutter Studio',
           theme: appTheme(),

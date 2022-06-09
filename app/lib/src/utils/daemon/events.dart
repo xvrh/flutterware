@@ -17,6 +17,8 @@ abstract class Event {
         return AppDebugPortEvent.fromJson(params);
       case 'app.started':
         return AppStartedEvent.fromJson(params);
+      case 'app.progress':
+        return AppProgressEvent.fromJson(params);
     }
     return null;
   }
@@ -91,7 +93,7 @@ class AppProgressEvent implements Event {
   final String appId;
   final String id;
   final String? progressId;
-  final String message;
+  final String? message;
   final bool finished;
 
   AppProgressEvent(

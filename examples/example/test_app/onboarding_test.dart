@@ -9,7 +9,7 @@ void main() {
     await tester.tap(find.text(''));
   });
 
-  testWidgets('Login test test', (tester) async {
+  testWidgets('Login test', (tester) async {
     //
   });
 

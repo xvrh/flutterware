@@ -55,7 +55,7 @@ AppProgressEvent _$AppProgressEventFromJson(Map<String, dynamic> json) =>
       json['appId'] as String,
       json['id'] as String,
       json['progressId'] as String?,
-      json['message'] as String,
+      json['message'] as String?,
       json['finished'] as bool,
     );
 
