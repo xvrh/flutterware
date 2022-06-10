@@ -24,12 +24,14 @@ void main() {
         await tester.tap(find.byIcon(Icons.add));
         await tester.pumpAndSettle();
         await tester.screenshot();
-        fail('This is a failure');
+        //fail('This is a failure');
       },
       'not ok': () async {
-        await tester.tap(find.byIcon(Icons.add));
-        await tester.pumpAndSettle();
-        await tester.screenshot();
+        for (var i = 0; i < 10; i++) {
+          await tester.tap(find.byIcon(Icons.add));
+          await tester.pumpAndSettle();
+          await tester.screenshot();
+        }
       },
     });
   });

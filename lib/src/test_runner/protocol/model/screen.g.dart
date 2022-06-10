@@ -7,6 +7,7 @@ part of 'screen.dart';
 // **************************************************************************
 
 Serializer<NewScreen> _$newScreenSerializer = new _$NewScreenSerializer();
+Serializer<ImageFile> _$imageFileSerializer = new _$ImageFileSerializer();
 Serializer<Screen> _$screenSerializer = new _$ScreenSerializer();
 Serializer<TextInfo> _$textInfoSerializer = new _$TextInfoSerializer();
 Serializer<ScreenLink> _$screenLinkSerializer = new _$ScreenLinkSerializer();
@@ -60,6 +61,13 @@ class _$NewScreenSerializer implements StructuredSerializer<NewScreen> {
         ..add(serializers.serialize(value,
             specifiedType: const FullType(String)));
     }
+    value = object.imageFile;
+    if (value != null) {
+      result
+        ..add('imageFile')
+        ..add(serializers.serialize(value,
+            specifiedType: const FullType(ImageFile)));
+    }
     return result;
   }
 
@@ -93,6 +101,61 @@ class _$NewScreenSerializer implements StructuredSerializer<NewScreen> {
         case 'imageBase64':
           result.imageBase64 = serializers.deserialize(value,
               specifiedType: const FullType(String)) as String?;
+          break;
+        case 'imageFile':
+          result.imageFile.replace(serializers.deserialize(value,
+              specifiedType: const FullType(ImageFile))! as ImageFile);
+          break;
+      }
+    }
+
+    return result.build();
+  }
+}
+
+class _$ImageFileSerializer implements StructuredSerializer<ImageFile> {
+  @override
+  final Iterable<Type> types = const [ImageFile, _$ImageFile];
+  @override
+  final String wireName = 'ImageFile';
+
+  @override
+  Iterable<Object?> serialize(Serializers serializers, ImageFile object,
+      {FullType specifiedType = FullType.unspecified}) {
+    final result = <Object?>[
+      'path',
+      serializers.serialize(object.path, specifiedType: const FullType(String)),
+      'width',
+      serializers.serialize(object.width, specifiedType: const FullType(int)),
+      'height',
+      serializers.serialize(object.height, specifiedType: const FullType(int)),
+    ];
+
+    return result;
+  }
+
+  @override
+  ImageFile deserialize(Serializers serializers, Iterable<Object?> serialized,
+      {FullType specifiedType = FullType.unspecified}) {
+    final result = new ImageFileBuilder();
+
+    final iterator = serialized.iterator;
+    while (iterator.moveNext()) {
+      final key = iterator.current! as String;
+      iterator.moveNext();
+      final Object? value = iterator.current;
+      switch (key) {
+        case 'path':
+          result.path = serializers.deserialize(value,
+              specifiedType: const FullType(String))! as String;
+          break;
+        case 'width':
+          result.width = serializers.deserialize(value,
+              specifiedType: const FullType(int))! as int;
+          break;
+        case 'height':
+          result.height = serializers.deserialize(value,
+              specifiedType: const FullType(int))! as int;
           break;
       }
     }
@@ -148,6 +211,13 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
         ..add('imageBytes')
         ..add(serializers.serialize(value,
             specifiedType: const FullType(Uint8List)));
+    }
+    value = object.imageFile;
+    if (value != null) {
+      result
+        ..add('imageFile')
+        ..add(serializers.serialize(value,
+            specifiedType: const FullType(ImageFile)));
     }
     value = object.documentationKey;
     if (value != null) {
@@ -225,6 +295,10 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
         case 'imageBytes':
           result.imageBytes = serializers.deserialize(value,
               specifiedType: const FullType(Uint8List)) as Uint8List?;
+          break;
+        case 'imageFile':
+          result.imageFile.replace(serializers.deserialize(value,
+              specifiedType: const FullType(ImageFile))! as ImageFile);
           break;
         case 'documentationKey':
           result.documentationKey = serializers.deserialize(value,
@@ -697,6 +771,8 @@ class _$NewScreen extends NewScreen {
   final AnalyticEvent? analyticEvent;
   @override
   final String? imageBase64;
+  @override
+  final ImageFile? imageFile;
 
   factory _$NewScreen([void Function(NewScreenBuilder)? updates]) =>
       (new NewScreenBuilder()..update(updates))._build();
@@ -706,7 +782,8 @@ class _$NewScreen extends NewScreen {
       this.parent,
       this.parentRectangle,
       this.analyticEvent,
-      this.imageBase64})
+      this.imageBase64,
+      this.imageFile})
       : super._() {
     BuiltValueNullFieldError.checkNotNull(screen, 'NewScreen', 'screen');
   }
@@ -726,17 +803,20 @@ class _$NewScreen extends NewScreen {
         parent == other.parent &&
         parentRectangle == other.parentRectangle &&
         analyticEvent == other.analyticEvent &&
-        imageBase64 == other.imageBase64;
+        imageBase64 == other.imageBase64 &&
+        imageFile == other.imageFile;
   }
 
   @override
   int get hashCode {
     return $jf($jc(
         $jc(
-            $jc($jc($jc(0, screen.hashCode), parent.hashCode),
-                parentRectangle.hashCode),
-            analyticEvent.hashCode),
-        imageBase64.hashCode));
+            $jc(
+                $jc($jc($jc(0, screen.hashCode), parent.hashCode),
+                    parentRectangle.hashCode),
+                analyticEvent.hashCode),
+            imageBase64.hashCode),
+        imageFile.hashCode));
   }
 
   @override
@@ -746,7 +826,8 @@ class _$NewScreen extends NewScreen {
           ..add('parent', parent)
           ..add('parentRectangle', parentRectangle)
           ..add('analyticEvent', analyticEvent)
-          ..add('imageBase64', imageBase64))
+          ..add('imageBase64', imageBase64)
+          ..add('imageFile', imageFile))
         .toString();
   }
 }
@@ -778,6 +859,11 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
   String? get imageBase64 => _$this._imageBase64;
   set imageBase64(String? imageBase64) => _$this._imageBase64 = imageBase64;
 
+  ImageFileBuilder? _imageFile;
+  ImageFileBuilder get imageFile =>
+      _$this._imageFile ??= new ImageFileBuilder();
+  set imageFile(ImageFileBuilder? imageFile) => _$this._imageFile = imageFile;
+
   NewScreenBuilder();
 
   NewScreenBuilder get _$this {
@@ -788,6 +874,7 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
       _parentRectangle = $v.parentRectangle?.toBuilder();
       _analyticEvent = $v.analyticEvent?.toBuilder();
       _imageBase64 = $v.imageBase64;
+      _imageFile = $v.imageFile?.toBuilder();
       _$v = null;
     }
     return this;
@@ -816,7 +903,8 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
               parent: parent,
               parentRectangle: _parentRectangle?.build(),
               analyticEvent: _analyticEvent?.build(),
-              imageBase64: imageBase64);
+              imageBase64: imageBase64,
+              imageFile: _imageFile?.build());
     } catch (_) {
       late String _$failedField;
       try {
@@ -827,12 +915,121 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
         _parentRectangle?.build();
         _$failedField = 'analyticEvent';
         _analyticEvent?.build();
+
+        _$failedField = 'imageFile';
+        _imageFile?.build();
       } catch (e) {
         throw new BuiltValueNestedFieldError(
             'NewScreen', _$failedField, e.toString());
       }
       rethrow;
     }
+    replace(_$result);
+    return _$result;
+  }
+}
+
+class _$ImageFile extends ImageFile {
+  @override
+  final String path;
+  @override
+  final int width;
+  @override
+  final int height;
+
+  factory _$ImageFile([void Function(ImageFileBuilder)? updates]) =>
+      (new ImageFileBuilder()..update(updates))._build();
+
+  _$ImageFile._({required this.path, required this.width, required this.height})
+      : super._() {
+    BuiltValueNullFieldError.checkNotNull(path, 'ImageFile', 'path');
+    BuiltValueNullFieldError.checkNotNull(width, 'ImageFile', 'width');
+    BuiltValueNullFieldError.checkNotNull(height, 'ImageFile', 'height');
+  }
+
+  @override
+  ImageFile rebuild(void Function(ImageFileBuilder) updates) =>
+      (toBuilder()..update(updates)).build();
+
+  @override
+  ImageFileBuilder toBuilder() => new ImageFileBuilder()..replace(this);
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(other, this)) return true;
+    return other is ImageFile &&
+        path == other.path &&
+        width == other.width &&
+        height == other.height;
+  }
+
+  @override
+  int get hashCode {
+    return $jf(
+        $jc($jc($jc(0, path.hashCode), width.hashCode), height.hashCode));
+  }
+
+  @override
+  String toString() {
+    return (newBuiltValueToStringHelper('ImageFile')
+          ..add('path', path)
+          ..add('width', width)
+          ..add('height', height))
+        .toString();
+  }
+}
+
+class ImageFileBuilder implements Builder<ImageFile, ImageFileBuilder> {
+  _$ImageFile? _$v;
+
+  String? _path;
+  String? get path => _$this._path;
+  set path(String? path) => _$this._path = path;
+
+  int? _width;
+  int? get width => _$this._width;
+  set width(int? width) => _$this._width = width;
+
+  int? _height;
+  int? get height => _$this._height;
+  set height(int? height) => _$this._height = height;
+
+  ImageFileBuilder();
+
+  ImageFileBuilder get _$this {
+    final $v = _$v;
+    if ($v != null) {
+      _path = $v.path;
+      _width = $v.width;
+      _height = $v.height;
+      _$v = null;
+    }
+    return this;
+  }
+
+  @override
+  void replace(ImageFile other) {
+    ArgumentError.checkNotNull(other, 'other');
+    _$v = other as _$ImageFile;
+  }
+
+  @override
+  void update(void Function(ImageFileBuilder)? updates) {
+    if (updates != null) updates(this);
+  }
+
+  @override
+  ImageFile build() => _build();
+
+  _$ImageFile _build() {
+    final _$result = _$v ??
+        new _$ImageFile._(
+            path: BuiltValueNullFieldError.checkNotNull(
+                path, 'ImageFile', 'path'),
+            width: BuiltValueNullFieldError.checkNotNull(
+                width, 'ImageFile', 'width'),
+            height: BuiltValueNullFieldError.checkNotNull(
+                height, 'ImageFile', 'height'));
     replace(_$result);
     return _$result;
   }
@@ -851,6 +1048,8 @@ class _$Screen extends Screen {
   final String name;
   @override
   final Uint8List? imageBytes;
+  @override
+  final ImageFile? imageFile;
   @override
   final String? documentationKey;
   @override
@@ -878,6 +1077,7 @@ class _$Screen extends Screen {
       this.pathName,
       required this.name,
       this.imageBytes,
+      this.imageFile,
       this.documentationKey,
       required this.isCollapsable,
       required this.isCollapsed,
@@ -915,6 +1115,7 @@ class _$Screen extends Screen {
         pathName == other.pathName &&
         name == other.name &&
         imageBytes == other.imageBytes &&
+        imageFile == other.imageFile &&
         documentationKey == other.documentationKey &&
         isCollapsable == other.isCollapsable &&
         isCollapsed == other.isCollapsed &&
@@ -939,12 +1140,14 @@ class _$Screen extends Screen {
                                         $jc(
                                             $jc(
                                                 $jc(
-                                                    $jc($jc(0, id.hashCode),
-                                                        texts.hashCode),
-                                                    next.hashCode),
-                                                pathName.hashCode),
-                                            name.hashCode),
-                                        imageBytes.hashCode),
+                                                    $jc(
+                                                        $jc($jc(0, id.hashCode),
+                                                            texts.hashCode),
+                                                        next.hashCode),
+                                                    pathName.hashCode),
+                                                name.hashCode),
+                                            imageBytes.hashCode),
+                                        imageFile.hashCode),
                                     documentationKey.hashCode),
                                 isCollapsable.hashCode),
                             isCollapsed.hashCode),
@@ -964,6 +1167,7 @@ class _$Screen extends Screen {
           ..add('pathName', pathName)
           ..add('name', name)
           ..add('imageBytes', imageBytes)
+          ..add('imageFile', imageFile)
           ..add('documentationKey', documentationKey)
           ..add('isCollapsable', isCollapsable)
           ..add('isCollapsed', isCollapsed)
@@ -1004,6 +1208,11 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
   Uint8List? _imageBytes;
   Uint8List? get imageBytes => _$this._imageBytes;
   set imageBytes(Uint8List? imageBytes) => _$this._imageBytes = imageBytes;
+
+  ImageFileBuilder? _imageFile;
+  ImageFileBuilder get imageFile =>
+      _$this._imageFile ??= new ImageFileBuilder();
+  set imageFile(ImageFileBuilder? imageFile) => _$this._imageFile = imageFile;
 
   String? _documentationKey;
   String? get documentationKey => _$this._documentationKey;
@@ -1053,6 +1262,7 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
       _pathName = $v.pathName;
       _name = $v.name;
       _imageBytes = $v.imageBytes;
+      _imageFile = $v.imageFile?.toBuilder();
       _documentationKey = $v.documentationKey;
       _isCollapsable = $v.isCollapsable;
       _isCollapsed = $v.isCollapsed;
@@ -1092,6 +1302,7 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
               name:
                   BuiltValueNullFieldError.checkNotNull(name, 'Screen', 'name'),
               imageBytes: imageBytes,
+              imageFile: _imageFile?.build(),
               documentationKey: documentationKey,
               isCollapsable: BuiltValueNullFieldError.checkNotNull(
                   isCollapsable, 'Screen', 'isCollapsable'),
@@ -1109,6 +1320,9 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
         texts.build();
         _$failedField = 'next';
         next.build();
+
+        _$failedField = 'imageFile';
+        _imageFile?.build();
 
         _$failedField = 'collapsedScreens';
         collapsedScreens.build();

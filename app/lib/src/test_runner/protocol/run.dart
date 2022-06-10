@@ -39,6 +39,10 @@ class RunHost {
         if (image != null) {
           s.imageBytes = base64Decode(image);
         }
+        var file = newScreen.imageFile;
+        if (file != null) {
+          s.imageFile.replace(file);
+        }
       });
       run.screens[screen.id] = screen;
       var parentId = newScreen.parent;

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -12,15 +13,17 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_studio/src/test_runner/protocol/models.dart';
 import 'package:flutter_studio/src/test_runner/runtime/binding.dart';
 import 'package:flutter_test/flutter_test.dart' as flutter;
+import 'package:pool/pool.dart';
 
 import '../protocol/model/screen.dart';
 import 'fake_window_padding.dart';
 import 'path_tracker.dart';
 import 'scenario.dart';
+import 'package:crypto/crypto.dart';
 
 const String _defaultPlatform = kIsWeb ? 'web' : 'android';
 
-Future<ui.Image> captureImage(Element element) {
+Future<ui.Image> _captureImage(Element element) {
   assert(element.renderObject != null);
   RenderObject renderObject = element.renderObject!;
   while (!renderObject.isRepaintBoundary) {
@@ -28,7 +31,8 @@ Future<ui.Image> captureImage(Element element) {
   }
   assert(!renderObject.debugNeedsPaint);
   final OffsetLayer layer = renderObject.debugLayer! as OffsetLayer;
-  return layer.toImage(renderObject.paintBounds, pixelRatio: 1);
+  print("Capture ${renderObject.paintBounds}");
+  return layer.toImage(renderObject.paintBounds, pixelRatio: 1 / 3);
 }
 
 //TODO(xha): should come from Zone (injected by the runner). If direct tests:
@@ -86,6 +90,8 @@ Future<void> Function(flutter.WidgetTester) wrapTestBody(
       debugDefaultTargetPlatformOverride = null;
       debugDisableShadows = true;
     }
+    //await tester._lastUpload;
+    await tester.runAsync(tester._uploadScreenPool.close);
   };
 }
 
@@ -96,15 +102,23 @@ Future<void> splitTest(Map<String, Future<void> Function()> paths) async {
   await path.value();
 }
 
+String _hashBytes(Uint8List pixels) => md5.convert(pixels).toString();
+
 class WidgetTester implements flutter.WidgetTester {
   final flutter.WidgetTester delegate;
   int _screenIndex = 0;
   String? _previousId;
   Rect? _previousTap;
   String? _currentPathName;
+  final _boundaryKey = GlobalKey();
+  Future? _lastUpload;
+  final _uploadScreenPool = Pool(1);
+  final _saveImagePool = Pool(10);
 
   WidgetTester.delegated(this.delegate);
+
   final _previousScreens = <String>{};
+
   Future<void> screenshot() async {
     var index = ++_screenIndex;
     var parentIds = _pathTracker.id;
@@ -123,35 +137,44 @@ class WidgetTester implements flutter.WidgetTester {
       return;
     }
     _previousScreens.add(screenId);
-    //var boundary = _boundaryKey.currentContext!.findRenderObject()!
-    //  as RenderRepaintBoundary;
+    var boundary = _boundaryKey.currentContext!.findRenderObject()!
+        as RenderRepaintBoundary;
+
+    var screen = Screen(screenId, "$screenId", isCollapsable: false)
+        .rebuild((s) => s..pathName = _currentPathName);
+    _currentPathName = null;
 
     await runAsync(() async {
       "pixel ratio from args";
-      //var image = await boundary.toImage(pixelRatio: 1);
-      var image = await captureImage(allElements.first);
-      Future<void> f() async {
-        Uint8List? pngBytes;
+      //var image = await _captureImage(allElements.first);
+      var image = await boundary.toImage(pixelRatio: 1);
+      Future<NewScreen> f() async {
         var byteData =
-            (await image.toByteData(format: ui.ImageByteFormat.png))!;
-        pngBytes = byteData.buffer.asUint8List();
+            (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+        var pixels = byteData.buffer.asUint8List();
 
-        var screen = Screen(screenId, "$screenId", isCollapsable: false)
-            .rebuild((s) => s..pathName = _currentPathName);
-
-        // File('_screenshots/$screenId-rawStraightRgba.bmp')
-        //     .writeAsBytes(pngBytes);
+        var hashCode = await compute(_hashBytes, pixels);
+        var targetFile = File('_screenshots/$screenId-$hashCode.bmp');
+        if (!targetFile.existsSync()) {
+          await targetFile.writeAsBytes(pixels);
+        }
         var newScreen = NewScreen((b) {
           b
             ..screen.replace(screen)
-            ..imageBase64 = pngBytes != null ? base64Encode(pngBytes) : null
+            ..imageFile.replace(ImageFile(targetFile.absolute.path,
+                boundary.size.width.toInt(), boundary.size.height.toInt()))
+            //..imageBase64 = pngBytes != null ? base64Encode(pngBytes) : null
             ..parent = parentId;
         });
         //_logger.info('Add screen [$name] (id: $screenId, parent: $parentId)');
-        await runContext.addScreen(newScreen);
+        return newScreen;
       }
 
-      await f();
+      var newScreenFuture = _uploadScreenPool.withResource(f);
+
+      _uploadScreenPool.withResource(() async {
+        await runContext.addScreen(await newScreenFuture);
+      });
     });
   }
 
@@ -456,7 +479,8 @@ class WidgetTester implements flutter.WidgetTester {
   flutter.Future<void> pumpWidget(Widget widget,
       [Duration? duration,
       flutter.EnginePhase phase = flutter.EnginePhase.sendSemanticsUpdate]) {
-    return delegate.pumpWidget(widget, duration, phase);
+    return delegate.pumpWidget(
+        RepaintBoundary(key: _boundaryKey, child: widget), duration, phase);
   }
 
   @override

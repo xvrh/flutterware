@@ -20,6 +20,25 @@ abstract class NewScreen implements Built<NewScreen, NewScreenBuilder> {
   Rectangle? get parentRectangle;
   AnalyticEvent? get analyticEvent;
   String? get imageBase64;
+  ImageFile? get imageFile;
+}
+
+abstract class ImageFile implements Built<ImageFile, ImageFileBuilder> {
+  static Serializer<ImageFile> get serializer => _$imageFileSerializer;
+
+  ImageFile._();
+  factory ImageFile._fromBuilder([void Function(ImageFileBuilder) updates]) =
+      _$ImageFile;
+
+  factory ImageFile(String path, int width, int height) =>
+      ImageFile._fromBuilder((b) => b
+        ..path = path
+        ..width = width
+        ..height = height);
+
+  String get path;
+  int get width;
+  int get height;
 }
 
 abstract class Screen implements Built<Screen, ScreenBuilder> {
@@ -42,6 +61,7 @@ abstract class Screen implements Built<Screen, ScreenBuilder> {
   String? get pathName;
   String get name;
   Uint8List? get imageBytes;
+  ImageFile? get imageFile;
   String? get documentationKey;
   bool get isCollapsable;
   bool get isCollapsed;

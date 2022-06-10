@@ -17,6 +17,7 @@ part 'serializers.g.dart';
   ScenarioReference,
   Rectangle,
   Screen,
+  ImageFile,
   ScreenLink,
   ScenarioRun,
   RunArgs,
