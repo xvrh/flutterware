@@ -116,7 +116,9 @@ class Runner implements RunContext {
   }
 
   late RunArgs _currentRun;
+
   RunArgs get args => _currentRun;
+
   @override
   Future<void> addScreen(/*RunArgs run,*/ NewScreen screen) =>
       _runClient!.addScreen(_currentRun, screen);
@@ -137,6 +139,7 @@ class Runner implements RunContext {
   }
 
   final _currentScenario = <RunArgs, Group>{};
+
   ScenarioRun _createRun(RunArgs args) {
     _logger.fine('RunTest ${args.scenarioName.join('/')}');
     var allScenario = tests();
@@ -158,25 +161,28 @@ class Runner implements RunContext {
 
     _runPool.withResource(() async {
       var stopwatch = Stopwatch()..start();
-      late RunResult result;
+      Object? error;
+      StackTrace? stackTrace;
       try {
         await runZonedGuarded(() async {
-          var tests = await runGroup(scenario).toList();
-          print("Tests ${tests.map((t) => t.state.result).join(',')}");
-          if (tests.any((t) => t.state.result.isFailing)) {
-            result = RunResult.error(tests.map((t) => t.errors).toList(), null);
-          } else {
-            result = RunResult.success();
-          }
-        }, (e, stackTrace) {
-          print('Error $e');
-          result = RunResult.error(e, stackTrace);
-          _logger.warning('Zone error $e $stackTrace');
+          await runGroup(scenario).toList();
+        }, (e, s) {
+          error = e;
+          stackTrace = s;
+          _logger.warning('Zone error $e $s');
         });
-      } catch (e, stackTrace) {
+      } catch (e, s) {
         _logger.warning('Failed to run test', e);
-        result = RunResult.error(e, stackTrace);
+        error = e;
+        stackTrace = s;
       } finally {
+        RunResult result;
+        if (error != null) {
+          result = RunResult.error(error!, stackTrace);
+        } else {
+          result = RunResult.success();
+        }
+
         result = result.rebuild((b) => b..duration = stopwatch.elapsed);
         await runClient.complete(args, result);
         _logger.finer('End test ${args.scenarioName} in ${stopwatch.elapsed}');

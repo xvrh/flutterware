@@ -76,10 +76,11 @@ Future<void> Function(flutter.WidgetTester) wrapTestBody(
         await body(tester);
       } while (_pathTracker.resetAndCheck());
     } catch (e, stackTrace) {
-      print("Here fail $e");
-      //await tester.screenshot();
-      //await tester.pumpWidget(ErrorWidget(e));
-      //await tester.screenshot();
+      await tester.screenshot();
+      //TODO(xha): use a custom widget to render the screen
+      // => allow to select, scroll etc...
+      await tester.pumpWidget(ErrorWidget('$e\n$stackTrace'));
+      await tester.screenshot();
       rethrow;
     } finally {
       debugDefaultTargetPlatformOverride = null;
