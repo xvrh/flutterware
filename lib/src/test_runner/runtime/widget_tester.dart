@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_studio/src/test_runner/protocol/models.dart';
 import 'package:flutter_studio/src/test_runner/runtime/binding.dart';
+import 'package:flutter_studio/src/test_runner/runtime/widget_tester_extension.dart';
 import 'package:flutter_test/flutter_test.dart' as flutter;
 import 'package:pool/pool.dart';
 
@@ -40,10 +41,10 @@ Future<ui.Image> _captureImage(Element element) {
 var _a = "";
 RunContext runContext = EmptyRunContext();
 PathTracker _pathTracker = PathTracker();
-late WidgetTester tester;
+late AppWidgetTester tester;
 
 Future<void> Function(flutter.WidgetTester) wrapTestBody(
-    Future<void> Function(WidgetTester) body) {
+    Future<void> Function(AppWidgetTester) body) {
   return (originalTester) async {
     var args = runContext.args;
     var device = args.device;
@@ -66,7 +67,7 @@ Future<void> Function(flutter.WidgetTester) wrapTestBody(
     platformDispatcher.localesTestValue = [Locale('en', 'US')];
     debugDefaultTargetPlatformOverride = device.platform.toTargetPlatform();
     debugDisableShadows = false;
-    tester = WidgetTester.delegated(originalTester);
+    tester = AppWidgetTester.delegated(originalTester);
 
     //TODO(xha): move that around the test so we can run the teardown & setup
     // between each run.
@@ -87,6 +88,7 @@ Future<void> Function(flutter.WidgetTester) wrapTestBody(
       await tester.screenshot();
       rethrow;
     } finally {
+      binding.window.clearAllTestValues();
       debugDefaultTargetPlatformOverride = null;
       debugDisableShadows = true;
     }
@@ -104,7 +106,7 @@ Future<void> splitTest(Map<String, Future<void> Function()> paths) async {
 
 String _hashBytes(Uint8List pixels) => md5.convert(pixels).toString();
 
-class WidgetTester implements flutter.WidgetTester {
+class AppWidgetTester implements flutter.WidgetTester {
   final flutter.WidgetTester delegate;
   int _screenIndex = 0;
   String? _previousId;
@@ -113,9 +115,9 @@ class WidgetTester implements flutter.WidgetTester {
   final _boundaryKey = GlobalKey();
   Future? _lastUpload;
   final _uploadScreenPool = Pool(1);
-  final _saveImagePool = Pool(10);
+  final _saveImagePool = Pool(5);
 
-  WidgetTester.delegated(this.delegate);
+  AppWidgetTester.delegated(this.delegate);
 
   final _previousScreens = <String>{};
 
@@ -127,6 +129,10 @@ class WidgetTester implements flutter.WidgetTester {
 
     var parentId = _previousId;
     _previousId = screenId;
+
+    await waitForAssets();
+    //await runAsync(() async {});
+    //await rePumpWidget();
 
     var isDuplicatedScreen = _previousScreens.contains(screenId);
 
@@ -170,12 +176,35 @@ class WidgetTester implements flutter.WidgetTester {
         return newScreen;
       }
 
-      var newScreenFuture = _uploadScreenPool.withResource(f);
+      var newScreenFuture = _saveImagePool.withResource(f);
 
       _uploadScreenPool.withResource(() async {
         await runContext.addScreen(await newScreenFuture);
       });
     });
+  }
+
+  var a = "";
+  Widget? _widget;
+  Future<void> rePumpWidget() async {
+    var widget = _widget;
+    if (widget != null) {
+      await pumpWidget(widget);
+    }
+  }
+
+  @override
+  flutter.Future<void> pumpWidget(Widget widget,
+      [Duration? duration,
+      flutter.EnginePhase phase = flutter.EnginePhase.sendSemanticsUpdate]) {
+    _widget = widget;
+    return delegate.pumpWidget(
+        DefaultAssetBundle(
+          bundle: runContext.assetBundle,
+          child: RepaintBoundary(key: _boundaryKey, child: widget),
+        ),
+        duration,
+        phase);
   }
 
   @override
@@ -473,14 +502,6 @@ class WidgetTester implements flutter.WidgetTester {
       [Duration interval =
           const Duration(milliseconds: 16, microseconds: 683)]) {
     return delegate.pumpFrames(target, maxDuration, interval);
-  }
-
-  @override
-  flutter.Future<void> pumpWidget(Widget widget,
-      [Duration? duration,
-      flutter.EnginePhase phase = flutter.EnginePhase.sendSemanticsUpdate]) {
-    return delegate.pumpWidget(
-        RepaintBoundary(key: _boundaryKey, child: widget), duration, phase);
   }
 
   @override

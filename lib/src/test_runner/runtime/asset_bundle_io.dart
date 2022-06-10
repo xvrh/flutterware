@@ -3,15 +3,32 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
+import 'package:flutter_studio/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'asset_bundle.dart';
 import 'setup.dart' show BundleParameters;
+
+void mockFlutterAssets(AssetBundle delegate) {
+  /// Navigation related actions (pop, push, replace) broadcasts these actions via
+  /// platform messages.
+  SystemChannels.navigation
+      .setMockMethodCallHandler((MethodCall methodCall) async {});
+
+  ServicesBinding.instance.defaultBinaryMessenger
+      .setMockMessageHandler('flutter/assets', (ByteData? message) async {
+    assert(message != null);
+    String key = utf8.decode(message!.buffer.asUint8List());
+    return delegate.load(key);
+  });
+}
 
 class IOAssetBundle extends CachingAssetBundle implements ScenarioBundle {
   final String assetFolderPath;
   final BundleParameters bundleParams;
 
-  IOAssetBundle(this.assetFolderPath, {required this.bundleParams});
+  IOAssetBundle(this.assetFolderPath, {required this.bundleParams}) {
+    mockFlutterAssets(this);
+  }
 
   @override
   Future<String> loadString(String key, {bool cache = true}) async {
@@ -27,6 +44,7 @@ class IOAssetBundle extends CachingAssetBundle implements ScenarioBundle {
   @override
   Future<ByteData> load(String key) async {
     var projectRoot = bundleParams.rootProjectPath;
+    print("Load $key");
     File asset;
     if (projectRoot != null && key.startsWith('assets/')) {
       asset = File(path.join(projectRoot, key));

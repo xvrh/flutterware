@@ -3,10 +3,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart' hide WidgetTester;
 import 'widget_tester.dart';
 
-extension WidgetTesterExtension on WidgetTester {
+extension WidgetTesterExtension on AppWidgetTester {
   Iterable<_ImageAndContext> _listImages() sync* {
     final imageElements = find.byType(Image).evaluate();
     final containerElements = find.byType(DecoratedBox).evaluate();
+
+    print("Images ${imageElements.length} ${containerElements.length}");
 
     for (final imageElement in imageElements) {
       final widget = imageElement.widget;
@@ -36,19 +38,10 @@ extension WidgetTesterExtension on WidgetTester {
 
       for (final image in _listImages()) {
         if (image.provider is! NetworkImage) {
+          print("Precache ${image.provider}");
           futures.add(precacheImage(image.provider, image.context));
         }
       }
-      //TODO(xha): pre-load lottie animations
-//      for (final lottie in lottieElements) {
-//        final widget = lottie.widget as LottieBuilder;
-//        var provider = widget.lottie;
-//        if (provider is AssetLottie) {
-//          await provider.precache(lottie);
-//        }
-//      }
-      //});
-
       await Future.wait(futures);
     });
   }

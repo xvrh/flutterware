@@ -117,6 +117,8 @@ class Runner implements RunContext {
 
   late RunArgs _currentRun;
 
+  AssetBundle get assetBundle => _bundle;
+
   RunArgs get args => _currentRun;
 
   @override

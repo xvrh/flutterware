@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:collection/collection.dart';
 import 'package:flutter_studio_app/src/test_runner/flow_graph.dart';
 import '../app/project_view.dart';
 import '../app/ui/breadcrumb.dart';
+import '../utils/raw_image_provider.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter_studio/internals/test_runner.dart';
 import 'package:flutter/material.dart';
@@ -210,17 +213,26 @@ class _CollapsedScreenshot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var bytes = screen.imageBytes;
     Widget image;
-    if (bytes != null) {
-      image = Image.memory(bytes);
-    } else {
-      image = Center(
-        child: Text(
-          screen.name,
-          style: const TextStyle(fontSize: 10),
+    var file = screen.imageFile;
+    if (file != null) {
+      image = Image(
+        image: RawImageProvider(
+          RawImageData(File(file.path), file.width, file.height),
         ),
       );
+    } else {
+      var bytes = screen.imageBytes;
+      if (bytes != null) {
+        image = Image.memory(bytes);
+      } else {
+        image = Center(
+          child: Text(
+            screen.name,
+            style: const TextStyle(fontSize: 10),
+          ),
+        );
+      }
     }
     return InkWell(
       onTap: onTap,

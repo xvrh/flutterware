@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart' hide WidgetTester;
 import 'package:logging/logging.dart';
 import 'package:pool/pool.dart';
@@ -18,6 +19,7 @@ import 'widget_tester.dart';
 import 'widget_tester_extension.dart';
 
 abstract class RunContext {
+  AssetBundle get assetBundle;
   RunArgs get args;
   Future<void> addScreen(NewScreen newScreen);
 }
@@ -32,6 +34,8 @@ class EmptyRunContext implements RunContext {
       accessibility: AccessibilityConfig(),
       language: 'en',
       imageRatio: 1);
+
+  AssetBundle get assetBundle => rootBundle;
 }
 
 /*

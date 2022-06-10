@@ -12,11 +12,7 @@ Widget? widgetForScreen(ScenarioRun run, Screen screen) {
   if (file != null) {
     return Image(
       image: RawImageProvider(
-        RawImageData(
-          File(file.path),
-          file.width,
-          file.height,
-        ),
+        RawImageData(File(file.path), file.width, file.height),
       ),
     );
   }
