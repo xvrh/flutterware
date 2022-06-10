@@ -10,7 +10,7 @@ void main() {
     print('Some code to configure the mocks');
   });
 
-  testWidgets('On-boarding should do this and should to that', (tester) async {
+  testApp('On-boarding should do this and should to that', (tester) async {
     await tester.pumpWidget(MyApp());
     await tester.screenshot();
     await tester.tap(find.byIcon(Icons.add));
@@ -36,35 +36,35 @@ void main() {
     });
   });
 
-  testWidgets('Login', (tester) async {
+  testApp('Login', (tester) async {
     print('Login test');
 
     expect(1, 0);
   });
 
-  testWidgets('Dashboard', (tester) async {
+  testApp('Dashboard', (tester) async {
     //
   });
 
-  testWidgets('Products', (tester) async {
+  testApp('Products', (tester) async {
     //
   });
 
   group('Basket of all the products', () {
-    testWidgets('Empty', (tester) async {
+    testApp('Empty', (tester) async {
       //
     });
-    testWidgets('One product', (tester) async {
+    testApp('One product', (tester) async {
       //
     });
   });
 
-  testWidgets('Logout', (tester) async {
+  testApp('Logout', (tester) async {
     //
   });
 
   group('My group', () {
-    testWidgets('More sub', (tester) async {
+    testApp('More sub', (tester) async {
       print('bla');
     });
   });
