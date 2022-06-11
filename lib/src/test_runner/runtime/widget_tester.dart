@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_studio/src/test_runner/protocol/models.dart';
 import 'package:flutter_studio/src/test_runner/runtime/binding.dart';
+import 'package:flutter_studio/src/test_runner/runtime/phone_status_bar.dart';
 import 'package:flutter_studio/src/test_runner/runtime/widget_tester_extension.dart';
 import 'package:flutter_test/flutter_test.dart' as flutter;
 import 'package:pool/pool.dart';
@@ -113,6 +114,7 @@ class AppWidgetTester implements flutter.WidgetTester {
   Rect? _previousTap;
   String? _currentPathName;
   final _boundaryKey = GlobalKey();
+  final _statusBarKey = GlobalKey<PhoneStatusBarState>();
   Future? _lastUpload;
   final _uploadScreenPool = Pool(1);
   final _saveImagePool = Pool(5);
@@ -130,9 +132,13 @@ class AppWidgetTester implements flutter.WidgetTester {
     var parentId = _previousId;
     _previousId = screenId;
 
+    await pumpAndSettle();
     await waitForAssets();
-    //await runAsync(() async {});
-    //await rePumpWidget();
+    await pump(Duration(seconds: 5));
+    await pumpAndSettle();
+    // await runAsync(() async {});
+    // await runAsync(() async {});
+    // await rePumpWidget();
 
     var isDuplicatedScreen = _previousScreens.contains(screenId);
 
@@ -145,31 +151,51 @@ class AppWidgetTester implements flutter.WidgetTester {
     _previousScreens.add(screenId);
     var boundary = _boundaryKey.currentContext!.findRenderObject()!
         as RenderRepaintBoundary;
+    await _refreshStatusBar(boundary);
 
     var screen = Screen(screenId, "$screenId", isCollapsable: false)
         .rebuild((s) => s..pathName = _currentPathName);
     _currentPathName = null;
 
+    // Allow filter with tags
+    var captureScreenshot = true;
+
     await runAsync(() async {
       "pixel ratio from args";
       //var image = await _captureImage(allElements.first);
-      var image = await boundary.toImage(pixelRatio: 1);
+      ui.Image? image;
+      if (runContext.args.imageRatio > 0) {
+        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
+        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
+        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
+        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
+        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
+      }
       Future<NewScreen> f() async {
-        var byteData =
-            (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
-        var pixels = byteData.buffer.asUint8List();
+        Uint8List? pixels;
+        File? targetFile;
+        if (image != null) {
+          var byteData =
+              (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+          pixels = byteData.buffer.asUint8List();
 
-        var hashCode = await compute(_hashBytes, pixels);
-        var targetFile = File('_screenshots/$screenId-$hashCode.bmp');
-        if (!targetFile.existsSync()) {
-          await targetFile.writeAsBytes(pixels);
+          var hashCode = await compute(_hashBytes, pixels);
+          targetFile = File('_screenshots/$screenId-$hashCode.bmp');
+          if (!targetFile.existsSync()) {
+            await targetFile.writeAsBytes(pixels);
+          }
         }
         var newScreen = NewScreen((b) {
           b
             ..screen.replace(screen)
-            ..imageFile.replace(ImageFile(targetFile.absolute.path,
-                boundary.size.width.toInt(), boundary.size.height.toInt()))
-            //..imageBase64 = pngBytes != null ? base64Encode(pngBytes) : null
+            ..imageFile = targetFile != null
+                ? ImageFile(
+                        targetFile.absolute.path,
+                        boundary.size.width.toInt(),
+                        boundary.size.height.toInt())
+                    .toBuilder()
+                : null
+            //..imageBase64 = pixels != null ? base64Encode(pixels) : null
             ..parent = parentId;
         });
         //_logger.info('Add screen [$name] (id: $screenId, parent: $parentId)');
@@ -184,8 +210,31 @@ class AppWidgetTester implements flutter.WidgetTester {
     });
   }
 
+  Future<void> _refreshStatusBar(RenderRepaintBoundary boundary) async {
+    var statusBar = _statusBarKey.currentState!;
+    Brightness? brightnessAt(Offset offset) {
+      //ignore: invalid_use_of_protected_member
+      return boundary.layer!
+          .find<SystemUiOverlayStyle>(offset)
+          ?.statusBarIconBrightness;
+    }
+
+    var defaultStatusBar = Brightness.light;
+    var projectBrightness = null; //_project.defaultStatusBarBrightness;
+    if (projectBrightness != null) {
+      //defaultStatusBar = Brightness.values[projectBrightness];
+    }
+    statusBar.setBrightness(
+      top: brightnessAt(Offset(0, 10)) ?? defaultStatusBar,
+      bottom: brightnessAt(Offset(0, runContext.args.device.height - 5)) ??
+          Brightness.dark,
+    );
+    await pump(Duration.zero);
+  }
+
   var a = "";
   Widget? _widget;
+
   Future<void> rePumpWidget() async {
     var widget = _widget;
     if (widget != null) {
@@ -198,6 +247,14 @@ class AppWidgetTester implements flutter.WidgetTester {
       [Duration? duration,
       flutter.EnginePhase phase = flutter.EnginePhase.sendSemanticsUpdate]) {
     _widget = widget;
+
+    widget = PhoneStatusBar(
+      leftText: '09:42',
+      key: _statusBarKey,
+      viewPadding: runContext.args.device.safeArea.toEdgeInsets(),
+      child: widget,
+    );
+
     return delegate.pumpWidget(
         DefaultAssetBundle(
           bundle: runContext.assetBundle,
