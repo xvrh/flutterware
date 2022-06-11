@@ -132,13 +132,11 @@ class AppWidgetTester implements flutter.WidgetTester {
     var parentId = _previousId;
     _previousId = screenId;
 
-    await pumpAndSettle();
+    // TODO(xha): only make the pump automatically in the "high level" api if
+    // pumpFrames is true
+    "";
     await waitForAssets();
-    await pump(Duration(seconds: 5));
     await pumpAndSettle();
-    // await runAsync(() async {});
-    // await runAsync(() async {});
-    // await rePumpWidget();
 
     var isDuplicatedScreen = _previousScreens.contains(screenId);
 
