@@ -53,6 +53,7 @@ class _TestListingViewState extends State<TestListingView> {
             context
                 .go('${paths.tests}/run/${Uri.encodeComponent(path.encoded)}');
           },
+          extraDepth: 1,
         );
       },
     );

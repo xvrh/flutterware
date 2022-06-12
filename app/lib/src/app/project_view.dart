@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_studio_app/src/app/ui/menu.dart';
 import 'package:flutter_studio_app/src/project_info/screen.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 
@@ -53,8 +54,17 @@ class ProjectViewState extends State<ProjectView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SidebarHeader(title: Text('Project')),
                     Expanded(child: Menu(widget.project)),
+                    MenuLine(
+                      selected: false,
+                      onTap: () {},
+                      type: LineType.leaf,
+                      depth: 0,
+                      child: Text(
+                        'Flutter Studio v0.1.0',
+                        style: TextStyle(color: AppColors.selection),
+                      ),
+                    ),
                   ],
                 ),
               ),

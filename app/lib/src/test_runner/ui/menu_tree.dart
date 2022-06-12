@@ -6,13 +6,16 @@ class MenuTree extends StatefulWidget {
   final List<MenuEntry> entries;
   final TreePath? selected;
   final void Function(TreePath) onSelected;
+  final int extraDepth;
 
   const MenuTree({
     Key? key,
     required this.entries,
     this.selected,
     required this.onSelected,
-  }) : super(key: key);
+    int? extraDepth,
+  })  : extraDepth = extraDepth ?? 0,
+        super(key: key);
 
   @override
   State<MenuTree> createState() => _MenuTreeState();
@@ -98,6 +101,7 @@ class _MenuTreeState extends State<MenuTree> {
             line,
             expanded: _expanded.contains(line.path),
             selected: widget.selected == line.path,
+            extraDepth: widget.extraDepth,
             onTap: () {
               if (!line.isLeaf) {
                 setState(() {
@@ -123,6 +127,7 @@ class _LineView extends StatelessWidget {
   final bool expanded;
   final VoidCallback onTap;
   final bool selected;
+  final int extraDepth;
 
   const _LineView(
     this.line, {
@@ -130,6 +135,7 @@ class _LineView extends StatelessWidget {
     required this.expanded,
     required this.onTap,
     required this.selected,
+    required this.extraDepth,
   }) : super(key: key);
 
   @override
@@ -142,7 +148,7 @@ class _LineView extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            SizedBox(width: 12.0 * (line.depth + 2)),
+            SizedBox(width: 12.0 * (line.depth + extraDepth)),
             Icon(
               expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
               size: 17,

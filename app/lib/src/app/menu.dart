@@ -31,6 +31,7 @@ class _MenuState extends State<Menu> {
 
   @override
   Widget build(BuildContext context) {
+    var rootStyle = const TextStyle(fontWeight: FontWeight.bold);
     return ListView(
       children: [
         MenuLine(
@@ -38,23 +39,11 @@ class _MenuState extends State<Menu> {
           onTap: () {
             context.router.go(paths.home);
           },
-          type: LineType.expanded,
+          type: LineType.leaf,
           depth: 0,
-          child: Row(
-            children: [
-              FlutterLogo(size: 15),
-              Expanded(
-                child: ValueListenableBuilder<Snapshot<Pubspec>>(
-                  valueListenable: widget.project.pubspec,
-                  builder: (context, snapshot, child) {
-                    return Text(
-                      snapshot.data?.name ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    );
-                  },
-                ),
-              ),
-            ],
+          child: Text(
+            'Project',
+            style: rootStyle,
           ),
         ),
         MenuLine(
@@ -63,8 +52,8 @@ class _MenuState extends State<Menu> {
             context.router.go(paths.dependencies);
           },
           type: LineType.leaf,
-          depth: 1,
-          child: Text('Dependencies'),
+          depth: 0,
+          child: Text('Dependencies', style: rootStyle),
         ),
         MenuLine(
           selected:
@@ -83,8 +72,11 @@ class _MenuState extends State<Menu> {
           type: _expanded.contains(paths.tests)
               ? LineType.expanded
               : LineType.collapsed,
-          depth: 1,
-          child: Text('Tests'),
+          depth: 0,
+          child: Text(
+            'Tests',
+            style: rootStyle,
+          ),
         ),
         if (_expanded.contains(paths.tests)) TestMenu(widget.project),
         MenuLine(
@@ -93,8 +85,11 @@ class _MenuState extends State<Menu> {
             context.router.go(paths.runs);
           },
           type: LineType.leaf,
-          depth: 1,
-          child: Text('Run on device'),
+          depth: 0,
+          child: Text(
+            'Run on device',
+            style: rootStyle,
+          ),
         ),
         MenuLine(
           selected:
@@ -103,8 +98,11 @@ class _MenuState extends State<Menu> {
             context.router.go(paths.themes);
           },
           type: LineType.collapsed,
-          depth: 1,
-          child: Text('Themes'),
+          depth: 0,
+          child: Text(
+            'Themes',
+            style: rootStyle,
+          ),
         ),
       ],
     );
