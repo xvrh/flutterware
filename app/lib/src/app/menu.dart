@@ -104,6 +104,19 @@ class _MenuState extends State<Menu> {
             style: rootStyle,
           ),
         ),
+        MenuLine(
+          selected:
+              context.router.selection(paths.icon) == SelectionType.selected,
+          onTap: () {
+            context.router.go(paths.icon);
+          },
+          type: LineType.collapsed,
+          depth: 0,
+          child: Text(
+            'Icon',
+            style: rootStyle,
+          ),
+        ),
       ],
     );
 

@@ -57,7 +57,9 @@ class ProjectViewState extends State<ProjectView> {
                     Expanded(child: Menu(widget.project)),
                     MenuLine(
                       selected: false,
-                      onTap: () {},
+                      onTap: () {
+                        //TODO(xha): go to changelog, feature tour etc...
+                      },
                       type: LineType.leaf,
                       depth: 0,
                       child: Text(
