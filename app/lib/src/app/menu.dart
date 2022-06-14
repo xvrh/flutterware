@@ -138,7 +138,7 @@ class _MenuState extends State<Menu> {
     //    MenuEntry('Easing'),
     //    MenuEntry('Shaders'),
     //    MenuEntry('Particles'),
-    //    MenuEntry('Path'),
+    //    MenuEntry('Path & Drawing'),
     //    MenuEntry('App icon'),
     //    MenuEntry('Benchmarks'),
     //    MenuEntry('Wysiwyg'),
