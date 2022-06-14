@@ -5,8 +5,8 @@ import 'package:collection/collection.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_studio_app/src/project_info/image_provider.dart';
+import 'package:flutter_studio_app/src/utils/state_extension.dart';
 import 'package:flutter_studio_app/src/utils/ui/loading.dart';
-import 'package:file_picker/file_picker.dart';
 import '../app/project_view.dart';
 import '../project.dart';
 import '../utils/async_value.dart';
@@ -49,6 +49,16 @@ class IconScreen extends StatelessWidget {
                     icon: Icon(Icons.photo),
                     label: Text('Change icon'),
                   ),
+                PopupMenuButton(
+                    itemBuilder: (context) => [
+                          PopupMenuItem(
+                            child: Text('Reload icons'),
+                            onTap: () {
+                              project.icons.icons.refresh();
+                              project.icons.sample.refresh();
+                            },
+                          ),
+                        ]),
               ],
             ),
             const SizedBox(height: 30),
@@ -150,7 +160,7 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
 
   @override
   Widget build(BuildContext context) {
-    var biggest = widget.icons.biggest;
+    var biggest = widget.icons.biggestForPlatforms(_selectedPlatforms);
     var image = _image;
     return AlertDialog(
       title: Text('Change icon'),
@@ -228,12 +238,17 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
     }
   }
 
+  List<IconPlatform> get _selectedPlatforms => _platformSwitches.entries
+      .where((e) => e.value)
+      .map((e) => e.key)
+      .toList();
+
   void _apply(Uint8List image) async {
-    await widget.icons.changeIcon(image,
-        platforms: _platformSwitches.entries
-            .where((e) => e.value)
-            .map((e) => e.key)
-            .toList());
+    await withLoader((_) async {
+      await widget.icons.changeIcon(image,
+          platforms: _selectedPlatforms);
+    }, message: 'Applying new icon...');
+
     unawaited(widget.project.icons.icons.refresh());
     unawaited(widget.project.icons.sample.refresh());
     if (mounted) {

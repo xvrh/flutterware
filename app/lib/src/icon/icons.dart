@@ -64,8 +64,11 @@ class AppIcons {
 
   bool get isNotEmpty => icons.values.any((v) => v.isNotEmpty);
 
-  AppIcon get biggest {
-    var allIcons = icons.values.expand((e) => e).toList();
+  AppIcon biggestForPlatforms(List<IconPlatform> platforms) {
+    var allIcons = icons.entries
+        .where((e) => platforms.contains(e.key))
+        .expand((e) => e.value)
+        .toList();
     var biggest = allIcons.first;
     for (var icon in allIcons) {
       if (icon.originalWidth > biggest.originalWidth) {
