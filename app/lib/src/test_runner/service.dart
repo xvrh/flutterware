@@ -64,8 +64,8 @@ class TestService {
   void _setupWatcher() {
     print("Setup watcher");
     _fileWatcherSubscription = StreamGroup.merge([
-      DirectoryWatcher(p.join(project.directory, 'lib')).events,
-      DirectoryWatcher(p.join(project.directory, 'test_app')).events,
+      DirectoryWatcher(p.join(project.directory.path, 'lib')).events,
+      DirectoryWatcher(p.join(project.directory.path, 'test_app')).events,
     ]).throttleTime(Duration(seconds: 1)).listen((e) {
       print("File change $e");
       var stateValue = _state.value;

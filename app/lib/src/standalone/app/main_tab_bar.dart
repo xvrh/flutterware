@@ -3,7 +3,7 @@ import 'package:flutter_studio_app/src/standalone/app/add_project.dart';
 
 import '../../project.dart';
 import '../../ui.dart';
-import '../../utils/data_loader.dart';
+import '../../utils/async_value.dart';
 import '../workspace.dart';
 import 'package:path/path.dart' as p;
 
@@ -96,7 +96,8 @@ class _Tab extends StatelessWidget {
     return ValueListenableBuilder<Snapshot<Pubspec>>(
       valueListenable: project.pubspec,
       builder: (context, snapshot, child) {
-        var projectName = snapshot.data?.name ?? p.basename(project.directory);
+        var projectName =
+            snapshot.data?.name ?? p.basename(project.directory.path);
         return InkWell(
           onTap: onTap,
           child: Container(

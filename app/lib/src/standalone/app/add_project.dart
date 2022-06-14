@@ -7,7 +7,7 @@ import 'package:pub_semver/pub_semver.dart';
 import '../../project.dart';
 import '../../ui.dart';
 import '../../flutter_sdk.dart';
-import '../../utils/data_loader.dart';
+import '../../utils/async_value.dart';
 
 Future<void> openProject(BuildContext context, Workspace workspace) async {
   var path = await getDirectoryPath();

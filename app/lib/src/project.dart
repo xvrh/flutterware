@@ -7,35 +7,23 @@ import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 import 'package:yaml/yaml.dart';
 import 'flutter_sdk.dart';
+import 'project_info/service.dart';
 import 'test_runner/service.dart';
-import 'utils/data_loader.dart';
+import 'utils/async_value.dart';
 
 part 'project.g.dart';
 
 @JsonSerializable()
 class Project {
-  final String directory;
+  final Directory directory;
   final FlutterSdkPath flutterSdkPath;
   final FlutterSdk _flutterSdk;
   late final tests = TestService(this);
-  late DataLoader<Pubspec> _pubspec;
-  late StreamSubscription _pubspecWatcher;
+  late final info = ProjectInfoService(this);
 
-  Project(this.directory, this.flutterSdkPath)
-      : _flutterSdk = FlutterSdk(flutterSdkPath) {
-    var pubspec = p.join(directory, 'pubspec.yaml');
-    _pubspec = DataLoader(
-      debugName: 'Pubspec',
-      lazy: true,
-      loader: () async {
-        var content = await File(pubspec).readAsString();
-        return Pubspec(loadYaml(content) as YamlMap);
-      },
-    );
-    _pubspecWatcher = FileWatcher(pubspec).events.listen((change) {
-      _pubspec.refresh(mode: LoadingMode.none);
-    });
-  }
+  Project(String path, this.flutterSdkPath)
+      : directory = Directory(path),
+        _flutterSdk = FlutterSdk(flutterSdkPath);
 
   factory Project.fromJson(Map<String, dynamic> json) =>
       _$ProjectFromJson(json);
@@ -48,15 +36,16 @@ class Project {
     return false;
   }
 
-  ValueListenable<Snapshot<Pubspec>> get pubspec => _pubspec;
+  String get absolutePath => directory.absolute.path;
+
+  ValueListenable<Snapshot<Pubspec>> get pubspec => info.pubspec;
 
   Map<String, dynamic> toJson() => _$ProjectToJson(this);
 
   void dispose() {
-    _pubspecWatcher.cancel();
     _flutterSdk.dispose();
-    _pubspec.dispose();
     tests.dispose();
+    info.dispose();
   }
 }
 

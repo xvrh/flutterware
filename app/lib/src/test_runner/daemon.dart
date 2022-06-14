@@ -41,7 +41,7 @@ class Daemon {
 
   Future<void> reload({required bool fullRestart}) async {
     _isReloading.value = true;
-    var testFiles = collectTestFiles(Directory(_project.directory));
+    var testFiles = collectTestFiles(_project.directory);
     await _starter.writeEntryPoint(testFiles);
     var endOfReload = _protocol.onEvent
         .where((e) =>
@@ -78,7 +78,7 @@ class DaemonStarter {
   late final File _entryPoint;
 
   DaemonStarter(this.project, this.server) {
-    _entryPoint = File(p.join(project.directory, 'build', 'flutter_studio',
+    _entryPoint = File(p.join(project.directory.path, 'build', 'flutter_studio',
         '${id}_test_entry_point.dart'))
       ..parent.createSync(recursive: true);
   }
@@ -97,11 +97,11 @@ class DaemonStarter {
           'run',
           '--machine',
           '--target',
-          p.relative(_entryPoint.path, from: project.directory),
+          p.relative(_entryPoint.path, from: project.directory.path),
           '--device-id',
           'flutter-tester'
         ],
-        workingDirectory: project.directory);
+        workingDirectory: project.directory.path);
     await globals.resourceCleaner.killProcessOnNextLaunch(process.pid);
     var protocol = DaemonProtocol(
         process.stdin,

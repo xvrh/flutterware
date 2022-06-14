@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../project.dart';
 import '../../../ui.dart';
-import '../../../utils/data_loader.dart';
+import '../../../utils/async_value.dart';
 import '../../workspace.dart';
 import '../add_project.dart';
 
@@ -75,7 +75,7 @@ class _ProjectTile extends StatelessWidget {
         if (snapshot.hasError) {
           title = Tooltip(
             message: '${snapshot.error}',
-            child: Text(project.directory),
+            child: Text(project.directory.path),
           );
         } else {
           title = Text(snapshot.data?.name ?? '');
@@ -85,7 +85,7 @@ class _ProjectTile extends StatelessWidget {
           title: title,
           onTap: onTap,
           subtitle: Text(
-            project.directory,
+            project.directory.path,
             style: const TextStyle(color: AppColors.lightText),
           ),
         );

@@ -40,10 +40,10 @@ class Snapshot<T extends Object> {
   }
 }
 
-class DataLoader<T extends Object>
+class AsyncValue<T extends Object>
     implements ChangeNotifier, ValueListenable<Snapshot<T>> {
   final Future<T> Function() _loader;
-  final String debugName;
+  final String? debugName;
   final bool lazy;
   final LoadingMode? loadingMode;
   final _value = ValueNotifier<Snapshot<T>>(const Snapshot());
@@ -51,12 +51,12 @@ class DataLoader<T extends Object>
   bool _isInitialized = false;
   bool _isDisposed = false;
 
-  DataLoader({
+  AsyncValue({
     required Future<T> Function() loader,
     bool? lazy,
     this.loadingMode,
     T? seed,
-    required this.debugName,
+    this.debugName,
   })  : _loader = loader,
         lazy = lazy ?? true {
     if (seed != null) {

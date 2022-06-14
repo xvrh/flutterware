@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:pub_semver/pub_semver.dart';
 import 'package:collection/collection.dart';
 
-import 'utils/data_loader.dart';
+import 'utils/async_value.dart';
 
 final _logger = Logger('flutter_sdk');
 
@@ -109,10 +109,10 @@ class FlutterSdkPath {
 
 class FlutterSdk {
   final FlutterSdkPath path;
-  late DataLoader<Version> _version;
+  late AsyncValue<Version> _version;
 
   FlutterSdk(this.path) {
-    _version = DataLoader<Version>(
+    _version = AsyncValue<Version>(
       debugName: 'Flutter SDK version',
       loader: path._readVersion,
       lazy: true,
@@ -128,7 +128,7 @@ class FlutterSdk {
 
   String get dart => path.dart;
 
-  DataLoader<Version> get version => _version;
+  AsyncValue<Version> get version => _version;
 
   @override
   bool operator ==(other) => other is FlutterSdk && other.path == path;

@@ -1,52 +1,80 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_studio_app/src/dependencies/pubspec_lock.dart';
-import 'package:flutter_studio_app/src/utils/data_loader.dart';
+import 'package:flutter_studio_app/src/utils/async_value.dart';
+import 'package:watcher/watcher.dart';
 import 'package:yaml/yaml.dart';
 
+import '../icon/icons.dart';
 import '../project.dart';
 import '../utils/cloc/cloc.dart';
 import 'package:path/path.dart' as p;
 
 class ProjectInfoService {
   final Project project;
-  late final DataLoader<ProjectSummary> _loader;
+  late final dependencies =
+      AsyncValue<DependenciesSummary>(loader: _loadDependencies);
+  late final AsyncValue<Pubspec> _pubspec;
+  late final _icon = AsyncValue<SampleIcon>(loader: _loadIcon);
+  late StreamSubscription _pubspecWatcher;
 
   ProjectInfoService(this.project) {
-    _loader = DataLoader(loader: _load, debugName: 'Project info');
+    var pubspec = p.join(project.directory.path, 'pubspec.yaml');
+    _pubspec = AsyncValue(
+      debugName: 'Pubspec',
+      lazy: true,
+      loader: () async {
+        var content = await File(pubspec).readAsString();
+        return Pubspec(loadYaml(content) as YamlMap);
+      },
+    );
+    _pubspecWatcher = FileWatcher(pubspec).events.listen((change) {
+      _pubspec.refresh(mode: LoadingMode.none);
+    });
   }
 
-  Future<ProjectSummary> _load() async {
-    var pubspec = project.pubspec.value.requireData;
-    var pubspecLock = await PubspecLock.load(project.directory);
+  Future<DependenciesSummary> _loadDependencies() async {
+    var pubspecLock = await PubspecLock.load(project.absolutePath);
 
-    return ProjectSummary(
-        pubspec.name,
-        icon,
-        DependenciesSummary(
-            total: pubspecLock.packages.length,
-            direct: pubspecLock.packages
-                .where((e) => e.type != DependencyType.transitive)
-                .length),
-        codeMetrics);
+    var direct = pubspecLock.packages
+        .where((e) => e.type != DependencyType.transitive)
+        .length;
+    return DependenciesSummary(
+        transitive: pubspecLock.packages.length - direct, direct: direct);
+  }
+
+  Future<SampleIcon> _loadIcon() async {
+    var file = await ProjectIcons.findSampleIcon(project.directory.path);
+    return SampleIcon(file);
+  }
+
+  ValueListenable<Snapshot<Pubspec>> get pubspec => _pubspec;
+
+  ValueListenable<Snapshot<SampleIcon>> get icon => _icon;
+
+  void dispose() {
+    _pubspecWatcher.cancel();
+    _pubspec.dispose();
+    dependencies.dispose();
+    _icon.dispose();
   }
 }
 
-class ProjectSummary {
-  final String packageName;
-  final File? icon;
-  final DependenciesSummary dependencies;
-  final CodeMetrics codeMetrics;
+class SampleIcon {
+  final File? file;
 
-  ProjectSummary(
-      this.packageName, this.icon, this.dependencies, this.codeMetrics);
+  SampleIcon(this.file);
 }
 
 class DependenciesSummary {
-  final int total;
   final int direct;
+  final int transitive;
 
-  DependenciesSummary({required this.total, required this.direct});
+  DependenciesSummary({required this.transitive, required this.direct});
+
+  int get total => direct + transitive;
 }
 
 class CodeMetrics {

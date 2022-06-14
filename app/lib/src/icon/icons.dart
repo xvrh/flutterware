@@ -1,4 +1,7 @@
 import 'dart:io';
+import 'package:collection/collection.dart';
+import 'package:glob/glob.dart';
+import 'package:glob/list_local_fs.dart';
 
 class IconPlatform {
   static final android = IconPlatform('Android', [
@@ -34,13 +37,25 @@ class ProjectIcons {
 
   List<ProjectIcon> get android => icons[IconPlatform.android] ?? const [];
 
-  static File? findSampleIcon() {
-    var locations = [
-      'android/app/src/main/res/mipmap-xhdpi/ic_launcher.png',
-      'android/app/src/main/res/mipmap-*dpi/ic_launcher.png',
-      'android/app/src/main/res/mipmap-*dpi/ic_launcher.png',
-      'android/app/src/main/res/mipmap-*dpi/ic_launcher.png',
-    ];
+  static Future<File?> findSampleIcon(String directory) async {
+    for (var platform in [
+      IconPlatform.android,
+      IconPlatform.ios,
+      IconPlatform.web,
+      IconPlatform.macOS,
+      IconPlatform.windows
+    ]) {
+      var files = <File>[];
+      for (var globPath in platform.locations) {
+        var glob = Glob(globPath);
+        files.addAll((await glob.list().toList()).whereType<File>());
+      }
+      files = files.sortedBy<num>((e) => e.lengthSync()).toList();
+      if (files.isNotEmpty) {
+        return files.last;
+      }
+    }
+    return null;
 
     // Hardcode a few location to search for the icon
 

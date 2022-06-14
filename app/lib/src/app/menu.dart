@@ -3,7 +3,7 @@ import 'package:flutter_studio_app/src/test_runner/menu.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 
 import '../project.dart';
-import '../utils/data_loader.dart';
+import '../utils/async_value.dart';
 import 'ui/menu.dart';
 import 'paths.dart' as paths;
 
@@ -42,7 +42,7 @@ class _MenuState extends State<Menu> {
           type: LineType.leaf,
           depth: 0,
           child: Text(
-            'Project',
+            'Overview',
             style: rootStyle,
           ),
         ),
@@ -110,7 +110,7 @@ class _MenuState extends State<Menu> {
           onTap: () {
             context.router.go(paths.icon);
           },
-          type: LineType.collapsed,
+          type: LineType.leaf,
           depth: 0,
           child: Text(
             'Icon',

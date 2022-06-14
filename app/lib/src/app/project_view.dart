@@ -4,10 +4,11 @@ import 'package:flutter_studio_app/src/project_info/screen.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 
 import '../dependencies/screen.dart';
+import '../icon/screen.dart';
 import '../project.dart';
 import '../test_runner/screen.dart';
 import '../ui.dart';
-import '../utils/data_loader.dart';
+import '../utils/async_value.dart';
 import 'header.dart';
 import 'menu.dart';
 import 'ui/breadcrumb.dart';
@@ -82,6 +83,7 @@ class ProjectViewState extends State<ProjectView> {
                     paths.home: (route) => ProjectInfoScreen(widget.project),
                     paths.dependencies: (route) => DependenciesScreen(),
                     paths.tests: (route) => TestRunnerScreen(widget.project),
+                    paths.icon: (route) => IconScreen(widget.project),
                   },
                   onNotFound: (_) => paths.home,
                 ),
