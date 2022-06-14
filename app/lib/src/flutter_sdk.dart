@@ -1,13 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
-
-import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:pub_semver/pub_semver.dart';
 import 'package:collection/collection.dart';
 
 import 'utils/async_value.dart';
-
-final _logger = Logger('flutter_sdk');
 
 class FlutterSdkPath {
   final String root;
@@ -76,34 +73,36 @@ class FlutterSdkPath {
     if (homeEnvironment != null && homeEnvironment.isNotEmpty) {
       sdks.add(await FlutterSdkPath.tryFind(homeEnvironment));
     }
-    await for (var sdk in _whichFlutter()) {
-      sdks.add(sdk);
-    }
+    sdks.add(await _whichFlutter());
 
     return sdks.whereNotNull().toSet();
   }
 
-  static Stream<FlutterSdkPath> _whichFlutter() async* {
-    for (var command in [
-      'which',
-      if (Platform.isWindows) 'where',
-    ]) {
-      try {
-        var result = await Process.run(command, ['flutter'], runInShell: true);
-        if (result.exitCode == 0) {
-          var out = result.stdout;
-          if (out is String && out.isNotEmpty) {
-            var sdk = await FlutterSdkPath.tryFind(out.trim());
-            if (sdk != null) {
-              yield sdk;
-            }
-          }
-        }
-      } catch (e) {
-        _logger.fine('Error which flutter: $e');
-        // Skip error
-      }
+  static Future<FlutterSdkPath?> _whichFlutter() async {
+    var uri = await _which('flutter');
+    if (uri != null) {
+      return FlutterSdkPath.tryFind(uri.toFilePath());
     }
+    return null;
+  }
+
+  static Future<Uri?> _which(String executableName) async {
+    final whichOrWhere = Platform.isWindows ? 'where' : 'which';
+    final fileExtension = Platform.isWindows ? '.exe' : '';
+    final process =
+    await Process.run(whichOrWhere, ['$executableName$fileExtension']);
+    if (process.exitCode == 0) {
+      final file = File(LineSplitter.split(process.stdout.toString()).first);
+      final uri = File(await file.resolveSymbolicLinks()).uri;
+      return uri;
+    }
+    if (process.exitCode == 1) {
+      // The exit code for executable not being on the `PATH`.
+      return null;
+    }
+    throw Exception(
+        '`$whichOrWhere $executableName` returned unexpected exit code: '
+            '${process.exitCode}.');
   }
 }
 
