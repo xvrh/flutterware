@@ -1,43 +1,33 @@
-// Taken from https://github.com/yrom/flutter_raw_image_provider/blob/master/lib/raw_image_provider.dart
+// From https://github.com/yrom/flutter_raw_image_provider/blob/master/lib/raw_image_provider.dart
 
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
-import 'package:crypto/crypto.dart';
 
 /// Decodes the given [image] (raw image pixel data) as an image ('dart:ui')
-class RawImageProvider extends ImageProvider<_RawImageKey> {
+class RawImageProvider extends ImageProvider<Object> {
   final RawImageData image;
-  final double? scale;
-  final int? targetWidth;
-  final int? targetHeight;
 
-  RawImageProvider(
-    this.image, {
-    this.scale = 1.0,
-    this.targetWidth,
-    this.targetHeight,
-  });
+  RawImageProvider(this.image);
 
   @override
-  ImageStreamCompleter load(_RawImageKey key, DecoderCallback decode) {
+  ImageStreamCompleter load(Object key, DecoderCallback decode) {
     return MultiFrameImageStreamCompleter(
       codec: _loadAsync(key),
-      scale: scale ?? 1.0,
+      scale: 1.0,
       debugLabel: 'RawImageProvider(${describeIdentity(key)})',
     );
   }
 
   @override
-  Future<_RawImageKey> obtainKey(ImageConfiguration configuration) {
+  Future<Object> obtainKey(ImageConfiguration configuration) {
     return SynchronousFuture(image._obtainKey());
   }
 
   /// see [ui.decodeImageFromPixels]
-  Future<ui.Codec> _loadAsync(_RawImageKey key) async {
+  Future<ui.Codec> _loadAsync(Object key) async {
     assert(key == image._obtainKey());
     var bytes = await image.file.readAsBytes();
     var buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
@@ -47,8 +37,7 @@ class RawImageProvider extends ImageProvider<_RawImageKey> {
       height: image.height,
       pixelFormat: image.pixelFormat,
     );
-    return descriptor.instantiateCodec(
-        targetWidth: targetWidth, targetHeight: targetHeight);
+    return descriptor.instantiateCodec();
   }
 }
 
@@ -57,6 +46,7 @@ class _RawImageKey {
   final int h;
   final int format;
   final String path;
+
   _RawImageKey(this.w, this.h, this.format, this.path);
 
   @override

@@ -4,10 +4,13 @@ import 'package:flutter_studio_app/src/project_info/service.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 import '../app/paths.dart' as paths;
 import '../app/project_view.dart';
+import '../icon/service.dart';
 import '../project.dart';
 import '../ui.dart';
 import '../utils/async_value.dart';
 import 'package:path/path.dart' as p;
+
+import 'image_provider.dart';
 
 class ProjectInfoScreen extends StatelessWidget {
   final Project project;
@@ -25,7 +28,7 @@ class ProjectInfoScreen extends StatelessWidget {
       children: [
         Row(
           children: [
-            SizedBox(width: 50, height: 50, child: _Icon(project)),
+            _Icon(project),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -37,13 +40,19 @@ class ProjectInfoScreen extends StatelessWidget {
                       return Text(
                         projectSnapshot.data?.name ??
                             p.basename(project.directory.path),
-                        style: theme.textTheme.headlineSmall,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
+                        ),
                       );
                     },
                   ),
                   Text(
                     p.normalize(project.absolutePath),
-                    style: const TextStyle(color: Colors.black45),
+                    style: const TextStyle(
+                      color: Colors.black45,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -51,7 +60,6 @@ class ProjectInfoScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 20),
-
         Card(
           child: Padding(
             padding: const EdgeInsets.all(8.0),
@@ -116,15 +124,26 @@ class _Icon extends StatelessWidget {
       onTap: () {
         context.router.go('/${paths.icon}');
       },
-      child: ValueListenableBuilder<Snapshot<SampleIcon>>(
-        valueListenable: project.info.icon,
-        builder: (context, snapshot, child) {
-          var file = snapshot.data?.file;
-          if (file != null) {
-            return Image.file(file);
-          }
-          return const SizedBox();
-        },
+      child: Container(
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.black12, width: 2),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: ValueListenableBuilder<Snapshot<SampleIcon>>(
+            valueListenable: project.icons.sample,
+            builder: (context, snapshot, child) {
+              var file = snapshot.data?.file;
+              if (file != null) {
+                return Image(image: AppIconImageProvider(file));
+              }
+              return const SizedBox();
+            },
+          ),
+        ),
       ),
     );
   }
@@ -225,21 +244,3 @@ class _Metrics extends StatelessWidget {
     );
   }
 }
-
-/*
-MarkdownBody(data: '''
-## ${snapshot.data?.name ?? ''}
-   Path
-   Icon (clickable to feature)
-
-150 dependencies (12 direct) (link to dependency feature)
-
-## Metrics (LoC)
-  lib: xx files, 200 LoC
-  tests: xx files
-  tool:
-  bin:
-  example:
-  total: xx, xx
-'''
- */

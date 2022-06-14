@@ -1,76 +1,141 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:glob/glob.dart';
 import 'package:glob/list_local_fs.dart';
+import 'package:image/image.dart';
 
 class IconPlatform {
   static final android = IconPlatform('Android', [
     'android/app/src/main/res/mipmap-*dpi/ic_launcher.png',
   ]);
   static final ios = IconPlatform('iOS', [
-    'app/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-*x*@?x.png',
+    'ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-*x*@?x.png',
   ]);
   static final web = IconPlatform('Web', [
     'web/favicon.png',
     'web/icons/Icon*.png',
   ]);
   static final macOS = IconPlatform('macOS', [
-    'app/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_*.png',
+    'macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_*.png',
   ]);
   static final windows = IconPlatform('Windows', [
-    'app/windows/runner/resources/app_icon.ico',
+    'windows/runner/resources/app_icon.ico',
   ]);
   static final linux = IconPlatform('Linux', [
     //TODO
   ]);
 
+  static final values = [
+    IconPlatform.android,
+    IconPlatform.ios,
+    IconPlatform.web,
+    IconPlatform.macOS,
+    IconPlatform.windows,
+  ];
+
   final String name;
-  final List<String> locations;
+  final List<Glob> locations;
 
-  IconPlatform(this.name, this.locations);
-}
+  IconPlatform(this.name, List<String> locations)
+      : locations = locations.map(Glob.new).toList();
 
-class ProjectIcons {
-  final Map<IconPlatform, List<ProjectIcon>> icons;
+  @override
+  String toString() => name;
 
-  ProjectIcons(this.icons);
-
-  List<ProjectIcon> get android => icons[IconPlatform.android] ?? const [];
-
-  static Future<File?> findSampleIcon(String directory) async {
-    for (var platform in [
-      IconPlatform.android,
-      IconPlatform.ios,
-      IconPlatform.web,
-      IconPlatform.macOS,
-      IconPlatform.windows
-    ]) {
-      var files = <File>[];
-      for (var globPath in platform.locations) {
-        var glob = Glob(globPath);
-        files.addAll((await glob.list().toList()).whereType<File>());
-      }
-      files = files.sortedBy<num>((e) => e.lengthSync()).toList();
-      if (files.isNotEmpty) {
-        return files.last;
-      }
+  Future<List<File>> allFiles(String root) async {
+    var files = <File>[];
+    for (var glob in locations) {
+      files.addAll((await glob.list(root: root).toList()).whereType<File>());
     }
-    return null;
-
-    // Hardcode a few location to search for the icon
-
-    // Best icon: keep order Android, iOS, Web etc...
-    //  Find icon with best resolution? (bigger file size but under x mo?)
+    return files;
   }
 }
 
-class ProjectIcon {
-  final File file;
-  final int width, height;
+class AppIcons {
+  final Map<IconPlatform, List<AppIcon>> icons;
 
-  ProjectIcon(
-    this.file, {
-    required this.width,
-    required this.height,
+  AppIcons(this.icons);
+
+  List<AppIcon> get android => icons[IconPlatform.android] ?? const [];
+
+  static Future<AppIcon?> findSampleIcon(String directory,
+      {required int size}) async {
+    for (var platform in IconPlatform.values) {
+      var files = await platform.allFiles(directory);
+      files = files.sortedBy<num>((e) => e.lengthSync()).toList();
+      if (files.isNotEmpty) {
+        return compute<_LoadRequest, AppIcon?>(
+            _loadIcon, _LoadRequest(files.last, size));
+      }
+    }
+    return null;
+  }
+
+  static Future<AppIcons> loadIcons(String directory,
+      {required int size}) async {
+    return compute((_) async {
+      var results = <IconPlatform, List<AppIcon>>{};
+
+      for (var platform in IconPlatform.values) {
+        var icons = results[platform] = [];
+        var files = await platform.allFiles(directory);
+        for (var file in files.sortedByCompare((e) => e.path, compareNatural)) {
+          var icon = _loadIcon(_LoadRequest(file, size));
+          if (icon != null) {
+            icons.add(icon);
+          }
+        }
+      }
+
+      return AppIcons(results);
+    }, null);
+  }
+
+  static AppIcon? _loadIcon(_LoadRequest load) {
+    var size = load.size;
+    var file = load.file;
+    var data = file.readAsBytesSync();
+    try {
+      var originalImage =
+          decodeImage(data) ?? (throw Exception('Fail to load image'));
+      var preview = copyResize(originalImage, width: size, height: size);
+
+      return AppIcon(
+        preview.getBytes(),
+        file.path,
+        originalWidth: originalImage.width,
+        originalHeight: originalImage.height,
+        previewWidth: size,
+        previewHeight: size,
+      );
+    } catch (e) {
+      print("Fail to load image $e");
+      return null;
+    }
+  }
+}
+
+class _LoadRequest {
+  final File file;
+  final int size;
+
+  _LoadRequest(this.file, this.size);
+}
+
+class AppIcon {
+  final Uint8List preview;
+  final String path;
+  final int originalWidth, originalHeight;
+  final int previewWidth, previewHeight;
+
+  AppIcon(
+    this.preview,
+    this.path, {
+    required this.previewWidth,
+    required this.previewHeight,
+    required this.originalWidth,
+    required this.originalHeight,
   });
 }

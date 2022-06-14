@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 import 'package:yaml/yaml.dart';
 import 'flutter_sdk.dart';
+import 'icon/service.dart';
 import 'project_info/service.dart';
 import 'test_runner/service.dart';
 import 'utils/async_value.dart';
@@ -20,6 +21,7 @@ class Project {
   final FlutterSdk _flutterSdk;
   late final tests = TestService(this);
   late final info = ProjectInfoService(this);
+  late final icons = IconService(this);
 
   Project(String path, this.flutterSdkPath)
       : directory = Directory(path),
@@ -46,6 +48,7 @@ class Project {
     _flutterSdk.dispose();
     tests.dispose();
     info.dispose();
+    icons.dispose();
   }
 }
 

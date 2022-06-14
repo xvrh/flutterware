@@ -42,6 +42,7 @@ dependencies:
   flutter_svg:
   flutter_web_plugins:
     sdk: flutter
+  glob:
   image:
   io:
   json_annotation:

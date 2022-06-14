@@ -17,7 +17,6 @@ class ProjectInfoService {
   late final dependencies =
       AsyncValue<DependenciesSummary>(loader: _loadDependencies);
   late final AsyncValue<Pubspec> _pubspec;
-  late final _icon = AsyncValue<SampleIcon>(loader: _loadIcon);
   late StreamSubscription _pubspecWatcher;
 
   ProjectInfoService(this.project) {
@@ -45,27 +44,13 @@ class ProjectInfoService {
         transitive: pubspecLock.packages.length - direct, direct: direct);
   }
 
-  Future<SampleIcon> _loadIcon() async {
-    var file = await ProjectIcons.findSampleIcon(project.directory.path);
-    return SampleIcon(file);
-  }
-
   ValueListenable<Snapshot<Pubspec>> get pubspec => _pubspec;
-
-  ValueListenable<Snapshot<SampleIcon>> get icon => _icon;
 
   void dispose() {
     _pubspecWatcher.cancel();
     _pubspec.dispose();
     dependencies.dispose();
-    _icon.dispose();
   }
-}
-
-class SampleIcon {
-  final File? file;
-
-  SampleIcon(this.file);
 }
 
 class DependenciesSummary {
