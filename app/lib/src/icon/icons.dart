@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:glob/glob.dart';
 import 'package:glob/list_local_fs.dart';
 import 'package:image/image.dart';
+import 'package:pool/pool.dart';
+import 'package:path/path.dart' as p;
 
 class IconPlatform {
   static final android = IconPlatform('Android', [
@@ -58,7 +62,18 @@ class AppIcons {
 
   AppIcons(this.icons);
 
-  List<AppIcon> get android => icons[IconPlatform.android] ?? const [];
+  bool get isNotEmpty => icons.values.any((v) => v.isNotEmpty);
+
+  AppIcon get biggest {
+    var allIcons = icons.values.expand((e) => e).toList();
+    var biggest = allIcons.first;
+    for (var icon in allIcons) {
+      if (icon.originalWidth > biggest.originalWidth) {
+        biggest = icon;
+      }
+    }
+    return biggest;
+  }
 
   static Future<AppIcon?> findSampleIcon(String directory,
       {required int size}) async {
@@ -75,22 +90,32 @@ class AppIcons {
 
   static Future<AppIcons> loadIcons(String directory,
       {required int size}) async {
-    return compute((_) async {
-      var results = <IconPlatform, List<AppIcon>>{};
+    var results = <IconPlatform, List<AppIcon>>{};
 
-      for (var platform in IconPlatform.values) {
-        var icons = results[platform] = [];
-        var files = await platform.allFiles(directory);
-        for (var file in files.sortedByCompare((e) => e.path, compareNatural)) {
-          var icon = _loadIcon(_LoadRequest(file, size));
+    var pool = Pool(max(2, Platform.numberOfProcessors - 1));
+
+    for (var platform in IconPlatform.values) {
+      var files = await platform.allFiles(directory);
+      var icons = results[platform] = [];
+      for (var file in files) {
+        unawaited(pool.withResource(() async {
+          AppIcon? icon;
+          if (kDebugMode) {
+            // "compute" function is not parallelized in debug mode, so it is
+            // too slow.
+            icon = _loadIcon(_LoadRequest(file, size));
+          } else {
+            icon = await compute(_loadIcon, _LoadRequest(file, size));
+          }
           if (icon != null) {
             icons.add(icon);
           }
-        }
+        }));
       }
+    }
+    await pool.close();
 
-      return AppIcons(results);
-    }, null);
+    return AppIcons(results);
   }
 
   static AppIcon? _loadIcon(_LoadRequest load) {
@@ -103,7 +128,7 @@ class AppIcons {
       var preview = copyResize(originalImage, width: size, height: size);
 
       return AppIcon(
-        preview.getBytes(),
+        ByteData.view(preview.getBytes().buffer),
         file.path,
         originalWidth: originalImage.width,
         originalHeight: originalImage.height,
@@ -111,9 +136,31 @@ class AppIcons {
         previewHeight: size,
       );
     } catch (e) {
-      print("Fail to load image $e");
       return null;
     }
+  }
+
+  Future<void> changeIcon(Uint8List bytes,
+      {required List<IconPlatform> platforms}) async {
+    await compute((_) {
+      var encoders = {'.png': encodePng, '.ico': encodeIco, '.jpg': encodeJpg};
+      var image = decodeImage(bytes)!;
+      for (var platform in platforms) {
+        var iconsForPlatform = icons[platform];
+        if (iconsForPlatform != null) {
+          for (var icon in iconsForPlatform) {
+            var encoder = encoders[p.extension(icon.path)];
+            if (encoder != null) {
+              var newImage = copyResize(image,
+                  width: icon.originalWidth, height: icon.originalHeight);
+
+              var newBytes = encoder(newImage);
+              File(icon.path).writeAsBytesSync(newBytes);
+            }
+          }
+        }
+      }
+    }, null);
   }
 }
 
@@ -125,7 +172,7 @@ class _LoadRequest {
 }
 
 class AppIcon {
-  final Uint8List preview;
+  final ByteData preview;
   final String path;
   final int originalWidth, originalHeight;
   final int previewWidth, previewHeight;

@@ -26,7 +26,7 @@ class IconService {
 
   AsyncValue<AppIcons> get icons => _icons;
 
-  ValueListenable<Snapshot<SampleIcon>> get sample => _sample;
+  AsyncValue<SampleIcon> get sample => _sample;
 
   void dispose() {
     _icons.dispose();

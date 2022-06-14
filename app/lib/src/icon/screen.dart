@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_studio_app/src/project_info/image_provider.dart';
 import 'package:flutter_studio_app/src/utils/ui/loading.dart';
-
+import 'package:file_picker/file_picker.dart';
 import '../app/project_view.dart';
 import '../project.dart';
 import '../utils/async_value.dart';
@@ -40,11 +43,12 @@ class IconScreen extends StatelessWidget {
                     style: theme.textTheme.headlineSmall,
                   ),
                 ),
-                OutlinedButton.icon(
-                  onPressed: () => _changeIcon(context),
-                  icon: Icon(Icons.photo),
-                  label: Text('Change icon'),
-                ),
+                if (data != null && data.isNotEmpty)
+                  OutlinedButton.icon(
+                    onPressed: () => _changeIcon(context, data),
+                    icon: Icon(Icons.photo),
+                    label: Text('Change icon'),
+                  ),
               ],
             ),
             const SizedBox(height: 30),
@@ -63,9 +67,10 @@ class IconScreen extends StatelessWidget {
     );
   }
 
-  void _changeIcon(BuildContext context) async {
+  void _changeIcon(BuildContext context, AppIcons icons) async {
     await showDialog(
-        context: context, builder: (context) => _ChangeIconDialog());
+        context: context,
+        builder: (context) => _ChangeIconDialog(project, icons));
     // Pick image
     // Indicate the recommended size
     // Allow to choose image for background on iOS (+ checkbox)
@@ -79,6 +84,8 @@ class IconScreen extends StatelessWidget {
     for (var entry in icons.icons.entries) {
       if (entry.value.isEmpty) continue;
 
+      var files = entry.value.sortedByCompare((e) => e.path, compareNatural);
+
       yield Text(
         entry.key.name,
         style: theme.textTheme.bodyLarge,
@@ -91,7 +98,7 @@ class IconScreen extends StatelessWidget {
         },
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         children: [
-          for (var icon in entry.value)
+          for (var icon in files)
             TableRow(
               children: [
                 Center(
@@ -126,17 +133,25 @@ class IconScreen extends StatelessWidget {
 }
 
 class _ChangeIconDialog extends StatefulWidget {
-  const _ChangeIconDialog({super.key});
+  final Project project;
+  final AppIcons icons;
+
+  const _ChangeIconDialog(this.project, this.icons);
 
   @override
   State<_ChangeIconDialog> createState() => __ChangeIconDialogState();
 }
 
 class __ChangeIconDialogState extends State<_ChangeIconDialog> {
+  final _platformSwitches = <IconPlatform, bool>{
+    for (var platform in IconPlatform.values) platform: true,
+  };
   Uint8List? _image;
 
   @override
   Widget build(BuildContext context) {
+    var biggest = widget.icons.biggest;
+    var image = _image;
     return AlertDialog(
       title: Text('Change icon'),
       content: SizedBox(
@@ -145,21 +160,38 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 15),
             ElevatedButton.icon(
-              onPressed: () {
-                // Load image in memory and display it
-              },
+              onPressed: _pick,
               icon: Icon(Icons.file_upload),
               label: Text('Choose icon'),
             ),
-            Text('Recommended size: 1024x1024'),
-            Row(
-              children: [
-                Switch(value: true, onChanged: (v) {}),
-                Text('Android'),
-              ],
+            if (image != null)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: Image.memory(image),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                  'Recommended size: ${biggest.originalWidth}x${biggest.originalHeight}'),
             ),
+            for (var platform in IconPlatform.values)
+              Row(
+                children: [
+                  Switch(
+                      value: _platformSwitches[platform]!,
+                      onChanged: (v) {
+                        setState(() {
+                          _platformSwitches[platform] = v;
+                        });
+                      }),
+                  Text(platform.name),
+                ],
+              ),
             WarningBox(
               message: 'This feature is limited and experimental.  \n'
                   'If you have suggestions to improve it, [open issues on Github](https://github.com/xvrh/flutter_studio)',
@@ -175,15 +207,37 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
           child: Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: _image != null
-              ? () {
-                  //TODO: replace all icons with correct size
-                  // refresh all icons in service.
-                }
-              : null,
+          onPressed: image != null ? () => _apply(image) : null,
           child: Text('Apply'),
         ),
       ],
     );
+  }
+
+  void _pick() async {
+    var imagesGroup = XTypeGroup(
+      label: 'images',
+      extensions: ['png'],
+    );
+    var result = await openFile(acceptedTypeGroups: [imagesGroup]);
+    if (result != null) {
+      var bytes = await result.readAsBytes();
+      setState(() {
+        _image = bytes;
+      });
+    }
+  }
+
+  void _apply(Uint8List image) async {
+    await widget.icons.changeIcon(image,
+        platforms: _platformSwitches.entries
+            .where((e) => e.value)
+            .map((e) => e.key)
+            .toList());
+    unawaited(widget.project.icons.icons.refresh());
+    unawaited(widget.project.icons.sample.refresh());
+    if (mounted) {
+      Navigator.pop(context);
+    }
   }
 }

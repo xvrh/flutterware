@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_studio_app/src/project_info/service.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 import '../app/paths.dart' as paths;
@@ -120,19 +119,19 @@ class _Icon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () {
-        context.router.go('/${paths.icon}');
-      },
-      child: Container(
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.black12, width: 2),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
+    return Material(
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.black12, width: 2),
+      ),
+      child: InkWell(
+        onTap: () {
+          context.router.go('/${paths.icon}');
+        },
+        child: SizedBox(
+          width: 50,
+          height: 50,
           child: ValueListenableBuilder<Snapshot<SampleIcon>>(
             valueListenable: project.icons.sample,
             builder: (context, snapshot, child) {

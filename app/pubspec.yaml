@@ -32,6 +32,7 @@ dependencies:
   collection:
   device_frame:
   diacritic:
+  file_picker:
   file_selector:
   flutter:
     sdk: flutter
