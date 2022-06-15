@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_studio_app/src/dependencies/service.dart';
 import 'package:json_annotation/json_annotation.dart';
 import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
@@ -22,6 +23,7 @@ class Project {
   late final tests = TestService(this);
   late final info = ProjectInfoService(this);
   late final icons = IconService(this);
+  late final dependencies = DependenciesService(this);
 
   Project(String path, this.flutterSdkPath)
       : directory = Directory(path),
@@ -49,6 +51,7 @@ class Project {
     tests.dispose();
     info.dispose();
     icons.dispose();
+    dependencies.dispose();
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:flutter_studio_app/src/project_info/service.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 import '../app/paths.dart' as paths;
 import '../app/project_view.dart';
+import '../dependencies/service.dart';
 import '../icon/service.dart';
 import '../project.dart';
 import '../ui.dart';
@@ -159,12 +160,12 @@ class _Dependencies extends StatelessWidget {
       onTap: () {
         context.router.go('/${paths.dependencies}');
       },
-      child: ValueListenableBuilder<Snapshot<DependenciesSummary>>(
-        valueListenable: project.info.dependencies,
+      child: ValueListenableBuilder<Snapshot<Dependencies>>(
+        valueListenable: project.dependencies.dependencies,
         builder: (context, snapshot, child) {
           var data = snapshot.data;
           return Text(
-            '${data?.total ?? '-'} dependencies (${data?.direct ?? '-'} directs, ${data?.transitive} transitives)',
+            '${data?.dependencies.length ?? '-'} dependencies (${data?.directs.length ?? '-'} directs, ${data?.transitives.length} transitives)',
             style: const TextStyle(color: AppColors.selection),
           );
         },

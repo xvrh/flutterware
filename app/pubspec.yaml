@@ -49,6 +49,7 @@ dependencies:
   json_annotation:
   logging:
   os_detect:
+  package_config:
   path:
   path_provider:
   pool:

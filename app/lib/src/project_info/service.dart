@@ -14,8 +14,6 @@ import 'package:path/path.dart' as p;
 
 class ProjectInfoService {
   final Project project;
-  late final dependencies =
-      AsyncValue<DependenciesSummary>(loader: _loadDependencies);
   late final AsyncValue<Pubspec> _pubspec;
   late StreamSubscription _pubspecWatcher;
 
@@ -34,32 +32,12 @@ class ProjectInfoService {
     });
   }
 
-  Future<DependenciesSummary> _loadDependencies() async {
-    var pubspecLock = await PubspecLock.load(project.absolutePath);
-
-    var direct = pubspecLock.packages
-        .where((e) => e.type != DependencyType.transitive)
-        .length;
-    return DependenciesSummary(
-        transitive: pubspecLock.packages.length - direct, direct: direct);
-  }
-
   ValueListenable<Snapshot<Pubspec>> get pubspec => _pubspec;
 
   void dispose() {
     _pubspecWatcher.cancel();
     _pubspec.dispose();
-    dependencies.dispose();
   }
-}
-
-class DependenciesSummary {
-  final int direct;
-  final int transitive;
-
-  DependenciesSummary({required this.transitive, required this.direct});
-
-  int get total => direct + transitive;
 }
 
 class CodeMetrics {
