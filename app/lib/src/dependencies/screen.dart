@@ -38,6 +38,16 @@ class DependenciesScreen extends StatelessWidget {
                     style: theme.textTheme.headlineSmall,
                   ),
                 ),
+                PopupMenuButton(
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      child: Text('Reload'),
+                      onTap: () {
+                        project.dependencies.dependencies.refresh();
+                      },
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 30),
@@ -58,19 +68,60 @@ class DependenciesScreen extends StatelessWidget {
 
   Iterable<Widget> _dependencies(
       BuildContext context, Dependencies dependencies) sync* {
-    //TODO(xha): skip source: sdk & source: path
-    yield Text('Directs');
-    for (var dependency in dependencies.directs) {
-      yield ListTile(
-        title: Text(dependency.lockDependency.name),
-      );
-    }
-    yield Text('Transitives');
-    for (var dependency in dependencies.transitives) {
-      yield ListTile(
-        title: Text(dependency.lockDependency.name),
-      );
-    }
+    var theme = Theme.of(context);
+    var headerStyle = theme.textTheme.titleMedium;
+
+    yield Text(
+      'Direct dependencies (${dependencies.directs.length})',
+      style: headerStyle,
+    );
+    yield _table(dependencies.directs);
+    yield const SizedBox(height: 30);
+    yield Text(
+      'Transitive dependencies (${dependencies.transitives.length})',
+      style: headerStyle,
+    );
+    yield _table(dependencies.transitives);
+  }
+
+  Widget _table(List<Dependency> dependencies) {
+    return DataTable(columns: [
+      DataColumn(label: Text('Package')),
+      DataColumn(label: Text('Version')),
+      DataColumn(label: Text('Pub')),
+      DataColumn(label: Text('GitHub')),
+    ], rows: [
+      for (var dependency in dependencies)
+        DataRow(cells: [
+          DataCell(Text(dependency.name)),
+          DataCell(Tooltip(
+            message: 'Upgrade available: BREAKING 3.0.0',
+            child: Row(
+              children: [
+                Text(dependency.lockDependency.version),
+                Icon(Icons.upgrade, size: 15),
+              ],
+            ),
+          )),
+          DataCell(
+            Tooltip(
+              message: '33% popularity / 100 likes / 130 points',
+              child: Text('97%'),
+            ),
+          ),
+          DataCell(
+            Tooltip(
+              message: '130 stars, 3 forks',
+              child: Row(
+                children: [
+                  Text('130'),
+                  Icon(Icons.star_outline, size: 15),
+                ],
+              ),
+            ),
+          ),
+        ]),
+    ]);
   }
 }
 

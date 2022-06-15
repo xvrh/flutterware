@@ -27,8 +27,12 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  auto_size_text:
   flutter:
     sdk: flutter
+  path:
+  package_info_plus:
+  os_detect:
 
 dev_dependencies:
   flutter_studio:

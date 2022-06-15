@@ -36,12 +36,16 @@ class Dependencies implements Disposable {
 
   List<Dependency>? _directs;
   List<Dependency> get directs => _directs ??= dependencies
-      .where((e) => e.lockDependency.type != DependencyType.transitive)
+      .where((e) =>
+          e.lockDependency.type != DependencyType.transitive &&
+          e.lockDependency.source == 'hosted')
       .toList();
 
   List<Dependency>? _transitives;
   List<Dependency> get transitives => _transitives ??= dependencies
-      .where((e) => e.lockDependency.type == DependencyType.transitive)
+      .where((e) =>
+          e.lockDependency.type == DependencyType.transitive &&
+          e.lockDependency.source == 'hosted')
       .toList();
 
   @override
@@ -60,6 +64,8 @@ class Dependency implements Disposable {
   late final pub = AsyncValue<PubReport>(loader: _loadPubReport, lazy: true);
 
   Dependency(this.package, this.lockDependency);
+
+  String get name => lockDependency.name;
 
   Future<ClocReport> _loadCloc() async {
     throw UnimplementedError();
