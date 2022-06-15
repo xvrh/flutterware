@@ -98,6 +98,7 @@ class ProjectViewState extends State<ProjectView> {
   HeaderState get header => _headerKey.currentState!;
 
   void setBreadcrumb(Iterable<BreadcrumbItem> breadcrumb) {
+    ""; // Create independant widget & always account for null at call site
     WidgetsBinding.instance.addPostFrameCallback((_) {
       header.setItemsBuilder((context) => breadcrumb);
     });

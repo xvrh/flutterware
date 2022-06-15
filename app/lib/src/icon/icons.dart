@@ -37,6 +37,7 @@ class IconPlatform {
     IconPlatform.web,
     IconPlatform.macOS,
     IconPlatform.windows,
+    IconPlatform.linux,
   ];
 
   final String name;
@@ -118,6 +119,8 @@ class AppIcons {
     }
     await pool.close();
 
+    results.removeWhere((key, value) => value.isEmpty);
+
     return AppIcons(results);
   }
 
@@ -146,16 +149,22 @@ class AppIcons {
   Future<void> changeIcon(Uint8List bytes,
       {required List<IconPlatform> platforms}) async {
     await compute((_) {
-      var encoders = {'.png': encodePng, '.ico': encodeIco, '.jpg': encodeJpg};
+      var encoders = {'.png': encodePng, '.ico': encodeIco};
       var image = decodeImage(bytes)!;
       for (var platform in platforms) {
         var iconsForPlatform = icons[platform];
         if (iconsForPlatform != null) {
           for (var icon in iconsForPlatform) {
-            var encoder = encoders[p.extension(icon.path)];
+            var encoder = encoders[p.extension(icon.path).toLowerCase()];
             if (encoder != null) {
-              var newImage = copyResize(image,
-                  width: icon.originalWidth, height: icon.originalHeight);
+              var newImage = copyResize(
+                image,
+                width: icon.originalWidth,
+                height: icon.originalHeight,
+                interpolation: image.width >= icon.originalWidth
+                    ? Interpolation.average
+                    : Interpolation.linear,
+              );
 
               var newBytes = encoder(newImage);
               File(icon.path).writeAsBytesSync(newBytes);

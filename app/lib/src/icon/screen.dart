@@ -189,7 +189,7 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
               child: Text(
                   'Recommended size: ${biggest.originalWidth}x${biggest.originalHeight}'),
             ),
-            for (var platform in IconPlatform.values)
+            for (var platform in widget.icons.icons.keys)
               Row(
                 children: [
                   Switch(
