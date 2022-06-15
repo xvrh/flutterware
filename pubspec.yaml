@@ -12,11 +12,13 @@ dependencies:
   built_collection:
   built_value:
   collection:
+  crypto:
   flutter:
     sdk: flutter
   flutter_test:
     sdk: flutter
   logging:
+  meta:
   path:
   pool:
   stream_channel:

@@ -81,7 +81,8 @@ class ProjectViewState extends State<ProjectView> {
                 child: RouterOutlet(
                   {
                     paths.home: (route) => ProjectInfoScreen(widget.project),
-                    paths.dependencies: (route) => DependenciesScreen(),
+                    paths.dependencies: (route) =>
+                        DependenciesScreen(widget.project),
                     paths.tests: (route) => TestRunnerScreen(widget.project),
                     paths.icon: (route) => IconScreen(widget.project),
                   },
