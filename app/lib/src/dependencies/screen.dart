@@ -19,9 +19,6 @@ class DependenciesScreen extends StatelessWidget {
     ProjectView.of(context).setBreadcrumb([
       BreadcrumbItem(Text('Dependencies')),
     ]);
-    ProjectView.of(context).setBreadcrumb([
-      BreadcrumbItem(Text('App icon')),
-    ]);
     var theme = Theme.of(context);
     return ValueListenableBuilder<Snapshot<Dependencies>>(
       valueListenable: project.dependencies.dependencies,
