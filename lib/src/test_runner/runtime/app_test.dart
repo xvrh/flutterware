@@ -105,9 +105,9 @@ abstract class AppTest {
 
   Future<void> enterText(
     dynamic target,
-    String text,
+    String text, {
     Screenshot? screenshot,
-  ) async {
+  }) async {
     var finder = _targetToFinder(target);
     await tester.enterText(finder, text);
     await tester.pumpAndSettle();

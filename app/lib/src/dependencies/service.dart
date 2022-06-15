@@ -60,8 +60,8 @@ class Dependency implements Disposable {
   final Package package;
   final LockDependency lockDependency;
   late final cloc = AsyncValue<ClocReport>(loader: _loadCloc, lazy: true);
-  late final github = AsyncValue<GithubReport>(loader: _loadGithub, lazy: true);
-  late final pub = AsyncValue<PubReport>(loader: _loadPubReport, lazy: true);
+  late final github =
+      AsyncValue<QualityReport>(loader: _loadQuality, lazy: true);
 
   Dependency(this.package, this.lockDependency);
 
@@ -71,13 +71,12 @@ class Dependency implements Disposable {
     throw UnimplementedError();
   }
 
-  Future<GithubReport> _loadGithub() async {
+  Future<QualityReport> _loadQuality() async {
     throw UnimplementedError();
   }
 
-  Future<PubReport> _loadPubReport() async {
-    throw UnimplementedError();
-  }
+  @override
+  String toString() => 'Dependency($name)';
 
   @override
   void dispose() {
@@ -85,8 +84,7 @@ class Dependency implements Disposable {
   }
 }
 
-class GithubReport {}
-
-class PubReport {
+class QualityReport {
   // PubClient https://pub.dartlang.org/api/packages/puppeteer
+  // Github
 }

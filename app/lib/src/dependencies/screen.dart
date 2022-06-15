@@ -85,42 +85,49 @@ class DependenciesScreen extends StatelessWidget {
   }
 
   Widget _table(List<Dependency> dependencies) {
-    return DataTable(columns: [
+    return DataTable(showCheckboxColumn: false, columns: [
       DataColumn(label: Text('Package')),
       DataColumn(label: Text('Version')),
       DataColumn(label: Text('Pub')),
       DataColumn(label: Text('GitHub')),
     ], rows: [
       for (var dependency in dependencies)
-        DataRow(cells: [
-          DataCell(Text(dependency.name)),
-          DataCell(Tooltip(
-            message: 'Upgrade available: BREAKING 3.0.0',
-            child: Row(
-              children: [
-                Text(dependency.lockDependency.version),
-                Icon(Icons.upgrade, size: 15),
-              ],
-            ),
-          )),
-          DataCell(
-            Tooltip(
-              message: '33% popularity / 100 likes / 130 points',
-              child: Text('97%'),
-            ),
-          ),
-          DataCell(
-            Tooltip(
-              message: '130 stars, 3 forks',
-              child: Row(
-                children: [
-                  Text('130'),
-                  Icon(Icons.star_outline, size: 15),
-                ],
+        DataRow(
+          onSelectChanged: (selected) {
+            print('Tap ${dependency.name}');
+          },
+          cells: [
+            DataCell(Text(dependency.name)),
+            DataCell(
+              Tooltip(
+                message: 'Upgrade available: BREAKING 3.0.0',
+                child: Row(
+                  children: [
+                    Text(dependency.lockDependency.version),
+                    Icon(Icons.upgrade, size: 15),
+                  ],
+                ),
               ),
             ),
-          ),
-        ]),
+            DataCell(
+              Tooltip(
+                message: '33% popularity / 100 likes / 130 points',
+                child: Text('97%'),
+              ),
+            ),
+            DataCell(
+              Tooltip(
+                message: '130 stars, 3 forks',
+                child: Row(
+                  children: [
+                    Text('130'),
+                    Icon(Icons.star_outline, size: 15),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
     ]);
   }
 }
