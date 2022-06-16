@@ -327,12 +327,10 @@ packages:
   glob:
     dependency: "direct main"
     description:
-      path: "."
-      ref: e10eb24
-      resolved-ref: e10eb2407c58427144004458ef85c9bbf7286e56
-      url: "https://github.com/dart-lang/glob.git"
-    source: git
-    version: "2.1.0-dev"
+      name: glob
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "2.1.0"
   graphs:
     dependency: transitive
     description:

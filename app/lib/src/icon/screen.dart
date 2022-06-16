@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/project_info/image_provider.dart';
+import 'package:flutter_studio_app/src/icon/image_provider.dart';
 import 'package:flutter_studio_app/src/utils/state_extension.dart';
 import 'package:flutter_studio_app/src/utils/ui/loading.dart';
 import '../app/project_view.dart';
@@ -245,8 +245,7 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
 
   void _apply(Uint8List image) async {
     await withLoader((_) async {
-      await widget.icons.changeIcon(image,
-          platforms: _selectedPlatforms);
+      await widget.icons.changeIcon(image, platforms: _selectedPlatforms);
     }, message: 'Applying new icon...');
 
     unawaited(widget.project.icons.icons.refresh());

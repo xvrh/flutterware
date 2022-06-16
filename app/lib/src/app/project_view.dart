@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_studio_app/src/app/ui/menu.dart';
-import 'package:flutter_studio_app/src/project_info/screen.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
-
 import '../dependencies/screen.dart';
 import '../icon/screen.dart';
+import '../overview/screen.dart';
 import '../project.dart';
 import '../test_runner/screen.dart';
 import '../ui.dart';
@@ -80,7 +79,7 @@ class ProjectViewState extends State<ProjectView> {
               Expanded(
                 child: RouterOutlet(
                   {
-                    paths.home: (route) => ProjectInfoScreen(widget.project),
+                    paths.home: (route) => OverviewScreen(widget.project),
                     paths.dependencies: (route) =>
                         DependenciesScreen(widget.project),
                     paths.tests: (route) => TestRunnerScreen(widget.project),

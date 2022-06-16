@@ -9,7 +9,7 @@ import 'package:watcher/watcher.dart';
 import 'package:yaml/yaml.dart';
 import 'flutter_sdk.dart';
 import 'icon/service.dart';
-import 'project_info/service.dart';
+import 'overview/service.dart';
 import 'test_runner/service.dart';
 import 'utils/async_value.dart';
 

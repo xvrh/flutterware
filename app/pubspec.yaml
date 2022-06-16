@@ -73,13 +73,6 @@ dev_dependencies:
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
-dependency_overrides:
-  # https://github.com/dart-lang/glob/pull/60
-  glob:
-    git:
-      url: https://github.com/dart-lang/glob.git
-      ref: e10eb24
-
 # The following section is specific to Flutter.
 flutter:
 
