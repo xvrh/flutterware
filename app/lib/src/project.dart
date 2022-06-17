@@ -61,4 +61,5 @@ class Pubspec {
   Pubspec(this._data);
 
   String get name => _data['name'] as String;
+  String? get version => _data['version'] as String?;
 }

@@ -28,13 +28,19 @@ class OverviewScreen extends StatelessWidget {
         primary: false,
         padding: const EdgeInsets.all(15),
         children: [
-          _ProjectNameCard(project),
+          _ProjectInfoCard(project),
           const SizedBox(height: 30),
-          _HomeCard(),
-          const SizedBox(height: 15),
-          _HomeCard2(),
-          const SizedBox(height: 15),
-          _HomeCard3(),
+          Text('Tools', style: theme.textTheme.titleLarge,),
+          Text('Dependency preview'),
+          Text('Launcher icon updater'),
+          Text('Hot-reloadable, visual tests runner'),
+          Text('ThemeData editor'),
+          Text('CustomPaint editor'),
+          //_HomeCard(),
+          //const SizedBox(height: 15),
+          //_HomeCard2(),
+          //const SizedBox(height: 15),
+          //_HomeCard3(),
           /*Card(
             child: Padding(
               padding: const EdgeInsets.all(8.0),
@@ -89,15 +95,16 @@ class OverviewScreen extends StatelessWidget {
   }
 }
 
-class _ProjectNameCard extends StatelessWidget {
+class _ProjectInfoCard extends StatelessWidget {
   final Project project;
 
-  const _ProjectNameCard(this.project, {super.key});
+  const _ProjectInfoCard(this.project, {super.key});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _Icon(project),
           const SizedBox(width: 10),
@@ -105,44 +112,80 @@ class _ProjectNameCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    ValueListenableBuilder<Snapshot<Pubspec>>(
-                      valueListenable: project.pubspec,
-                      builder: (context, projectSnapshot, child) {
-                        return Text(
+                ValueListenableBuilder<Snapshot<Pubspec>>(
+                  valueListenable: project.pubspec,
+                  builder: (context, projectSnapshot, child) {
+                    var version = projectSnapshot.data?.version;
+                    if (version != null) {
+                      version = version.split('+').first;
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
                           projectSnapshot.data?.name ??
                               p.basename(project.directory.path),
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w500,
                           ),
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      decoration: BoxDecoration(
-                          color: Colors.black12,
-                          borderRadius: BorderRadius.circular(2)),
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Text(
-                        'v1.0.0',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.black45,
                         ),
-                      ),
-                    )
-                  ],
+                        const SizedBox(width: 10),
+                        if (version != null)
+                          Container(
+                            decoration: BoxDecoration(
+                                color: Colors.black12,
+                                borderRadius: BorderRadius.circular(2)),
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: Text(
+                              'v$version',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.black45,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
                 Text(
                   p.normalize(project.absolutePath),
                   style: const TextStyle(
                     color: Colors.black45,
                     fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Align(
+                  alignment: Alignment.bottomLeft,
+                  child: Container(
+                    decoration: BoxDecoration(color: Color(0xffE7F8FF)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                    child: Text(
+                      'ANDROID | IOS | MACOS | WINDOWS',
+                      style: const TextStyle(
+                          color: Color(0xff1967d2), fontSize: 11),
+                    ),
+                  ),
+                ),
+                InkWell(
+                  onTap: () {},
+                  child: Text(
+                    '10 pub dependencies',
+                    style: const TextStyle(
+                      color: AppColors.selection,
+                      decoration: TextDecoration.underline,
+                      fontSize: 12
+                    ),
+                  ),
+                ),
+                Text(
+                  'Dart 2.17',
+                  style: const TextStyle(
                   ),
                 ),
                 /*const SizedBox(width: 10),
