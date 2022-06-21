@@ -2,8 +2,8 @@ import 'package:flutter_studio/src/test_runner/runtime/widget_tester.dart';
 export 'package:flutter_studio/src/test_runner/runtime/widget_tester.dart'
     show AppWidgetTester, splitTest;
 import 'package:flutter_test/flutter_test.dart' as flutter_test;
-export 'package:flutter_test/flutter_test.dart' hide testWidgets;
 import 'package:meta/meta.dart';
+export 'package:flutter_test/flutter_test.dart' hide testWidgets;
 export 'runtime/app_test.dart' show AppTest, Screenshot;
 
 @isTest

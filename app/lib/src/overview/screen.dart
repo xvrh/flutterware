@@ -116,8 +116,9 @@ class _ProjectInfoCard extends StatelessWidget {
                   valueListenable: project.pubspec,
                   builder: (context, projectSnapshot, child) {
                     var version = projectSnapshot.data?.version;
+                    String? versionString;
                     if (version != null) {
-                      version = version.split('+').first;
+                      versionString = '${version.major}.${version.minor}.${version.patch}';
                     }
 
                     return Row(
@@ -133,14 +134,14 @@ class _ProjectInfoCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        if (version != null)
+                        if (versionString != null)
                           Container(
                             decoration: BoxDecoration(
                                 color: Colors.black12,
                                 borderRadius: BorderRadius.circular(2)),
                             padding: const EdgeInsets.symmetric(horizontal: 2),
                             child: Text(
-                              'v$version',
+                              'v$versionString',
                               style: const TextStyle(
                                 fontSize: 11,
                                 color: Colors.black45,

@@ -5,13 +5,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_studio_app/src/dependencies/service.dart';
 import 'package:json_annotation/json_annotation.dart';
 import 'package:path/path.dart' as p;
-import 'package:watcher/watcher.dart';
-import 'package:yaml/yaml.dart';
+import 'package:pubspec_parse/pubspec_parse.dart';
 import 'flutter_sdk.dart';
 import 'icon/service.dart';
 import 'overview/service.dart';
 import 'test_runner/service.dart';
 import 'utils/async_value.dart';
+
+export 'package:pubspec_parse/pubspec_parse.dart' show Pubspec;
 
 part 'project.g.dart';
 
@@ -53,13 +54,4 @@ class Project {
     icons.dispose();
     dependencies.dispose();
   }
-}
-
-class Pubspec {
-  final YamlMap _data;
-
-  Pubspec(this._data);
-
-  String get name => _data['name'] as String;
-  String? get version => _data['version'] as String?;
 }

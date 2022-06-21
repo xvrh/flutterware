@@ -1,5 +1,5 @@
 
-# Flutter Studio
+# Flutterware
 
 A set of tools for Flutter projects.
 
@@ -28,21 +28,29 @@ The first launch is a bit slow because the tool need to be compiled.
 
 ### Test visualizer
 
-A new kind of testing built on top of the standard `flutter_test` framework:
+**screenshots**
+
+A new kind of testing built on top of the standard `flutter_test` framework.
 
 - Screenshot every step of your test
-- Hot-reload the test instantly (~1s) after any change
-- Preview your app with all screen sizes and in all languages
-- Easy to write tests that exercise the whole app
+- Hot-reload a test instantly (~1s) after any change
+- Preview your app at any screen size and in all languages
+- Easier to write tests that exercise the whole app
+- Deploy the tests as a Web page for an internal documentation of the app.
+
+**more screenshots** (code => result)
+*Link to the gallery compiled* 
 
 ### Dependency manager
 
 Overview of your dependencies to monitor the quality.
 
 - See Pub & GitHub scores
-- Run `pub upgrade` and preview all changelogs. 
+- Run `pub upgrade` and preview all changelogs
 
 ### App icon change
+
+Quickly replace your app's launcher icon.
 
 ### More tools to come...
 

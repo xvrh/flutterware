@@ -1,12 +1,20 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:isolate';
+
+import 'package:flutter/foundation.dart';
 import 'package:package_config/package_config.dart';
 import '../project.dart';
 import '../utils/async_value.dart';
 import '../utils/cloc/cloc.dart';
 import 'pubspec_lock.dart';
-
+import 'quality.dart';
+import 'package:pub_scores/pub_scores.dart';
+import 'package:path/path.dart' as p;
 class DependenciesService {
   final Project project;
   late final dependencies = AsyncValue<Dependencies>(loader: _load);
+  late final pubScores = AsyncValue<PubScores>(loader: _loadPubScores);
 
   DependenciesService(this.project);
 
@@ -18,14 +26,38 @@ class DependenciesService {
     for (var dependency in pubspecLock.packages) {
       var package = packageConfig[dependency.name];
       if (package != null) {
-        results.add(Dependency(package, dependency));
+        results.add(Dependency(this, package, dependency));
       }
     }
     return Dependencies(results);
   }
 
+  Future<PubScores> _loadPubScores() async {
+    //TODO(xha): we should download a fresh copy of this file as it can change
+    // very frequently.
+    var appDirectory = Directory.current;
+    var appPackageConfig = await findPackageConfig(appDirectory);
+    if (appPackageConfig == null) {
+      throw Exception('Cannot resolve [package_config] of ${appDirectory.path}');
+    }
+    var pubScorePackage = appPackageConfig['pub_scores'];
+    if (pubScorePackage == null) {
+      throw Exception('Cannot find package [pub_scores]');
+    }
+
+    var dataPath = p.join(pubScorePackage.root.toFilePath(), 'lib/data/all_packages.json');
+
+    return await compute<String, PubScores>((path) async {
+      //TODO(xha): consider a lighter parsing as the file is big
+      var content = File(path).readAsStringSync();
+      var json = jsonDecode(content) as Map<String, dynamic>;
+      return PubScores.fromJson(json);
+    }, dataPath);
+  }
+
   void dispose() {
     dependencies.dispose();
+    pubScores.dispose();
   }
 }
 
@@ -57,21 +89,16 @@ class Dependencies implements Disposable {
 }
 
 class Dependency implements Disposable {
+  final DependenciesService _service;
   final Package package;
   final LockDependency lockDependency;
   late final cloc = AsyncValue<ClocReport>(loader: _loadCloc, lazy: true);
-  late final github =
-      AsyncValue<QualityReport>(loader: _loadQuality, lazy: true);
 
-  Dependency(this.package, this.lockDependency);
+  Dependency(this._service, this.package, this.lockDependency);
 
   String get name => lockDependency.name;
 
   Future<ClocReport> _loadCloc() async {
-    throw UnimplementedError();
-  }
-
-  Future<QualityReport> _loadQuality() async {
     throw UnimplementedError();
   }
 
@@ -82,9 +109,4 @@ class Dependency implements Disposable {
   void dispose() {
     cloc.dispose();
   }
-}
-
-class QualityReport {
-  // PubClient https://pub.dartlang.org/api/packages/puppeteer
-  // Github
 }

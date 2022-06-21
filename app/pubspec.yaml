@@ -43,6 +43,7 @@ dependencies:
   flutter_svg:
   flutter_web_plugins:
     sdk: flutter
+  github:
   glob:
   image:
   io:
@@ -53,7 +54,12 @@ dependencies:
   path:
   path_provider:
   pool:
+  pub_scores:
+    git:
+      url: https://github.com/xvrh/pub-scores.git
+      ref: 915d965e36e8257cf2768489ba279326567c2065
   pub_semver:
+  pubspec_parse:
   rxdart:
   shelf:
   shelf_router:

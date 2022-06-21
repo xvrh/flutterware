@@ -24,7 +24,7 @@ class ProjectInfoService {
       lazy: true,
       loader: () async {
         var content = await File(pubspec).readAsString();
-        return Pubspec(loadYaml(content) as YamlMap);
+        return Pubspec.parse(content);
       },
     );
     _pubspecWatcher = FileWatcher(pubspec).events.listen((change) {
