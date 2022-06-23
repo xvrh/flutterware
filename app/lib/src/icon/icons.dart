@@ -131,7 +131,7 @@ class AppIcons {
     try {
       var originalImage =
           decodeImage(data) ?? (throw Exception('Fail to load image'));
-      var preview = copyResize(originalImage, width: size, height: size);
+      var preview = copyResize(originalImage, width: size, height: size, interpolation: Interpolation.linear);
 
       return AppIcon(
         ByteData.view(preview.getBytes().buffer),

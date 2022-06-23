@@ -102,6 +102,10 @@ class Dependency implements Disposable {
 
   String get name => lockDependency.name;
 
+  bool get isTransitive => lockDependency.type == DependencyType.transitive;
+
+  bool get isDirect => !isTransitive;
+
   Future<ClocReport> _loadCloc() async {
     throw UnimplementedError();
   }

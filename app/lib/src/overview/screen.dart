@@ -397,8 +397,8 @@ class _Icon extends StatelessWidget {
           context.router.go('/${paths.icon}');
         },
         child: SizedBox(
-          width: 50,
-          height: 50,
+          width: IconService.previewSize.toDouble(),
+          height: IconService.previewSize.toDouble(),
           child: ValueListenableBuilder<Snapshot<SampleIcon>>(
             valueListenable: project.icons.sample,
             builder: (context, snapshot, child) {

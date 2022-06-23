@@ -58,7 +58,7 @@ dependencies:
     #git:
     #  url: https://github.com/xvrh/pub-scores.git
     #  ref: 915d965e36e8257cf2768489ba279326567c2065
-    path: ../../all_pub_metrics
+    path: ../../pub-scores
   pub_semver:
   pubspec_parse:
   rxdart:

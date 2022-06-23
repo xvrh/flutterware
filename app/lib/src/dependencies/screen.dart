@@ -11,7 +11,6 @@ import '../utils/ui/error_panel.dart';
 import '../utils/ui/loading.dart';
 import 'package:collection/collection.dart';
 
-
 //TODO(xha): enhancement:
 // - Search field for filter
 // - Single table
@@ -63,6 +62,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
   };
   int _sortIndex = 0;
   bool _sortAscending = true;
+  bool _withTransitive = true;
 
   Project get project => widget.parent.widget.project;
 
@@ -105,7 +105,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
             ),
             const SizedBox(height: 30),
             if (data != null)
-              ..._dependencies(context, data)
+              _card(data)
             else if (error != null)
               ErrorPanel(
                 message: 'Failed to load dependencies',
@@ -119,25 +119,13 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
     );
   }
 
-  Iterable<Widget> _dependencies(
-      BuildContext context, Dependencies dependencies) sync* {
-    var theme = Theme.of(context);
-    var headerStyle = theme.textTheme.titleMedium;
-
-    yield Text(
-      'Direct dependencies (${dependencies.directs.length})',
-      style: headerStyle,
-    );
-    yield _table(dependencies.directs);
-    yield const SizedBox(height: 30);
-    yield Text(
-      'Transitive dependencies (${dependencies.transitives.length})',
-      style: headerStyle,
-    );
-    yield _table(dependencies.transitives);
+  Widget _card(Dependencies dependencies) {
+    return Card(
+        clipBehavior: Clip.antiAlias,
+        child: _table(dependencies.dependencies.values));
   }
 
-  Widget _table(List<Dependency> dependencies) {
+  Widget _table(Iterable<Dependency> dependencies) {
     return SizedBox(
       height: _DependencyListScreen._rowHeight * dependencies.length +
           _DependencyListScreen._headingHeight,
@@ -155,7 +143,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
     );
   }
 
-  Widget _data(List<Dependency> dependencies) {
+  Widget _data(Iterable<Dependency> dependencies) {
     return ValueListenableBuilder<Snapshot<PubScores>>(
         valueListenable: project.dependencies.pubScores,
         builder: (context, pubScores, child) {
@@ -176,10 +164,10 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
             sortAscending: _sortAscending,
             columns: [
               DataColumn(label: Text('Package'), onSort: _onSort),
+              DataColumn(label: Text('Type')),
               DataColumn(label: Text('Version')),
               DataColumn(label: Text('Pub'), onSort: _onSort),
               DataColumn(label: Text('GitHub'), onSort: _onSort),
-              DataColumn(label: Text('Imports')),
             ],
             rows: [
               for (var dependency in sortedDependencies)
@@ -188,16 +176,26 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                     context.router.go(dependency.name);
                   },
                   cells: [
-                    DataCell(Text(dependency.name)),
                     DataCell(
-                      Tooltip(
-                        message: "Upgrade available: BREAKING 3.0.0",
-                        child: Row(
-                          children: [
-                            Text(dependency.lockDependency.version),
-                            Icon(Icons.upgrade, size: 15),
-                          ],
+                        Text(dependency.name),
                         ),
+                    DataCell(dependency.isTransitive
+                        ? _DependencyTransitiveBadge()
+                        : _DependencyDirectBadge()),
+                    DataCell(
+                      Row(
+                        children: [
+                          Tooltip(
+                            message: "Upgrade available: BREAKING 3.0.0",
+                            child: Row(
+                              children: [
+                                Text(dependency.lockDependency.version),
+                                Icon(Icons.upgrade, size: 15),
+                              ],
+                            ),
+                          ),
+
+                        ],
                       ),
                     ),
                     DataCell(
@@ -205,9 +203,6 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                     ),
                     DataCell(
                       _GithubCell(dependency, pubScores.data),
-                    ),
-                    DataCell(
-                      Text('2'),
                     ),
                   ],
                 ),
@@ -219,9 +214,12 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
   static Comparable _selectPackageName(
           Dependency d, Snapshot<PubScores> scores) =>
       d.name;
+
   static Comparable _selectPubScore(Dependency d, Snapshot<PubScores> scores) =>
       scores.data?[d.name]?.pub.popularityScore ?? 0;
-  static Comparable _selectGithubScore(Dependency d, Snapshot<PubScores> scores) =>
+
+  static Comparable _selectGithubScore(
+          Dependency d, Snapshot<PubScores> scores) =>
       scores.data?[d.name]?.github?.starCount ?? 0;
 
   void _onSort(int columnIndex, bool ascending) {
@@ -286,6 +284,61 @@ class _GithubCell extends StatelessWidget {
           Text('$starCount'),
           Icon(Icons.star_outline, size: 15),
         ],
+      ),
+    );
+  }
+}
+
+class _DependencyTransitiveBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.black12,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Tooltip(
+        message: 'http > machin > this one',
+        child: Text(
+          'Transitive',
+          style: const TextStyle(
+            color: Colors.black26,
+            fontSize: 10,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DependencyDirectBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Tooltip(
+        message: '3 imports',
+        child: Row(
+          children: [
+            Text('Direct'),
+            Container(
+              decoration:
+                  BoxDecoration(shape: BoxShape.circle, color: Colors.blue,),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+              child: Text(
+                '2',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
