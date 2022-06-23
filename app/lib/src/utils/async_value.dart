@@ -186,6 +186,10 @@ class AsyncValue<T extends Object>
   @override
   void dispose() {
     _isDisposed = true;
+    var previousValue = _value.value.data;
+    if (previousValue is Disposable) {
+      previousValue.dispose();
+    }
     _value.dispose();
   }
 }

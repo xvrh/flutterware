@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:package_config/package_config.dart';
@@ -8,9 +7,9 @@ import '../project.dart';
 import '../utils/async_value.dart';
 import '../utils/cloc/cloc.dart';
 import 'pubspec_lock.dart';
-import 'quality.dart';
 import 'package:pub_scores/pub_scores.dart';
 import 'package:path/path.dart' as p;
+
 class DependenciesService {
   final Project project;
   late final dependencies = AsyncValue<Dependencies>(loader: _load);
@@ -62,19 +61,24 @@ class DependenciesService {
 }
 
 class Dependencies implements Disposable {
-  final List<Dependency> dependencies;
+  final Map<String, Dependency> dependencies;
 
-  Dependencies(this.dependencies);
+  Dependencies(List<Dependency> dependencies): dependencies = {
+    for (var d in dependencies)
+      d.name : d,
+  };
+
+  Dependency? operator[](String packageName) => dependencies[packageName];
 
   List<Dependency>? _directs;
-  List<Dependency> get directs => _directs ??= dependencies
+  List<Dependency> get directs => _directs ??= dependencies.values
       .where((e) =>
           e.lockDependency.type != DependencyType.transitive &&
           e.lockDependency.source == 'hosted')
       .toList();
 
   List<Dependency>? _transitives;
-  List<Dependency> get transitives => _transitives ??= dependencies
+  List<Dependency> get transitives => _transitives ??= dependencies.values
       .where((e) =>
           e.lockDependency.type == DependencyType.transitive &&
           e.lockDependency.source == 'hosted')
@@ -82,7 +86,7 @@ class Dependencies implements Disposable {
 
   @override
   void dispose() {
-    for (var dependency in dependencies) {
+    for (var dependency in dependencies.values) {
       dependency.dispose();
     }
   }

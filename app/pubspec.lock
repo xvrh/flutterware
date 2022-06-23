@@ -593,11 +593,9 @@ packages:
   pub_scores:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "915d965e36e8257cf2768489ba279326567c2065"
-      resolved-ref: "915d965e36e8257cf2768489ba279326567c2065"
-      url: "https://github.com/xvrh/pub-scores.git"
-    source: git
+      path: "../../all_pub_metrics"
+      relative: true
+    source: path
     version: "1.0.0"
   pub_semver:
     dependency: "direct main"

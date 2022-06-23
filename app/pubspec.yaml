@@ -55,9 +55,10 @@ dependencies:
   path_provider:
   pool:
   pub_scores:
-    git:
-      url: https://github.com/xvrh/pub-scores.git
-      ref: 915d965e36e8257cf2768489ba279326567c2065
+    #git:
+    #  url: https://github.com/xvrh/pub-scores.git
+    #  ref: 915d965e36e8257cf2768489ba279326567c2065
+    path: ../../all_pub_metrics
   pub_semver:
   pubspec_parse:
   rxdart:
