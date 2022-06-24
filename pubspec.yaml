@@ -1,0 +1,33 @@
+name: flutter_studio
+description: A set of GUI tools for Flutter apps development.
+version: 1.0.0
+homepage: https://github.com/xvrh/flutter_studio
+
+environment:
+  sdk: '>=2.17.0 <3.0.0'
+  flutter: '>=3.0.0'
+
+dependencies:
+  args:
+  built_collection:
+  built_value:
+  collection:
+  crypto:
+  flutter:
+    sdk: flutter
+  flutter_test:
+    sdk: flutter
+  logging:
+  meta:
+  path:
+  pool:
+  stream_channel:
+  test:
+  test_api:
+  web_socket_channel:
+
+dev_dependencies:
+  build_runner:
+  built_value_generator:
+  json_serializable:
+  lints:
