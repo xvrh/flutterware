@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_studio_app/src/ui/theme.dart';
 
@@ -13,12 +14,29 @@ class AppThemeDemo extends StatelessWidget {
         child: Scaffold(
           appBar: AppBar(
             title: Text('Theme demo'),
-            bottom: const TabBar(
-              tabs: [
-                Tab(icon: Icon(Icons.library_books)),
-                Tab(icon: Icon(Icons.card_giftcard)),
-                Tab(icon: Icon(Icons.microwave)),
-              ],
+            bottom: PreferredSize(
+              preferredSize: Size.fromHeight(35),
+              child: Stack(
+                children: [
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    left: 0,
+                    child: Container(
+                      color: AppColors.tabDivider,
+                      height: 1,
+                    ),
+                  ),
+                  const TabBar(
+                    tabs: [
+                      Tab(text: 'Elements', height: 35),
+                      Tab(text: 'Card', height: 35),
+                      Tab(text: 'Third', height: 35),
+                    ],
+                  ),
+
+                ],
+              ),
             ),
           ),
           body: TabBarView(
@@ -97,10 +115,11 @@ class _Tab1State extends State<_Tab1> {
             ),
             IconButton(onPressed: () {}, icon: Icon(Icons.refresh)),
             PopupMenuButton(
-                itemBuilder: (context) => [
-                      PopupMenuItem(child: Text('Reload')),
-                      PopupMenuItem(child: Text('Delete this item')),
-                    ]),
+              itemBuilder: (context) => [
+                PopupMenuItem(child: Text('Reload')),
+                PopupMenuItem(child: Text('Delete this item')),
+              ],
+            ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(primary: AppColors.stateError),
               onPressed: () {},

@@ -16,6 +16,40 @@ ThemeData get appTheme {
 ThemeData _buildAppTheme() {
   var base = ThemeData(useMaterial3: true, colorSchemeSeed: AppColors.primary);
 
+  base = base.copyWith(
+      scaffoldBackgroundColor: AppColors.scaffoldBackground,
+      tabBarTheme: base.tabBarTheme.copyWith(
+        labelColor: AppColors.primary,
+        indicatorSize: TabBarIndicatorSize.label,
+        unselectedLabelColor: AppColors.secondaryForeground,
+        labelStyle:
+            base.textTheme.titleMedium!.copyWith(fontWeight: FontWeight.w500),
+        unselectedLabelStyle:
+            base.textTheme.titleMedium!.copyWith(fontWeight: FontWeight.w500),
+        indicator: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: AppColors.primary, width: 3),
+          ),
+        ),
+      ),
+      popupMenuTheme: base.popupMenuTheme.copyWith(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: Colors.black12),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          primary: AppColors.primary,
+          onPrimary: Colors.white,
+        ),
+      ),
+      cardColor: Colors.white,
+      cardTheme: base.cardTheme.copyWith(
+        surfaceTintColor: Colors.white,
+        elevation: 3,
+      ));
+
   return base;
 
   base = base.copyWith(
