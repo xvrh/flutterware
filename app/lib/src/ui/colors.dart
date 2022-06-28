@@ -8,7 +8,8 @@ class AppColors {
   static const primaryOnMenu = Color(0xFF669df6);
   static const menuBackground = Color(0xFF0b1d32);
   static const menuSecondaryBackground = Color(0xFF182a41);
-  static const secondaryForeground = Color(0xff476282);
+  static const foregroundPrimary = Color(0xff476282);
+  static const foregroundSecondary = Color(0xff476282);
 
   static const textSteal = Color(0xFF223a55);
   static const textGrey = Color(0xFF737373);

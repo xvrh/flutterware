@@ -34,7 +34,6 @@ class AppThemeDemo extends StatelessWidget {
                       Tab(text: 'Third', height: 35),
                     ],
                   ),
-
                 ],
               ),
             ),
@@ -119,6 +118,19 @@ class _Tab1State extends State<_Tab1> {
                 PopupMenuItem(child: Text('Reload')),
                 PopupMenuItem(child: Text('Delete this item')),
               ],
+            ),
+            PopupMenuButton(
+              itemBuilder: (context) => [
+                PopupMenuItem(child: Text('Reload')),
+                PopupMenuItem(child: Text('Delete this item')),
+              ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('A menu', style: theme.textTheme.titleMedium,),
+                  Icon(Icons.expand_more),
+                ],
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(primary: AppColors.stateError),
@@ -236,9 +248,14 @@ class _Tab2 extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var theme = Theme.of(context);
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 30),
+      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 30),
       children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 6),
+          child: Text('My table', style: theme.textTheme.titleSmall),
+        ),
         Card(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
