@@ -20,8 +20,6 @@ class OverviewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    ProjectView.of(context).setBreadcrumb([]);
-
     return Container(
       color: Color(0xfff8f8f8),
       child: ListView(
@@ -30,7 +28,10 @@ class OverviewScreen extends StatelessWidget {
         children: [
           _ProjectInfoCard(project),
           const SizedBox(height: 30),
-          Text('Tools', style: theme.textTheme.titleLarge,),
+          Text(
+            'Tools',
+            style: theme.textTheme.titleLarge,
+          ),
           Text('Launcher icon update'),
           Text('Dependency preview'),
           Text('Hot-reloadable, visual test runner'),
@@ -118,7 +119,8 @@ class _ProjectInfoCard extends StatelessWidget {
                     var version = projectSnapshot.data?.version;
                     String? versionString;
                     if (version != null) {
-                      versionString = '${version.major}.${version.minor}.${version.patch}';
+                      versionString =
+                          '${version.major}.${version.minor}.${version.patch}';
                     }
 
                     return Row(
@@ -178,16 +180,14 @@ class _ProjectInfoCard extends StatelessWidget {
                   child: Text(
                     '10 pub dependencies',
                     style: const TextStyle(
-                      color: AppColors.selection,
-                      decoration: TextDecoration.underline,
-                      fontSize: 12
-                    ),
+                        color: AppColors.selection,
+                        decoration: TextDecoration.underline,
+                        fontSize: 12),
                   ),
                 ),
                 Text(
                   'Dart 2.17',
-                  style: const TextStyle(
-                  ),
+                  style: const TextStyle(),
                 ),
                 /*const SizedBox(width: 10),
                 Row(

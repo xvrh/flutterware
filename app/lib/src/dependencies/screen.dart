@@ -66,9 +66,6 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ProjectView.of(context).setBreadcrumb([
-      BreadcrumbItem(Text('Dependencies')),
-    ]);
     var theme = Theme.of(context);
     return ValueListenableBuilder<Snapshot<Dependencies>>(
       valueListenable: project.dependencies.dependencies,
@@ -175,8 +172,8 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                   },
                   cells: [
                     DataCell(
-                        Text(dependency.name),
-                        ),
+                      Text(dependency.name),
+                    ),
                     DataCell(dependency.isTransitive
                         ? _DependencyTransitiveBadge()
                         : _DependencyDirectBadge()),
@@ -192,7 +189,6 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                               ],
                             ),
                           ),
-
                         ],
                       ),
                     ),
@@ -324,8 +320,10 @@ class _DependencyDirectBadge extends StatelessWidget {
           children: [
             Text('Direct'),
             Container(
-              decoration:
-                  BoxDecoration(shape: BoxShape.circle, color: Colors.blue,),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.blue,
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
               child: Text(
                 '2',

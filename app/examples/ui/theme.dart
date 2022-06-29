@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_studio_app/src/ui/side_menu.dart';
 import 'package:flutter_studio_app/src/ui/theme.dart';
 
 void main() => runApp(AppThemeDemo());
@@ -31,7 +32,7 @@ class AppThemeDemo extends StatelessWidget {
                     tabs: [
                       Tab(text: 'Elements', height: 35),
                       Tab(text: 'Card', height: 35),
-                      Tab(text: 'Third', height: 35),
+                      Tab(text: 'Menus', height: 35),
                     ],
                   ),
                 ],
@@ -42,7 +43,7 @@ class AppThemeDemo extends StatelessWidget {
             children: [
               _Tab1(),
               _Tab2(),
-              Icon(Icons.directions_bike),
+              _Tab3(),
             ],
           ),
         ),
@@ -127,7 +128,10 @@ class _Tab1State extends State<_Tab1> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('A menu', style: theme.textTheme.titleMedium,),
+                  Text(
+                    'A menu',
+                    style: theme.textTheme.titleMedium,
+                  ),
                   Icon(Icons.expand_more),
                 ],
               ),
@@ -281,6 +285,36 @@ class _Tab2 extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Tab3 extends StatelessWidget {
+  const _Tab3({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      scrollDirection: Axis.horizontal,
+      children: [
+        SideMenu(
+          children: [
+            //MenuGroup(title: 'title', icon: Icon(Icons.add), links: {})
+          ],
+        ),
+        const SizedBox(width: 20),
+        SideMenu(
+          children: [
+            //MenuGroup(title: 'title', icon: Icon(Icons.add), links: {})
+          ],
+        ),
+        const SizedBox(width: 20),
+        SideMenu(
+          children: [
+            //MenuGroup(title: 'title', icon: Icon(Icons.add), links: {})
+          ],
         ),
       ],
     );

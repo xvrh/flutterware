@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_studio_app/src/icon/image_provider.dart';
 import 'package:flutter_studio_app/src/utils/state_extension.dart';
 import 'package:flutter_studio_app/src/utils/ui/loading.dart';
-import '../app/project_view.dart';
 import '../project.dart';
 import '../utils/async_value.dart';
 import '../utils/ui/error_panel.dart';
@@ -22,9 +21,6 @@ class IconScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    ProjectView.of(context).setBreadcrumb([
-      BreadcrumbItem(Text('App icon')),
-    ]);
     var theme = Theme.of(context);
     return ValueListenableBuilder<Snapshot<AppIcons>>(
       valueListenable: project.icons.icons,

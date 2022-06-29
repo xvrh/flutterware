@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import '../flutter_sdk.dart';
 import '../project.dart';
 import '../ui.dart';
+import '../ui/theme.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter/material.dart';
 
@@ -28,8 +29,8 @@ class SingleProjectApp extends StatelessWidget {
       child: FittedApp(
         minimumSize: Size(750, 400),
         child: MaterialApp(
-          title: 'Flutter Studio',
-          theme: appTheme(),
+          title: 'Flutterware',
+          theme: appTheme,
           home: Scaffold(
             body: ProjectView(project),
           ),
