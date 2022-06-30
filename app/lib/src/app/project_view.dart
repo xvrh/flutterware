@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/app/ui/menu.dart';
+import 'package:flutter_studio_app/src/ui/side_menu.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 import '../dependencies/screen.dart';
 import '../icon/screen.dart';
 import '../overview/screen.dart';
 import '../project.dart';
-import '../test_runner/screen.dart';
-import 'menu.dart';
+import '../utils/async_value.dart';
 import 'paths.dart' as paths;
 
 class ProjectView extends StatelessWidget {
@@ -22,41 +21,60 @@ class ProjectView extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                color: AppColors.menuBackground,
-                width: 250,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+              SideMenu(children: [
+                LogoTile(name: 'Flutterware', version: 'v0.2.0', onTap: () {}),
+                SingleLineGroup(
+                  child: MenuLink(
+                    url: '/${paths.home}',
+                    title: Row(
+                      children: [
+                        Icon(
+                          Icons.home,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        ValueListenableBuilder<Snapshot<Pubspec>>(
+                          valueListenable: project.pubspec,
+                          builder: (context, snapshot, child) {
+                            return Text(snapshot.data?.name??'');
+                          }
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                CollapsibleMenu(
+                  title: Text('Pub dependencies'),
                   children: [
-                    Expanded(child: Menu(project)),
-                    MenuLine(
-                      selected: false,
-                      onTap: () {
-                        //TODO(xha): go to changelog, feature tour etc...
-                      },
-                      type: LineType.leaf,
-                      depth: 0,
-                      child: Text(
-                        'Flutter Studio v0.1.0',
-                        style: TextStyle(color: AppColors.selection),
-                      ),
+                    MenuLink(
+                      url: '/${paths.dependencies}',
+                      title: Text('Overview'),
                     ),
                   ],
                 ),
-              ),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.separator,
+                CollapsibleMenu(
+                  title: Text('Tests'),
+                  children: [
+
+                  ],
                 ),
-                width: 1,
-              ),
+                CollapsibleMenu(
+                  title: Text('Deployment'),
+                  children: [
+                    MenuLink(
+                      url: '/${paths.icon}',
+                      title: Text('Launcher icon'),
+                    ),
+                  ],
+                ),
+              ]),
               Expanded(
                 child: RouterOutlet(
                   {
                     paths.home: (route) => OverviewScreen(project),
-                    paths.dependencies: (route) => DependenciesScreen(project),
-                    paths.tests: (route) => TestRunnerScreen(project),
-                    paths.icon: (route) => IconScreen(project),
+                     paths.dependencies: (route) => DependenciesScreen(project),
+                    // paths.tests: (route) => TestRunnerScreen(project),
+                     paths.icon: (route) => IconScreen(project),
                   },
                   onNotFound: (_) => paths.home,
                 ),

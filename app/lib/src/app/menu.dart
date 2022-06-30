@@ -4,7 +4,6 @@ import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 
 import '../project.dart';
 import '../utils/async_value.dart';
-import 'ui/menu.dart';
 import 'paths.dart' as paths;
 
 class Menu extends StatefulWidget {
@@ -132,13 +131,13 @@ class _MenuState extends State<Menu> {
     //    ]),
     //    MenuEntry('Run app'),
     //    MenuEntry('Themes'),
-    //    MenuEntry('Assets'),
+    //    MenuEntry('Assets'), V
     //    MenuEntry('Lottie animations'),
     //    MenuEntry('Animations'),
     //    MenuEntry('Easing'),
     //    MenuEntry('Shaders'),
     //    MenuEntry('Particles'),
-    //    MenuEntry('Path & Drawing'),
+    //    MenuEntry('Path & Drawing'), V
     //    MenuEntry('App icon'),
     //    MenuEntry('Benchmarks'),
     //    MenuEntry('Wysiwyg'),

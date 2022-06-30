@@ -7,6 +7,7 @@ import '../dependencies/service.dart';
 import '../icon/service.dart';
 import '../project.dart';
 import '../ui.dart';
+import '../ui/colors.dart';
 import '../utils/async_value.dart';
 import 'package:path/path.dart' as p;
 
@@ -21,11 +22,14 @@ class OverviewScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
     return Container(
-      color: Color(0xfff8f8f8),
       child: ListView(
         primary: false,
-        padding: const EdgeInsets.all(15),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
         children: [
+          Text(
+            ' PROJECT OVERVIEW',
+            style: theme.textTheme.bodySmall,
+          ),
           _ProjectInfoCard(project),
           const SizedBox(height: 30),
           Text(
@@ -103,113 +107,122 @@ class _ProjectInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _Icon(project),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ValueListenableBuilder<Snapshot<Pubspec>>(
-                  valueListenable: project.pubspec,
-                  builder: (context, projectSnapshot, child) {
-                    var version = projectSnapshot.data?.version;
-                    String? versionString;
-                    if (version != null) {
-                      versionString =
-                          '${version.major}.${version.minor}.${version.patch}';
-                    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _Icon(project),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ValueListenableBuilder<Snapshot<Pubspec>>(
+                    valueListenable: project.pubspec,
+                    builder: (context, projectSnapshot, child) {
+                      var version = projectSnapshot.data?.version;
+                      String? versionString;
+                      if (version != null) {
+                        versionString =
+                            '${version.major}.${version.minor}.${version.patch}';
+                      }
 
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          projectSnapshot.data?.name ??
-                              p.basename(project.directory.path),
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        if (versionString != null)
-                          Container(
-                            decoration: BoxDecoration(
-                                color: Colors.black12,
-                                borderRadius: BorderRadius.circular(2)),
-                            padding: const EdgeInsets.symmetric(horizontal: 2),
-                            child: Text(
-                              'v$versionString',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.black45,
-                              ),
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            projectSnapshot.data?.name ??
+                                p.basename(project.directory.path),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                      ],
-                    );
-                  },
-                ),
-                Text(
-                  p.normalize(project.absolutePath),
-                  style: const TextStyle(
-                    color: Colors.black45,
-                    fontSize: 12,
+                          const SizedBox(width: 10),
+                          if (versionString != null)
+                            Container(
+                              decoration: BoxDecoration(
+                                  color: Colors.black12,
+                                  borderRadius: BorderRadius.circular(2)),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 2),
+                              child: Text(
+                                'v$versionString',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.black45,
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
-                ),
-                const SizedBox(height: 5),
-                Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Container(
-                    decoration: BoxDecoration(color: Color(0xffE7F8FF)),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                    child: Text(
-                      'ANDROID | IOS | MACOS | WINDOWS',
-                      style: const TextStyle(
-                          color: Color(0xff1967d2), fontSize: 11),
+                  Text(
+                    p.normalize(project.absolutePath),
+                    style: const TextStyle(
+                      color: Colors.black45,
+                      fontSize: 12,
                     ),
                   ),
-                ),
-                InkWell(
-                  onTap: () {},
-                  child: Text(
-                    '10 pub dependencies',
-                    style: const TextStyle(
-                        color: AppColors.selection,
-                        decoration: TextDecoration.underline,
-                        fontSize: 12),
-                  ),
-                ),
-                Text(
-                  'Dart 2.17',
-                  style: const TextStyle(),
-                ),
-                /*const SizedBox(width: 10),
-                Row(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                          color: Colors.black12,
-                          borderRadius: BorderRadius.circular(2)),
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                  const SizedBox(height: 5),
+                  Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Container(
+                      decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 2),
                       child: Text(
-                        'v1.0.0',
+                        'ANDROID | IOS | MACOS | WINDOWS',
                         style: const TextStyle(
-                            fontSize: 11, color: Colors.black45),
+                            color: Colors.white, fontSize: 10),
                       ),
                     ),
-                    Text('Android'),
-                  ],
-                ),*/
-              ],
-            ),
-          )
-        ],
+                  ),
+                  InkWell(
+                    onTap: () {},
+                    child: Text(
+                      'Dependencies: 10 directs, 32 transitives',
+                      style: const TextStyle(
+                        //color: AppColors.selection,
+                        //decoration: TextDecoration.underline,
+                        //fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Dart: v2.17',
+                    style: const TextStyle(),
+                  ),
+                  Text(
+                    'Version: v2.17',
+                    style: const TextStyle(),
+                  ),
+                  /*const SizedBox(width: 10),
+                  Row(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                            color: Colors.black12,
+                            borderRadius: BorderRadius.circular(2)),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Text(
+                          'v1.0.0',
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.black45),
+                        ),
+                      ),
+                      Text('Android'),
+                    ],
+                  ),*/
+                ],
+              ),
+            )
+          ],
+        ),
       ),
     );
   }
@@ -253,7 +266,7 @@ class _HomeCard extends StatelessWidget {
                       child: Text(
                         'Manage',
                         style: const TextStyle(
-                          color: AppColors.selection,
+                          // color: AppColors.selection,
                           decoration: TextDecoration.underline,
                         ),
                       ),
@@ -432,7 +445,9 @@ class _Dependencies extends StatelessWidget {
           var data = snapshot.data;
           return Text(
             '${data?.dependencies.length ?? '-'} dependencies (${data?.directs.length ?? '-'} directs, ${data?.transitives.length} transitives)',
-            style: const TextStyle(color: AppColors.selection),
+            style: const TextStyle(
+                //color: AppColors.selection,
+                ),
           );
         },
       ),

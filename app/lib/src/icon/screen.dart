@@ -77,11 +77,6 @@ class IconScreen extends StatelessWidget {
     await showDialog(
         context: context,
         builder: (context) => _ChangeIconDialog(project, icons));
-    // Pick image
-    // Indicate the recommended size
-    // Allow to choose image for background on iOS (+ checkbox)
-    // Allow to check/uncheck some platforms
-    // This is a first version that need to be enhanced.
   }
 
   Iterable<Widget> _icons(BuildContext context, AppIcons icons) sync* {
@@ -93,11 +88,11 @@ class IconScreen extends StatelessWidget {
       var files = entry.value.sortedByCompare((e) => e.path, compareNatural);
 
       yield Text(
-        entry.key.name,
-        style: theme.textTheme.bodyLarge,
+        ' ${entry.key.name}',
+        style: theme.textTheme.bodyMedium,
       );
-      yield const SizedBox(height: 15);
-      yield Table(
+      yield const SizedBox(height: 5);
+      var table = Table(
         columnWidths: {
           0: FixedColumnWidth(80),
           1: FixedColumnWidth(100),
@@ -132,7 +127,10 @@ class IconScreen extends StatelessWidget {
             ),
         ],
       );
-      yield Divider();
+      yield Card(child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: table,
+      ));
       yield const SizedBox(height: 30);
     }
   }
@@ -225,7 +223,7 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
       label: 'images',
       extensions: ['png'],
     );
-    var result = await openFile(acceptedTypeGroups: [imagesGroup]);
+    var result = await openFile(acceptedTypeGroups: [imagesGroup], initialDirectory: widget.project.absolutePath);
     if (result != null) {
       var bytes = await result.readAsBytes();
       setState(() {

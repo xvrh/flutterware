@@ -35,61 +35,21 @@ class SideMenu extends StatelessWidget {
   }
 }
 
-class MenuGroup extends StatelessWidget {
-  final String title;
-  final Widget icon;
-  final Map<String, String> links;
-
-  const MenuGroup({
-    Key? key,
-    required this.title,
-    required this.icon,
-    required this.links,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    var selectedIndex = context.router.selectedIndex(links.keys);
-    return ExpansionTile(
-      initiallyExpanded: true,
-      leading: IconTheme(
-        data: IconThemeData(color: Colors.white),
-        child: icon,
-      ),
-      title: Text(
-        title,
-        style: const TextStyle(color: Colors.white),
-      ),
-      backgroundColor: AppColors.menuSecondaryBackground,
-      children: links.entries
-          .mapIndexed((index, element) => MenuLink(element.key, element.value,
-              isSelected: index == selectedIndex))
-          .toList(),
-    );
-  }
-}
-
 class MenuLink extends StatelessWidget {
   final String url;
-  final String title;
-  final bool? isSelected;
+  final Widget title;
 
-  const MenuLink(this.url, this.title, {Key? key, this.isSelected})
-      : super(key: key);
+  const MenuLink({required this.url,required this.title, Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    var isSelected = this.isSelected ?? context.router.isSelected(url);
-    return ListTile(
-      title: Text(
-        title,
-        style: TextStyle(
-          color: isSelected ? AppColors.primaryOnMenu : null,
-        ),
-      ),
+    var isSelected = context.router.isSelected(url);
+    return MenuLine(
+      isSelected: isSelected,
       onTap: () {
         context.go(url);
       },
+      child: title,
     );
   }
 }
@@ -200,6 +160,7 @@ class CollapsibleMenu extends StatelessWidget {
     var theme = Theme.of(context);
     return Theme(
       data: theme.copyWith(
+        dividerColor: Colors.transparent,
         textTheme: theme.textTheme.copyWith(
           subtitle1: TextStyle(
             fontWeight: FontWeight.w700,
@@ -214,7 +175,7 @@ class CollapsibleMenu extends StatelessWidget {
           collapsedTextColor: AppColors.textSecondary,
           collapsedIconColor: AppColors.textSecondary,
           title: title,
-          children: children,
+          children: [...children, const SizedBox(height: 5)],
         ),
       ),
     );
@@ -238,7 +199,7 @@ class LogoTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 15),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
           children: [
             Padding(
@@ -249,7 +210,7 @@ class LogoTile extends StatelessWidget {
               name,
               style: const TextStyle(
                 fontWeight: FontWeight.w700,
-                fontSize: 20,
+                fontSize: 16,
               ),
             ),
             Container(

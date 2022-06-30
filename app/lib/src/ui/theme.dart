@@ -58,7 +58,9 @@ ThemeData _buildAppTheme() {
     cardColor: Colors.white,
     cardTheme: base.cardTheme.copyWith(
       surfaceTintColor: Colors.white,
-      elevation: 3,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+      elevation: 2,
     ),
     inputDecorationTheme: base.inputDecorationTheme.copyWith(
       border: inputBorder,

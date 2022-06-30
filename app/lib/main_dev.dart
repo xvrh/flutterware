@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_studio_app/src/flutter_sdk.dart';
-import 'src/app/single_project.dart';
+import 'src/app/app.dart';
 import 'src/globals.dart';
 import 'src/project.dart';
 import 'src/utils/debug.dart';
