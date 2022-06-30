@@ -301,19 +301,140 @@ class _Tab3 extends StatelessWidget {
       children: [
         SideMenu(
           children: [
-            //MenuGroup(title: 'title', icon: Icon(Icons.add), links: {})
+            LogoTile(name: 'Flutterware', version: 'v0.2.0'),
+            MenuLine(
+              onTap: () {},
+              isSelected: true,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.home,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Text('flutter_studio_example'),
+                ],
+              ),
+            ),
+            MenuLine(
+              onTap: () {},
+              isSelected: false,
+              child: Text('Icons'),
+            ),
+            CollapsibleMenu(
+              text: Text('Pub dependencies'),
+              expanded: null,
+            ),
+            CollapsibleMenu(
+              text: Text('App tests'),
+              expanded: null,
+            ),
+            CollapsibleMenu(
+              text: Text('Icons'),
+              expanded: null,
+            ),
           ],
         ),
         const SizedBox(width: 20),
         SideMenu(
           children: [
-            //MenuGroup(title: 'title', icon: Icon(Icons.add), links: {})
+            LogoTile(name: 'Flutterware', version: 'v0.2.0'),
+            MenuLine(
+              onTap: () {},
+              isSelected: false,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.home,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Text('flutter_studio_example'),
+                ],
+              ),
+            ),
+            MenuLine(
+              onTap: () {},
+              isSelected: true,
+              child: Text('Icons'),
+            ),
           ],
         ),
         const SizedBox(width: 20),
         SideMenu(
           children: [
-            //MenuGroup(title: 'title', icon: Icon(Icons.add), links: {})
+            CollapsibleMenu(
+              text: Text('App tests'),
+              expanded: [
+                Center(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      textStyle: const TextStyle(fontSize: 12),
+                      minimumSize: Size(0, 30),
+                    ),
+                    onPressed: () {},
+                    child: Text('Launch test runner'),
+                  ),
+                ),
+                MenuLine(
+                  onTap: () {},
+                  isSelected: false,
+                  indent: 1,
+                  child: Text('Learn about App Test'),
+                ),
+                MenuLine(
+                  onTap: () {},
+                  isSelected: false,
+                  indent: 1,
+                  child: Text('Examples'),
+                ),
+                MenuLine(
+                  onTap: () {},
+                  isSelected: false,
+                  expanded: false,
+                  indent: 1,
+                  child: Text('my_super_example.dart'),
+                ),
+                MenuLine(
+                  onTap: () {},
+                  isSelected: false,
+                  expanded: true,
+                  indent: 1,
+                  child: Text('my_super_example.dart'),
+                ),
+                MenuLine(
+                  onTap: () {},
+                  isSelected: false,
+                  indent: 2,
+                  child: Text('Examples'),
+                ),
+              ],
+            ),
+            CollapsibleMenu(
+              text: Text('App tests'),
+              expanded: [
+                MenuLine(
+                  onTap: () {},
+                  isSelected: false,
+                  expanded: true,
+                  indent: 1,
+                  child: Text('my_super_example.dart'),
+                ),
+                MenuLine(
+                  onTap: () {},
+                  isSelected: false,
+                  indent: 2,
+                  child:
+                      Text('Onboarding should work correctly with all widgets'),
+                ),
+                MenuLine(
+                  onTap: () {},
+                  isSelected: false,
+                  indent: 2,
+                  child: Text('Login and logout should work'),
+                ),
+              ],
+            ),
           ],
         ),
       ],

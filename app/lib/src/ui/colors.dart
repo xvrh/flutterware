@@ -4,7 +4,8 @@ class AppColors {
   static const scaffoldBackground = Color(0xfff6f7f9);
 
   static const primary = Color(0xFF1967d2);
-  static const link = primary;
+  static const link = Color(0xff1a73e8);
+  static const linkActive = Color(0xff185abc);
   static const primaryOnMenu = Color(0xFF669df6);
   static const menuBackground = Color(0xFF0b1d32);
   static const menuSecondaryBackground = Color(0xFF182a41);
@@ -13,18 +14,16 @@ class AppColors {
 
   static const textSteal = Color(0xFF223a55);
   static const textGrey = Color(0xFF737373);
+  static const textSecondary = Color(0xA5000000);
 
-  static const danger = Color(0xFFc23f38);
-  static const stateError = danger;
+  static const stateError = Color(0xFFc23f38);
   static const divider = Color(0xFFF5F5F5);
   static const tabDivider = Color(0xFFc2cfdd);
   static const dividerDark = Color(0xFF243447);
 
   static const tableHeader = Color(0xfffafafa);
 
-  // Not from specs
-  static const info = Color(0xFF4EABFB);
-  static const warning = Color(0xFFFB9E26);
-  static const success = Colors.green;
+  static const primaryBorder = Color(0xffdadce0);
+  static const navigationBackgroundActive = Color(0xffe8f0fe);
+  static const navigationForegroundActive = linkActive;
 }
-

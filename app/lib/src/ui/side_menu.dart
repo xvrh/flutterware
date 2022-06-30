@@ -4,6 +4,7 @@ import '../utils.dart';
 import 'theme.dart';
 
 const _menuWidth = 250.0;
+const _leftMargin = 20.0;
 
 class SideMenu extends StatelessWidget {
   final List<Widget> children;
@@ -12,75 +13,28 @@ class SideMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTextStyle.merge(
-      style: TextStyle(),
-      child: Builder(builder: (context) {
-        return SizedBox(
-          width: _menuWidth,
-          child: Material(
-            shadowColor: Colors.black,
-            elevation: 4,
-            color: Colors.white,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                InkWell(
-                  onTap: () {},
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Row(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: FlutterLogo(),
-                        ),
-                        Text(
-                          'Flutterware',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 20,
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.only(left: 10),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF01579B),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            'v0.1.0',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Colors.white,
-                            ),
-                          ),
-                        )
-                      ],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: InkWell(
-                    borderRadius:
-                        BorderRadius.horizontal(right: Radius.circular(20)),
-                    //highlightShape: RoundedRectangleBorder(),
-                    onTap: () {
-                      context.go('/');
-                    },
-                    child: _Logo(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ...children,
-              ],
-            ),
+    return SizedBox(
+      width: _menuWidth,
+      child: Material(
+        shadowColor: Colors.black,
+        elevation: 4,
+        color: Colors.white,
+        child: DefaultTextStyle.merge(
+          style: TextStyle(
+            fontSize: 13,
           ),
-        );
-      }),
+          child: ListView(
+            children: [
+              for (var child in children) ...[
+                child,
+                const Divider(
+                  height: 22,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -144,29 +98,174 @@ class MenuLink extends StatelessWidget {
   }
 }
 
-class _Logo extends StatelessWidget {
-  const _Logo({Key? key}) : super(key: key);
+class MenuLine extends StatelessWidget {
+  static const _expandIconWidth = 20.0;
+
+  final Widget child;
+  final VoidCallback onTap;
+  final bool isSelected;
+  final bool? expanded;
+  final int indent;
+
+  const MenuLine({
+    super.key,
+    required this.child,
+    required this.onTap,
+    required this.isSelected,
+    this.expanded,
+    int? indent,
+  }) : indent = indent ?? 0;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Row(
-        children: [
-          Icon(
-            Icons.home,
-            //color: AppColors.primary,
-            size: 18,
-          ),
-          const SizedBox(width: 10),
-          Text(
-            'my_project_name',
-            style: const TextStyle(
-              //fontSize: 20,
+    var expanded = this.expanded;
+    IconData? expandableIcon;
+    if (expanded != null) {
+      expandableIcon = expanded ? Icons.arrow_drop_down : Icons.arrow_right;
+    }
+
+    var borderRadius = BorderRadius.horizontal(right: Radius.circular(20));
+    return DefaultTextStyle.merge(
+      style: isSelected
+          ? TextStyle(
+              color: AppColors.navigationForegroundActive,
               fontWeight: FontWeight.w500,
+            )
+          : null,
+      child: IconTheme.merge(
+        data: IconThemeData(
+          color: isSelected ? AppColors.navigationForegroundActive : null,
+          size: 18,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(right: 8.0),
+          child: Container(
+            decoration: isSelected
+                ? BoxDecoration(
+                    borderRadius: borderRadius,
+                    color: AppColors.navigationBackgroundActive,
+                  )
+                : null,
+            child: InkWell(
+              borderRadius: borderRadius,
+              onTap: onTap,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  top: 3,
+                  bottom: 3,
+                  left: _leftMargin - _expandIconWidth + indent * 12,
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: _expandIconWidth,
+                      child: Center(
+                        child: Icon(expandableIcon),
+                      ),
+                    ),
+                    Expanded(child: child),
+                  ],
+                ),
+              ),
             ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class CollapsibleMenu extends StatelessWidget {
+  final Widget text;
+  final List<Widget>? expanded;
+
+  const CollapsibleMenu({
+    super.key,
+    required this.text,
+    required this.expanded,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    var expanded = this.expanded;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () {},
+          child: Padding(
+            padding: const EdgeInsets.only(
+              left: _leftMargin,
+              right: 8,
+              top: 3,
+              bottom: 3,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: DefaultTextStyle.merge(
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                    ),
+                    child: text,
+                  ),
+                ),
+                Icon(expanded == null ? Icons.expand_more : Icons.expand_less),
+              ],
+            ),
+          ),
+        ),
+        ...?expanded,
+      ],
+    );
+  }
+}
+
+class LogoTile extends StatelessWidget {
+  final String name;
+  final String version;
+
+  const LogoTile({super.key, required this.name, required this.version});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () {},
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: FlutterLogo(),
+            ),
+            Text(
+              name,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 20,
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.only(left: 10),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 5,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFF01579B),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                version,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Colors.white,
+                ),
+              ),
+            )
+          ],
+        ),
       ),
     );
   }
