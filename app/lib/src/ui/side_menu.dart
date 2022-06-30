@@ -20,16 +20,12 @@ class SideMenu extends StatelessWidget {
         elevation: 4,
         color: Colors.white,
         child: DefaultTextStyle.merge(
-          style: TextStyle(
-            fontSize: 13,
-          ),
+          style: TextStyle(fontSize: 13),
           child: ListView(
             children: [
               for (var child in children) ...[
                 child,
-                const Divider(
-                  height: 22,
-                ),
+                Container(height: 1, color: AppColors.primaryBorder),
               ],
             ],
           ),
@@ -94,6 +90,20 @@ class MenuLink extends StatelessWidget {
       onTap: () {
         context.go(url);
       },
+    );
+  }
+}
+
+class SingleLineGroup extends StatelessWidget {
+  final Widget child;
+
+  const SingleLineGroup({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: child,
     );
   }
 }
@@ -176,48 +186,37 @@ class MenuLine extends StatelessWidget {
 }
 
 class CollapsibleMenu extends StatelessWidget {
-  final Widget text;
-  final List<Widget>? expanded;
+  final Widget title;
+  final List<Widget> children;
 
   const CollapsibleMenu({
     super.key,
-    required this.text,
-    required this.expanded,
+    required this.title,
+    required this.children,
   });
 
   @override
   Widget build(BuildContext context) {
-    var expanded = this.expanded;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          onTap: () {},
-          child: Padding(
-            padding: const EdgeInsets.only(
-              left: _leftMargin,
-              right: 8,
-              top: 3,
-              bottom: 3,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DefaultTextStyle.merge(
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textSecondary,
-                    ),
-                    child: text,
-                  ),
-                ),
-                Icon(expanded == null ? Icons.expand_more : Icons.expand_less),
-              ],
-            ),
+    var theme = Theme.of(context);
+    return Theme(
+      data: theme.copyWith(
+        textTheme: theme.textTheme.copyWith(
+          subtitle1: TextStyle(
+            fontWeight: FontWeight.w700,
           ),
         ),
-        ...?expanded,
-      ],
+      ),
+      child: ListTileTheme(
+        dense: true,
+        data: ListTileThemeData(dense: true),
+        child: ExpansionTile(
+          textColor: AppColors.textSecondary,
+          collapsedTextColor: AppColors.textSecondary,
+          collapsedIconColor: AppColors.textSecondary,
+          title: title,
+          children: children,
+        ),
+      ),
     );
   }
 }
@@ -225,15 +224,21 @@ class CollapsibleMenu extends StatelessWidget {
 class LogoTile extends StatelessWidget {
   final String name;
   final String version;
+  final VoidCallback onTap;
 
-  const LogoTile({super.key, required this.name, required this.version});
+  const LogoTile({
+    super.key,
+    required this.name,
+    required this.version,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () {},
+      onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 15),
         child: Row(
           children: [
             Padding(

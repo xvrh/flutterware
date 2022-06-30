@@ -301,10 +301,51 @@ class _Tab3 extends StatelessWidget {
       children: [
         SideMenu(
           children: [
-            LogoTile(name: 'Flutterware', version: 'v0.2.0'),
+            LogoTile(name: 'Flutterware', version: 'v0.2.0', onTap: () {}),
+            SingleLineGroup(
+              child: MenuLine(
+                onTap: () {},
+                isSelected: true,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.home,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Text('flutter_studio_example'),
+                  ],
+                ),
+              ),
+            ),
+            SingleLineGroup(
+              child: MenuLine(
+                onTap: () {},
+                isSelected: false,
+                child: Text('Icons'),
+              ),
+            ),
+            CollapsibleMenu(
+              title: Text('Pub dependencies'),
+              children: [],
+            ),
+            CollapsibleMenu(
+              title: Text('App tests'),
+              children: [],
+            ),
+            CollapsibleMenu(
+              title: Text('Icons'),
+              children: [],
+            ),
+          ],
+        ),
+        const SizedBox(width: 20),
+        SideMenu(
+          children: [
+            LogoTile(name: 'Flutterware', version: 'v0.2.0', onTap: () {}),
             MenuLine(
               onTap: () {},
-              isSelected: true,
+              isSelected: false,
               child: Row(
                 children: [
                   Icon(
@@ -318,43 +359,6 @@ class _Tab3 extends StatelessWidget {
             ),
             MenuLine(
               onTap: () {},
-              isSelected: false,
-              child: Text('Icons'),
-            ),
-            CollapsibleMenu(
-              text: Text('Pub dependencies'),
-              expanded: null,
-            ),
-            CollapsibleMenu(
-              text: Text('App tests'),
-              expanded: null,
-            ),
-            CollapsibleMenu(
-              text: Text('Icons'),
-              expanded: null,
-            ),
-          ],
-        ),
-        const SizedBox(width: 20),
-        SideMenu(
-          children: [
-            LogoTile(name: 'Flutterware', version: 'v0.2.0'),
-            MenuLine(
-              onTap: () {},
-              isSelected: false,
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.home,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 10),
-                  Text('flutter_studio_example'),
-                ],
-              ),
-            ),
-            MenuLine(
-              onTap: () {},
               isSelected: true,
               child: Text('Icons'),
             ),
@@ -364,16 +368,20 @@ class _Tab3 extends StatelessWidget {
         SideMenu(
           children: [
             CollapsibleMenu(
-              text: Text('App tests'),
-              expanded: [
+              title: Text('App tests'),
+              children: [
                 Center(
-                  child: ElevatedButton(
+                  child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       textStyle: const TextStyle(fontSize: 12),
                       minimumSize: Size(0, 30),
                     ),
                     onPressed: () {},
-                    child: Text('Launch test runner'),
+                    icon: Icon(
+                      Icons.play_arrow,
+                      size: 12,
+                    ),
+                    label: Text('Start test runner'),
                   ),
                 ),
                 MenuLine(
@@ -411,8 +419,8 @@ class _Tab3 extends StatelessWidget {
               ],
             ),
             CollapsibleMenu(
-              text: Text('App tests'),
-              expanded: [
+              title: Text('App tests'),
+              children: [
                 MenuLine(
                   onTap: () {},
                   isSelected: false,
