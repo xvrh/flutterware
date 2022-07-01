@@ -127,7 +127,8 @@ class IconScreen extends StatelessWidget {
             ),
         ],
       );
-      yield Card(child: Padding(
+      yield Card(
+          child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: table,
       ));
@@ -223,7 +224,9 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
       label: 'images',
       extensions: ['png'],
     );
-    var result = await openFile(acceptedTypeGroups: [imagesGroup], initialDirectory: widget.project.absolutePath);
+    var result = await openFile(
+        acceptedTypeGroups: [imagesGroup],
+        initialDirectory: widget.project.absolutePath);
     if (result != null) {
       var bytes = await result.readAsBytes();
       setState(() {
