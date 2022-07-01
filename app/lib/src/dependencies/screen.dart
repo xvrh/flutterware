@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_studio_app/src/dependencies/detail.dart';
 import 'package:flutter_studio_app/src/dependencies/service.dart';
+import 'package:flutter_studio_app/src/dependencies/upgrades.dart';
 import 'package:flutter_studio_app/src/utils/router_outlet.dart';
 import 'package:pub_scores/pub_scores.dart';
 import '../app/project_view.dart';
 import '../project.dart';
+import '../utils.dart';
 import '../utils/async_value.dart';
 import '../utils/ui/error_panel.dart';
 import '../utils/ui/loading.dart';
@@ -32,8 +34,9 @@ class _DependenciesScreenState extends State<DependenciesScreen> {
     return PageStorage(
       bucket: _scrollBucket,
       child: RouterOutlet({
-        '': (_) => _DependencyListScreen(this),
-        ':packageName': (args) =>
+        'overview': (_) => _DependencyListScreen(this),
+        'upgrade': (_) => DependenciesUpgradeScreen(),
+        'packages/:packageName': (args) =>
             DependencyDetailScreen(widget.project, args['packageName']),
       }),
     );
@@ -53,10 +56,10 @@ class _DependencyListScreen extends StatefulWidget {
 }
 
 class _DependencyListScreenState extends State<_DependencyListScreen> {
-  static final _sorts = {
+  final _sorts = {
     0: _selectPackageName,
-    2: _selectPubScore,
-    3: _selectGithubScore,
+    3: _selectPubScore,
+    4: _selectGithubScore,
   };
   int _sortIndex = 0;
   bool _sortAscending = true;
@@ -82,8 +85,8 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    'Dependencies',
-                    style: theme.textTheme.headlineSmall,
+                    ' Dependencies',
+                    style: theme.textTheme.headlineMedium,
                   ),
                 ),
                 PopupMenuButton(
@@ -98,7 +101,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 10),
             if (data != null)
               _card(data)
             else if (error != null)
@@ -116,8 +119,70 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
 
   Widget _card(Dependencies dependencies) {
     return Card(
-        clipBehavior: Clip.antiAlias,
-        child: _table(dependencies.dependencies.values));
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          _header(),
+          _table(dependencies.dependencies.values),
+        ],
+      ),
+    );
+  }
+
+  Widget _header() {
+    return Container(
+      color: AppColors.tableHeader,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: TextFormField(
+                //controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search by email',
+                  prefixIcon: Icon(Icons.search),
+                  suffixIconConstraints: BoxConstraints(minHeight: 30),
+                  // suffixIcon: _searchController.text.isNotEmpty
+                  //     ? IconButton(
+                  // constraints:
+                  // BoxConstraints(minHeight: 30, minWidth: 48),
+                  // padding: EdgeInsets.zero,
+                  // onPressed: () {
+                  //   setState(() {
+                  //     _searchController.text = '';
+                  //   });
+                  //   _loader.refresh();
+                  // },
+                  // icon: Icon(Icons.clear),
+                  //)
+                  //    : null,
+                ),
+                onFieldSubmitted: (_) {
+                  // _loader.refresh();
+                  // _searchDebounce?.cancel();
+                },
+                onChanged: (v) {
+                  setState(() {
+                    // Refresh the clear button
+                  });
+                  // _onSearchChanged();
+                },
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {},
+            // onPressed: _loader.refresh,
+            child: Icon(
+              Icons.refresh,
+              color: Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _table(Iterable<Dependency> dependencies) {
@@ -168,7 +233,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
               for (var dependency in sortedDependencies)
                 DataRow(
                   onSelectChanged: (selected) {
-                    context.router.go(dependency.name);
+                    context.router.go('packages/${dependency.name}');
                   },
                   cells: [
                     DataCell(

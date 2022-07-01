@@ -34,11 +34,10 @@ class ProjectView extends StatelessWidget {
                         ),
                         const SizedBox(width: 10),
                         ValueListenableBuilder<Snapshot<Pubspec>>(
-                          valueListenable: project.pubspec,
-                          builder: (context, snapshot, child) {
-                            return Text(snapshot.data?.name??'');
-                          }
-                        ),
+                            valueListenable: project.pubspec,
+                            builder: (context, snapshot, child) {
+                              return Text(snapshot.data?.name ?? '');
+                            }),
                       ],
                     ),
                   ),
@@ -47,16 +46,18 @@ class ProjectView extends StatelessWidget {
                   title: Text('Pub dependencies'),
                   children: [
                     MenuLink(
-                      url: '/${paths.dependencies}',
+                      url: '/${paths.dependencies}/overview',
                       title: Text('Overview'),
+                    ),
+                    MenuLink(
+                      url: '/${paths.dependencies}/upgrade',
+                      title: Text('Upgrades'),
                     ),
                   ],
                 ),
                 CollapsibleMenu(
                   title: Text('Tests'),
-                  children: [
-
-                  ],
+                  children: [],
                 ),
                 CollapsibleMenu(
                   title: Text('Deployment'),
@@ -72,9 +73,9 @@ class ProjectView extends StatelessWidget {
                 child: RouterOutlet(
                   {
                     paths.home: (route) => OverviewScreen(project),
-                     paths.dependencies: (route) => DependenciesScreen(project),
+                    paths.dependencies: (route) => DependenciesScreen(project),
                     // paths.tests: (route) => TestRunnerScreen(project),
-                     paths.icon: (route) => IconScreen(project),
+                    paths.icon: (route) => IconScreen(project),
                   },
                   onNotFound: (_) => paths.home,
                 ),

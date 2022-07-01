@@ -25,7 +25,21 @@ ThemeData _buildAppTheme() {
       color: Color(0xffe0e0e0),
     ),
   );
+  var textTheme =
+      base.textTheme.apply(displayColor: AppColors.foregroundPrimary);
+
   base = base.copyWith(
+    textTheme: textTheme.copyWith(
+      headlineLarge: textTheme.headlineLarge!.copyWith(
+        fontWeight: FontWeight.w500,
+      ),
+      headlineMedium: textTheme.headlineMedium!.copyWith(
+        fontWeight: FontWeight.w500,
+      ),
+      headlineSmall: textTheme.headlineSmall!.copyWith(
+        fontWeight: FontWeight.w500,
+      ),
+    ),
     scaffoldBackgroundColor: AppColors.scaffoldBackground,
     tabBarTheme: base.tabBarTheme.copyWith(
       labelColor: AppColors.primary,
@@ -59,7 +73,6 @@ ThemeData _buildAppTheme() {
     cardTheme: base.cardTheme.copyWith(
       surfaceTintColor: Colors.white,
       color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
       elevation: 2,
     ),
     inputDecorationTheme: base.inputDecorationTheme.copyWith(
@@ -72,8 +85,16 @@ ThemeData _buildAppTheme() {
       isDense: true,
       fillColor: Colors.white,
       hoverColor: Colors.white,
-      hintStyle: const TextStyle(color: Colors.black38),
+      hintStyle: const TextStyle(color: Colors.black38, fontSize: 14),
       contentPadding: EdgeInsets.symmetric(vertical: 13, horizontal: 10),
+    ),
+    dataTableTheme: base.dataTableTheme.copyWith(
+      headingRowColor: MaterialStateProperty.all(AppColors.tableHeader),
+      headingTextStyle: const TextStyle(
+        fontSize: 13,
+        color: AppColors.textSecondary,
+        fontWeight: FontWeight.w500,
+      ),
     ),
     dividerTheme: base.dividerTheme.copyWith(
       color: AppColors.primaryBorder,
