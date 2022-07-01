@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
-import 'icons.dart';
+import 'model/icons.dart';
 
 class AppIconImageProvider extends ImageProvider<Object> {
   final AppIcon image;
@@ -25,7 +25,8 @@ class AppIconImageProvider extends ImageProvider<Object> {
   }
 
   Future<ui.Codec> _loadAsync(Object key) async {
-    var buffer = await ui.ImmutableBuffer.fromUint8List(image.preview.buffer.asUint8List());
+    var buffer = await ui.ImmutableBuffer.fromUint8List(
+        image.preview.buffer.asUint8List());
     final descriptor = ui.ImageDescriptor.raw(
       buffer,
       width: image.previewWidth,

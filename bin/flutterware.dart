@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
-import 'package:flutter_studio/internals/constants.dart';
+import 'package:flutterware/internals/constants.dart';
 import 'package:path/path.dart' as p;
-import 'package:io/io.dart';
-import 'package:args/args.dart';
 
 void main(List<String> arguments) async {
   var studioPackage =
@@ -46,7 +44,7 @@ PackageRoot: $packageRoot
       throw Exception('Pub get failed ${pubGetResult.stderr}');
     }
     var compiledResult = Process.runSync(Platform.resolvedExecutable,
-        ['compile', 'exe', '-o', compiledCliPath, 'bin/flutter_studio.dart'],
+        ['compile', 'exe', '-o', compiledCliPath, 'bin/flutterware.dart'],
         workingDirectory: appPath);
     if (compiledResult.exitCode != 0) {
       throw Exception(

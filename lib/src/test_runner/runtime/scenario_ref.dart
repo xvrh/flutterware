@@ -1,4 +1,4 @@
-import 'package:flutter_studio/src/test_runner/runtime/runner.dart';
+import 'package:flutterware/src/test_runner/runtime/runner.dart';
 
 import 'scenario.dart';
 

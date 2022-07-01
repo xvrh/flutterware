@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter_studio/internals/constants.dart';
-import 'package:flutter_studio_app/src/constants.dart';
+import 'package:flutterware/internals/constants.dart';
+import 'package:flutterware_app/src/constants.dart';
 import 'package:logging/logging.dart';
 import 'package:io/ansi.dart';
 import 'dart:io' as io;
@@ -37,7 +37,7 @@ void main(List<String> args) async {
     dartExecutable: dartExecutable,
     studioAppPath: Platform.environment[studioAppPathEnvironmentKey]!,
     flutterSdk: flutterSdk,
-      projectDirectory: Directory.current,
+    projectDirectory: Directory.current,
   );
 
   var commandRunner = CommandRunner(

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
-class ChangeLogTab extends StatelessWidget {
-  const ChangeLogTab({super.key});
+class ChangeLogPage extends StatelessWidget {
+  const ChangeLogPage({super.key});
 
   @override
   Widget build(BuildContext context) {

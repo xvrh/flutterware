@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/dependencies/service.dart';
-import 'package:flutter_studio_app/src/utils/router_outlet.dart';
-import 'package:flutter_studio_app/src/utils/ui/loading.dart';
+import 'package:flutterware_app/src/dependencies/model/service.dart';
+import 'package:flutterware_app/src/utils/router_outlet.dart';
+import 'package:flutterware_app/src/utils/ui/loading.dart';
 
 import '../app/ui/back_bar.dart';
 import '../project.dart';
@@ -50,7 +50,10 @@ class _DetailScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           BackBar('All dependencies'),
-          Text(dependency.name, style: theme.textTheme.headlineMedium,),
+          Text(
+            dependency.name,
+            style: theme.textTheme.headlineMedium,
+          ),
           Text('''
 Version | Date update
 Link Pub

@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_studio_app/src/dependencies/pubspec_lock.dart';
-import 'package:flutter_studio_app/src/utils/async_value.dart';
+import 'package:flutterware_app/src/dependencies/model/pubspec_lock.dart';
+import 'package:flutterware_app/src/utils/async_value.dart';
 import 'package:watcher/watcher.dart';
 import 'package:yaml/yaml.dart';
 
-import '../icon/icons.dart';
+import '../icon/model/icons.dart';
 import '../project.dart';
 import '../utils/cloc/cloc.dart';
 import 'package:path/path.dart' as p;

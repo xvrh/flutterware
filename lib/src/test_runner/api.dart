@@ -1,5 +1,5 @@
-import 'package:flutter_studio/src/test_runner/runtime/widget_tester.dart';
-export 'package:flutter_studio/src/test_runner/runtime/widget_tester.dart'
+import 'package:flutterware/src/test_runner/runtime/widget_tester.dart';
+export 'package:flutterware/src/test_runner/runtime/widget_tester.dart'
     show AppWidgetTester, splitTest;
 import 'package:flutter_test/flutter_test.dart' as flutter_test;
 import 'package:meta/meta.dart';

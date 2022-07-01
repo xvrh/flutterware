@@ -11,6 +11,7 @@ class AppColors {
   static const menuSecondaryBackground = Color(0xFF182a41);
   static const foregroundPrimary = Color(0xff1b3a57);
   static const foregroundSecondary = Color(0xff476282);
+  static const breadcrumbLink = Color(0xff5f6368);
 
   static const textSteal = Color(0xFF223a55);
   static const textGrey = Color(0xFF737373);
@@ -19,7 +20,6 @@ class AppColors {
   static const stateError = Color(0xFFc23f38);
   static const divider = Color(0xFFF5F5F5);
   static const tabDivider = Color(0xFFc2cfdd);
-  static const dividerDark = Color(0xFF243447);
 
   static const tableHeader = Color(0xfffafafa);
 

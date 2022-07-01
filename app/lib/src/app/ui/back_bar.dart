@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/utils/router_outlet.dart';
+import 'package:flutterware_app/src/utils/router_outlet.dart';
 
 class BackBar extends StatelessWidget {
   final String text;

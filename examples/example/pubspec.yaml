@@ -1,4 +1,4 @@
-name: flutter_studio_example
+name: flutterware_example
 description: A new Flutter project.
 
 # The following line prevents the package from being accidentally published to
@@ -35,7 +35,7 @@ dependencies:
   os_detect:
 
 dev_dependencies:
-  flutter_studio:
+  flutterware:
     path: ../..
   flutter_test:
     sdk: flutter

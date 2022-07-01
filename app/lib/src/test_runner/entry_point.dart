@@ -1,4 +1,4 @@
-import 'package:flutter_studio_app/src/utils/source_code.dart';
+import 'package:flutterware_app/src/utils/source_code.dart';
 import 'package:path/path.dart' as p;
 
 import 'dart:io';
@@ -35,7 +35,7 @@ class TestFile {
 String entryPointCode(Project project, List<TestFile> files, Uri serverUri) {
   var code = StringBuffer()..writeln('''
 // GENERATED-CODE: Flutter Studio - Test runner feature
-import 'package:flutter_studio/internals/test_runner_daemon.dart';
+import 'package:flutterware/internals/test_runner_daemon.dart';
 ''');
 
   var index = 0;

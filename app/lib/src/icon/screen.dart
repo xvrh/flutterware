@@ -4,14 +4,15 @@ import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/icon/image_provider.dart';
-import 'package:flutter_studio_app/src/utils/state_extension.dart';
-import 'package:flutter_studio_app/src/utils/ui/loading.dart';
+import 'package:flutterware_app/src/app/ui/breadcrumb.dart';
+import 'package:flutterware_app/src/icon/image_provider.dart';
+import 'package:flutterware_app/src/utils/state_extension.dart';
+import 'package:flutterware_app/src/utils/ui/loading.dart';
 import '../project.dart';
 import '../utils/async_value.dart';
 import '../utils/ui/error_panel.dart';
 import '../utils/ui/warning_box.dart';
-import 'icons.dart';
+import 'model/icons.dart';
 import 'package:path/path.dart' as p;
 
 class IconScreen extends StatelessWidget {
@@ -31,12 +32,16 @@ class IconScreen extends StatelessWidget {
           primary: false,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           children: [
+            Breadcrumb(children: [
+              BreadcrumbEntry.overview,
+              Text('Tools'),
+            ]),
             Row(
               children: [
                 Expanded(
                   child: Text(
                     'App icon',
-                    style: theme.textTheme.headlineSmall,
+                    style: theme.textTheme.headlineMedium,
                   ),
                 ),
                 if (data != null && data.isNotEmpty)
@@ -57,7 +62,7 @@ class IconScreen extends StatelessWidget {
                         ]),
               ],
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 20),
             if (data != null)
               ..._icons(context, data)
             else if (error != null)
@@ -128,10 +133,11 @@ class IconScreen extends StatelessWidget {
         ],
       );
       yield Card(
-          child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: table,
-      ));
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: table,
+        ),
+      );
       yield const SizedBox(height: 30);
     }
   }

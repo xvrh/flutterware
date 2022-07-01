@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/test_runner/app_connected.dart';
-import 'package:flutter_studio_app/src/utils/router_outlet.dart';
+import 'package:flutterware_app/src/test_runner/app_connected.dart';
+import 'package:flutterware_app/src/utils/router_outlet.dart';
 
 import '../app/project_view.dart';
 import '../project.dart';
@@ -14,9 +14,6 @@ class TestRunnerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    ProjectView.of(context).setBreadcrumb([
-      BreadcrumbItem(Text('Test runner')),
-    ]);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

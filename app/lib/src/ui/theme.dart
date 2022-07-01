@@ -74,6 +74,7 @@ ThemeData _buildAppTheme() {
       surfaceTintColor: Colors.white,
       color: Colors.white,
       elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 0),
     ),
     inputDecorationTheme: base.inputDecorationTheme.copyWith(
       border: inputBorder,

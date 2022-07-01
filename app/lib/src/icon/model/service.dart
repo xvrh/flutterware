@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import '../project.dart';
-import '../utils/async_value.dart';
+import '../../project.dart';
+import '../../utils/async_value.dart';
 import 'icons.dart';
 
 class IconService {

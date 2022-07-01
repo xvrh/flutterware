@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_studio_app/src/test_runner/daemon.dart';
-import 'package:flutter_studio_app/src/test_runner/entry_point.dart';
+import 'package:flutterware_app/src/test_runner/daemon.dart';
+import 'package:flutterware_app/src/test_runner/entry_point.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:rxdart/rxdart.dart';

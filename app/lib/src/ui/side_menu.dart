@@ -1,15 +1,16 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import '../utils.dart';
-import 'theme.dart';
+import '../utils/expansion_tile.dart';
 
 const _menuWidth = 250.0;
 const _leftMargin = 20.0;
 
 class SideMenu extends StatelessWidget {
   final List<Widget> children;
+  final List<Widget>? bottom;
 
-  const SideMenu({Key? key, required this.children}) : super(key: key);
+  const SideMenu({Key? key, required this.children, this.bottom})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -21,12 +22,20 @@ class SideMenu extends StatelessWidget {
         color: Colors.white,
         child: DefaultTextStyle.merge(
           style: TextStyle(fontSize: 13),
-          child: ListView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (var child in children) ...[
-                child,
-                Container(height: 1, color: AppColors.primaryBorder),
-              ],
+              Expanded(
+                child: ListView(
+                  children: [
+                    for (var child in children) ...[
+                      child,
+                      Container(height: 1, color: AppColors.primaryBorder),
+                    ],
+                  ],
+                ),
+              ),
+              ...?bottom,
             ],
           ),
         ),
@@ -35,21 +44,41 @@ class SideMenu extends StatelessWidget {
   }
 }
 
-class MenuLink extends StatelessWidget {
+class MenuLink extends StatefulWidget {
   final String url;
   final Widget title;
 
-  const MenuLink({required this.url,required this.title, Key? key}) : super(key: key);
+  const MenuLink({required this.url, required this.title, Key? key})
+      : super(key: key);
+
+  @override
+  State<MenuLink> createState() => _MenuLinkState();
+}
+
+class _MenuLinkState extends State<MenuLink> {
+  bool? _isSelected = false;
 
   @override
   Widget build(BuildContext context) {
-    var isSelected = context.router.isSelected(url);
+    var isSelected = context.router.isSelected(widget.url);
+    if (isSelected != _isSelected) {
+      _isSelected = isSelected;
+      if (isSelected) {
+        var parentMenu = CollapsibleMenu._of(context);
+        if (parentMenu != null) {
+          WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+            parentMenu._expansionTileKey.currentState?.expand();
+          });
+        }
+      }
+    }
+
     return MenuLine(
       isSelected: isSelected,
       onTap: () {
-        context.go(url);
+        context.go(widget.url);
       },
-      child: title,
+      child: widget.title,
     );
   }
 }
@@ -145,15 +174,28 @@ class MenuLine extends StatelessWidget {
   }
 }
 
-class CollapsibleMenu extends StatelessWidget {
+class CollapsibleMenu extends StatefulWidget {
   final Widget title;
   final List<Widget> children;
+  final bool initiallyExpanded;
 
   const CollapsibleMenu({
     super.key,
     required this.title,
     required this.children,
-  });
+    bool? initiallyExpanded,
+  }) : initiallyExpanded = initiallyExpanded ?? false;
+
+  @override
+  State<CollapsibleMenu> createState() => _CollapsibleMenuState();
+
+  static _CollapsibleMenuState? _of(BuildContext context) {
+    return context.findAncestorStateOfType<_CollapsibleMenuState>();
+  }
+}
+
+class _CollapsibleMenuState extends State<CollapsibleMenu> {
+  final _expansionTileKey = GlobalKey<ExpansionTileState>();
 
   @override
   Widget build(BuildContext context) {
@@ -170,12 +212,15 @@ class CollapsibleMenu extends StatelessWidget {
       child: ListTileTheme(
         dense: true,
         data: ListTileThemeData(dense: true),
-        child: ExpansionTile(
+        child: CustomExpansionTile(
+          key: _expansionTileKey,
+          initiallyExpanded: widget.initiallyExpanded,
+          maintainState: true,
           textColor: AppColors.textSecondary,
           collapsedTextColor: AppColors.textSecondary,
           collapsedIconColor: AppColors.textSecondary,
-          title: title,
-          children: [...children, const SizedBox(height: 5)],
+          title: widget.title,
+          children: [...widget.children, const SizedBox(height: 5)],
         ),
       ),
     );
@@ -185,53 +230,48 @@ class CollapsibleMenu extends StatelessWidget {
 class LogoTile extends StatelessWidget {
   final String name;
   final String version;
-  final VoidCallback onTap;
 
   const LogoTile({
     super.key,
     required this.name,
     required this.version,
-    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: FlutterLogo(),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: FlutterLogo(),
+          ),
+          Text(
+            name,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
             ),
-            Text(
-              name,
+          ),
+          Container(
+            margin: const EdgeInsets.only(left: 10),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 5,
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xFF01579B),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              version,
               style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
+                fontSize: 10,
+                color: Colors.white,
               ),
             ),
-            Container(
-              margin: const EdgeInsets.only(left: 10),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 5,
-              ),
-              decoration: BoxDecoration(
-                color: const Color(0xFF01579B),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                version,
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: Colors.white,
-                ),
-              ),
-            )
-          ],
-        ),
+          )
+        ],
       ),
     );
   }

@@ -3,10 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:package_config/package_config.dart';
-import '../project.dart';
-import '../utils/async_value.dart';
-import '../utils/cloc/cloc.dart';
-import 'pubspec_lock.dart';
+import '../../project.dart';
+import '../../utils/async_value.dart';
+import '../../utils/cloc/cloc.dart';
+import '../model/pubspec_lock.dart';
 import 'package:pub_scores/pub_scores.dart';
 import 'package:path/path.dart' as p;
 
@@ -24,7 +24,7 @@ class DependenciesService {
     var results = <Dependency>[];
     for (var dependency in pubspecLock.packages) {
       var package = packageConfig[dependency.name];
-      if (package != null) {
+      if (package != null && dependency.source != 'sdk') {
         results.add(Dependency(this, package, dependency));
       }
     }
@@ -37,14 +37,16 @@ class DependenciesService {
     var appDirectory = Directory.current;
     var appPackageConfig = await findPackageConfig(appDirectory);
     if (appPackageConfig == null) {
-      throw Exception('Cannot resolve [package_config] of ${appDirectory.path}');
+      throw Exception(
+          'Cannot resolve [package_config] of ${appDirectory.path}');
     }
     var pubScorePackage = appPackageConfig['pub_scores'];
     if (pubScorePackage == null) {
       throw Exception('Cannot find package [pub_scores]');
     }
 
-    var dataPath = p.join(pubScorePackage.root.toFilePath(), 'lib/data/all_packages.json');
+    var dataPath =
+        p.join(pubScorePackage.root.toFilePath(), 'lib/data/all_packages.json');
 
     return await compute<String, PubScores>((path) async {
       //TODO(xha): consider a lighter parsing as the file is big
@@ -63,12 +65,12 @@ class DependenciesService {
 class Dependencies implements Disposable {
   final Map<String, Dependency> dependencies;
 
-  Dependencies(List<Dependency> dependencies): dependencies = {
-    for (var d in dependencies)
-      d.name : d,
-  };
+  Dependencies(List<Dependency> dependencies)
+      : dependencies = {
+          for (var d in dependencies) d.name: d,
+        };
 
-  Dependency? operator[](String packageName) => dependencies[packageName];
+  Dependency? operator [](String packageName) => dependencies[packageName];
 
   List<Dependency>? _directs;
   List<Dependency> get directs => _directs ??= dependencies.values

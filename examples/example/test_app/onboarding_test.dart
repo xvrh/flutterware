@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio/flutter_test.dart';
-import 'package:flutter_studio_example/main.dart';
+import 'package:flutterware/flutter_test.dart';
+import 'package:flutterware_example/main.dart';
 import 'package:flutter_test/flutter_test.dart' hide testWidgets;
 
 // Start flutter_studio tool to run those tests:

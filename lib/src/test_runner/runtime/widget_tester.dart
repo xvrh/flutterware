@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -10,10 +8,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_studio/src/test_runner/protocol/models.dart';
-import 'package:flutter_studio/src/test_runner/runtime/binding.dart';
-import 'package:flutter_studio/src/test_runner/runtime/phone_status_bar.dart';
-import 'package:flutter_studio/src/test_runner/runtime/widget_tester_extension.dart';
+import 'package:flutterware/src/test_runner/protocol/models.dart';
+import 'package:flutterware/src/test_runner/runtime/phone_status_bar.dart';
+import 'package:flutterware/src/test_runner/runtime/widget_tester_extension.dart';
 import 'package:flutter_test/flutter_test.dart' as flutter;
 import 'package:pool/pool.dart';
 

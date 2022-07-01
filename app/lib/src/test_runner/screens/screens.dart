@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_studio/internals/test_runner.dart';
+import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
 import '../../utils/raw_image_provider.dart';
 import '../service.dart';

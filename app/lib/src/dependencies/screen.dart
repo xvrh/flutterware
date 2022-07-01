@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/dependencies/detail.dart';
-import 'package:flutter_studio_app/src/dependencies/service.dart';
-import 'package:flutter_studio_app/src/dependencies/upgrades.dart';
-import 'package:flutter_studio_app/src/utils/router_outlet.dart';
+import 'package:flutterware_app/src/dependencies/detail.dart';
+import 'package:flutterware_app/src/dependencies/model/service.dart';
+import 'package:flutterware_app/src/dependencies/upgrades.dart';
+import 'package:flutterware_app/src/utils/router_outlet.dart';
 import 'package:pub_scores/pub_scores.dart';
 import '../app/project_view.dart';
+import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
@@ -34,7 +35,7 @@ class _DependenciesScreenState extends State<DependenciesScreen> {
     return PageStorage(
       bucket: _scrollBucket,
       child: RouterOutlet({
-        'overview': (_) => _DependencyListScreen(this),
+        '': (_) => _DependencyListScreen(this),
         'upgrade': (_) => DependenciesUpgradeScreen(),
         'packages/:packageName': (args) =>
             DependencyDetailScreen(widget.project, args['packageName']),
@@ -81,11 +82,15 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
           primary: false,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           children: [
+            Breadcrumb(children: [
+              BreadcrumbEntry.overview,
+              Text('Tools'),
+            ]),
             Row(
               children: [
                 Expanded(
                   child: Text(
-                    ' Dependencies',
+                    'Dependencies',
                     style: theme.textTheme.headlineMedium,
                   ),
                 ),

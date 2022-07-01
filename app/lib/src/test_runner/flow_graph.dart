@@ -1,33 +1,19 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:built_collection/built_collection.dart';
-import '../app/project_view.dart';
-import '../app/ui/breadcrumb.dart';
-import '../utils/router_outlet.dart';
-import 'package:flutter_studio/internals/test_runner.dart';
+import '../utils.dart';
+import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart' hide InteractiveViewer;
 import 'package:flutter/services.dart';
-import '../ui.dart';
 import '../utils/assets.dart';
 import '../utils/graphite.dart';
 import 'detail.dart';
 import 'protocol/api.dart';
 import 'protocol/run.dart';
 import 'screens/screens.dart';
-import 'service.dart';
 import 'toolbar.dart';
 import 'ui/collapse_button.dart';
 import 'ui/interactive_viewer.dart';
-
-Iterable<BreadcrumbItem> breadcrumbForRun(ScenarioRun run) sync* {
-  for (var i = 0; i < run.scenario.name.length; i++) {
-    var part = run.scenario.name[i];
-    yield BreadcrumbItem(
-      Text(part),
-      onTap: null,
-    );
-  }
-}
 
 class RunView extends StatefulWidget {
   final TestRunnerApi client;
@@ -84,10 +70,6 @@ class _RunViewState extends State<RunView> {
       stream: run.onUpdated,
       initialData: run.value,
       builder: (context, snapshot) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          ProjectView.of(context).header.setItemsBuilder(null);
-        });
-
         var toolbarScope = ToolBarScope.of(context);
         var project = toolbarScope.widget.project;
 
@@ -98,11 +80,6 @@ class _RunViewState extends State<RunView> {
           contentWidget = Container();
         } else {
           var run = snapshot.requireData;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            ProjectView.of(context)
-                .header
-                .setItemsBuilder((context) => breadcrumbForRun(run));
-          });
           if (toolbarScope.isCollapsed) {
             run = run.collapse();
           }
@@ -236,7 +213,7 @@ class _FlowMaster extends StatelessWidget {
           ),
         ),
         Container(
-          color: AppColors.separator,
+          color: AppColors.divider,
           height: 1,
         ),
         Padding(
@@ -383,8 +360,7 @@ class _ScreenView extends StatelessWidget {
   final ScenarioRun run;
   final Screen screen;
 
-  const _ScreenView(this.run, this.screen, {Key? key})
-      : super(key: key);
+  const _ScreenView(this.run, this.screen, {Key? key}) : super(key: key);
 
   Widget? _widgetForScreen(Screen screen) {
     return widgetForScreen(run, screen);

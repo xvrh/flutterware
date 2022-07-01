@@ -1,9 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
-class FeatureTourTab extends StatelessWidget {
-  const FeatureTourTab({super.key});
+class FeatureTourPage extends StatelessWidget {
+  const FeatureTourPage({super.key});
 
   @override
   Widget build(BuildContext context) {

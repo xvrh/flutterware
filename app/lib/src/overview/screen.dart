@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/overview/service.dart';
-import 'package:flutter_studio_app/src/utils/router_outlet.dart';
+import 'package:flutterware_app/src/overview/service.dart';
+import 'package:flutterware_app/src/utils/router_outlet.dart';
 import '../app/paths.dart' as paths;
 import '../app/project_view.dart';
-import '../dependencies/service.dart';
-import '../icon/service.dart';
+import '../dependencies/model/service.dart';
+import '../icon/model/service.dart';
 import '../project.dart';
 import '../ui.dart';
 import '../ui/colors.dart';
@@ -21,81 +21,22 @@ class OverviewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    return Container(
-      child: ListView(
-        primary: false,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
-        children: [
-          Text(
-            ' PROJECT OVERVIEW',
-            style: theme.textTheme.bodySmall,
-          ),
-          _ProjectInfoCard(project),
-          const SizedBox(height: 30),
-          Text(
-            'Tools',
-            style: theme.textTheme.titleLarge,
-          ),
-          Text('Launcher icon update'),
-          Text('Dependency preview'),
-          Text('Hot-reloadable, visual test runner'),
-          //Text('ThemeData editor'),
-          //Text('CustomPaint editor'),
-          //_HomeCard(),
-          //const SizedBox(height: 15),
-          //_HomeCard2(),
-          //const SizedBox(height: 15),
-          //_HomeCard3(),
-          /*Card(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    '120 dependencies',
-                    style: theme.textTheme.bodyLarge,
-                  ),
-                  Text('4 directs, 200 transitives'),
-                  TextButton(onPressed: () {}, child: Text('MANAGE')),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('24 523 Lines of Code'),
-                  TextButton(onPressed: () {}, child: Text('MANAGE')),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('0 App Test'),
-                  TextButton(onPressed: () {}, child: Text('START')),
-                ],
-              ),
-            ),
-          ),
-          //TODO(xha): re-organise to be more beautiful
-          // Title - More info
-          const SizedBox(height: 20),
-          _Dependencies(project),
-          const SizedBox(height: 20),
-          _Metrics(project),*/
-        ],
-      ),
+    return ListView(
+      primary: false,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+      children: [
+        Text(
+          'PROJECT OVERVIEW',
+          style: theme.textTheme.bodySmall,
+        ),
+        _ProjectInfoCard(project),
+        const SizedBox(height: 30),
+        Text(
+          'TOOLS',
+          style: theme.textTheme.bodySmall,
+        ),
+        _ToolsCard(),
+      ],
     );
   }
 }
@@ -172,13 +113,15 @@ class _ProjectInfoCard extends StatelessWidget {
                   Align(
                     alignment: Alignment.bottomLeft,
                     child: Container(
-                      decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 5, vertical: 2),
                       child: Text(
                         'ANDROID | IOS | MACOS | WINDOWS',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 10),
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 10),
                       ),
                     ),
                   ),
@@ -187,10 +130,10 @@ class _ProjectInfoCard extends StatelessWidget {
                     child: Text(
                       'Dependencies: 10 directs, 32 transitives',
                       style: const TextStyle(
-                        //color: AppColors.selection,
-                        //decoration: TextDecoration.underline,
-                        //fontSize: 12,
-                      ),
+                          //color: AppColors.selection,
+                          //decoration: TextDecoration.underline,
+                          //fontSize: 12,
+                          ),
                     ),
                   ),
                   Text(
@@ -224,6 +167,62 @@ class _ProjectInfoCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ToolsCard extends StatelessWidget {
+  const _ToolsCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Link('Launcher icon update', '/project/${paths.icon}'),
+            _Link('Dependencies overview', '/project/${paths.dependencies}'),
+            _Link('Hot-reloadable, visual test runner',
+                '/project/${paths.tests}'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Link extends StatelessWidget {
+  final String title;
+  final String url;
+
+  const _Link(this.title, this.url);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text('• '),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: InkWell(
+            onTap: () {
+              context.router.go(url);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.link,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -407,7 +406,7 @@ class _Icon extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () {
-          context.router.go('/${paths.icon}');
+          context.router.go('/project/${paths.icon}');
         },
         child: SizedBox(
           width: IconService.previewSize.toDouble(),

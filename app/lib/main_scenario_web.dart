@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:html';
-import 'package:flutter_studio/internals/web.dart';
+import 'package:flutterware/internals/web.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/utils/router_outlet.dart';
+import 'package:flutterware_app/src/utils/router_outlet.dart';
 import 'package:rxdart/rxdart.dart';
 import 'src/test_runner/app_connected.dart';
 import 'src/test_runner/protocol/api.dart';

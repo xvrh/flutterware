@@ -8,7 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flutter_studio_example/main.dart';
+import 'package:flutterware_example/main.dart';
 
 void main() {
   testWidgets('Counter increments', (tester) async {

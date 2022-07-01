@@ -1,4 +1,5 @@
-import 'package:flutter_studio_app/src/utils/fitted_app.dart';
+import 'package:flutterware_app/src/about/screen.dart';
+import 'package:flutterware_app/src/utils/fitted_app.dart';
 import '../project.dart';
 import '../ui/theme.dart';
 import '../utils/router_outlet.dart';
@@ -20,7 +21,13 @@ class SingleProjectApp extends StatelessWidget {
           title: 'Flutterware',
           theme: appTheme,
           home: Scaffold(
-            body: ProjectView(project),
+            body: RouterOutlet(
+              {
+                'project': (_) => ProjectView(project),
+                'about': (_) => AboutScreen(),
+              },
+              onNotFound: (_) => 'project',
+            ),
           ),
           initialRoute: '/',
           debugShowCheckedModeBanner: false,
