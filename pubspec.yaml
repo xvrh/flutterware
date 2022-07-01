@@ -1,6 +1,6 @@
 name: flutterware
 description: A set of GUI tools for Flutter apps development.
-version: 1.0.0
+version: 0.1.0 # Keep it sync with flutterware_app
 homepage: https://github.com/xvrh/flutterware
 
 environment:

@@ -5,7 +5,7 @@ import '../../utils/async_value.dart';
 import 'icons.dart';
 
 class IconService {
-  static const previewSize = 80;
+  static const previewSize = 70;
 
   final Project project;
   late final _sample = AsyncValue<SampleIcon>(loader: _loadIcon);

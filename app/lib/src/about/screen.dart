@@ -1,14 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutterware_app/src/about/changelog.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../ui/side_menu.dart';
 import '../utils.dart';
 import 'about.dart';
 import 'feature_tour.dart';
 
-class AboutMenuItem extends StatelessWidget {
+class AboutMenuItem extends StatefulWidget {
   const AboutMenuItem({super.key});
+
+  @override
+  State<AboutMenuItem> createState() => _AboutMenuItemState();
+}
+
+class _AboutMenuItemState extends State<AboutMenuItem> {
+  late Future<PackageInfo> _packageInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    _packageInfo = PackageInfo.fromPlatform();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,8 +38,13 @@ class AboutMenuItem extends StatelessWidget {
               size: 15,
             ),
             const SizedBox(width: 5),
-            Text(
-              'Flutterware v0.2.0',
+            FutureBuilder<PackageInfo>(
+              future: _packageInfo,
+              builder: (context, snapshot) {
+                return Text(
+                  'Flutterware v${snapshot.data?.version ?? ''}',
+                );
+              },
             ),
           ],
         ),
