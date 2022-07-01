@@ -31,7 +31,7 @@ class OverviewScreen extends StatelessWidget {
         _ProjectInfoCard(project),
         const SizedBox(height: 30),
         Text(
-          'INFO',
+          'METRICS',
           style: theme.textTheme.bodySmall,
         ),
         MetricsCard(project),
