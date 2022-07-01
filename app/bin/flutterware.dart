@@ -9,7 +9,7 @@ import 'dart:io' as io;
 import 'package:path/path.dart' as p;
 import 'package:args/command_runner.dart';
 
-final _logger = Logger('flutter_studio');
+final _logger = Logger('flutterware');
 
 class _Context {
   final String dartExecutable;
@@ -41,7 +41,7 @@ void main(List<String> args) async {
   );
 
   var commandRunner = CommandRunner(
-      'flutter_studio', 'Collection of tools for Flutter development.')
+      'flutterware', 'Collection of tools for Flutter development.')
     ..addCommand(_AppCommand(context))
     ..argParser.addFlag('verbose', abbr: 'v', help: 'increase logging')
     ..argParser.addFlag(forceCompileCliOption, hide: true);

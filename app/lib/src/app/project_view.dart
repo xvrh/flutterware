@@ -39,11 +39,13 @@ class ProjectView extends StatelessWidget {
                       size: 18,
                     ),
                     const SizedBox(width: 10),
-                    ValueListenableBuilder<Snapshot<Pubspec>>(
-                      valueListenable: project.pubspec,
-                      builder: (context, snapshot, child) {
-                        return Text(snapshot.data?.name ?? '');
-                      },
+                    Expanded(
+                      child: ValueListenableBuilder<Snapshot<Pubspec>>(
+                        valueListenable: project.pubspec,
+                        builder: (context, snapshot, child) {
+                          return Text(snapshot.data?.name ?? '');
+                        },
+                      ),
                     ),
                   ],
                 ),

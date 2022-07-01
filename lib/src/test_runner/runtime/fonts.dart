@@ -5,7 +5,7 @@ import 'package:package_config/package_config.dart';
 
 Future<String> commonFontsPath = (() async {
   var packageConfig = (await findPackageConfig(Directory.current))!;
-  var testUtilsPackage = packageConfig['flutter_studio']!;
+  var testUtilsPackage = packageConfig['flutterware']!;
   return testUtilsPackage.packageUriRoot
       .resolve('src/test/runtime/fonts')
       .toFilePath();

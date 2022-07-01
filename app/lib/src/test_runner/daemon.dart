@@ -78,7 +78,7 @@ class DaemonStarter {
   late final File _entryPoint;
 
   DaemonStarter(this.project, this.server) {
-    _entryPoint = File(p.join(project.directory.path, 'build', 'flutter_studio',
+    _entryPoint = File(p.join(project.directory.path, 'build', 'flutterware',
         '${id}_test_entry_point.dart'))
       ..parent.createSync(recursive: true);
   }

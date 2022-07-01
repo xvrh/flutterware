@@ -10,6 +10,7 @@ import '../utils/async_value.dart';
 import 'package:path/path.dart' as p;
 
 import '../icon/image_provider.dart';
+import 'metrics_card.dart';
 
 class OverviewScreen extends StatelessWidget {
   final Project project;
@@ -33,7 +34,7 @@ class OverviewScreen extends StatelessWidget {
           'INFO',
           style: theme.textTheme.bodySmall,
         ),
-        _MetricsCard(),
+        MetricsCard(project),
         const SizedBox(height: 30),
         Text(
           'TOOLS',
@@ -206,14 +207,16 @@ class _ToolsCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Link('Launcher icon update', '/project/${paths.icon}'),
-            _Link('Dependencies overview', '/project/${paths.dependencies}'),
+            _Link(
+                'Pub dependencies overview', '/project/${paths.dependencies}'),
             _Link('Hot-reloadable, visual test runner',
                 '/project/${paths.tests}'),
-            Text('• Widget preview: build UI in isolation (TODO)'),
-            Text('• Assets management (TODO)'),
-            Text('• Path & drawing (TODO)'),
-            Text('• Animation editor (TODO)'),
-            Text('• Theme editor (TODO)'),
+            Text('• Widget preview: build UI in isolation (WIP)'),
+            Text('• Assets management (WIP)'),
+            Text('• Path & drawing (WIP)'),
+            Text('• Animation editor (WIP)'),
+            Text('• Theme editor (WIP)'),
+            Text('• Translation synchronisation (WIP)'),
           ],
         ),
       ),
@@ -248,77 +251,6 @@ class _Link extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MetricsCard extends StatelessWidget {
-  const _MetricsCard({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(15),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _InfoRow(
-              label: Text('Dependencies'),
-              value: InkWell(
-                onTap: () {},
-                child: Text("10 direct, 32 transitives"),
-              ),
-            ),
-            _InfoRow(
-              label: Text('Lines of Code'),
-              value: Tooltip(
-                message:
-                    "lib: 90% (4560 LoC, 20 files)\ntest: 5% (1200)\nother: 3%",
-                child: Text("12 530 (Dart), 45 645 (Java)"),
-              ),
-            ),
-            _InfoRow(
-              label: Text('Assets'),
-              value: InkWell(
-                onTap: () {},
-                child: Text("120 files, 5.32 MB"),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final Widget label;
-  final Widget value;
-
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 150,
-          child: DefaultTextStyle.merge(
-            style: const TextStyle(color: Colors.black54, fontSize: 13),
-            child: label,
-          ),
-        ),
-        Expanded(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: value,
           ),
         ),
       ],

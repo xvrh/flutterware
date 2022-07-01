@@ -34,7 +34,7 @@ class TestFile {
 
 String entryPointCode(Project project, List<TestFile> files, Uri serverUri) {
   var code = StringBuffer()..writeln('''
-// GENERATED-CODE: Flutter Studio - Test runner feature
+// GENERATED-CODE: Flutterware - Test runner feature
 import 'package:flutterware/internals/test_runner_daemon.dart';
 ''');
 

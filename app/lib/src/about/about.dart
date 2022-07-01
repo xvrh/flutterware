@@ -24,11 +24,11 @@ class AboutPage extends StatelessWidget {
               padding: const EdgeInsets.all(15),
               child: MarkdownBody(
                 data: '''
-**Flutterware** is a desktop app grouping several tools for [Flutter development](https://flutter.dev).
+**Flutterware** is a desktop app grouping several tools for [Flutter](https://flutter.dev) development.
 
 It is a hobby project from passionned Flutter users. Any help to improve this project is welcome. Open issues, start discussions, submit pull requests… 
 
-- [Flutterware Github repository](https://github.com/xvrh/flutterware)
+- [Github repository](https://github.com/xvrh/flutterware)
 - [Pub package](https://pub.dev/packages/flutterware)
 ''',
                 styleSheet: MarkdownStyleSheet(

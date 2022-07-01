@@ -5,13 +5,13 @@ import 'package:flutterware/internals/constants.dart';
 import 'package:path/path.dart' as p;
 
 void main(List<String> arguments) async {
-  var studioPackage =
-      await Isolate.resolvePackageUri(Uri.parse('package:flutter_studio/lib'));
-  var packageRoot = studioPackage!.resolve('..').toFilePath();
+  var pubPackage =
+      await Isolate.resolvePackageUri(Uri.parse('package:flutterware/lib'));
+  var packageRoot = pubPackage!.resolve('..').toFilePath();
   var appPath = p.join(packageRoot, 'app');
   if (!File(p.join(packageRoot, 'pubspec.yaml')).existsSync() ||
       !File(p.join(appPath, 'pubspec.yaml')).existsSync()) {
-    throw Exception('Failed to resolve flutter_studio (root: $packageRoot)');
+    throw Exception('Failed to resolve flutterware (root: $packageRoot)');
   }
 
   var isVerbose = arguments.any((e) => ['-v', '--verbose'].contains(e));
@@ -20,7 +20,7 @@ void main(List<String> arguments) async {
     print('''
 Platform.resolvedExecutable: ${Platform.resolvedExecutable}
 Platform.script: ${Platform.script}
-StudioPackage: $studioPackage
+Flutterware Package: $pubPackage
 PackageRoot: $packageRoot
 ''');
   }
@@ -48,7 +48,7 @@ PackageRoot: $packageRoot
         workingDirectory: appPath);
     if (compiledResult.exitCode != 0) {
       throw Exception(
-          'Failed to compile flutter_studio CLI ${compiledResult.stderr}');
+          'Failed to compile flutterware CLI ${compiledResult.stderr}');
     }
   }
 

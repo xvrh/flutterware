@@ -3,8 +3,8 @@ import 'package:flutterware/flutter_test.dart';
 import 'package:flutterware_example/main.dart';
 import 'package:flutter_test/flutter_test.dart' hide testWidgets;
 
-// Start flutter_studio tool to run those tests:
-// dart run flutter_studio app
+// Start flutterware tool to run those tests:
+// dart run flutterware app
 void main() {
   setUp(() {
     print('Some code to configure the mocks');

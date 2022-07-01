@@ -205,7 +205,7 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
               ),
             WarningBox(
               message: 'This feature is limited and experimental.  \n'
-                  'If you have suggestions to improve it, [open issues on Github](https://github.com/xvrh/flutter_studio)',
+                  'If you have suggestions to improve it, [open issues on Github](https://github.com/xvrh/flutterware)',
             ),
           ],
         ),
