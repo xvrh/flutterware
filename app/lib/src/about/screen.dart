@@ -95,7 +95,7 @@ class AboutScreen extends StatelessWidget {
               children: [
                 MenuLink(
                   url: 'what',
-                  title: Text('What is it'),
+                  title: Text('What is it?'),
                 ),
                 MenuLink(
                   url: 'features',

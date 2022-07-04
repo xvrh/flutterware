@@ -6,6 +6,7 @@ import '../dependencies/screen.dart';
 import '../icon/screen.dart';
 import '../overview/screen.dart';
 import '../project.dart';
+import '../test_runner/menu.dart';
 import '../test_runner/screen.dart';
 import '../utils/async_value.dart';
 import 'paths.dart' as paths;
@@ -66,7 +67,9 @@ class ProjectView extends StatelessWidget {
             ),
             CollapsibleMenu(
               title: Text('Tests'),
-              children: [],
+              children: [
+                TestMenu(project),
+              ],
             ),
           ],
         ),

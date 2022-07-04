@@ -8,6 +8,7 @@ import 'package:flutterware_app/src/app/ui/breadcrumb.dart';
 import 'package:flutterware_app/src/icon/image_provider.dart';
 import 'package:flutterware_app/src/utils/state_extension.dart';
 import 'package:flutterware_app/src/utils/ui/loading.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../project.dart';
 import '../utils/async_value.dart';
 import '../utils/ui/error_panel.dart';
@@ -124,9 +125,14 @@ class IconScreen extends StatelessWidget {
                   '${icon.originalWidth}x${icon.originalHeight}',
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
-                Text(
-                  p.relative(icon.path, from: project.directory.path),
-                  style: const TextStyle(color: Colors.black45),
+                InkWell(
+                  onTap: () {
+                    launchUrl(Uri.file(p.dirname(icon.path)));
+                  },
+                  child: Text(
+                    p.relative(icon.path, from: project.directory.path),
+                    style: const TextStyle(color: Colors.black45),
+                  ),
                 ),
               ],
             ),

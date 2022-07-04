@@ -135,7 +135,7 @@ class AppIcons {
 
       return AppIcon(
         ByteData.view(preview.getBytes().buffer),
-        file.path,
+        file.absolute.path,
         originalWidth: originalImage.width,
         originalHeight: originalImage.height,
         previewWidth: size,

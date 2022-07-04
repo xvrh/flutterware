@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutterware_app/src/overview/model/assets.dart';
 import 'package:flutterware_app/src/overview/model/code_metrics.dart';
 import 'package:flutterware_app/src/utils/async_value.dart';
 import 'package:watcher/watcher.dart';
@@ -13,6 +14,7 @@ class ProjectInfoService {
   late final AsyncValue<Pubspec> _pubspec;
   late final AsyncValue<List<FlutterPlatform>> _platforms;
   late final AsyncValue<CodeMetrics> _codeMetrics;
+  late final AsyncValue<AssetsReport> _assetsMetrics;
   late StreamSubscription _pubspecWatcher;
 
   ProjectInfoService(this.project) {
@@ -30,6 +32,7 @@ class ProjectInfoService {
 
     _platforms = AsyncValue(loader: _loadPlatforms);
     _codeMetrics = AsyncValue(loader: _loadCodeMetrics);
+    _assetsMetrics = AsyncValue(loader: _loadAssetsMetrics);
   }
 
   ValueListenable<Snapshot<Pubspec>> get pubspec => _pubspec;
@@ -37,6 +40,8 @@ class ProjectInfoService {
   ValueListenable<Snapshot<List<FlutterPlatform>>> get platforms => _platforms;
 
   ValueListenable<Snapshot<CodeMetrics>> get codeMetrics => _codeMetrics;
+
+  ValueListenable<Snapshot<AssetsReport>> get assetsMetrics => _assetsMetrics;
 
   Future<List<FlutterPlatform>> _loadPlatforms() async {
     var result = <FlutterPlatform>[];
@@ -54,12 +59,16 @@ class ProjectInfoService {
   Future<CodeMetrics> _loadCodeMetrics() async {
     return compute<String, CodeMetrics>(codeMetricsOf, project.absolutePath);
   }
+  Future<AssetsReport> _loadAssetsMetrics() async {
+    return compute<String, AssetsReport>(createAssetReport, project.absolutePath);
+  }
 
   void dispose() {
     _pubspecWatcher.cancel();
     _pubspec.dispose();
     _platforms.dispose();
     _codeMetrics.dispose();
+    _assetsMetrics.dispose();
   }
 }
 

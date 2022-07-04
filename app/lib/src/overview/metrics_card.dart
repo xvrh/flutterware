@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/dependencies/model/service.dart';
+import 'package:flutterware_app/src/overview/model/assets.dart';
 import 'package:flutterware_app/src/utils.dart';
 import 'package:flutterware_app/src/utils/cloc/cloc.dart';
-
+import 'package:intl/intl.dart';
 import '../project.dart';
 import '../utils/async_value.dart';
 import 'model/code_metrics.dart';
@@ -48,41 +49,56 @@ class MetricsCard extends StatelessWidget {
             _InfoRow(
               label: Text('Lines of Code'),
               value: ValueListenableBuilder<Snapshot<CodeMetrics>>(
-                  valueListenable: project.info.codeMetrics,
-                  builder: (context, snapshot, child) {
-                    if (snapshot.error != null) {
-                      return ErrorPanel(
-                        message:
-                            'Failed to load code metrics: ${snapshot.error}',
-                      );
-                    }
-
-                    var data = snapshot.data;
-                    if (data == null) {
-                      return Text('');
-                    }
-
-                    String describe(ClocResult result) =>
-                        '${result.lines} LoC, ${result.files} file${result.files > 1 ? 's' : ''}';
-
-                    var description = [
-                      for (var folder in {
-                        'lib': data.lib,
-                        'tests': data.tests,
-                        'other': data.other,
-                      }.entries)
-                        '${folder.key}: ${describe(folder.value)}'
-                    ].join('\n');
-
-                    return Tooltip(
-                      message: description,
-                      child: Text('${data.sum.lines} (Dart)'),
+                valueListenable: project.info.codeMetrics,
+                builder: (context, snapshot, child) {
+                  if (snapshot.error != null) {
+                    return ErrorPanel(
+                      message: 'Failed to load code metrics: ${snapshot.error}',
                     );
-                  }),
+                  }
+
+                  var data = snapshot.data;
+                  if (data == null) {
+                    return Text('');
+                  }
+
+                  var numberFormat = NumberFormat.decimalPattern('en_US');
+
+                  String describe(ClocResult result) =>
+                      '${numberFormat.format(result.lines)} LoC, ${result.files} file${result.files > 1 ? 's' : ''}';
+
+                  var description = [
+                    for (var folder in {
+                      'lib': data.lib,
+                      'tests': data.tests,
+                      'other': data.other,
+                    }.entries)
+                      '${folder.key}: ${describe(folder.value)}'
+                  ].join('\n');
+
+                  return Tooltip(
+                    message: description,
+                    child: Text('${numberFormat.format(data.sum.lines)} (Dart)'),
+                  );
+                },
+              ),
             ),
             _InfoRow(
               label: Text('Assets'),
-              value: Text("120 files, 5.32 MB"),
+              value: ValueListenableBuilder<Snapshot<AssetsReport>>(
+                valueListenable: project.info.assetsMetrics,
+                builder: (context, snapshot, child) {
+                  var data = snapshot.data;
+                  if (data == null) {
+                    return Text('');
+                  }
+
+                  return Text(
+                    '${data.fileCount} file${data.fileCount > 1 ? 's' : ''}, '
+                        '${(data.totalBytes / 1000000).toStringAsFixed(2)} MB'
+                  );
+                },
+              ),
             ),
           ],
         ),

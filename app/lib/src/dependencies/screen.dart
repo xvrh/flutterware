@@ -57,6 +57,7 @@ class _DependencyListScreen extends StatefulWidget {
 }
 
 class _DependencyListScreenState extends State<_DependencyListScreen> {
+  final _searchController = TextEditingController();
   final _sorts = {
     0: _selectPackageName,
     3: _selectPubScore,
@@ -140,49 +141,42 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
+          Text('Show transitive'),
+          Checkbox(value: true, onChanged: (v) {}),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: TextFormField(
-                //controller: _searchController,
+                controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Search by email',
+                  hintText: 'Search by name',
                   prefixIcon: Icon(Icons.search),
                   suffixIconConstraints: BoxConstraints(minHeight: 30),
-                  // suffixIcon: _searchController.text.isNotEmpty
-                  //     ? IconButton(
-                  // constraints:
-                  // BoxConstraints(minHeight: 30, minWidth: 48),
-                  // padding: EdgeInsets.zero,
-                  // onPressed: () {
-                  //   setState(() {
-                  //     _searchController.text = '';
-                  //   });
-                  //   _loader.refresh();
-                  // },
-                  // icon: Icon(Icons.clear),
-                  //)
-                  //    : null,
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          constraints:
+                              BoxConstraints(minHeight: 30, minWidth: 48),
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            setState(() {
+                              _searchController.text = '';
+                            });
+                          },
+                          icon: Icon(Icons.clear),
+                        )
+                      : null,
                 ),
                 onFieldSubmitted: (_) {
-                  // _loader.refresh();
-                  // _searchDebounce?.cancel();
+                  setState(() {
+                    // Refresh the table
+                  });
                 },
                 onChanged: (v) {
                   setState(() {
-                    // Refresh the clear button
+                    // Refresh the table
                   });
-                  // _onSearchChanged();
                 },
               ),
-            ),
-          ),
-          TextButton(
-            onPressed: () {},
-            // onPressed: _loader.refresh,
-            child: Icon(
-              Icons.refresh,
-              color: Colors.black54,
             ),
           ),
         ],
@@ -191,8 +185,14 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
   }
 
   Widget _table(Iterable<Dependency> dependencies) {
+    var filteredDependencies  =dependencies;
+    if (_searchController.text.isNotEmpty ) {
+      var query = _searchController.text.toLowerCase();
+      filteredDependencies = dependencies.where((e) => e.name.toLowerCase().contains(query));
+    }
+
     return SizedBox(
-      height: _DependencyListScreen._rowHeight * dependencies.length +
+      height: _DependencyListScreen._rowHeight * filteredDependencies.length +
           _DependencyListScreen._headingHeight,
       child: CustomScrollView(
         scrollDirection: Axis.horizontal,
@@ -201,7 +201,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
           SliverFillRemaining(
             hasScrollBody: false,
             fillOverscroll: true,
-            child: _data(dependencies),
+            child: _data(filteredDependencies),
           )
         ],
       ),
@@ -291,6 +291,12 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
       _sortIndex = columnIndex;
       _sortAscending = ascending;
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 }
 

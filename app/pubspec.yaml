@@ -46,6 +46,7 @@ dependencies:
   github:
   glob:
   image:
+  intl:
   io:
   json_annotation:
   logging:
