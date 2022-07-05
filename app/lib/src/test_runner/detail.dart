@@ -10,7 +10,6 @@ import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
 import '../ui.dart';
 import 'detail/image.dart';
-import 'detail/json.dart';
 import 'service.dart';
 
 class DetailPage extends StatelessWidget {
@@ -28,21 +27,6 @@ class DetailPage extends StatelessWidget {
       return Center(
         child: Text('Screen $screenId is loading'),
       );
-    }
-
-    var email = screen.email;
-    if (email != null) {
-      throw UnimplementedError();
-    }
-
-    var pdf = screen.pdf;
-    if (pdf != null) {
-      throw UnimplementedError();
-    }
-
-    var json = screen.json;
-    if (json != null) {
-      return JsonDetail(project, run, screen, json);
     }
 
     return ImageDetail(project, run, screen);

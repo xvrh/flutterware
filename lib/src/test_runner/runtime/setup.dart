@@ -19,8 +19,6 @@ void runTests(
   String? projectPackageName,
   Brightness? defaultStatusBarBrightness,
   int? poEditorProjectId,
-  ConfluenceInfo? confluence,
-  FirebaseInfo? firebase,
 }) async {
   _setupLogger();
   var bundleParams = BundleParameters(
@@ -39,9 +37,6 @@ void runTests(
       rootPath: rootProjectPath,
       supportedLanguages: supportedLanguages ?? ['en'],
       defaultStatusBarBrightness: defaultStatusBarBrightness?.index,
-      poEditorProjectId: poEditorProjectId,
-      confluence: confluence,
-      firebase: firebase,
     ),
   );
 }

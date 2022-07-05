@@ -161,10 +161,6 @@ class AppWidgetTester implements flutter.WidgetTester {
       ui.Image? image;
       if (runContext.args.imageRatio > 0) {
         image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
-        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
-        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
-        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
-        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
       }
       Future<NewScreen> f() async {
         Uint8List? pixels;
