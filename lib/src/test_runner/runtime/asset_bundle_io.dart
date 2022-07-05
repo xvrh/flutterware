@@ -17,7 +17,7 @@ void mockFlutterAssets(AssetBundle delegate) {
   ServicesBinding.instance.defaultBinaryMessenger
       .setMockMessageHandler('flutter/assets', (ByteData? message) async {
     assert(message != null);
-    String key = utf8.decode(message!.buffer.asUint8List());
+    var key = utf8.decode(message!.buffer.asUint8List());
     return delegate.load(key);
   });
 }
@@ -44,7 +44,6 @@ class IOAssetBundle extends CachingAssetBundle implements ScenarioBundle {
   @override
   Future<ByteData> load(String key) async {
     var projectRoot = bundleParams.rootProjectPath;
-    print("Load $key");
     File asset;
     if (projectRoot != null && key.startsWith('assets/')) {
       asset = File(path.join(projectRoot, key));

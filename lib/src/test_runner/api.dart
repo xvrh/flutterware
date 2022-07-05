@@ -9,5 +9,5 @@ export 'runtime/app_test.dart' show AppTest, Screenshot;
 @isTest
 void testApp(
     String description, Future<void> Function(AppWidgetTester tester) body) {
-  flutter_test.testWidgets(description, wrapTestBody(body));
+  flutter_test.testWidgets(description, applyTestValues(body));
 }

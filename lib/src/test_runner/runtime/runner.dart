@@ -20,7 +20,7 @@ import 'fonts.dart';
 import 'list_tests.dart';
 import 'run_group.dart';
 import 'scenario.dart';
-import 'package:test_api/src/backend/group.dart';
+import 'package:test_api/src/backend/group.dart'; // ignore: implementation_imports
 
 import 'widget_tester.dart'; // ignore: implementation_imports
 

@@ -1,43 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart';
 
-class FeatureTourPage extends StatelessWidget {
+class FeatureTourPage extends StatefulWidget {
   const FeatureTourPage({super.key});
 
   @override
+  State<FeatureTourPage> createState() => _FeatureTourPageState();
+}
+
+class _FeatureTourPageState extends State<FeatureTourPage> {
+  final _scrollController = ScrollController();
+
+  @override
   Widget build(BuildContext context) {
-    return Markdown(data: '''
+    return Markdown(
+        extensionSet: ExtensionSet.gitHubWeb,
+        controller: _scrollController,
+        data: '''
 ## Features
-#### test_ui
- - Run normal test (without screenshots)
- - Allow to run integration_test
- - Fully inspect each screenshot
- - Capture animation
- - Display how many frames between each screenshot. Display how expensive it is. Allow to access the detailed timeline for the transition.
- - Export screenshots with “device_frame” in all languages. Allow to create “marketing material” (from UI and from CLI)
- - Export full animation of the whole test
-Launcher
- - Preview (example folder)
- - Create new example
- - Devbar in the UI (change language, etc...)
-Theme
- - Synchronisation with Figma
-Timeline
- - Editor
- - New animation API
-Assets
- - Optimization + resize
- - Available with CLI
- - Generate constants
- - Synchronisation with Figma
-Pubspec
- - Upgrade packages
- - See changelogs etc...
-Flutter version management
- - Download flutter installations
- - Set system path to main version
-Translations
- - Synchronize with Translation platform
+
+### Dependencies overview
+
+A list of all the pub dependencies of a project with some information about each depended package:
+- Quality metrics (pub scores, Github stars...)
+- Number of imports of this dependency in the project
+- Visualize the transitivity path. To understand from where a dependency is coming from.
+
+### App's launcher icon
+
+- View all the launcher icon of the project.
+- Allow to update all the icons from a single image.
+
+### App test
+ - Run Widget Test in a visual environment with screenshots of each step
+ - Configure screen size to common phone format
+ - See the app in every supported language
 ''');
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 }

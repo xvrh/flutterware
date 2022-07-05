@@ -3,15 +3,36 @@ import 'package:flutterware_app/src/utils.dart';
 
 class Breadcrumb extends StatelessWidget {
   final List<Widget> children;
+  final VoidCallback? onBack;
 
-  const Breadcrumb({super.key, required this.children});
+  const Breadcrumb({
+    super.key,
+    required this.children,
+    this.onBack,
+  });
 
   @override
   Widget build(BuildContext context) {
     return DefaultTextStyle.merge(
       style: const TextStyle(fontSize: 13, color: AppColors.breadcrumbLink),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          if (onBack != null) ...[
+            InkWell(
+              onTap: onBack,
+              child: SizedBox(
+                height: 25,
+                width: 25,
+                child: Icon(
+                  Icons.arrow_back,
+                  color: AppColors.breadcrumbLink,
+                  size: 18,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
           for (var child in children) ...[
             child,
             if (child != children.last)

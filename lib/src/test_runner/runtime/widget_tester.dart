@@ -22,18 +22,6 @@ import 'package:crypto/crypto.dart';
 
 const String _defaultPlatform = kIsWeb ? 'web' : 'android';
 
-Future<ui.Image> _captureImage(Element element) {
-  assert(element.renderObject != null);
-  RenderObject renderObject = element.renderObject!;
-  while (!renderObject.isRepaintBoundary) {
-    renderObject = renderObject.parent! as RenderObject;
-  }
-  assert(!renderObject.debugNeedsPaint);
-  final OffsetLayer layer = renderObject.debugLayer! as OffsetLayer;
-  print("Capture ${renderObject.paintBounds}");
-  return layer.toImage(renderObject.paintBounds, pixelRatio: 1 / 3);
-}
-
 //TODO(xha): should come from Zone (injected by the runner). If direct tests:
 // Default to EnvironmentVariable to define the behavior (device size etc...).
 var _a = "";
@@ -41,7 +29,7 @@ RunContext runContext = EmptyRunContext();
 PathTracker _pathTracker = PathTracker();
 late AppWidgetTester tester;
 
-Future<void> Function(flutter.WidgetTester) wrapTestBody(
+Future<void> Function(flutter.WidgetTester) applyTestValues(
     Future<void> Function(AppWidgetTester) body) {
   return (originalTester) async {
     var args = runContext.args;

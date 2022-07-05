@@ -1,16 +1,37 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
-class ChangeLogPage extends StatelessWidget {
+class ChangeLogPage extends StatefulWidget {
   const ChangeLogPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Markdown(data: '''
-## Changelog
+  State<ChangeLogPage> createState() => _ChangeLogPageState();
+}
 
-#### v0.1.0
-- `test_ui` feature: A GUI built on top of the “flutter test” framework.
-''');
+class _ChangeLogPageState extends State<ChangeLogPage> {
+  late Future<String> _changelog;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _changelog = _loadChangelog();
+  }
+
+  Future<String> _loadChangelog() async {
+    var file = File('../CHANGELOG.md');
+    return file.readAsString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _changelog,
+      builder: (context, snapshot) {
+        return Markdown(data: snapshot.data ?? '');
+      },
+    );
   }
 }

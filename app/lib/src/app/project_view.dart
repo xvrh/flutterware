@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/ui/side_menu.dart';
 import 'package:flutterware_app/src/utils/router_outlet.dart';
 import '../about/screen.dart';
-import '../dependencies/screen.dart';
+import '../dependencies/list.dart';
 import '../icon/screen.dart';
 import '../overview/screen.dart';
 import '../project.dart';

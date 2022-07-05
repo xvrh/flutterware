@@ -2,22 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/dependencies/detail.dart';
 import 'package:flutterware_app/src/dependencies/model/service.dart';
 import 'package:flutterware_app/src/dependencies/upgrades.dart';
-import 'package:flutterware_app/src/utils/router_outlet.dart';
 import 'package:pub_scores/pub_scores.dart';
-import '../app/project_view.dart';
 import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
-import '../utils/ui/error_panel.dart';
-import '../utils/ui/loading.dart';
 import 'package:collection/collection.dart';
 
-//TODO(xha): enhancement:
-// - Search field for filter
-// - Single table
-// - "Transitive" badge (with tooltip showing the root package responsible)
-// - Checkbox for "Show transitive dependencies" (with help icon)
 class DependenciesScreen extends StatefulWidget {
   final Project project;
 
@@ -29,6 +20,7 @@ class DependenciesScreen extends StatefulWidget {
 
 class _DependenciesScreenState extends State<DependenciesScreen> {
   final _scrollBucket = PageStorageBucket();
+  final _searchController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +33,12 @@ class _DependenciesScreenState extends State<DependenciesScreen> {
             DependencyDetailScreen(widget.project, args['packageName']),
       }),
     );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 }
 
@@ -57,7 +55,6 @@ class _DependencyListScreen extends StatefulWidget {
 }
 
 class _DependencyListScreenState extends State<_DependencyListScreen> {
-  final _searchController = TextEditingController();
   final _sorts = {
     0: _selectPackageName,
     3: _selectPubScore,
@@ -68,6 +65,9 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
   bool _withTransitive = true;
 
   Project get project => widget.parent.widget.project;
+
+  TextEditingController get _searchController =>
+      widget.parent._searchController;
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +85,6 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
           children: [
             Breadcrumb(children: [
               BreadcrumbEntry.overview,
-              Text('Tools'),
             ]),
             Row(
               children: [
@@ -141,9 +140,10 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
-          Text('Show transitive'),
+          Expanded(child: Text('Show transitive')),
           Checkbox(value: true, onChanged: (v) {}),
-          Expanded(
+          SizedBox(
+            width: 300,
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: TextFormField(
@@ -185,10 +185,11 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
   }
 
   Widget _table(Iterable<Dependency> dependencies) {
-    var filteredDependencies  =dependencies;
-    if (_searchController.text.isNotEmpty ) {
+    var filteredDependencies = dependencies;
+    if (_searchController.text.isNotEmpty) {
       var query = _searchController.text.toLowerCase();
-      filteredDependencies = dependencies.where((e) => e.name.toLowerCase().contains(query));
+      filteredDependencies =
+          dependencies.where((e) => e.name.toLowerCase().contains(query));
     }
 
     return SizedBox(
@@ -291,12 +292,6 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
       _sortIndex = columnIndex;
       _sortAscending = ascending;
     });
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 }
 
