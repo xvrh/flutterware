@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -10,10 +8,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_studio/src/test_runner/protocol/models.dart';
-import 'package:flutter_studio/src/test_runner/runtime/binding.dart';
-import 'package:flutter_studio/src/test_runner/runtime/phone_status_bar.dart';
-import 'package:flutter_studio/src/test_runner/runtime/widget_tester_extension.dart';
+import 'package:flutterware/src/test_runner/protocol/models.dart';
+import 'package:flutterware/src/test_runner/runtime/phone_status_bar.dart';
+import 'package:flutterware/src/test_runner/runtime/widget_tester_extension.dart';
 import 'package:flutter_test/flutter_test.dart' as flutter;
 import 'package:pool/pool.dart';
 
@@ -25,18 +22,6 @@ import 'package:crypto/crypto.dart';
 
 const String _defaultPlatform = kIsWeb ? 'web' : 'android';
 
-Future<ui.Image> _captureImage(Element element) {
-  assert(element.renderObject != null);
-  RenderObject renderObject = element.renderObject!;
-  while (!renderObject.isRepaintBoundary) {
-    renderObject = renderObject.parent! as RenderObject;
-  }
-  assert(!renderObject.debugNeedsPaint);
-  final OffsetLayer layer = renderObject.debugLayer! as OffsetLayer;
-  print("Capture ${renderObject.paintBounds}");
-  return layer.toImage(renderObject.paintBounds, pixelRatio: 1 / 3);
-}
-
 //TODO(xha): should come from Zone (injected by the runner). If direct tests:
 // Default to EnvironmentVariable to define the behavior (device size etc...).
 var _a = "";
@@ -44,7 +29,7 @@ RunContext runContext = EmptyRunContext();
 PathTracker _pathTracker = PathTracker();
 late AppWidgetTester tester;
 
-Future<void> Function(flutter.WidgetTester) wrapTestBody(
+Future<void> Function(flutter.WidgetTester) applyTestValues(
     Future<void> Function(AppWidgetTester) body) {
   return (originalTester) async {
     var args = runContext.args;
@@ -163,10 +148,6 @@ class AppWidgetTester implements flutter.WidgetTester {
       //var image = await _captureImage(allElements.first);
       ui.Image? image;
       if (runContext.args.imageRatio > 0) {
-        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
-        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
-        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
-        image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
         image = await boundary.toImage(pixelRatio: runContext.args.imageRatio);
       }
       Future<NewScreen> f() async {

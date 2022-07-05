@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import '../../ui.dart';
+
+import '../../utils.dart';
 
 class MenuTree extends StatefulWidget {
   final List<MenuEntry> entries;
@@ -143,7 +144,7 @@ class _LineView extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        color: selected ? AppColors.selection : null,
+        color: selected ? AppColors.link : null,
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -160,8 +161,7 @@ class _LineView extends StatelessWidget {
               child: Icon(
                 line.isLeaf ? Icons.insert_drive_file : Icons.folder,
                 size: 16,
-                color:
-                    line.isLeaf ? AppColors.iconLightBlue : Color(0xff8cd3ec),
+                color: line.isLeaf ? AppColors.link : Color(0xff8cd3ec),
               ),
             ),
             Expanded(

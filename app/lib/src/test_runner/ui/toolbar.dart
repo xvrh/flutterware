@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../ui.dart';
+import '../../utils.dart';
 
 class Toolbar extends StatelessWidget {
   final List<Widget> children;
@@ -275,7 +276,7 @@ class _Menu extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,
-              border: Border.all(color: AppColors.separator, width: 1),
+              border: Border.all(color: AppColors.divider, width: 1),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black26,

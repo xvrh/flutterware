@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter_studio_app/src/flutter_sdk.dart';
+import 'package:flutterware_app/src/flutter_sdk.dart';
 
 import 'daemon/commands.dart';
 import 'package:logging/logging.dart';

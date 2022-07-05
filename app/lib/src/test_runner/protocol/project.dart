@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter_studio/internals/test_runner.dart';
+import 'package:flutterware/internals/test_runner.dart';
 
 class ProjectHost {
   final Channel _channel;

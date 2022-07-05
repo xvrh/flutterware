@@ -4,15 +4,16 @@ import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/icon/image_provider.dart';
-import 'package:flutter_studio_app/src/utils/state_extension.dart';
-import 'package:flutter_studio_app/src/utils/ui/loading.dart';
-import '../app/project_view.dart';
+import 'package:flutterware_app/src/app/ui/breadcrumb.dart';
+import 'package:flutterware_app/src/icon/image_provider.dart';
+import 'package:flutterware_app/src/utils/state_extension.dart';
+import 'package:flutterware_app/src/utils/ui/loading.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../project.dart';
 import '../utils/async_value.dart';
 import '../utils/ui/error_panel.dart';
 import '../utils/ui/warning_box.dart';
-import 'icons.dart';
+import 'model/icons.dart';
 import 'package:path/path.dart' as p;
 
 class IconScreen extends StatelessWidget {
@@ -22,9 +23,6 @@ class IconScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    ProjectView.of(context).setBreadcrumb([
-      BreadcrumbItem(Text('App icon')),
-    ]);
     var theme = Theme.of(context);
     return ValueListenableBuilder<Snapshot<AppIcons>>(
       valueListenable: project.icons.icons,
@@ -35,12 +33,16 @@ class IconScreen extends StatelessWidget {
           primary: false,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           children: [
+            Breadcrumb(children: [
+              BreadcrumbEntry.overview,
+              Text('Tools'),
+            ]),
             Row(
               children: [
                 Expanded(
                   child: Text(
                     'App icon',
-                    style: theme.textTheme.headlineSmall,
+                    style: theme.textTheme.headlineMedium,
                   ),
                 ),
                 if (data != null && data.isNotEmpty)
@@ -61,7 +63,7 @@ class IconScreen extends StatelessWidget {
                         ]),
               ],
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 20),
             if (data != null)
               ..._icons(context, data)
             else if (error != null)
@@ -81,11 +83,6 @@ class IconScreen extends StatelessWidget {
     await showDialog(
         context: context,
         builder: (context) => _ChangeIconDialog(project, icons));
-    // Pick image
-    // Indicate the recommended size
-    // Allow to choose image for background on iOS (+ checkbox)
-    // Allow to check/uncheck some platforms
-    // This is a first version that need to be enhanced.
   }
 
   Iterable<Widget> _icons(BuildContext context, AppIcons icons) sync* {
@@ -97,11 +94,11 @@ class IconScreen extends StatelessWidget {
       var files = entry.value.sortedByCompare((e) => e.path, compareNatural);
 
       yield Text(
-        entry.key.name,
-        style: theme.textTheme.bodyLarge,
+        ' ${entry.key.name}',
+        style: theme.textTheme.bodyMedium,
       );
-      yield const SizedBox(height: 15);
-      yield Table(
+      yield const SizedBox(height: 5);
+      var table = Table(
         columnWidths: {
           0: FixedColumnWidth(80),
           1: FixedColumnWidth(100),
@@ -128,15 +125,25 @@ class IconScreen extends StatelessWidget {
                   '${icon.originalWidth}x${icon.originalHeight}',
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
-                Text(
-                  p.relative(icon.path, from: project.directory.path),
-                  style: const TextStyle(color: Colors.black45),
+                InkWell(
+                  onTap: () {
+                    launchUrl(Uri.file(p.dirname(icon.path)));
+                  },
+                  child: Text(
+                    p.relative(icon.path, from: project.directory.path),
+                    style: const TextStyle(color: Colors.black45),
+                  ),
                 ),
               ],
             ),
         ],
       );
-      yield Divider();
+      yield Card(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: table,
+        ),
+      );
       yield const SizedBox(height: 30);
     }
   }
@@ -204,7 +211,7 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
               ),
             WarningBox(
               message: 'This feature is limited and experimental.  \n'
-                  'If you have suggestions to improve it, [open issues on Github](https://github.com/xvrh/flutter_studio)',
+                  'If you have suggestions to improve it, [open issues on Github](https://github.com/xvrh/flutterware)',
             ),
           ],
         ),
@@ -229,7 +236,9 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
       label: 'images',
       extensions: ['png'],
     );
-    var result = await openFile(acceptedTypeGroups: [imagesGroup]);
+    var result = await openFile(
+        acceptedTypeGroups: [imagesGroup],
+        initialDirectory: widget.project.absolutePath);
     if (result != null) {
       var bytes = await result.readAsBytes();
       setState(() {

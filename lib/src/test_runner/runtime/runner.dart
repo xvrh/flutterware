@@ -20,7 +20,7 @@ import 'fonts.dart';
 import 'list_tests.dart';
 import 'run_group.dart';
 import 'scenario.dart';
-import 'package:test_api/src/backend/group.dart';
+import 'package:test_api/src/backend/group.dart'; // ignore: implementation_imports
 
 import 'widget_tester.dart'; // ignore: implementation_imports
 
@@ -52,9 +52,9 @@ class Runner implements RunContext {
       required Future<ScenarioBundle> Function() bundle,
       this.onConnected})
       : _bundleFactory = bundle {
-    //FlutterError.onError = (error) {
-    //  _logger.severe('FLUTTER ERROR: $error');
-    //};
+    FlutterError.onError = (error) {
+      _logger.severe('FLUTTER ERROR: $error');
+    };
 
     _binding = ScenarioBinding(onReloaded: notifyReloaded);
     _setup();
@@ -127,17 +127,6 @@ class Runner implements RunContext {
 
   Group? _findTest(Map<String, void Function()> tests, BuiltList<String> name) {
     return findTest(tests, name.join(' '));
-    /*for (var namePart in name) {
-      var value = tests[namePart];
-      if (value is TestCallback) {
-        return value;
-      } else if (value is Map<String, dynamic>) {
-        tests = value;
-      } else {
-        _logger.severe('Unsupported test type $value');
-      }
-    }
-    return null;*/
   }
 
   final _currentScenario = <RunArgs, Group>{};

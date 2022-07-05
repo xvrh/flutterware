@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-
+/*
 class AppColors {
   static const backgroundGrey = Color(0xfff2f2f2);
   static const separator = Color(0xffd1d1d1);
@@ -44,3 +44,4 @@ ThemeData appTheme() {
 
   return theme;
 }
+*/

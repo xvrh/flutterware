@@ -1,16 +1,15 @@
 import 'dart:io';
 
 import 'package:collection/collection.dart';
-import 'package:flutter_studio_app/src/test_runner/flow_graph.dart';
+import 'package:flutterware_app/src/test_runner/flow_graph.dart';
 import '../app/project_view.dart';
-import '../app/ui/breadcrumb.dart';
+import '../utils.dart';
 import '../utils/raw_image_provider.dart';
 import '../utils/router_outlet.dart';
-import 'package:flutter_studio/internals/test_runner.dart';
+import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
 import '../ui.dart';
 import 'detail/image.dart';
-import 'detail/json.dart';
 import 'service.dart';
 
 class DetailPage extends StatelessWidget {
@@ -24,32 +23,10 @@ class DetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var screen = run.screens[screenId];
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ProjectView.of(context).header.setItemsBuilder((context) => [
-            ...breadcrumbForRun(run),
-            if (screen != null) BreadcrumbItem(Text(screen.name)),
-          ]);
-    });
-
     if (screen == null) {
       return Center(
         child: Text('Screen $screenId is loading'),
       );
-    }
-
-    var email = screen.email;
-    if (email != null) {
-      throw UnimplementedError();
-    }
-
-    var pdf = screen.pdf;
-    if (pdf != null) {
-      throw UnimplementedError();
-    }
-
-    var json = screen.json;
-    if (json != null) {
-      return JsonDetail(project, run, screen, json);
     }
 
     return ImageDetail(project, run, screen);
@@ -57,7 +34,7 @@ class DetailPage extends StatelessWidget {
 }
 
 class DetailSkeleton extends StatelessWidget {
-  static final separator = Container(color: AppColors.separator, height: 1);
+  static final separator = Container(color: AppColors.divider, height: 1);
 
   final ProjectInfo project;
   final ScenarioRun run;
@@ -135,7 +112,7 @@ class DetailSkeleton extends StatelessWidget {
                 ),
                 if (parentScreen.collapsedScreens.isNotEmpty) ...[
                   Container(
-                    color: AppColors.separator,
+                    color: AppColors.divider,
                     height: 1,
                   ),
                   _RelatedScreensList(parentScreen, selectedScreen: screen),
@@ -145,7 +122,7 @@ class DetailSkeleton extends StatelessWidget {
           ),
         ),
         Container(
-          color: AppColors.separator,
+          color: AppColors.divider,
           width: 1,
         ),
         SizedBox(

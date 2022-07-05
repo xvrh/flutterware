@@ -18,7 +18,6 @@ abstract class NewScreen implements Built<NewScreen, NewScreenBuilder> {
   Screen get screen;
   String? get parent;
   Rectangle? get parentRectangle;
-  AnalyticEvent? get analyticEvent;
   String? get imageBase64;
   ImageFile? get imageFile;
 }
@@ -66,10 +65,6 @@ abstract class Screen implements Built<Screen, ScreenBuilder> {
   bool get isCollapsable;
   bool get isCollapsed;
   BuiltList<Screen> get collapsedScreens;
-  BrowserInfo? get browser;
-  EmailInfo? get email;
-  PdfInfo? get pdf;
-  JsonInfo? get json;
 }
 
 abstract class TextInfo implements Built<TextInfo, TextInfoBuilder> {
@@ -111,124 +106,5 @@ abstract class ScreenLink implements Built<ScreenLink, ScreenLinkBuilder> {
 
   String get to;
   Rectangle? get tapRect;
-  AnalyticEvent? get analytic;
 }
 
-abstract class AnalyticEvent
-    implements Built<AnalyticEvent, AnalyticEventBuilder> {
-  static Serializer<AnalyticEvent> get serializer => _$analyticEventSerializer;
-
-  AnalyticEvent._();
-  factory AnalyticEvent._builder(
-      [void Function(AnalyticEventBuilder) updates]) = _$AnalyticEvent;
-
-  factory AnalyticEvent(String event, {Map<String, dynamic>? args}) =>
-      AnalyticEvent._builder((b) {
-        b.event = event;
-        if (args != null) {
-          b.args.replace(args);
-        }
-      });
-
-  String get event;
-  BuiltMap<String, String> get args;
-}
-
-abstract class BrowserInfo implements Built<BrowserInfo, BrowserInfoBuilder> {
-  static Serializer<BrowserInfo> get serializer => _$browserInfoSerializer;
-
-  BrowserInfo._();
-
-  factory BrowserInfo._builder([void Function(BrowserInfoBuilder) updates]) =
-      _$BrowserInfo;
-
-  factory BrowserInfo(String url,
-          {required bool useSafariVC, required bool useWebView}) =>
-      BrowserInfo._builder((b) => b
-        ..url = url
-        ..useSafariVC = useSafariVC
-        ..useWebView = useWebView);
-
-  String get url;
-  bool get useSafariVC;
-  bool get useWebView;
-}
-
-abstract class EmailInfo implements Built<EmailInfo, EmailInfoBuilder> {
-  static Serializer<EmailInfo> get serializer => _$emailInfoSerializer;
-
-  EmailInfo._();
-  factory EmailInfo._builder([void Function(EmailInfoBuilder) updates]) =
-      _$EmailInfo;
-  factory EmailInfo({
-    required String subject,
-    required String body,
-    required String sender,
-    required String recipient,
-  }) =>
-      EmailInfo._builder((b) => b
-        ..subject = subject
-        ..body = body
-        ..sender = sender
-        ..recipient = recipient);
-
-  String get subject;
-  String get body;
-  String get sender;
-  String get recipient;
-}
-
-abstract class PdfInfo implements Built<PdfInfo, PdfInfoBuilder> {
-  static Serializer<PdfInfo> get serializer => _$pdfInfoSerializer;
-
-  PdfInfo._();
-  factory PdfInfo._builder([void Function(PdfInfoBuilder) updates]) = _$PdfInfo;
-
-  factory PdfInfo({
-    required Uint8List bytes,
-    required String fileName,
-  }) =>
-      PdfInfo._builder((b) => b
-        ..bytesBase64 = base64Encode(bytes)
-        ..fileName = fileName);
-
-  String get bytesBase64;
-  String get fileName;
-}
-
-abstract class JsonInfo implements Built<JsonInfo, JsonInfoBuilder> {
-  static Serializer<JsonInfo> get serializer => _$jsonInfoSerializer;
-
-  JsonInfo._();
-  factory JsonInfo._builder([void Function(JsonInfoBuilder) updates]) =
-      _$JsonInfo;
-
-  factory JsonInfo({
-    required String data,
-    required String fileName,
-  }) =>
-      JsonInfo._builder((b) => b
-        ..data = data
-        ..fileName = fileName);
-
-  String get data;
-  String get fileName;
-}
-
-abstract class DocumentationScreen
-    implements Built<DocumentationScreen, DocumentationScreenBuilder> {
-  DocumentationScreen._();
-  factory DocumentationScreen._fromBuilder(
-          [void Function(DocumentationScreenBuilder) updates]) =
-      _$DocumentationScreen;
-
-  factory DocumentationScreen(File? screenshot, Screen screen, RunArgs args) =>
-      DocumentationScreen._fromBuilder((b) => b
-        ..screenshot = screenshot
-        ..screen.replace(screen)
-        ..args.replace(args));
-
-  File? get screenshot;
-  Screen get screen;
-  RunArgs get args;
-}

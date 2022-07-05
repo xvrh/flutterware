@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:rxdart/rxdart.dart';
-import 'package:flutter_studio/internals/test_runner.dart';
+import 'package:flutterware/internals/test_runner.dart';
 
 class RunHost {
   final Channel _channel;
@@ -54,10 +54,6 @@ class RunHost {
               var parentRectangle = newScreen.parentRectangle;
               if (parentRectangle != null) {
                 r.tapRect.replace(parentRectangle);
-              }
-              var analyticEvent = newScreen.analyticEvent;
-              if (analyticEvent != null) {
-                r.analytic.replace(analyticEvent);
               }
             }),
           );

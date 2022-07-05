@@ -1,26 +1,26 @@
 
 # Flutterware
 
-A set of tools for Flutter projects.
+A collection of GUI tools for Flutter development.
 
 ## Quick start
 
 Add the `pub`dependency in your `pubspec.yaml`
 
-`flutter pub add flutter_studio`
+`flutter pub add flutterware`
 
 ```yaml
 dependencies:
-  flutter_studio:
+  flutterware:
 ```
 
 Run the GUI app
 
 ```shell
 # Run this in your Flutter project directory
-dart run flutter_studio app
+dart run flutterware app
 ```
-The first launch is a bit slow because the tool need to be compiled.
+The first launch is a bit slow because the desktop app need to be compiled.
 
 **screenshots**
 

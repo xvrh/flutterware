@@ -1,7 +1,8 @@
 import 'dart:math';
-import 'package:flutter_studio/internals/test_runner.dart';
+import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
 import '../ui.dart';
+import '../utils.dart';
 import 'ui/toolbar.dart';
 
 class ToolbarParameters {
@@ -85,9 +86,9 @@ class _RunToolbarState extends State<RunToolbar> {
       children: [
         Container(
           decoration: BoxDecoration(
-            color: AppColors.backgroundGrey,
+            color: AppColors.menuBackground,
             border: Border(
-              bottom: BorderSide(color: AppColors.separator, width: 1),
+              bottom: BorderSide(color: AppColors.divider, width: 1),
             ),
           ),
           child: Toolbar(

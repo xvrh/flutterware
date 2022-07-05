@@ -1,12 +1,25 @@
+import 'dart:ui';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/dependencies/service.dart';
-import 'package:flutter_studio_app/src/utils/router_outlet.dart';
-import 'package:flutter_studio_app/src/utils/ui/loading.dart';
+import 'package:flutterware_app/src/dependencies/model/service.dart';
+import 'package:flutterware_app/src/utils/router_outlet.dart';
+import 'package:flutterware_app/src/utils/ui/loading.dart';
 
 import '../app/ui/back_bar.dart';
+import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../ui.dart';
+import '../utils.dart';
 import '../utils/async_value.dart';
+
+class MyCustomScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+      };
+}
 
 class DependencyDetailScreen extends StatelessWidget {
   final Project project;
@@ -39,31 +52,166 @@ class _DetailScreen extends StatelessWidget {
   final Project project;
   final Dependency dependency;
 
-  const _DetailScreen(this.project, this.dependency, {super.key});
+  const _DetailScreen(this.project, this.dependency);
 
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
+    return DefaultTabController(
+      length: 3,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Breadcrumb(
+              onBack: () {
+                context.router.go('/project/dependencies');
+              },
+              children: [
+                BreadcrumbEntry.overview,
+                BreadcrumbEntry(
+                    title: Text('Dependencies'), url: '/project/dependencies')
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Text(
+                dependency.name,
+                style: theme.textTheme.headlineMedium,
+              ),
+            ),
+            const TabBar(
+              isScrollable: true,
+              tabs: [
+                Tab(text: 'Info', height: 35),
+                Tab(text: 'Readme', height: 35),
+                Tab(text: 'Changelog', height: 35),
+              ],
+            ),
+            Container(
+              color: AppColors.tabDivider,
+              height: 1,
+            ),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _InfoTab(),
+                  Text('README'),
+                  Text('Changelog'),
+                ],
+              ),
+            ),
+            InkWell(
+              onTap: () {
+                context.router.go('/project/dependencies');
+              },
+              child: Row(
+                children: [
+                  Icon(Icons.arrow_back, size: 18),
+                  const SizedBox(width: 5),
+                  Text('Back to list'),
+                ],
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoTab extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      padding: const EdgeInsets.symmetric(vertical: 15),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 15),
+          child: ListView(
+            primary: false,
+            children: [
+              _InfoRow(
+                label: Text('Version'),
+                value: Text("1.0.0"),
+              ),
+              _InfoRow(
+                label: Text('Pub'),
+                value: Text("100%, 205 likes, 130 points"),
+              ),
+              _InfoRow(
+                label: Text('Github'),
+                value: Text("100 stars 50 forks (thecompany/therepository)"),
+              ),
+              _InfoRow(
+                label: Text('Imports'),
+                value: Text("2 imports in Dart code"),
+              ),
+              _InfoRow(
+                label: Text('Transitive'),
+                value: Column(
+                  children: [
+                    Text("http < fetch < url"),
+                    Text("http < fetch < url"),
+                    Text("http < fetch < url"),
+                    Text("+ 3 others"),
+                  ],
+                ),
+              ),
+              Divider(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 15),
+                child: Text(
+                  'Metrics',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              _InfoRow(
+                label: Text('Lines of Code'),
+                value: Text("123654 (Dart), 456 (Java)"),
+              ),
+              _InfoRow(
+                label: Text('Size'),
+                value: Text("12 MO + 123 files"),
+              ),
+              Divider(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final Widget label;
+  final Widget value;
+
+  const _InfoRow({
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 15),
+      child: Row(
         children: [
-          BackBar('All dependencies'),
-          Text(dependency.name, style: theme.textTheme.headlineMedium,),
-          Text('''
-Version | Date update
-Link Pub
-Link Github
-Score pub
-Score Github
-Number of usage in the package (+ list)
-If transitive, show all import graphs (until direct dep)
-LoC
-Size (MB + number of files)
-Tabs: README | CHANGELOG
-All available versions?
-''')
+          SizedBox(
+            width: 150,
+            child: DefaultTextStyle.merge(
+              style: const TextStyle(color: Colors.black54, fontSize: 13),
+              child: label,
+            ),
+          ),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: value,
+            ),
+          ),
         ],
       ),
     );

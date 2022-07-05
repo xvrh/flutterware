@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 final _logger = Logger('resource_cleaner');
 
 class ResourceCleanerService {
-  final _basePath = 'build/flutter_studio/process_to_kill';
+  final _basePath = 'build/flutterware/process_to_kill';
 
   Future<void> initialize() async {
     var directory = Directory(_basePath);

@@ -1,106 +1,90 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/app/ui/menu.dart';
-import 'package:flutter_studio_app/src/utils/router_outlet.dart';
-import '../dependencies/screen.dart';
+import 'package:flutterware_app/src/ui/side_menu.dart';
+import 'package:flutterware_app/src/utils/router_outlet.dart';
+import '../about/screen.dart';
+import '../dependencies/list.dart';
 import '../icon/screen.dart';
 import '../overview/screen.dart';
 import '../project.dart';
+import '../test_runner/menu.dart';
 import '../test_runner/screen.dart';
-import '../ui.dart';
 import '../utils/async_value.dart';
-import 'header.dart';
-import 'menu.dart';
-import 'ui/breadcrumb.dart';
-import 'ui/side_bar.dart';
 import 'paths.dart' as paths;
 
-export 'ui/breadcrumb.dart';
-
-class ProjectView extends StatefulWidget {
+class ProjectView extends StatelessWidget {
   final Project project;
 
   const ProjectView(this.project, {Key? key}) : super(key: key);
 
   @override
-  State<ProjectView> createState() => ProjectViewState();
-
-  static ProjectViewState of(BuildContext context) =>
-      context.findAncestorStateOfType<ProjectViewState>()!;
-}
-
-class ProjectViewState extends State<ProjectView> {
-  final _headerKey = GlobalKey<HeaderState>();
-
-  @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ValueListenableBuilder<Snapshot<Pubspec>>(
-          valueListenable: widget.project.pubspec,
-          builder: (context, snapshot, child) {
-            return Header(
-              snapshot.data?.name ?? snapshot.error?.toString() ?? '',
-              key: _headerKey,
-            );
-          },
-        ),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                color: AppColors.menuBackground,
-                width: 250,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+        SideMenu(
+          bottom: [
+            AboutMenuItem(),
+          ],
+          children: [
+            LogoTile(
+              name: 'Flutterware',
+              version: 'ALPHA',
+            ),
+            SingleLineGroup(
+              child: MenuLink(
+                url: paths.home,
+                title: Row(
                   children: [
-                    Expanded(child: Menu(widget.project)),
-                    MenuLine(
-                      selected: false,
-                      onTap: () {
-                        //TODO(xha): go to changelog, feature tour etc...
-                      },
-                      type: LineType.leaf,
-                      depth: 0,
-                      child: Text(
-                        'Flutter Studio v0.1.0',
-                        style: TextStyle(color: AppColors.selection),
+                    Icon(
+                      Icons.home,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ValueListenableBuilder<Snapshot<Pubspec>>(
+                        valueListenable: project.pubspec,
+                        builder: (context, snapshot, child) {
+                          return Text(snapshot.data?.name ?? '');
+                        },
                       ),
                     ),
                   ],
                 ),
               ),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.separator,
+            ),
+            CollapsibleMenu(
+              title: Text('Project'),
+              children: [
+                MenuLink(
+                  url: paths.dependencies,
+                  title: Text('Pub dependencies'),
                 ),
-                width: 1,
-              ),
-              Expanded(
-                child: RouterOutlet(
-                  {
-                    paths.home: (route) => OverviewScreen(widget.project),
-                    paths.dependencies: (route) =>
-                        DependenciesScreen(widget.project),
-                    paths.tests: (route) => TestRunnerScreen(widget.project),
-                    paths.icon: (route) => IconScreen(widget.project),
-                  },
-                  onNotFound: (_) => paths.home,
+                MenuLink(
+                  url: paths.icon,
+                  title: Text('Launcher icon'),
                 ),
-              ),
-            ],
+              ],
+            ),
+            CollapsibleMenu(
+              title: Text('Tests'),
+              children: [
+                TestMenu(project),
+              ],
+            ),
+          ],
+        ),
+        Expanded(
+          child: RouterOutlet(
+            {
+              paths.home: (route) => OverviewScreen(project),
+              paths.dependencies: (route) => DependenciesScreen(project),
+              paths.tests: (route) => TestRunnerScreen(project),
+              paths.icon: (route) => IconScreen(project),
+            },
+            onNotFound: (_) => paths.home,
           ),
         ),
       ],
     );
-  }
-
-  HeaderState get header => _headerKey.currentState!;
-
-  void setBreadcrumb(Iterable<BreadcrumbItem> breadcrumb) {
-    ""; // Create independant widget & always account for null at call site
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      header.setItemsBuilder((context) => breadcrumb);
-    });
   }
 }

@@ -1,12 +1,8 @@
 import 'dart:io';
 
-import 'package:flutter_studio/internals/test_runner.dart';
+import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
 import '../detail.dart';
-import '../../app/ui/side_bar.dart';
-import 'shared/documentation_section.dart';
-import 'shared/link.dart';
-import 'shared/translation_key.dart';
 
 class ImageDetail extends StatefulWidget {
   final ProjectInfo project;

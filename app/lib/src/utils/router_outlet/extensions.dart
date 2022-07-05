@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
-import 'package:flutter_studio_app/src/utils/router_outlet/path.dart';
-export 'package:flutter_studio_app/src/utils/router_outlet/path.dart'
+import 'package:flutterware_app/src/utils/router_outlet/path.dart';
+export 'package:flutterware_app/src/utils/router_outlet/path.dart'
     show SelectionType;
 import 'provider.dart';
 import 'router_root.dart';

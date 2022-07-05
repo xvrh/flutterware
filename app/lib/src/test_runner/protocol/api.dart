@@ -1,5 +1,5 @@
 import 'package:stream_channel/stream_channel.dart';
-import 'package:flutter_studio/internals/test_runner.dart';
+import 'package:flutterware/internals/test_runner.dart';
 
 import 'listing.dart';
 import 'project.dart';

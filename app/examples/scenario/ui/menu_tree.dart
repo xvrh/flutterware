@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/test_runner/ui/menu_tree.dart';
-import 'package:flutter_studio_app/src/utils/debug.dart';
+import 'package:flutterware_app/src/test_runner/ui/menu_tree.dart';
+import 'package:flutterware_app/src/utils/debug.dart';
 
 void main() => runDebugApp(MenuTreeExample());
 

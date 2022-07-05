@@ -1,4 +1,4 @@
-# flutter_studio_example
+# flutterware_example
 
 A new Flutter project.
 

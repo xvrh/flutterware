@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/test_runner/protocol/api.dart';
-import '../app/ui/menu.dart';
+import 'package:flutterware_app/src/test_runner/protocol/api.dart';
 import '../project.dart';
 import '../ui.dart';
+import '../utils.dart';
 import 'daemon.dart';
 import 'listing.dart';
 import 'service.dart';
@@ -113,9 +113,9 @@ class DaemonToolbar extends StatelessWidget {
     return Container(
       height: 28,
       decoration: BoxDecoration(
-        color: AppColors.backgroundGrey,
+        color: AppColors.menuBackground,
         border: Border(
-          bottom: BorderSide(color: AppColors.separator, width: 1),
+          bottom: BorderSide(color: AppColors.divider, width: 1),
         ),
       ),
       child: Row(

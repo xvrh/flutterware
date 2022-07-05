@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio_app/src/overview/service.dart';
-import 'package:flutter_studio_app/src/utils/router_outlet.dart';
+import 'package:flutterware_app/src/overview/service.dart';
+import 'package:flutterware_app/src/utils/router_outlet.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../app/paths.dart' as paths;
-import '../app/project_view.dart';
-import '../dependencies/service.dart';
-import '../icon/service.dart';
+import '../icon/model/service.dart';
 import '../project.dart';
-import '../ui.dart';
+import '../ui/colors.dart';
 import '../utils/async_value.dart';
 import 'package:path/path.dart' as p;
 
 import '../icon/image_provider.dart';
+import 'metrics_card.dart';
 
 class OverviewScreen extends StatelessWidget {
   final Project project;
@@ -20,77 +20,28 @@ class OverviewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    ProjectView.of(context).setBreadcrumb([]);
-
-    return Container(
-      color: Color(0xfff8f8f8),
-      child: ListView(
-        primary: false,
-        padding: const EdgeInsets.all(15),
-        children: [
-          _ProjectInfoCard(project),
-          const SizedBox(height: 30),
-          Text('Tools', style: theme.textTheme.titleLarge,),
-          Text('Launcher icon update'),
-          Text('Dependency preview'),
-          Text('Hot-reloadable, visual test runner'),
-          //Text('ThemeData editor'),
-          //Text('CustomPaint editor'),
-          //_HomeCard(),
-          //const SizedBox(height: 15),
-          //_HomeCard2(),
-          //const SizedBox(height: 15),
-          //_HomeCard3(),
-          /*Card(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    '120 dependencies',
-                    style: theme.textTheme.bodyLarge,
-                  ),
-                  Text('4 directs, 200 transitives'),
-                  TextButton(onPressed: () {}, child: Text('MANAGE')),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('24 523 Lines of Code'),
-                  TextButton(onPressed: () {}, child: Text('MANAGE')),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('0 App Test'),
-                  TextButton(onPressed: () {}, child: Text('START')),
-                ],
-              ),
-            ),
-          ),
-          //TODO(xha): re-organise to be more beautiful
-          // Title - More info
-          const SizedBox(height: 20),
-          _Dependencies(project),
-          const SizedBox(height: 20),
-          _Metrics(project),*/
-        ],
-      ),
+    return ListView(
+      primary: false,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+      children: [
+        Text(
+          'FLUTTER APP',
+          style: theme.textTheme.bodySmall,
+        ),
+        _ProjectInfoCard(project),
+        const SizedBox(height: 30),
+        Text(
+          'METRICS',
+          style: theme.textTheme.bodySmall,
+        ),
+        MetricsCard(project),
+        const SizedBox(height: 30),
+        Text(
+          'TOOLS',
+          style: theme.textTheme.bodySmall,
+        ),
+        _ToolsCard(),
+      ],
     );
   }
 }
@@ -98,283 +49,114 @@ class OverviewScreen extends StatelessWidget {
 class _ProjectInfoCard extends StatelessWidget {
   final Project project;
 
-  const _ProjectInfoCard(this.project, {super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _Icon(project),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ValueListenableBuilder<Snapshot<Pubspec>>(
-                  valueListenable: project.pubspec,
-                  builder: (context, projectSnapshot, child) {
-                    var version = projectSnapshot.data?.version;
-                    String? versionString;
-                    if (version != null) {
-                      versionString = '${version.major}.${version.minor}.${version.patch}';
-                    }
-
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          projectSnapshot.data?.name ??
-                              p.basename(project.directory.path),
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        if (versionString != null)
-                          Container(
-                            decoration: BoxDecoration(
-                                color: Colors.black12,
-                                borderRadius: BorderRadius.circular(2)),
-                            padding: const EdgeInsets.symmetric(horizontal: 2),
-                            child: Text(
-                              'v$versionString',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.black45,
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-                Text(
-                  p.normalize(project.absolutePath),
-                  style: const TextStyle(
-                    color: Colors.black45,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Container(
-                    decoration: BoxDecoration(color: Color(0xffE7F8FF)),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                    child: Text(
-                      'ANDROID | IOS | MACOS | WINDOWS',
-                      style: const TextStyle(
-                          color: Color(0xff1967d2), fontSize: 11),
-                    ),
-                  ),
-                ),
-                InkWell(
-                  onTap: () {},
-                  child: Text(
-                    '10 pub dependencies',
-                    style: const TextStyle(
-                      color: AppColors.selection,
-                      decoration: TextDecoration.underline,
-                      fontSize: 12
-                    ),
-                  ),
-                ),
-                Text(
-                  'Dart 2.17',
-                  style: const TextStyle(
-                  ),
-                ),
-                /*const SizedBox(width: 10),
-                Row(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                          color: Colors.black12,
-                          borderRadius: BorderRadius.circular(2)),
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Text(
-                        'v1.0.0',
-                        style: const TextStyle(
-                            fontSize: 11, color: Colors.black45),
-                      ),
-                    ),
-                    Text('Android'),
-                  ],
-                ),*/
-              ],
-            ),
-          )
-        ],
-      ),
-    );
-  }
-}
-
-class _HomeCard extends StatelessWidget {
-  const _HomeCard({super.key});
+  const _ProjectInfoCard(this.project);
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 2,
-      color: Colors.white,
-      surfaceTintColor: Colors.white,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-      child: InkWell(
-        onTap: () {},
-        child: Container(
-          //decoration: BoxDecoration(
-          //    color: Colors.white,
-          //    border: Border.all(width: 1, color: Colors.black12),
-          //    borderRadius: BorderRadius.circular(3)),
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    'Dependencies',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 16,
-                    ),
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _Icon(project),
+            const SizedBox(width: 15),
+            Expanded(
+              child: _data(),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _data() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ValueListenableBuilder<Snapshot<Pubspec>>(
+          valueListenable: project.pubspec,
+          builder: (context, projectSnapshot, child) {
+            var version = projectSnapshot.data?.version;
+            String? versionString;
+            if (version != null) {
+              versionString =
+                  '${version.major}.${version.minor}.${version.patch}';
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  projectSnapshot.data?.name ??
+                      p.basename(project.directory.path),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
                   ),
-                  InkWell(
-                    onTap: () {},
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Text(
-                        'Manage',
-                        style: const TextStyle(
-                          color: AppColors.selection,
-                          decoration: TextDecoration.underline,
-                        ),
+                ),
+                const SizedBox(width: 10),
+                if (versionString != null)
+                  Container(
+                    decoration: BoxDecoration(
+                        color: Colors.black12,
+                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: Text(
+                      'v$versionString',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.black45,
                       ),
                     ),
                   ),
-                ],
+              ],
+            );
+          },
+        ),
+        Align(
+          alignment: Alignment.bottomLeft,
+          child: InkWell(
+            onTap: () => launchUrl(Uri.file(project.absolutePath)),
+            child: Text(
+              p.normalize(project.absolutePath),
+              style: const TextStyle(
+                color: Colors.black45,
+                fontSize: 12,
               ),
-              //Divider(),
-              Text('10 directs  |  72 transitives'),
-              //Text('72 transitives'),
-              //InkWell(
-              //  onTap: () {},
-              //  child: Padding(
-              //    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              //    child: Text(
-              //      'Manage',
-              //      style: const TextStyle(
-              //        color: AppColors.selection,
-              //        decoration: TextDecoration.underline,
-              //      ),
-              //    ),
-              //  ),
-              //),
-            ],
+            ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _HomeCard2 extends StatelessWidget {
-  const _HomeCard2({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      color: Colors.white,
-      surfaceTintColor: Colors.white,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-      child: Container(
-        //decoration: BoxDecoration(
-        //  color: Colors.white,
-        //  border: Border.all(width: 1, color: Colors.black12),
-        //),
-        padding: const EdgeInsets.all(5),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Text(
-                  'Code metrics',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(width: 5),
-                //Expanded(child: Divider()),
-              ],
+        const SizedBox(height: 5),
+        Align(
+          alignment: Alignment.bottomLeft,
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(8),
             ),
-            //Divider(),
-            Text('20256 Lines of Code'),
-            Text('72 files'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeCard3 extends StatelessWidget {
-  const _HomeCard3({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      color: Colors.white,
-      surfaceTintColor: Colors.orange,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-      child: Container(
-        //decoration: BoxDecoration(
-        //  color: Colors.white,
-        //  border: Border.all(width: 1, color: Colors.black12),
-        //),
-        padding: const EdgeInsets.all(5),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Text(
-                  'Flutter Studio',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(width: 5),
-                //Expanded(child: Divider()),
-                Container(
-                  decoration: BoxDecoration(
-                      color: Colors.black12,
-                      borderRadius: BorderRadius.circular(2)),
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Text(
-                    'v1.0.0',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.black45,
-                    ),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 5,
+              vertical: 2,
+            ),
+            child: ValueListenableBuilder<Snapshot<List<FlutterPlatform>>>(
+              valueListenable: project.info.platforms,
+              builder: (context, snapshot, child) {
+                return Text(
+                  snapshot.data?.map((p) => p.name.toUpperCase()).join(' | ') ??
+                      '',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
                   ),
-                )
-              ],
+                );
+              },
             ),
-            //Divider(),
-            Text('Changelog'),
-            Text('Feature tour'),
-            Text('Help'),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -394,7 +176,7 @@ class _Icon extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () {
-          context.router.go('/${paths.icon}');
+          context.router.go('/project/${paths.icon}');
         },
         child: SizedBox(
           width: IconService.previewSize.toDouble(),
@@ -415,97 +197,62 @@ class _Icon extends StatelessWidget {
   }
 }
 
-class _Dependencies extends StatelessWidget {
-  final Project project;
-
-  const _Dependencies(this.project);
-
+class _ToolsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () {
-        context.router.go('/${paths.dependencies}');
-      },
-      child: ValueListenableBuilder<Snapshot<Dependencies>>(
-        valueListenable: project.dependencies.dependencies,
-        builder: (context, snapshot, child) {
-          var data = snapshot.data;
-          return Text(
-            '${data?.dependencies.length ?? '-'} dependencies (${data?.directs.length ?? '-'} directs, ${data?.transitives.length} transitives)',
-            style: const TextStyle(color: AppColors.selection),
-          );
-        },
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Link('Launcher icon update', '/project/${paths.icon}'),
+            _Link(
+                'Pub dependencies overview', '/project/${paths.dependencies}'),
+            _Link('Hot-reloadable, visual test runner',
+                '/project/${paths.tests}'),
+            Text('• Widget preview: build UI in isolation (WIP)'),
+            Text('• Assets management (WIP)'),
+            Text('• Path & drawing (WIP)'),
+            Text('• Animation editor (WIP)'),
+            Text('• Theme editor (WIP)'),
+            Text('• Translation synchronisation (WIP)'),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _Metrics extends StatelessWidget {
-  final Project project;
+class _Link extends StatelessWidget {
+  final String title;
+  final String url;
 
-  const _Metrics(this.project);
+  const _Link(this.title, this.url);
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Row(
       children: [
-        Text(
-          'Code metrics',
-          style: theme.textTheme.bodyLarge,
-        ),
-        Row(
-          children: [
-            Text('Lines of Code'),
-            Text(
-              '24 325',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        //TODO(xha): Create its own menu entry
-        // Add a graph with test vs normal code
+        Text('• '),
         Align(
           alignment: Alignment.centerLeft,
-          child: SizedBox(
-            width: 400,
-            child: DataTable(columns: [
-              DataColumn(label: Text('Folder')),
-              DataColumn(label: Text('Files')),
-              DataColumn(label: Text('Lines')),
-            ], rows: [
-              DataRow(
-                cells: [
-                  DataCell(Text('Main')),
-                  DataCell(Text('50')),
-                  DataCell(Text('200 000')),
-                ],
+          child: InkWell(
+            onTap: () {
+              context.router.go(url);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.link,
+                  decoration: TextDecoration.underline,
+                ),
               ),
-              DataRow(
-                cells: [
-                  DataCell(Text('Tests')),
-                  DataCell(Text('50')),
-                  DataCell(Text('200 000')),
-                ],
-              ),
-              DataRow(
-                cells: [
-                  DataCell(Text('Other')),
-                  DataCell(Text('50')),
-                  DataCell(Text('200 000')),
-                ],
-              ),
-              DataRow(
-                cells: [
-                  DataCell(Text('Total')),
-                  DataCell(Text('50')),
-                  DataCell(Text('200 000')),
-                ],
-              ),
-            ]),
+            ),
           ),
-        )
+        ),
       ],
     );
   }

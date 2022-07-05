@@ -1,4 +1,4 @@
-import 'package:flutter_studio_app/src/utils/router_outlet/path.dart';
+import 'package:flutterware_app/src/utils/router_outlet/path.dart';
 import 'package:test/test.dart';
 
 void main() {

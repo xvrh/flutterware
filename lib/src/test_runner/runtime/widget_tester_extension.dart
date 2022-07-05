@@ -8,8 +8,6 @@ extension WidgetTesterExtension on AppWidgetTester {
     final imageElements = find.byType(Image).evaluate();
     final containerElements = find.byType(DecoratedBox).evaluate();
 
-    print("Images ${imageElements.length} ${containerElements.length}");
-
     for (final imageElement in imageElements) {
       final widget = imageElement.widget;
       if (widget is Image) {
@@ -38,7 +36,6 @@ extension WidgetTesterExtension on AppWidgetTester {
 
       for (final image in _listImages()) {
         if (image.provider is! NetworkImage) {
-          print("Precache ${image.provider}");
           futures.add(precacheImage(image.provider, image.context));
         }
       }

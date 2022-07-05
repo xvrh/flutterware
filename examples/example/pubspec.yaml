@@ -1,4 +1,4 @@
-name: flutter_studio_example
+name: flutterware_example
 description: A new Flutter project.
 
 # The following line prevents the package from being accidentally published to
@@ -30,15 +30,15 @@ dependencies:
   auto_size_text:
   flutter:
     sdk: flutter
-  path:
-  package_info_plus:
   os_detect:
+  package_info_plus:
+  path:
 
 dev_dependencies:
-  flutter_studio:
-    path: ../..
   flutter_test:
     sdk: flutter
+  flutterware:
+    path: ../..
   lints:
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

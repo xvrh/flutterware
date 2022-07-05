@@ -21,17 +21,10 @@ part 'serializers.g.dart';
   ScreenLink,
   ScenarioRun,
   RunArgs,
-  AnalyticEvent,
   DeviceInfo,
   RunResult,
   NewScreen,
   TextInfo,
   ProjectInfo,
-  ConfluenceInfo,
-  FirebaseInfo,
-  BrowserInfo,
-  EmailInfo,
-  PdfInfo,
-  JsonInfo,
 ])
 final Serializers modelSerializers = _$modelSerializers;

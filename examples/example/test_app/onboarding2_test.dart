@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_studio/flutter_test.dart';
-import 'package:flutter_studio_example/main.dart';
+import 'package:flutterware/flutter_test.dart';
+import 'package:flutterware_example/main.dart';
 
-// Start flutter_studio tool to run those tests:
-// dart run flutter_studio app
+// Start flutterware tool to run those tests:
+// dart run flutterware app
 void main() {
   testApp('On-boarding', (tester) async {
     await tester.pumpWidget(MyApp());
