@@ -21,7 +21,7 @@ abstract class ProjectInfo implements Built<ProjectInfo, ProjectInfoBuilder> {
         ..name = name
         ..rootPath = rootPath
         ..supportedLanguages.replace(supportedLanguages)
-        ..defaultStatusBarBrightness = defaultStatusBarBrightness;
+        ..defaultStatusBarBrightness = defaultStatusBarBrightness);
 
   String get name;
   String? get rootPath;
