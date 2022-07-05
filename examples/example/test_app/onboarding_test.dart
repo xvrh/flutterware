@@ -12,7 +12,7 @@ void main() {
 
   testApp('On-boarding should do this and should to that', (tester) async {
     await tester.pumpWidget(MyApp());
-    await tester.screenshot();
+    await tester.screenshot('Start');
     await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
     await tester.screenshot();

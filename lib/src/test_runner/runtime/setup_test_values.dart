@@ -19,7 +19,6 @@ Future<void> Function(WidgetTester) withTestValues(
     var platformDispatcher = binding.platformDispatcher;
 
     var pixelRatio = device.pixelRatio;
-    print("pixel $pixelRatio");
     window.physicalSizeTestValue =
         Size(device.width * pixelRatio, device.height * pixelRatio);
     window.devicePixelRatioTestValue = pixelRatio;
@@ -48,6 +47,8 @@ Future<void> Function(WidgetTester) withTestValues(
       await body(tester);
     } catch (e) {
       // Take a screenshot of the error
+      //TODO(xha): remove this and put it in Runner and get the value though the
+      // binding.renderView
       await tester.screenshot(name: 'Error: $e');
       rethrow;
     } finally {

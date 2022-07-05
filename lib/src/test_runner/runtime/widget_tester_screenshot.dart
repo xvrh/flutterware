@@ -14,7 +14,7 @@ import '../protocol/model/screen.dart';
 import 'run_context.dart';
 
 extension WidgetTesterScreenshotExtension on WidgetTester {
-  Future<void> screenshot({String? name}) async {
+  Future<void> screenshot(String name, {List<String>? tags}) async {
     var context = runContext;
 
     var index = ++context.screenIndex;

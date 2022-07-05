@@ -7,13 +7,13 @@ import 'package:flutterware_example/main.dart';
 void main() {
   testApp('On-boarding', (tester) async {
     await tester.pumpWidget(MyApp());
-    await tester.screenshot();
+    await tester.screenshot('Start');
     await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
-    await tester.screenshot();
+    await tester.screenshot('Push 1');
     await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
-    await tester.screenshot();
+    await tester.screenshot('Push 2');
   });
 
   testApp('Login', (tester) async {
