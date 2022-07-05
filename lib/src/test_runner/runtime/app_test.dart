@@ -1,8 +1,13 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutterware/src/test_runner/runtime/run_context.dart';
+import 'package:flutterware/src/test_runner/runtime/widget_tester_assets.dart';
+import 'package:flutterware/src/test_runner/runtime/widget_tester_screenshot.dart';
 
 import '../api.dart';
 import 'extract_text.dart';
+import 'path_tracker.dart';
 import 'phone_status_bar.dart';
 
 abstract class AppTest {
@@ -10,13 +15,39 @@ abstract class AppTest {
   Future<void> tearDown() async {}
   Future<void> run();
 
-  AppWidgetTester? _tester;
-  AppWidgetTester get tester {
+  WidgetTester? _tester;
+  WidgetTester get tester {
     var tester = _tester;
     if (tester == null) {
       throw Exception('tester is only available when the test is run');
     }
     return tester;
+  }
+
+  Future<void> call(WidgetTester tester) async {
+    _tester = tester;
+    var runContext = tester.runContext;
+    try {
+      do {
+        runContext.screenIndex = 0;
+        // Reset between the runs
+        await tester.pumpWidget(const SizedBox());
+        await setUp();
+        await run();
+      } while (runContext.pathTracker.resetAndCheck());
+    } finally {
+      await tearDown();
+      _tester = null;
+    }
+  }
+
+  Future<void> splitTest(Map<String, Future<void> Function()> paths) async {
+    var runContext = tester.runContext;
+
+    var index = runContext.pathTracker.split(paths.length);
+    var path = paths.entries.elementAt(index);
+    runContext.currentSplitName = path.key;
+    await path.value();
   }
 
   /// A flag to control whether every calls to [pumpWidget], [tap], [enterText]...
@@ -55,17 +86,6 @@ abstract class AppTest {
   //  ```
   bool autoScreenshot = true;
 
-  Future<void> call(AppWidgetTester tester) async {
-    _tester = tester;
-    try {
-      await setUp();
-      await run();
-    } finally {
-      await tearDown();
-      _tester = null;
-    }
-  }
-
   Future<void> pumpWidget(
     Widget widget, {
     Screenshot? screenshot,
@@ -79,12 +99,12 @@ abstract class AppTest {
     //
     // widget = wrapWidget(widget);
     //
-    //  await tester.pumpWidget(
-    //    DefaultAssetBundle(
-    //      bundle: _bundle,
-    //      child: widget,
-    //    ),
-    //  );
+    //await tester.pumpWidget(
+    //  DefaultAssetBundle(
+    //    bundle: rootBundle,
+    //    child: widget,
+    //  ),
+    //);
     await tester.pumpWidget(widget);
     await _screenshot(screenshot);
   }
@@ -111,7 +131,8 @@ abstract class AppTest {
     var finder = _targetToFinder(target);
     await tester.enterText(finder, text);
     await tester.pumpAndSettle();
-    await _screenshot(screenshot);
+    await _screenshot(screenshot,
+        autoName: 'enterText(text, ${finder.description})');
   }
 
   Future<void> tap(
@@ -123,21 +144,26 @@ abstract class AppTest {
 
     await tester.tap(finder);
     if (pumpFrames) {
-      await tester.pumpAndSettle();
+      await _pumpFrames();
     }
-    await _screenshot(screenshot);
+    await _screenshot(screenshot, autoName: 'tap(${finder.description})');
+  }
+
+  Future<void> _pumpFrames() async {
+    await tester.waitForAssets();
+    await tester.pumpAndSettle();
   }
 
   Future<void> _screenshot(Screenshot? screenshot, {String? autoName}) async {
     if (screenshot == null && autoScreenshot) {
       screenshot = Screenshot(name: autoName);
     }
-    if (screenshot != null) {
-      await tester.screenshot();
+    if (screenshot != null && screenshot != Screenshot.none) {
+      await tester.screenshot(name: screenshot.name);
     }
   }
 
-  Future<void> screenshot({String? name, List<String>? tags}) {
+  Future<void> screenshot(String name, {List<String>? tags}) {
     return _screenshot(Screenshot(name: name, tags: tags));
   }
 }

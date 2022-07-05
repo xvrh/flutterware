@@ -46,25 +46,20 @@ abstract class Screen implements Built<Screen, ScreenBuilder> {
   Screen._();
   factory Screen._builder([void Function(ScreenBuilder) updates]) = _$Screen;
 
-  factory Screen(String id, String name,
-          {bool? isCollapsable, bool? isCollapsed}) =>
-      Screen._builder((b) => b
-        ..id = id
-        ..name = name
-        ..isCollapsable = isCollapsable ?? false
-        ..isCollapsed = false);
+  factory Screen(String id, String name) => Screen._builder((b) => b
+    ..id = id
+    ..name = name);
 
   String get id;
   BuiltList<TextInfo> get texts;
   BuiltList<ScreenLink> get next;
-  String? get pathName;
+  String? get splitName;
   String get name;
   Uint8List? get imageBytes;
   ImageFile? get imageFile;
-  String? get documentationKey;
-  bool get isCollapsable;
-  bool get isCollapsed;
-  BuiltList<Screen> get collapsedScreens;
+  int? get topBrightness;
+  int? get bottomBrightness;
+  BuiltList<String>? get supportedLocales;
 }
 
 abstract class TextInfo implements Built<TextInfo, TextInfoBuilder> {
@@ -107,4 +102,3 @@ abstract class ScreenLink implements Built<ScreenLink, ScreenLinkBuilder> {
   String get to;
   Rectangle? get tapRect;
 }
-

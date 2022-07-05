@@ -1,18 +1,15 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:built_collection/built_collection.dart';
 import '../utils.dart';
 import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart' hide InteractiveViewer;
 import 'package:flutter/services.dart';
-import '../utils/assets.dart';
 import '../utils/graphite.dart';
 import 'detail.dart';
 import 'protocol/api.dart';
 import 'protocol/run.dart';
 import 'screens/screens.dart';
 import 'toolbar.dart';
-import 'ui/collapse_button.dart';
 import 'ui/interactive_viewer.dart';
 
 class RunView extends StatefulWidget {
@@ -80,9 +77,6 @@ class _RunViewState extends State<RunView> {
           contentWidget = Container();
         } else {
           var run = snapshot.requireData;
-          if (toolbarScope.isCollapsed) {
-            run = run.collapse();
-          }
           contentWidget = RouterOutlet({
             '': (_) => _FlowMaster(this, run),
             'detail/:screen': (detail) =>
@@ -140,12 +134,6 @@ class _RunViewState extends State<RunView> {
     );
   }
 
-  void _setCollapsed(bool value) {
-    setState(() {
-      ToolBarScope.of(context).isCollapsed = value;
-    });
-  }
-
   @override
   void dispose() {
     _reloadSubscription.cancel();
@@ -189,37 +177,20 @@ class _FlowMaster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
-        Expanded(
-          child: Stack(
-            children: [
-              Container(
-                color: Colors.black.withOpacity(0.02),
-                child: _FlowGraph(run),
-              ),
-              Positioned(
-                right: 5,
-                top: 5,
-                child: CollapseButton(
-                  isCollapsed: ToolBarScope.of(context).isCollapsed,
-                  onChanged: (v) {
-                    parent._setCollapsed(v);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          color: AppColors.divider,
-          height: 1,
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Text(run.scenario.description ?? ''),
-        ),
+        _FlowGraph(run),
+        //TODO(xha): re-enable with a more powerful feature to filter tags
+        //Positioned(
+        //  right: 5,
+        //  top: 5,
+        //  child: CollapseButton(
+        //    isCollapsed: ToolBarScope.of(context).isCollapsed,
+        //    onChanged: (v) {
+        //      parent._setCollapsed(v);
+        //    },
+        //  ),
+        //),
       ],
     );
   }
@@ -266,13 +237,10 @@ class __FlowGraphState extends State<_FlowGraph> {
   void _fillInput() {
     var screens = widget.run.screens;
     _inputs = screens.values
-        .where((s) => !s.isCollapsed)
         .map((s) => NodeInput(
             id: s.id,
             next: s.next.map((n) {
-              var target = screens[n.to];
-              target ??= screens.values.firstWhere(
-                  (e) => e.collapsedScreens.any((c) => c.id == n.to));
+              var target = screens[n.to]!;
               return target.id;
             }).toList()))
         .toList();
@@ -336,12 +304,14 @@ class __FlowGraphState extends State<_FlowGraph> {
         return p;
       },
       edgeTooltip: (from, to) {
-        var pathName = widget.run.screens[to]!.pathName;
-        if (pathName != null) {
+        var splitName = widget.run.screens[to]!.splitName;
+        if (splitName != null) {
           return EdgeTooltip(
-            pathName,
+            splitName,
             style: TextStyle(
-                color: Colors.blueGrey.withOpacity(0.8), fontSize: 15),
+              color: Colors.blueGrey.withOpacity(0.8),
+              fontSize: 15,
+            ),
           );
         }
         return null;
@@ -377,35 +347,9 @@ class _ScreenView extends StatelessWidget {
           child: Text(screen.name),
         );
 
-    var documentationKey = screen.documentationKey;
-
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        for (var i = min(3, screen.collapsedScreens.length); i > 0; i--)
-          Transform.translate(
-            offset: Offset(i * 8, i * 8),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                    color: Colors.blueGrey.withOpacity(0.5), width: 1),
-                borderRadius: BorderRadius.circular(20),
-                color: Colors.white,
-              ),
-              width: run.args.device.width * run.args.device.pixelRatio,
-              height: run.args.device.height * run.args.device.pixelRatio,
-              alignment: Alignment.center,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: Opacity(
-                  opacity: 0.5,
-                  child: _widgetForScreen(
-                          screen.collapsedScreens.elementAt(i - 1)) ??
-                      Container(color: Colors.white),
-                ),
-              ),
-            ),
-          ),
         Container(
           decoration: BoxDecoration(
             border: Border.all(color: Colors.blueGrey, width: 2),
@@ -424,59 +368,14 @@ class _ScreenView extends StatelessWidget {
             translation: Offset(0, -1),
             child: Container(
               padding: EdgeInsets.symmetric(vertical: 5),
-              child: Column(
-                children: [
-                  if (documentationKey != null)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Image.asset(
-                          assets.images.confluence.path,
-                          height: 15,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          documentationKey,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: const Color(0xFF0052CC),
-                          ),
-                        ),
-                      ],
-                    ),
-                  Text(
-                    screen.name,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 22, color: Colors.black54),
-                  ),
-                ],
+              child: Text(
+                screen.name,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 22, color: Colors.black54),
               ),
             ),
           ),
         ),
-        if (screen.collapsedScreens.isNotEmpty)
-          Positioned(
-            bottom: 0,
-            right: 10,
-            child: FractionalTranslation(
-              translation: Offset(0, 1),
-              child: Row(
-                children: [
-                  Text(
-                    '+ ${screen.collapsedScreens.length} screen${screen.collapsedScreens.length > 1 ? 's' : ''}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 15,
-                        height: 0.9,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blueAccent,
-                        backgroundColor: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-          ),
       ],
     );
   }

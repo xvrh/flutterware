@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart' as flutter;
+import 'package:flutterware/src/test_runner/runtime/run_context.dart';
 import 'package:logging/logging.dart';
 import 'package:pool/pool.dart';
 import 'package:stream_channel/stream_channel.dart';
@@ -19,10 +20,7 @@ import 'binding.dart';
 import 'fonts.dart';
 import 'list_tests.dart';
 import 'run_group.dart';
-import 'scenario.dart';
 import 'package:test_api/src/backend/group.dart'; // ignore: implementation_imports
-
-import 'widget_tester.dart'; // ignore: implementation_imports
 
 final _logger = Logger('runner');
 
@@ -34,20 +32,19 @@ typedef TestCallback = Future<void> Function(WidgetTester);
 
 /// The class responsible to hold all the tests and coordinate the communication
 /// with the server.
-class Runner implements RunContext {
+class Runner {
   final StreamChannel<String> Function() connectionFactory;
-  final Map<String, void Function()> Function() tests;
+  final Map<String, void Function()> Function() mainFunctions;
   final ProjectInfo project;
   late final ScenarioBinding _binding;
   final void Function()? onConnected;
-  final _runPool = Pool(1);
   ProjectClient? _project;
   RunClient? _runClient;
   final Future<ScenarioBundle> Function() _bundleFactory;
   late final ScenarioBundle _bundle;
 
   Runner(this.connectionFactory,
-      {required this.tests,
+      {required this.mainFunctions,
       required this.project,
       required Future<ScenarioBundle> Function() bundle,
       this.onConnected})
@@ -57,14 +54,13 @@ class Runner implements RunContext {
     };
 
     _binding = ScenarioBinding(onReloaded: notifyReloaded);
-    _setup();
   }
 
   ScenarioBundle get bundle => _bundle;
 
   ScenarioBinding get binding => _binding;
 
-  Future<void> _setup() async {
+  Future<void> run() async {
     _bundle = await _bundleFactory();
 
     if (!kIsWeb) {
@@ -98,7 +94,10 @@ class Runner implements RunContext {
 
   void _onConnected(Connection connection) {
     _project = ProjectClient(connection, load: () => project);
-    ListingClient(connection, list: _list);
+    ListingClient(connection, list: () {
+      var allMains = mainFunctions();
+      return listTests(allMains);
+    });
     _runClient =
         RunClient(connection, create: _createRun, execute: _executeRun);
 
@@ -110,20 +109,9 @@ class Runner implements RunContext {
     _project?.notifyReloaded();
   }
 
-  Iterable<ScenarioReference> _list() {
-    var allTests = tests();
-    return listTests(allTests);
-  }
-
-  late RunArgs _currentRun;
-
-  AssetBundle get assetBundle => _bundle;
-
-  RunArgs get args => _currentRun;
-
   @override
-  Future<void> addScreen(/*RunArgs run,*/ NewScreen screen) =>
-      _runClient!.addScreen(_currentRun, screen);
+  Future<void> addScreen(RunArgs run, NewScreen screen) =>
+      _runClient!.addScreen(run, screen);
 
   Group? _findTest(Map<String, void Function()> tests, BuiltList<String> name) {
     return findTest(tests, name.join(' '));
@@ -133,8 +121,8 @@ class Runner implements RunContext {
 
   ScenarioRun _createRun(RunArgs args) {
     _logger.fine('RunTest ${args.scenarioName.join('/')}');
-    var allScenario = tests();
-    var scenario = _findTest(allScenario, args.scenarioName);
+    var allMains = mainFunctions();
+    var scenario = _findTest(allMains, args.scenarioName);
     if (scenario == null) {
       throw Exception('No test ${args.scenarioName.join('/')} found.');
     }
@@ -144,24 +132,30 @@ class Runner implements RunContext {
     return run;
   }
 
+  final _runPool = Pool(1);
   void _executeRun(RunArgs args) {
     var runClient = _runClient!;
     var scenario = _currentScenario[args]!;
-    _currentRun = args;
-    runContext = this;
 
     _runPool.withResource(() async {
       var stopwatch = Stopwatch()..start();
       Object? error;
       StackTrace? stackTrace;
       try {
-        await runZonedGuarded(() async {
-          await runGroup(scenario).toList();
-        }, (e, s) {
-          error = e;
-          stackTrace = s;
-          _logger.warning('Zone error $e $s');
-        });
+        var runClient = _runClient!;
+        var runContext = RunContext(args,
+            addScreen: (screen) => runClient.addScreen(args, screen));
+        await runZonedGuarded(
+          () async {
+            await runGroup(scenario).toList();
+          },
+          zoneValues: {#runContext: runContext},
+          (e, s) {
+            error = e;
+            stackTrace = s;
+            _logger.warning('Zone error $e $s');
+          },
+        );
       } catch (e, s) {
         _logger.warning('Failed to run test', e);
         error = e;

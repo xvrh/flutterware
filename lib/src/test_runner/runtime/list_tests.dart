@@ -16,10 +16,10 @@ Group findTest(Map<String, void Function()> allTests, String fullTestName) {
   return declarer.build();
 }
 
-Iterable<ScenarioReference> listTests(Map<String, void Function()> allTests) {
+Iterable<ScenarioReference> listTests(Map<String, void Function()> allMains) {
   var declarer = Declarer();
   declarer.declare(() {
-    for (var main in allTests.entries) {
+    for (var main in allMains.entries) {
       group(main.key, main.value);
     }
   });

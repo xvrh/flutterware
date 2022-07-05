@@ -113,7 +113,6 @@ class DaemonToolbar extends StatelessWidget {
     return Container(
       height: 28,
       decoration: BoxDecoration(
-        color: AppColors.menuBackground,
         border: Border(
           bottom: BorderSide(color: AppColors.divider, width: 1),
         ),

@@ -6,6 +6,38 @@ import '../protocol/models.dart';
 import 'runner.dart';
 import 'setup_io.dart' if (dart.library.html) 'setup_web.dart';
 
+void runTests(
+  Uri serverUri,
+  Map<String, void Function()> Function() tests, {
+  required String flutterBinPath,
+  bool Function(String)? translationPredicate,
+  String? projectName,
+  List<String>? supportedLanguages,
+  String? rootProjectPath,
+  String? projectPackageName,
+  Brightness? defaultStatusBarBrightness,
+}) async {
+  _setupLogger();
+  var bundleParams = BundleParameters(
+    flutterBinPath: flutterBinPath,
+    translationPredicate: translationPredicate,
+    rootProjectPath: rootProjectPath,
+    projectPackageName: projectPackageName,
+  );
+  await Runner(
+    () => createChannel(serverUri),
+    mainFunctions: tests,
+    bundle: () async => createBundle(bundleParams),
+    onConnected: onConnected,
+    project: ProjectInfo(
+      'projectName',
+      rootPath: rootProjectPath,
+      supportedLanguages: supportedLanguages ?? ['en'],
+      defaultStatusBarBrightness: defaultStatusBarBrightness?.index,
+    ),
+  ).run();
+}
+
 class BundleParameters {
   final bool Function(String) translationPredicate;
   final String flutterBinPath;

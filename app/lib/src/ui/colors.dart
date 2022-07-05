@@ -7,8 +7,6 @@ class AppColors {
   static const link = Color(0xff1a73e8);
   static const linkActive = Color(0xff185abc);
   static const primaryOnMenu = Color(0xFF669df6);
-  static const menuBackground = Color(0xFF0b1d32);
-  static const menuSecondaryBackground = Color(0xFF182a41);
   static const foregroundPrimary = Color(0xff1b3a57);
   static const foregroundSecondary = Color(0xff476282);
   static const breadcrumbLink = Color(0xff5f6368);

@@ -36,11 +36,14 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
       'language',
       serializers.serialize(object.language,
           specifiedType: const FullType(String)),
-      'onlyWithDocumentationKey',
-      serializers.serialize(object.onlyWithDocumentationKey,
-          specifiedType: const FullType(bool)),
     ];
-
+    Object? value;
+    value = object.platformBrightness;
+    if (value != null) {
+      result
+        ..add('platformBrightness')
+        ..add(serializers.serialize(value, specifiedType: const FullType(int)));
+    }
     return result;
   }
 
@@ -82,9 +85,9 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
           result.language = serializers.deserialize(value,
               specifiedType: const FullType(String))! as String;
           break;
-        case 'onlyWithDocumentationKey':
-          result.onlyWithDocumentationKey = serializers.deserialize(value,
-              specifiedType: const FullType(bool))! as bool;
+        case 'platformBrightness':
+          result.platformBrightness = serializers.deserialize(value,
+              specifiedType: const FullType(int)) as int?;
           break;
       }
     }
@@ -107,7 +110,7 @@ class _$RunArgs extends RunArgs {
   @override
   final String language;
   @override
-  final bool onlyWithDocumentationKey;
+  final int? platformBrightness;
 
   factory _$RunArgs([void Function(RunArgsBuilder)? updates]) =>
       (new RunArgsBuilder()..update(updates))._build();
@@ -119,7 +122,7 @@ class _$RunArgs extends RunArgs {
       required this.accessibility,
       required this.imageRatio,
       required this.language,
-      required this.onlyWithDocumentationKey})
+      this.platformBrightness})
       : super._() {
     BuiltValueNullFieldError.checkNotNull(id, 'RunArgs', 'id');
     BuiltValueNullFieldError.checkNotNull(
@@ -129,8 +132,6 @@ class _$RunArgs extends RunArgs {
         accessibility, 'RunArgs', 'accessibility');
     BuiltValueNullFieldError.checkNotNull(imageRatio, 'RunArgs', 'imageRatio');
     BuiltValueNullFieldError.checkNotNull(language, 'RunArgs', 'language');
-    BuiltValueNullFieldError.checkNotNull(
-        onlyWithDocumentationKey, 'RunArgs', 'onlyWithDocumentationKey');
   }
 
   @override
@@ -150,7 +151,7 @@ class _$RunArgs extends RunArgs {
         accessibility == other.accessibility &&
         imageRatio == other.imageRatio &&
         language == other.language &&
-        onlyWithDocumentationKey == other.onlyWithDocumentationKey;
+        platformBrightness == other.platformBrightness;
   }
 
   @override
@@ -164,7 +165,7 @@ class _$RunArgs extends RunArgs {
                     accessibility.hashCode),
                 imageRatio.hashCode),
             language.hashCode),
-        onlyWithDocumentationKey.hashCode));
+        platformBrightness.hashCode));
   }
 
   @override
@@ -176,7 +177,7 @@ class _$RunArgs extends RunArgs {
           ..add('accessibility', accessibility)
           ..add('imageRatio', imageRatio)
           ..add('language', language)
-          ..add('onlyWithDocumentationKey', onlyWithDocumentationKey))
+          ..add('platformBrightness', platformBrightness))
         .toString();
   }
 }
@@ -212,10 +213,10 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
   String? get language => _$this._language;
   set language(String? language) => _$this._language = language;
 
-  bool? _onlyWithDocumentationKey;
-  bool? get onlyWithDocumentationKey => _$this._onlyWithDocumentationKey;
-  set onlyWithDocumentationKey(bool? onlyWithDocumentationKey) =>
-      _$this._onlyWithDocumentationKey = onlyWithDocumentationKey;
+  int? _platformBrightness;
+  int? get platformBrightness => _$this._platformBrightness;
+  set platformBrightness(int? platformBrightness) =>
+      _$this._platformBrightness = platformBrightness;
 
   RunArgsBuilder();
 
@@ -228,7 +229,7 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
       _accessibility = $v.accessibility.toBuilder();
       _imageRatio = $v.imageRatio;
       _language = $v.language;
-      _onlyWithDocumentationKey = $v.onlyWithDocumentationKey;
+      _platformBrightness = $v.platformBrightness;
       _$v = null;
     }
     return this;
@@ -261,10 +262,7 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
                   imageRatio, 'RunArgs', 'imageRatio'),
               language: BuiltValueNullFieldError.checkNotNull(
                   language, 'RunArgs', 'language'),
-              onlyWithDocumentationKey: BuiltValueNullFieldError.checkNotNull(
-                  onlyWithDocumentationKey,
-                  'RunArgs',
-                  'onlyWithDocumentationKey'));
+              platformBrightness: platformBrightness);
     } catch (_) {
       late String _$failedField;
       try {

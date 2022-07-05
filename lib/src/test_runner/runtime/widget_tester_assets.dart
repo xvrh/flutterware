@@ -1,9 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_test/flutter_test.dart' hide WidgetTester;
-import 'widget_tester.dart';
+import 'package:flutter_test/flutter_test.dart';
 
-extension WidgetTesterExtension on AppWidgetTester {
+extension WidgetTesterAssetsExtension on WidgetTester {
   Iterable<_ImageAndContext> _listImages() sync* {
     final imageElements = find.byType(Image).evaluate();
     final containerElements = find.byType(DecoratedBox).evaluate();

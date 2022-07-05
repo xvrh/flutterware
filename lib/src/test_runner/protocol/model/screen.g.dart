@@ -169,22 +169,12 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
               const FullType(BuiltList, const [const FullType(ScreenLink)])),
       'name',
       serializers.serialize(object.name, specifiedType: const FullType(String)),
-      'isCollapsable',
-      serializers.serialize(object.isCollapsable,
-          specifiedType: const FullType(bool)),
-      'isCollapsed',
-      serializers.serialize(object.isCollapsed,
-          specifiedType: const FullType(bool)),
-      'collapsedScreens',
-      serializers.serialize(object.collapsedScreens,
-          specifiedType:
-              const FullType(BuiltList, const [const FullType(Screen)])),
     ];
     Object? value;
-    value = object.pathName;
+    value = object.splitName;
     if (value != null) {
       result
-        ..add('pathName')
+        ..add('splitName')
         ..add(serializers.serialize(value,
             specifiedType: const FullType(String)));
     }
@@ -202,12 +192,25 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
         ..add(serializers.serialize(value,
             specifiedType: const FullType(ImageFile)));
     }
-    value = object.documentationKey;
+    value = object.topBrightness;
     if (value != null) {
       result
-        ..add('documentationKey')
+        ..add('topBrightness')
+        ..add(serializers.serialize(value, specifiedType: const FullType(int)));
+    }
+    value = object.bottomBrightness;
+    if (value != null) {
+      result
+        ..add('bottomBrightness')
+        ..add(serializers.serialize(value, specifiedType: const FullType(int)));
+    }
+    value = object.supportedLocales;
+    if (value != null) {
+      result
+        ..add('supportedLocales')
         ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+            specifiedType:
+                const FullType(BuiltList, const [const FullType(String)])));
     }
     return result;
   }
@@ -239,8 +242,8 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
                       BuiltList, const [const FullType(ScreenLink)]))!
               as BuiltList<Object?>);
           break;
-        case 'pathName':
-          result.pathName = serializers.deserialize(value,
+        case 'splitName':
+          result.splitName = serializers.deserialize(value,
               specifiedType: const FullType(String)) as String?;
           break;
         case 'name':
@@ -255,22 +258,18 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
           result.imageFile.replace(serializers.deserialize(value,
               specifiedType: const FullType(ImageFile))! as ImageFile);
           break;
-        case 'documentationKey':
-          result.documentationKey = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+        case 'topBrightness':
+          result.topBrightness = serializers.deserialize(value,
+              specifiedType: const FullType(int)) as int?;
           break;
-        case 'isCollapsable':
-          result.isCollapsable = serializers.deserialize(value,
-              specifiedType: const FullType(bool))! as bool;
+        case 'bottomBrightness':
+          result.bottomBrightness = serializers.deserialize(value,
+              specifiedType: const FullType(int)) as int?;
           break;
-        case 'isCollapsed':
-          result.isCollapsed = serializers.deserialize(value,
-              specifiedType: const FullType(bool))! as bool;
-          break;
-        case 'collapsedScreens':
-          result.collapsedScreens.replace(serializers.deserialize(value,
+        case 'supportedLocales':
+          result.supportedLocales.replace(serializers.deserialize(value,
                   specifiedType: const FullType(
-                      BuiltList, const [const FullType(Screen)]))!
+                      BuiltList, const [const FullType(String)]))!
               as BuiltList<Object?>);
           break;
       }
@@ -698,7 +697,7 @@ class _$Screen extends Screen {
   @override
   final BuiltList<ScreenLink> next;
   @override
-  final String? pathName;
+  final String? splitName;
   @override
   final String name;
   @override
@@ -706,13 +705,11 @@ class _$Screen extends Screen {
   @override
   final ImageFile? imageFile;
   @override
-  final String? documentationKey;
+  final int? topBrightness;
   @override
-  final bool isCollapsable;
+  final int? bottomBrightness;
   @override
-  final bool isCollapsed;
-  @override
-  final BuiltList<Screen> collapsedScreens;
+  final BuiltList<String>? supportedLocales;
 
   factory _$Screen([void Function(ScreenBuilder)? updates]) =>
       (new ScreenBuilder()..update(updates))._build();
@@ -721,24 +718,18 @@ class _$Screen extends Screen {
       {required this.id,
       required this.texts,
       required this.next,
-      this.pathName,
+      this.splitName,
       required this.name,
       this.imageBytes,
       this.imageFile,
-      this.documentationKey,
-      required this.isCollapsable,
-      required this.isCollapsed,
-      required this.collapsedScreens})
+      this.topBrightness,
+      this.bottomBrightness,
+      this.supportedLocales})
       : super._() {
     BuiltValueNullFieldError.checkNotNull(id, 'Screen', 'id');
     BuiltValueNullFieldError.checkNotNull(texts, 'Screen', 'texts');
     BuiltValueNullFieldError.checkNotNull(next, 'Screen', 'next');
     BuiltValueNullFieldError.checkNotNull(name, 'Screen', 'name');
-    BuiltValueNullFieldError.checkNotNull(
-        isCollapsable, 'Screen', 'isCollapsable');
-    BuiltValueNullFieldError.checkNotNull(isCollapsed, 'Screen', 'isCollapsed');
-    BuiltValueNullFieldError.checkNotNull(
-        collapsedScreens, 'Screen', 'collapsedScreens');
   }
 
   @override
@@ -755,14 +746,13 @@ class _$Screen extends Screen {
         id == other.id &&
         texts == other.texts &&
         next == other.next &&
-        pathName == other.pathName &&
+        splitName == other.splitName &&
         name == other.name &&
         imageBytes == other.imageBytes &&
         imageFile == other.imageFile &&
-        documentationKey == other.documentationKey &&
-        isCollapsable == other.isCollapsable &&
-        isCollapsed == other.isCollapsed &&
-        collapsedScreens == other.collapsedScreens;
+        topBrightness == other.topBrightness &&
+        bottomBrightness == other.bottomBrightness &&
+        supportedLocales == other.supportedLocales;
   }
 
   @override
@@ -774,19 +764,15 @@ class _$Screen extends Screen {
                     $jc(
                         $jc(
                             $jc(
-                                $jc(
-                                    $jc(
-                                        $jc($jc(0, id.hashCode),
-                                            texts.hashCode),
-                                        next.hashCode),
-                                    pathName.hashCode),
-                                name.hashCode),
-                            imageBytes.hashCode),
-                        imageFile.hashCode),
-                    documentationKey.hashCode),
-                isCollapsable.hashCode),
-            isCollapsed.hashCode),
-        collapsedScreens.hashCode));
+                                $jc($jc($jc(0, id.hashCode), texts.hashCode),
+                                    next.hashCode),
+                                splitName.hashCode),
+                            name.hashCode),
+                        imageBytes.hashCode),
+                    imageFile.hashCode),
+                topBrightness.hashCode),
+            bottomBrightness.hashCode),
+        supportedLocales.hashCode));
   }
 
   @override
@@ -795,14 +781,13 @@ class _$Screen extends Screen {
           ..add('id', id)
           ..add('texts', texts)
           ..add('next', next)
-          ..add('pathName', pathName)
+          ..add('splitName', splitName)
           ..add('name', name)
           ..add('imageBytes', imageBytes)
           ..add('imageFile', imageFile)
-          ..add('documentationKey', documentationKey)
-          ..add('isCollapsable', isCollapsable)
-          ..add('isCollapsed', isCollapsed)
-          ..add('collapsedScreens', collapsedScreens))
+          ..add('topBrightness', topBrightness)
+          ..add('bottomBrightness', bottomBrightness)
+          ..add('supportedLocales', supportedLocales))
         .toString();
   }
 }
@@ -824,9 +809,9 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
       _$this._next ??= new ListBuilder<ScreenLink>();
   set next(ListBuilder<ScreenLink>? next) => _$this._next = next;
 
-  String? _pathName;
-  String? get pathName => _$this._pathName;
-  set pathName(String? pathName) => _$this._pathName = pathName;
+  String? _splitName;
+  String? get splitName => _$this._splitName;
+  set splitName(String? splitName) => _$this._splitName = splitName;
 
   String? _name;
   String? get name => _$this._name;
@@ -841,25 +826,21 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
       _$this._imageFile ??= new ImageFileBuilder();
   set imageFile(ImageFileBuilder? imageFile) => _$this._imageFile = imageFile;
 
-  String? _documentationKey;
-  String? get documentationKey => _$this._documentationKey;
-  set documentationKey(String? documentationKey) =>
-      _$this._documentationKey = documentationKey;
+  int? _topBrightness;
+  int? get topBrightness => _$this._topBrightness;
+  set topBrightness(int? topBrightness) =>
+      _$this._topBrightness = topBrightness;
 
-  bool? _isCollapsable;
-  bool? get isCollapsable => _$this._isCollapsable;
-  set isCollapsable(bool? isCollapsable) =>
-      _$this._isCollapsable = isCollapsable;
+  int? _bottomBrightness;
+  int? get bottomBrightness => _$this._bottomBrightness;
+  set bottomBrightness(int? bottomBrightness) =>
+      _$this._bottomBrightness = bottomBrightness;
 
-  bool? _isCollapsed;
-  bool? get isCollapsed => _$this._isCollapsed;
-  set isCollapsed(bool? isCollapsed) => _$this._isCollapsed = isCollapsed;
-
-  ListBuilder<Screen>? _collapsedScreens;
-  ListBuilder<Screen> get collapsedScreens =>
-      _$this._collapsedScreens ??= new ListBuilder<Screen>();
-  set collapsedScreens(ListBuilder<Screen>? collapsedScreens) =>
-      _$this._collapsedScreens = collapsedScreens;
+  ListBuilder<String>? _supportedLocales;
+  ListBuilder<String> get supportedLocales =>
+      _$this._supportedLocales ??= new ListBuilder<String>();
+  set supportedLocales(ListBuilder<String>? supportedLocales) =>
+      _$this._supportedLocales = supportedLocales;
 
   ScreenBuilder();
 
@@ -869,14 +850,13 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
       _id = $v.id;
       _texts = $v.texts.toBuilder();
       _next = $v.next.toBuilder();
-      _pathName = $v.pathName;
+      _splitName = $v.splitName;
       _name = $v.name;
       _imageBytes = $v.imageBytes;
       _imageFile = $v.imageFile?.toBuilder();
-      _documentationKey = $v.documentationKey;
-      _isCollapsable = $v.isCollapsable;
-      _isCollapsed = $v.isCollapsed;
-      _collapsedScreens = $v.collapsedScreens.toBuilder();
+      _topBrightness = $v.topBrightness;
+      _bottomBrightness = $v.bottomBrightness;
+      _supportedLocales = $v.supportedLocales?.toBuilder();
       _$v = null;
     }
     return this;
@@ -904,17 +884,14 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
               id: BuiltValueNullFieldError.checkNotNull(id, 'Screen', 'id'),
               texts: texts.build(),
               next: next.build(),
-              pathName: pathName,
+              splitName: splitName,
               name:
                   BuiltValueNullFieldError.checkNotNull(name, 'Screen', 'name'),
               imageBytes: imageBytes,
               imageFile: _imageFile?.build(),
-              documentationKey: documentationKey,
-              isCollapsable: BuiltValueNullFieldError.checkNotNull(
-                  isCollapsable, 'Screen', 'isCollapsable'),
-              isCollapsed: BuiltValueNullFieldError.checkNotNull(
-                  isCollapsed, 'Screen', 'isCollapsed'),
-              collapsedScreens: collapsedScreens.build());
+              topBrightness: topBrightness,
+              bottomBrightness: bottomBrightness,
+              supportedLocales: _supportedLocales?.build());
     } catch (_) {
       late String _$failedField;
       try {
@@ -926,8 +903,8 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
         _$failedField = 'imageFile';
         _imageFile?.build();
 
-        _$failedField = 'collapsedScreens';
-        collapsedScreens.build();
+        _$failedField = 'supportedLocales';
+        _supportedLocales?.build();
       } catch (e) {
         throw new BuiltValueNestedFieldError(
             'Screen', _$failedField, e.toString());

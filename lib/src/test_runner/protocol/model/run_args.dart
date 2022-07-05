@@ -14,12 +14,14 @@ abstract class RunArgs implements Built<RunArgs, RunArgsBuilder> {
   RunArgs._();
   factory RunArgs._builder([void Function(RunArgsBuilder) updates]) = _$RunArgs;
 
-  factory RunArgs(Iterable<String> scenarioName,
-          {required DeviceInfo device,
-          required AccessibilityConfig accessibility,
-          required String language,
-          required double imageRatio,
-          bool? onlyWithDocumentationKey}) =>
+  factory RunArgs(
+    Iterable<String> scenarioName, {
+    required DeviceInfo device,
+    required AccessibilityConfig accessibility,
+    required String language,
+    required double imageRatio,
+    int? platformBrightness,
+  }) =>
       RunArgs._builder((b) => b
         ..id = _runId++
         ..scenarioName.replace(scenarioName)
@@ -27,7 +29,7 @@ abstract class RunArgs implements Built<RunArgs, RunArgsBuilder> {
         ..accessibility.replace(accessibility)
         ..imageRatio = imageRatio
         ..language = language
-        ..onlyWithDocumentationKey = onlyWithDocumentationKey ?? false);
+        ..platformBrightness = platformBrightness);
 
   int get id;
   BuiltList<String> get scenarioName;
@@ -35,5 +37,5 @@ abstract class RunArgs implements Built<RunArgs, RunArgsBuilder> {
   AccessibilityConfig get accessibility;
   double get imageRatio;
   String get language;
-  bool get onlyWithDocumentationKey;
+  int? get platformBrightness;
 }

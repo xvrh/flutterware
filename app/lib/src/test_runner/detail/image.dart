@@ -23,8 +23,6 @@ class _ImageDetailState extends State<ImageDetail> {
   @override
   Widget build(BuildContext context) {
     var screen = widget.screen;
-    var documentationKey = screen.documentationKey;
-
     return DetailSkeleton(
       widget.project,
       widget.run,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/flutter_test.dart';
 import 'package:flutterware_example/main.dart';
-import 'package:flutter_test/flutter_test.dart' hide testWidgets;
 
 // Start flutterware tool to run those tests:
 // dart run flutterware app
@@ -19,21 +19,6 @@ void main() {
     await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
     await tester.screenshot();
-    await splitTest({
-      'ok': () async {
-        await tester.tap(find.byIcon(Icons.add));
-        await tester.pumpAndSettle();
-        await tester.screenshot();
-        //fail('This is a failure');
-      },
-      'not ok': () async {
-        for (var i = 0; i < 10; i++) {
-          await tester.tap(find.byIcon(Icons.add));
-          await tester.pumpAndSettle();
-          await tester.screenshot();
-        }
-      },
-    });
   });
 
   testApp('Login', (tester) async {

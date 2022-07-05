@@ -14,18 +14,6 @@ void main() {
     await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
     await tester.screenshot();
-    await splitTest({
-      'ok': () async {
-        await tester.tap(find.byIcon(Icons.add));
-        await tester.pumpAndSettle();
-        await tester.screenshot();
-      },
-      'not ok': () async {
-        await tester.tap(find.byIcon(Icons.add));
-        await tester.pumpAndSettle();
-        await tester.screenshot();
-      },
-    });
   });
 
   testApp('Login', (tester) async {

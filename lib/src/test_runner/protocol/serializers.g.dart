@@ -37,8 +37,8 @@ Serializers _$modelSerializers = (new Serializers().toBuilder()
           const FullType(BuiltList, const [const FullType(ScreenLink)]),
           () => new ListBuilder<ScreenLink>())
       ..addBuilderFactory(
-          const FullType(BuiltList, const [const FullType(Screen)]),
-          () => new ListBuilder<Screen>())
+          const FullType(BuiltList, const [const FullType(String)]),
+          () => new ListBuilder<String>())
       ..addBuilderFactory(
           const FullType(
               BuiltMap, const [const FullType(String), const FullType(Screen)]),

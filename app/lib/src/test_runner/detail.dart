@@ -1,16 +1,8 @@
-import 'dart:io';
-
 import 'package:collection/collection.dart';
-import 'package:flutterware_app/src/test_runner/flow_graph.dart';
-import '../app/project_view.dart';
 import '../utils.dart';
-import '../utils/raw_image_provider.dart';
-import '../utils/router_outlet.dart';
 import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
-import '../ui.dart';
 import 'detail/image.dart';
-import 'service.dart';
 
 class DetailPage extends StatelessWidget {
   final ProjectInfo project;
@@ -80,43 +72,22 @@ class DetailSkeleton extends StatelessWidget {
       );
     }
 
-    var parentScreen = screen;
-    if (screen.collapsedScreens.isEmpty) {
-      parentScreen = run.screens.values
-              .firstWhereOrNull((s) => s.collapsedScreens.contains(screen)) ??
-          screen;
-    }
-
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
           child: Container(
             color: Colors.black.withOpacity(0.02),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Stack(
               children: [
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: _ScreenView(
-                          run,
-                          screen,
-                          child: main,
-                        ),
-                      ),
-                      if (previousScreenLink != null) previousScreenLink,
-                    ],
+                Positioned.fill(
+                  child: _ScreenView(
+                    run,
+                    screen,
+                    child: main,
                   ),
                 ),
-                if (parentScreen.collapsedScreens.isNotEmpty) ...[
-                  Container(
-                    color: AppColors.divider,
-                    height: 1,
-                  ),
-                  _RelatedScreensList(parentScreen, selectedScreen: screen),
-                ],
+                if (previousScreenLink != null) previousScreenLink,
               ],
             ),
           ),
@@ -132,94 +103,6 @@ class DetailSkeleton extends StatelessWidget {
           ),
         )
       ],
-    );
-  }
-}
-
-class _RelatedScreensList extends StatelessWidget {
-  final Screen parentScreen;
-  final Screen selectedScreen;
-
-  const _RelatedScreensList(
-    this.parentScreen, {
-    Key? key,
-    required this.selectedScreen,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    var allScreens = [parentScreen, ...parentScreen.collapsedScreens];
-    return SizedBox(
-      height: 80,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5.0),
-        child: Center(
-          child: ListView.separated(
-            shrinkWrap: true,
-            scrollDirection: Axis.horizontal,
-            itemCount: allScreens.length,
-            itemBuilder: (context, item) {
-              var collapsedScreen = allScreens[item];
-              return _CollapsedScreenshot(
-                collapsedScreen,
-                isSelected: collapsedScreen == selectedScreen,
-                onTap: () {
-                  context.router.go('../../detail/${collapsedScreen.id}');
-                },
-              );
-            },
-            separatorBuilder: (context, item) => const SizedBox(width: 10),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CollapsedScreenshot extends StatelessWidget {
-  final Screen screen;
-  final VoidCallback onTap;
-  final bool isSelected;
-
-  const _CollapsedScreenshot(
-    this.screen, {
-    Key? key,
-    required this.onTap,
-    required this.isSelected,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    Widget image;
-    var file = screen.imageFile;
-    if (file != null) {
-      image = Image(
-        image: RawImageProvider(
-          RawImageData(File(file.path), file.width, file.height),
-        ),
-      );
-    } else {
-      var bytes = screen.imageBytes;
-      if (bytes != null) {
-        image = Image.memory(bytes);
-      } else {
-        image = Center(
-          child: Text(
-            screen.name,
-            style: const TextStyle(fontSize: 10),
-          ),
-        );
-      }
-    }
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-          decoration: isSelected
-              ? BoxDecoration(
-                  border: Border.all(color: Colors.blueAccent, width: 2),
-                )
-              : null,
-          child: image),
     );
   }
 }
