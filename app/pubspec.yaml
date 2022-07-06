@@ -46,6 +46,7 @@ dependencies:
     path: ../
   github:
   glob:
+  graphs:
   image:
   intl:
   io:
@@ -66,7 +67,10 @@ dependencies:
   pub_semver:
   pubspec_parse:
   pubviz:
-    path: ../../pubviz
+    git:
+      url: https://github.com/xvrh/pubviz.git
+      ref: 8c8732b8856ec403a9b91a976aabde8bc0358063
+    #path: ../../pubviz
   rxdart:
   shelf:
   shelf_router:

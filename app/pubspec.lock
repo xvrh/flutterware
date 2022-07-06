@@ -346,7 +346,7 @@ packages:
     source: hosted
     version: "2.1.0"
   graphs:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: graphs
       url: "https://pub.dartlang.org"
@@ -684,9 +684,11 @@ packages:
   pubviz:
     dependency: "direct main"
     description:
-      path: "../../pubviz"
-      relative: true
-    source: path
+      path: "."
+      ref: "8c8732b8856ec403a9b91a976aabde8bc0358063"
+      resolved-ref: "8c8732b8856ec403a9b91a976aabde8bc0358063"
+      url: "https://github.com/xvrh/pubviz.git"
+    source: git
     version: "3.0.0"
   rxdart:
     dependency: "direct main"

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:graphs/graphs.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_config/package_config.dart';
 import '../../project.dart';
@@ -18,17 +19,27 @@ class DependenciesService {
   DependenciesService(this.project);
 
   Future<Dependencies> _load() async {
+    var rootPubspec = await _readPubspec(project.absolutePath);
     var pubspecLock = await PubspecLock.load(project.absolutePath);
     var packageConfig = (await findPackageConfig(project.directory))!;
 
-    var results = <Dependency>[];
+    var results = Dependencies(rootPubspec, <Dependency>[]);
     for (var dependency in pubspecLock.packages) {
       var package = packageConfig[dependency.name];
       if (package != null && dependency.source != 'sdk') {
-        results.add(Dependency(this, package, dependency));
+        var pubspec = await _readPubspec(package.root.toFilePath());
+
+        results.dependencies[package.name] =
+            Dependency(this, results, package, pubspec, dependency);
       }
     }
-    return Dependencies(results);
+    results.computeDependants();
+    return results;
+  }
+
+  static Future<Pubspec> _readPubspec(String path) async {
+    var pubspecFile = File(p.join(path, 'pubspec.yaml'));
+    return Pubspec.parse(await pubspecFile.readAsString());
   }
 
   Future<PubScores> _loadPubScores() async {
@@ -63,9 +74,10 @@ class DependenciesService {
 }
 
 class Dependencies implements Disposable {
+  final Pubspec rootPubspec;
   final Map<String, Dependency> dependencies;
 
-  Dependencies(List<Dependency> dependencies)
+  Dependencies(this.rootPubspec, List<Dependency> dependencies)
       : dependencies = {
           for (var d in dependencies) d.name: d,
         };
@@ -73,6 +85,7 @@ class Dependencies implements Disposable {
   Dependency? operator [](String packageName) => dependencies[packageName];
 
   List<Dependency>? _directs;
+
   List<Dependency> get directs => _directs ??= dependencies.values
       .where((e) =>
           e.lockDependency.type != DependencyType.transitive &&
@@ -80,11 +93,25 @@ class Dependencies implements Disposable {
       .toList();
 
   List<Dependency>? _transitives;
+
   List<Dependency> get transitives => _transitives ??= dependencies.values
       .where((e) =>
           e.lockDependency.type == DependencyType.transitive &&
           e.lockDependency.source == 'hosted')
       .toList();
+
+  void computeDependants() {
+    for (var dependency in dependencies.values) {
+      for (var sub in dependency.pubspec.dependencies.keys) {
+        dependencies[sub]?.dependants.add(dependency.name);
+      }
+      if (dependency.name == rootPubspec.name) {
+        for (var sub in dependency.pubspec.devDependencies.keys) {
+          dependencies[sub]?.dependants.add(dependency.name);
+        }
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -96,13 +123,17 @@ class Dependencies implements Disposable {
 
 class Dependency implements Disposable {
   final DependenciesService _service;
+  final Dependencies parent;
   final Package package;
   final LockDependency lockDependency;
+  final Pubspec pubspec;
+  final dependants = <String>{};
   late final cloc = AsyncValue<ClocReport>(loader: _loadCloc);
 
-  Dependency(this._service, this.package, this.lockDependency);
+  Dependency(this._service, this.parent, this.package, this.pubspec,
+      this.lockDependency);
 
-  String get name => lockDependency.name;
+  String get name => package.name;
 
   bool get isTransitive => lockDependency.type == DependencyType.transitive;
 
@@ -110,6 +141,32 @@ class Dependency implements Disposable {
 
   Future<ClocReport> _loadCloc() async {
     throw UnimplementedError();
+  }
+
+  List<List<String>>? _dependencyPaths;
+  List<List<String>> get dependencyPaths {
+    _dependencyPaths = _computeDependencyPaths();
+    //print("Compute ${name} $_dependencyPaths $dependants");
+    return _dependencyPaths!;
+  }
+
+  List<List<String>> _computeDependencyPaths() {
+    if (dependants.isEmpty) {
+      print("Empty $name");
+      return [
+        [name]
+      ];
+    }
+
+    var results = <List<String>>[];
+    for (var dependant in dependants) {
+      var lists = parent[dependant]!._computeDependencyPaths();
+      for (var list in lists) {
+        list.add(name);
+      }
+      results.addAll(lists);
+    }
+    return results;
   }
 
   @override

@@ -96,23 +96,24 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                     style: theme.textTheme.headlineMedium,
                   ),
                 ),
-                OutlinedButton(
-                  onPressed: () async {
-                    try {
-                      await withLoader((_) async {
-                        await pubviz.openBrowser(project.absolutePath,
-                            sdkDirectory: project.flutterSdkPath.binDir);
-                      }, message: 'Opening Pubviz in browser...');
-                    } catch (e) {
-                      await showMessageDialog(context,
-                          message: 'Failed to collect dependencies. '
-                              'Run "flutter pub get" in the project.');
-                    }
-                  },
-                  child: Text('Visualize'),
-                ),
                 PopupMenuButton(
+                  elevation: 2,
                   itemBuilder: (context) => [
+                    PopupMenuItem(
+                      child: Text('Visualize in browser'),
+                      onTap: () async {
+                        try {
+                          await withLoader((_) async {
+                            await pubviz.openBrowser(project.absolutePath,
+                                sdkDirectory: project.flutterSdkPath.binDir);
+                          }, message: 'Opening Pubviz in browser...');
+                        } catch (e) {
+                          await showMessageDialog(context,
+                              message: 'Failed to collect dependencies. '
+                                  'Run "flutter pub get" in the project.');
+                        }
+                      },
+                    ),
                     PopupMenuItem(
                       child: Text('Reload'),
                       onTap: () {
@@ -145,7 +146,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
       child: Column(
         children: [
           _header(),
-          _table(dependencies.dependencies.values),
+          _table(dependencies),
         ],
       ),
     );
@@ -201,12 +202,12 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
     );
   }
 
-  Widget _table(Iterable<Dependency> dependencies) {
-    var filteredDependencies = dependencies;
+  Widget _table(Dependencies dependencies) {
+    var filteredDependencies = dependencies.dependencies.values;
     if (_searchController.text.isNotEmpty) {
       var query = _searchController.text.toLowerCase();
-      filteredDependencies =
-          dependencies.where((e) => e.name.toLowerCase().contains(query));
+      filteredDependencies = dependencies.dependencies.values
+          .where((e) => e.name.toLowerCase().contains(query));
     }
 
     return SizedBox(
@@ -219,78 +220,67 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
           SliverFillRemaining(
             hasScrollBody: false,
             fillOverscroll: true,
-            child: _data(filteredDependencies),
+            child: _data(dependencies, filteredDependencies),
           )
         ],
       ),
     );
   }
 
-  Widget _data(Iterable<Dependency> dependencies) {
+  Widget _data(Dependencies all, Iterable<Dependency> list) {
     return ValueListenableBuilder<Snapshot<PubScores>>(
-        valueListenable: project.dependencies.pubScores,
-        builder: (context, pubScores, child) {
-          var sort = _sorts[_sortIndex]!;
-          var comparator = (Comparable a, Comparable b) => a.compareTo(b);
-          if (!_sortAscending) {
-            comparator = comparator.inverse;
-          }
+      valueListenable: project.dependencies.pubScores,
+      builder: (context, pubScores, child) {
+        var sort = _sorts[_sortIndex]!;
+        var comparator = (Comparable a, Comparable b) => a.compareTo(b);
+        if (!_sortAscending) {
+          comparator = comparator.inverse;
+        }
 
-          var sortedDependencies = dependencies.sortedByCompare<Comparable>(
-              (p) => sort(p, pubScores), comparator);
+        var sortedDependencies = list.sortedByCompare<Comparable>(
+            (p) => sort(p, pubScores), comparator);
 
-          return DataTable(
-            dataRowHeight: _DependencyListScreen._rowHeight,
-            headingRowHeight: _DependencyListScreen._headingHeight,
-            showCheckboxColumn: false,
-            sortColumnIndex: _sortIndex,
-            sortAscending: _sortAscending,
-            columns: [
-              DataColumn(label: Text('Package'), onSort: _onSort),
-              DataColumn(label: Text('Type')),
-              DataColumn(label: Text('Version')),
-              DataColumn(label: Text('Pub'), onSort: _onSort),
-              DataColumn(label: Text('GitHub'), onSort: _onSort),
-            ],
-            rows: [
-              for (var dependency in sortedDependencies)
-                DataRow(
-                  onSelectChanged: (selected) {
-                    context.router.go('packages/${dependency.name}');
-                  },
-                  cells: [
-                    DataCell(
-                      Text(dependency.name),
-                    ),
-                    DataCell(dependency.isTransitive
-                        ? _DependencyTransitiveBadge()
-                        : _DependencyDirectBadge()),
-                    DataCell(
-                      Row(
-                        children: [
-                          Tooltip(
-                            message: "Upgrade available: BREAKING 3.0.0",
-                            child: Row(
-                              children: [
-                                Text(dependency.lockDependency.version),
-                                Icon(Icons.upgrade, size: 15),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    DataCell(
-                      _PubCell(dependency, pubScores.data),
-                    ),
-                    DataCell(
-                      _GithubCell(dependency, pubScores.data),
-                    ),
-                  ],
-                ),
-            ],
-          );
-        });
+        return DataTable(
+          dataRowHeight: _DependencyListScreen._rowHeight,
+          headingRowHeight: _DependencyListScreen._headingHeight,
+          showCheckboxColumn: false,
+          sortColumnIndex: _sortIndex,
+          sortAscending: _sortAscending,
+          columns: [
+            DataColumn(label: Text('Package'), onSort: _onSort),
+            DataColumn(label: Text('Type')),
+            DataColumn(label: Text('Version')),
+            DataColumn(label: Text('Pub'), onSort: _onSort),
+            DataColumn(label: Text('GitHub'), onSort: _onSort),
+          ],
+          rows: [
+            for (var dependency in sortedDependencies)
+              DataRow(
+                onSelectChanged: (selected) {
+                  context.router.go('packages/${dependency.name}');
+                },
+                cells: [
+                  DataCell(
+                    Text(dependency.name),
+                  ),
+                  DataCell(dependency.isTransitive
+                      ? _DependencyTransitiveBadge()
+                      : _DependencyDirectBadge()),
+                  DataCell(
+                    _VersionCell(dependency),
+                  ),
+                  DataCell(
+                    _PubCell(dependency, pubScores.data),
+                  ),
+                  DataCell(
+                    _GithubCell(dependency, pubScores.data),
+                  ),
+                ],
+              ),
+          ],
+        );
+      },
+    );
   }
 
   static Comparable _selectPackageName(
@@ -425,5 +415,32 @@ class _DependencyDirectBadge extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _VersionCell extends StatelessWidget {
+  final Dependency dependency;
+
+  const _VersionCell(this.dependency);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(dependency.lockDependency.version);
+
+    //TODO(xha): run a dart pub outdated in the background and when ready, display
+    // an icon explaining what is available
+    //return Row(
+    //  children: [
+    //    Tooltip(
+    //      message: "Upgrade available: BREAKING 3.0.0",
+    //      child: Row(
+    //        children: [
+    //          Text(dependency.lockDependency.version),
+    //          Icon(Icons.upgrade, size: 15),
+    //        ],
+    //      ),
+    //    ),
+    //  ],
+    //);
   }
 }

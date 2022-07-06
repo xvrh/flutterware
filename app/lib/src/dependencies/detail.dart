@@ -91,7 +91,7 @@ class _DetailScreen extends StatelessWidget {
             Expanded(
               child: TabBarView(
                 children: [
-                  _InfoTab(),
+                  _InfoTab(dependency),
                   Text('README'),
                   Text('Changelog'),
                 ],
@@ -117,6 +117,10 @@ class _DetailScreen extends StatelessWidget {
 }
 
 class _InfoTab extends StatelessWidget {
+  final Dependency dependency;
+
+  const _InfoTab(this.dependency);
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -147,10 +151,8 @@ class _InfoTab extends StatelessWidget {
                 label: Text('Transitive'),
                 value: Column(
                   children: [
-                    Text("http < fetch < url"),
-                    Text("http < fetch < url"),
-                    Text("http < fetch < url"),
-                    Text("+ 3 others"),
+                    for (var dependantPath in dependency.dependencyPaths)
+                      Text(dependantPath.join(' < ')),
                   ],
                 ),
               ),
