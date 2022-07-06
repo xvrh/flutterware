@@ -7,7 +7,7 @@ import 'package:meta/meta.dart';
 
 import 'runtime/setup_test_values.dart';
 export 'package:flutter_test/flutter_test.dart' hide testWidgets;
-export 'runtime/app_test.dart' show AppTest, Screenshot;
+export 'runtime/app_test.dart' show AppTest;
 
 @isTest
 void testApp(String description,

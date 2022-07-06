@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutterware_app/src/icon/model/service.dart';
 import 'package:flutterware_app/src/ui/side_menu.dart';
 import 'package:flutterware_app/src/utils/router_outlet.dart';
 import '../about/screen.dart';
 import '../dependencies/list.dart';
+import '../icon/image_provider.dart';
 import '../icon/screen.dart';
 import '../overview/screen.dart';
 import '../project.dart';
@@ -18,6 +20,7 @@ class ProjectView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const iconWidth = 25.0;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -26,18 +29,26 @@ class ProjectView extends StatelessWidget {
             AboutMenuItem(),
           ],
           children: [
-            LogoTile(
-              name: 'Flutterware',
-              version: 'ALPHA',
-            ),
             SingleLineGroup(
               child: MenuLink(
                 url: paths.home,
                 title: Row(
                   children: [
-                    Icon(
-                      Icons.home,
-                      size: 18,
+                    ValueListenableBuilder<Snapshot<SampleIcon>>(
+                      valueListenable: project.icons.sample,
+                      builder: (context, snapshot, child) {
+                        var data = snapshot.data?.file;
+
+                        if (data != null) {
+                          return Image(
+                            image: AppIconImageProvider(data),
+                            width: iconWidth,
+                            height: iconWidth,
+                          );
+                        } else {
+                          return const SizedBox(width: iconWidth);
+                        }
+                      },
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -65,12 +76,7 @@ class ProjectView extends StatelessWidget {
                 ),
               ],
             ),
-            CollapsibleMenu(
-              title: Text('Tests'),
-              children: [
-                TestMenu(project),
-              ],
-            ),
+            TestMenu(project),
           ],
         ),
         Expanded(

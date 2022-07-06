@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/ui/side_menu.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
@@ -6,6 +5,8 @@ import 'package:flutterware_app/src/ui/theme.dart';
 void main() => runApp(AppThemeDemo());
 
 class AppThemeDemo extends StatelessWidget {
+  const AppThemeDemo({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -292,8 +293,6 @@ class _Tab2 extends StatelessWidget {
 }
 
 class _Tab3 extends StatelessWidget {
-  const _Tab3({super.key});
-
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -301,7 +300,6 @@ class _Tab3 extends StatelessWidget {
       children: [
         SideMenu(
           children: [
-            LogoTile(name: 'Flutterware', version: 'v0.2.0'),
             SingleLineGroup(
               child: MenuLine(
                 onTap: () {},
@@ -342,7 +340,6 @@ class _Tab3 extends StatelessWidget {
         const SizedBox(width: 20),
         SideMenu(
           children: [
-            LogoTile(name: 'Flutterware', version: 'v0.2.0'),
             MenuLine(
               onTap: () {},
               isSelected: false,

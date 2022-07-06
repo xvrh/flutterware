@@ -1,15 +1,10 @@
 import 'dart:ui';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/dependencies/model/service.dart';
-import 'package:flutterware_app/src/utils/router_outlet.dart';
-import 'package:flutterware_app/src/utils/ui/loading.dart';
 
-import '../app/ui/back_bar.dart';
 import '../app/ui/breadcrumb.dart';
 import '../project.dart';
-import '../ui.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
 

@@ -22,6 +22,7 @@ class GraphiteCell extends StatefulWidget {
     required this.node,
     required this.cellPadding,
     this.builder,
+    super.key,
   });
   @override
   State<GraphiteCell> createState() => _GraphiteCellState();
@@ -42,6 +43,10 @@ class _GraphiteCellState extends State<GraphiteCell> {
 }
 
 class GraphiteAnchor extends StatefulWidget {
+  const GraphiteAnchor({
+    super.key,
+  });
+
   @override
   State<GraphiteAnchor> createState() => _GraphiteAnchorState();
 }

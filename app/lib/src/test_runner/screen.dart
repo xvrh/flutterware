@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/test_runner/app_connected.dart';
 import 'package:flutterware_app/src/utils/router_outlet.dart';
 
-import '../app/project_view.dart';
 import '../project.dart';
 import 'menu.dart';
 import 'protocol/api.dart';
@@ -33,8 +32,6 @@ class TestRunnerScreen extends StatelessWidget {
 }
 
 class _HomeScreen extends StatelessWidget {
-  const _HomeScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     return Text('''Explain app test feature
@@ -49,7 +46,7 @@ Screenshot of expected workflow
 class _RunScreen extends StatelessWidget {
   final Project project;
 
-  const _RunScreen(this.project, {super.key});
+  const _RunScreen(this.project);
 
   @override
   Widget build(BuildContext context) {

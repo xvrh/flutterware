@@ -2,21 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'package:async/async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
-import '../flutter_sdk.dart';
 import '../globals.dart';
 import '../project.dart';
 import '../utils/daemon/commands.dart';
 import '../utils/daemon/events.dart';
 import '../utils/daemon/protocol.dart';
 import 'entry_point.dart';
-import 'protocol/api.dart';
 import 'server.dart';
 import 'package:path/path.dart' as p;
-
-import 'service.dart';
 
 final _logger = Logger('Test daemon');
 

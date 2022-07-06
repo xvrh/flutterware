@@ -1,19 +1,15 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutterware_app/src/test_runner/daemon.dart';
-import 'package:flutterware_app/src/test_runner/entry_point.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:rxdart/rxdart.dart';
 import 'package:watcher/watcher.dart';
 import '../project.dart';
-import '../utils/flutter_run_process.dart';
 import 'protocol/api.dart';
 import 'server.dart';
 import 'package:async/async.dart';
-import 'package:stream_transform/stream_transform.dart';
 
 final _logger = Logger('test_runner_service');
 

@@ -8,6 +8,7 @@ class GraphiteGrid extends StatefulWidget {
 
   GraphiteGrid({
     required this.matrix,
+    super.key,
   });
   @override
   State<GraphiteGrid> createState() => _GraphiteGridState();

@@ -49,7 +49,7 @@ Future<void> Function(WidgetTester) withTestValues(
       // Take a screenshot of the error
       //TODO(xha): remove this and put it in Runner and get the value though the
       // binding.renderView
-      await tester.screenshot(name: 'Error: $e');
+      await tester.screenshot(name: 'After error');
       rethrow;
     } finally {
       binding.window.clearAllTestValues();

@@ -1,71 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/test_runner/protocol/api.dart';
 import '../project.dart';
-import '../ui.dart';
+import '../ui/side_menu.dart';
 import '../utils.dart';
 import 'daemon.dart';
 import 'listing.dart';
 import 'service.dart';
-
-class _TestMenuLine extends StatelessWidget {
-  final Project project;
-
-  const _TestMenuLine(this.project, {super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: Text('Tests')),
-        ValueListenableBuilder<DaemonState>(
-            valueListenable: project.tests.state,
-            builder: (context, state, child) {
-              return IconButton(
-                onPressed: () {
-                  project.tests.ensureStarted();
-                },
-                constraints: BoxConstraints(),
-                padding: EdgeInsets.zero,
-                icon: Icon(Icons.more_vert, size: 12),
-              );
-              return IntrinsicHeight(
-                child: Container(
-                  // decoration: BoxDecoration(
-                  //     color: Colors.blueAccent,
-                  //     borderRadius: BorderRadius.circular(5)),
-                  // Put all this on the top of the main tab.
-                  // Just keep the
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.bolt,
-                        color: Colors.orange,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 5),
-                      Icon(
-                        Icons.restart_alt,
-                        color: Colors.green,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 5),
-                      VerticalDivider(),
-                      const SizedBox(width: 5),
-                      Icon(
-                        Icons.more_vert,
-                        size: 20,
-                        //color: Colors.white,
-                      ),
-                    ],
-                  ),
-                ),
-              );
-              return const SizedBox();
-            }),
-      ],
-    );
-  }
-}
 
 class TestMenu extends StatelessWidget {
   final Project project;
@@ -74,6 +14,26 @@ class TestMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return CollapsibleMenu(
+      title: Text('Tests'),
+      children: [
+        MenuLine(
+          onTap: () {},
+          isSelected: false,
+          child: Text('Help'),
+        ),
+        MenuLine(
+          onTap: () {},
+          isSelected: false,
+          expanded: false,
+          child: Text('test_app'),
+        ),
+        _listing(),
+      ],
+    );
+  }
+
+  Widget _listing() {
     return StreamBuilder<List<TestRunnerApi>>(
       stream: project.tests.clients,
       initialData: project.tests.clients.value,
@@ -144,7 +104,7 @@ class DaemonToolbar extends StatelessWidget {
 class _DaemonConnectedToolbar extends StatelessWidget {
   final Daemon daemon;
 
-  const _DaemonConnectedToolbar(this.daemon, {super.key});
+  const _DaemonConnectedToolbar(this.daemon);
 
   @override
   Widget build(BuildContext context) {
@@ -205,7 +165,7 @@ class _DaemonConnectedToolbar extends StatelessWidget {
 class _DaemonStoppedToolbar extends StatelessWidget {
   final Project project;
 
-  const _DaemonStoppedToolbar(this.project, {super.key});
+  const _DaemonStoppedToolbar(this.project);
 
   @override
   Widget build(BuildContext context) {
@@ -229,8 +189,6 @@ class _DaemonStoppedToolbar extends StatelessWidget {
 }
 
 class _DaemonStartingToolbar extends StatelessWidget {
-  const _DaemonStartingToolbar({super.key});
-
   @override
   Widget build(BuildContext context) {
     return Text(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/dependencies/detail.dart';
 import 'package:flutterware_app/src/dependencies/model/service.dart';
+import 'package:flutterware_app/src/utils/ui/message_dialog.dart';
+import 'package:pubviz/open.dart' as pubviz;
 import 'package:flutterware_app/src/dependencies/upgrades.dart';
 import 'package:pub_scores/pub_scores.dart';
 import '../app/ui/breadcrumb.dart';
@@ -93,6 +95,21 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                     'Dependencies',
                     style: theme.textTheme.headlineMedium,
                   ),
+                ),
+                OutlinedButton(
+                  onPressed: () async {
+                    try {
+                      await withLoader((_) async {
+                        await pubviz.openBrowser(project.absolutePath,
+                            sdkDirectory: project.flutterSdkPath.binDir);
+                      }, message: 'Opening Pubviz in browser...');
+                    } catch (e) {
+                      await showMessageDialog(context,
+                          message: 'Failed to collect dependencies. '
+                              'Run "flutter pub get" in the project.');
+                    }
+                  },
+                  child: Text('Visualize'),
                 ),
                 PopupMenuButton(
                   itemBuilder: (context) => [

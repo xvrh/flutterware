@@ -14,7 +14,7 @@ class RouterRoot extends StatefulWidget {
       : super(key: key);
 
   @override
-  _RouterRootState createState() => _RouterRootState();
+  State<RouterRoot> createState() => _RouterRootState();
 
   static UrlSource sourceOf(BuildContext context) {
     return context
@@ -115,7 +115,7 @@ class RouterRootAuto extends StatefulWidget {
   const RouterRootAuto({Key? key, required this.child}) : super(key: key);
 
   @override
-  _RouterRootAuto createState() => _RouterRootAuto();
+  State<RouterRootAuto> createState() => _RouterRootAuto();
 }
 
 class _RouterRootAuto extends State<RouterRootAuto> {

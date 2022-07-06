@@ -8,6 +8,7 @@ class GraphiteRoot extends StatefulWidget {
 
   GraphiteRoot({
     required this.mtx,
+    super.key,
   });
   @override
   State<GraphiteRoot> createState() => _GraphiteRootState();

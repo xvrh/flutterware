@@ -1,8 +1,6 @@
 import 'dart:math';
 import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
-import '../ui.dart';
-import '../utils.dart';
 import 'ui/toolbar.dart';
 
 class ToolbarParameters {

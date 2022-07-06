@@ -61,7 +61,7 @@ const _buttonBackground = Colors.white;
 const _buttonBorderColor = Color(0xffC4C4C4);
 const _textStyle = TextStyle(fontSize: 13, color: Colors.black87);
 
-class ToolbarDropdown<T> extends StatelessWidget {
+class ToolbarDropdown<T extends Object> extends StatelessWidget {
   static const _highlightColor = Color(0xff0000ff);
 
   final T value;

@@ -3,9 +3,7 @@ import 'ui/menu_tree.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
-import '../ui.dart';
 import 'flow_graph.dart';
-import 'listing.dart';
 import 'protocol/api.dart';
 import 'toolbar.dart';
 

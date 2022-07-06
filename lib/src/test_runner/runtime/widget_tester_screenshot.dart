@@ -8,13 +8,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutterware/src/test_runner/protocol/models.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware/src/test_runner/runtime/binding.dart';
-
-import '../protocol/model/screen.dart';
 import 'run_context.dart';
 
 extension WidgetTesterScreenshotExtension on WidgetTester {
-  Future<void> screenshot(String name, {List<String>? tags}) async {
+  Future<void> screenshot({String? name, List<String>? tags}) async {
     var context = runContext;
 
     var index = ++context.screenIndex;

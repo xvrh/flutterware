@@ -98,7 +98,7 @@ class Dependency implements Disposable {
   final DependenciesService _service;
   final Package package;
   final LockDependency lockDependency;
-  late final cloc = AsyncValue<ClocReport>(loader: _loadCloc, lazy: true);
+  late final cloc = AsyncValue<ClocReport>(loader: _loadCloc);
 
   Dependency(this._service, this.package, this.lockDependency);
 
