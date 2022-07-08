@@ -27,7 +27,9 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  analyzer:
   args:
+  auto_size_text:
   async:
   built_collection:
   collection:
@@ -46,13 +48,13 @@ dependencies:
     path: ../
   github:
   glob:
-  graphs:
   image:
   intl:
   io:
   json_annotation:
   logging:
   markdown:
+  meta:
   os_detect:
   package_config:
   package_info_plus:

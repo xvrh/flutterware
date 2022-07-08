@@ -5,11 +5,14 @@ import 'package:flutterware_app/src/utils/ui/message_dialog.dart';
 import 'package:pubviz/open.dart' as pubviz;
 import 'package:flutterware_app/src/dependencies/upgrades.dart';
 import 'package:pub_scores/pub_scores.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
 import 'package:collection/collection.dart';
+
+import 'model/package_imports.dart';
 
 class DependenciesScreen extends StatefulWidget {
   final Project project;
@@ -203,10 +206,10 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
   }
 
   Widget _table(Dependencies dependencies) {
-    var filteredDependencies = dependencies.dependencies.values;
+    var filteredDependencies = dependencies.dependencies;
     if (_searchController.text.isNotEmpty) {
       var query = _searchController.text.toLowerCase();
-      filteredDependencies = dependencies.dependencies.values
+      filteredDependencies = dependencies.dependencies
           .where((e) => e.name.toLowerCase().contains(query));
     }
 
@@ -260,21 +263,13 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                   context.router.go('packages/${dependency.name}');
                 },
                 cells: [
-                  DataCell(
-                    Text(dependency.name),
-                  ),
+                  DataCell(Text(dependency.name)),
                   DataCell(dependency.isTransitive
-                      ? _DependencyTransitiveBadge()
-                      : _DependencyDirectBadge()),
-                  DataCell(
-                    _VersionCell(dependency),
-                  ),
-                  DataCell(
-                    _PubCell(dependency, pubScores.data),
-                  ),
-                  DataCell(
-                    _GithubCell(dependency, pubScores.data),
-                  ),
+                      ? _DependencyTransitiveBadge(dependency)
+                      : _DependencyDirectBadge(project, dependency)),
+                  DataCell(_VersionCell(dependency)),
+                  DataCell(_PubCell(dependency, pubScores.data)),
+                  DataCell(_GithubCell(dependency, pubScores.data)),
                 ],
               ),
           ],
@@ -324,9 +319,17 @@ class _PubCell extends StatelessWidget {
       if (points != null) '$points point${points > 1 ? 's' : ''}',
     ];
 
-    return Tooltip(
-      message: message.join(' / '),
-      child: Text(popularityString),
+    return InkWell(
+      onTap: () {
+        launchUrl(Uri.https('pub.dev', 'packages/${dependency.name}'));
+      },
+      child: Tooltip(
+        message: message.join(' / '),
+        child: Text(
+          popularityString,
+          style: const TextStyle(color: AppColors.blackSecondary),
+        ),
+      ),
     );
   }
 }
@@ -346,38 +349,51 @@ class _GithubCell extends StatelessWidget {
 
     var starCount = github.starCount;
     var forkCount = github.forkCount;
-    return Tooltip(
-      message: '${[
-        '$starCount star${starCount > 1 ? 's' : ''}',
-        '$forkCount fork${forkCount > 1 ? 's' : ''}',
-      ].join(', ')}\n${github.slug}',
-      child: Row(
-        children: [
-          Text('$starCount'),
-          Icon(Icons.star_outline, size: 15),
-        ],
+    return InkWell(
+      onTap: () {
+        launchUrl(Uri.https('github.com', github.slug));
+      },
+      child: Tooltip(
+        message: '${[
+          '$starCount star${starCount > 1 ? 's' : ''}',
+          '$forkCount fork${forkCount > 1 ? 's' : ''}',
+        ].join(', ')}\n${github.slug}',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$starCount',
+              style: const TextStyle(color: AppColors.blackSecondary),
+            ),
+            Icon(Icons.star_outline, size: 15, color: AppColors.blackSecondary),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _DependencyTransitiveBadge extends StatelessWidget {
+  final Dependency dependency;
+
+  const _DependencyTransitiveBadge(this.dependency);
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.black12,
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Tooltip(
-        message: 'http > machin > this one',
+        message: dependency.dependencyPaths
+            .take(3)
+            .map((l) => l.join(' > '))
+            .join('\n'),
         child: Text(
           'Transitive',
-          style: const TextStyle(
-            color: Colors.black26,
-            fontSize: 10,
-          ),
+          style: const TextStyle(fontSize: 12),
         ),
       ),
     );
@@ -385,34 +401,40 @@ class _DependencyTransitiveBadge extends StatelessWidget {
 }
 
 class _DependencyDirectBadge extends StatelessWidget {
+  final Project project;
+  final Dependency dependency;
+
+  const _DependencyDirectBadge(this.project, this.dependency);
+
   @override
   Widget build(BuildContext context) {
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.black26,
-        borderRadius: BorderRadius.circular(5),
+        color: Color(0xfff2f8eb),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Tooltip(
-        message: '3 imports',
-        child: Row(
-          children: [
-            Text('Direct'),
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.blue,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-              child: Text(
-                '2',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                ),
+      child: ValueListenableBuilder<Snapshot<PackageImports>>(
+        valueListenable: project.dependencies.packageImports,
+        builder: (context, snapshot, child) {
+          var packageImports = snapshot.data;
+          var tooltip = '';
+          if (packageImports != null) {
+            var imports = packageImports[dependency.name];
+            tooltip =
+                '${imports.length} import${imports.length > 1 ? 's' : ''}';
+          }
+          return Tooltip(
+            message: tooltip,
+            child: Text(
+              'Direct',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xff618a3d),
               ),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -425,7 +447,12 @@ class _VersionCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(dependency.lockDependency.version);
+    return Text(
+      dependency.pubspec.version?.toString() ?? '',
+      style: const TextStyle(
+        color: AppColors.blackSecondary,
+      ),
+    );
 
     //TODO(xha): run a dart pub outdated in the background and when ready, display
     // an icon explaining what is available

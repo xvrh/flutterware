@@ -40,6 +40,18 @@ class Lang {
   static final dart = Lang('Dart', ['.dart'], _javaCommentSingle)
     ..withMulti(_javaCommentFrom, _javaCommentTo)
     ..withRmInline(_javaRmInline);
+  static final swift = Lang('Swift', ['.swift'], _javaCommentSingle)
+    ..withMulti(_javaCommentFrom, _javaCommentTo)
+    ..withRmInline(_javaRmInline);
+  static final objectiveC = Lang('Objective-C', ['.m'], _javaCommentSingle)
+    ..withMulti(_javaCommentFrom, _javaCommentTo)
+    ..withRmInline(_javaRmInline);
+  static final c = Lang('C', ['.c'], _javaCommentSingle)
+    ..withMulti(_javaCommentFrom, _javaCommentTo)
+    ..withRmInline(_javaRmInline);
+  static final cpp = Lang('C++', ['.cpp'], _javaCommentSingle)
+    ..withMulti(_javaCommentFrom, _javaCommentTo)
+    ..withRmInline(_javaRmInline);
 
   static final languages = [
     java,
@@ -51,6 +63,10 @@ class Lang {
     csharp,
     xml,
     dart,
+    swift,
+    objectiveC,
+    c,
+    cpp,
   ];
 
   /// Returns the lang object given a [filename], `null` otherwise.

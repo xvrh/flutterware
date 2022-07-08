@@ -9,7 +9,7 @@ packages:
     source: hosted
     version: "41.0.0"
   analyzer:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: analyzer
       url: "https://pub.dartlang.org"
@@ -36,6 +36,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.8.2"
+  auto_size_text:
+    dependency: "direct main"
+    description:
+      name: auto_size_text
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "3.0.0"
   boolean_selector:
     dependency: transitive
     description:
@@ -346,7 +353,7 @@ packages:
     source: hosted
     version: "2.1.0"
   graphs:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: graphs
       url: "https://pub.dartlang.org"
@@ -479,7 +486,7 @@ packages:
     source: hosted
     version: "0.1.4"
   meta:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: meta
       url: "https://pub.dartlang.org"

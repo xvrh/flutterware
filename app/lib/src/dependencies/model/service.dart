@@ -1,20 +1,26 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:graphs/graphs.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_config/package_config.dart';
 import '../../project.dart';
 import '../../utils/async_value.dart';
 import '../../utils/cloc/cloc.dart';
+import '../../utils/list_files.dart';
 import '../model/pubspec_lock.dart';
 import 'package:pub_scores/pub_scores.dart';
 import 'package:path/path.dart' as p;
+
+import 'dependency_graph.dart';
+import 'package_imports.dart';
 
 class DependenciesService {
   final Project project;
   late final dependencies = AsyncValue<Dependencies>(loader: _load);
   late final pubScores = AsyncValue<PubScores>(loader: _loadPubScores);
+  late final packageImports =
+      AsyncValue<PackageImports>(loader: _loadPackageImports);
 
   DependenciesService(this.project);
 
@@ -24,14 +30,14 @@ class DependenciesService {
     var packageConfig = (await findPackageConfig(project.directory))!;
 
     var results = Dependencies(rootPubspec, <Dependency>[]);
-    for (var dependency in pubspecLock.packages) {
-      var package = packageConfig[dependency.name];
-      if (package != null && dependency.source != 'sdk') {
-        var pubspec = await _readPubspec(package.root.toFilePath());
+    for (var package in packageConfig.packages) {
+      var pubspecLockDep =
+          pubspecLock.packages.firstWhereOrNull((e) => e.name == package.name);
 
-        results.dependencies[package.name] =
-            Dependency(this, results, package, pubspec, dependency);
-      }
+      var pubspec = await _readPubspec(package.root.toFilePath());
+
+      results._allPackages[package.name] =
+          Dependency(this, results, package, pubspec, pubspecLockDep);
     }
     results.computeDependants();
     return results;
@@ -67,6 +73,14 @@ class DependenciesService {
     }, dataPath);
   }
 
+  Future<PackageImports> _loadPackageImports() async {
+    return await compute<String, PackageImports>((path) async {
+      return PackageImports.gather(listFilesInDirectory(path)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart')));
+    }, project.absolutePath);
+  }
+
   void dispose() {
     dependencies.dispose();
     pubScores.dispose();
@@ -75,47 +89,44 @@ class DependenciesService {
 
 class Dependencies implements Disposable {
   final Pubspec rootPubspec;
-  final Map<String, Dependency> dependencies;
+  final Map<String, Dependency> _allPackages;
 
   Dependencies(this.rootPubspec, List<Dependency> dependencies)
-      : dependencies = {
+      : _allPackages = {
           for (var d in dependencies) d.name: d,
         };
 
-  Dependency? operator [](String packageName) => dependencies[packageName];
+  Dependency? operator [](String packageName) => _allPackages[packageName];
+
+  Iterable<Dependency> get dependencies => _allPackages.values.where((e) {
+        return e.name != rootPubspec.name;
+      });
 
   List<Dependency>? _directs;
-
-  List<Dependency> get directs => _directs ??= dependencies.values
-      .where((e) =>
-          e.lockDependency.type != DependencyType.transitive &&
-          e.lockDependency.source == 'hosted')
-      .toList();
+  List<Dependency> get directs =>
+      _directs ??= dependencies.where((e) => !e.isTransitive).toList();
 
   List<Dependency>? _transitives;
-
-  List<Dependency> get transitives => _transitives ??= dependencies.values
-      .where((e) =>
-          e.lockDependency.type == DependencyType.transitive &&
-          e.lockDependency.source == 'hosted')
-      .toList();
+  List<Dependency> get transitives =>
+      _transitives ??= dependencies.where((e) => e.isTransitive).toList();
 
   void computeDependants() {
-    for (var dependency in dependencies.values) {
+    for (var dependency in _allPackages.values) {
       for (var sub in dependency.pubspec.dependencies.keys) {
-        dependencies[sub]?.dependants.add(dependency.name);
+        _allPackages[sub]?.dependants.add(dependency.name);
       }
-      if (dependency.name == rootPubspec.name) {
-        for (var sub in dependency.pubspec.devDependencies.keys) {
-          dependencies[sub]?.dependants.add(dependency.name);
-        }
-      }
+    }
+    for (var directDep in [
+      ...rootPubspec.dependencies.keys,
+      ...rootPubspec.devDependencies.keys
+    ]) {
+      _allPackages[directDep]?.dependants.add(rootPubspec.name);
     }
   }
 
   @override
   void dispose() {
-    for (var dependency in dependencies.values) {
+    for (var dependency in _allPackages.values) {
       dependency.dispose();
     }
   }
@@ -125,48 +136,52 @@ class Dependency implements Disposable {
   final DependenciesService _service;
   final Dependencies parent;
   final Package package;
-  final LockDependency lockDependency;
+  final LockDependency? lockDependency;
   final Pubspec pubspec;
   final dependants = <String>{};
   late final cloc = AsyncValue<ClocReport>(loader: _loadCloc);
+  late final size = AsyncValue<SizeReport>(loader: _loadSize);
 
   Dependency(this._service, this.parent, this.package, this.pubspec,
       this.lockDependency);
 
   String get name => package.name;
 
-  bool get isTransitive => lockDependency.type == DependencyType.transitive;
+  bool get isTransitive => lockDependency?.type == DependencyType.transitive;
 
   bool get isDirect => !isTransitive;
 
   Future<ClocReport> _loadCloc() async {
-    throw UnimplementedError();
+    return compute<String, ClocReport>(
+      (path) async {
+        return countLinesOfCode(listFilesInDirectory(path));
+      },
+      package.root.toFilePath(),
+    );
+  }
+
+  Future<SizeReport> _loadSize() async {
+    return compute<String, SizeReport>(
+      (path) async {
+        var files = listFilesInDirectory(path);
+        var count = 0;
+        var size = 0;
+        for (var file in files) {
+          ++count;
+          size += file.lengthSync();
+        }
+        return SizeReport(fileCount: count, totalBytes: size);
+      },
+      package.root.toFilePath(),
+    );
   }
 
   List<List<String>>? _dependencyPaths;
+
   List<List<String>> get dependencyPaths {
-    _dependencyPaths = _computeDependencyPaths();
-    //print("Compute ${name} $_dependencyPaths $dependants");
+    _dependencyPaths =
+        dependenciesGraph(name, (e) => parent._allPackages[e]!.dependants);
     return _dependencyPaths!;
-  }
-
-  List<List<String>> _computeDependencyPaths() {
-    if (dependants.isEmpty) {
-      print("Empty $name");
-      return [
-        [name]
-      ];
-    }
-
-    var results = <List<String>>[];
-    for (var dependant in dependants) {
-      var lists = parent[dependant]!._computeDependencyPaths();
-      for (var list in lists) {
-        list.add(name);
-      }
-      results.addAll(lists);
-    }
-    return results;
   }
 
   @override
@@ -176,4 +191,11 @@ class Dependency implements Disposable {
   void dispose() {
     cloc.dispose();
   }
+}
+
+class SizeReport {
+  final int fileCount;
+  final int totalBytes;
+
+  SizeReport({required this.fileCount, required this.totalBytes});
 }

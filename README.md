@@ -1,24 +1,24 @@
 
-# Flutterware
+# Kitter
 
-A collection of GUI tools for Flutter development.
+A kit of GUI tools for Flutter development.
 
 ## Quick start
 
 Add the `pub`dependency in your `pubspec.yaml`
 
-`flutter pub add flutterware`
+`flutter pub add kitter`
 
 ```yaml
 dependencies:
-  flutterware:
+  deck:
 ```
 
 Run the GUI app
 
 ```shell
 # Run this in your Flutter project directory
-dart run flutterware app
+dart run kitter app
 ```
 The first launch is a bit slow because the desktop app need to be compiled.
 
@@ -48,7 +48,7 @@ Overview of your dependencies to monitor the quality.
 - See Pub & GitHub scores
 - Run `pub upgrade` and preview all changelogs
 
-### App icon change
+### App's icon change
 
 Quickly replace your app's launcher icon.
 
