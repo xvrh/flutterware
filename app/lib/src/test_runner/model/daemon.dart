@@ -4,12 +4,12 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
-import '../globals.dart';
-import '../project.dart';
-import '../utils/daemon/commands.dart';
-import '../utils/daemon/events.dart';
-import '../utils/daemon/protocol.dart';
-import 'entry_point.dart';
+import '../../globals.dart';
+import '../../project.dart';
+import '../../utils/daemon/commands.dart';
+import '../../utils/daemon/events.dart';
+import '../../utils/daemon/protocol.dart';
+import '../entry_point.dart';
 import 'server.dart';
 import 'package:path/path.dart' as p;
 

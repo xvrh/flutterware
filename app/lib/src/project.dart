@@ -9,7 +9,7 @@ import 'package:pubspec_parse/pubspec_parse.dart';
 import 'flutter_sdk.dart';
 import 'icon/model/service.dart';
 import 'overview/service.dart';
-import 'test_runner/service.dart';
+import 'test_runner/model/service.dart';
 import 'utils/async_value.dart';
 
 export 'package:pubspec_parse/pubspec_parse.dart' show Pubspec;

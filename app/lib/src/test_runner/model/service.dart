@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutterware_app/src/test_runner/daemon.dart';
+import 'package:flutterware_app/src/test_runner/model/daemon.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:rxdart/rxdart.dart';
 import 'package:watcher/watcher.dart';
-import '../project.dart';
-import 'protocol/api.dart';
+import '../../project.dart';
+import '../protocol/api.dart';
 import 'server.dart';
 import 'package:async/async.dart';
 

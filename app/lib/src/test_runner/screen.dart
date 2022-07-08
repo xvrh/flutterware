@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/test_runner/app_connected.dart';
+import 'package:flutterware_app/src/test_runner/help.dart';
 import 'package:flutterware_app/src/utils/router_outlet.dart';
 
 import '../project.dart';
+import 'daemon_toolbar.dart';
 import 'menu.dart';
 import 'protocol/api.dart';
 
@@ -13,33 +15,13 @@ class TestRunnerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        DaemonToolbar(project),
-        Expanded(
-          child: RouterOutlet(
-            {
-              '': (r) => _HomeScreen(),
-              'run': (r) => _RunScreen(project),
-            },
-            onNotFound: (r) => '',
-          ),
-        ),
-      ],
+    return RouterOutlet(
+      {
+        '': (r) => HelpScreen(),
+        'run': (r) => _RunScreen(project),
+      },
+      onNotFound: (r) => '',
     );
-  }
-}
-
-class _HomeScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Text('''Explain app test feature
-Link to doc
-Button "add a test"
-Screenshot of expected workflow    
-        
-''');
   }
 }
 
