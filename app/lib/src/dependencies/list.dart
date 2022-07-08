@@ -5,7 +5,6 @@ import 'package:flutterware_app/src/utils/ui/message_dialog.dart';
 import 'package:pubviz/open.dart' as pubviz;
 import 'package:flutterware_app/src/dependencies/upgrades.dart';
 import 'package:pub_scores/pub_scores.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../utils.dart';
@@ -13,6 +12,7 @@ import '../utils/async_value.dart';
 import 'package:collection/collection.dart';
 
 import 'model/package_imports.dart';
+import 'utils.dart';
 
 class DependenciesScreen extends StatefulWidget {
   final Project project;
@@ -26,6 +26,9 @@ class DependenciesScreen extends StatefulWidget {
 class _DependenciesScreenState extends State<DependenciesScreen> {
   final _scrollBucket = PageStorageBucket();
   final _searchController = TextEditingController();
+  bool _withTransitive = false;
+  int _sortIndex = 0;
+  bool _sortAscending = true;
 
   @override
   Widget build(BuildContext context) {
@@ -65,14 +68,20 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
     3: _selectPubScore,
     4: _selectGithubScore,
   };
-  int _sortIndex = 0;
-  bool _sortAscending = true;
-  bool _withTransitive = true;
 
   Project get project => widget.parent.widget.project;
 
   TextEditingController get _searchController =>
       widget.parent._searchController;
+
+  bool get _withTransitive => widget.parent._withTransitive;
+  set _withTransitive(bool v) => widget.parent._withTransitive = v;
+
+  int get _sortIndex => widget.parent._sortIndex;
+  set _sortIndex(int v) => widget.parent._sortIndex = v;
+
+  bool get _sortAscending => widget.parent._sortAscending;
+  set _sortAscending(bool v) => widget.parent._sortAscending = v;
 
   @override
   Widget build(BuildContext context) {
@@ -161,42 +170,38 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
-          Expanded(child: Text('Show transitive')),
-          Checkbox(value: true, onChanged: (v) {}),
-          SizedBox(
+          Container(
             width: 300,
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: TextFormField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search by name',
-                  prefixIcon: Icon(Icons.search),
-                  suffixIconConstraints: BoxConstraints(minHeight: 30),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          constraints:
-                              BoxConstraints(minHeight: 30, minWidth: 48),
-                          padding: EdgeInsets.zero,
-                          onPressed: () {
-                            setState(() {
-                              _searchController.text = '';
-                            });
-                          },
-                          icon: Icon(Icons.clear),
-                        )
-                      : null,
-                ),
-                onFieldSubmitted: (_) {
-                  setState(() {
-                    // Refresh the table
-                  });
-                },
-                onChanged: (v) {
-                  setState(() {
-                    // Refresh the table
-                  });
-                },
+            padding: const EdgeInsets.all(8.0),
+            child: _searchField(),
+          ),
+          Expanded(child: SizedBox()),
+          InkWell(
+            onTap: () {
+              setState(() {
+                _withTransitive = !_withTransitive;
+              });
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: Colors.black12,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.filter_list, size: 15),
+                  Text('Show all', style: TextStyle(fontSize: 12)),
+                  Checkbox(
+                    value: _withTransitive,
+                    onChanged: (v) {
+                      setState(() {
+                        _withTransitive = v!;
+                      });
+                    },
+                  ),
+                ],
               ),
             ),
           ),
@@ -205,8 +210,44 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
     );
   }
 
+  Widget _searchField() {
+    return TextFormField(
+      controller: _searchController,
+      decoration: InputDecoration(
+        hintText: 'Search by name',
+        prefixIcon: Icon(Icons.search),
+        suffixIconConstraints: BoxConstraints(minHeight: 30),
+        suffixIcon: _searchController.text.isNotEmpty
+            ? IconButton(
+                constraints: BoxConstraints(minHeight: 30, minWidth: 48),
+                padding: EdgeInsets.zero,
+                onPressed: () {
+                  setState(() {
+                    _searchController.text = '';
+                  });
+                },
+                icon: Icon(Icons.clear),
+              )
+            : null,
+      ),
+      onFieldSubmitted: (_) {
+        setState(() {
+          // Refresh the table
+        });
+      },
+      onChanged: (v) {
+        setState(() {
+          // Refresh the table
+        });
+      },
+    );
+  }
+
   Widget _table(Dependencies dependencies) {
     var filteredDependencies = dependencies.dependencies;
+    if (!_withTransitive) {
+      filteredDependencies = filteredDependencies.where((d) => d.isDirect);
+    }
     if (_searchController.text.isNotEmpty) {
       var query = _searchController.text.toLowerCase();
       filteredDependencies = dependencies.dependencies
@@ -320,9 +361,7 @@ class _PubCell extends StatelessWidget {
     ];
 
     return InkWell(
-      onTap: () {
-        launchUrl(Uri.https('pub.dev', 'packages/${dependency.name}'));
-      },
+      onTap: () => openPub(dependency),
       child: Tooltip(
         message: message.join(' / '),
         child: Text(
@@ -350,9 +389,7 @@ class _GithubCell extends StatelessWidget {
     var starCount = github.starCount;
     var forkCount = github.forkCount;
     return InkWell(
-      onTap: () {
-        launchUrl(Uri.https('github.com', github.slug));
-      },
+      onTap: () => openGithub(github),
       child: Tooltip(
         message: '${[
           '$starCount star${starCount > 1 ? 's' : ''}',

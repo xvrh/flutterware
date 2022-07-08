@@ -119,7 +119,7 @@ class RouterRootAuto extends StatefulWidget {
 }
 
 class _RouterRootAuto extends State<RouterRootAuto> {
-  final _urlSource = UrlSource.auto();
+  final _urlSource = UrlSource.forPlatform();
 
   @override
   void initState() {

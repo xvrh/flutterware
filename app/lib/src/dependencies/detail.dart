@@ -10,12 +10,13 @@ import 'package:flutterware_app/src/utils/cloc/cloc.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:pub_scores/pub_scores.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
 import 'package:auto_size_text/auto_size_text.dart';
+
+import 'utils.dart';
 
 class MyCustomScrollBehavior extends MaterialScrollBehavior {
   @override
@@ -46,10 +47,11 @@ class DependencyDetailScreen extends StatelessWidget {
             return ErrorWidget('$packageName not found');
           }
           return ValueListenableBuilder<Snapshot<PubScores>>(
-              valueListenable: project.dependencies.pubScores,
-              builder: (context, pubScores, child) {
-                return _DetailScreen(project, dependency, pubScores.data);
-              });
+            valueListenable: project.dependencies.pubScores,
+            builder: (context, pubScores, child) {
+              return _DetailScreen(project, dependency, pubScores.data);
+            },
+          );
         }
       },
     );
@@ -182,10 +184,10 @@ class _InfoTabState extends State<_InfoTab> {
     var github = scores?.github;
     var pubInfo = scores?.pub;
 
-    var transitivePaths = dependency.dependencyPaths;
+    var transitivePaths =
+        dependency.dependencyPaths.sortedBy((e) => e.join('-'));
     var transitivePathsToShow =
-        (_showAllTransitivePath ? transitivePaths : transitivePaths.take(4))
-            .sortedBy((e) => e.join('-'));
+        _showAllTransitivePath ? transitivePaths : transitivePaths.take(4);
     var hiddenPathsLength =
         transitivePaths.length - transitivePathsToShow.length;
 
@@ -216,10 +218,7 @@ class _InfoTabState extends State<_InfoTab> {
                 _InfoRow(
                   label: Text('Pub'),
                   value: InkWell(
-                    onTap: () {
-                      launchUrl(
-                          Uri.https('pub.dev', 'packages/${dependency.name}'));
-                    },
+                    onTap: () => openPub(dependency),
                     child: Text(pubInfos.join(', ')),
                   ),
                 ),
@@ -227,9 +226,7 @@ class _InfoTabState extends State<_InfoTab> {
                 _InfoRow(
                   label: Text('Github'),
                   value: InkWell(
-                    onTap: () {
-                      launchUrl(Uri.https('github.com', github.slug));
-                    },
+                    onTap: () => openGithub(github),
                     child: Text.rich(
                       TextSpan(
                         text:

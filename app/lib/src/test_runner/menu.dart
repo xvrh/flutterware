@@ -3,6 +3,7 @@ import 'package:flutterware_app/src/test_runner/protocol/api.dart';
 import '../project.dart';
 import '../ui/side_menu.dart';
 import '../utils.dart';
+import '../utils/expansion_tile.dart';
 import 'daemon.dart';
 import 'listing.dart';
 import 'service.dart';
@@ -15,7 +16,27 @@ class TestMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CollapsibleMenu(
-      title: Text('Tests'),
+      title: Row(
+        children: [
+          Expanded(child: Text('Tests')),
+          Builder(builder: (context) {
+            return IconButton(
+              padding: EdgeInsets.zero,
+              constraints: BoxConstraints(),
+              onPressed: () {
+                var expansionPanel = CustomExpansionTile.of(context);
+                expansionPanel.expand();
+                print('Panel $expansionPanel');
+                context.router.go('tests');
+              },
+              icon: Icon(
+                Icons.info_outline,
+                size: 18,
+              ),
+            );
+          }),
+        ],
+      ),
       children: [
         MenuLine(
           onTap: () {},
