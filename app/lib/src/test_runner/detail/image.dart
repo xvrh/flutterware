@@ -3,11 +3,10 @@ import 'package:flutter/material.dart';
 import '../detail.dart';
 
 class ImageDetail extends StatefulWidget {
-  final ProjectInfo project;
   final ScenarioRun run;
   final Screen screen;
 
-  const ImageDetail(this.project, this.run, this.screen, {Key? key})
+  const ImageDetail(this.run, this.screen, {Key? key})
       : super(key: key);
 
   @override
@@ -22,7 +21,6 @@ class _ImageDetailState extends State<ImageDetail> {
   Widget build(BuildContext context) {
     var screen = widget.screen;
     return DetailSkeleton(
-      widget.project,
       widget.run,
       screen,
       main: _Screenshot(

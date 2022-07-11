@@ -70,9 +70,9 @@ class _App extends StatelessWidget {
           );
         } else {
           var client = clients.last;
-          return ConnectedScreen(
-            client,
+          return TestRunView(
             key: ValueKey(client),
+            client,
           );
         }
       },

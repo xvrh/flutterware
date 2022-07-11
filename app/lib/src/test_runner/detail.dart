@@ -5,11 +5,10 @@ import 'package:flutter/material.dart';
 import 'detail/image.dart';
 
 class DetailPage extends StatelessWidget {
-  final ProjectInfo project;
   final ScenarioRun run;
   final String screenId;
 
-  const DetailPage(this.project, this.run, this.screenId, {Key? key})
+  const DetailPage(this.run, this.screenId, {Key? key})
       : super(key: key);
 
   @override
@@ -21,21 +20,19 @@ class DetailPage extends StatelessWidget {
       );
     }
 
-    return ImageDetail(project, run, screen);
+    return ImageDetail(run, screen);
   }
 }
 
 class DetailSkeleton extends StatelessWidget {
   static final separator = Container(color: AppColors.divider, height: 1);
 
-  final ProjectInfo project;
   final ScenarioRun run;
   final Screen screen;
   final Widget main;
   final List<Widget> sidebar;
 
   const DetailSkeleton(
-    this.project,
     this.run,
     this.screen, {
     Key? key,

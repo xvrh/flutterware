@@ -69,7 +69,6 @@ class _RunViewState extends State<RunView> {
       initialData: run.value,
       builder: (context, snapshot) {
         var toolbarScope = ToolBarScope.of(context);
-        var project = toolbarScope.widget.project;
 
         Widget contentWidget;
         if (snapshot.hasError) {
@@ -81,14 +80,13 @@ class _RunViewState extends State<RunView> {
           contentWidget = RouterOutlet({
             '': (_) => _FlowMaster(this, run),
             'detail/:screen': (detail) =>
-                DetailPage(project, run, detail['screen']),
+                DetailPage(run, detail['screen']),
           });
         }
         var isCompleted = snapshot.data?.isCompleted ?? false;
         var result = snapshot.data?.result;
 
         return RunToolbar(
-          project: project,
           initialParameters: toolbarScope.parameters,
           onChanged: (p) {
             var oldParameters = toolbarScope.parameters;

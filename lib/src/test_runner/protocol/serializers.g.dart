@@ -12,7 +12,6 @@ Serializers _$modelSerializers = (new Serializers().toBuilder()
       ..add(DevicePlatform.serializer)
       ..add(ImageFile.serializer)
       ..add(NewScreen.serializer)
-      ..add(ProjectInfo.serializer)
       ..add(Rectangle.serializer)
       ..add(RunArgs.serializer)
       ..add(RunResult.serializer)
@@ -21,9 +20,6 @@ Serializers _$modelSerializers = (new Serializers().toBuilder()
       ..add(Screen.serializer)
       ..add(ScreenLink.serializer)
       ..add(TextInfo.serializer)
-      ..addBuilderFactory(
-          const FullType(BuiltList, const [const FullType(String)]),
-          () => new ListBuilder<String>())
       ..addBuilderFactory(
           const FullType(BuiltList, const [const FullType(String)]),
           () => new ListBuilder<String>())

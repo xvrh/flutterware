@@ -39,7 +39,7 @@ class _RunScreen extends StatelessWidget {
         var clients = snapshot.requireData;
         if (clients.isNotEmpty) {
           var client = clients.last;
-          return ConnectedScreen(client);
+          return TestRunView(client);
         }
         return Center(child: CircularProgressIndicator());
       },

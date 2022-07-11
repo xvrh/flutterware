@@ -22,9 +22,8 @@ class ToolbarParameters {
 }
 
 class ToolBarScope extends StatefulWidget {
-  final ProjectInfo project;
   final Widget child;
-  const ToolBarScope({Key? key, required this.child, required this.project})
+  const ToolBarScope({Key? key, required this.child})
       : super(key: key);
 
   @override
@@ -37,7 +36,7 @@ class ToolBarScope extends StatefulWidget {
 
 class ToolBarScopeState extends State<ToolBarScope> {
   late ToolbarParameters parameters = ToolbarParameters(
-    language: widget.project.supportedLanguages.first,
+    language: 'en',
     device: DeviceInfo.iPhoneX,
     accessibility: AccessibilityConfig.defaultValue,
   );
@@ -49,7 +48,6 @@ class ToolBarScopeState extends State<ToolBarScope> {
 }
 
 class RunToolbar extends StatefulWidget {
-  final ProjectInfo project;
   final List<Widget>? leadingActions;
   final List<Widget>? trailingActions;
   final Widget child;
@@ -59,7 +57,6 @@ class RunToolbar extends StatefulWidget {
   const RunToolbar({
     Key? key,
     required this.child,
-    required this.project,
     required this.initialParameters,
     required this.onChanged,
     this.leadingActions,
@@ -93,7 +90,7 @@ class _RunToolbarState extends State<RunToolbar> {
                 _onChanged();
               },
               items: {
-                for (var language in widget.project.supportedLanguages)
+                for (var language in ['en'])
                   language: Text(language)
               },
             ),

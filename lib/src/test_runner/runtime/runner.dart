@@ -35,7 +35,6 @@ typedef TestCallback = Future<void> Function(WidgetTester);
 class Runner {
   final StreamChannel<String> Function() connectionFactory;
   final Map<String, void Function()> Function() mainFunctions;
-  final ProjectInfo project;
   late final ScenarioBinding _binding;
   final void Function()? onConnected;
   ProjectClient? _project;
@@ -45,7 +44,6 @@ class Runner {
 
   Runner(this.connectionFactory,
       {required this.mainFunctions,
-      required this.project,
       required Future<ScenarioBundle> Function() bundle,
       this.onConnected})
       : _bundleFactory = bundle {
@@ -93,7 +91,7 @@ class Runner {
   }
 
   void _onConnected(Connection connection) {
-    _project = ProjectClient(connection, load: () => project);
+    _project = ProjectClient(connection);
     ListingClient(connection, list: () {
       var allMains = mainFunctions();
       return listTests(allMains);
