@@ -61,6 +61,7 @@ ThemeData _buildAppTheme() {
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: Colors.black12),
       ),
+      textStyle: const TextStyle(color: Colors.black87),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(

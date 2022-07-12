@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../project.dart';
 import '../ui/colors.dart';
+import '../utils/custom_popup_menu.dart';
 import 'model/daemon.dart';
 import 'model/service.dart';
 
@@ -41,34 +42,21 @@ class _DaemonConnectedToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     //TODO(xha): disable buttons when isReloading is true
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.inMenuToolbarBackground,
-        borderRadius: BorderRadius.circular(15),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      margin: const EdgeInsets.symmetric(horizontal: 50, vertical: 10),
-      child: ValueListenableBuilder<bool>(
-        valueListenable: daemon.isReloading,
-        builder: (context, isReloading, child) {
-          return Row(
+    return Stack(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.inMenuToolbarBackground,
+            borderRadius: BorderRadius.circular(15),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 0),
+          margin: const EdgeInsets.symmetric(horizontal: 40, vertical: 10),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _ToolbarButton(
-                onPressed: isReloading ? null : () {
-                  daemon.reload(fullRestart: false);
-                },
-                icon: Icons.bolt,
-                iconColor: Colors.orange,
-                tooltip: 'Hot reload',
-              ),
-              _ToolbarButton(
-                onPressed:isReloading ? null : () {
-                  daemon.reload(fullRestart: true);
-                },
-                icon: Icons.restart_alt,
-                iconColor: Colors.green,
-                tooltip: 'Hot restart',
-              ),
+              _HotReloadButton(daemon),
+              _HotRestartButton(daemon),
               ////TODO(xha): open a dropdown with option to watch lib/** & test_app/**
               _ToolbarButton(
                 onPressed: () {
@@ -78,11 +66,94 @@ class _DaemonConnectedToolbar extends StatelessWidget {
                 iconColor: Colors.red,
                 tooltip: 'Stop test runner',
               ),
+              //Expanded(child: const SizedBox()),
             ],
-          );
-        }
-      ),
+          ),
+        ),
+        Positioned(
+            right: 0,
+            bottom: 0,
+            top: 0,
+            child: CustomPopupMenuButton(
+              splashRadius: Material.defaultSplashRadius / 2,
+              iconConstraints: BoxConstraints(),
+              constraints: BoxConstraints(
+                minWidth: 2.0 * 56.0,
+                maxWidth: 10.0 * 56.0,
+              ),
+              tooltip: 'Configure auto hot reload',
+              padding: EdgeInsets.zero,
+              icon: Icon(
+                Icons.more_vert,
+                size: 15,
+              ),
+              itemBuilder: (context) => [
+                CheckedPopupMenuItem(
+                  checked: true,
+                  child: Text(
+                    'Hot reload on change in lib/',
+                    style: const TextStyle(color: Colors.black87),
+                  ),
+                ),
+                CheckedPopupMenuItem(
+                  checked: true,
+                  child: Text(
+                    'Hot reload on change in app_test/',
+                    style: const TextStyle(color: Colors.black87),
+                  ),
+                ),
+              ],
+            ),)
+      ],
     );
+  }
+}
+
+class _HotReloadButton extends StatelessWidget {
+  final Daemon daemon;
+
+  const _HotReloadButton(this.daemon);
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+        valueListenable: daemon.isReloading,
+        builder: (context, isReloading, child) {
+          return _ToolbarButton(
+            onPressed: isReloading
+                ? null
+                : () {
+                    daemon.reload(fullRestart: false);
+                  },
+            icon: Icons.bolt,
+            iconColor: Colors.orange,
+            tooltip: 'Hot reload',
+          );
+        });
+  }
+}
+
+class _HotRestartButton extends StatelessWidget {
+  final Daemon daemon;
+
+  const _HotRestartButton(this.daemon);
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+        valueListenable: daemon.isReloading,
+        builder: (context, isReloading, child) {
+          return _ToolbarButton(
+            onPressed: isReloading
+                ? null
+                : () {
+                    daemon.reload(fullRestart: true);
+                  },
+            icon: Icons.restart_alt,
+            iconColor: Colors.green,
+            tooltip: 'Hot restart',
+          );
+        });
   }
 }
 
@@ -153,7 +224,7 @@ class _DaemonStartingToolbar extends StatelessWidget {
         borderRadius: BorderRadius.circular(15),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      margin: const EdgeInsets.symmetric(horizontal: 50, vertical: 10),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Text(
         'Launching test runner...',
         textAlign: TextAlign.center,
