@@ -23,6 +23,14 @@ class DaemonMessage {
   DaemonMessage(this.message, this.type);
 }
 
+class DaemonProgressMessage {
+  final String? messageId;
+  final String message;
+  final int code;
+
+  DaemonProgressMessage(this.messageId, this.message, this.code);
+}
+
 class Daemon {
   final DaemonStarter _starter;
   final Process _process;
@@ -30,18 +38,16 @@ class Daemon {
   final String _appId;
   late StreamSubscription _eventSubscription;
   final _isReloading = ValueNotifier<bool>(false);
-  final _progressMessage = ValueNotifier<String?>(null);
-  String? _currentProgressMessageId;
+  final _progressMessage = ValueNotifier<DaemonProgressMessage?>(null);
 
   Daemon(this._starter, this._process, this._protocol, this._appId) {
     _eventSubscription = _protocol.onEvent.listen((event) {
       if (event is AppProgressEvent) {
         var message = event.message;
-        if (message != null) {
+        if (message != null && message.isNotEmpty) {
           _clearProgressTimer?.cancel();
-          _currentProgressMessageId = event.id;
-          _progressMessage.value = message;
-        } else if (event.id == _currentProgressMessageId) {
+          _progressMessage.value = DaemonProgressMessage(event.id, message, 0);
+        } else if (event.id == _progressMessage.value?.messageId) {
           _progressMessage.value = null;
         }
       } else if (event is DaemonLogEvent) {
@@ -54,10 +60,9 @@ class Daemon {
   }
 
   Timer? _clearProgressTimer;
-  void _setProgressMessage(String message, Duration duration) {
+  void _setProgressMessage(String message, int code, Duration duration) {
     _clearProgressTimer?.cancel();
-    _currentProgressMessageId = null;
-    _progressMessage.value = message;
+    _progressMessage.value = DaemonProgressMessage(null, message, code);
     _clearProgressTimer = Timer(duration, () {
       _progressMessage.value = null;
     });
@@ -71,7 +76,7 @@ class Daemon {
 
   ValueListenable<bool> get isReloading => _isReloading;
 
-  ValueListenable<String?> get progressMessage => _progressMessage;
+  ValueListenable<DaemonProgressMessage?> get progressMessage => _progressMessage;
 
   Future<void> reload({required bool fullRestart}) async {
     _isReloading.value = true;
@@ -88,7 +93,10 @@ class Daemon {
         AppRestartCommand(appId: _appId, fullRestart: fullRestart));
     await endOfReload;
     _isReloading.value = false;
-    _setProgressMessage(endResult.message, Duration(seconds: 2));
+    if (endResult.message.isNotEmpty) {
+      _setProgressMessage(
+          endResult.message, endResult.code, Duration(seconds: 2));
+    }
   }
 
   Future<void> stop() async {

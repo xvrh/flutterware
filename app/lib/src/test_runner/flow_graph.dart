@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:built_collection/built_collection.dart';
 import 'package:flutterware_app/src/test_runner/daemon_toolbar.dart';
+import '../project.dart';
 import '../utils.dart';
 import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart' hide InteractiveViewer;
@@ -16,8 +17,9 @@ import 'ui/interactive_viewer.dart';
 class RunView extends StatefulWidget {
   final TestRunnerApi client;
   final BuiltList<String> scenarioName;
+  final Widget? reloadToolbar;
 
-  RunView(this.client, this.scenarioName)
+  RunView(this.client, this.scenarioName, {this.reloadToolbar})
       : super(key: Key(scenarioName.join('-')));
 
   @override
@@ -79,13 +81,13 @@ class _RunViewState extends State<RunView> {
           var run = snapshot.requireData;
           contentWidget = RouterOutlet({
             '': (_) => _FlowMaster(this, run),
-            'detail/:screen': (detail) =>
-                DetailPage(run, detail['screen']),
+            'detail/:screen': (detail) => DetailPage(run, detail['screen']),
           });
         }
         var isCompleted = snapshot.data?.isCompleted ?? false;
         var result = snapshot.data?.result;
 
+        var reloadToolbar = widget.reloadToolbar;
         return RunToolbar(
           initialParameters: toolbarScope.parameters,
           onChanged: (p) {
@@ -101,19 +103,22 @@ class _RunViewState extends State<RunView> {
           },
           leadingActions: [
             if (isCompleted)
-              ElevatedButton(
-                onPressed: () {
-                  if (isInDetail) {
-                    context.go('');
-                  } else {
-                    _refresh();
-                  }
-                },
-                child: Icon(
-                  isInDetail ? Icons.arrow_back : Icons.refresh,
-                  size: 15,
-                ),
-              )
+              if (isInDetail || reloadToolbar == null)
+                ElevatedButton(
+                  onPressed: () {
+                    if (isInDetail) {
+                      context.go('');
+                    } else {
+                      _refresh();
+                    }
+                  },
+                  child: Icon(
+                    isInDetail ? Icons.arrow_back : Icons.refresh,
+                    size: 15,
+                  ),
+                )
+              else
+                reloadToolbar
             else
               ElevatedButton(
                 onPressed: null,

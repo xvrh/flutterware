@@ -13,9 +13,31 @@ import 'package:async/async.dart';
 
 final _logger = Logger('test_runner_service');
 
+class WatchConfig {
+  static final defaultFolders = <String>{'lib', 'test_app'};
+  final Set<String> folders;
+
+  WatchConfig(this.folders);
+
+  WatchConfig toggleFolder(String folder) {
+    var newFolders = folders.toSet();
+    if (newFolders.contains(folder)) {
+      newFolders.remove(folder);
+    } else {
+      newFolders.add(folder);
+    }
+    return WatchConfig(newFolders);
+  }
+
+  bool contains(String folder) => folders.contains(folder);
+}
+
 class TestService {
   final Project project;
   final _state = ValueNotifier<DaemonState>(DaemonState$Stopped());
+
+  // TODO(xha): load config from config file
+  final _watchConfig = ValueNotifier<WatchConfig>(WatchConfig(WatchConfig.defaultFolders));
   final _server = Server();
   StreamSubscription? _fileWatcherSubscription;
   final  _messageController = StreamController<DaemonMessage>.broadcast();
@@ -23,6 +45,8 @@ class TestService {
   TestService(this.project);
 
   ValueListenable<DaemonState> get state => _state;
+
+  ValueListenable<WatchConfig> get watchConfig => _watchConfig;
 
   ValueStream<List<TestRunnerApi>> get clients => _server.clients;
 
@@ -42,7 +66,7 @@ class TestService {
       var daemon = await daemonStarter.start();
       _state.value = DaemonState$Connected(daemon);
       await daemon.reload(fullRestart: false);
-      _setupWatcher();
+      _updateWatcher();
       _logger.info('Test runner started');
       await daemon.onExit;
       _state.value = DaemonState$Stopped();
@@ -54,10 +78,18 @@ class TestService {
     }
   }
 
-  void _setupWatcher() {
+  void updateWatchConfig(WatchConfig config) {
+    _watchConfig.value = config;
+    _updateWatcher();
+  }
+
+  void _updateWatcher() {
+    _fileWatcherSubscription?.cancel();
+    var config = _watchConfig.value;
+
     _fileWatcherSubscription = StreamGroup.merge([
-      DirectoryWatcher(p.join(project.directory.path, 'lib')).events,
-      DirectoryWatcher(p.join(project.directory.path, 'test_app')).events,
+      for (var config in config.folders)
+      DirectoryWatcher(p.join(project.directory.path, config)).events,
     ]).throttleTime(Duration(seconds: 1)).listen((e) {
       var stateValue = _state.value;
       if (stateValue is DaemonState$Connected) {

@@ -72,6 +72,7 @@ class _App extends StatelessWidget {
           var client = clients.last;
           return TestRunView(
             key: ValueKey(client),
+
             client,
           );
         }

@@ -1,4 +1,5 @@
 import 'package:built_collection/built_collection.dart';
+import '../project.dart';
 import 'ui/menu_tree.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter/material.dart';
@@ -8,8 +9,9 @@ import 'toolbar.dart';
 
 class TestRunView extends StatelessWidget {
   final TestRunnerApi client;
+  final Widget? reloadToolbar;
 
-  const TestRunView(this.client,{Key? key})
+  const TestRunView(this.client,{Key? key, this.reloadToolbar,})
       : super(key: key);
 
   @override
@@ -21,6 +23,7 @@ class TestRunView extends StatelessWidget {
             return RunView(
               client,
               BuiltList(TreePath.fromEncoded(args['testId']).nodes),
+                reloadToolbar: reloadToolbar,
             );
           },
         },

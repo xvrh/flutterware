@@ -21,7 +21,7 @@ class DaemonToolbar extends StatelessWidget {
             valueListenable: project.tests.state,
             builder: (context, state, child) {
               if (state is DaemonState$Connected) {
-                return _DaemonConnectedToolbar(state.daemon);
+                return _DaemonConnectedToolbar(project, state.daemon);
               } else if (state is DaemonState$Stopped) {
                 return _DaemonStoppedToolbar(project);
               } else {
@@ -35,10 +35,48 @@ class DaemonToolbar extends StatelessWidget {
   }
 }
 
+class SmallDaemonToolbar extends StatelessWidget {
+  final Project project;
+
+  const SmallDaemonToolbar(this.project, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<DaemonState>(
+      valueListenable: project.tests.state,
+      builder: (context, state, child) {
+        if (state is DaemonState$Connected) {
+          var daemon = state.daemon;
+          return ValueListenableBuilder<bool>(
+            valueListenable: daemon.isReloading,
+            builder: (context, isReloading, child) {
+              return Tooltip(
+                message: 'Hot reload',
+                child: ElevatedButton(
+                  onPressed: isReloading
+                      ? null
+                      : () {
+                    daemon.reload(fullRestart: false);
+                  },
+                    child: Icon(Icons.bolt, color: Colors.orange,),
+                ),
+              );
+            },
+          );
+        }else {
+          return const SizedBox();
+        }
+      },
+    );
+  }
+}
+
+
 class _DaemonConnectedToolbar extends StatelessWidget {
+  final Project project;
   final Daemon daemon;
 
-  const _DaemonConnectedToolbar(this.daemon);
+  const _DaemonConnectedToolbar(this.project, this.daemon);
 
   @override
   Widget build(BuildContext context) {
@@ -74,58 +112,69 @@ class _DaemonConnectedToolbar extends StatelessWidget {
           right: 0,
           bottom: 0,
           top: 0,
-          child: CustomPopupMenuButton(
-            splashRadius: Material.defaultSplashRadius / 2,
-            iconConstraints: BoxConstraints(),
-            constraints: BoxConstraints(
-              minWidth: 2.0 * 56.0,
-              maxWidth: 10.0 * 56.0,
-            ),
-            tooltip: 'Configure auto hot reload',
-            padding: EdgeInsets.zero,
-            icon: Icon(
-              Icons.more_vert,
-              size: 15,
-            ),
-            itemBuilder: (context) => [
-              CheckedPopupMenuItem(
-                checked: true,
-                child: Text(
-                  'Hot reload on change in lib/',
-                  style: const TextStyle(color: Colors.black87),
+          child: ValueListenableBuilder<WatchConfig>(
+            valueListenable: project.tests.watchConfig,
+            builder: (context, watchConfig, child) {
+              return CustomPopupMenuButton<String>(
+                splashRadius: Material.defaultSplashRadius / 2,
+                iconConstraints: BoxConstraints(),
+                constraints: BoxConstraints(
+                  minWidth: 2.0 * 56.0,
+                  maxWidth: 10.0 * 56.0,
                 ),
-              ),
-              CheckedPopupMenuItem(
-                checked: true,
-                child: Text(
-                  'Hot reload on change in app_test/',
-                  style: const TextStyle(color: Colors.black87),
+                tooltip: 'Configure auto hot reload',
+                padding: EdgeInsets.zero,
+                icon: Icon(
+                  Icons.more_vert,
+                  size: 15,
                 ),
-              ),
-            ],
+                onSelected: (select) {
+                  project.tests.updateWatchConfig(watchConfig.toggleFolder(select));
+                },
+                itemBuilder: (context) => [
+                  for (var folder in WatchConfig.defaultFolders)
+                  CheckedPopupMenuItem(
+                    value: folder,
+                    checked: watchConfig.contains(folder),
+                    child: Text(
+                      'Hot reload on change in $folder/',
+                      style: const TextStyle(color: Colors.black87),
+                    ),
+                  ),
+                ],
+              );
+            }
           ),
         ),
         Positioned(
           top: 0,
           left: 0,
           right: 0,
-          child: ValueListenableBuilder<String?>(
+          child: ValueListenableBuilder<DaemonProgressMessage?>(
             valueListenable: daemon.progressMessage,
             builder: (context, message, child) {
-              if (message == null || message.isEmpty) return const SizedBox();
+              if (message == null) return const SizedBox();
+
+              var background = AppColors.inMenuToolbarBackground;
+              var foreground = Colors.black87;
+              if (message.code != 0) {
+                 background = AppColors.stateError;
+                 foreground = Colors.white;
+              }
+
               return FractionalTranslation(
                 translation: Offset(0, -0.4),
                 child: Center(
                   child: Container(
                     decoration: BoxDecoration(
-                      color: AppColors.inMenuToolbarBackground,
+                      color: background,
                       border: Border.all(color: Colors.black26),
                       borderRadius: BorderRadius.circular(10)
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 2),
                     child: AutoSizeText(
-                      message,
-                      style: const TextStyle(fontSize: 11),
+                      message.message,
+                      style: TextStyle(fontSize: 11, color: foreground),
                       maxFontSize: 11,
                       minFontSize: 8,
                       textAlign: TextAlign.center,
