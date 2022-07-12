@@ -1,27 +1,72 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/test_runner/app_connected.dart';
 import 'package:flutterware_app/src/test_runner/help.dart';
 import 'package:flutterware_app/src/utils/router_outlet.dart';
-
+import 'model/daemon.dart' show MessageLevel;
 import '../project.dart';
-import 'daemon_toolbar.dart';
-import 'menu.dart';
 import 'protocol/api.dart';
 
-class TestRunnerScreen extends StatelessWidget {
+class TestRunnerScreen extends StatefulWidget {
   final Project project;
 
   const TestRunnerScreen(this.project, {super.key});
+
+  @override
+  State<TestRunnerScreen> createState() => _TestRunnerScreenState();
+}
+
+class _TestRunnerScreenState extends State<TestRunnerScreen> {
+  late StreamSubscription _messageSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _messageSubscription = widget.project.tests.daemonMessage.listen((event) {
+      Color background, foreground;
+      switch (event.type) {
+        case MessageLevel.info:
+          background = Colors.black12;
+          foreground = Colors.black87;
+          break;
+        case MessageLevel.warning:
+          background = Colors.orange;
+          foreground = Colors.black87;
+          break;
+        case MessageLevel.error:
+          background = Colors.red;
+          foreground = Colors.white;
+          break;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            event.message,
+            style: TextStyle(color: foreground),
+          ),
+          backgroundColor: background,
+        ),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return RouterOutlet(
       {
         'home': (r) => HelpScreen(),
-        'run': (r) => _RunScreen(project),
+        'run': (r) => _RunScreen(widget.project),
       },
       onNotFound: (r) => 'home',
     );
+  }
+
+  @override
+  void dispose() {
+    _messageSubscription.cancel();
+    super.dispose();
   }
 }
 

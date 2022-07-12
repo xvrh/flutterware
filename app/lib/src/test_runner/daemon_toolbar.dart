@@ -1,3 +1,4 @@
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 
 import '../project.dart';
@@ -66,44 +67,76 @@ class _DaemonConnectedToolbar extends StatelessWidget {
                 iconColor: Colors.red,
                 tooltip: 'Stop test runner',
               ),
-              //Expanded(child: const SizedBox()),
             ],
           ),
         ),
         Positioned(
-            right: 0,
-            bottom: 0,
-            top: 0,
-            child: CustomPopupMenuButton(
-              splashRadius: Material.defaultSplashRadius / 2,
-              iconConstraints: BoxConstraints(),
-              constraints: BoxConstraints(
-                minWidth: 2.0 * 56.0,
-                maxWidth: 10.0 * 56.0,
+          right: 0,
+          bottom: 0,
+          top: 0,
+          child: CustomPopupMenuButton(
+            splashRadius: Material.defaultSplashRadius / 2,
+            iconConstraints: BoxConstraints(),
+            constraints: BoxConstraints(
+              minWidth: 2.0 * 56.0,
+              maxWidth: 10.0 * 56.0,
+            ),
+            tooltip: 'Configure auto hot reload',
+            padding: EdgeInsets.zero,
+            icon: Icon(
+              Icons.more_vert,
+              size: 15,
+            ),
+            itemBuilder: (context) => [
+              CheckedPopupMenuItem(
+                checked: true,
+                child: Text(
+                  'Hot reload on change in lib/',
+                  style: const TextStyle(color: Colors.black87),
+                ),
               ),
-              tooltip: 'Configure auto hot reload',
-              padding: EdgeInsets.zero,
-              icon: Icon(
-                Icons.more_vert,
-                size: 15,
+              CheckedPopupMenuItem(
+                checked: true,
+                child: Text(
+                  'Hot reload on change in app_test/',
+                  style: const TextStyle(color: Colors.black87),
+                ),
               ),
-              itemBuilder: (context) => [
-                CheckedPopupMenuItem(
-                  checked: true,
-                  child: Text(
-                    'Hot reload on change in lib/',
-                    style: const TextStyle(color: Colors.black87),
+            ],
+          ),
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: ValueListenableBuilder<String?>(
+            valueListenable: daemon.progressMessage,
+            builder: (context, message, child) {
+              if (message == null || message.isEmpty) return const SizedBox();
+              return FractionalTranslation(
+                translation: Offset(0, -0.4),
+                child: Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.inMenuToolbarBackground,
+                      border: Border.all(color: Colors.black26),
+                      borderRadius: BorderRadius.circular(10)
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: AutoSizeText(
+                      message,
+                      style: const TextStyle(fontSize: 11),
+                      maxFontSize: 11,
+                      minFontSize: 8,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                    ),
                   ),
                 ),
-                CheckedPopupMenuItem(
-                  checked: true,
-                  child: Text(
-                    'Hot reload on change in app_test/',
-                    style: const TextStyle(color: Colors.black87),
-                  ),
-                ),
-              ],
-            ),)
+              );
+            }
+          ),
+        ),
       ],
     );
   }
@@ -117,19 +150,20 @@ class _HotReloadButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
-        valueListenable: daemon.isReloading,
-        builder: (context, isReloading, child) {
-          return _ToolbarButton(
-            onPressed: isReloading
-                ? null
-                : () {
-                    daemon.reload(fullRestart: false);
-                  },
-            icon: Icons.bolt,
-            iconColor: Colors.orange,
-            tooltip: 'Hot reload',
-          );
-        });
+      valueListenable: daemon.isReloading,
+      builder: (context, isReloading, child) {
+        return _ToolbarButton(
+          onPressed: isReloading
+              ? null
+              : () {
+                  daemon.reload(fullRestart: false);
+                },
+          icon: Icons.bolt,
+          iconColor: Colors.orange,
+          tooltip: 'Hot reload',
+        );
+      },
+    );
   }
 }
 

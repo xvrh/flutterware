@@ -12,8 +12,16 @@ import '../../utils/daemon/protocol.dart';
 import '../entry_point.dart';
 import 'server.dart';
 import 'package:path/path.dart' as p;
+export '../../utils/daemon/events.dart' show MessageLevel;
 
 final _logger = Logger('Test daemon');
+
+class DaemonMessage {
+  final String message;
+  final MessageLevel type;
+
+  DaemonMessage(this.message, this.type);
+}
 
 class Daemon {
   final DaemonStarter _starter;
@@ -22,17 +30,48 @@ class Daemon {
   final String _appId;
   late StreamSubscription _eventSubscription;
   final _isReloading = ValueNotifier<bool>(false);
+  final _progressMessage = ValueNotifier<String?>(null);
+  String? _currentProgressMessageId;
 
   Daemon(this._starter, this._process, this._protocol, this._appId) {
     _eventSubscription = _protocol.onEvent.listen((event) {
-      //TODO(xha): dispatch messages etc...
-      print("Event ${event.runtimeType}");
+      if (event is AppProgressEvent) {
+        var message = event.message;
+        if (message != null) {
+          _clearProgressTimer?.cancel();
+          _currentProgressMessageId = event.id;
+          _progressMessage.value = message;
+        } else if (event.id == _currentProgressMessageId) {
+          _progressMessage.value = null;
+        }
+      } else if (event is DaemonLogEvent) {
+        _showMessage(
+            event.log, event.error ? MessageLevel.error : MessageLevel.info);
+      } else if (event is DaemonLogMessageEvent) {
+        _showMessage(event.message, event.level);
+      }
     });
+  }
+
+  Timer? _clearProgressTimer;
+  void _setProgressMessage(String message, Duration duration) {
+    _clearProgressTimer?.cancel();
+    _currentProgressMessageId = null;
+    _progressMessage.value = message;
+    _clearProgressTimer = Timer(duration, () {
+      _progressMessage.value = null;
+    });
+  }
+
+  void _showMessage(String message, MessageLevel level) {
+    _starter.messageSink.add(DaemonMessage(message, level));
   }
 
   Project get _project => _starter.project;
 
   ValueListenable<bool> get isReloading => _isReloading;
+
+  ValueListenable<String?> get progressMessage => _progressMessage;
 
   Future<void> reload({required bool fullRestart}) async {
     _isReloading.value = true;
@@ -45,12 +84,11 @@ class Daemon {
             e.progressId == (fullRestart ? 'hot.restart' : 'hot.reload') &&
             e.finished)
         .first;
-    await _protocol.sendCommand(
+    var endResult = await _protocol.sendCommand(
         AppRestartCommand(appId: _appId, fullRestart: fullRestart));
-    print("Will wait for reload");
     await endOfReload;
-    print("End of reload");
     _isReloading.value = false;
+    _setProgressMessage(endResult.message, Duration(seconds: 2));
   }
 
   Future<void> stop() async {
@@ -70,9 +108,10 @@ class DaemonStarter {
       '${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(99999)}';
   final Project project;
   final Server server;
+  final Sink<DaemonMessage> messageSink;
   late final File _entryPoint;
 
-  DaemonStarter(this.project, this.server) {
+  DaemonStarter(this.project, this.server, this.messageSink) {
     _entryPoint = File(p.join(project.directory.path, 'build', 'flutterware',
         '${id}_test_entry_point.dart'))
       ..parent.createSync(recursive: true);

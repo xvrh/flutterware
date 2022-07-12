@@ -18,6 +18,7 @@ class TestService {
   final _state = ValueNotifier<DaemonState>(DaemonState$Stopped());
   final _server = Server();
   StreamSubscription? _fileWatcherSubscription;
+  final  _messageController = StreamController<DaemonMessage>.broadcast();
 
   TestService(this.project);
 
@@ -25,13 +26,9 @@ class TestService {
 
   ValueStream<List<TestRunnerApi>> get clients => _server.clients;
 
-  bool get isStarted => _server.isStarted;
+  Stream<DaemonMessage> get daemonMessage => _messageController.stream;
 
-  void ensureStarted() {
-    if (!isStarted) {
-      start();
-    }
-  }
+  bool get isStarted => _server.isStarted;
 
   void start() async {
     if (!_server.isStarted) {
@@ -40,7 +37,7 @@ class TestService {
 
     _state.value = DaemonState$Starting('');
 
-    var daemonStarter = DaemonStarter(project, _server);
+    var daemonStarter = DaemonStarter(project, _server, _messageController.sink);
     try {
       var daemon = await daemonStarter.start();
       _state.value = DaemonState$Connected(daemon);
@@ -58,12 +55,10 @@ class TestService {
   }
 
   void _setupWatcher() {
-    print("Setup watcher");
     _fileWatcherSubscription = StreamGroup.merge([
       DirectoryWatcher(p.join(project.directory.path, 'lib')).events,
       DirectoryWatcher(p.join(project.directory.path, 'test_app')).events,
     ]).throttleTime(Duration(seconds: 1)).listen((e) {
-      print("File change $e");
       var stateValue = _state.value;
       if (stateValue is DaemonState$Connected) {
         stateValue.daemon.reload(fullRestart: false);
@@ -86,6 +81,7 @@ class TestService {
 
   void dispose() {
     _disposeWatcher();
+    _messageController.close();
     _state.dispose();
     if (_server.isStarted) {
       _server.close();
