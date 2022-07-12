@@ -17,10 +17,10 @@ class TestRunnerScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return RouterOutlet(
       {
-        '': (r) => HelpScreen(),
+        'home': (r) => HelpScreen(),
         'run': (r) => _RunScreen(project),
       },
-      onNotFound: (r) => '',
+      onNotFound: (r) => 'home',
     );
   }
 }

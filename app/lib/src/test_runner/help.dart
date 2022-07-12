@@ -10,28 +10,21 @@ class HelpScreen extends StatelessWidget {
       padding: const EdgeInsets.all(15),
       child: Card(
         child: Markdown(
-          data: '''
-TAKE FROM DOCUMENTATION
-          
+          data: '''          
 ## App test
-<screenshot dual code <-> result>
 
 ### Features
-##### Instant hot reload of the code and preview of the result.
+##### Screenshot every step of the test
 
-##### Choose language, screen size & accessibility features
+##### Hot Reload to instantaneously see the result
 
+##### Preview all screens in all supported languages
 
+##### Switch to any screen size
 
-### Example
-[Create an example](#create)
+##### Enable all accessibility settings
 
-```dart
-void main() {
-
-}
-```
-    
+##### Split the test to explore all paths
 ''',
         ),
       ),

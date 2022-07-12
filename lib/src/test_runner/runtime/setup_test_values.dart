@@ -41,7 +41,6 @@ Future<void> Function(WidgetTester) withTestValues(
     }
     platformDispatcher.localesTestValue = [Locale('en', 'US')];
     debugDefaultTargetPlatformOverride = device.platform.toTargetPlatform();
-    debugDisableShadows = false;
 
     try {
       await body(tester);
@@ -54,7 +53,6 @@ Future<void> Function(WidgetTester) withTestValues(
     } finally {
       binding.window.clearAllTestValues();
       debugDefaultTargetPlatformOverride = null;
-      debugDisableShadows = true;
     }
   };
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../project.dart';
+import '../ui/colors.dart';
 import 'model/daemon.dart';
 import 'model/service.dart';
 
@@ -40,58 +41,77 @@ class _DaemonConnectedToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     //TODO(xha): disable buttons when isReloading is true
-    return Row(
-      children: [
-        IconButton(
-          splashRadius: Material.defaultSplashRadius / 2,
-          onPressed: () {
-            daemon.reload(fullRestart: false);
-          },
-          constraints: BoxConstraints(),
-          padding: EdgeInsets.symmetric(horizontal: 5, vertical: 0),
-          icon: Icon(
-            Icons.bolt,
-            color: Colors.orange,
-            size: 20,
-          ),
-          tooltip: 'Hot reload',
-        ),
-        IconButton(
-          onPressed: () {
-            daemon.reload(fullRestart: true);
-          },
-          constraints: BoxConstraints(),
-          padding: EdgeInsets.symmetric(horizontal: 5, vertical: 0),
-          icon: Icon(
-            Icons.restart_alt,
-            size: 20,
-            color: Colors.green,
-          ),
-          tooltip: 'Hot restart',
-          splashRadius: Material.defaultSplashRadius / 2,
-        ),
-        ////TODO(xha): open a dropdown with option to watch lib/** & test_app/**
-        //Text('Auto reload'),
-        //Checkbox(value: true, onChanged: (v) {}),
-        //OutlinedButton(onPressed: () {}, child: Text('Auto reload')),
-        Expanded(
-          child: const SizedBox(),
-        ),
-        IconButton(
-          splashRadius: Material.defaultSplashRadius / 2,
-          onPressed: () {
-            daemon.stop();
-          },
-          constraints: BoxConstraints(),
-          padding: EdgeInsets.symmetric(horizontal: 5, vertical: 0),
-          icon: Icon(
-            Icons.stop,
-            color: Colors.red,
-            size: 20,
-          ),
-          tooltip: 'Stop test runner',
-        ),
-      ],
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.inMenuToolbarBackground,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      margin: const EdgeInsets.symmetric(horizontal: 50, vertical: 10),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: daemon.isReloading,
+        builder: (context, isReloading, child) {
+          return Row(
+            children: [
+              _ToolbarButton(
+                onPressed: isReloading ? null : () {
+                  daemon.reload(fullRestart: false);
+                },
+                icon: Icons.bolt,
+                iconColor: Colors.orange,
+                tooltip: 'Hot reload',
+              ),
+              _ToolbarButton(
+                onPressed:isReloading ? null : () {
+                  daemon.reload(fullRestart: true);
+                },
+                icon: Icons.restart_alt,
+                iconColor: Colors.green,
+                tooltip: 'Hot restart',
+              ),
+              ////TODO(xha): open a dropdown with option to watch lib/** & test_app/**
+              _ToolbarButton(
+                onPressed: () {
+                  daemon.stop();
+                },
+                icon: Icons.stop,
+                iconColor: Colors.red,
+                tooltip: 'Stop test runner',
+              ),
+            ],
+          );
+        }
+      ),
+    );
+  }
+}
+
+class _ToolbarButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+  final IconData icon;
+  final Color iconColor;
+  final String tooltip;
+
+  const _ToolbarButton({
+    required this.onPressed,
+    required this.icon,
+    required this.iconColor,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      splashRadius: Material.defaultSplashRadius / 2,
+      onPressed: onPressed,
+      constraints: BoxConstraints(),
+      padding: EdgeInsets.symmetric(horizontal: 5, vertical: 0),
+      icon: Icon(
+        icon,
+        color: onPressed != null ? iconColor : Colors.black26,
+        size: 20,
+      ),
+      tooltip: tooltip,
     );
   }
 }
@@ -103,7 +123,9 @@ class _DaemonStoppedToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return Container(
+      alignment: Alignment.center,
+      margin: const EdgeInsets.symmetric(vertical: 10),
       child: ElevatedButton.icon(
         onPressed: () {
           project.tests.start();
@@ -125,11 +147,20 @@ class _DaemonStoppedToolbar extends StatelessWidget {
 class _DaemonStartingToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Text(
-      'Launching test runner...',
-      style: TextStyle(
-        color: Colors.black26,
-        fontSize: 13,
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.inMenuToolbarBackground,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      margin: const EdgeInsets.symmetric(horizontal: 50, vertical: 10),
+      child: Text(
+        'Launching test runner...',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.black26,
+          fontSize: 13,
+        ),
       ),
     );
   }

@@ -31,6 +31,9 @@ class ScenarioBinding extends AutomatedTestWidgetsFlutterBinding {
   bool get overrideHttpClient => false;
 
   @override
+  bool get disableShadows => false;
+
+  @override
   Future<void> performReassemble() {
     // In order for Hot reload to work, we need to schedule a test
     Timer.run(_afterHotReload);

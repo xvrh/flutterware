@@ -3,7 +3,6 @@ import 'package:flutterware_app/src/test_runner/protocol/api.dart';
 import '../project.dart';
 import '../ui/side_menu.dart';
 import '../utils.dart';
-import '../utils/expansion_tile.dart';
 import 'daemon_toolbar.dart';
 import 'listing.dart';
 import 'model/service.dart';
@@ -16,72 +15,13 @@ class TestMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CollapsibleMenu(
-      title: Row(
-        children: [
-          Expanded(child: Text('Tests')),
-          //Builder(builder: (context) {
-          //  var isSelected = context.router.isSelected('tests/home');
-          //  if (isSelected != _isSelected) {
-          //    _isSelected = isSelected;
-          //    if (isSelected) {
-          //      var parentMenu = CustomExpansionTile.of(context);
-          //      if (parentMenu != null) {
-          //        WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-          //          parentMenu.expand();
-          //        });
-          //      }
-          //    }
-          //  }
-          //  return IconButton(
-          //    padding: EdgeInsets.zero,
-          //    constraints: BoxConstraints(),
-          //    onPressed: () {
-          //      var expansionPanel = CustomExpansionTile.of(context);
-          //      expansionPanel.expand();
-          //      print('Panel $expansionPanel');
-          //      context.router.go('tests/home');
-          //    },
-          //    icon: Icon(
-          //      Icons.info_outline,
-          //      size: 18,
-          //    ),
-          //    splashRadius: Material.defaultSplashRadius / 2,
-          //  );
-          //}),
-        ],
-      ),
+      title: Text('Tests'),
       children: [
-        MenuLine(
-          onTap: () {
-            context.go('tests/home');
-          },
-          isSelected: context.router.isSelected('tests/home'),
-          child: Text('Introduction'),
+        MenuLink(
+          url: 'tests/home',
+          title: Text('Introduction'),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: Color(0xfff1f3f4),
-            //borderRadius: BorderRadius.circular(20),
-            borderRadius: BorderRadius.circular(15),
-            //border: Border.symmetric(
-            //    horizontal: BorderSide(color: Color(0xffdadce0))),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          margin: const EdgeInsets.symmetric(horizontal: 50, vertical: 10),
-          child: Row(
-            children: [
-              //Text(
-              //  'Daemon',
-              //  style: const TextStyle(
-              //    fontSize: 12,
-              //    fontWeight: FontWeight.w500,
-              //    color: Colors.black54,
-              //  ),
-              //),
-              Expanded(child: DaemonToolbar(project)),
-            ],
-          ),
-        ),
+        DaemonToolbar(project),
         _listing(),
       ],
     );

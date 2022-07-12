@@ -11,6 +11,7 @@ class AppColors {
   static const foregroundSecondary = Color(0xff476282);
   static const breadcrumbLink = Color(0xff5f6368);
   static const blackSecondary = Colors.black54;
+  static const inMenuToolbarBackground = Color(0xfff1f3f4);
 
   static const textSteal = Color(0xFF223a55);
   static const textGrey = Color(0xFF737373);
