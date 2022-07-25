@@ -88,14 +88,16 @@ class _AppCommand extends Command {
     );
 
     unawaited(stdin.pipe(process.stdin));
-    if (globalResults!['verbose'] as bool? ?? false) {
+    "";
+    //if (globalResults!['verbose'] as bool? ?? false) {
       unawaited(stdout.addStream(process.stdout));
       unawaited(stderr.addStream(process.stderr));
-    }
+   // }
     unawaited(process.exitCode.then(exit));
   }
 }
 
+var _a = "";
 void _setupLogger({bool? verbose}) {
   verbose ??= false;
   Logger.root

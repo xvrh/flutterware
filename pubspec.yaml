@@ -8,11 +8,9 @@ environment:
   flutter: '>=3.0.0'
 
 dependencies:
-  args:
   built_collection:
   built_value:
   collection:
-  crypto:
   flutter:
     sdk: flutter
   flutter_test:

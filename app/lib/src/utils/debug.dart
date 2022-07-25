@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
+import 'package:io/ansi.dart';
 
 void runDebugApp(Widget widget) {
   setupDebugLogger();

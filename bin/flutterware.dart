@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'package:flutterware/internals/constants.dart';
+import 'package:flutterware/internals/log.dart';
 import 'package:path/path.dart' as p;
+import 'package:logging/logging.dart';
+import 'package:io/ansi.dart' as ansi;
 
 void main(List<String> arguments) async {
   var pubPackage =
@@ -16,14 +20,12 @@ void main(List<String> arguments) async {
 
   var isVerbose = arguments.any((e) => ['-v', '--verbose'].contains(e));
 
-  if (isVerbose) {
-    print('''
+  _printLog('''
 Platform.resolvedExecutable: ${Platform.resolvedExecutable}
 Platform.script: ${Platform.script}
 Flutterware Package: $pubPackage
 PackageRoot: $packageRoot
-''');
-  }
+''', Level.INFO.value, verbose: isVerbose);
 
   var compiledCliPath = 'build/compiled_cli${Platform.isWindows ? '.exe' : ''}';
   var compiledCliFile = File(p.join(appPath, compiledCliPath));
@@ -65,6 +67,30 @@ PackageRoot: $packageRoot
   //TODO(xha): try to keep the command line colors by using a json protocol with the
   // formatting information and converting to ansi code here.
   unawaited(stdin.pipe(process.stdin));
-  unawaited(stdout.addStream(process.stdout));
+  process.stdout
+      .transform(Utf8Decoder())
+      .transform(LineSplitter())
+      .listen((line) {
+    var log = Log.tryParse(line);
+    if (log != null) {
+      _printLog(log.message, log.level, verbose: isVerbose);
+    }
+  });
   unawaited(stderr.addStream(process.stderr));
+}
+
+void _printLog(String message, int level, {required bool verbose}) {
+  if (!verbose && level < Level.INFO.value) {
+    return;
+  }
+
+  var color = <int, ansi.AnsiCode> {
+        Level.SHOUT.value: ansi.red,
+        Level.SEVERE.value: ansi.red,
+        Level.WARNING.value: ansi.yellow,
+        Level.INFO.value: ansi.blue,
+      }[level] ??
+      ansi.black;
+
+  print(ansi.wrapWith(message, [color]));
 }

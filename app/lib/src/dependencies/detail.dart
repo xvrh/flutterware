@@ -16,6 +16,7 @@ import '../utils.dart';
 import '../utils/async_value.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 
+import '../utils/utils.dart';
 import 'utils.dart';
 
 class MyCustomScrollBehavior extends MaterialScrollBehavior {
@@ -330,7 +331,7 @@ class _InfoTabState extends State<_InfoTab> {
                     var data = snapshot.data;
                     if (data != null) {
                       return Text(
-                          '${(data.totalBytes / 1000000).toStringAsFixed(1)} MB, '
+                          '${getSizeAsMB(data.totalBytes)}, '
                           '${data.fileCount} file${data.fileCount > 1 ? 's' : ''}');
                     } else {
                       return Text('');

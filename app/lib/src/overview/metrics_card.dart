@@ -6,6 +6,7 @@ import 'package:flutterware_app/src/utils/cloc/cloc.dart';
 import 'package:intl/intl.dart';
 import '../project.dart';
 import '../utils/async_value.dart';
+import '../utils/utils.dart';
 import 'model/code_metrics.dart';
 
 class MetricsCard extends StatelessWidget {
@@ -95,7 +96,7 @@ class MetricsCard extends StatelessWidget {
 
                   return Text(
                     '${data.fileCount} file${data.fileCount > 1 ? 's' : ''}, '
-                        '${(data.totalBytes / 1000000).toStringAsFixed(2)} MB'
+                        '${getSizeAsMB(data.totalBytes)}'
                   );
                 },
               ),
