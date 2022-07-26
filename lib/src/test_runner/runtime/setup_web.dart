@@ -6,7 +6,7 @@ import 'asset_bundle_web.dart';
 import 'runner.dart';
 import 'setup.dart' show BundleParameters;
 
-Future<ScenarioBundle> createBundle(BundleParameters params) {
+Future<TestBundle> createBundle(BundleParameters params) {
   return WebAssetBundle.create(params);
 }
 

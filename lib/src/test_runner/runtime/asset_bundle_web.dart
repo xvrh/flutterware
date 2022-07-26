@@ -6,7 +6,7 @@ import 'setup.dart' show BundleParameters;
 
 const _assetManifestKey = 'AssetManifest.json';
 
-class WebAssetBundle extends CachingAssetBundle implements ScenarioBundle {
+class WebAssetBundle extends CachingAssetBundle implements TestBundle {
   final BundleParameters bundleParams;
   final ByteData assetManifest;
   final Zone realAsyncZone;

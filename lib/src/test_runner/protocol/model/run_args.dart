@@ -3,6 +3,7 @@ import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 import 'accessibility.dart';
 import 'device_info.dart';
+import 'locale.dart';
 
 part 'run_args.g.dart';
 
@@ -15,27 +16,27 @@ abstract class RunArgs implements Built<RunArgs, RunArgsBuilder> {
   factory RunArgs._builder([void Function(RunArgsBuilder) updates]) = _$RunArgs;
 
   factory RunArgs(
-    Iterable<String> scenarioName, {
+    Iterable<String> testName, {
     required DeviceInfo device,
     required AccessibilityConfig accessibility,
-    required String language,
+    required SerializableLocale locale,
     required double imageRatio,
     int? platformBrightness,
   }) =>
       RunArgs._builder((b) => b
         ..id = _runId++
-        ..scenarioName.replace(scenarioName)
+        ..testName.replace(testName)
         ..device.replace(device)
         ..accessibility.replace(accessibility)
         ..imageRatio = imageRatio
-        ..language = language
+        ..locale.replace(locale)
         ..platformBrightness = platformBrightness);
 
   int get id;
-  BuiltList<String> get scenarioName;
+  BuiltList<String> get testName;
   DeviceInfo get device;
   AccessibilityConfig get accessibility;
   double get imageRatio;
-  String get language;
+  SerializableLocale get locale;
   int? get platformBrightness;
 }

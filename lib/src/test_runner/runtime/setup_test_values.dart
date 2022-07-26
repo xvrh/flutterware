@@ -39,7 +39,7 @@ Future<void> Function(WidgetTester) withTestValues(
       platformDispatcher.platformBrightnessTestValue =
           ui.Brightness.values[platformBrightness];
     }
-    platformDispatcher.localesTestValue = [Locale('en', 'US')];
+    platformDispatcher.localesTestValue = [Locale(args.locale.language, args.locale.country)];
     debugDefaultTargetPlatformOverride = device.platform.toTargetPlatform();
 
     try {

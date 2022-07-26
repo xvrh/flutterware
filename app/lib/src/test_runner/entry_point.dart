@@ -1,6 +1,6 @@
 import 'package:flutterware_app/src/utils/source_code.dart';
 import 'package:path/path.dart' as p;
-
+import 'package:collection/collection.dart';
 import 'dart:io';
 
 import '../project.dart';
@@ -14,7 +14,8 @@ List<TestFile> collectTestFiles(Directory projectRoot) {
     for (var file in testFolder
         .listSync(recursive: true)
         .whereType<File>()
-        .where((f) => f.path.endsWith('_test.dart'))) {
+        .where((f) => f.path.endsWith('_test.dart'))
+        .sortedByCompare((e) => e.path, compareNatural)) {
       // TODO(xha): check for main function?
       files.add(TestFile(projectRoot, file));
     }

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../detail.dart';
 
 class ImageDetail extends StatefulWidget {
-  final ScenarioRun run;
+  final TestRun run;
   final Screen screen;
 
   const ImageDetail(this.run, this.screen, {Key? key})
@@ -29,6 +29,12 @@ class _ImageDetailState extends State<ImageDetail> {
         selectedTextInfo: _overTextInfo,
         selectedLink: _overLink,
       ),
+      onOverLink: (link) {
+        setState(() {
+          _overLink = link;
+          _overTextInfo = null;
+        });
+      },
       sidebar: [],
       /*sidebar: [
         Expanded(
@@ -94,7 +100,7 @@ class _ImageDetailState extends State<ImageDetail> {
 }
 
 class _Screenshot extends StatelessWidget {
-  final ScenarioRun run;
+  final TestRun run;
   final Screen screen;
   final TextInfo? selectedTextInfo;
   final ScreenLink? selectedLink;

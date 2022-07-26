@@ -35,28 +35,28 @@ typedef TestCallback = Future<void> Function(WidgetTester);
 class Runner {
   final StreamChannel<String> Function() connectionFactory;
   final Map<String, void Function()> Function() mainFunctions;
-  late final ScenarioBinding _binding;
+  late final TestBinding _binding;
   final void Function()? onConnected;
   ProjectClient? _project;
   RunClient? _runClient;
-  final Future<ScenarioBundle> Function() _bundleFactory;
-  late final ScenarioBundle _bundle;
+  final Future<TestBundle> Function() _bundleFactory;
+  late final TestBundle _bundle;
 
   Runner(this.connectionFactory,
       {required this.mainFunctions,
-      required Future<ScenarioBundle> Function() bundle,
+      required Future<TestBundle> Function() bundle,
       this.onConnected})
       : _bundleFactory = bundle {
     FlutterError.onError = (error) {
       _logger.severe('FLUTTER ERROR: $error');
     };
 
-    _binding = ScenarioBinding(onReloaded: notifyReloaded);
+    _binding = TestBinding(onReloaded: notifyReloaded);
   }
 
-  ScenarioBundle get bundle => _bundle;
+  TestBundle get bundle => _bundle;
 
-  ScenarioBinding get binding => _binding;
+  TestBinding get binding => _binding;
 
   Future<void> run() async {
     _bundle = await _bundleFactory();
@@ -115,25 +115,25 @@ class Runner {
     return findTest(tests, name.join(' '));
   }
 
-  final _currentScenario = <RunArgs, Group>{};
+  final _currentTest = <RunArgs, Group>{};
 
-  ScenarioRun _createRun(RunArgs args) {
-    _logger.fine('RunTest ${args.scenarioName.join('/')}');
+  TestRun _createRun(RunArgs args) {
+    _logger.fine('RunTest ${args.testName.join('/')}');
     var allMains = mainFunctions();
-    var scenario = _findTest(allMains, args.scenarioName);
-    if (scenario == null) {
-      throw Exception('No test ${args.scenarioName.join('/')} found.');
+    var test = _findTest(allMains, args.testName);
+    if (test == null) {
+      throw Exception('No test ${args.testName.join('/')} found.');
     }
 
-    var run = ScenarioRun(ScenarioReference(args.scenarioName), args);
-    _currentScenario[args] = scenario;
+    var run = TestRun(TestReference(args.testName), args);
+    _currentTest[args] = test;
     return run;
   }
 
   final _runPool = Pool(1);
   void _executeRun(RunArgs args) {
     var runClient = _runClient!;
-    var scenario = _currentScenario[args]!;
+    var test = _currentTest[args]!;
 
     _runPool.withResource(() async {
       var stopwatch = Stopwatch()..start();
@@ -145,7 +145,7 @@ class Runner {
             addScreen: (screen) => runClient.addScreen(args, screen));
         await runZonedGuarded(
           () async {
-            await runGroup(scenario).toList();
+            await runGroup(test).toList();
           },
           zoneValues: {#runContext: runContext},
           (e, s) {
@@ -168,8 +168,8 @@ class Runner {
 
         result = result.rebuild((b) => b..duration = stopwatch.elapsed);
         await runClient.complete(args, result);
-        _logger.finer('End test ${args.scenarioName} in ${stopwatch.elapsed}');
-        _currentScenario.remove(args);
+        _logger.finer('End test ${args.testName} in ${stopwatch.elapsed}');
+        _currentTest.remove(args);
       }
     });
   }

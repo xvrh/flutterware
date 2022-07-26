@@ -309,7 +309,7 @@ class _DaemonStartingToolbar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Text(
-        'Launching test runner...',
+        'Test runner is starting...',
         textAlign: TextAlign.center,
         style: TextStyle(
           color: Colors.black26,

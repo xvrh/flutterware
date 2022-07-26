@@ -3,6 +3,9 @@ import 'dart:io';
 import 'dart:isolate';
 import 'package:flutterware/internals/constants.dart';
 import 'package:path/path.dart' as p;
+import 'package:logging/logging.dart';
+
+final _logger = Logger('flutterware');
 
 void main(List<String> arguments) async {
   var pubPackage =
@@ -11,19 +14,20 @@ void main(List<String> arguments) async {
   var appPath = p.join(packageRoot, 'app');
   if (!File(p.join(packageRoot, 'pubspec.yaml')).existsSync() ||
       !File(p.join(appPath, 'pubspec.yaml')).existsSync()) {
+    //TODO(xha): print error in log
     throw Exception('Failed to resolve flutterware (root: $packageRoot)');
+    return;
   }
 
   var isVerbose = arguments.any((e) => ['-v', '--verbose'].contains(e));
 
-  if (isVerbose) {
-    print('''
+    _logger.fine('''
 Platform.resolvedExecutable: ${Platform.resolvedExecutable}
 Platform.script: ${Platform.script}
 Flutterware Package: $pubPackage
 PackageRoot: $packageRoot
 ''');
-  }
+
 
   var compiledCliPath = 'build/compiled_cli${Platform.isWindows ? '.exe' : ''}';
   var compiledCliFile = File(p.join(appPath, compiledCliPath));

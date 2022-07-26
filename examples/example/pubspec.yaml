@@ -30,6 +30,8 @@ dependencies:
   auto_size_text:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   os_detect:
   package_info_plus:
   path:

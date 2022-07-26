@@ -1,26 +1,26 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'scenario_run.dart';
+part of 'test_run.dart';
 
 // **************************************************************************
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<ScenarioRun> _$scenarioRunSerializer = new _$ScenarioRunSerializer();
+Serializer<TestRun> _$testRunSerializer = new _$TestRunSerializer();
 
-class _$ScenarioRunSerializer implements StructuredSerializer<ScenarioRun> {
+class _$TestRunSerializer implements StructuredSerializer<TestRun> {
   @override
-  final Iterable<Type> types = const [ScenarioRun, _$ScenarioRun];
+  final Iterable<Type> types = const [TestRun, _$TestRun];
   @override
-  final String wireName = 'ScenarioRun';
+  final String wireName = 'TestRun';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, ScenarioRun object,
+  Iterable<Object?> serialize(Serializers serializers, TestRun object,
       {FullType specifiedType = FullType.unspecified}) {
     final result = <Object?>[
-      'scenario',
-      serializers.serialize(object.scenario,
-          specifiedType: const FullType(ScenarioReference)),
+      'test',
+      serializers.serialize(object.test,
+          specifiedType: const FullType(TestReference)),
       'args',
       serializers.serialize(object.args,
           specifiedType: const FullType(RunArgs)),
@@ -41,9 +41,9 @@ class _$ScenarioRunSerializer implements StructuredSerializer<ScenarioRun> {
   }
 
   @override
-  ScenarioRun deserialize(Serializers serializers, Iterable<Object?> serialized,
+  TestRun deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = new ScenarioRunBuilder();
+    final result = new TestRunBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -51,10 +51,9 @@ class _$ScenarioRunSerializer implements StructuredSerializer<ScenarioRun> {
       iterator.moveNext();
       final Object? value = iterator.current;
       switch (key) {
-        case 'scenario':
-          result.scenario.replace(serializers.deserialize(value,
-                  specifiedType: const FullType(ScenarioReference))!
-              as ScenarioReference);
+        case 'test':
+          result.test.replace(serializers.deserialize(value,
+              specifiedType: const FullType(TestReference))! as TestReference);
           break;
         case 'args':
           result.args.replace(serializers.deserialize(value,
@@ -76,9 +75,9 @@ class _$ScenarioRunSerializer implements StructuredSerializer<ScenarioRun> {
   }
 }
 
-class _$ScenarioRun extends ScenarioRun {
+class _$TestRun extends TestRun {
   @override
-  final ScenarioReference scenario;
+  final TestReference test;
   @override
   final RunArgs args;
   @override
@@ -86,32 +85,32 @@ class _$ScenarioRun extends ScenarioRun {
   @override
   final RunResult? result;
 
-  factory _$ScenarioRun([void Function(ScenarioRunBuilder)? updates]) =>
-      (new ScenarioRunBuilder()..update(updates))._build();
+  factory _$TestRun([void Function(TestRunBuilder)? updates]) =>
+      (new TestRunBuilder()..update(updates))._build();
 
-  _$ScenarioRun._(
-      {required this.scenario,
+  _$TestRun._(
+      {required this.test,
       required this.args,
       required this.screens,
       this.result})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(scenario, 'ScenarioRun', 'scenario');
-    BuiltValueNullFieldError.checkNotNull(args, 'ScenarioRun', 'args');
-    BuiltValueNullFieldError.checkNotNull(screens, 'ScenarioRun', 'screens');
+    BuiltValueNullFieldError.checkNotNull(test, 'TestRun', 'test');
+    BuiltValueNullFieldError.checkNotNull(args, 'TestRun', 'args');
+    BuiltValueNullFieldError.checkNotNull(screens, 'TestRun', 'screens');
   }
 
   @override
-  ScenarioRun rebuild(void Function(ScenarioRunBuilder) updates) =>
+  TestRun rebuild(void Function(TestRunBuilder) updates) =>
       (toBuilder()..update(updates)).build();
 
   @override
-  ScenarioRunBuilder toBuilder() => new ScenarioRunBuilder()..replace(this);
+  TestRunBuilder toBuilder() => new TestRunBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is ScenarioRun &&
-        scenario == other.scenario &&
+    return other is TestRun &&
+        test == other.test &&
         args == other.args &&
         screens == other.screens &&
         result == other.result;
@@ -120,14 +119,14 @@ class _$ScenarioRun extends ScenarioRun {
   @override
   int get hashCode {
     return $jf($jc(
-        $jc($jc($jc(0, scenario.hashCode), args.hashCode), screens.hashCode),
+        $jc($jc($jc(0, test.hashCode), args.hashCode), screens.hashCode),
         result.hashCode));
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('ScenarioRun')
-          ..add('scenario', scenario)
+    return (newBuiltValueToStringHelper('TestRun')
+          ..add('test', test)
           ..add('args', args)
           ..add('screens', screens)
           ..add('result', result))
@@ -135,14 +134,12 @@ class _$ScenarioRun extends ScenarioRun {
   }
 }
 
-class ScenarioRunBuilder implements Builder<ScenarioRun, ScenarioRunBuilder> {
-  _$ScenarioRun? _$v;
+class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
+  _$TestRun? _$v;
 
-  ScenarioReferenceBuilder? _scenario;
-  ScenarioReferenceBuilder get scenario =>
-      _$this._scenario ??= new ScenarioReferenceBuilder();
-  set scenario(ScenarioReferenceBuilder? scenario) =>
-      _$this._scenario = scenario;
+  TestReferenceBuilder? _test;
+  TestReferenceBuilder get test => _$this._test ??= new TestReferenceBuilder();
+  set test(TestReferenceBuilder? test) => _$this._test = test;
 
   RunArgsBuilder? _args;
   RunArgsBuilder get args => _$this._args ??= new RunArgsBuilder();
@@ -157,12 +154,12 @@ class ScenarioRunBuilder implements Builder<ScenarioRun, ScenarioRunBuilder> {
   RunResultBuilder get result => _$this._result ??= new RunResultBuilder();
   set result(RunResultBuilder? result) => _$this._result = result;
 
-  ScenarioRunBuilder();
+  TestRunBuilder();
 
-  ScenarioRunBuilder get _$this {
+  TestRunBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
-      _scenario = $v.scenario.toBuilder();
+      _test = $v.test.toBuilder();
       _args = $v.args.toBuilder();
       _screens = $v.screens.toBuilder();
       _result = $v.result?.toBuilder();
@@ -172,33 +169,33 @@ class ScenarioRunBuilder implements Builder<ScenarioRun, ScenarioRunBuilder> {
   }
 
   @override
-  void replace(ScenarioRun other) {
+  void replace(TestRun other) {
     ArgumentError.checkNotNull(other, 'other');
-    _$v = other as _$ScenarioRun;
+    _$v = other as _$TestRun;
   }
 
   @override
-  void update(void Function(ScenarioRunBuilder)? updates) {
+  void update(void Function(TestRunBuilder)? updates) {
     if (updates != null) updates(this);
   }
 
   @override
-  ScenarioRun build() => _build();
+  TestRun build() => _build();
 
-  _$ScenarioRun _build() {
-    _$ScenarioRun _$result;
+  _$TestRun _build() {
+    _$TestRun _$result;
     try {
       _$result = _$v ??
-          new _$ScenarioRun._(
-              scenario: scenario.build(),
+          new _$TestRun._(
+              test: test.build(),
               args: args.build(),
               screens: screens.build(),
               result: _result?.build());
     } catch (_) {
       late String _$failedField;
       try {
-        _$failedField = 'scenario';
-        scenario.build();
+        _$failedField = 'test';
+        test.build();
         _$failedField = 'args';
         args.build();
         _$failedField = 'screens';
@@ -207,7 +204,7 @@ class ScenarioRunBuilder implements Builder<ScenarioRun, ScenarioRunBuilder> {
         _result?.build();
       } catch (e) {
         throw new BuiltValueNestedFieldError(
-            'ScenarioRun', _$failedField, e.toString());
+            'TestRun', _$failedField, e.toString());
       }
       rethrow;
     }

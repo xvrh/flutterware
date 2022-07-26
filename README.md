@@ -7,7 +7,7 @@ A collection of GUI tools for Flutter development.
 
 Add `flutterware` package in your `pubspec.yaml`
 
-`flutter pub add flutterware`
+`dart pub add flutterware`
 
 ```yaml
 dependencies:
@@ -18,7 +18,7 @@ Run the GUI app
 
 ```shell
 # Run this in your Flutter project directory
-flutter pub run flutterware app
+dart run flutterware
 ```
 The first launch is a bit slow because the desktop app need to be compiled.
 

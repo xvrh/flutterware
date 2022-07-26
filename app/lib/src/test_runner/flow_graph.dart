@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:built_collection/built_collection.dart';
-import 'package:flutterware_app/src/test_runner/daemon_toolbar.dart';
-import '../project.dart';
 import '../utils.dart';
 import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart' hide InteractiveViewer;
@@ -10,17 +8,17 @@ import '../utils/graphite.dart';
 import 'detail.dart';
 import 'protocol/api.dart';
 import 'protocol/run.dart';
-import 'screens/screens.dart';
+import 'screenshot_frame.dart';
 import 'toolbar.dart';
 import 'ui/interactive_viewer.dart';
 
 class RunView extends StatefulWidget {
   final TestRunnerApi client;
-  final BuiltList<String> scenarioName;
+  final BuiltList<String> testName;
   final Widget? reloadToolbar;
 
-  RunView(this.client, this.scenarioName, {this.reloadToolbar})
-      : super(key: Key(scenarioName.join('-')));
+  RunView(this.client, this.testName, {this.reloadToolbar})
+      : super(key: Key(testName.join('-')));
 
   @override
   State<RunView> createState() => _RunViewState();
@@ -53,9 +51,9 @@ class _RunViewState extends State<RunView> {
     var toolbar = ToolBarScope.of(context).parameters;
     _runReference = widget.client.run.start(
       RunArgs(
-        widget.scenarioName,
+        widget.testName,
         device: toolbar.device,
-        language: toolbar.language,
+        locale: toolbar.locale,
         accessibility: toolbar.accessibility,
         imageRatio: 1.0,
       ),
@@ -66,7 +64,7 @@ class _RunViewState extends State<RunView> {
   Widget build(BuildContext context) {
     var run = _runReference;
     var isInDetail = context.router.path.remaining.toString().isNotEmpty;
-    return StreamBuilder<ScenarioRun>(
+    return StreamBuilder<TestRun>(
       stream: run.onUpdated,
       initialData: run.value,
       builder: (context, snapshot) {
@@ -89,6 +87,7 @@ class _RunViewState extends State<RunView> {
 
         var reloadToolbar = widget.reloadToolbar;
         return RunToolbar(
+          supportedLocales: snapshot.data?.supportedLocales,
           initialParameters: toolbarScope.parameters,
           onChanged: (p) {
             var oldParameters = toolbarScope.parameters;
@@ -174,7 +173,7 @@ class ResultIcon extends StatelessWidget {
 }
 
 class _FlowMaster extends StatelessWidget {
-  final ScenarioRun run;
+  final TestRun run;
   final _RunViewState parent;
 
   const _FlowMaster(this.parent, this.run, {Key? key}) : super(key: key);
@@ -201,7 +200,7 @@ class _FlowMaster extends StatelessWidget {
 }
 
 class _FlowGraph extends StatefulWidget {
-  final ScenarioRun run;
+  final TestRun run;
 
   const _FlowGraph(this.run, {Key? key}) : super(key: key);
 
@@ -331,31 +330,20 @@ class __FlowGraphState extends State<_FlowGraph> {
 }
 
 class _ScreenView extends StatelessWidget {
-  final ScenarioRun run;
+  final TestRun run;
   final Screen screen;
 
   const _ScreenView(this.run, this.screen, {Key? key}) : super(key: key);
 
-  Widget? _widgetForScreen(Screen screen) {
-    return widgetForScreen(run, screen);
-  }
-
   @override
   Widget build(BuildContext context) {
-    var main = _widgetForScreen(screen) ??
-        Container(
-          color: Colors.black12,
-          width: run.args.device.width * run.args.device.pixelRatio,
-          height: run.args.device.height * run.args.device.pixelRatio,
-          alignment: Alignment.center,
-          child: Text(screen.name),
-        );
+    var main = ScreenshotFrame(screen, run.args);
 
     return Stack(
       clipBehavior: Clip.none,
       children: [
         Container(
-          decoration: BoxDecoration(
+          foregroundDecoration: BoxDecoration(
             border: Border.all(color: Colors.blueGrey, width: 2),
             borderRadius: BorderRadius.circular(20),
           ),

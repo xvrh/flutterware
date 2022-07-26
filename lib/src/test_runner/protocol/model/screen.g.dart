@@ -209,8 +209,8 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
       result
         ..add('supportedLocales')
         ..add(serializers.serialize(value,
-            specifiedType:
-                const FullType(BuiltList, const [const FullType(String)])));
+            specifiedType: const FullType(
+                BuiltList, const [const FullType(SerializableLocale)])));
     }
     return result;
   }
@@ -269,7 +269,7 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
         case 'supportedLocales':
           result.supportedLocales.replace(serializers.deserialize(value,
                   specifiedType: const FullType(
-                      BuiltList, const [const FullType(String)]))!
+                      BuiltList, const [const FullType(SerializableLocale)]))!
               as BuiltList<Object?>);
           break;
       }
@@ -709,7 +709,7 @@ class _$Screen extends Screen {
   @override
   final int? bottomBrightness;
   @override
-  final BuiltList<String>? supportedLocales;
+  final BuiltList<SerializableLocale>? supportedLocales;
 
   factory _$Screen([void Function(ScreenBuilder)? updates]) =>
       (new ScreenBuilder()..update(updates))._build();
@@ -836,10 +836,10 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
   set bottomBrightness(int? bottomBrightness) =>
       _$this._bottomBrightness = bottomBrightness;
 
-  ListBuilder<String>? _supportedLocales;
-  ListBuilder<String> get supportedLocales =>
-      _$this._supportedLocales ??= new ListBuilder<String>();
-  set supportedLocales(ListBuilder<String>? supportedLocales) =>
+  ListBuilder<SerializableLocale>? _supportedLocales;
+  ListBuilder<SerializableLocale> get supportedLocales =>
+      _$this._supportedLocales ??= new ListBuilder<SerializableLocale>();
+  set supportedLocales(ListBuilder<SerializableLocale>? supportedLocales) =>
       _$this._supportedLocales = supportedLocales;
 
   ScreenBuilder();

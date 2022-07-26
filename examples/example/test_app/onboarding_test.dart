@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/flutter_test.dart';
 import 'package:flutterware_example/main.dart';
 
@@ -7,7 +6,7 @@ import 'package:flutterware_example/main.dart';
 // dart run flutterware app
 void main() {
   setUp(() {
-    print('Some code to configure the mocks');
+    // Configure your mocks here
   });
 
   testApp('On-boarding should do this and should to that', (tester) async {
@@ -19,38 +18,5 @@ void main() {
     await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
     await tester.screenshot(name: 'Tap icon');
-  });
-
-  testApp('Login', (tester) async {
-    print('Login test');
-
-    expect(1, 0);
-  });
-
-  testApp('Dashboard', (tester) async {
-    //
-  });
-
-  testApp('Products', (tester) async {
-    //
-  });
-
-  group('Basket of all the products', () {
-    testApp('Empty', (tester) async {
-      //
-    });
-    testApp('One product', (tester) async {
-      //
-    });
-  });
-
-  testApp('Logout', (tester) async {
-    //
-  });
-
-  group('My group', () {
-    testApp('More sub', (tester) async {
-      print('bla');
-    });
   });
 }

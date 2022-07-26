@@ -1,23 +1,22 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'scenario.dart';
+part of 'test_reference.dart';
 
 // **************************************************************************
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<ScenarioReference> _$scenarioReferenceSerializer =
-    new _$ScenarioReferenceSerializer();
+Serializer<TestReference> _$testReferenceSerializer =
+    new _$TestReferenceSerializer();
 
-class _$ScenarioReferenceSerializer
-    implements StructuredSerializer<ScenarioReference> {
+class _$TestReferenceSerializer implements StructuredSerializer<TestReference> {
   @override
-  final Iterable<Type> types = const [ScenarioReference, _$ScenarioReference];
+  final Iterable<Type> types = const [TestReference, _$TestReference];
   @override
-  final String wireName = 'ScenarioReference';
+  final String wireName = 'TestReference';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, ScenarioReference object,
+  Iterable<Object?> serialize(Serializers serializers, TestReference object,
       {FullType specifiedType = FullType.unspecified}) {
     final result = <Object?>[
       'name',
@@ -37,10 +36,10 @@ class _$ScenarioReferenceSerializer
   }
 
   @override
-  ScenarioReference deserialize(
+  TestReference deserialize(
       Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = new ScenarioReferenceBuilder();
+    final result = new TestReferenceBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -65,32 +64,30 @@ class _$ScenarioReferenceSerializer
   }
 }
 
-class _$ScenarioReference extends ScenarioReference {
+class _$TestReference extends TestReference {
   @override
   final BuiltList<String> name;
   @override
   final String? description;
 
-  factory _$ScenarioReference(
-          [void Function(ScenarioReferenceBuilder)? updates]) =>
-      (new ScenarioReferenceBuilder()..update(updates))._build();
+  factory _$TestReference([void Function(TestReferenceBuilder)? updates]) =>
+      (new TestReferenceBuilder()..update(updates))._build();
 
-  _$ScenarioReference._({required this.name, this.description}) : super._() {
-    BuiltValueNullFieldError.checkNotNull(name, 'ScenarioReference', 'name');
+  _$TestReference._({required this.name, this.description}) : super._() {
+    BuiltValueNullFieldError.checkNotNull(name, 'TestReference', 'name');
   }
 
   @override
-  ScenarioReference rebuild(void Function(ScenarioReferenceBuilder) updates) =>
+  TestReference rebuild(void Function(TestReferenceBuilder) updates) =>
       (toBuilder()..update(updates)).build();
 
   @override
-  ScenarioReferenceBuilder toBuilder() =>
-      new ScenarioReferenceBuilder()..replace(this);
+  TestReferenceBuilder toBuilder() => new TestReferenceBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is ScenarioReference &&
+    return other is TestReference &&
         name == other.name &&
         description == other.description;
   }
@@ -102,16 +99,16 @@ class _$ScenarioReference extends ScenarioReference {
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('ScenarioReference')
+    return (newBuiltValueToStringHelper('TestReference')
           ..add('name', name)
           ..add('description', description))
         .toString();
   }
 }
 
-class ScenarioReferenceBuilder
-    implements Builder<ScenarioReference, ScenarioReferenceBuilder> {
-  _$ScenarioReference? _$v;
+class TestReferenceBuilder
+    implements Builder<TestReference, TestReferenceBuilder> {
+  _$TestReference? _$v;
 
   ListBuilder<String>? _name;
   ListBuilder<String> get name => _$this._name ??= new ListBuilder<String>();
@@ -121,9 +118,9 @@ class ScenarioReferenceBuilder
   String? get description => _$this._description;
   set description(String? description) => _$this._description = description;
 
-  ScenarioReferenceBuilder();
+  TestReferenceBuilder();
 
-  ScenarioReferenceBuilder get _$this {
+  TestReferenceBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
       _name = $v.name.toBuilder();
@@ -134,25 +131,24 @@ class ScenarioReferenceBuilder
   }
 
   @override
-  void replace(ScenarioReference other) {
+  void replace(TestReference other) {
     ArgumentError.checkNotNull(other, 'other');
-    _$v = other as _$ScenarioReference;
+    _$v = other as _$TestReference;
   }
 
   @override
-  void update(void Function(ScenarioReferenceBuilder)? updates) {
+  void update(void Function(TestReferenceBuilder)? updates) {
     if (updates != null) updates(this);
   }
 
   @override
-  ScenarioReference build() => _build();
+  TestReference build() => _build();
 
-  _$ScenarioReference _build() {
-    _$ScenarioReference _$result;
+  _$TestReference _build() {
+    _$TestReference _$result;
     try {
       _$result = _$v ??
-          new _$ScenarioReference._(
-              name: name.build(), description: description);
+          new _$TestReference._(name: name.build(), description: description);
     } catch (_) {
       late String _$failedField;
       try {
@@ -160,7 +156,7 @@ class ScenarioReferenceBuilder
         name.build();
       } catch (e) {
         throw new BuiltValueNestedFieldError(
-            'ScenarioReference', _$failedField, e.toString());
+            'TestReference', _$failedField, e.toString());
       }
       rethrow;
     }

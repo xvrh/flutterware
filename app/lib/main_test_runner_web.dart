@@ -43,7 +43,7 @@ class _StandaloneApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return RouterOutlet.root(
       child: MaterialApp(
-        title: 'Scenario runner',
+        title: 'Test runner',
         home: Scaffold(body: app),
         initialRoute: '/',
         debugShowCheckedModeBanner: false,

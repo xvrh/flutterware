@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:ui';
+import 'package:flutterware/src/test_runner/protocol/model/locale.dart';
+
 import '../../../flutter_test.dart';
 import '../protocol/models.dart';
 import 'path_tracker.dart';
@@ -11,6 +14,7 @@ class RunContext {
   String? currentSplitName;
   String? previousId;
   final previousScreens = <String>{};
+  Rect? previousTap;
 
   RunContext(this.args, {required this.addScreen});
 
@@ -40,7 +44,7 @@ extension WidgetTesterContextExtension on WidgetTester {
         RunArgs(['test'],
             device: DeviceInfo.iPhoneX,
             accessibility: AccessibilityConfig(),
-            language: 'en',
+            locale: SerializableLocale('en'),
             imageRatio: 1),
         addScreen: (_) {});
   }

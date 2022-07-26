@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
+import 'locale.dart';
 import 'rectangle.dart';
 
 part 'screen.g.dart';
@@ -56,7 +57,7 @@ abstract class Screen implements Built<Screen, ScreenBuilder> {
   ImageFile? get imageFile;
   int? get topBrightness;
   int? get bottomBrightness;
-  BuiltList<String>? get supportedLocales;
+  BuiltList<SerializableLocale>? get supportedLocales;
 }
 
 abstract class TextInfo implements Built<TextInfo, TextInfoBuilder> {

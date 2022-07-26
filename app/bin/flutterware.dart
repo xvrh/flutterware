@@ -46,6 +46,11 @@ void main(List<String> args) async {
     ..argParser.addFlag('verbose', abbr: 'v', help: 'increase logging')
     ..argParser.addFlag(forceCompileCliOption, hide: true);
   var argResults = commandRunner.parse(args);
+  if (argResults.command == null &&
+      (argResults.arguments.isEmpty ||
+          argResults.arguments.first.startsWith('-'))) {
+    argResults = commandRunner.parse(['app', ...args]);
+  }
 
   var verbose = argResults['verbose'] as bool;
   _setupLogger(verbose: verbose);

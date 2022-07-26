@@ -15,8 +15,8 @@ class RunHost {
   RunReference start(RunArgs args) {
     var run = RunReference(args, this);
     _currentRuns[args.id] = run;
-    _channel.sendRequest<ScenarioRun>('create', args).then((r) {
-      run._scenario.add(r);
+    _channel.sendRequest<TestRun>('create', args).then((r) {
+      run._test.add(r);
       _channel.sendRequest('execute', args);
     }).onError((e, stackTrace) {
       // Finish the run early
@@ -77,25 +77,25 @@ class RunHost {
 class RunReference {
   final RunArgs args;
   final RunHost _host;
-  final _scenario = BehaviorSubject<ScenarioRun>();
+  final _test = BehaviorSubject<TestRun>();
 
   RunReference(this.args, this._host);
 
-  ScenarioRun? get value => _scenario.valueOrNull;
-  Stream<ScenarioRun> get onUpdated => _scenario.stream;
+  TestRun? get value => _test.valueOrNull;
+  Stream<TestRun> get onUpdated => _test.stream;
 
-  void _rebuild(void Function(ScenarioRunBuilder) updates) {
-    var scenario = _scenario.value;
-    scenario = scenario.rebuild(updates);
-    _scenario.add(scenario);
+  void _rebuild(void Function(TestRunBuilder) updates) {
+    var test = _test.value;
+    test = test.rebuild(updates);
+    _test.add(test);
   }
 
   void _completeWithError(Object error) {
-    _scenario.addError(error);
+    _test.addError(error);
   }
 
   void dispose() {
-    _scenario.close();
+    _test.close();
     _host._currentRuns.remove(args.id);
   }
 }

@@ -8,9 +8,10 @@ export 'model/message.dart';
 export 'model/rectangle.dart';
 export 'model/run_args.dart';
 export 'model/run_result.dart';
-export 'model/scenario.dart';
-export 'model/scenario_run.dart';
+export 'model/test_reference.dart';
+export 'model/test_run.dart';
 export 'model/screen.dart';
+export 'model/locale.dart';
 export 'serializers.dart' show modelSerializers;
 
 extension DevicePlatformExtension on DevicePlatform {

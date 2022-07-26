@@ -4,18 +4,18 @@ import 'package:flutter/material.dart';
 import 'ui/toolbar.dart';
 
 class ToolbarParameters {
-  final String language;
+  final SerializableLocale locale;
   final DeviceInfo device;
   final AccessibilityConfig accessibility;
 
   ToolbarParameters({
-    required this.language,
+    required this.locale,
     required this.device,
     required this.accessibility,
   });
 
   bool requiresFullRun(ToolbarParameters newConfig) {
-    return newConfig.language != language ||
+    return newConfig.locale != locale ||
         newConfig.device != device ||
         newConfig.accessibility != accessibility;
   }
@@ -36,7 +36,7 @@ class ToolBarScope extends StatefulWidget {
 
 class ToolBarScopeState extends State<ToolBarScope> {
   late ToolbarParameters parameters = ToolbarParameters(
-    language: 'en',
+    locale: SerializableLocale('en'),
     device: DeviceInfo.iPhoneX,
     accessibility: AccessibilityConfig.defaultValue,
   );
@@ -53,6 +53,7 @@ class RunToolbar extends StatefulWidget {
   final Widget child;
   final ToolbarParameters initialParameters;
   final void Function(ToolbarParameters) onChanged;
+  final Set<SerializableLocale>? supportedLocales;
 
   const RunToolbar({
     Key? key,
@@ -61,6 +62,7 @@ class RunToolbar extends StatefulWidget {
     required this.onChanged,
     this.leadingActions,
     this.trailingActions,
+    required this.supportedLocales,
   }) : super(key: key);
 
   @override
@@ -68,7 +70,7 @@ class RunToolbar extends StatefulWidget {
 }
 
 class _RunToolbarState extends State<RunToolbar> {
-  late String _language = widget.initialParameters.language;
+  late SerializableLocale _language = widget.initialParameters.locale;
   late DeviceInfo _device = widget.initialParameters.device;
   late AccessibilityConfig _accessibility =
       widget.initialParameters.accessibility;
@@ -81,7 +83,7 @@ class _RunToolbarState extends State<RunToolbar> {
         Toolbar(
           children: [
             ...?widget.leadingActions,
-            ToolbarDropdown<String>(
+            ToolbarDropdown<SerializableLocale>(
               value: _language,
               onChanged: (v) {
                 setState(() {
@@ -90,8 +92,8 @@ class _RunToolbarState extends State<RunToolbar> {
                 _onChanged();
               },
               items: {
-                for (var language in ['en'])
-                  language: Text(language)
+                for (var language in widget.supportedLocales ?? const <SerializableLocale>[])
+                  language: Text(language.displayString)
               },
             ),
             ToolbarDropdown<DeviceInfo>(
@@ -143,7 +145,7 @@ class _RunToolbarState extends State<RunToolbar> {
 
   void _onChanged() {
     widget.onChanged(ToolbarParameters(
-      language: _language,
+      locale: _language,
       device: _device,
       accessibility: _accessibility,
     ));

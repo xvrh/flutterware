@@ -21,7 +21,7 @@ void mockFlutterAssets(AssetBundle delegate) {
   });
 }
 
-class IOAssetBundle extends CachingAssetBundle implements ScenarioBundle {
+class IOAssetBundle extends CachingAssetBundle implements TestBundle {
   final String assetFolderPath;
   final BundleParameters bundleParams;
 

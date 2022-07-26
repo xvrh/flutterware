@@ -22,6 +22,9 @@ extension WidgetTesterScreenshotExtension on WidgetTester {
     var parentId = context.previousId;
     context.previousId = screenId;
 
+    var parentRectangle = context.previousTap;
+    context.previousTap = null;
+
     var isDuplicatedScreen = context.previousScreens.contains(screenId);
 
     if (isDuplicatedScreen) {
@@ -56,7 +59,7 @@ extension WidgetTesterScreenshotExtension on WidgetTester {
             brightnessAt(Offset(0, runContext.args.device.height - 5))?.index;
       if (widgetsApp != null) {
         s.supportedLocales.replace(
-            widgetsApp.supportedLocales.map((l) => l.toString()).toList());
+            widgetsApp.supportedLocales.map((l) => SerializableLocale(l.languageCode, l.countryCode)).toList());
       }
     });
 
@@ -78,6 +81,13 @@ extension WidgetTesterScreenshotExtension on WidgetTester {
           ..screen.replace(screen)
           ..imageBase64 = pixels != null ? base64Encode(pixels) : null
           ..parent = parentId;
+        if (parentRectangle != null) {
+          b.parentRectangle.replace(Rectangle.fromLTRB(
+              parentRectangle.left,
+              parentRectangle.top,
+              parentRectangle.right,
+              parentRectangle.bottom));
+        }
       });
 
       context.addScreen(newScreen);

@@ -5,7 +5,7 @@ import 'asset_bundle_io.dart';
 import 'runner.dart';
 import 'setup.dart' show BundleParameters;
 
-Future<ScenarioBundle> createBundle(BundleParameters params) async {
+Future<TestBundle> createBundle(BundleParameters params) async {
   await _buildBundle(params);
   return IOAssetBundle(
     'build/flutter_assets',
