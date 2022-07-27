@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'package:flutterware/internals/constants.dart';
+import 'package:flutterware/internals/log.dart';
 import 'package:path/path.dart' as p;
 import 'package:logging/logging.dart';
 
@@ -69,6 +71,30 @@ PackageRoot: $packageRoot
   //TODO(xha): try to keep the command line colors by using a json protocol with the
   // formatting information and converting to ansi code here.
   unawaited(stdin.pipe(process.stdin));
-  unawaited(stdout.addStream(process.stdout));
+  process.stdout
+      .transform(Utf8Decoder())
+      .transform(LineSplitter())
+      .listen((line) {
+    var log = Log.tryParse(line);
+    if (log != null) {
+      _printLog(log.message, log.level, verbose: isVerbose);
+    }
+  });
   unawaited(stderr.addStream(process.stderr));
+}
+
+void _printLog(String message, int level, {required bool verbose}) {
+  if (!verbose && level < Level.INFO.value) {
+    return;
+  }
+
+  var color = <int, ansi.AnsiCode> {
+        Level.SHOUT.value: ansi.red,
+        Level.SEVERE.value: ansi.red,
+        Level.WARNING.value: ansi.yellow,
+        Level.INFO.value: ansi.blue,
+      }[level] ??
+      ansi.black;
+
+  print(ansi.wrapWith(message, [color]));
 }
