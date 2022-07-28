@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,21 +10,28 @@ import 'package:flutterware_app/src/utils/daemon/protocol.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:args/command_runner.dart';
+import 'package:pubspec_parse/pubspec_parse.dart';
 
 class _Context {
   final String dartExecutable;
-  final String studioAppPath;
+  final String appToolPath;
   final _FlutterSdk flutterSdk;
   final Directory projectDirectory;
   final RemoteLogClient logClient;
 
   _Context({
     required this.dartExecutable,
-    required this.studioAppPath,
+    required this.appToolPath,
     required this.flutterSdk,
     required this.projectDirectory,
     required this.logClient,
   });
+
+  Future<String> flutterwareVersion() async {
+    var pubspecContent = await File(p.join(appToolPath, 'pubspec.yaml')).readAsString();
+    var pubspec = Pubspec.parse(pubspecContent);
+    return pubspec.version.toString();
+  }
 }
 
 void main(List<String> args) async {
@@ -39,12 +45,9 @@ void main(List<String> args) async {
   var loggerUrl = Platform.environment[remoteLoggerServerUrlKey]!;
   var logger = RemoteLogClient(Uri.parse(loggerUrl));
 
-  logger.printWarning("message");
-  await Future.delayed(const Duration(seconds: 3));
-
   var context = _Context(
     dartExecutable: dartExecutable,
-    studioAppPath: Platform.environment[appPathEnvironmentKey]!,
+    appToolPath: Platform.environment[appPathEnvironmentKey]!,
     flutterSdk: flutterSdk,
     projectDirectory: Directory.current,
     logClient: logger,
@@ -82,8 +85,15 @@ class _AppCommand extends Command {
 
   @override
   void run() async {
+    var appPubspec = Pubspec.parse(await File(p.join(context.projectDirectory.absolute.path, 'pubspec.yaml')).readAsString());
+
+    context.logClient.printBox('''
+App: ${appPubspec.name} (${context.projectDirectory.absolute.path})
+Flutter SDK: ${context.flutterSdk.root}
+''', title: 'Flutterware ${await context.flutterwareVersion()}');
+
     var buildProgress = context.logClient.startProgress(
-        'Starting Flutter Studio App (Flutter: ${context.flutterSdk.flutter}, dir: ${context.studioAppPath})');
+        'Starting Flutterware GUI');
 
     var process = await Process.start(
       context.flutterSdk.flutter,
@@ -92,31 +102,32 @@ class _AppCommand extends Command {
         '-d',
         'macos',
         '--release',
-        '--dart-define',
-        '$projectDefineKey=${context.projectDirectory.absolute.path}',
-        '--dart-define',
-        '$flutterSdkDefineKey=${context.flutterSdk.root}',
-        '--dart-define',
-        '$flutterSdkDefineKey=${context.logClient.uri}',
+        '--machine',
       ],
       environment: {
         if (Platform.isMacOS) 'LC_ALL': 'en_US.UTF-8',
+        projectDefineKey: context.projectDirectory.absolute.path,
+        flutterSdkDefineKey: context.flutterSdk.root,
+        remoteLoggerUrlKey: '${context.logClient.uri}',
       },
-      workingDirectory: context.studioAppPath,
+      workingDirectory: context.appToolPath,
     );
 
     await for (var line in process.stdout.transform(Utf8Decoder()).transform(LineSplitter())) {
-      context.logClient.printTrace('App: $line');
       var daemonLine = DaemonProtocol.tryReadLine(line);
       if (daemonLine != null) {
+        context.logClient.printTrace('App daemon: $daemonLine');
         var event = DaemonProtocol.tryReadEvent(daemonLine);
-        if (event is AppProgressEvent && event.finished) {
-          buildProgress.stop();
+        if (event is AppStartedEvent) {
+          break;
         }
+      } else {
+        context.logClient.printTrace('App: $line');
       }
     }
+    buildProgress.stop();
 
-    unawaited(process.exitCode.then(exit));
+    exit(await process.exitCode);
   }
 }
 

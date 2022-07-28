@@ -29,8 +29,8 @@ environment:
 dependencies:
   analyzer:
   args:
-  auto_size_text:
   async:
+  auto_size_text:
   built_collection:
   collection:
   device_frame:

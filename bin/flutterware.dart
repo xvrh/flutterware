@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:io' as io;
@@ -27,13 +26,11 @@ void main(List<String> arguments) async {
     return;
   }
 
-  logger.printBox('''
-Platform.resolvedExecutable: ${Platform.resolvedExecutable}
-Platform.script: ${Platform.script}
-Flutterware Package: $pubPackage
-PackageRoot: $packageRoot
-App: $appPath
-''', title: 'Flutterware');
+  logger.printTrace('Platform.resolvedExecutable: ${Platform.resolvedExecutable}');
+  logger.printTrace('Platform.script: ${Platform.script}');
+  logger.printTrace('Flutterware Package: $pubPackage');
+  logger.printTrace('PackageRoot: $packageRoot');
+  logger.printTrace('App: $appPath');
 
   var compiledCliPath = 'build/compiled_cli${Platform.isWindows ? '.exe' : ''}';
   var compiledCliFile = File(p.join(appPath, compiledCliPath));
@@ -47,7 +44,7 @@ App: $appPath
       // Don't care if the file doesn't exist
     }
 
-    var buildCliProgress = logger.startProgress('Build CLI');
+    var buildCliProgress = logger.startProgress('Building CLI');
     var pubGetResult = Process.runSync(
         Platform.resolvedExecutable, ['pub', 'get'],
         workingDirectory: appPath);
@@ -78,12 +75,12 @@ App: $appPath
   logger.terminal.keystrokes.listen((e) {
     if (e.trim() == 'q') {
       logger.printStatus('Bye bye');
-      exit(0);
+      process.kill();
     }
   });
 
   var code = await process.exitCode;
-  if (code != 0) {
+  if (code > 0) {
     logger.printError('CLI terminated with error ($code).\n'
         'Stdout: ${await utf8.decodeStream(process.stdout)}\n'
         'Stderr: ${await utf8.decodeStream(process.stderr)}'

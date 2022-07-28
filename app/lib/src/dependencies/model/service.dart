@@ -37,7 +37,7 @@ class DependenciesService {
       var pubspec = await _readPubspec(package.root.toFilePath());
 
       results._allPackages[package.name] =
-          Dependency(this, results, package, pubspec, pubspecLockDep);
+          Dependency(results, package, pubspec, pubspecLockDep);
     }
     results.computeDependants();
     return results;
@@ -133,7 +133,6 @@ class Dependencies implements Disposable {
 }
 
 class Dependency implements Disposable {
-  final DependenciesService _service;
   final Dependencies parent;
   final Package package;
   final LockDependency? lockDependency;
@@ -142,7 +141,7 @@ class Dependency implements Disposable {
   late final cloc = AsyncValue<ClocReport>(loader: _loadCloc);
   late final size = AsyncValue<SizeReport>(loader: _loadSize);
 
-  Dependency(this._service, this.parent, this.package, this.pubspec,
+  Dependency(this.parent, this.package, this.pubspec,
       this.lockDependency);
 
   String get name => package.name;

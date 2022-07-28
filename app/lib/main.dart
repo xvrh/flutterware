@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/internals/remote_log.dart';
 import 'package:flutterware/internals/remote_log_adapter.dart';
@@ -8,17 +10,19 @@ import 'src/app/app.dart';
 import 'src/globals.dart';
 import 'src/project.dart';
 
-const projectPath = String.fromEnvironment(projectDefineKey);
-const flutterSdkPath = String.fromEnvironment(flutterSdkDefineKey);
-const remoteLoggerUrl = String.fromEnvironment(remoteLoggerUrlKey);
+
 
 void main() async {
-  if (projectPath.isEmpty || flutterSdkPath.isEmpty) {
+  var projectPath = Platform.environment[projectDefineKey];
+  var flutterSdkPath = Platform.environment[flutterSdkDefineKey];
+
+  if (projectPath==null || flutterSdkPath==null) {
     throw Exception(
         'This entry point need to be run with some --dart-define parameters. Use main_dev.dart for development.');
   }
 
-  if (remoteLoggerUrl.isNotEmpty) {
+  var remoteLoggerUrl = Platform.environment[remoteLoggerUrlKey];
+  if (remoteLoggerUrl != null && remoteLoggerUrl.isNotEmpty) {
     var remoteLoggerClient = RemoteLogClient(Uri.parse(remoteLoggerUrl));
     globals.logger = remoteLoggerClient;
   }

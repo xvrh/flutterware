@@ -112,14 +112,21 @@ class RemoteLogClient implements LogClient {
 
   Future<void> _rawSend(String path, Object message) async {
     var client = HttpClient();
-    var request = await client.openUrl(
-        'post', uri.replace(path: p.url.join(uri.path, path)));
-    request.headers.add('content-type', 'application/json');
-    request.add(utf8.encode(jsonEncode(message)));
-    var response = await request.close();
-    if (response.statusCode >= 400) {
-      throw Exception(
-          'RemoteLog error (${response.statusCode} ${response.reasonPhrase}');
+    try {
+      var request = await client.openUrl(
+          'post', uri.replace(path: p.url.join(uri.path, path)));
+      request.headers.add('content-type', 'application/json');
+      request.add(utf8.encode(jsonEncode(message)));
+      var response = await request.close();
+      if (response.statusCode >= 400) {
+        throw Exception(
+            'RemoteLog error (${response.statusCode} ${response.reasonPhrase}');
+      }
+      await response.drain();
+    } catch (e) {
+      print('Fail to send log $e');
+    } finally {
+      client.close();
     }
   }
 }
@@ -137,4 +144,3 @@ class _RemoteStatus implements ProgressStatus {
     client._stopProgress(id);
   }
 }
-

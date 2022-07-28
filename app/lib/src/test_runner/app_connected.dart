@@ -1,5 +1,4 @@
 import 'package:built_collection/built_collection.dart';
-import '../project.dart';
 import 'ui/menu_tree.dart';
 import '../utils/router_outlet.dart';
 import 'package:flutter/material.dart';

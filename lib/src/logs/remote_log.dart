@@ -18,12 +18,12 @@ class RemoteLogServer {
     server.listen(_handleRequest);
   }
 
-  static Future<RemoteLogServer> start(Logger logger) async {
-    var httpServer = await HttpServer.bind(InternetAddress.anyIPv4, 0);
+  static Future<RemoteLogServer> start(Logger logger, {int? port}) async {
+    var httpServer = await HttpServer.bind(InternetAddress.anyIPv4, port ?? 0);
     return RemoteLogServer._(httpServer, logger);
   }
 
-  String get url => 'https://${server.address.address}:${server.port}';
+  String get url => 'http://${server.address.address}:${server.port}';
 
   void _handleRequest(HttpRequest request) async {
     var path = request.uri.pathSegments.firstOrNull;
