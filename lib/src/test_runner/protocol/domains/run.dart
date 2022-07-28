@@ -6,7 +6,7 @@ class RunClient {
 
   RunClient(
     Connection connection, {
-    required ScenarioRun Function(RunArgs) create,
+    required TestRun Function(RunArgs) create,
     required void Function(RunArgs) execute,
   }) : _channel = connection.createChannel('TestRun') {
     _channel.registerMethod('create', create);

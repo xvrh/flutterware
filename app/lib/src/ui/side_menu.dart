@@ -148,12 +148,11 @@ class MenuLine extends StatelessWidget {
             child: InkWell(
               borderRadius: borderRadius,
               onTap: onTap,
-              child: Padding(
+              child: Container(
                 padding: EdgeInsets.only(
-                  top: 3,
-                  bottom: 3,
                   left: _leftMargin - _expandIconWidth + indent * 12,
                 ),
+                constraints: BoxConstraints(minHeight: 26),
                 child: Row(
                   children: [
                     SizedBox(
@@ -222,56 +221,6 @@ class _CollapsibleMenuState extends State<CollapsibleMenu> {
           title: widget.title,
           children: [...widget.children, const SizedBox(height: 5)],
         ),
-      ),
-    );
-  }
-}
-
-class LogoTile extends StatelessWidget {
-  final String name;
-  final String version;
-
-  const LogoTile({
-    super.key,
-    required this.name,
-    required this.version,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: FlutterLogo(),
-          ),
-          Text(
-            name,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.only(left: 10),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 5,
-            ),
-            decoration: BoxDecoration(
-              color: const Color(0xFF01579B),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              version,
-              style: const TextStyle(
-                fontSize: 10,
-                color: Colors.white,
-              ),
-            ),
-          )
-        ],
       ),
     );
   }

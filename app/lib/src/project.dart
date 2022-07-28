@@ -1,15 +1,14 @@
 import 'dart:async';
 import 'dart:io';
-
 import 'package:flutter/foundation.dart';
-import 'package:flutterware_app/src/dependencies/model/service.dart';
 import 'package:json_annotation/json_annotation.dart';
 import 'package:path/path.dart' as p;
 import 'package:pubspec_parse/pubspec_parse.dart';
+import 'dependencies/model/service.dart';
 import 'flutter_sdk.dart';
 import 'icon/model/service.dart';
 import 'overview/service.dart';
-import 'test_runner/service.dart';
+import 'test_runner/model/service.dart';
 import 'utils/async_value.dart';
 
 export 'package:pubspec_parse/pubspec_parse.dart' show Pubspec;
@@ -25,8 +24,9 @@ class Project {
   late final info = ProjectInfoService(this);
   late final icons = IconService(this);
   late final dependencies = DependenciesService(this);
+  final Uri? loggerUri;
 
-  Project(String path, this.flutterSdkPath)
+  Project(String path, this.flutterSdkPath, {this.loggerUri})
       : directory = Directory(path),
         _flutterSdk = FlutterSdk(flutterSdkPath);
 

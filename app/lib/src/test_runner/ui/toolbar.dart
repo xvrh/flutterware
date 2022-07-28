@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../ui.dart';
-import '../../utils.dart';
 
 class Toolbar extends StatelessWidget {
   final List<Widget> children;
@@ -63,7 +61,7 @@ const _buttonBackground = Colors.white;
 const _buttonBorderColor = Color(0xffC4C4C4);
 const _textStyle = TextStyle(fontSize: 13, color: Colors.black87);
 
-class ToolbarDropdown<T> extends StatelessWidget {
+class ToolbarDropdown<T extends Object> extends StatelessWidget {
   static const _highlightColor = Color(0xff0000ff);
 
   final T value;
@@ -94,6 +92,7 @@ class ToolbarDropdown<T> extends StatelessWidget {
       ),
       child: DropdownButton<T>(
         value: value,
+        isExpanded: false,
         items: [
           for (var entry in items.entries)
             DropdownMenuItem(
@@ -155,10 +154,11 @@ class ToolbarPicker<T> extends StatelessWidget {
       ),
       actions: [
         TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: Text('CANCEL')),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          child: Text('CANCEL'),
+        ),
       ],
     );
   }
@@ -267,29 +267,18 @@ class _Menu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var theme = Theme.of(context);
     return Align(
       alignment: Alignment.topLeft,
       child: CompositedTransformFollower(
         link: link,
         offset: Offset(-20, 22),
-        child: Material(
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: AppColors.divider, width: 1),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 2,
-                  offset: Offset(1, 1),
-                )
-              ],
-            ),
-            child: GestureDetector(
-              onTap: () {},
-              behavior: HitTestBehavior.opaque,
-              child: child,
-            ),
+        child: Card(
+          color: theme.canvasColor,
+          child: GestureDetector(
+            onTap: () {},
+            behavior: HitTestBehavior.opaque,
+            child: child,
           ),
         ),
       ),

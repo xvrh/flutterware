@@ -54,7 +54,7 @@ class DaemonLogMessageEvent implements Event {
   final String message;
   final String? stackTrace;
 
-  DaemonLogMessageEvent(this.level,  this.message, this.stackTrace);
+  DaemonLogMessageEvent(this.level, this.message, this.stackTrace);
 
   factory DaemonLogMessageEvent.fromJson(Map<String, dynamic> json) =>
       _$DaemonLogMessageEventFromJson(json);

@@ -1,5 +1,5 @@
-import 'package:flutterware_app/src/test_runner/ui/menu_tree.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware_app/src/test_runner/ui/menu_tree.dart';
 
 void main() {
   test('TreePath startsWith', () {

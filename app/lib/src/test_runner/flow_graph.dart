@@ -1,26 +1,24 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:built_collection/built_collection.dart';
-import '../utils.dart';
-import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart' hide InteractiveViewer;
 import 'package:flutter/services.dart';
-import '../utils/assets.dart';
+import 'package:flutterware/internals/test_runner.dart';
+import '../utils.dart';
 import '../utils/graphite.dart';
 import 'detail.dart';
 import 'protocol/api.dart';
 import 'protocol/run.dart';
-import 'screens/screens.dart';
+import 'screenshot_frame.dart';
 import 'toolbar.dart';
-import 'ui/collapse_button.dart';
 import 'ui/interactive_viewer.dart';
 
 class RunView extends StatefulWidget {
   final TestRunnerApi client;
-  final BuiltList<String> scenarioName;
+  final BuiltList<String> testName;
+  final Widget? reloadToolbar;
 
-  RunView(this.client, this.scenarioName)
-      : super(key: Key(scenarioName.join('-')));
+  RunView(this.client, this.testName, {this.reloadToolbar})
+      : super(key: Key(testName.join('-')));
 
   @override
   State<RunView> createState() => _RunViewState();
@@ -53,9 +51,9 @@ class _RunViewState extends State<RunView> {
     var toolbar = ToolBarScope.of(context).parameters;
     _runReference = widget.client.run.start(
       RunArgs(
-        widget.scenarioName,
+        widget.testName,
         device: toolbar.device,
-        language: toolbar.language,
+        locale: toolbar.locale,
         accessibility: toolbar.accessibility,
         imageRatio: 1.0,
       ),
@@ -66,12 +64,11 @@ class _RunViewState extends State<RunView> {
   Widget build(BuildContext context) {
     var run = _runReference;
     var isInDetail = context.router.path.remaining.toString().isNotEmpty;
-    return StreamBuilder<ScenarioRun>(
+    return StreamBuilder<TestRun>(
       stream: run.onUpdated,
       initialData: run.value,
       builder: (context, snapshot) {
         var toolbarScope = ToolBarScope.of(context);
-        var project = toolbarScope.widget.project;
 
         Widget contentWidget;
         if (snapshot.hasError) {
@@ -80,20 +77,17 @@ class _RunViewState extends State<RunView> {
           contentWidget = Container();
         } else {
           var run = snapshot.requireData;
-          if (toolbarScope.isCollapsed) {
-            run = run.collapse();
-          }
           contentWidget = RouterOutlet({
             '': (_) => _FlowMaster(this, run),
-            'detail/:screen': (detail) =>
-                DetailPage(project, run, detail['screen']),
+            'detail/:screen': (detail) => DetailPage(run, detail['screen']),
           });
         }
         var isCompleted = snapshot.data?.isCompleted ?? false;
         var result = snapshot.data?.result;
 
+        var reloadToolbar = widget.reloadToolbar;
         return RunToolbar(
-          project: project,
+          supportedLocales: snapshot.data?.supportedLocales,
           initialParameters: toolbarScope.parameters,
           onChanged: (p) {
             var oldParameters = toolbarScope.parameters;
@@ -108,19 +102,22 @@ class _RunViewState extends State<RunView> {
           },
           leadingActions: [
             if (isCompleted)
-              ElevatedButton(
-                onPressed: () {
-                  if (isInDetail) {
-                    context.go('');
-                  } else {
-                    _refresh();
-                  }
-                },
-                child: Icon(
-                  isInDetail ? Icons.arrow_back : Icons.refresh,
-                  size: 15,
-                ),
-              )
+              if (isInDetail || reloadToolbar == null)
+                ElevatedButton(
+                  onPressed: () {
+                    if (isInDetail) {
+                      context.go('');
+                    } else {
+                      _refresh();
+                    }
+                  },
+                  child: Icon(
+                    isInDetail ? Icons.arrow_back : Icons.refresh,
+                    size: 15,
+                  ),
+                )
+              else
+                reloadToolbar
             else
               ElevatedButton(
                 onPressed: null,
@@ -138,12 +135,6 @@ class _RunViewState extends State<RunView> {
         );
       },
     );
-  }
-
-  void _setCollapsed(bool value) {
-    setState(() {
-      ToolBarScope.of(context).isCollapsed = value;
-    });
   }
 
   @override
@@ -182,51 +173,34 @@ class ResultIcon extends StatelessWidget {
 }
 
 class _FlowMaster extends StatelessWidget {
-  final ScenarioRun run;
+  final TestRun run;
   final _RunViewState parent;
 
   const _FlowMaster(this.parent, this.run, {Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
-        Expanded(
-          child: Stack(
-            children: [
-              Container(
-                color: Colors.black.withOpacity(0.02),
-                child: _FlowGraph(run),
-              ),
-              Positioned(
-                right: 5,
-                top: 5,
-                child: CollapseButton(
-                  isCollapsed: ToolBarScope.of(context).isCollapsed,
-                  onChanged: (v) {
-                    parent._setCollapsed(v);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          color: AppColors.divider,
-          height: 1,
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Text(run.scenario.description ?? ''),
-        ),
+        _FlowGraph(run),
+        //TODO(xha): re-enable with a more powerful feature to filter tags
+        //Positioned(
+        //  right: 5,
+        //  top: 5,
+        //  child: CollapseButton(
+        //    isCollapsed: ToolBarScope.of(context).isCollapsed,
+        //    onChanged: (v) {
+        //      parent._setCollapsed(v);
+        //    },
+        //  ),
+        //),
       ],
     );
   }
 }
 
 class _FlowGraph extends StatefulWidget {
-  final ScenarioRun run;
+  final TestRun run;
 
   const _FlowGraph(this.run, {Key? key}) : super(key: key);
 
@@ -266,13 +240,10 @@ class __FlowGraphState extends State<_FlowGraph> {
   void _fillInput() {
     var screens = widget.run.screens;
     _inputs = screens.values
-        .where((s) => !s.isCollapsed)
         .map((s) => NodeInput(
             id: s.id,
             next: s.next.map((n) {
-              var target = screens[n.to];
-              target ??= screens.values.firstWhere(
-                  (e) => e.collapsedScreens.any((c) => c.id == n.to));
+              var target = screens[n.to]!;
               return target.id;
             }).toList()))
         .toList();
@@ -336,12 +307,14 @@ class __FlowGraphState extends State<_FlowGraph> {
         return p;
       },
       edgeTooltip: (from, to) {
-        var pathName = widget.run.screens[to]!.pathName;
-        if (pathName != null) {
+        var splitName = widget.run.screens[to]!.splitName;
+        if (splitName != null) {
           return EdgeTooltip(
-            pathName,
+            splitName,
             style: TextStyle(
-                color: Colors.blueGrey.withOpacity(0.8), fontSize: 15),
+              color: Colors.blueGrey.withOpacity(0.8),
+              fontSize: 15,
+            ),
           );
         }
         return null;
@@ -357,57 +330,20 @@ class __FlowGraphState extends State<_FlowGraph> {
 }
 
 class _ScreenView extends StatelessWidget {
-  final ScenarioRun run;
+  final TestRun run;
   final Screen screen;
 
   const _ScreenView(this.run, this.screen, {Key? key}) : super(key: key);
 
-  Widget? _widgetForScreen(Screen screen) {
-    return widgetForScreen(run, screen);
-  }
-
   @override
   Widget build(BuildContext context) {
-    var main = _widgetForScreen(screen) ??
-        Container(
-          color: Colors.black12,
-          width: run.args.device.width * run.args.device.pixelRatio,
-          height: run.args.device.height * run.args.device.pixelRatio,
-          alignment: Alignment.center,
-          child: Text(screen.name),
-        );
-
-    var documentationKey = screen.documentationKey;
+    var main = ScreenshotFrame(screen, run.args);
 
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        for (var i = min(3, screen.collapsedScreens.length); i > 0; i--)
-          Transform.translate(
-            offset: Offset(i * 8, i * 8),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                    color: Colors.blueGrey.withOpacity(0.5), width: 1),
-                borderRadius: BorderRadius.circular(20),
-                color: Colors.white,
-              ),
-              width: run.args.device.width * run.args.device.pixelRatio,
-              height: run.args.device.height * run.args.device.pixelRatio,
-              alignment: Alignment.center,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: Opacity(
-                  opacity: 0.5,
-                  child: _widgetForScreen(
-                          screen.collapsedScreens.elementAt(i - 1)) ??
-                      Container(color: Colors.white),
-                ),
-              ),
-            ),
-          ),
         Container(
-          decoration: BoxDecoration(
+          foregroundDecoration: BoxDecoration(
             border: Border.all(color: Colors.blueGrey, width: 2),
             borderRadius: BorderRadius.circular(20),
           ),
@@ -424,59 +360,14 @@ class _ScreenView extends StatelessWidget {
             translation: Offset(0, -1),
             child: Container(
               padding: EdgeInsets.symmetric(vertical: 5),
-              child: Column(
-                children: [
-                  if (documentationKey != null)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Image.asset(
-                          assets.images.confluence.path,
-                          height: 15,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          documentationKey,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: const Color(0xFF0052CC),
-                          ),
-                        ),
-                      ],
-                    ),
-                  Text(
-                    screen.name,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 22, color: Colors.black54),
-                  ),
-                ],
+              child: Text(
+                screen.name,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 22, color: Colors.black54),
               ),
             ),
           ),
         ),
-        if (screen.collapsedScreens.isNotEmpty)
-          Positioned(
-            bottom: 0,
-            right: 10,
-            child: FractionalTranslation(
-              translation: Offset(0, 1),
-              child: Row(
-                children: [
-                  Text(
-                    '+ ${screen.collapsedScreens.length} screen${screen.collapsedScreens.length > 1 ? 's' : ''}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 15,
-                        height: 0.9,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blueAccent,
-                        backgroundColor: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-          ),
       ],
     );
   }

@@ -1,33 +1,29 @@
 import 'dart:math';
-import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
-import '../ui.dart';
-import '../utils.dart';
+import 'package:flutterware/internals/test_runner.dart';
 import 'ui/toolbar.dart';
 
 class ToolbarParameters {
-  final String language;
+  final SerializableLocale locale;
   final DeviceInfo device;
   final AccessibilityConfig accessibility;
 
   ToolbarParameters({
-    required this.language,
+    required this.locale,
     required this.device,
     required this.accessibility,
   });
 
   bool requiresFullRun(ToolbarParameters newConfig) {
-    return newConfig.language != language ||
+    return newConfig.locale != locale ||
         newConfig.device != device ||
         newConfig.accessibility != accessibility;
   }
 }
 
 class ToolBarScope extends StatefulWidget {
-  final ProjectInfo project;
   final Widget child;
-  const ToolBarScope({Key? key, required this.child, required this.project})
-      : super(key: key);
+  const ToolBarScope({Key? key, required this.child}) : super(key: key);
 
   @override
   ToolBarScopeState createState() => ToolBarScopeState();
@@ -39,11 +35,10 @@ class ToolBarScope extends StatefulWidget {
 
 class ToolBarScopeState extends State<ToolBarScope> {
   late ToolbarParameters parameters = ToolbarParameters(
-    language: widget.project.supportedLanguages.first,
+    locale: SerializableLocale('en'),
     device: DeviceInfo.iPhoneX,
     accessibility: AccessibilityConfig.defaultValue,
   );
-  bool isCollapsed = false;
 
   @override
   Widget build(BuildContext context) {
@@ -52,21 +47,21 @@ class ToolBarScopeState extends State<ToolBarScope> {
 }
 
 class RunToolbar extends StatefulWidget {
-  final ProjectInfo project;
   final List<Widget>? leadingActions;
   final List<Widget>? trailingActions;
   final Widget child;
   final ToolbarParameters initialParameters;
   final void Function(ToolbarParameters) onChanged;
+  final Set<SerializableLocale>? supportedLocales;
 
   const RunToolbar({
     Key? key,
     required this.child,
-    required this.project,
     required this.initialParameters,
     required this.onChanged,
     this.leadingActions,
     this.trailingActions,
+    required this.supportedLocales,
   }) : super(key: key);
 
   @override
@@ -74,7 +69,7 @@ class RunToolbar extends StatefulWidget {
 }
 
 class _RunToolbarState extends State<RunToolbar> {
-  late String _language = widget.initialParameters.language;
+  late SerializableLocale _language = widget.initialParameters.locale;
   late DeviceInfo _device = widget.initialParameters.device;
   late AccessibilityConfig _accessibility =
       widget.initialParameters.accessibility;
@@ -84,69 +79,62 @@ class _RunToolbarState extends State<RunToolbar> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.menuBackground,
-            border: Border(
-              bottom: BorderSide(color: AppColors.divider, width: 1),
+        Toolbar(
+          children: [
+            ...?widget.leadingActions,
+            ToolbarDropdown<SerializableLocale>(
+              value: _language,
+              onChanged: (v) {
+                setState(() {
+                  _language = v;
+                });
+                _onChanged();
+              },
+              items: {
+                for (var language
+                    in widget.supportedLocales ?? const <SerializableLocale>[])
+                  language: Text(language.displayString)
+              },
             ),
-          ),
-          child: Toolbar(
-            children: [
-              ...?widget.leadingActions,
-              ToolbarDropdown<String>(
-                value: _language,
+            ToolbarDropdown<DeviceInfo>(
+              value: _device,
+              onChanged: (v) {
+                setState(() {
+                  _device = v;
+                });
+                _onChanged();
+              },
+              items: {
+                for (var value in DeviceInfo.devices) value: Text(value.name)
+              },
+            ),
+            ToolbarPanel(
+              button: Row(
+                children: [
+                  Icon(
+                    Icons.text_fields,
+                    color: Colors.black54,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(_describeAccessibility(_accessibility))
+                ],
+              ),
+              panel: _AccessibilityPanel(
+                initialValue: _accessibility,
                 onChanged: (v) {
                   setState(() {
-                    _language = v;
+                    _accessibility = v;
                   });
                   _onChanged();
                 },
-                items: {
-                  for (var language in widget.project.supportedLanguages)
-                    language: Text(language)
-                },
               ),
-              ToolbarDropdown<DeviceInfo>(
-                value: _device,
-                onChanged: (v) {
-                  setState(() {
-                    _device = v;
-                  });
-                  _onChanged();
-                },
-                items: {
-                  for (var value in DeviceInfo.devices) value: Text(value.name)
-                },
-              ),
-              ToolbarPanel(
-                button: Row(
-                  children: [
-                    Icon(
-                      Icons.text_fields,
-                      color: Colors.black54,
-                    ),
-                    const SizedBox(width: 5),
-                    Text(_describeAccessibility(_accessibility))
-                  ],
-                ),
-                panel: _AccessibilityPanel(
-                  initialValue: _accessibility,
-                  onChanged: (v) {
-                    setState(() {
-                      _accessibility = v;
-                    });
-                    _onChanged();
-                  },
-                ),
-              ),
-              Expanded(
-                child: const SizedBox(),
-              ),
-              ...?widget.trailingActions,
-              // User preferences?
-            ],
-          ),
+            ),
+            Expanded(
+              child: const SizedBox(),
+            ),
+            ...?widget.trailingActions,
+            // User preferences?
+          ],
         ),
         Expanded(
           child: widget.child,
@@ -157,7 +145,7 @@ class _RunToolbarState extends State<RunToolbar> {
 
   void _onChanged() {
     widget.onChanged(ToolbarParameters(
-      language: _language,
+      locale: _language,
       device: _device,
       accessibility: _accessibility,
     ));
@@ -165,13 +153,20 @@ class _RunToolbarState extends State<RunToolbar> {
 }
 
 String _describeAccessibility(AccessibilityConfig config) {
-  if (config.textScale == 1.0 && !config.boldText) return 'Default';
+  var features = <String>[
+    if (config.boldText) 'bold',
+    if (config.highContrast) 'high contrast',
+    if (config.invertColors) 'invert colors',
+  ];
+  if (config.textScale == 1.0 && features.isEmpty) return 'Default';
 
   var buffer = StringBuffer();
   buffer.write('Text ${(config.textScale * 100).round()}%');
-  if (config.boldText) {
-    buffer.write(' (bold)');
+
+  if (features.isNotEmpty) {
+    buffer.write(' (${features.join(', ')})');
   }
+
   return '$buffer';
 }
 
@@ -209,6 +204,8 @@ class _AccessibilityPanelState extends State<_AccessibilityPanel> {
             ),
             _scaleEditor(),
             _boldEditor(),
+            _highContrastEditor(),
+            _invertColorsEditor(),
             ElevatedButton(
               onPressed: () {
                 widget.onChanged(_value);
@@ -299,6 +296,38 @@ class _AccessibilityPanelState extends State<_AccessibilityPanel> {
           onChanged: (v) {
             setState(() {
               _value = _value.rebuild((b) => b.boldText = v);
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _highContrastEditor() {
+    return Row(
+      children: [
+        SizedBox(width: 100, child: Text('High contrast')),
+        Checkbox(
+          value: _value.highContrast,
+          onChanged: (v) {
+            setState(() {
+              _value = _value.rebuild((b) => b.highContrast = v);
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _invertColorsEditor() {
+    return Row(
+      children: [
+        SizedBox(width: 100, child: Text('Invert colors')),
+        Checkbox(
+          value: _value.invertColors,
+          onChanged: (v) {
+            setState(() {
+              _value = _value.rebuild((b) => b.invertColors = v);
             });
           },
         ),

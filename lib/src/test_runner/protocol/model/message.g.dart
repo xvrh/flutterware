@@ -6,9 +6,9 @@ part of 'message.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-const MessageType _$request = const MessageType._('request');
-const MessageType _$response = const MessageType._('response');
-const MessageType _$error = const MessageType._('error');
+const MessageType _$request = MessageType._('request');
+const MessageType _$response = MessageType._('response');
+const MessageType _$error = MessageType._('error');
 
 MessageType _$valueOf(String name) {
   switch (name) {
@@ -19,23 +19,23 @@ MessageType _$valueOf(String name) {
     case 'error':
       return _$error;
     default:
-      throw new ArgumentError(name);
+      throw ArgumentError(name);
   }
 }
 
 final BuiltSet<MessageType> _$values =
-    new BuiltSet<MessageType>(const <MessageType>[
+    BuiltSet<MessageType>(const <MessageType>[
   _$request,
   _$response,
   _$error,
 ]);
 
-Serializers _$messageSerializers = (new Serializers().toBuilder()
+Serializers _$messageSerializers = (Serializers().toBuilder()
       ..add(Message.serializer)
       ..add(MessageType.serializer))
     .build();
-Serializer<Message> _$messageSerializer = new _$MessageSerializer();
-Serializer<MessageType> _$messageTypeSerializer = new _$MessageTypeSerializer();
+Serializer<Message> _$messageSerializer = _$MessageSerializer();
+Serializer<MessageType> _$messageTypeSerializer = _$MessageTypeSerializer();
 
 class _$MessageSerializer implements StructuredSerializer<Message> {
   @override
@@ -83,7 +83,7 @@ class _$MessageSerializer implements StructuredSerializer<Message> {
   @override
   Message deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = new MessageBuilder();
+    final result = MessageBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -160,7 +160,7 @@ class _$Message extends Message {
   final String? serializedParameter3;
 
   factory _$Message([void Function(MessageBuilder)? updates]) =>
-      (new MessageBuilder()..update(updates))._build();
+      (MessageBuilder()..update(updates))._build();
 
   _$Message._(
       {required this.type,
@@ -184,7 +184,7 @@ class _$Message extends Message {
       (toBuilder()..update(updates)).build();
 
   @override
-  MessageBuilder toBuilder() => new MessageBuilder()..replace(this);
+  MessageBuilder toBuilder() => MessageBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -294,7 +294,7 @@ class MessageBuilder implements Builder<Message, MessageBuilder> {
 
   _$Message _build() {
     final _$result = _$v ??
-        new _$Message._(
+        _$Message._(
             type:
                 BuiltValueNullFieldError.checkNotNull(type, 'Message', 'type'),
             id: BuiltValueNullFieldError.checkNotNull(id, 'Message', 'id'),

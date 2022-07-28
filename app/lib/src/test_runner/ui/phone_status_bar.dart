@@ -2,10 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 
-class PhoneStatusBar extends StatefulWidget {
+class PhoneStatusBar extends StatelessWidget {
   final Widget child;
   final String leftText;
-  final Brightness brightness;
+  final Brightness topBrightness;
+  final Brightness bottomBrightness;
   final EdgeInsets viewPadding;
 
   const PhoneStatusBar({
@@ -13,76 +14,40 @@ class PhoneStatusBar extends StatefulWidget {
     required this.child,
     required this.leftText,
     required this.viewPadding,
-    Brightness? brightness,
-  })  : brightness = brightness ?? Brightness.light,
-        super(key: key);
-
-  @override
-  PhoneStatusBarState createState() => PhoneStatusBarState();
-}
-
-class PhoneStatusBarState extends State<PhoneStatusBar> {
-  late Brightness _topBrightness = widget.brightness;
-  late Brightness _bottomBrightness = widget.brightness;
-
-  @override
-  void didUpdateWidget(covariant PhoneStatusBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (widget.brightness != oldWidget.brightness) {
-      _topBrightness = widget.brightness;
-      _bottomBrightness = widget.brightness;
-    }
-  }
+    required this.topBrightness,
+    required this.bottomBrightness,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    Widget bar = _StatusBar(
-      widget,
-      topBrightness: _topBrightness,
-      bottomBrightness: _bottomBrightness,
-    );
+    Widget bar = _StatusBar(this);
 
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Stack(
         children: [
           Positioned.fill(
-            child: widget.child,
+            child: child,
           ),
           bar,
         ],
       ),
     );
   }
-
-  void setBrightness({required Brightness top, required Brightness bottom}) {
-    setState(() {
-      _topBrightness = top;
-      _bottomBrightness = bottom;
-    });
-  }
 }
 
 class _StatusBar extends StatelessWidget {
   final PhoneStatusBar parent;
-  final Brightness topBrightness;
-  final Brightness bottomBrightness;
 
-  const _StatusBar(
-    this.parent, {
-    Key? key,
-    required this.topBrightness,
-    required this.bottomBrightness,
-  }) : super(key: key);
+  const _StatusBar(this.parent, {Key? key}) : super(key: key);
 
   static Color _colorFor(Brightness brightness) =>
       brightness == Brightness.light ? Colors.white : Colors.black;
 
   @override
   Widget build(BuildContext context) {
-    var topColor = _colorFor(topBrightness);
-    var bottomColor = _colorFor(bottomBrightness);
+    var topColor = _colorFor(parent.topBrightness);
+    var bottomColor = _colorFor(parent.bottomBrightness);
 
     return DefaultTextStyle.merge(
       style: TextStyle(

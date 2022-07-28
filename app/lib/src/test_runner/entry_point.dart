@@ -1,9 +1,8 @@
-import 'package:flutterware_app/src/utils/source_code.dart';
-import 'package:path/path.dart' as p;
-
 import 'dart:io';
-
+import 'package:collection/collection.dart';
+import 'package:path/path.dart' as p;
 import '../project.dart';
+import '../utils/source_code.dart';
 
 const _testLocation = 'test_app';
 
@@ -14,7 +13,8 @@ List<TestFile> collectTestFiles(Directory projectRoot) {
     for (var file in testFolder
         .listSync(recursive: true)
         .whereType<File>()
-        .where((f) => f.path.endsWith('_test.dart'))) {
+        .where((f) => f.path.endsWith('_test.dart'))
+        .sortedByCompare((e) => e.path, compareNatural)) {
       // TODO(xha): check for main function?
       files.add(TestFile(projectRoot, file));
     }
@@ -32,7 +32,8 @@ class TestFile {
       p.relative(file.absolute.path, from: projectRoot.absolute.path);
 }
 
-String entryPointCode(Project project, List<TestFile> files, Uri serverUri) {
+String entryPointCode(Project project, List<TestFile> files,
+    {required Uri serverUri, required Uri? loggerUri}) {
   var code = StringBuffer()..writeln('''
 // GENERATED-CODE: Flutterware - Test runner feature
 import 'package:flutterware/internals/test_runner_daemon.dart';
@@ -54,7 +55,10 @@ import 'package:flutterware/internals/test_runner_daemon.dart';
 };
 final _cliServer = Uri.parse('${serverUri.toString()}');
 void main() {
-  runTests(_cliServer, allTests, flutterBinPath: ${escapeDartString(project.flutterSdkPath.flutter)});
+  runTests(_cliServer, allTests, 
+    flutterBinPath: ${escapeDartString(project.flutterSdkPath.flutter)},
+    loggerUri: ${loggerUri == null ? 'null' : 'Uri.parse(${escapeDartString(loggerUri.toString())})'},
+  );
 }
 ''');
   return '$code';

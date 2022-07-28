@@ -3,11 +3,13 @@
 
 A collection of GUI tools for Flutter development.
 
+![screenshot](doc/screenshots/test_visualizer.png)
+
 ## Quick start
 
-Add the `pub`dependency in your `pubspec.yaml`
+Add `flutterware` package in your `pubspec.yaml`
 
-`flutter pub add flutterware`
+`dart pub add flutterware`
 
 ```yaml
 dependencies:
@@ -18,17 +20,15 @@ Run the GUI app
 
 ```shell
 # Run this in your Flutter project directory
-dart run flutterware app
+dart run flutterware
 ```
 The first launch is a bit slow because the desktop app need to be compiled.
 
-**screenshots**
+![screenshot shell](doc/screenshots/shell.png)
 
 ## Features
 
 ### Test visualizer
-
-**screenshots**
 
 A new kind of testing built on top of the standard `flutter_test` framework.
 
@@ -38,9 +38,6 @@ A new kind of testing built on top of the standard `flutter_test` framework.
 - Easier to write tests that exercise the whole app
 - Deploy the tests as a Web page for an internal documentation of the app.
 
-**more screenshots** (code => result)
-*Link to the gallery compiled* 
-
 ### Dependency manager
 
 Overview of your dependencies to monitor the quality.
@@ -48,7 +45,7 @@ Overview of your dependencies to monitor the quality.
 - See Pub & GitHub scores
 - Run `pub upgrade` and preview all changelogs
 
-### App icon change
+### App's icon change
 
 Quickly replace your app's launcher icon.
 

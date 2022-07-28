@@ -1,9 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:collection/collection.dart';
 import 'package:path/path.dart' as p;
 import 'package:pub_semver/pub_semver.dart';
-import 'package:collection/collection.dart';
-
 import 'utils/async_value.dart';
 
 class FlutterSdkPath {
@@ -35,11 +34,12 @@ class FlutterSdkPath {
 
   Map<String, dynamic> toJson() => {'root': root};
 
-  String get flutter =>
-      p.join(root, 'bin', 'flutter${Platform.isWindows ? '.bat' : ''}');
+  String get binDir => p.join(root, 'bin');
 
-  String get dart =>
-      p.join(root, 'bin', 'dart${Platform.isWindows ? '.bat' : ''}');
+  String get flutter =>
+      p.join(binDir, 'flutter${Platform.isWindows ? '.bat' : ''}');
+
+  String get dart => p.join(binDir, 'dart${Platform.isWindows ? '.bat' : ''}');
 
   Future<Version> _readVersion() async {
     var rawVersion = await File(p.join(root, 'version')).readAsString();
@@ -90,7 +90,7 @@ class FlutterSdkPath {
     final whichOrWhere = Platform.isWindows ? 'where' : 'which';
     final fileExtension = Platform.isWindows ? '.exe' : '';
     final process =
-    await Process.run(whichOrWhere, ['$executableName$fileExtension']);
+        await Process.run(whichOrWhere, ['$executableName$fileExtension']);
     if (process.exitCode == 0) {
       final file = File(LineSplitter.split(process.stdout.toString()).first);
       final uri = File(await file.resolveSymbolicLinks()).uri;
@@ -102,7 +102,7 @@ class FlutterSdkPath {
     }
     throw Exception(
         '`$whichOrWhere $executableName` returned unexpected exit code: '
-            '${process.exitCode}.');
+        '${process.exitCode}.');
   }
 }
 

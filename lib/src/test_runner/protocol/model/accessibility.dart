@@ -15,11 +15,31 @@ abstract class AccessibilityConfig
           [void Function(AccessibilityConfigBuilder) updates]) =
       _$AccessibilityConfig;
 
-  factory AccessibilityConfig({double? textScale, bool? boldText}) =>
+  factory AccessibilityConfig(
+          {double? textScale,
+          bool? boldText,
+          bool? accessibleNavigation,
+          bool? disableAnimations,
+          bool? highContrast,
+          bool? invertColors,
+          bool? reduceMotion,
+          bool? onOffSwitchLabels}) =>
       AccessibilityConfig._fromBuilder((b) => b
         ..textScale = textScale ?? 1.0
-        ..boldText = boldText ?? false);
+        ..boldText = boldText ?? false
+        ..accessibleNavigation = accessibleNavigation ?? false
+        ..disableAnimations = disableAnimations ?? false
+        ..highContrast = highContrast ?? false
+        ..invertColors = invertColors ?? false
+        ..reduceMotion = reduceMotion ?? false
+        ..onOffSwitchLabels = onOffSwitchLabels ?? false);
 
   double get textScale;
   bool get boldText;
+  bool get accessibleNavigation;
+  bool get disableAnimations;
+  bool get highContrast;
+  bool get invertColors;
+  bool get reduceMotion;
+  bool get onOffSwitchLabels;
 }

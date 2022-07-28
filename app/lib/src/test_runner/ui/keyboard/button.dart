@@ -8,6 +8,7 @@ class VirtualKeyboardButton extends StatelessWidget {
   const VirtualKeyboardButton({
     required this.backgroundColor,
     required this.child,
+    super.key,
   });
 
   @override

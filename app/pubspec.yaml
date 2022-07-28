@@ -27,7 +27,10 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  analyzer:
   args:
+  async:
+  auto_size_text:
   built_collection:
   collection:
   device_frame:
@@ -51,6 +54,7 @@ dependencies:
   json_annotation:
   logging:
   markdown:
+  meta:
   os_detect:
   package_config:
   package_info_plus:
@@ -64,12 +68,18 @@ dependencies:
     path: ../../pub-scores
   pub_semver:
   pubspec_parse:
+  pubviz:
+    git:
+      url: https://github.com/xvrh/pubviz.git
+      ref: 8c8732b8856ec403a9b91a976aabde8bc0358063
+    #path: ../../pubviz
   rxdart:
   shelf:
   shelf_router:
   shelf_web_socket:
   stream_channel:
   url_launcher:
+  vector_math:
   watcher:
   web_socket_channel:
   yaml:
@@ -80,6 +90,7 @@ dev_dependencies:
     sdk: flutter
   json_serializable:
   lints:
+  test:
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

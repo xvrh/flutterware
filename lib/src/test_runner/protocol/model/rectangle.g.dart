@@ -6,7 +6,7 @@ part of 'rectangle.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<Rectangle> _$rectangleSerializer = new _$RectangleSerializer();
+Serializer<Rectangle> _$rectangleSerializer = _$RectangleSerializer();
 
 class _$RectangleSerializer implements StructuredSerializer<Rectangle> {
   @override
@@ -36,7 +36,7 @@ class _$RectangleSerializer implements StructuredSerializer<Rectangle> {
   @override
   Rectangle deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = new RectangleBuilder();
+    final result = RectangleBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -78,7 +78,7 @@ class _$Rectangle extends Rectangle {
   final double bottom;
 
   factory _$Rectangle([void Function(RectangleBuilder)? updates]) =>
-      (new RectangleBuilder()..update(updates))._build();
+      (RectangleBuilder()..update(updates))._build();
 
   _$Rectangle._(
       {required this.left,
@@ -97,7 +97,7 @@ class _$Rectangle extends Rectangle {
       (toBuilder()..update(updates)).build();
 
   @override
-  RectangleBuilder toBuilder() => new RectangleBuilder()..replace(this);
+  RectangleBuilder toBuilder() => RectangleBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -176,7 +176,7 @@ class RectangleBuilder implements Builder<Rectangle, RectangleBuilder> {
 
   _$Rectangle _build() {
     final _$result = _$v ??
-        new _$Rectangle._(
+        _$Rectangle._(
             left: BuiltValueNullFieldError.checkNotNull(
                 left, 'Rectangle', 'left'),
             top: BuiltValueNullFieldError.checkNotNull(top, 'Rectangle', 'top'),

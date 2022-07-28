@@ -12,10 +12,6 @@ class ProjectHost {
 
   Stream<void> get onReloaded => _onReloadedController.stream;
 
-  Future<ProjectInfo> loadInfo() async {
-    return await _channel.sendRequest<ProjectInfo>('load');
-  }
-
   void _onReloaded() {
     _onReloadedController.add(null);
   }

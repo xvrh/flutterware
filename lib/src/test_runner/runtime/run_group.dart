@@ -3,11 +3,13 @@ import 'package:test_api/src/backend/live_test.dart'; // ignore: implementation_
 import 'package:test_api/src/backend/runtime.dart'; // ignore: implementation_imports
 import 'package:test_api/src/backend/suite.dart'; // ignore: implementation_imports
 import 'package:test_api/src/backend/suite_platform.dart'; // ignore: implementation_imports
-import 'package:test_api/src/backend/test.dart'; // ignore: implementation_imports
+import 'package:test_api/src/backend/test.dart';
 
-Stream<LiveTest> runGroup(Group builtGroup) {
+// ignore: implementation_imports
+
+Future<List<LiveTest>> runGroup(Group builtGroup) async {
   final suite = Suite(builtGroup, SuitePlatform(Runtime.vm));
-  return _runGroup(suite, builtGroup, <Group>[]);
+  return await _runGroup(suite, builtGroup, <Group>[]).toList();
 }
 
 Stream<LiveTest> _runGroup(
@@ -44,9 +46,6 @@ Stream<LiveTest> _runGroup(
 }
 
 Future<LiveTest> _runLiveTest(Suite suiteConfig, LiveTest liveTest) async {
-  await Future<void>.microtask(liveTest.run);
-  // Once the test finishes, use await null to do a coarse-grained event
-  // loop pump to avoid starving non-microtask events.
-  await null;
+  await liveTest.run();
   return liveTest;
 }

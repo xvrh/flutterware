@@ -1,8 +1,6 @@
 import 'dart:io';
-
 import 'package:glob/glob.dart';
 import 'package:glob/list_local_fs.dart';
-
 import '../../utils/cloc/cloc.dart';
 
 CodeMetrics codeMetricsOf(String directory) {

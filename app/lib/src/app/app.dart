@@ -1,10 +1,9 @@
-import 'package:flutterware_app/src/about/screen.dart';
-import 'package:flutterware_app/src/utils/fitted_app.dart';
+import 'package:flutter/material.dart';
+import '../about/screen.dart';
 import '../project.dart';
 import '../ui/theme.dart';
+import '../utils/fitted_app.dart';
 import '../utils/router_outlet.dart';
-import 'package:flutter/material.dart';
-
 import 'project_view.dart';
 
 class SingleProjectApp extends StatelessWidget {

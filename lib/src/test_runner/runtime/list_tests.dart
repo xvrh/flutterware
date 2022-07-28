@@ -1,10 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-
-import '../protocol/model/scenario.dart';
 import 'package:test_api/src/backend/declarer.dart'; // ignore: implementation_imports
-import 'package:test_api/src/backend/group_entry.dart'; // ignore: implementation_imports
 import 'package:test_api/src/backend/group.dart'; // ignore: implementation_imports
-import 'package:test_api/src/backend/test.dart'; // ignore: implementation_imports
+import 'package:test_api/src/backend/group_entry.dart'; // ignore: implementation_imports
+import 'package:test_api/src/backend/test.dart';
+import '../protocol/model/test_reference.dart';
+
+// ignore: implementation_imports
 
 Group findTest(Map<String, void Function()> allTests, String fullTestName) {
   var declarer = Declarer(fullTestName: fullTestName);
@@ -16,10 +17,10 @@ Group findTest(Map<String, void Function()> allTests, String fullTestName) {
   return declarer.build();
 }
 
-Iterable<ScenarioReference> listTests(Map<String, void Function()> allTests) {
+Iterable<TestReference> listTests(Map<String, void Function()> allMains) {
   var declarer = Declarer();
   declarer.declare(() {
-    for (var main in allTests.entries) {
+    for (var main in allMains.entries) {
       group(main.key, main.value);
     }
   });
@@ -27,13 +28,12 @@ Iterable<ScenarioReference> listTests(Map<String, void Function()> allTests) {
   return _listTests([], builtGroup);
 }
 
-Iterable<ScenarioReference> _listTests(
-    List<String> parents, Group group) sync* {
+Iterable<TestReference> _listTests(List<String> parents, Group group) sync* {
   for (var entry in group.entries) {
     var simpleName = _individualName(entry, group);
     var name = [...parents, simpleName];
     if (entry is Test) {
-      yield ScenarioReference(name);
+      yield TestReference(name);
     } else if (entry is Group) {
       yield* _listTests(name, entry);
     } else {

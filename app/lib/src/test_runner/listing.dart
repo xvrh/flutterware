@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:built_collection/built_collection.dart';
 import 'package:collection/collection.dart';
-import '../utils/router_outlet.dart';
-import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterware/internals/test_runner.dart';
+import '../app/paths.dart' as paths;
+import '../utils/router_outlet.dart';
 import 'protocol/api.dart';
 import 'protocol/listing.dart';
 import 'ui/menu_tree.dart';
-import '../app/paths.dart' as paths;
 
 class TestListingView extends StatefulWidget {
   final TestRunnerApi client;
@@ -35,14 +35,14 @@ class _TestListingViewState extends State<TestListingView> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<BuiltMap<BuiltList<String>, ScenarioReference>>(
-      stream: listing.allScenarios,
-      initialData: listing.allScenarios.value,
+    return StreamBuilder<BuiltMap<BuiltList<String>, TestReference>>(
+      stream: listing.allTests,
+      initialData: listing.allTests.value,
       builder: (context, snapshot) {
-        var selectedScenario = context.router.allArgs['testId'];
+        var selectedTest = context.router.allArgs['testId'];
         TreePath? selectedPath;
-        if (selectedScenario != null) {
-          selectedPath = TreePath.fromEncoded(selectedScenario);
+        if (selectedTest != null) {
+          selectedPath = TreePath.fromEncoded(selectedTest);
         }
 
         return MenuTree(
@@ -58,12 +58,11 @@ class _TestListingViewState extends State<TestListingView> {
     );
   }
 
-  List<MenuEntry> _menu(
-      BuiltMap<BuiltList<String>, ScenarioReference> scenarios) {
+  List<MenuEntry> _menu(BuiltMap<BuiltList<String>, TestReference> tests) {
     var entries = <MenuEntry>[];
 
-    for (var scenario in scenarios.entries) {
-      var name = scenario.key;
+    for (var test in tests.entries) {
+      var name = test.key;
       _addToMenu(name.toList(), entries);
     }
 
@@ -93,24 +92,5 @@ class _TestListingViewState extends State<TestListingView> {
   void dispose() {
     _reloadSubscription.cancel();
     super.dispose();
-  }
-}
-
-class ScenarioRow extends StatelessWidget {
-  final TestRunnerApi client;
-
-  final ScenarioReference scenario;
-
-  const ScenarioRow(this.client, this.scenario, {Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      title: Text(scenario.name.join('/')),
-      onTap: () {
-        context.go(
-            'scenario/${Uri.encodeComponent(TreePath(scenario.name.toList()).encoded)}');
-      },
-    );
   }
 }

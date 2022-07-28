@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/utils.dart';
+import '../../utils.dart';
 
 class Breadcrumb extends StatelessWidget {
   final List<Widget> children;

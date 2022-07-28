@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart' as flutter;
 import 'package:logging/logging.dart';
 import 'package:pool/pool.dart';
 import 'package:stream_channel/stream_channel.dart';
+import 'package:test_api/src/backend/group.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../api.dart';
 import '../protocol/connection.dart';
@@ -18,11 +19,10 @@ import 'asset_bundle.dart';
 import 'binding.dart';
 import 'fonts.dart';
 import 'list_tests.dart';
+import 'run_context.dart';
 import 'run_group.dart';
-import 'scenario.dart';
-import 'package:test_api/src/backend/group.dart'; // ignore: implementation_imports
 
-import 'widget_tester.dart'; // ignore: implementation_imports
+// ignore: implementation_imports
 
 final _logger = Logger('runner');
 
@@ -34,37 +34,33 @@ typedef TestCallback = Future<void> Function(WidgetTester);
 
 /// The class responsible to hold all the tests and coordinate the communication
 /// with the server.
-class Runner implements RunContext {
+class Runner {
   final StreamChannel<String> Function() connectionFactory;
-  final Map<String, void Function()> Function() tests;
-  final ProjectInfo project;
-  late final ScenarioBinding _binding;
+  final Map<String, void Function()> Function() mainFunctions;
+  late final TestBinding _binding;
   final void Function()? onConnected;
-  final _runPool = Pool(1);
   ProjectClient? _project;
   RunClient? _runClient;
-  final Future<ScenarioBundle> Function() _bundleFactory;
-  late final ScenarioBundle _bundle;
+  final Future<TestBundle> Function() _bundleFactory;
+  late final TestBundle _bundle;
 
   Runner(this.connectionFactory,
-      {required this.tests,
-      required this.project,
-      required Future<ScenarioBundle> Function() bundle,
+      {required this.mainFunctions,
+      required Future<TestBundle> Function() bundle,
       this.onConnected})
       : _bundleFactory = bundle {
     FlutterError.onError = (error) {
       _logger.severe('FLUTTER ERROR: $error');
     };
 
-    _binding = ScenarioBinding(onReloaded: notifyReloaded);
-    _setup();
+    _binding = TestBinding(onReloaded: notifyReloaded);
   }
 
-  ScenarioBundle get bundle => _bundle;
+  TestBundle get bundle => _bundle;
 
-  ScenarioBinding get binding => _binding;
+  TestBinding get binding => _binding;
 
-  Future<void> _setup() async {
+  Future<void> run() async {
     _bundle = await _bundleFactory();
 
     if (!kIsWeb) {
@@ -97,8 +93,11 @@ class Runner implements RunContext {
   }
 
   void _onConnected(Connection connection) {
-    _project = ProjectClient(connection, load: () => project);
-    ListingClient(connection, list: _list);
+    _project = ProjectClient(connection);
+    ListingClient(connection, list: () {
+      var allMains = mainFunctions();
+      return listTests(allMains);
+    });
     _runClient =
         RunClient(connection, create: _createRun, execute: _executeRun);
 
@@ -110,75 +109,61 @@ class Runner implements RunContext {
     _project?.notifyReloaded();
   }
 
-  Iterable<ScenarioReference> _list() {
-    var allTests = tests();
-    return listTests(allTests);
-  }
-
-  late RunArgs _currentRun;
-
-  AssetBundle get assetBundle => _bundle;
-
-  RunArgs get args => _currentRun;
-
-  @override
-  Future<void> addScreen(/*RunArgs run,*/ NewScreen screen) =>
-      _runClient!.addScreen(_currentRun, screen);
-
   Group? _findTest(Map<String, void Function()> tests, BuiltList<String> name) {
     return findTest(tests, name.join(' '));
   }
 
-  final _currentScenario = <RunArgs, Group>{};
+  final _currentTest = <RunArgs, Group>{};
 
-  ScenarioRun _createRun(RunArgs args) {
-    _logger.fine('RunTest ${args.scenarioName.join('/')}');
-    var allScenario = tests();
-    var scenario = _findTest(allScenario, args.scenarioName);
-    if (scenario == null) {
-      throw Exception('No test ${args.scenarioName.join('/')} found.');
+  TestRun _createRun(RunArgs args) {
+    _logger.fine('RunTest ${args.testName.join('/')}');
+    var allMains = mainFunctions();
+    var test = _findTest(allMains, args.testName);
+    if (test == null) {
+      throw Exception('No test ${args.testName.join('/')} found.');
     }
 
-    var run = ScenarioRun(ScenarioReference(args.scenarioName), args);
-    _currentScenario[args] = scenario;
+    var run = TestRun(TestReference(args.testName), args);
+    _currentTest[args] = test;
     return run;
   }
 
+  final _runPool = Pool(1);
   void _executeRun(RunArgs args) {
-    var runClient = _runClient!;
-    var scenario = _currentScenario[args]!;
-    _currentRun = args;
-    runContext = this;
+    var test = _currentTest[args]!;
 
     _runPool.withResource(() async {
       var stopwatch = Stopwatch()..start();
-      Object? error;
-      StackTrace? stackTrace;
-      try {
-        await runZonedGuarded(() async {
-          await runGroup(scenario).toList();
-        }, (e, s) {
-          error = e;
-          stackTrace = s;
-          _logger.warning('Zone error $e $s');
-        });
-      } catch (e, s) {
-        _logger.warning('Failed to run test', e);
-        error = e;
-        stackTrace = s;
-      } finally {
-        RunResult result;
-        if (error != null) {
-          result = RunResult.error(error!, stackTrace);
-        } else {
-          result = RunResult.success();
-        }
 
-        result = result.rebuild((b) => b..duration = stopwatch.elapsed);
-        await runClient.complete(args, result);
-        _logger.finer('End test ${args.scenarioName} in ${stopwatch.elapsed}');
-        _currentScenario.remove(args);
+      FlutterErrorDetails? error;
+      reportTestException = (errorDetails, testDescription) {
+        error = errorDetails;
+        _logger.severe('Test error $errorDetails');
+      };
+
+      var runClient = _runClient!;
+      var runContext = RunContext(args,
+          addScreen: (screen) => runClient.addScreen(args, screen));
+      await runZonedGuarded(
+        () async => await runGroup(test),
+        zoneValues: {#runContext: runContext},
+        (error, stack) {
+          _logger.info('Zone error $error');
+        },
+      );
+
+      RunResult result;
+      if (error != null) {
+        var errorDetails = error!;
+        result = RunResult.error(errorDetails.exception, errorDetails.stack);
+      } else {
+        result = RunResult.success();
       }
+
+      result = result.rebuild((b) => b..duration = stopwatch.elapsed);
+      await runClient.complete(args, result);
+      _logger.info('End test ${args.testName} in ${stopwatch.elapsed}');
+      _currentTest.remove(args);
     });
   }
 }

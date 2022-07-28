@@ -1,5 +1,4 @@
 import 'package:flutter/widgets.dart';
-
 import 'extract_text.dart';
 
 abstract class TranslationTracker {

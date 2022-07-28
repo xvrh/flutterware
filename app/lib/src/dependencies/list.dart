@@ -1,13 +1,17 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/dependencies/detail.dart';
-import 'package:flutterware_app/src/dependencies/model/service.dart';
-import 'package:flutterware_app/src/dependencies/upgrades.dart';
 import 'package:pub_scores/pub_scores.dart';
+import 'package:pubviz/open.dart' as pubviz;
 import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
-import 'package:collection/collection.dart';
+import '../utils/ui/message_dialog.dart';
+import 'detail.dart';
+import 'model/package_imports.dart';
+import 'model/service.dart';
+import 'upgrades.dart';
+import 'utils.dart';
 
 class DependenciesScreen extends StatefulWidget {
   final Project project;
@@ -21,6 +25,9 @@ class DependenciesScreen extends StatefulWidget {
 class _DependenciesScreenState extends State<DependenciesScreen> {
   final _scrollBucket = PageStorageBucket();
   final _searchController = TextEditingController();
+  bool _withTransitive = false;
+  int _sortIndex = 0;
+  bool _sortAscending = true;
 
   @override
   Widget build(BuildContext context) {
@@ -60,14 +67,20 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
     3: _selectPubScore,
     4: _selectGithubScore,
   };
-  int _sortIndex = 0;
-  bool _sortAscending = true;
-  bool _withTransitive = true;
 
   Project get project => widget.parent.widget.project;
 
   TextEditingController get _searchController =>
       widget.parent._searchController;
+
+  bool get _withTransitive => widget.parent._withTransitive;
+  set _withTransitive(bool v) => widget.parent._withTransitive = v;
+
+  int get _sortIndex => widget.parent._sortIndex;
+  set _sortIndex(int v) => widget.parent._sortIndex = v;
+
+  bool get _sortAscending => widget.parent._sortAscending;
+  set _sortAscending(bool v) => widget.parent._sortAscending = v;
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +108,23 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                   ),
                 ),
                 PopupMenuButton(
+                  elevation: 2,
                   itemBuilder: (context) => [
+                    PopupMenuItem(
+                      child: Text('Visualize in browser'),
+                      onTap: () async {
+                        try {
+                          await withLoader((_) async {
+                            await pubviz.openBrowser(project.absolutePath,
+                                sdkDirectory: project.flutterSdkPath.binDir);
+                          }, message: 'Opening Pubviz in browser...');
+                        } catch (e) {
+                          await showMessageDialog(context,
+                              message: 'Failed to collect dependencies. '
+                                  'Run "flutter pub get" in the project.');
+                        }
+                      },
+                    ),
                     PopupMenuItem(
                       child: Text('Reload'),
                       onTap: () {
@@ -128,7 +157,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
       child: Column(
         children: [
           _header(),
-          _table(dependencies.dependencies.values),
+          _table(dependencies),
         ],
       ),
     );
@@ -140,42 +169,38 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
-          Expanded(child: Text('Show transitive')),
-          Checkbox(value: true, onChanged: (v) {}),
-          SizedBox(
+          Container(
             width: 300,
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: TextFormField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search by name',
-                  prefixIcon: Icon(Icons.search),
-                  suffixIconConstraints: BoxConstraints(minHeight: 30),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          constraints:
-                              BoxConstraints(minHeight: 30, minWidth: 48),
-                          padding: EdgeInsets.zero,
-                          onPressed: () {
-                            setState(() {
-                              _searchController.text = '';
-                            });
-                          },
-                          icon: Icon(Icons.clear),
-                        )
-                      : null,
-                ),
-                onFieldSubmitted: (_) {
-                  setState(() {
-                    // Refresh the table
-                  });
-                },
-                onChanged: (v) {
-                  setState(() {
-                    // Refresh the table
-                  });
-                },
+            padding: const EdgeInsets.all(8.0),
+            child: _searchField(),
+          ),
+          Expanded(child: SizedBox()),
+          InkWell(
+            onTap: () {
+              setState(() {
+                _withTransitive = !_withTransitive;
+              });
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: Colors.black12,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.filter_list, size: 15),
+                  Text('Show all', style: TextStyle(fontSize: 12)),
+                  Checkbox(
+                    value: _withTransitive,
+                    onChanged: (v) {
+                      setState(() {
+                        _withTransitive = v!;
+                      });
+                    },
+                  ),
+                ],
               ),
             ),
           ),
@@ -184,12 +209,48 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
     );
   }
 
-  Widget _table(Iterable<Dependency> dependencies) {
-    var filteredDependencies = dependencies;
+  Widget _searchField() {
+    return TextFormField(
+      controller: _searchController,
+      decoration: InputDecoration(
+        hintText: 'Search by name',
+        prefixIcon: Icon(Icons.search),
+        suffixIconConstraints: BoxConstraints(minHeight: 30),
+        suffixIcon: _searchController.text.isNotEmpty
+            ? IconButton(
+                constraints: BoxConstraints(minHeight: 30, minWidth: 48),
+                padding: EdgeInsets.zero,
+                onPressed: () {
+                  setState(() {
+                    _searchController.text = '';
+                  });
+                },
+                icon: Icon(Icons.clear),
+              )
+            : null,
+      ),
+      onFieldSubmitted: (_) {
+        setState(() {
+          // Refresh the table
+        });
+      },
+      onChanged: (v) {
+        setState(() {
+          // Refresh the table
+        });
+      },
+    );
+  }
+
+  Widget _table(Dependencies dependencies) {
+    var filteredDependencies = dependencies.dependencies;
+    if (!_withTransitive) {
+      filteredDependencies = filteredDependencies.where((d) => d.isDirect);
+    }
     if (_searchController.text.isNotEmpty) {
       var query = _searchController.text.toLowerCase();
-      filteredDependencies =
-          dependencies.where((e) => e.name.toLowerCase().contains(query));
+      filteredDependencies = dependencies.dependencies
+          .where((e) => e.name.toLowerCase().contains(query));
     }
 
     return SizedBox(
@@ -202,78 +263,59 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
           SliverFillRemaining(
             hasScrollBody: false,
             fillOverscroll: true,
-            child: _data(filteredDependencies),
+            child: _data(dependencies, filteredDependencies),
           )
         ],
       ),
     );
   }
 
-  Widget _data(Iterable<Dependency> dependencies) {
+  Widget _data(Dependencies all, Iterable<Dependency> list) {
     return ValueListenableBuilder<Snapshot<PubScores>>(
-        valueListenable: project.dependencies.pubScores,
-        builder: (context, pubScores, child) {
-          var sort = _sorts[_sortIndex]!;
-          var comparator = (Comparable a, Comparable b) => a.compareTo(b);
-          if (!_sortAscending) {
-            comparator = comparator.inverse;
-          }
+      valueListenable: project.dependencies.pubScores,
+      builder: (context, pubScores, child) {
+        var sort = _sorts[_sortIndex]!;
+        var comparator = (Comparable a, Comparable b) => a.compareTo(b);
+        if (!_sortAscending) {
+          comparator = comparator.inverse;
+        }
 
-          var sortedDependencies = dependencies.sortedByCompare<Comparable>(
-              (p) => sort(p, pubScores), comparator);
+        var sortedDependencies = list.sortedByCompare<Comparable>(
+            (p) => sort(p, pubScores), comparator);
 
-          return DataTable(
-            dataRowHeight: _DependencyListScreen._rowHeight,
-            headingRowHeight: _DependencyListScreen._headingHeight,
-            showCheckboxColumn: false,
-            sortColumnIndex: _sortIndex,
-            sortAscending: _sortAscending,
-            columns: [
-              DataColumn(label: Text('Package'), onSort: _onSort),
-              DataColumn(label: Text('Type')),
-              DataColumn(label: Text('Version')),
-              DataColumn(label: Text('Pub'), onSort: _onSort),
-              DataColumn(label: Text('GitHub'), onSort: _onSort),
-            ],
-            rows: [
-              for (var dependency in sortedDependencies)
-                DataRow(
-                  onSelectChanged: (selected) {
-                    context.router.go('packages/${dependency.name}');
-                  },
-                  cells: [
-                    DataCell(
-                      Text(dependency.name),
-                    ),
-                    DataCell(dependency.isTransitive
-                        ? _DependencyTransitiveBadge()
-                        : _DependencyDirectBadge()),
-                    DataCell(
-                      Row(
-                        children: [
-                          Tooltip(
-                            message: "Upgrade available: BREAKING 3.0.0",
-                            child: Row(
-                              children: [
-                                Text(dependency.lockDependency.version),
-                                Icon(Icons.upgrade, size: 15),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    DataCell(
-                      _PubCell(dependency, pubScores.data),
-                    ),
-                    DataCell(
-                      _GithubCell(dependency, pubScores.data),
-                    ),
-                  ],
-                ),
-            ],
-          );
-        });
+        return DataTable(
+          dataRowHeight: _DependencyListScreen._rowHeight,
+          headingRowHeight: _DependencyListScreen._headingHeight,
+          showCheckboxColumn: false,
+          sortColumnIndex: _sortIndex,
+          sortAscending: _sortAscending,
+          columns: [
+            DataColumn(label: Text('Package'), onSort: _onSort),
+            DataColumn(label: Text('Type')),
+            DataColumn(label: Text('Version')),
+            DataColumn(label: Text('Pub'), onSort: _onSort),
+            DataColumn(label: Text('GitHub'), onSort: _onSort),
+          ],
+          rows: [
+            for (var dependency in sortedDependencies)
+              DataRow(
+                onSelectChanged: (selected) {
+                  context.router.go('packages/${dependency.name}');
+                },
+                cells: [
+                  DataCell(Text(dependency.name)),
+                  DataCell(dependency.isTransitive
+                      ? _DependencyTransitiveBadge(dependency)
+                      : _DependencyDirectBadge(project, dependency)),
+                  DataCell(_VersionCell(dependency)),
+                  DataCell(_PubCell(dependency, pubScores.data)),
+                  DataCell(_GithubCell(dependency, pubScores.data)),
+                ],
+              ),
+          ],
+        );
+      },
+    );
   }
 
   static Comparable _selectPackageName(
@@ -317,9 +359,15 @@ class _PubCell extends StatelessWidget {
       if (points != null) '$points point${points > 1 ? 's' : ''}',
     ];
 
-    return Tooltip(
-      message: message.join(' / '),
-      child: Text(popularityString),
+    return InkWell(
+      onTap: () => openPub(dependency),
+      child: Tooltip(
+        message: message.join(' / '),
+        child: Text(
+          popularityString,
+          style: const TextStyle(color: AppColors.blackSecondary),
+        ),
+      ),
     );
   }
 }
@@ -339,38 +387,49 @@ class _GithubCell extends StatelessWidget {
 
     var starCount = github.starCount;
     var forkCount = github.forkCount;
-    return Tooltip(
-      message: '${[
-        '$starCount star${starCount > 1 ? 's' : ''}',
-        '$forkCount fork${forkCount > 1 ? 's' : ''}',
-      ].join(', ')}\n${github.slug}',
-      child: Row(
-        children: [
-          Text('$starCount'),
-          Icon(Icons.star_outline, size: 15),
-        ],
+    return InkWell(
+      onTap: () => openGithub(github),
+      child: Tooltip(
+        message: '${[
+          '$starCount star${starCount > 1 ? 's' : ''}',
+          '$forkCount fork${forkCount > 1 ? 's' : ''}',
+        ].join(', ')}\n${github.slug}',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$starCount',
+              style: const TextStyle(color: AppColors.blackSecondary),
+            ),
+            Icon(Icons.star_outline, size: 15, color: AppColors.blackSecondary),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _DependencyTransitiveBadge extends StatelessWidget {
+  final Dependency dependency;
+
+  const _DependencyTransitiveBadge(this.dependency);
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.black12,
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Tooltip(
-        message: 'http > machin > this one',
+        message: dependency.dependencyPaths
+            .take(3)
+            .map((l) => l.join(' > '))
+            .join('\n'),
         child: Text(
           'Transitive',
-          style: const TextStyle(
-            color: Colors.black26,
-            fontSize: 10,
-          ),
+          style: const TextStyle(fontSize: 12),
         ),
       ),
     );
@@ -378,35 +437,73 @@ class _DependencyTransitiveBadge extends StatelessWidget {
 }
 
 class _DependencyDirectBadge extends StatelessWidget {
+  final Project project;
+  final Dependency dependency;
+
+  const _DependencyDirectBadge(this.project, this.dependency);
+
   @override
   Widget build(BuildContext context) {
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.black26,
-        borderRadius: BorderRadius.circular(5),
+        color: Color(0xfff2f8eb),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Tooltip(
-        message: '3 imports',
-        child: Row(
-          children: [
-            Text('Direct'),
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.blue,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-              child: Text(
-                '2',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                ),
+      child: ValueListenableBuilder<Snapshot<PackageImports>>(
+        valueListenable: project.dependencies.packageImports,
+        builder: (context, snapshot, child) {
+          var packageImports = snapshot.data;
+          var tooltip = '';
+          if (packageImports != null) {
+            var imports = packageImports[dependency.name];
+            tooltip =
+                '${imports.length} import${imports.length > 1 ? 's' : ''}';
+          }
+          return Tooltip(
+            message: tooltip,
+            child: Text(
+              'Direct',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xff618a3d),
               ),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
+  }
+}
+
+class _VersionCell extends StatelessWidget {
+  final Dependency dependency;
+
+  const _VersionCell(this.dependency);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      dependency.pubspec.version?.toString() ?? '',
+      style: const TextStyle(
+        color: AppColors.blackSecondary,
+      ),
+    );
+
+    //TODO(xha): run a dart pub outdated in the background and when ready, display
+    // an icon explaining what is available
+    //return Row(
+    //  children: [
+    //    Tooltip(
+    //      message: "Upgrade available: BREAKING 3.0.0",
+    //      child: Row(
+    //        children: [
+    //          Text(dependency.lockDependency.version),
+    //          Icon(Icons.upgrade, size: 15),
+    //        ],
+    //      ),
+    //    ),
+    //  ],
+    //);
   }
 }

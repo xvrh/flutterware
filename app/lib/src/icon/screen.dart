@@ -1,20 +1,19 @@
 import 'dart:async';
 import 'dart:typed_data';
-
 import 'package:collection/collection.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/app/ui/breadcrumb.dart';
-import 'package:flutterware_app/src/icon/image_provider.dart';
-import 'package:flutterware_app/src/utils/state_extension.dart';
-import 'package:flutterware_app/src/utils/ui/loading.dart';
+import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
+import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../utils/async_value.dart';
+import '../utils/state_extension.dart';
 import '../utils/ui/error_panel.dart';
+import '../utils/ui/loading.dart';
 import '../utils/ui/warning_box.dart';
+import 'image_provider.dart';
 import 'model/icons.dart';
-import 'package:path/path.dart' as p;
 
 class IconScreen extends StatelessWidget {
   final Project project;

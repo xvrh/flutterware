@@ -6,7 +6,7 @@ part of 'run_args.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<RunArgs> _$runArgsSerializer = new _$RunArgsSerializer();
+Serializer<RunArgs> _$runArgsSerializer = _$RunArgsSerializer();
 
 class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
   @override
@@ -20,10 +20,9 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
     final result = <Object?>[
       'id',
       serializers.serialize(object.id, specifiedType: const FullType(int)),
-      'scenarioName',
-      serializers.serialize(object.scenarioName,
-          specifiedType:
-              const FullType(BuiltList, const [const FullType(String)])),
+      'testName',
+      serializers.serialize(object.testName,
+          specifiedType: const FullType(BuiltList, [FullType(String)])),
       'device',
       serializers.serialize(object.device,
           specifiedType: const FullType(DeviceInfo)),
@@ -33,21 +32,24 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
       'imageRatio',
       serializers.serialize(object.imageRatio,
           specifiedType: const FullType(double)),
-      'language',
-      serializers.serialize(object.language,
-          specifiedType: const FullType(String)),
-      'onlyWithDocumentationKey',
-      serializers.serialize(object.onlyWithDocumentationKey,
-          specifiedType: const FullType(bool)),
+      'locale',
+      serializers.serialize(object.locale,
+          specifiedType: const FullType(SerializableLocale)),
     ];
-
+    Object? value;
+    value = object.platformBrightness;
+    if (value != null) {
+      result
+        ..add('platformBrightness')
+        ..add(serializers.serialize(value, specifiedType: const FullType(int)));
+    }
     return result;
   }
 
   @override
   RunArgs deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = new RunArgsBuilder();
+    final result = RunArgsBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -59,10 +61,9 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
           result.id = serializers.deserialize(value,
               specifiedType: const FullType(int))! as int;
           break;
-        case 'scenarioName':
-          result.scenarioName.replace(serializers.deserialize(value,
-                  specifiedType: const FullType(
-                      BuiltList, const [const FullType(String)]))!
+        case 'testName':
+          result.testName.replace(serializers.deserialize(value,
+                  specifiedType: const FullType(BuiltList, [FullType(String)]))!
               as BuiltList<Object?>);
           break;
         case 'device':
@@ -78,13 +79,14 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
           result.imageRatio = serializers.deserialize(value,
               specifiedType: const FullType(double))! as double;
           break;
-        case 'language':
-          result.language = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+        case 'locale':
+          result.locale.replace(serializers.deserialize(value,
+                  specifiedType: const FullType(SerializableLocale))!
+              as SerializableLocale);
           break;
-        case 'onlyWithDocumentationKey':
-          result.onlyWithDocumentationKey = serializers.deserialize(value,
-              specifiedType: const FullType(bool))! as bool;
+        case 'platformBrightness':
+          result.platformBrightness = serializers.deserialize(value,
+              specifiedType: const FullType(int)) as int?;
           break;
       }
     }
@@ -97,7 +99,7 @@ class _$RunArgs extends RunArgs {
   @override
   final int id;
   @override
-  final BuiltList<String> scenarioName;
+  final BuiltList<String> testName;
   @override
   final DeviceInfo device;
   @override
@@ -105,32 +107,29 @@ class _$RunArgs extends RunArgs {
   @override
   final double imageRatio;
   @override
-  final String language;
+  final SerializableLocale locale;
   @override
-  final bool onlyWithDocumentationKey;
+  final int? platformBrightness;
 
   factory _$RunArgs([void Function(RunArgsBuilder)? updates]) =>
-      (new RunArgsBuilder()..update(updates))._build();
+      (RunArgsBuilder()..update(updates))._build();
 
   _$RunArgs._(
       {required this.id,
-      required this.scenarioName,
+      required this.testName,
       required this.device,
       required this.accessibility,
       required this.imageRatio,
-      required this.language,
-      required this.onlyWithDocumentationKey})
+      required this.locale,
+      this.platformBrightness})
       : super._() {
     BuiltValueNullFieldError.checkNotNull(id, 'RunArgs', 'id');
-    BuiltValueNullFieldError.checkNotNull(
-        scenarioName, 'RunArgs', 'scenarioName');
+    BuiltValueNullFieldError.checkNotNull(testName, 'RunArgs', 'testName');
     BuiltValueNullFieldError.checkNotNull(device, 'RunArgs', 'device');
     BuiltValueNullFieldError.checkNotNull(
         accessibility, 'RunArgs', 'accessibility');
     BuiltValueNullFieldError.checkNotNull(imageRatio, 'RunArgs', 'imageRatio');
-    BuiltValueNullFieldError.checkNotNull(language, 'RunArgs', 'language');
-    BuiltValueNullFieldError.checkNotNull(
-        onlyWithDocumentationKey, 'RunArgs', 'onlyWithDocumentationKey');
+    BuiltValueNullFieldError.checkNotNull(locale, 'RunArgs', 'locale');
   }
 
   @override
@@ -138,19 +137,19 @@ class _$RunArgs extends RunArgs {
       (toBuilder()..update(updates)).build();
 
   @override
-  RunArgsBuilder toBuilder() => new RunArgsBuilder()..replace(this);
+  RunArgsBuilder toBuilder() => RunArgsBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
     return other is RunArgs &&
         id == other.id &&
-        scenarioName == other.scenarioName &&
+        testName == other.testName &&
         device == other.device &&
         accessibility == other.accessibility &&
         imageRatio == other.imageRatio &&
-        language == other.language &&
-        onlyWithDocumentationKey == other.onlyWithDocumentationKey;
+        locale == other.locale &&
+        platformBrightness == other.platformBrightness;
   }
 
   @override
@@ -159,24 +158,24 @@ class _$RunArgs extends RunArgs {
         $jc(
             $jc(
                 $jc(
-                    $jc($jc($jc(0, id.hashCode), scenarioName.hashCode),
+                    $jc($jc($jc(0, id.hashCode), testName.hashCode),
                         device.hashCode),
                     accessibility.hashCode),
                 imageRatio.hashCode),
-            language.hashCode),
-        onlyWithDocumentationKey.hashCode));
+            locale.hashCode),
+        platformBrightness.hashCode));
   }
 
   @override
   String toString() {
     return (newBuiltValueToStringHelper('RunArgs')
           ..add('id', id)
-          ..add('scenarioName', scenarioName)
+          ..add('testName', testName)
           ..add('device', device)
           ..add('accessibility', accessibility)
           ..add('imageRatio', imageRatio)
-          ..add('language', language)
-          ..add('onlyWithDocumentationKey', onlyWithDocumentationKey))
+          ..add('locale', locale)
+          ..add('platformBrightness', platformBrightness))
         .toString();
   }
 }
@@ -188,19 +187,18 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
   int? get id => _$this._id;
   set id(int? id) => _$this._id = id;
 
-  ListBuilder<String>? _scenarioName;
-  ListBuilder<String> get scenarioName =>
-      _$this._scenarioName ??= new ListBuilder<String>();
-  set scenarioName(ListBuilder<String>? scenarioName) =>
-      _$this._scenarioName = scenarioName;
+  ListBuilder<String>? _testName;
+  ListBuilder<String> get testName =>
+      _$this._testName ??= ListBuilder<String>();
+  set testName(ListBuilder<String>? testName) => _$this._testName = testName;
 
   DeviceInfoBuilder? _device;
-  DeviceInfoBuilder get device => _$this._device ??= new DeviceInfoBuilder();
+  DeviceInfoBuilder get device => _$this._device ??= DeviceInfoBuilder();
   set device(DeviceInfoBuilder? device) => _$this._device = device;
 
   AccessibilityConfigBuilder? _accessibility;
   AccessibilityConfigBuilder get accessibility =>
-      _$this._accessibility ??= new AccessibilityConfigBuilder();
+      _$this._accessibility ??= AccessibilityConfigBuilder();
   set accessibility(AccessibilityConfigBuilder? accessibility) =>
       _$this._accessibility = accessibility;
 
@@ -208,14 +206,15 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
   double? get imageRatio => _$this._imageRatio;
   set imageRatio(double? imageRatio) => _$this._imageRatio = imageRatio;
 
-  String? _language;
-  String? get language => _$this._language;
-  set language(String? language) => _$this._language = language;
+  SerializableLocaleBuilder? _locale;
+  SerializableLocaleBuilder get locale =>
+      _$this._locale ??= SerializableLocaleBuilder();
+  set locale(SerializableLocaleBuilder? locale) => _$this._locale = locale;
 
-  bool? _onlyWithDocumentationKey;
-  bool? get onlyWithDocumentationKey => _$this._onlyWithDocumentationKey;
-  set onlyWithDocumentationKey(bool? onlyWithDocumentationKey) =>
-      _$this._onlyWithDocumentationKey = onlyWithDocumentationKey;
+  int? _platformBrightness;
+  int? get platformBrightness => _$this._platformBrightness;
+  set platformBrightness(int? platformBrightness) =>
+      _$this._platformBrightness = platformBrightness;
 
   RunArgsBuilder();
 
@@ -223,12 +222,12 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
     final $v = _$v;
     if ($v != null) {
       _id = $v.id;
-      _scenarioName = $v.scenarioName.toBuilder();
+      _testName = $v.testName.toBuilder();
       _device = $v.device.toBuilder();
       _accessibility = $v.accessibility.toBuilder();
       _imageRatio = $v.imageRatio;
-      _language = $v.language;
-      _onlyWithDocumentationKey = $v.onlyWithDocumentationKey;
+      _locale = $v.locale.toBuilder();
+      _platformBrightness = $v.platformBrightness;
       _$v = null;
     }
     return this;
@@ -252,30 +251,29 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
     _$RunArgs _$result;
     try {
       _$result = _$v ??
-          new _$RunArgs._(
+          _$RunArgs._(
               id: BuiltValueNullFieldError.checkNotNull(id, 'RunArgs', 'id'),
-              scenarioName: scenarioName.build(),
+              testName: testName.build(),
               device: device.build(),
               accessibility: accessibility.build(),
               imageRatio: BuiltValueNullFieldError.checkNotNull(
                   imageRatio, 'RunArgs', 'imageRatio'),
-              language: BuiltValueNullFieldError.checkNotNull(
-                  language, 'RunArgs', 'language'),
-              onlyWithDocumentationKey: BuiltValueNullFieldError.checkNotNull(
-                  onlyWithDocumentationKey,
-                  'RunArgs',
-                  'onlyWithDocumentationKey'));
+              locale: locale.build(),
+              platformBrightness: platformBrightness);
     } catch (_) {
       late String _$failedField;
       try {
-        _$failedField = 'scenarioName';
-        scenarioName.build();
+        _$failedField = 'testName';
+        testName.build();
         _$failedField = 'device';
         device.build();
         _$failedField = 'accessibility';
         accessibility.build();
+
+        _$failedField = 'locale';
+        locale.build();
       } catch (e) {
-        throw new BuiltValueNestedFieldError(
+        throw BuiltValueNestedFieldError(
             'RunArgs', _$failedField, e.toString());
       }
       rethrow;

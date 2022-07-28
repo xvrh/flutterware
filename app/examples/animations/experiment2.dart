@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 //  - generate a main() file. ie: main() => runAnimationPreview(MyScreenToAnimate());
 //  - Tool, start the file ("flutter run -d xxx")
 //        => allow to run it on phone or desktop
-//  -   runPreview, connect back to the editor and get updates
+//  - runPreview, connect back to the editor and get updates
 //  - Tool show the editor and send animation info (with current position)
 //     in real time to the device.
 //    Animation type: opacity, translation, scale, rotation, anchor, text
@@ -42,7 +42,6 @@ class AnimatableWidget extends StatelessWidget {
     return Container();
   }
 }
-
 
 // Generated
 class TimelineGenerated extends StatelessWidget {

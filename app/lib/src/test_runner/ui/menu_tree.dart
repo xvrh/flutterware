@@ -1,7 +1,6 @@
 import 'package:collection/collection.dart';
-import 'package:flutter/material.dart';
-
-import '../../utils.dart';
+import 'package:flutter/widgets.dart';
+import '../../ui/side_menu.dart';
 
 class MenuTree extends StatefulWidget {
   final List<MenuEntry> entries;
@@ -98,11 +97,10 @@ class _MenuTreeState extends State<MenuTree> {
     return Column(
       children: [
         for (var line in _visibleLines)
-          _LineView(
-            line,
-            expanded: _expanded.contains(line.path),
-            selected: widget.selected == line.path,
-            extraDepth: widget.extraDepth,
+          MenuLine(
+            expanded: line.isLeaf ? null : _expanded.contains(line.path),
+            isSelected: widget.selected == line.path,
+            indent: line.depth + widget.extraDepth,
             onTap: () {
               if (!line.isLeaf) {
                 setState(() {
@@ -117,12 +115,14 @@ class _MenuTreeState extends State<MenuTree> {
                 widget.onSelected(line.path);
               }
             },
+            child: Text(line.entry.text),
           ),
       ],
     );
   }
 }
 
+/*
 class _LineView extends StatelessWidget {
   final _Line line;
   final bool expanded;
@@ -176,7 +176,7 @@ class _LineView extends StatelessWidget {
     );
   }
 }
-
+*/
 class MenuEntry {
   final List<MenuEntry>? children;
   final String text;

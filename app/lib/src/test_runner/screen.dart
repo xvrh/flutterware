@@ -1,55 +1,79 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/test_runner/app_connected.dart';
-import 'package:flutterware_app/src/utils/router_outlet.dart';
-
-import '../app/project_view.dart';
 import '../project.dart';
-import 'menu.dart';
+import '../utils/router_outlet.dart';
+import 'app_connected.dart';
+import 'daemon_toolbar.dart';
+import 'help.dart';
+import 'model/daemon.dart' show MessageLevel;
 import 'protocol/api.dart';
 
-class TestRunnerScreen extends StatelessWidget {
+class TestRunnerScreen extends StatefulWidget {
   final Project project;
 
   const TestRunnerScreen(this.project, {super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        DaemonToolbar(project),
-        Expanded(
-          child: RouterOutlet(
-            {
-              '': (r) => _HomeScreen(),
-              'run': (r) => _RunScreen(project),
-            },
-            onNotFound: (r) => '',
-          ),
-        ),
-      ],
-    );
-  }
+  State<TestRunnerScreen> createState() => _TestRunnerScreenState();
 }
 
-class _HomeScreen extends StatelessWidget {
-  const _HomeScreen({super.key});
+class _TestRunnerScreenState extends State<TestRunnerScreen> {
+  late StreamSubscription _messageSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _messageSubscription = widget.project.tests.daemonMessage.listen((event) {
+      Color background, foreground;
+      switch (event.type) {
+        case MessageLevel.info:
+          background = Colors.black12;
+          foreground = Colors.black87;
+          break;
+        case MessageLevel.warning:
+          background = Colors.orange;
+          foreground = Colors.black87;
+          break;
+        case MessageLevel.error:
+          background = Colors.red;
+          foreground = Colors.white;
+          break;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            event.message,
+            style: TextStyle(color: foreground),
+          ),
+          backgroundColor: background,
+        ),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Text('''Explain app test feature
-Link to doc
-Button "add a test"
-Screenshot of expected workflow    
-        
-''');
+    return RouterOutlet(
+      {
+        'home': (r) => HelpScreen(),
+        'run': (r) => _RunScreen(widget.project),
+      },
+      onNotFound: (r) => 'home',
+    );
+  }
+
+  @override
+  void dispose() {
+    _messageSubscription.cancel();
+    super.dispose();
   }
 }
 
 class _RunScreen extends StatelessWidget {
   final Project project;
 
-  const _RunScreen(this.project, {super.key});
+  const _RunScreen(this.project);
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +84,8 @@ class _RunScreen extends StatelessWidget {
         var clients = snapshot.requireData;
         if (clients.isNotEmpty) {
           var client = clients.last;
-          return ConnectedScreen(client);
+          return TestRunView(client,
+              reloadToolbar: SmallDaemonToolbar(project));
         }
         return Center(child: CircularProgressIndicator());
       },

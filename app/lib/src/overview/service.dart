@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutterware_app/src/overview/model/assets.dart';
-import 'package:flutterware_app/src/overview/model/code_metrics.dart';
-import 'package:flutterware_app/src/utils/async_value.dart';
+import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 import '../project.dart';
-import '../utils/cloc/cloc.dart';
-import 'package:path/path.dart' as p;
+import '../utils/async_value.dart';
+import 'model/assets.dart';
+import 'model/code_metrics.dart';
 
 class ProjectInfoService {
   final Project project;
@@ -59,8 +58,10 @@ class ProjectInfoService {
   Future<CodeMetrics> _loadCodeMetrics() async {
     return compute<String, CodeMetrics>(codeMetricsOf, project.absolutePath);
   }
+
   Future<AssetsReport> _loadAssetsMetrics() async {
-    return compute<String, AssetsReport>(createAssetReport, project.absolutePath);
+    return compute<String, AssetsReport>(
+        createAssetReport, project.absolutePath);
   }
 
   void dispose() {

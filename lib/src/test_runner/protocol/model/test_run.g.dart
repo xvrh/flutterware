@@ -1,0 +1,216 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'test_run.dart';
+
+// **************************************************************************
+// BuiltValueGenerator
+// **************************************************************************
+
+Serializer<TestRun> _$testRunSerializer = _$TestRunSerializer();
+
+class _$TestRunSerializer implements StructuredSerializer<TestRun> {
+  @override
+  final Iterable<Type> types = const [TestRun, _$TestRun];
+  @override
+  final String wireName = 'TestRun';
+
+  @override
+  Iterable<Object?> serialize(Serializers serializers, TestRun object,
+      {FullType specifiedType = FullType.unspecified}) {
+    final result = <Object?>[
+      'test',
+      serializers.serialize(object.test,
+          specifiedType: const FullType(TestReference)),
+      'args',
+      serializers.serialize(object.args,
+          specifiedType: const FullType(RunArgs)),
+      'screens',
+      serializers.serialize(object.screens,
+          specifiedType:
+              const FullType(BuiltMap, [FullType(String), FullType(Screen)])),
+    ];
+    Object? value;
+    value = object.result;
+    if (value != null) {
+      result
+        ..add('result')
+        ..add(serializers.serialize(value,
+            specifiedType: const FullType(RunResult)));
+    }
+    return result;
+  }
+
+  @override
+  TestRun deserialize(Serializers serializers, Iterable<Object?> serialized,
+      {FullType specifiedType = FullType.unspecified}) {
+    final result = TestRunBuilder();
+
+    final iterator = serialized.iterator;
+    while (iterator.moveNext()) {
+      final key = iterator.current! as String;
+      iterator.moveNext();
+      final Object? value = iterator.current;
+      switch (key) {
+        case 'test':
+          result.test.replace(serializers.deserialize(value,
+              specifiedType: const FullType(TestReference))! as TestReference);
+          break;
+        case 'args':
+          result.args.replace(serializers.deserialize(value,
+              specifiedType: const FullType(RunArgs))! as RunArgs);
+          break;
+        case 'screens':
+          result.screens.replace(serializers.deserialize(value,
+              specifiedType: const FullType(
+                  BuiltMap, [FullType(String), FullType(Screen)]))!);
+          break;
+        case 'result':
+          result.result.replace(serializers.deserialize(value,
+              specifiedType: const FullType(RunResult))! as RunResult);
+          break;
+      }
+    }
+
+    return result.build();
+  }
+}
+
+class _$TestRun extends TestRun {
+  @override
+  final TestReference test;
+  @override
+  final RunArgs args;
+  @override
+  final BuiltMap<String, Screen> screens;
+  @override
+  final RunResult? result;
+
+  factory _$TestRun([void Function(TestRunBuilder)? updates]) =>
+      (TestRunBuilder()..update(updates))._build();
+
+  _$TestRun._(
+      {required this.test,
+      required this.args,
+      required this.screens,
+      this.result})
+      : super._() {
+    BuiltValueNullFieldError.checkNotNull(test, 'TestRun', 'test');
+    BuiltValueNullFieldError.checkNotNull(args, 'TestRun', 'args');
+    BuiltValueNullFieldError.checkNotNull(screens, 'TestRun', 'screens');
+  }
+
+  @override
+  TestRun rebuild(void Function(TestRunBuilder) updates) =>
+      (toBuilder()..update(updates)).build();
+
+  @override
+  TestRunBuilder toBuilder() => TestRunBuilder()..replace(this);
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(other, this)) return true;
+    return other is TestRun &&
+        test == other.test &&
+        args == other.args &&
+        screens == other.screens &&
+        result == other.result;
+  }
+
+  @override
+  int get hashCode {
+    return $jf($jc(
+        $jc($jc($jc(0, test.hashCode), args.hashCode), screens.hashCode),
+        result.hashCode));
+  }
+
+  @override
+  String toString() {
+    return (newBuiltValueToStringHelper('TestRun')
+          ..add('test', test)
+          ..add('args', args)
+          ..add('screens', screens)
+          ..add('result', result))
+        .toString();
+  }
+}
+
+class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
+  _$TestRun? _$v;
+
+  TestReferenceBuilder? _test;
+  TestReferenceBuilder get test => _$this._test ??= TestReferenceBuilder();
+  set test(TestReferenceBuilder? test) => _$this._test = test;
+
+  RunArgsBuilder? _args;
+  RunArgsBuilder get args => _$this._args ??= RunArgsBuilder();
+  set args(RunArgsBuilder? args) => _$this._args = args;
+
+  MapBuilder<String, Screen>? _screens;
+  MapBuilder<String, Screen> get screens =>
+      _$this._screens ??= MapBuilder<String, Screen>();
+  set screens(MapBuilder<String, Screen>? screens) => _$this._screens = screens;
+
+  RunResultBuilder? _result;
+  RunResultBuilder get result => _$this._result ??= RunResultBuilder();
+  set result(RunResultBuilder? result) => _$this._result = result;
+
+  TestRunBuilder();
+
+  TestRunBuilder get _$this {
+    final $v = _$v;
+    if ($v != null) {
+      _test = $v.test.toBuilder();
+      _args = $v.args.toBuilder();
+      _screens = $v.screens.toBuilder();
+      _result = $v.result?.toBuilder();
+      _$v = null;
+    }
+    return this;
+  }
+
+  @override
+  void replace(TestRun other) {
+    ArgumentError.checkNotNull(other, 'other');
+    _$v = other as _$TestRun;
+  }
+
+  @override
+  void update(void Function(TestRunBuilder)? updates) {
+    if (updates != null) updates(this);
+  }
+
+  @override
+  TestRun build() => _build();
+
+  _$TestRun _build() {
+    _$TestRun _$result;
+    try {
+      _$result = _$v ??
+          _$TestRun._(
+              test: test.build(),
+              args: args.build(),
+              screens: screens.build(),
+              result: _result?.build());
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'test';
+        test.build();
+        _$failedField = 'args';
+        args.build();
+        _$failedField = 'screens';
+        screens.build();
+        _$failedField = 'result';
+        _result?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+            'TestRun', _$failedField, e.toString());
+      }
+      rethrow;
+    }
+    replace(_$result);
+    return _$result;
+  }
+}
+
+// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new

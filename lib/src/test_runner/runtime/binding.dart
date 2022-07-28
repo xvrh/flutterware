@@ -2,10 +2,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-class ScenarioBinding extends AutomatedTestWidgetsFlutterBinding {
+class TestBinding extends AutomatedTestWidgetsFlutterBinding {
   final void Function()? onReloaded;
 
-  ScenarioBinding({this.onReloaded});
+  TestBinding({this.onReloaded});
 
   @override
   void initInstances() {
@@ -19,16 +19,19 @@ class ScenarioBinding extends AutomatedTestWidgetsFlutterBinding {
   /// need the binding to be constructed before calling [testWidgets],
   /// you can ensure a binding has been constructed by calling the
   /// [TestWidgetsFlutterBinding.ensureInitialized] function.
-  static ScenarioBinding get instance => BindingBase.checkInstance(_instance);
-  static ScenarioBinding? _instance;
+  static TestBinding get instance => BindingBase.checkInstance(_instance);
+  static TestBinding? _instance;
 
-  static ScenarioBinding ensureInitialized() {
-    if (ScenarioBinding._instance == null) ScenarioBinding();
-    return ScenarioBinding.instance;
+  static TestBinding ensureInitialized() {
+    if (TestBinding._instance == null) TestBinding();
+    return TestBinding.instance;
   }
 
   @override
   bool get overrideHttpClient => false;
+
+  @override
+  bool get disableShadows => false;
 
   @override
   Future<void> performReassemble() {

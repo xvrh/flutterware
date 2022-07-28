@@ -7,8 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:glob/glob.dart';
 import 'package:glob/list_local_fs.dart';
 import 'package:image/image.dart';
-import 'package:pool/pool.dart';
 import 'package:path/path.dart' as p;
+import 'package:pool/pool.dart';
 
 class IconPlatform {
   static final android = IconPlatform('Android', [
@@ -131,7 +131,8 @@ class AppIcons {
     try {
       var originalImage =
           decodeImage(data) ?? (throw Exception('Fail to load image'));
-      var preview = copyResize(originalImage, width: size, height: size, interpolation: Interpolation.linear);
+      var preview = copyResize(originalImage,
+          width: size, height: size, interpolation: Interpolation.linear);
 
       return AppIcon(
         ByteData.view(preview.getBytes().buffer),

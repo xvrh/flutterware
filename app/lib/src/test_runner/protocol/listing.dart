@@ -1,22 +1,22 @@
 import 'package:built_collection/built_collection.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:flutterware/internals/test_runner.dart';
+import 'package:rxdart/rxdart.dart';
 
 class ListingHost {
   final Channel _channel;
-  final allScenarios =
-      BehaviorSubject<BuiltMap<BuiltList<String>, ScenarioReference>>.seeded(
+  final allTests =
+      BehaviorSubject<BuiltMap<BuiltList<String>, TestReference>>.seeded(
           BuiltMap());
 
   ListingHost(Connection connection)
       : _channel = connection.createChannel('Listing');
 
   void list() async {
-    var result = (await _channel.sendRequest<BuiltList>('list'))
-        .cast<ScenarioReference>();
+    var result =
+        (await _channel.sendRequest<BuiltList>('list')).cast<TestReference>();
 
-    var oldMap = allScenarios.value;
-    var newScenarios = oldMap.rebuild((b) {
+    var oldMap = allTests.value;
+    var newTests = oldMap.rebuild((b) {
       b.clear();
       for (var newEntry in result) {
         var oldEntry = oldMap[newEntry.name];
@@ -28,10 +28,10 @@ class ListingHost {
         }
       }
     });
-    allScenarios.add(newScenarios);
+    allTests.add(newTests);
   }
 
   void dispose() {
-    allScenarios.close();
+    allTests.close();
   }
 }

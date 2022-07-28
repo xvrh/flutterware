@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/overview/service.dart';
-import 'package:flutterware_app/src/utils/router_outlet.dart';
+import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 import '../app/paths.dart' as paths;
+import '../icon/image_provider.dart';
 import '../icon/model/service.dart';
 import '../project.dart';
 import '../ui/colors.dart';
 import '../utils/async_value.dart';
-import 'package:path/path.dart' as p;
-
-import '../icon/image_provider.dart';
+import '../utils/router_outlet.dart';
 import 'metrics_card.dart';
+import 'service.dart';
 
 class OverviewScreen extends StatelessWidget {
   final Project project;
@@ -210,13 +209,13 @@ class _ToolsCard extends StatelessWidget {
             _Link(
                 'Pub dependencies overview', '/project/${paths.dependencies}'),
             _Link('Hot-reloadable, visual test runner',
-                '/project/${paths.tests}'),
-            Text('• Widget preview: build UI in isolation (WIP)'),
+                '/project/${paths.tests}/home'),
+            Text('• Widgets preview: build UI in isolation (WIP)'),
             Text('• Assets management (WIP)'),
             Text('• Path & drawing (WIP)'),
             Text('• Animation editor (WIP)'),
             Text('• Theme editor (WIP)'),
-            Text('• Translation synchronisation (WIP)'),
+            Text('• Translations synchronisation (WIP)'),
           ],
         ),
       ),

@@ -252,6 +252,10 @@ class CustomExpansionTile extends StatefulWidget {
   /// which means that the expansion arrow icon will appear on the tile's trailing edge.
   final ListTileControlAffinity? controlAffinity;
 
+  static ExpansionTileState of(BuildContext context) {
+    return context.findAncestorStateOfType<ExpansionTileState>()!;
+  }
+
   @override
   State<CustomExpansionTile> createState() => ExpansionTileState();
 }

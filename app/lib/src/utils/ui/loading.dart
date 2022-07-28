@@ -115,6 +115,7 @@ OverlayEntry _showLoading(BuildContext context, Widget content) {
   var entry = OverlayEntry(builder: (context) {
     return Container(
       alignment: Alignment.center,
+      color: Colors.black12,
       child: content,
     );
   });
