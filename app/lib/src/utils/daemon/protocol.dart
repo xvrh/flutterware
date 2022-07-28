@@ -33,16 +33,11 @@ class DaemonProtocol {
   DaemonProtocol(this.write, this.read) {
     _subscription = read.listen((event) {
       _logger.finer('Daemon: $event');
-      if (event.startsWith('[{') && event.endsWith('}]')) {
-        var content = jsonDecode(event) as List;
-        var object = content.first as Map<String, dynamic>;
-        var eventName = object['event'] as String?;
-        if (eventName != null) {
-          var params = object['params'] as Map<String, dynamic>;
-          var decodedEvent = Event.decode(eventName, params);
-          if (decodedEvent != null) {
-            _eventController.add(decodedEvent);
-          }
+      var object = tryReadLine(event);
+      if (object != null) {
+        var decodedEvent = tryReadEvent(object);
+        if (decodedEvent != null) {
+          _eventController.add(decodedEvent);
         } else {
           var id = object['id'] as int?;
           if (id != null) {
@@ -57,6 +52,24 @@ class DaemonProtocol {
     }, onDone: () {
       _eventController.close();
     });
+  }
+
+  static Map<String, dynamic>? tryReadLine(String line) {
+    if (line.startsWith('[{') && line.endsWith('}]')) {
+      var content = jsonDecode(line) as List;
+      return content.first as Map<String, dynamic>;
+    }
+    return null;
+  }
+
+  static Event? tryReadEvent(Map<String, dynamic> object) {
+    var eventName = object['event'] as String?;
+    if (eventName != null) {
+      var params = object['params'] as Map<String, dynamic>;
+      var decodedEvent = Event.decode(eventName, params);
+      return decodedEvent;
+    }
+    return null;
   }
 
   Stream<Event> get onEvent => _eventController.stream;

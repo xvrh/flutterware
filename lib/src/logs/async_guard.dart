@@ -89,7 +89,7 @@ Future<T> asyncGuard<T>(
                         'or a binary function accepting an Object and '
                         'StackTrace. onError must return a T');
   }
-  final Completer<T> completer = Completer<T>();
+  final completer = Completer<T>();
 
   void handleError(Object e, StackTrace s) {
     if (completer.isCompleted) {
@@ -108,7 +108,7 @@ Future<T> asyncGuard<T>(
 
   runZoned<void>(() async {
     try {
-      final T result = await fn();
+      final result = await fn();
       if (!completer.isCompleted) {
         completer.complete(result);
       }

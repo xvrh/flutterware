@@ -2,7 +2,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutterware/src/test_runner/protocol/models.dart';
-import 'package:flutterware/src/test_runner/runtime/widget_tester_screenshot.dart';
 
 import '../../../flutter_test.dart';
 import 'fake_window_padding.dart';

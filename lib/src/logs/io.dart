@@ -48,6 +48,7 @@ class Stdio {
     );
     return _stdout!;
   }
+  //ignore: close_sinks
   io.Stdout? _stdout;
 
   @visibleForTesting
@@ -62,6 +63,7 @@ class Stdio {
     );
     return _stderr!;
   }
+  //ignore: close_sinks
   io.IOSink? _stderr;
 
   bool get hasTerminal => io.stdout.hasTerminal;
@@ -81,12 +83,12 @@ class Stdio {
     if (stdin is! io.Stdin) {
       return _stdinHasTerminal = false;
     }
-    final io.Stdin ioStdin = stdin as io.Stdin;
+    final ioStdin = stdin as io.Stdin;
     if (!ioStdin.hasTerminal) {
       return _stdinHasTerminal = false;
     }
     try {
-      final bool currentEchoMode = ioStdin.echoMode;
+      final currentEchoMode = ioStdin.echoMode;
       ioStdin.echoMode = !currentEchoMode;
       ioStdin.echoMode = currentEchoMode;
     } on io.StdinException {

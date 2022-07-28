@@ -399,7 +399,7 @@ class DelegatingLogger implements Logger {
 /// Throws a [StateError] if no matching delegate is found.
 @override
 T asLogger<T extends Logger>(Logger logger) {
-  final Logger original = logger;
+  final original = logger;
   while (true) {
     if (logger is T) {
       return logger;
@@ -646,15 +646,15 @@ void _generateBox({
   required Terminal terminal,
   String? title,
 }) {
-  const int kPaddingLeftRight = 1;
-  const int kEdges = 2;
+  const  kPaddingLeftRight = 1;
+  const  kEdges = 2;
 
-  final int maxTextWidthPerLine = wrapColumn - kEdges - kPaddingLeftRight * 2;
-  final List<String> lines = wrapText(message, shouldWrap: true, columnWidth: maxTextWidthPerLine).split('\n');
-  final List<int> lineWidth = lines.map((String line) => _getColumnSize(line)).toList();
-  final int maxColumnSize = lineWidth.reduce((int currLen, int maxLen) => max(currLen, maxLen));
-  final int textWidth = min(maxColumnSize, maxTextWidthPerLine);
-  final int textWithPaddingWidth = textWidth + kPaddingLeftRight * 2;
+  final  maxTextWidthPerLine = wrapColumn - kEdges - kPaddingLeftRight * 2;
+  final lines = wrapText(message, shouldWrap: true, columnWidth: maxTextWidthPerLine).split('\n');
+  final  lineWidth = lines.map((String line) => _getColumnSize(line)).toList();
+  final  maxColumnSize = lineWidth.reduce((int currLen, int maxLen) => max(currLen, maxLen));
+  final  textWidth = min(maxColumnSize, maxTextWidthPerLine);
+  final  textWithPaddingWidth = textWidth + kPaddingLeftRight * 2;
 
   write('\n');
 
@@ -671,11 +671,11 @@ void _generateBox({
   write('\n');
 
   // Write `│ [message] │`.
-  for (int lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+  for (var lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     write('│');
     write(' ' * kPaddingLeftRight);
     write(lines[lineIdx]);
-    final int remainingSpacesToEnd = textWidth - lineWidth[lineIdx];
+    final  remainingSpacesToEnd = textWidth - lineWidth[lineIdx];
     write(' ' * (remainingSpacesToEnd + kPaddingLeftRight));
     write('│');
     write('\n');
@@ -713,7 +713,7 @@ class WindowsStdoutLogger extends StdoutLogger {
 
   @override
   void writeToStdOut(String message) {
-    final String windowsMessage = terminal.supportsEmoji
+    final  windowsMessage = terminal.supportsEmoji
       ? message
       : message.replaceAll('🔥', '')
                .replaceAll('🖼️', '')
@@ -863,7 +863,6 @@ class BufferLogger extends Logger {
     String? progressId,
     int progressIndicatorPadding = kDefaultStatusPadding,
   }) {
-    assert(progressIndicatorPadding != null);
     printStatus(message);
     return SilentStatus(
       stopwatch: _stopwatchFactory.createStopwatch(),
@@ -982,7 +981,7 @@ class VerboseLogger extends DelegatingLogger {
   void printBox(String message, {
     String? title,
   }) {
-    String composedMessage = '';
+    var composedMessage = '';
     _generateBox(
       title: title,
       message: message,
@@ -1006,9 +1005,8 @@ class VerboseLogger extends DelegatingLogger {
     String? progressId,
     int progressIndicatorPadding = kDefaultStatusPadding,
   }) {
-    assert(progressIndicatorPadding != null);
     printStatus(message);
-    final Stopwatch timer = _stopwatchFactory.createStopwatch()..start();
+    final timer = _stopwatchFactory.createStopwatch()..start();
     return SilentStatus(
       // This is intentionally a different stopwatch than above.
       stopwatch: _stopwatchFactory.createStopwatch(),
@@ -1029,11 +1027,11 @@ class VerboseLogger extends DelegatingLogger {
       return;
     }
 
-    final int millis = _stopwatch.elapsedMilliseconds;
+    final  millis = _stopwatch.elapsedMilliseconds;
     _stopwatch.reset();
 
     String prefix;
-    const int prefixWidth = 8;
+    const  prefixWidth = 8;
     if (millis == 0) {
       prefix = ''.padLeft(prefixWidth);
     } else {
@@ -1044,8 +1042,8 @@ class VerboseLogger extends DelegatingLogger {
     }
     prefix = '[$prefix] ';
 
-    final String indent = ''.padLeft(prefix.length);
-    final String indentMessage = message.replaceAll('\n', '\n$indent');
+    final  indent = ''.padLeft(prefix.length);
+    final  indentMessage = message.replaceAll('\n', '\n$indent');
 
     switch (type) {
       case _LogType.error:
@@ -1301,7 +1299,7 @@ class AnonymousSpinnerStatus extends Status {
   ];
 
   static List<String> _selectAnimation(Terminal terminal) {
-    final List<String> animations = terminal.supportsEmoji ? _emojiAnimations : _asciiAnimations;
+    final animations = terminal.supportsEmoji ? _emojiAnimations : _asciiAnimations;
     return animations[terminal.preferredStyle % animations.length]
       .runes
       .map<String>((int scalar) => String.fromCharCode(scalar))
@@ -1342,7 +1340,6 @@ class AnonymousSpinnerStatus extends Status {
 
   void _callback(Timer timer) {
     assert(this.timer == timer);
-    assert(timer != null);
     assert(timer.isActive);
     _writeToStdOut(_backspaceChar * _lastAnimationFrameLength);
     ticks += 1;
@@ -1356,7 +1353,7 @@ class AnonymousSpinnerStatus extends Status {
         _writeToStdOut(_slowWarning);
       }
     }
-    final String newFrame = _currentAnimationFrame;
+    final newFrame = _currentAnimationFrame;
     _lastAnimationFrameLength = newFrame.runes.length;
     _writeToStdOut(newFrame);
   }
@@ -1429,7 +1426,7 @@ class SpinnerStatus extends AnonymousSpinnerStatus {
   }
 
   void _printStatus() {
-    final String line = '${message.padRight(padding)}$_margin';
+    final line = '${message.padRight(padding)}$_margin';
     _totalMessageLength = line.length;
     _writeToStdOut(line);
   }

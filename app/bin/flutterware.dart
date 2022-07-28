@@ -1,27 +1,30 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutterware/internals/constants.dart';
+import 'package:flutterware/internals/remote_log.dart';
+import 'package:flutterware/internals/remote_log_adapter.dart';
 import 'package:flutterware_app/src/constants.dart';
+import 'package:flutterware_app/src/utils/daemon/events.dart';
+import 'package:flutterware_app/src/utils/daemon/protocol.dart';
 import 'package:logging/logging.dart';
-import 'package:io/ansi.dart';
-import 'dart:io' as io;
 import 'package:path/path.dart' as p;
 import 'package:args/command_runner.dart';
-
-final _logger = Logger('flutterware');
 
 class _Context {
   final String dartExecutable;
   final String studioAppPath;
   final _FlutterSdk flutterSdk;
   final Directory projectDirectory;
+  final RemoteLogClient logClient;
 
   _Context({
     required this.dartExecutable,
     required this.studioAppPath,
     required this.flutterSdk,
     required this.projectDirectory,
+    required this.logClient,
   });
 }
 
@@ -33,11 +36,18 @@ void main(List<String> args) async {
         'Make sure you are using the dart command from a Flutter SDK (instead of a standalone Dart SDK).\nSearched ${Platform.resolvedExecutable}');
   }
 
+  var loggerUrl = Platform.environment[remoteLoggerServerUrlKey]!;
+  var logger = RemoteLogClient(Uri.parse(loggerUrl));
+
+  logger.printWarning("message");
+  await Future.delayed(const Duration(seconds: 3));
+
   var context = _Context(
     dartExecutable: dartExecutable,
-    studioAppPath: Platform.environment[studioAppPathEnvironmentKey]!,
+    studioAppPath: Platform.environment[appPathEnvironmentKey]!,
     flutterSdk: flutterSdk,
     projectDirectory: Directory.current,
+    logClient: logger,
   );
 
   var commandRunner = CommandRunner(
@@ -52,8 +62,9 @@ void main(List<String> args) async {
     argResults = commandRunner.parse(['app', ...args]);
   }
 
-  var verbose = argResults['verbose'] as bool;
-  _setupLogger(verbose: verbose);
+  Logger.root
+    ..level = Level.ALL
+    ..onRecord.listen(logger.printLogRecord);
 
   await commandRunner.runCommand(argResults);
 }
@@ -71,9 +82,9 @@ class _AppCommand extends Command {
 
   @override
   void run() async {
-    _logger.fine(
+    var buildProgress = context.logClient.startProgress(
         'Starting Flutter Studio App (Flutter: ${context.flutterSdk.flutter}, dir: ${context.studioAppPath})');
-    _logger.fine('Current directory: ${Directory.current}');
+
     var process = await Process.start(
       context.flutterSdk.flutter,
       [
@@ -85,6 +96,8 @@ class _AppCommand extends Command {
         '$projectDefineKey=${context.projectDirectory.absolute.path}',
         '--dart-define',
         '$flutterSdkDefineKey=${context.flutterSdk.root}',
+        '--dart-define',
+        '$flutterSdkDefineKey=${context.logClient.uri}',
       ],
       environment: {
         if (Platform.isMacOS) 'LC_ALL': 'en_US.UTF-8',
@@ -92,40 +105,19 @@ class _AppCommand extends Command {
       workingDirectory: context.studioAppPath,
     );
 
-    unawaited(stdin.pipe(process.stdin));
-    "";
-    //if (globalResults!['verbose'] as bool? ?? false) {
-      unawaited(stdout.addStream(process.stdout));
-      unawaited(stderr.addStream(process.stderr));
-   // }
+    await for (var line in process.stdout.transform(Utf8Decoder()).transform(LineSplitter())) {
+      context.logClient.printTrace('App: $line');
+      var daemonLine = DaemonProtocol.tryReadLine(line);
+      if (daemonLine != null) {
+        var event = DaemonProtocol.tryReadEvent(daemonLine);
+        if (event is AppProgressEvent && event.finished) {
+          buildProgress.stop();
+        }
+      }
+    }
+
     unawaited(process.exitCode.then(exit));
   }
-}
-
-var _a = "";
-void _setupLogger({bool? verbose}) {
-  verbose ??= false;
-  Logger.root
-    ..level = verbose ? Level.ALL : Level.INFO
-    ..onRecord.listen((e) {
-      var foreground = {
-            Level.INFO: blue,
-            Level.WARNING: yellow,
-            Level.SEVERE: red,
-            Level.SHOUT: black,
-          }[e.level] ??
-          defaultForeground;
-      var background = {
-        Level.SHOUT: backgroundLightRed,
-      }[e.level];
-
-      var message = e.message;
-      if (e.stackTrace != null) {
-        message += '\n${e.stackTrace}';
-      }
-      io.stdout.writeln(
-          wrapWith(message, [foreground, if (background != null) background]));
-    });
 }
 
 class _FlutterSdk {

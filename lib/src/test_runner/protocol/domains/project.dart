@@ -1,5 +1,4 @@
 import '../connection.dart';
-import '../models.dart';
 
 class ProjectClient {
   final Channel _channel;

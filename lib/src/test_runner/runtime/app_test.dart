@@ -84,7 +84,7 @@ abstract class AppTest {
   }) async {
     var finder = _targetToFinder(target);
 
-    var box = _getElementBox(finder, callee: 'tap');
+    var box = _getElementBox(finder);
     if (box != null) {
       tester.runContext.previousTap ??=
           box.localToGlobal(box.size.topLeft(Offset.zero)) & box.size;
@@ -95,9 +95,7 @@ abstract class AppTest {
   }
 
   RenderBox? _getElementBox(
-    Finder finder, {
-    required String callee,
-  }) {
+    Finder finder) {
     final elements = finder.evaluate();
     if (elements.isNotEmpty) {
       var renderBox = elements.first.renderObject;
@@ -105,6 +103,7 @@ abstract class AppTest {
         return renderBox;
       }
     }
+    return null;
   }
 
   Future<void> _pumpFramesIfNeeded(bool needed) async {

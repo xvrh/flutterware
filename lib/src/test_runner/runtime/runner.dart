@@ -107,10 +107,6 @@ class Runner {
     _project?.notifyReloaded();
   }
 
-  @override
-  Future<void> addScreen(RunArgs run, NewScreen screen) =>
-      _runClient!.addScreen(run, screen);
-
   Group? _findTest(Map<String, void Function()> tests, BuiltList<String> name) {
     return findTest(tests, name.join(' '));
   }

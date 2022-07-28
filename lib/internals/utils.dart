@@ -1,8 +1,7 @@
 import 'dart:math' as math;
 
-
 String getElapsedAsSeconds(Duration duration) {
-  final double seconds = duration.inMilliseconds / Duration.millisecondsPerSecond;
+  final seconds = duration.inMilliseconds / Duration.millisecondsPerSecond;
   return '${seconds.toStringAsFixed(1)}s';
 }
 
@@ -56,22 +55,22 @@ String wrapText(String text, {
   int? indent,
 }) {
   assert(columnWidth >= 0);
-  if (text == null || text.isEmpty) {
+  if (text.isEmpty) {
     return '';
   }
   indent ??= 0;
   hangingIndent ??= 0;
-  final List<String> splitText = text.split('\n');
-  final List<String> result = <String>[];
-  for (final String line in splitText) {
-    String trimmedText = line.trimLeft();
-    final String leadingWhitespace = line.substring(0, line.length - trimmedText.length);
+  final splitText = text.split('\n');
+  final result = <String>[];
+  for (final line in splitText) {
+    var trimmedText = line.trimLeft();
+    final leadingWhitespace = line.substring(0, line.length - trimmedText.length);
     List<String> notIndented;
     if (hangingIndent != 0) {
       // When we have a hanging indent, we want to wrap the first line at one
       // width, and the rest at another (offset by hangingIndent), so we wrap
       // them twice and recombine.
-      final List<String> firstLineWrap = _wrapTextAsLines(
+      final firstLineWrap = _wrapTextAsLines(
         trimmedText,
         columnWidth: columnWidth - leadingWhitespace.length - indent,
         shouldWrap: shouldWrap,
@@ -93,18 +92,18 @@ String wrapText(String text, {
       );
     }
     String? hangingIndentString;
-    final String indentString = ' ' * indent;
+    final indentString = ' ' * indent;
     result.addAll(notIndented.map<String>(
-          (String line) {
+          (line) {
         // Don't return any lines with just whitespace on them.
         if (line.isEmpty) {
           return '';
         }
-        String truncatedIndent = '$indentString${hangingIndentString ?? ''}$leadingWhitespace';
+        var truncatedIndent = '$indentString${hangingIndentString ?? ''}$leadingWhitespace';
         if (truncatedIndent.length > columnWidth - kMinColumnWidth) {
           truncatedIndent = truncatedIndent.substring(0, math.max(columnWidth - kMinColumnWidth, 0));
         }
-        final String result = '$truncatedIndent$line';
+        final result = '$truncatedIndent$line';
         hangingIndentString ??= ' ' * hangingIndent!;
         return result;
       },
@@ -144,7 +143,7 @@ List<String> _wrapTextAsLines(String text, {
   required int columnWidth,
   required bool shouldWrap,
 }) {
-  if (text == null || text.isEmpty) {
+  if (text.isEmpty) {
     return <String>[''];
   }
   assert(start >= 0);
@@ -155,9 +154,9 @@ List<String> _wrapTextAsLines(String text, {
   // reconstitute the original string. This is useful for manipulating "visible"
   // characters in the presence of ANSI control codes.
   List<_AnsiRun> splitWithCodes(String input) {
-    final RegExp characterOrCode = RegExp('(\u001b\\[[0-9;]*m|.)', multiLine: true);
-    List<_AnsiRun> result = <_AnsiRun>[];
-    final StringBuffer current = StringBuffer();
+    final characterOrCode = RegExp('(\u001b\\[[0-9;]*m|.)', multiLine: true);
+    var result = <_AnsiRun>[];
+    final current = StringBuffer();
     for (final Match match in characterOrCode.allMatches(input)) {
       current.write(match[0]);
       if (match[0]!.length < 4) {
@@ -184,25 +183,25 @@ List<String> _wrapTextAsLines(String text, {
     return list.sublist(start, end).map<String>((_AnsiRun run) => run.original).join().trim();
   }
 
-  final List<String> result = <String>[];
+  final result = <String>[];
   final int effectiveLength = math.max(columnWidth - start, kMinColumnWidth);
-  for (final String line in text.split('\n')) {
+  for (final line in text.split('\n')) {
     // If the line is short enough, even with ANSI codes, then we can just add
     // add it and move on.
     if (line.length <= effectiveLength || !shouldWrap) {
       result.add(line);
       continue;
     }
-    final List<_AnsiRun> splitLine = splitWithCodes(line);
+    final splitLine = splitWithCodes(line);
     if (splitLine.length <= effectiveLength) {
       result.add(line);
       continue;
     }
 
-    int currentLineStart = 0;
+    var currentLineStart = 0;
     int? lastWhitespace;
     // Find the start of the current line.
-    for (int index = 0; index < splitLine.length; ++index) {
+    for (var index = 0; index < splitLine.length; ++index) {
       if (splitLine[index].character.isNotEmpty && _isWhitespace(splitLine[index])) {
         lastWhitespace = index;
       }
@@ -235,7 +234,7 @@ List<String> _wrapTextAsLines(String text, {
 ///
 /// Based on: https://en.wikipedia.org/wiki/Whitespace_character#Unicode
 bool _isWhitespace(_AnsiRun run) {
-  final int rune = run.character.isNotEmpty ? run.character.codeUnitAt(0) : 0x0;
+  final rune = run.character.isNotEmpty ? run.character.codeUnitAt(0) : 0x0;
   return rune >= 0x0009 && rune <= 0x000D ||
       rune == 0x0020 ||
       rune == 0x0085 ||

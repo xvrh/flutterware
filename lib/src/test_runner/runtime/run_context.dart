@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:ui';
-import 'package:flutterware/src/test_runner/protocol/model/locale.dart';
 
 import '../../../flutter_test.dart';
 import '../protocol/models.dart';

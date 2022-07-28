@@ -201,7 +201,7 @@ class AnsiTerminal implements Terminal {
 
   @override
   int get preferredStyle {
-    const int workdays = DateTime.friday;
+    const workdays = DateTime.friday;
     if (_now.weekday <= workdays) {
       return _now.weekday - 1;
     }
@@ -227,19 +227,18 @@ class AnsiTerminal implements Terminal {
 
   @override
   String bolden(String message) {
-    assert(message != null);
     if (!supportsColor || message.isEmpty) {
       return message;
     }
-    final StringBuffer buffer = StringBuffer();
-    for (String line in message.split('\n')) {
+    final  buffer = StringBuffer();
+    for (var line in message.split('\n')) {
       // If there were bolds or resetBolds in the string before, then nuke them:
       // they're redundant. This prevents previously embedded resets from
       // stopping the boldness.
       line = line.replaceAll(_boldControls, '');
       buffer.writeln('$bold$line$resetBold');
     }
-    final String result = buffer.toString();
+    final  result = buffer.toString();
     // avoid introducing a new newline to the emboldened text
     return (!message.endsWith('\n') && result.endsWith('\n'))
         ? result.substring(0, result.length - 1)
@@ -248,20 +247,19 @@ class AnsiTerminal implements Terminal {
 
   @override
   String color(String message, TerminalColor color) {
-    assert(message != null);
-    if (!supportsColor || color == null || message.isEmpty) {
+    if (!supportsColor || message.isEmpty) {
       return message;
     }
-    final StringBuffer buffer = StringBuffer();
-    final String colorCodes = _colorMap[color]!;
-    for (String line in message.split('\n')) {
+    final buffer = StringBuffer();
+    final  colorCodes = _colorMap[color]!;
+    for (var line in message.split('\n')) {
       // If there were resets in the string before, then keep them, but
       // restart the color right after. This prevents embedded resets from
       // stopping the colors, and allows nesting of colors.
       line = line.replaceAll(resetColor, '$resetColor$colorCodes');
       buffer.writeln('$colorCodes$line$resetColor');
     }
-    final String result = buffer.toString();
+    final  result = buffer.toString();
     // avoid introducing a new newline to the colored text
     return (!message.endsWith('\n') && result.endsWith('\n'))
         ? result.substring(0, result.length - 1)
@@ -276,7 +274,7 @@ class AnsiTerminal implements Terminal {
     if (!_stdio.stdinHasTerminal) {
       return false;
     }
-    final io.Stdin stdin = _stdio.stdin as io.Stdin;
+    final stdin = _stdio.stdin as io.Stdin;
     return stdin.lineMode && stdin.echoMode;
   }
   @override
@@ -284,7 +282,7 @@ class AnsiTerminal implements Terminal {
     if (!_stdio.stdinHasTerminal) {
       return;
     }
-    final io.Stdin stdin = _stdio.stdin as io.Stdin;
+    final stdin = _stdio.stdin as io.Stdin;
     // The order of setting lineMode and echoMode is important on Windows.
     if (value) {
       stdin.echoMode = false;
@@ -318,7 +316,7 @@ class AnsiTerminal implements Terminal {
     if (!usesTerminalUi) {
       throw StateError('cannot prompt without a terminal ui');
     }
-    List<String> charactersToDisplay = acceptedCharacters;
+    var charactersToDisplay = acceptedCharacters;
     if (defaultChoiceIndex != null) {
       assert(defaultChoiceIndex >= 0 && defaultChoiceIndex < acceptedCharacters.length);
       charactersToDisplay = List<String>.of(charactersToDisplay);
