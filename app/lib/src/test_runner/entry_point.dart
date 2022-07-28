@@ -33,7 +33,7 @@ class TestFile {
       p.relative(file.absolute.path, from: projectRoot.absolute.path);
 }
 
-String entryPointCode(Project project, List<TestFile> files, Uri serverUri) {
+String entryPointCode(Project project, List<TestFile> files, {required Uri serverUri, required Uri? loggerUri}) {
   var code = StringBuffer()..writeln('''
 // GENERATED-CODE: Flutterware - Test runner feature
 import 'package:flutterware/internals/test_runner_daemon.dart';
@@ -55,7 +55,10 @@ import 'package:flutterware/internals/test_runner_daemon.dart';
 };
 final _cliServer = Uri.parse('${serverUri.toString()}');
 void main() {
-  runTests(_cliServer, allTests, flutterBinPath: ${escapeDartString(project.flutterSdkPath.flutter)});
+  runTests(_cliServer, allTests, 
+    flutterBinPath: ${escapeDartString(project.flutterSdkPath.flutter)},
+    loggerUri: ${loggerUri == null ? 'null' : 'Uri.parse(${escapeDartString(loggerUri.toString())})'},
+  );
 }
 ''');
   return '$code';

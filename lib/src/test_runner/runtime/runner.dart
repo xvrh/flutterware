@@ -128,45 +128,40 @@ class Runner {
 
   final _runPool = Pool(1);
   void _executeRun(RunArgs args) {
-    var runClient = _runClient!;
     var test = _currentTest[args]!;
 
     _runPool.withResource(() async {
       var stopwatch = Stopwatch()..start();
-      Object? error;
-      StackTrace? stackTrace;
-      try {
-        var runClient = _runClient!;
-        var runContext = RunContext(args,
-            addScreen: (screen) => runClient.addScreen(args, screen));
-        await runZonedGuarded(
-          () async {
-            await runGroup(test).toList();
-          },
-          zoneValues: {#runContext: runContext},
-          (e, s) {
-            error = e;
-            stackTrace = s;
-            _logger.warning('Zone error $e $s');
-          },
-        );
-      } catch (e, s) {
-        _logger.warning('Failed to run test', e);
-        error = e;
-        stackTrace = s;
-      } finally {
-        RunResult result;
-        if (error != null) {
-          result = RunResult.error(error!, stackTrace);
-        } else {
-          result = RunResult.success();
-        }
 
-        result = result.rebuild((b) => b..duration = stopwatch.elapsed);
-        await runClient.complete(args, result);
-        _logger.finer('End test ${args.testName} in ${stopwatch.elapsed}');
-        _currentTest.remove(args);
+      FlutterErrorDetails? error;
+      reportTestException = (errorDetails, testDescription) {
+        error = errorDetails;
+        _logger.severe('Test error $errorDetails');
+      };
+
+      var runClient = _runClient!;
+      var runContext = RunContext(args,
+          addScreen: (screen) => runClient.addScreen(args, screen));
+      await runZonedGuarded(
+        () async => await runGroup(test),
+        zoneValues: {#runContext: runContext},
+        (error, stack) {
+          _logger.info('Zone error $error');
+        },
+      );
+
+      RunResult result;
+      if (error != null) {
+        var errorDetails = error!;
+        result = RunResult.error(errorDetails.exception, errorDetails.stack);
+      } else {
+        result = RunResult.success();
       }
+
+      result = result.rebuild((b) => b..duration = stopwatch.elapsed);
+      await runClient.complete(args, result);
+      _logger.info('End test ${args.testName} in ${stopwatch.elapsed}');
+      _currentTest.remove(args);
     });
   }
 }

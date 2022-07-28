@@ -25,8 +25,9 @@ class Project {
   late final info = ProjectInfoService(this);
   late final icons = IconService(this);
   late final dependencies = DependenciesService(this);
+  final Uri? loggerUri;
 
-  Project(String path, this.flutterSdkPath)
+  Project(String path, this.flutterSdkPath, {this.loggerUri})
       : directory = Directory(path),
         _flutterSdk = FlutterSdk(flutterSdkPath);
 

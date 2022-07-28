@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutterware/internals/remote_log.dart';
+import 'package:flutterware/internals/remote_log_adapter.dart';
 import 'package:logging/logging.dart';
 import 'runner.dart';
 import 'setup_io.dart' if (dart.library.html) 'setup_web.dart';
@@ -7,6 +9,7 @@ void runTests(
   Uri serverUri,
   Map<String, void Function()> Function() tests, {
   required String flutterBinPath,
+  Uri? loggerUri,
   bool Function(String)? translationPredicate,
   String? projectName,
   List<String>? supportedLanguages,
@@ -14,7 +17,7 @@ void runTests(
   String? projectPackageName,
   Brightness? defaultStatusBarBrightness,
 }) async {
-  _setupLogger();
+  _setupLogger(loggerUri);
   var bundleParams = BundleParameters(
     flutterBinPath: flutterBinPath,
     translationPredicate: translationPredicate,
@@ -47,19 +50,16 @@ class BundleParameters {
       key.endsWith('.json') && key.contains('translations');
 }
 
-void _setupLogger() {
+void _setupLogger(Uri? loggerUri) {
+  LogClient logger;
+  if (loggerUri != null) {
+    logger = RemoteLogClient(loggerUri);
+  } else {
+    logger = LogClient.print();
+  }
+
+
   Logger.root
     ..level = Level.ALL
-    ..onRecord.listen((e) {
-      var errorSuffix = '';
-      if (e.error != null) {
-        errorSuffix = ' (${e.error})';
-      }
-
-      debugPrint('[${e.level.name}] ${e.loggerName}: ${e.message}$errorSuffix');
-
-      if (e.stackTrace != null) {
-        debugPrint('${e.stackTrace}');
-      }
-    });
+    ..onRecord.listen(logger.printLogRecord);
 }

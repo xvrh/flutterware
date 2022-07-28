@@ -1,6 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart';
+import 'package:flutter/material.dart';
 import 'package:flutterware/src/test_runner/protocol/models.dart';
 
 import '../../../flutter_test.dart';
@@ -48,6 +48,8 @@ Future<void> Function(WidgetTester) withTestValues(
       //TODO(xha): remove this and put it in Runner and get the value though the
       // binding.renderView
       await tester.screenshot(name: 'After error');
+      await tester.pumpWidget(ErrorWidget('$e'));
+      await tester.screenshot(name: 'Error');
       rethrow;
     } finally {
       binding.window.clearAllTestValues();

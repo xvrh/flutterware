@@ -126,8 +126,6 @@ Flutter SDK: ${context.flutterSdk.root}
       }
     }
     buildProgress.stop();
-
-    exit(await process.exitCode);
   }
 }
 
