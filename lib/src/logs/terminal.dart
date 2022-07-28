@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 import 'dart:convert';
-import 'io.dart' as io;
 import 'dart:io' as io;
+import 'io.dart' as io;
 import 'logger.dart';
 import 'platform.dart';
 
@@ -26,14 +26,18 @@ class OutputPreferences {
     int? wrapColumn,
     bool? showColor,
     io.Stdio? stdio,
-  }) : _stdio = stdio,
+  })  : _stdio = stdio,
         wrapText = wrapText ?? stdio?.hasTerminal ?? false,
         _overrideWrapColumn = wrapColumn,
         showColor = showColor ?? false;
 
   /// A version of this class for use in tests.
-  OutputPreferences.test({this.wrapText = false, int wrapColumn = kDefaultTerminalColumns, this.showColor = false})
-      : _overrideWrapColumn = wrapColumn, _stdio = null;
+  OutputPreferences.test(
+      {this.wrapText = false,
+      int wrapColumn = kDefaultTerminalColumns,
+      this.showColor = false})
+      : _overrideWrapColumn = wrapColumn,
+        _stdio = null;
 
   final io.Stdio? _stdio;
 
@@ -55,7 +59,9 @@ class OutputPreferences {
   /// terminal, or to [kDefaultTerminalColumns] if not writing to a terminal.
   final int? _overrideWrapColumn;
   int get wrapColumn {
-    return _overrideWrapColumn ?? _stdio?.terminalColumns ?? kDefaultTerminalColumns;
+    return _overrideWrapColumn ??
+        _stdio?.terminalColumns ??
+        kDefaultTerminalColumns;
   }
 
   /// Whether or not to output ANSI color codes when writing to the output
@@ -74,7 +80,8 @@ abstract class Terminal {
   /// Create a new test [Terminal].
   ///
   /// If not specified, [supportsColor] defaults to `false`.
-  factory Terminal.test({bool supportsColor, bool supportsEmoji}) = _TestTerminal;
+  factory Terminal.test({bool supportsColor, bool supportsEmoji}) =
+      _TestTerminal;
 
   /// Whether the current terminal supports color escape codes.
   bool get supportsColor;
@@ -140,21 +147,21 @@ abstract class Terminal {
   ///
   /// If [usesTerminalUi] is false, throws a [StateError].
   Future<String> promptForCharInput(
-      List<String> acceptedCharacters, {
-        required Logger logger,
-        String? prompt,
-        int? defaultChoiceIndex,
-        bool displayAcceptedCharacters = true,
-      });
+    List<String> acceptedCharacters, {
+    required Logger logger,
+    String? prompt,
+    int? defaultChoiceIndex,
+    bool displayAcceptedCharacters = true,
+  });
 }
 
 class AnsiTerminal implements Terminal {
   AnsiTerminal({
     required io.Stdio stdio,
     required Platform platform,
-    DateTime? now, // Time used to determine preferredStyle. Defaults to 0001-01-01 00:00.
-  })
-      : _stdio = stdio,
+    DateTime?
+        now, // Time used to determine preferredStyle. Defaults to 0001-01-01 00:00.
+  })  : _stdio = stdio,
         _platform = platform,
         _now = now ?? DateTime(1);
 
@@ -196,8 +203,8 @@ class AnsiTerminal implements Terminal {
   // which sets the WT_SESSION environment variable. See:
   // https://github.com/microsoft/terminal/blob/master/doc/user-docs/index.md#tips-and-tricks
   @override
-  bool get supportsEmoji => !_platform.isWindows
-      || _platform.environment.containsKey('WT_SESSION');
+  bool get supportsEmoji =>
+      !_platform.isWindows || _platform.environment.containsKey('WT_SESSION');
 
   @override
   int get preferredStyle {
@@ -230,7 +237,7 @@ class AnsiTerminal implements Terminal {
     if (!supportsColor || message.isEmpty) {
       return message;
     }
-    final  buffer = StringBuffer();
+    final buffer = StringBuffer();
     for (var line in message.split('\n')) {
       // If there were bolds or resetBolds in the string before, then nuke them:
       // they're redundant. This prevents previously embedded resets from
@@ -238,7 +245,7 @@ class AnsiTerminal implements Terminal {
       line = line.replaceAll(_boldControls, '');
       buffer.writeln('$bold$line$resetBold');
     }
-    final  result = buffer.toString();
+    final result = buffer.toString();
     // avoid introducing a new newline to the emboldened text
     return (!message.endsWith('\n') && result.endsWith('\n'))
         ? result.substring(0, result.length - 1)
@@ -251,7 +258,7 @@ class AnsiTerminal implements Terminal {
       return message;
     }
     final buffer = StringBuffer();
-    final  colorCodes = _colorMap[color]!;
+    final colorCodes = _colorMap[color]!;
     for (var line in message.split('\n')) {
       // If there were resets in the string before, then keep them, but
       // restart the color right after. This prevents embedded resets from
@@ -259,7 +266,7 @@ class AnsiTerminal implements Terminal {
       line = line.replaceAll(resetColor, '$resetColor$colorCodes');
       buffer.writeln('$colorCodes$line$resetColor');
     }
-    final  result = buffer.toString();
+    final result = buffer.toString();
     // avoid introducing a new newline to the colored text
     return (!message.endsWith('\n') && result.endsWith('\n'))
         ? result.substring(0, result.length - 1)
@@ -277,6 +284,7 @@ class AnsiTerminal implements Terminal {
     final stdin = _stdio.stdin as io.Stdin;
     return stdin.lineMode && stdin.echoMode;
   }
+
   @override
   set singleCharMode(bool value) {
     if (!_stdio.stdinHasTerminal) {
@@ -300,17 +308,19 @@ class AnsiTerminal implements Terminal {
 
   @override
   Stream<String> get keystrokes {
-    return _broadcastStdInString ??= _stdio.stdin.transform<String>(const AsciiDecoder(allowInvalid: true)).asBroadcastStream();
+    return _broadcastStdInString ??= _stdio.stdin
+        .transform<String>(const AsciiDecoder(allowInvalid: true))
+        .asBroadcastStream();
   }
 
   @override
   Future<String> promptForCharInput(
-      List<String> acceptedCharacters, {
-        required Logger logger,
-        String? prompt,
-        int? defaultChoiceIndex,
-        bool displayAcceptedCharacters = true,
-      }) async {
+    List<String> acceptedCharacters, {
+    required Logger logger,
+    String? prompt,
+    int? defaultChoiceIndex,
+    bool displayAcceptedCharacters = true,
+  }) async {
     assert(acceptedCharacters.isNotEmpty);
     assert(prompt == null || prompt.isNotEmpty);
     if (!usesTerminalUi) {
@@ -318,18 +328,23 @@ class AnsiTerminal implements Terminal {
     }
     var charactersToDisplay = acceptedCharacters;
     if (defaultChoiceIndex != null) {
-      assert(defaultChoiceIndex >= 0 && defaultChoiceIndex < acceptedCharacters.length);
+      assert(defaultChoiceIndex >= 0 &&
+          defaultChoiceIndex < acceptedCharacters.length);
       charactersToDisplay = List<String>.of(charactersToDisplay);
-      charactersToDisplay[defaultChoiceIndex] = bolden(charactersToDisplay[defaultChoiceIndex]);
+      charactersToDisplay[defaultChoiceIndex] =
+          bolden(charactersToDisplay[defaultChoiceIndex]);
       acceptedCharacters.add('');
     }
     String? choice;
     singleCharMode = true;
-    while (choice == null || choice.length > 1 || !acceptedCharacters.contains(choice)) {
+    while (choice == null ||
+        choice.length > 1 ||
+        !acceptedCharacters.contains(choice)) {
       if (prompt != null) {
         logger.printStatus(prompt, emphasis: true, newline: false);
         if (displayAcceptedCharacters) {
-          logger.printStatus(' [${charactersToDisplay.join("|")}]', newline: false);
+          logger.printStatus(' [${charactersToDisplay.join("|")}]',
+              newline: false);
         }
         // prompt ends with ': '
         logger.printStatus(': ', emphasis: true, newline: false);
@@ -364,19 +379,21 @@ class _TestTerminal implements Terminal {
   Stream<String> get keystrokes => const Stream<String>.empty();
 
   @override
-  Future<String> promptForCharInput(List<String> acceptedCharacters, {
+  Future<String> promptForCharInput(
+    List<String> acceptedCharacters, {
     required Logger logger,
     String? prompt,
     int? defaultChoiceIndex,
     bool displayAcceptedCharacters = true,
   }) {
-    throw UnsupportedError('promptForCharInput not supported in the test terminal.');
+    throw UnsupportedError(
+        'promptForCharInput not supported in the test terminal.');
   }
 
   @override
   bool get singleCharMode => false;
   @override
-  set singleCharMode(bool value) { }
+  set singleCharMode(bool value) {}
 
   @override
   final bool supportsColor;

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/dependencies/model/service.dart';
-import 'package:flutterware_app/src/overview/model/assets.dart';
-import 'package:flutterware_app/src/utils.dart';
-import 'package:flutterware_app/src/utils/cloc/cloc.dart';
 import 'package:intl/intl.dart';
+import '../dependencies/model/service.dart';
 import '../project.dart';
+import '../utils.dart';
 import '../utils/async_value.dart';
+import '../utils/cloc/cloc.dart';
 import '../utils/utils.dart';
+import 'model/assets.dart';
 import 'model/code_metrics.dart';
 
 class MetricsCard extends StatelessWidget {
@@ -79,7 +79,8 @@ class MetricsCard extends StatelessWidget {
 
                   return Tooltip(
                     message: description,
-                    child: Text('${numberFormat.format(data.sum.lines)} (Dart)'),
+                    child:
+                        Text('${numberFormat.format(data.sum.lines)} (Dart)'),
                   );
                 },
               ),
@@ -95,9 +96,8 @@ class MetricsCard extends StatelessWidget {
                   }
 
                   return Text(
-                    '${data.fileCount} file${data.fileCount > 1 ? 's' : ''}, '
-                        '${getSizeAsMB(data.totalBytes)}'
-                  );
+                      '${data.fileCount} file${data.fileCount > 1 ? 's' : ''}, '
+                      '${getSizeAsMB(data.totalBytes)}');
                 },
               ),
             ),

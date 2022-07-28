@@ -1,4 +1,3 @@
-
 import 'package:logging/logging.dart';
 import 'remote_log.dart';
 

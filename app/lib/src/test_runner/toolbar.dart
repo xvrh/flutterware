@@ -1,6 +1,6 @@
 import 'dart:math';
-import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterware/internals/test_runner.dart';
 import 'ui/toolbar.dart';
 
 class ToolbarParameters {
@@ -23,8 +23,7 @@ class ToolbarParameters {
 
 class ToolBarScope extends StatefulWidget {
   final Widget child;
-  const ToolBarScope({Key? key, required this.child})
-      : super(key: key);
+  const ToolBarScope({Key? key, required this.child}) : super(key: key);
 
   @override
   ToolBarScopeState createState() => ToolBarScopeState();
@@ -92,7 +91,8 @@ class _RunToolbarState extends State<RunToolbar> {
                 _onChanged();
               },
               items: {
-                for (var language in widget.supportedLocales ?? const <SerializableLocale>[])
+                for (var language
+                    in widget.supportedLocales ?? const <SerializableLocale>[])
                   language: Text(language.displayString)
               },
             ),

@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:html';
-import 'package:flutterware/internals/web.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/utils/router_outlet.dart';
+import 'package:flutterware/internals/web.dart';
 import 'package:rxdart/rxdart.dart';
 import 'src/test_runner/app_connected.dart';
 import 'src/test_runner/protocol/api.dart';
+import 'src/utils/router_outlet.dart';
 
 void main() async {
   late BehaviorSubject<List<TestRunnerApi>> subject;
@@ -72,7 +72,6 @@ class _App extends StatelessWidget {
           var client = clients.last;
           return TestRunView(
             key: ValueKey(client),
-
             client,
           );
         }

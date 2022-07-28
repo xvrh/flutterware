@@ -1,13 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-
 import 'package:collection/collection.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutterware/src/test_runner/protocol/models.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../protocol/models.dart';
 import 'run_context.dart';
 
 extension WidgetTesterScreenshotExtension on WidgetTester {
@@ -58,8 +57,9 @@ extension WidgetTesterScreenshotExtension on WidgetTester {
         ..bottomBrightness =
             brightnessAt(Offset(0, runContext.args.device.height - 5))?.index;
       if (widgetsApp != null) {
-        s.supportedLocales.replace(
-            widgetsApp.supportedLocales.map((l) => SerializableLocale(l.languageCode, l.countryCode)).toList());
+        s.supportedLocales.replace(widgetsApp.supportedLocales
+            .map((l) => SerializableLocale(l.languageCode, l.countryCode))
+            .toList());
       }
     });
 

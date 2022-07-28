@@ -1,7 +1,6 @@
 import 'dart:io';
-
-import 'package:pubspec_parse/pubspec_parse.dart';
 import 'package:path/path.dart' as p;
+import 'package:pubspec_parse/pubspec_parse.dart';
 
 AssetsReport createAssetReport(String directory) {
   var pubspecFile = File(p.join(directory, 'pubspec.yaml'));

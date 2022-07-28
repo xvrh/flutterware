@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:ui';
-
 import '../../../flutter_test.dart';
 import '../protocol/models.dart';
 import 'path_tracker.dart';

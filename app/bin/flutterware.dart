@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-
+import 'package:args/command_runner.dart';
 import 'package:flutterware/internals/constants.dart';
 import 'package:flutterware/internals/remote_log.dart';
 import 'package:flutterware/internals/remote_log_adapter.dart';
@@ -9,7 +9,6 @@ import 'package:flutterware_app/src/utils/daemon/events.dart';
 import 'package:flutterware_app/src/utils/daemon/protocol.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
-import 'package:args/command_runner.dart';
 import 'package:pubspec_parse/pubspec_parse.dart';
 
 class _Context {
@@ -28,7 +27,8 @@ class _Context {
   });
 
   Future<String> flutterwareVersion() async {
-    var pubspecContent = await File(p.join(appToolPath, 'pubspec.yaml')).readAsString();
+    var pubspecContent =
+        await File(p.join(appToolPath, 'pubspec.yaml')).readAsString();
     var pubspec = Pubspec.parse(pubspecContent);
     return pubspec.version.toString();
   }
@@ -85,15 +85,17 @@ class _AppCommand extends Command {
 
   @override
   void run() async {
-    var appPubspec = Pubspec.parse(await File(p.join(context.projectDirectory.absolute.path, 'pubspec.yaml')).readAsString());
+    var appPubspec = Pubspec.parse(await File(
+            p.join(context.projectDirectory.absolute.path, 'pubspec.yaml'))
+        .readAsString());
 
     context.logClient.printBox('''
 App: ${appPubspec.name} (${context.projectDirectory.absolute.path})
 Flutter SDK: ${context.flutterSdk.root}
 ''', title: 'Flutterware ${await context.flutterwareVersion()}');
 
-    var buildProgress = context.logClient.startProgress(
-        'Starting Flutterware GUI');
+    var buildProgress =
+        context.logClient.startProgress('Starting Flutterware GUI');
 
     var process = await Process.start(
       context.flutterSdk.flutter,
@@ -113,7 +115,8 @@ Flutter SDK: ${context.flutterSdk.root}
       workingDirectory: context.appToolPath,
     );
 
-    await for (var line in process.stdout.transform(Utf8Decoder()).transform(LineSplitter())) {
+    await for (var line
+        in process.stdout.transform(Utf8Decoder()).transform(LineSplitter())) {
       var daemonLine = DaemonProtocol.tryReadLine(line);
       if (daemonLine != null) {
         context.logClient.printTrace('App daemon: $daemonLine');

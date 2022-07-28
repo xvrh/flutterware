@@ -6,8 +6,7 @@ part 'test_reference.g.dart';
 
 abstract class TestReference
     implements Built<TestReference, TestReferenceBuilder> {
-  static Serializer<TestReference> get serializer =>
-      _$testReferenceSerializer;
+  static Serializer<TestReference> get serializer => _$testReferenceSerializer;
 
   factory TestReference._builder(
       [void Function(TestReferenceBuilder)? updates]) = _$TestReference;

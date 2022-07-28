@@ -2,10 +2,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutterware/internals/remote_log.dart';
 import 'package:flutterware/internals/remote_log_adapter.dart';
-import 'package:flutterware_app/src/constants.dart';
-import 'package:flutterware_app/src/flutter_sdk.dart';
 import 'package:logging/logging.dart';
 import 'src/app/app.dart';
+import 'src/constants.dart';
+import 'src/flutter_sdk.dart';
 import 'src/globals.dart';
 import 'src/project.dart';
 
@@ -34,9 +34,7 @@ void main() async {
   _setupLogger();
   await globals.resourceCleaner.initialize();
   runApp(
-    SingleProjectApp(
-      project
-    ),
+    SingleProjectApp(project),
   );
 }
 

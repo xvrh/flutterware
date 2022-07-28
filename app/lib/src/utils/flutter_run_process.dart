@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutterware_app/src/flutter_sdk.dart';
-
-import 'daemon/commands.dart';
 import 'package:logging/logging.dart';
+import '../flutter_sdk.dart';
+import 'daemon/commands.dart';
 import 'daemon/events.dart';
 import 'daemon/protocol.dart';
 

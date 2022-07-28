@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/about/changelog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-
 import '../ui/side_menu.dart';
 import '../utils.dart';
 import 'about.dart';
+import 'changelog.dart';
 import 'feature_tour.dart';
 
 class AboutMenuItem extends StatefulWidget {

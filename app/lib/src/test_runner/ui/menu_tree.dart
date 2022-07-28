@@ -1,6 +1,5 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/widgets.dart';
-
 import '../../ui/side_menu.dart';
 
 class MenuTree extends StatefulWidget {

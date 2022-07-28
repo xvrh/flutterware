@@ -1,6 +1,5 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
-
 import '../project.dart';
 import '../ui/colors.dart';
 import '../utils/custom_popup_menu.dart';
@@ -56,21 +55,23 @@ class SmallDaemonToolbar extends StatelessWidget {
                   onPressed: isReloading
                       ? null
                       : () {
-                    daemon.reload(fullRestart: false);
-                  },
-                    child: Icon(Icons.bolt, color: Colors.orange,),
+                          daemon.reload(fullRestart: false);
+                        },
+                  child: Icon(
+                    Icons.bolt,
+                    color: Colors.orange,
+                  ),
                 ),
               );
             },
           );
-        }else {
+        } else {
           return const SizedBox();
         }
       },
     );
   }
 }
-
 
 class _DaemonConnectedToolbar extends StatelessWidget {
   final Project project;
@@ -113,78 +114,76 @@ class _DaemonConnectedToolbar extends StatelessWidget {
           bottom: 0,
           top: 0,
           child: ValueListenableBuilder<WatchConfig>(
-            valueListenable: project.tests.watchConfig,
-            builder: (context, watchConfig, child) {
-              return CustomPopupMenuButton<String>(
-                splashRadius: Material.defaultSplashRadius / 2,
-                iconConstraints: BoxConstraints(),
-                constraints: BoxConstraints(
-                  minWidth: 2.0 * 56.0,
-                  maxWidth: 10.0 * 56.0,
-                ),
-                tooltip: 'Configure auto hot reload',
-                padding: EdgeInsets.zero,
-                icon: Icon(
-                  Icons.more_vert,
-                  size: 15,
-                ),
-                onSelected: (select) {
-                  project.tests.updateWatchConfig(watchConfig.toggleFolder(select));
-                },
-                itemBuilder: (context) => [
-                  for (var folder in WatchConfig.defaultFolders)
-                  CheckedPopupMenuItem(
-                    value: folder,
-                    checked: watchConfig.contains(folder),
-                    child: Text(
-                      'Hot reload on change in $folder/',
-                      style: const TextStyle(color: Colors.black87),
-                    ),
+              valueListenable: project.tests.watchConfig,
+              builder: (context, watchConfig, child) {
+                return CustomPopupMenuButton<String>(
+                  splashRadius: Material.defaultSplashRadius / 2,
+                  iconConstraints: BoxConstraints(),
+                  constraints: BoxConstraints(
+                    minWidth: 2.0 * 56.0,
+                    maxWidth: 10.0 * 56.0,
                   ),
-                ],
-              );
-            }
-          ),
+                  tooltip: 'Configure auto hot reload',
+                  padding: EdgeInsets.zero,
+                  icon: Icon(
+                    Icons.more_vert,
+                    size: 15,
+                  ),
+                  onSelected: (select) {
+                    project.tests
+                        .updateWatchConfig(watchConfig.toggleFolder(select));
+                  },
+                  itemBuilder: (context) => [
+                    for (var folder in WatchConfig.defaultFolders)
+                      CheckedPopupMenuItem(
+                        value: folder,
+                        checked: watchConfig.contains(folder),
+                        child: Text(
+                          'Hot reload on change in $folder/',
+                          style: const TextStyle(color: Colors.black87),
+                        ),
+                      ),
+                  ],
+                );
+              }),
         ),
         Positioned(
           top: 0,
           left: 0,
           right: 0,
           child: ValueListenableBuilder<DaemonProgressMessage?>(
-            valueListenable: daemon.progressMessage,
-            builder: (context, message, child) {
-              if (message == null) return const SizedBox();
+              valueListenable: daemon.progressMessage,
+              builder: (context, message, child) {
+                if (message == null) return const SizedBox();
 
-              var background = AppColors.inMenuToolbarBackground;
-              var foreground = Colors.black87;
-              if (message.code != 0) {
-                 background = AppColors.stateError;
-                 foreground = Colors.white;
-              }
+                var background = AppColors.inMenuToolbarBackground;
+                var foreground = Colors.black87;
+                if (message.code != 0) {
+                  background = AppColors.stateError;
+                  foreground = Colors.white;
+                }
 
-              return FractionalTranslation(
-                translation: Offset(0, -0.4),
-                child: Center(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: background,
-                      border: Border.all(color: Colors.black26),
-                      borderRadius: BorderRadius.circular(10)
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: AutoSizeText(
-                      message.message,
-                      style: TextStyle(fontSize: 11, color: foreground),
-                      maxFontSize: 11,
-                      minFontSize: 8,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
+                return FractionalTranslation(
+                  translation: Offset(0, -0.4),
+                  child: Center(
+                    child: Container(
+                      decoration: BoxDecoration(
+                          color: background,
+                          border: Border.all(color: Colors.black26),
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: AutoSizeText(
+                        message.message,
+                        style: TextStyle(fontSize: 11, color: foreground),
+                        maxFontSize: 11,
+                        minFontSize: 8,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                      ),
                     ),
                   ),
-                ),
-              );
-            }
-          ),
+                );
+              }),
         ),
       ],
     );

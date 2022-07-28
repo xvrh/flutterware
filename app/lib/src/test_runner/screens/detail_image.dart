@@ -1,13 +1,12 @@
-import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterware/internals/test_runner.dart';
 import '../detail.dart';
 
 class ImageDetail extends StatefulWidget {
   final TestRun run;
   final Screen screen;
 
-  const ImageDetail(this.run, this.screen, {Key? key})
-      : super(key: key);
+  const ImageDetail(this.run, this.screen, {Key? key}) : super(key: key);
 
   @override
   State<ImageDetail> createState() => _ImageDetailState();

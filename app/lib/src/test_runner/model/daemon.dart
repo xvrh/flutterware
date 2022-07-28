@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
+import 'package:path/path.dart' as p;
 import '../../globals.dart';
 import '../../project.dart';
 import '../../utils/daemon/commands.dart';
@@ -11,7 +12,7 @@ import '../../utils/daemon/events.dart';
 import '../../utils/daemon/protocol.dart';
 import '../entry_point.dart';
 import 'server.dart';
-import 'package:path/path.dart' as p;
+
 export '../../utils/daemon/events.dart' show MessageLevel;
 
 final _logger = Logger('Test daemon');
@@ -76,7 +77,8 @@ class Daemon {
 
   ValueListenable<bool> get isReloading => _isReloading;
 
-  ValueListenable<DaemonProgressMessage?> get progressMessage => _progressMessage;
+  ValueListenable<DaemonProgressMessage?> get progressMessage =>
+      _progressMessage;
 
   Future<void> reload({required bool fullRestart}) async {
     _isReloading.value = true;
@@ -126,7 +128,8 @@ class DaemonStarter {
   }
 
   Future<void> writeEntryPoint(List<TestFile> testFiles) async {
-    var code = entryPointCode(project, testFiles, serverUri: server.socketUri!, loggerUri: project.loggerUri);
+    var code = entryPointCode(project, testFiles,
+        serverUri: server.socketUri!, loggerUri: project.loggerUri);
     await _entryPoint.writeAsString(code);
   }
 

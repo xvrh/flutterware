@@ -1,10 +1,8 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutterware/internals/test_runner.dart';
-import 'package:flutterware_app/src/test_runner/ui/phone_status_bar.dart';
-
 import '../utils/raw_image_provider.dart';
+import 'ui/phone_status_bar.dart';
 
 class ScreenshotFrame extends StatelessWidget {
   final Screen screen;

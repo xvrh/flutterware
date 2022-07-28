@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/internals/remote_log.dart';
-import 'package:flutterware/internals/remote_log_adapter.dart';
 import 'package:logging/logging.dart';
+import '../../../internals/remote_log.dart';
+import '../../../internals/remote_log_adapter.dart';
 import 'runner.dart';
 import 'setup_io.dart' if (dart.library.html) 'setup_web.dart';
 
@@ -57,7 +57,6 @@ void _setupLogger(Uri? loggerUri) {
   } else {
     logger = LogClient.print();
   }
-
 
   Logger.root
     ..level = Level.ALL

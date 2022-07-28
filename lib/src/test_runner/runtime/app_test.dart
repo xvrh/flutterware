@@ -1,8 +1,7 @@
 import 'package:flutter/widgets.dart';
-import 'package:flutterware/src/test_runner/runtime/run_context.dart';
-
 import '../api.dart';
 import 'extract_text.dart';
+import 'run_context.dart';
 
 abstract class AppTest {
   Future<void> setUp() async {}
@@ -94,8 +93,7 @@ abstract class AppTest {
     await _pumpFramesIfNeeded(pumpFrames);
   }
 
-  RenderBox? _getElementBox(
-    Finder finder) {
+  RenderBox? _getElementBox(Finder finder) {
     final elements = finder.evaluate();
     if (elements.isNotEmpty) {
       var renderBox = elements.first.renderObject;

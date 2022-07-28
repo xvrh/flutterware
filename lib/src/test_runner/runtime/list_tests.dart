@@ -1,10 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-
-import '../protocol/model/test_reference.dart';
 import 'package:test_api/src/backend/declarer.dart'; // ignore: implementation_imports
-import 'package:test_api/src/backend/group_entry.dart'; // ignore: implementation_imports
 import 'package:test_api/src/backend/group.dart'; // ignore: implementation_imports
-import 'package:test_api/src/backend/test.dart'; // ignore: implementation_imports
+import 'package:test_api/src/backend/group_entry.dart'; // ignore: implementation_imports
+import 'package:test_api/src/backend/test.dart';
+import '../protocol/model/test_reference.dart';
+
+// ignore: implementation_imports
 
 Group findTest(Map<String, void Function()> allTests, String fullTestName) {
   var declarer = Declarer(fullTestName: fullTestName);
@@ -27,8 +28,7 @@ Iterable<TestReference> listTests(Map<String, void Function()> allMains) {
   return _listTests([], builtGroup);
 }
 
-Iterable<TestReference> _listTests(
-    List<String> parents, Group group) sync* {
+Iterable<TestReference> _listTests(List<String> parents, Group group) sync* {
   for (var entry in group.entries) {
     var simpleName = _individualName(entry, group);
     var name = [...parents, simpleName];

@@ -1,8 +1,6 @@
 import 'dart:ui' as ui;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
-
 import 'model/icons.dart';
 
 class AppIconImageProvider extends ImageProvider<Object> {

@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutterware_app/src/overview/model/assets.dart';
-import 'package:flutterware_app/src/overview/model/code_metrics.dart';
-import 'package:flutterware_app/src/utils/async_value.dart';
+import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 import '../project.dart';
-import 'package:path/path.dart' as p;
+import '../utils/async_value.dart';
+import 'model/assets.dart';
+import 'model/code_metrics.dart';
 
 class ProjectInfoService {
   final Project project;

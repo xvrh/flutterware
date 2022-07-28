@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
-import 'package:flutterware/flutter_test.dart';
 import 'package:path/path.dart' as path;
+import '../../../flutter_test.dart';
 import 'asset_bundle.dart';
 import 'setup.dart' show BundleParameters;
 

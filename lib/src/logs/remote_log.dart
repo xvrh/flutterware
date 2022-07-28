@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:collection/collection.dart';
-
 import 'logger.dart';
 
 class RemoteLogServer {

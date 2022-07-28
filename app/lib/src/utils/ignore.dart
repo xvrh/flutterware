@@ -25,6 +25,7 @@
 /// [Ignore.listFiles].
 ///
 /// [1]: https://git-scm.com/docs/gitignore
+
 import 'package:meta/meta.dart';
 
 /// A set of ignore rules representing a single ignore file.
@@ -93,14 +94,14 @@ class Ignore {
   /// [1]: https://git-scm.com/docs/gitignore
   /// [2]: https://git-scm.com/docs/git-config#Documentation/git-config.txt-coreignoreCase
   Ignore(
-      List<String> patterns, {
-        bool ignoreCase = false,
-        void Function(String pattern, FormatException exception)? onInvalidPattern,
-      }) : _rules = _parseIgnorePatterns(
-    patterns,
-    ignoreCase,
-    onInvalidPattern: onInvalidPattern,
-  ).toList(growable: false);
+    List<String> patterns, {
+    bool ignoreCase = false,
+    void Function(String pattern, FormatException exception)? onInvalidPattern,
+  }) : _rules = _parseIgnorePatterns(
+          patterns,
+          ignoreCase,
+          onInvalidPattern: onInvalidPattern,
+        ).toList(growable: false);
 
   /// Returns `true` if [path] is ignored by the patterns used to create this
   /// [Ignore] instance, assuming those patterns are placed at `.`.
@@ -144,7 +145,7 @@ class Ignore {
       return false;
     }
     final pathWithoutSlash =
-    path.endsWith('/') ? path.substring(0, path.length - 1) : path;
+        path.endsWith('/') ? path.substring(0, path.length - 1) : path;
     return listFiles(
       beneath: pathWithoutSlash,
       includeDirs: true,
@@ -158,7 +159,7 @@ class Ignore {
       },
       ignoreForDir: (dir) => dir == '.' || dir.isEmpty ? this : null,
       isDir: (candidate) =>
-      candidate == '.' ||
+          candidate == '.' ||
           candidate.isEmpty ||
           path.length > candidate.length && path[candidate.length] == '/',
     ).isEmpty;
@@ -288,7 +289,7 @@ class Ignore {
         ignoreStack.add(ignore == null
             ? null
             : _IgnorePrefixPair(
-            ignore, current == '/' ? current : '$current/'));
+                ignore, current == '/' ? current : '$current/'));
         // Put all entities in current on the stack to be processed.
         toVisit.add(listDir(normalizedCurrent).map((x) => '/$x').toList());
         if (includeDirs) {
@@ -349,10 +350,10 @@ final _lineBreakPattern = RegExp('\r?\n');
 /// [onInvalidPattern] can be used to handle parse failures. If
 /// [onInvalidPattern] is `null` invalid patterns are ignored.
 Iterable<_IgnoreRule> _parseIgnorePatterns(
-    Iterable<String> patterns,
-    bool ignoreCase, {
-      void Function(String pattern, FormatException exception)? onInvalidPattern,
-    }) sync* {
+  Iterable<String> patterns,
+  bool ignoreCase, {
+  void Function(String pattern, FormatException exception)? onInvalidPattern,
+}) sync* {
   ArgumentError.checkNotNull(patterns, 'patterns');
   ArgumentError.checkNotNull(ignoreCase, 'ignoreCase');
   onInvalidPattern ??= (_, __) {};
@@ -567,7 +568,7 @@ bool _matchesStack(List<_IgnorePrefixPair?> ignores, String path) {
     if (ignorePair == null) continue;
     final prefixLength = ignorePair.prefix.length;
     final s =
-    prefixLength == 0 ? path : path.substring(ignorePair.prefix.length);
+        prefixLength == 0 ? path : path.substring(ignorePair.prefix.length);
     for (final rule in ignorePair.ignore._rules.reversed) {
       if (rule.pattern.hasMatch(s)) {
         return !rule.negative;

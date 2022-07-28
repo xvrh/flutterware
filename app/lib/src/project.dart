@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:io';
-
 import 'package:flutter/foundation.dart';
-import 'package:flutterware_app/src/dependencies/model/service.dart';
 import 'package:json_annotation/json_annotation.dart';
 import 'package:path/path.dart' as p;
 import 'package:pubspec_parse/pubspec_parse.dart';
+import 'dependencies/model/service.dart';
 import 'flutter_sdk.dart';
 import 'icon/model/service.dart';
 import 'overview/service.dart';

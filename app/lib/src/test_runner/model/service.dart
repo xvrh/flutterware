@@ -1,15 +1,14 @@
 import 'dart:async';
-
+import 'package:async/async.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutterware_app/src/test_runner/model/daemon.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:rxdart/rxdart.dart';
 import 'package:watcher/watcher.dart';
 import '../../project.dart';
 import '../protocol/api.dart';
+import 'daemon.dart';
 import 'server.dart';
-import 'package:async/async.dart';
 
 final _logger = Logger('test_runner_service');
 
@@ -37,10 +36,11 @@ class TestService {
   final _state = ValueNotifier<DaemonState>(DaemonState$Stopped());
 
   // TODO(xha): load config from config file
-  final _watchConfig = ValueNotifier<WatchConfig>(WatchConfig(WatchConfig.defaultFolders));
+  final _watchConfig =
+      ValueNotifier<WatchConfig>(WatchConfig(WatchConfig.defaultFolders));
   final _server = Server();
   StreamSubscription? _fileWatcherSubscription;
-  final  _messageController = StreamController<DaemonMessage>.broadcast();
+  final _messageController = StreamController<DaemonMessage>.broadcast();
 
   TestService(this.project);
 
@@ -61,7 +61,8 @@ class TestService {
 
     _state.value = DaemonState$Starting('');
 
-    var daemonStarter = DaemonStarter(project, _server, _messageController.sink);
+    var daemonStarter =
+        DaemonStarter(project, _server, _messageController.sink);
     try {
       var daemon = await daemonStarter.start();
       _state.value = DaemonState$Connected(daemon);
@@ -89,7 +90,7 @@ class TestService {
 
     _fileWatcherSubscription = StreamGroup.merge([
       for (var config in config.folders)
-      DirectoryWatcher(p.join(project.directory.path, config)).events,
+        DirectoryWatcher(p.join(project.directory.path, config)).events,
     ]).throttleTime(Duration(seconds: 1)).listen((e) {
       var stateValue = _state.value;
       if (stateValue is DaemonState$Connected) {

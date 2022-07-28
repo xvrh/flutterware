@@ -1,15 +1,14 @@
 import 'package:collection/collection.dart';
-import '../utils.dart';
-import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterware/internals/test_runner.dart';
+import '../utils.dart';
 import 'screens/detail_image.dart';
 
 class DetailPage extends StatelessWidget {
   final TestRun run;
   final String screenId;
 
-  const DetailPage(this.run, this.screenId, {Key? key})
-      : super(key: key);
+  const DetailPage(this.run, this.screenId, {Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +38,7 @@ class DetailSkeleton extends StatelessWidget {
     Key? key,
     required this.main,
     required this.sidebar,
-        required this.onOverLink,
+    required this.onOverLink,
   }) : super(key: key);
 
   @override
@@ -74,22 +73,21 @@ class DetailSkeleton extends StatelessWidget {
                   right: 0,
                   bottom: 0,
                   child: Column(
-                children: [
-                  for (var next in screen.next)
-                    MouseRegion(
-                      key: ValueKey(next),
-                      onEnter: (_) {
-                        onOverLink(next);
-                      },
-                      onExit: (_) {
-                        onOverLink(null);
-                      },
-                      child: _ScreenLink(
-                        run.screens[next.to]!, isNext: true
-                      ),
-                    ),
-                ],
-              ))
+                    children: [
+                      for (var next in screen.next)
+                        MouseRegion(
+                          key: ValueKey(next),
+                          onEnter: (_) {
+                            onOverLink(next);
+                          },
+                          onExit: (_) {
+                            onOverLink(null);
+                          },
+                          child:
+                              _ScreenLink(run.screens[next.to]!, isNext: true),
+                        ),
+                    ],
+                  ))
             ],
           ),
         ),
@@ -154,16 +152,14 @@ class _ScreenLink extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (!isNext)
-          Icon(Icons.arrow_back_ios, size: 13),
+          if (!isNext) Icon(Icons.arrow_back_ios, size: 13),
           Text(
             name,
             style: const TextStyle(
               fontSize: 10,
             ),
           ),
-          if (isNext)
-            Icon(Icons.arrow_forward_ios, size: 13),
+          if (isNext) Icon(Icons.arrow_forward_ios, size: 13),
         ],
       ),
     );

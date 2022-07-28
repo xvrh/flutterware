@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
-import 'package:flutterware_app/src/utils/router_outlet/path.dart';
-export 'package:flutterware_app/src/utils/router_outlet/path.dart'
-    show SelectionType;
+import 'path.dart';
 import 'provider.dart';
 import 'router_root.dart';
+
+export 'path.dart' show SelectionType;
 
 extension UrlRouterExtension on BuildContext {
   void go(String url) => router.go(url);

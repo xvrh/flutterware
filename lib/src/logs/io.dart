@@ -1,9 +1,7 @@
-
-
-import 'package:meta/meta.dart';
 import 'dart:io' as io;
-
+import 'package:meta/meta.dart';
 import 'async_guard.dart';
+
 /// A class that wraps stdout, stderr, and stdin, and exposes the allowed
 /// operations.
 ///
@@ -24,7 +22,8 @@ class Stdio {
   Stdio.test({
     required io.Stdout stdout,
     required io.IOSink stderr,
-  }) : _stdoutOverride = stdout, _stderrOverride = stderr;
+  })  : _stdoutOverride = stdout,
+        _stderrOverride = stderr;
 
   io.Stdout? _stdoutOverride;
   io.IOSink? _stderrOverride;
@@ -43,11 +42,16 @@ class Stdio {
     }
     _stdout = _stdoutOverride ?? io.stdout;
     _stdout!.done.then(
-          (void _) { _stdoutDone = true; },
-      onError: (Object err, StackTrace st) { _stdoutDone = true; },
+      (void _) {
+        _stdoutDone = true;
+      },
+      onError: (Object err, StackTrace st) {
+        _stdoutDone = true;
+      },
     );
     return _stdout!;
   }
+
   //ignore: close_sinks
   io.Stdout? _stdout;
 
@@ -58,11 +62,16 @@ class Stdio {
     }
     _stderr = _stderrOverride ?? io.stderr;
     _stderr!.done.then(
-          (void _) { _stderrDone = true; },
-      onError: (Object err, StackTrace st) { _stderrDone = true; },
+      (void _) {
+        _stderrDone = true;
+      },
+      onError: (Object err, StackTrace st) {
+        _stderrDone = true;
+      },
     );
     return _stderr!;
   }
+
   //ignore: close_sinks
   io.IOSink? _stderr;
 
@@ -104,39 +113,45 @@ class Stdio {
   /// Writes [message] to [stderr], falling back on [fallback] if the write
   /// throws any exception. The default fallback calls [print] on [message].
   void stderrWrite(
-      String message, {
-        void Function(String, dynamic, StackTrace)? fallback,
-      }) {
+    String message, {
+    void Function(String, dynamic, StackTrace)? fallback,
+  }) {
     if (!_stderrDone) {
       _stdioWrite(stderr, message, fallback: fallback);
       return;
     }
-    fallback == null ? print(message) : fallback(
-      message,
-      const io.StdoutException('stderr is done'),
-      StackTrace.current,
-    );
+    fallback == null
+        ? print(message)
+        : fallback(
+            message,
+            const io.StdoutException('stderr is done'),
+            StackTrace.current,
+          );
   }
 
   /// Writes [message] to [stdout], falling back on [fallback] if the write
   /// throws any exception. The default fallback calls [print] on [message].
   void stdoutWrite(
-      String message, {
-        void Function(String, dynamic, StackTrace)? fallback,
-      }) {
+    String message, {
+    void Function(String, dynamic, StackTrace)? fallback,
+  }) {
     if (!_stdoutDone) {
       _stdioWrite(stdout, message, fallback: fallback);
       return;
     }
-    fallback == null ? print(message) : fallback(
-      message,
-      const io.StdoutException('stdout is done'),
-      StackTrace.current,
-    );
+    fallback == null
+        ? print(message)
+        : fallback(
+            message,
+            const io.StdoutException('stdout is done'),
+            StackTrace.current,
+          );
   }
 
   // Helper for [stderrWrite] and [stdoutWrite].
-  void _stdioWrite(io.IOSink sink, String message, {
+  void _stdioWrite(
+    io.IOSink sink,
+    String message, {
     void Function(String, dynamic, StackTrace)? fallback,
   }) {
     asyncGuard<void>(() async {
@@ -151,8 +166,10 @@ class Stdio {
   }
 
   /// Adds [stream] to [stdout].
-  Future<void> addStdoutStream(Stream<List<int>> stream) => stdout.addStream(stream);
+  Future<void> addStdoutStream(Stream<List<int>> stream) =>
+      stdout.addStream(stream);
 
   /// Adds [stream] to [stderr].
-  Future<void> addStderrStream(Stream<List<int>> stream) => stderr.addStream(stream);
+  Future<void> addStderrStream(Stream<List<int>> stream) =>
+      stderr.addStream(stream);
 }

@@ -1,9 +1,8 @@
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/test_runner/protocol/models.dart';
-
 import '../../../flutter_test.dart';
+import '../protocol/models.dart';
 import 'fake_window_padding.dart';
 import 'run_context.dart';
 
@@ -38,7 +37,9 @@ Future<void> Function(WidgetTester) withTestValues(
       platformDispatcher.platformBrightnessTestValue =
           ui.Brightness.values[platformBrightness];
     }
-    platformDispatcher.localesTestValue = [Locale(args.locale.language, args.locale.country)];
+    platformDispatcher.localesTestValue = [
+      Locale(args.locale.language, args.locale.country)
+    ];
     debugDefaultTargetPlatformOverride = device.platform.toTargetPlatform();
 
     try {

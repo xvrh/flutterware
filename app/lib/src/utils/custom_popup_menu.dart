@@ -1,5 +1,3 @@
-
-
 import 'package:flutter/material.dart';
 
 // ignore_for_file: omit_local_variable_types
@@ -52,9 +50,9 @@ class CustomPopupMenuButton<T> extends StatefulWidget {
     this.constraints,
     this.iconConstraints,
     this.position = PopupMenuPosition.over,
-  }) : assert(
-        !(child != null && icon != null),
-        'You can only pass [child] or [icon], not both.',
+  })  : assert(
+          !(child != null && icon != null),
+          'You can only pass [child] or [icon], not both.',
         ),
         super(key: key);
 
@@ -185,7 +183,8 @@ class CustomPopupMenuButton<T> extends StatefulWidget {
   final PopupMenuPosition position;
 
   @override
-  CustomPopupMenuButtonState<T> createState() => CustomPopupMenuButtonState<T>();
+  CustomPopupMenuButtonState<T> createState() =>
+      CustomPopupMenuButtonState<T>();
 }
 
 /// The [State] for a [PopupMenuButton].
@@ -204,20 +203,24 @@ class CustomPopupMenuButtonState<T> extends State<CustomPopupMenuButton<T>> {
   void showButtonMenu() {
     final PopupMenuThemeData popupMenuTheme = PopupMenuTheme.of(context);
     final RenderBox button = context.findRenderObject()! as RenderBox;
-    final RenderBox overlay = Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final RenderBox overlay =
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
     final Offset offset;
     switch (widget.position) {
       case PopupMenuPosition.over:
         offset = widget.offset;
         break;
       case PopupMenuPosition.under:
-        offset = Offset(0.0, button.size.height - (widget.padding.vertical / 2)) + widget.offset;
+        offset =
+            Offset(0.0, button.size.height - (widget.padding.vertical / 2)) +
+                widget.offset;
         break;
     }
     final RelativeRect position = RelativeRect.fromRect(
       Rect.fromPoints(
         button.localToGlobal(offset, ancestor: overlay),
-        button.localToGlobal(button.size.bottomRight(Offset.zero) + offset, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero) + offset,
+            ancestor: overlay),
       ),
       Offset.zero & overlay.size,
     );
@@ -233,8 +236,7 @@ class CustomPopupMenuButtonState<T> extends State<CustomPopupMenuButton<T>> {
         shape: widget.shape ?? popupMenuTheme.shape,
         color: widget.color ?? popupMenuTheme.color,
         constraints: widget.constraints,
-      )
-          .then<void>((T? newValue) {
+      ).then<void>((T? newValue) {
         if (!mounted) {
           return null;
         }
@@ -248,7 +250,8 @@ class CustomPopupMenuButtonState<T> extends State<CustomPopupMenuButton<T>> {
   }
 
   bool get _canRequestFocus {
-    final NavigationMode mode = MediaQuery.maybeOf(context)?.navigationMode ?? NavigationMode.traditional;
+    final NavigationMode mode = MediaQuery.maybeOf(context)?.navigationMode ??
+        NavigationMode.traditional;
     switch (mode) {
       case NavigationMode.traditional:
         return widget.enabled;
@@ -260,15 +263,16 @@ class CustomPopupMenuButtonState<T> extends State<CustomPopupMenuButton<T>> {
   @override
   Widget build(BuildContext context) {
     final IconThemeData iconTheme = IconTheme.of(context);
-    final bool enableFeedback = widget.enableFeedback
-        ?? PopupMenuTheme.of(context).enableFeedback
-        ?? true;
+    final bool enableFeedback = widget.enableFeedback ??
+        PopupMenuTheme.of(context).enableFeedback ??
+        true;
 
     assert(debugCheckHasMaterialLocalizations(context));
 
     if (widget.child != null) {
       return Tooltip(
-        message: widget.tooltip ?? MaterialLocalizations.of(context).showMenuTooltip,
+        message:
+            widget.tooltip ?? MaterialLocalizations.of(context).showMenuTooltip,
         child: InkWell(
           onTap: widget.enabled ? showButtonMenu : null,
           canRequestFocus: _canRequestFocus,
@@ -284,7 +288,8 @@ class CustomPopupMenuButtonState<T> extends State<CustomPopupMenuButton<T>> {
       padding: widget.padding,
       splashRadius: widget.splashRadius,
       iconSize: widget.iconSize ?? iconTheme.size ?? 24.0,
-      tooltip: widget.tooltip ?? MaterialLocalizations.of(context).showMenuTooltip,
+      tooltip:
+          widget.tooltip ?? MaterialLocalizations.of(context).showMenuTooltip,
       onPressed: widget.enabled ? showButtonMenu : null,
       enableFeedback: enableFeedback,
       constraints: widget.iconConstraints,

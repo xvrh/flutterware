@@ -43,7 +43,6 @@ class AnimatableWidget extends StatelessWidget {
   }
 }
 
-
 // Generated
 class TimelineGenerated extends StatelessWidget {
   final AnimationController controller;

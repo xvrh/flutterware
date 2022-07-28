@@ -1,8 +1,6 @@
 import 'dart:async';
-
 import 'package:flutter/widgets.dart';
 import 'package:rxdart/rxdart.dart';
-
 import 'ui/loading.dart';
 
 extension StateExtension on State {

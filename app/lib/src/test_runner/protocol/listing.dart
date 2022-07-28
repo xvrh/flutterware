@@ -1,6 +1,6 @@
 import 'package:built_collection/built_collection.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:flutterware/internals/test_runner.dart';
+import 'package:rxdart/rxdart.dart';
 
 class ListingHost {
   final Channel _channel;
@@ -12,8 +12,8 @@ class ListingHost {
       : _channel = connection.createChannel('Listing');
 
   void list() async {
-    var result = (await _channel.sendRequest<BuiltList>('list'))
-        .cast<TestReference>();
+    var result =
+        (await _channel.sendRequest<BuiltList>('list')).cast<TestReference>();
 
     var oldMap = allTests.value;
     var newTests = oldMap.rebuild((b) {

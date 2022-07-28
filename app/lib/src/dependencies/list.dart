@@ -1,17 +1,16 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/dependencies/detail.dart';
-import 'package:flutterware_app/src/dependencies/model/service.dart';
-import 'package:flutterware_app/src/utils/ui/message_dialog.dart';
-import 'package:pubviz/open.dart' as pubviz;
-import 'package:flutterware_app/src/dependencies/upgrades.dart';
 import 'package:pub_scores/pub_scores.dart';
+import 'package:pubviz/open.dart' as pubviz;
 import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
-import 'package:collection/collection.dart';
-
+import '../utils/ui/message_dialog.dart';
+import 'detail.dart';
 import 'model/package_imports.dart';
+import 'model/service.dart';
+import 'upgrades.dart';
 import 'utils.dart';
 
 class DependenciesScreen extends StatefulWidget {

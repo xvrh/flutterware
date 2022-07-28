@@ -6,7 +6,7 @@ part of 'run_args.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<RunArgs> _$runArgsSerializer = new _$RunArgsSerializer();
+Serializer<RunArgs> _$runArgsSerializer = _$RunArgsSerializer();
 
 class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
   @override
@@ -22,8 +22,7 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
       serializers.serialize(object.id, specifiedType: const FullType(int)),
       'testName',
       serializers.serialize(object.testName,
-          specifiedType:
-              const FullType(BuiltList, const [const FullType(String)])),
+          specifiedType: const FullType(BuiltList, [FullType(String)])),
       'device',
       serializers.serialize(object.device,
           specifiedType: const FullType(DeviceInfo)),
@@ -50,7 +49,7 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
   @override
   RunArgs deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = new RunArgsBuilder();
+    final result = RunArgsBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -64,8 +63,7 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
           break;
         case 'testName':
           result.testName.replace(serializers.deserialize(value,
-                  specifiedType: const FullType(
-                      BuiltList, const [const FullType(String)]))!
+                  specifiedType: const FullType(BuiltList, [FullType(String)]))!
               as BuiltList<Object?>);
           break;
         case 'device':
@@ -114,7 +112,7 @@ class _$RunArgs extends RunArgs {
   final int? platformBrightness;
 
   factory _$RunArgs([void Function(RunArgsBuilder)? updates]) =>
-      (new RunArgsBuilder()..update(updates))._build();
+      (RunArgsBuilder()..update(updates))._build();
 
   _$RunArgs._(
       {required this.id,
@@ -139,7 +137,7 @@ class _$RunArgs extends RunArgs {
       (toBuilder()..update(updates)).build();
 
   @override
-  RunArgsBuilder toBuilder() => new RunArgsBuilder()..replace(this);
+  RunArgsBuilder toBuilder() => RunArgsBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -191,16 +189,16 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
 
   ListBuilder<String>? _testName;
   ListBuilder<String> get testName =>
-      _$this._testName ??= new ListBuilder<String>();
+      _$this._testName ??= ListBuilder<String>();
   set testName(ListBuilder<String>? testName) => _$this._testName = testName;
 
   DeviceInfoBuilder? _device;
-  DeviceInfoBuilder get device => _$this._device ??= new DeviceInfoBuilder();
+  DeviceInfoBuilder get device => _$this._device ??= DeviceInfoBuilder();
   set device(DeviceInfoBuilder? device) => _$this._device = device;
 
   AccessibilityConfigBuilder? _accessibility;
   AccessibilityConfigBuilder get accessibility =>
-      _$this._accessibility ??= new AccessibilityConfigBuilder();
+      _$this._accessibility ??= AccessibilityConfigBuilder();
   set accessibility(AccessibilityConfigBuilder? accessibility) =>
       _$this._accessibility = accessibility;
 
@@ -210,7 +208,7 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
 
   SerializableLocaleBuilder? _locale;
   SerializableLocaleBuilder get locale =>
-      _$this._locale ??= new SerializableLocaleBuilder();
+      _$this._locale ??= SerializableLocaleBuilder();
   set locale(SerializableLocaleBuilder? locale) => _$this._locale = locale;
 
   int? _platformBrightness;
@@ -253,7 +251,7 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
     _$RunArgs _$result;
     try {
       _$result = _$v ??
-          new _$RunArgs._(
+          _$RunArgs._(
               id: BuiltValueNullFieldError.checkNotNull(id, 'RunArgs', 'id'),
               testName: testName.build(),
               device: device.build(),
@@ -275,7 +273,7 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
         _$failedField = 'locale';
         locale.build();
       } catch (e) {
-        throw new BuiltValueNestedFieldError(
+        throw BuiltValueNestedFieldError(
             'RunArgs', _$failedField, e.toString());
       }
       rethrow;

@@ -1,5 +1,4 @@
 import 'package:flutterware/internals/remote_log.dart';
-
 import 'utils/resource_cleaner.dart';
 
 class Globals {

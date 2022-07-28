@@ -7,7 +7,7 @@ part of 'locale.dart';
 // **************************************************************************
 
 Serializer<SerializableLocale> _$serializableLocaleSerializer =
-    new _$SerializableLocaleSerializer();
+    _$SerializableLocaleSerializer();
 
 class _$SerializableLocaleSerializer
     implements StructuredSerializer<SerializableLocale> {
@@ -40,7 +40,7 @@ class _$SerializableLocaleSerializer
   SerializableLocale deserialize(
       Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = new SerializableLocaleBuilder();
+    final result = SerializableLocaleBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -71,7 +71,7 @@ class _$SerializableLocale extends SerializableLocale {
 
   factory _$SerializableLocale(
           [void Function(SerializableLocaleBuilder)? updates]) =>
-      (new SerializableLocaleBuilder()..update(updates))._build();
+      (SerializableLocaleBuilder()..update(updates))._build();
 
   _$SerializableLocale._({required this.language, this.country}) : super._() {
     BuiltValueNullFieldError.checkNotNull(
@@ -85,7 +85,7 @@ class _$SerializableLocale extends SerializableLocale {
 
   @override
   SerializableLocaleBuilder toBuilder() =>
-      new SerializableLocaleBuilder()..replace(this);
+      SerializableLocaleBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -149,7 +149,7 @@ class SerializableLocaleBuilder
 
   _$SerializableLocale _build() {
     final _$result = _$v ??
-        new _$SerializableLocale._(
+        _$SerializableLocale._(
             language: BuiltValueNullFieldError.checkNotNull(
                 language, 'SerializableLocale', 'language'),
             country: country);

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/test_runner/protocol/api.dart';
 import '../project.dart';
 import '../ui/side_menu.dart';
 import 'daemon_toolbar.dart';
 import 'listing.dart';
 import 'model/service.dart';
+import 'protocol/api.dart';
 
 class TestMenu extends StatelessWidget {
   final Project project;

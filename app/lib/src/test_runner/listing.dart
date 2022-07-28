@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:built_collection/built_collection.dart';
 import 'package:collection/collection.dart';
-import '../utils/router_outlet.dart';
-import 'package:flutterware/internals/test_runner.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterware/internals/test_runner.dart';
+import '../app/paths.dart' as paths;
+import '../utils/router_outlet.dart';
 import 'protocol/api.dart';
 import 'protocol/listing.dart';
 import 'ui/menu_tree.dart';
-import '../app/paths.dart' as paths;
 
 class TestListingView extends StatefulWidget {
   final TestRunnerApi client;
@@ -58,8 +58,7 @@ class _TestListingViewState extends State<TestListingView> {
     );
   }
 
-  List<MenuEntry> _menu(
-      BuiltMap<BuiltList<String>, TestReference> tests) {
+  List<MenuEntry> _menu(BuiltMap<BuiltList<String>, TestReference> tests) {
     var entries = <MenuEntry>[];
 
     for (var test in tests.entries) {

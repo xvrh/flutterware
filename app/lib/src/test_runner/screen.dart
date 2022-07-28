@@ -1,12 +1,11 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/test_runner/app_connected.dart';
-import 'package:flutterware_app/src/test_runner/daemon_toolbar.dart';
-import 'package:flutterware_app/src/test_runner/help.dart';
-import 'package:flutterware_app/src/utils/router_outlet.dart';
-import 'model/daemon.dart' show MessageLevel;
 import '../project.dart';
+import '../utils/router_outlet.dart';
+import 'app_connected.dart';
+import 'daemon_toolbar.dart';
+import 'help.dart';
+import 'model/daemon.dart' show MessageLevel;
 import 'protocol/api.dart';
 
 class TestRunnerScreen extends StatefulWidget {
@@ -85,7 +84,8 @@ class _RunScreen extends StatelessWidget {
         var clients = snapshot.requireData;
         if (clients.isNotEmpty) {
           var client = clients.last;
-          return TestRunView(client, reloadToolbar: SmallDaemonToolbar(project));
+          return TestRunView(client,
+              reloadToolbar: SmallDaemonToolbar(project));
         }
         return Center(child: CircularProgressIndicator());
       },

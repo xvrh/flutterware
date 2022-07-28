@@ -3,7 +3,9 @@ import 'package:test_api/src/backend/live_test.dart'; // ignore: implementation_
 import 'package:test_api/src/backend/runtime.dart'; // ignore: implementation_imports
 import 'package:test_api/src/backend/suite.dart'; // ignore: implementation_imports
 import 'package:test_api/src/backend/suite_platform.dart'; // ignore: implementation_imports
-import 'package:test_api/src/backend/test.dart'; // ignore: implementation_imports
+import 'package:test_api/src/backend/test.dart';
+
+// ignore: implementation_imports
 
 Future<List<LiveTest>> runGroup(Group builtGroup) async {
   final suite = Suite(builtGroup, SuitePlatform(Runtime.vm));

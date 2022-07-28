@@ -26,7 +26,8 @@ void main(List<String> arguments) async {
     return;
   }
 
-  logger.printTrace('Platform.resolvedExecutable: ${Platform.resolvedExecutable}');
+  logger.printTrace(
+      'Platform.resolvedExecutable: ${Platform.resolvedExecutable}');
   logger.printTrace('Platform.script: ${Platform.script}');
   logger.printTrace('Flutterware Package: $pubPackage');
   logger.printTrace('PackageRoot: $packageRoot');
@@ -83,8 +84,7 @@ void main(List<String> arguments) async {
   if (code > 0) {
     logger.printError('CLI terminated with error ($code).\n'
         'Stdout: ${await utf8.decodeStream(process.stdout)}\n'
-        'Stderr: ${await utf8.decodeStream(process.stderr)}'
-    );
+        'Stderr: ${await utf8.decodeStream(process.stderr)}');
     exit(code);
   }
 }

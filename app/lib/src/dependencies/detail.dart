@@ -1,12 +1,9 @@
 import 'dart:io';
 import 'dart:ui';
-
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:flutterware_app/src/dependencies/model/package_imports.dart';
-import 'package:flutterware_app/src/dependencies/model/service.dart';
-import 'package:flutterware_app/src/utils/cloc/cloc.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:pub_scores/pub_scores.dart';
@@ -14,9 +11,10 @@ import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
-import 'package:auto_size_text/auto_size_text.dart';
-
+import '../utils/cloc/cloc.dart';
 import '../utils/utils.dart';
+import 'model/package_imports.dart';
+import 'model/service.dart';
 import 'utils.dart';
 
 class MyCustomScrollBehavior extends MaterialScrollBehavior {
@@ -330,8 +328,7 @@ class _InfoTabState extends State<_InfoTab> {
                   builder: (context, snapshot, child) {
                     var data = snapshot.data;
                     if (data != null) {
-                      return Text(
-                          '${getSizeAsMB(data.totalBytes)}, '
+                      return Text('${getSizeAsMB(data.totalBytes)}, '
                           '${data.fileCount} file${data.fileCount > 1 ? 's' : ''}');
                     } else {
                       return Text('');

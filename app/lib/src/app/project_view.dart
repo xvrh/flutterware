@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/icon/model/service.dart';
-import 'package:flutterware_app/src/ui/side_menu.dart';
-import 'package:flutterware_app/src/utils/router_outlet.dart';
 import '../about/screen.dart';
 import '../dependencies/list.dart';
 import '../icon/image_provider.dart';
+import '../icon/model/service.dart';
 import '../icon/screen.dart';
 import '../overview/screen.dart';
 import '../project.dart';
 import '../test_runner/menu.dart';
 import '../test_runner/screen.dart';
+import '../ui/side_menu.dart';
 import '../utils/async_value.dart';
+import '../utils/router_outlet.dart';
 import 'paths.dart' as paths;
 
 class ProjectView extends StatelessWidget {

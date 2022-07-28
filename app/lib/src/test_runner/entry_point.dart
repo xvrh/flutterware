@@ -1,9 +1,8 @@
-import 'package:flutterware_app/src/utils/source_code.dart';
-import 'package:path/path.dart' as p;
-import 'package:collection/collection.dart';
 import 'dart:io';
-
+import 'package:collection/collection.dart';
+import 'package:path/path.dart' as p;
 import '../project.dart';
+import '../utils/source_code.dart';
 
 const _testLocation = 'test_app';
 
@@ -33,7 +32,8 @@ class TestFile {
       p.relative(file.absolute.path, from: projectRoot.absolute.path);
 }
 
-String entryPointCode(Project project, List<TestFile> files, {required Uri serverUri, required Uri? loggerUri}) {
+String entryPointCode(Project project, List<TestFile> files,
+    {required Uri serverUri, required Uri? loggerUri}) {
   var code = StringBuffer()..writeln('''
 // GENERATED-CODE: Flutterware - Test runner feature
 import 'package:flutterware/internals/test_runner_daemon.dart';

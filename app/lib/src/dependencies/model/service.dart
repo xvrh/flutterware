@@ -1,17 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_config/package_config.dart';
+import 'package:path/path.dart' as p;
+import 'package:pub_scores/pub_scores.dart';
 import '../../project.dart';
 import '../../utils/async_value.dart';
 import '../../utils/cloc/cloc.dart';
 import '../../utils/list_files.dart';
 import '../model/pubspec_lock.dart';
-import 'package:pub_scores/pub_scores.dart';
-import 'package:path/path.dart' as p;
-
 import 'dependency_graph.dart';
 import 'package_imports.dart';
 
@@ -141,8 +139,7 @@ class Dependency implements Disposable {
   late final cloc = AsyncValue<ClocReport>(loader: _loadCloc);
   late final size = AsyncValue<SizeReport>(loader: _loadSize);
 
-  Dependency(this.parent, this.package, this.pubspec,
-      this.lockDependency);
+  Dependency(this.parent, this.package, this.pubspec, this.lockDependency);
 
   String get name => package.name;
 
