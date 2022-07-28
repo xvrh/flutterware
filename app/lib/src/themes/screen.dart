@@ -7,7 +7,7 @@ class ThemesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text('''Themes
 - Button add a Theme (create a file in lib/src/themes/xx.dart    
-- List all files in the project with the // GENERATED-FILE: Theme file generated with Flutter Studio (pub.dev link)
+- List all files in the project with the // GENERATED-FILE: Theme file generated with Flutterware (pub.dev/packages/flutterware)
 
 ThemeData myThemeName() {
   var theme = ThemeData(material3: true);

@@ -28,7 +28,7 @@ class _Context {
 
   Future<String> flutterwareVersion() async {
     var pubspecContent =
-        await File(p.join(appToolPath, 'pubspec.yaml')).readAsString();
+        await File(p.join(appToolPath, '..', 'pubspec.yaml')).readAsString();
     var pubspec = Pubspec.parse(pubspecContent);
     return pubspec.version.toString();
   }
@@ -79,7 +79,7 @@ class _AppCommand extends Command {
   final name = 'app';
 
   @override
-  final description = 'Start the Flutter Studio App GUI.';
+  final description = 'Start the Flutterware App GUI.';
 
   _AppCommand(this.context);
 
