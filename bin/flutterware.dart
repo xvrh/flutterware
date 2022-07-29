@@ -46,13 +46,13 @@ void main(List<String> arguments) async {
     }
 
     var buildCliProgress = logger.startProgress('Building CLI');
-    var pubGetResult = Process.runSync(
+    var pubGetResult = await Process.run(
         Platform.resolvedExecutable, ['pub', 'get'],
         workingDirectory: appPath);
     if (pubGetResult.exitCode != 0) {
       throw Exception('Pub get failed ${pubGetResult.stderr}');
     }
-    var compiledResult = Process.runSync(Platform.resolvedExecutable,
+    var compiledResult =await Process.run(Platform.resolvedExecutable,
         ['compile', 'exe', '-o', compiledCliPath, 'bin/flutterware.dart'],
         workingDirectory: appPath);
     if (compiledResult.exitCode != 0) {
