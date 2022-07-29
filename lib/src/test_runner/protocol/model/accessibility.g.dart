@@ -296,8 +296,7 @@ class AccessibilityConfigBuilder
                 invertColors, 'AccessibilityConfig', 'invertColors'),
             reduceMotion: BuiltValueNullFieldError.checkNotNull(
                 reduceMotion, 'AccessibilityConfig', 'reduceMotion'),
-            onOffSwitchLabels:
-                BuiltValueNullFieldError.checkNotNull(onOffSwitchLabels, 'AccessibilityConfig', 'onOffSwitchLabels'));
+            onOffSwitchLabels: BuiltValueNullFieldError.checkNotNull(onOffSwitchLabels, 'AccessibilityConfig', 'onOffSwitchLabels'));
     replace(_$result);
     return _$result;
   }

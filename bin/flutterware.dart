@@ -52,7 +52,7 @@ void main(List<String> arguments) async {
     if (pubGetResult.exitCode != 0) {
       throw Exception('Pub get failed ${pubGetResult.stderr}');
     }
-    var compiledResult =await Process.run(Platform.resolvedExecutable,
+    var compiledResult = await Process.run(Platform.resolvedExecutable,
         ['compile', 'exe', '-o', compiledCliPath, 'bin/flutterware.dart'],
         workingDirectory: appPath);
     if (compiledResult.exitCode != 0) {

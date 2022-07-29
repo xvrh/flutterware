@@ -4,7 +4,7 @@ import 'package:flutterware/internals/test_runner.dart';
 import 'ui/toolbar.dart';
 
 class ToolbarParameters {
-  final SerializableLocale locale;
+  final SerializableLocale? locale;
   final DeviceInfo device;
   final AccessibilityConfig accessibility;
 
@@ -35,7 +35,7 @@ class ToolBarScope extends StatefulWidget {
 
 class ToolBarScopeState extends State<ToolBarScope> {
   late ToolbarParameters parameters = ToolbarParameters(
-    locale: SerializableLocale('en'),
+    locale: null,
     device: DeviceInfo.iPhoneX,
     accessibility: AccessibilityConfig.defaultValue,
   );
@@ -69,7 +69,7 @@ class RunToolbar extends StatefulWidget {
 }
 
 class _RunToolbarState extends State<RunToolbar> {
-  late SerializableLocale _language = widget.initialParameters.locale;
+  late SerializableLocale? _language = widget.initialParameters.locale;
   late DeviceInfo _device = widget.initialParameters.device;
   late AccessibilityConfig _accessibility =
       widget.initialParameters.accessibility;
@@ -84,6 +84,7 @@ class _RunToolbarState extends State<RunToolbar> {
             ...?widget.leadingActions,
             ToolbarDropdown<SerializableLocale>(
               value: _language,
+              hint: Text('Locale'),
               onChanged: (v) {
                 setState(() {
                   _language = v;

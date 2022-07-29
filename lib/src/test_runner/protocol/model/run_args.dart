@@ -19,7 +19,7 @@ abstract class RunArgs implements Built<RunArgs, RunArgsBuilder> {
     Iterable<String> testName, {
     required DeviceInfo device,
     required AccessibilityConfig accessibility,
-    required SerializableLocale locale,
+    required SerializableLocale? locale,
     required double imageRatio,
     int? platformBrightness,
   }) =>
@@ -29,7 +29,7 @@ abstract class RunArgs implements Built<RunArgs, RunArgsBuilder> {
         ..device.replace(device)
         ..accessibility.replace(accessibility)
         ..imageRatio = imageRatio
-        ..locale.replace(locale)
+        ..locale = locale?.toBuilder()
         ..platformBrightness = platformBrightness);
 
   int get id;
@@ -37,6 +37,6 @@ abstract class RunArgs implements Built<RunArgs, RunArgsBuilder> {
   DeviceInfo get device;
   AccessibilityConfig get accessibility;
   double get imageRatio;
-  SerializableLocale get locale;
+  SerializableLocale? get locale;
   int? get platformBrightness;
 }

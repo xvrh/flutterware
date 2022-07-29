@@ -189,13 +189,16 @@ class _FlowMasterState extends State<_FlowMaster> {
   @override
   void initState() {
     super.initState();
-    widget.parent._interactionController.addListener(() {
+    widget.parent._interactionController.addListener(_onInteraction);
+    _updateScale();
+  }
+
+  void _onInteraction() {
       setState(() {
         _updateScale();
       });
-    });
-    _updateScale();
-  }
+    }
+
 
   void _updateScale() {
     _scale = widget.parent._interactionController.value.getMaxScaleOnAxis();
@@ -231,6 +234,12 @@ class _FlowMasterState extends State<_FlowMaster> {
         ),
       ],
     );
+  }
+
+  @override
+  void dispose() {
+    widget.parent._interactionController.removeListener(_onInteraction);
+    super.dispose();
   }
 }
 

@@ -6,7 +6,7 @@ part of 'test_run.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<TestRun> _$testRunSerializer = _$TestRunSerializer();
+Serializer<TestRun> _$testRunSerializer = new _$TestRunSerializer();
 
 class _$TestRunSerializer implements StructuredSerializer<TestRun> {
   @override
@@ -26,8 +26,8 @@ class _$TestRunSerializer implements StructuredSerializer<TestRun> {
           specifiedType: const FullType(RunArgs)),
       'screens',
       serializers.serialize(object.screens,
-          specifiedType:
-              const FullType(BuiltMap, [FullType(String), FullType(Screen)])),
+          specifiedType: const FullType(BuiltMap,
+              const [const FullType(String), const FullType(Screen)])),
     ];
     Object? value;
     value = object.result;
@@ -43,7 +43,7 @@ class _$TestRunSerializer implements StructuredSerializer<TestRun> {
   @override
   TestRun deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = TestRunBuilder();
+    final result = new TestRunBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -61,8 +61,8 @@ class _$TestRunSerializer implements StructuredSerializer<TestRun> {
           break;
         case 'screens':
           result.screens.replace(serializers.deserialize(value,
-              specifiedType: const FullType(
-                  BuiltMap, [FullType(String), FullType(Screen)]))!);
+              specifiedType: const FullType(BuiltMap,
+                  const [const FullType(String), const FullType(Screen)]))!);
           break;
         case 'result':
           result.result.replace(serializers.deserialize(value,
@@ -86,7 +86,7 @@ class _$TestRun extends TestRun {
   final RunResult? result;
 
   factory _$TestRun([void Function(TestRunBuilder)? updates]) =>
-      (TestRunBuilder()..update(updates))._build();
+      (new TestRunBuilder()..update(updates))._build();
 
   _$TestRun._(
       {required this.test,
@@ -104,7 +104,7 @@ class _$TestRun extends TestRun {
       (toBuilder()..update(updates)).build();
 
   @override
-  TestRunBuilder toBuilder() => TestRunBuilder()..replace(this);
+  TestRunBuilder toBuilder() => new TestRunBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -138,20 +138,20 @@ class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
   _$TestRun? _$v;
 
   TestReferenceBuilder? _test;
-  TestReferenceBuilder get test => _$this._test ??= TestReferenceBuilder();
+  TestReferenceBuilder get test => _$this._test ??= new TestReferenceBuilder();
   set test(TestReferenceBuilder? test) => _$this._test = test;
 
   RunArgsBuilder? _args;
-  RunArgsBuilder get args => _$this._args ??= RunArgsBuilder();
+  RunArgsBuilder get args => _$this._args ??= new RunArgsBuilder();
   set args(RunArgsBuilder? args) => _$this._args = args;
 
   MapBuilder<String, Screen>? _screens;
   MapBuilder<String, Screen> get screens =>
-      _$this._screens ??= MapBuilder<String, Screen>();
+      _$this._screens ??= new MapBuilder<String, Screen>();
   set screens(MapBuilder<String, Screen>? screens) => _$this._screens = screens;
 
   RunResultBuilder? _result;
-  RunResultBuilder get result => _$this._result ??= RunResultBuilder();
+  RunResultBuilder get result => _$this._result ??= new RunResultBuilder();
   set result(RunResultBuilder? result) => _$this._result = result;
 
   TestRunBuilder();
@@ -186,7 +186,7 @@ class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
     _$TestRun _$result;
     try {
       _$result = _$v ??
-          _$TestRun._(
+          new _$TestRun._(
               test: test.build(),
               args: args.build(),
               screens: screens.build(),
@@ -203,7 +203,7 @@ class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
         _$failedField = 'result';
         _result?.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError(
+        throw new BuiltValueNestedFieldError(
             'TestRun', _$failedField, e.toString());
       }
       rethrow;

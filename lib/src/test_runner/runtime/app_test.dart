@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import '../api.dart';
 import 'extract_text.dart';
 import 'run_context.dart';
+import 'setup_test_values.dart';
 
 abstract class AppTest {
   Future<void> setUp() async {}
@@ -49,6 +50,13 @@ abstract class AppTest {
   }) async {
     await tester.pumpWidget(widget);
     await _pumpFramesIfNeeded(pumpFrames);
+  }
+
+  Future<void> pump([
+    Duration? duration,
+    EnginePhase phase = EnginePhase.sendSemanticsUpdate,
+  ]) async {
+    await tester.pump(duration, phase);
   }
 
   Finder _targetToFinder(dynamic target) {

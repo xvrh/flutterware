@@ -64,11 +64,12 @@ const _textStyle = TextStyle(fontSize: 13, color: Colors.black87);
 class ToolbarDropdown<T extends Object> extends StatelessWidget {
   static const _highlightColor = Color(0xff0000ff);
 
-  final T value;
+  final T? value;
   final void Function(T) onChanged;
   final Map<T, Widget> items;
   final bool showArrow;
   final bool highlight;
+  final Widget? hint;
 
   const ToolbarDropdown({
     Key? key,
@@ -77,6 +78,7 @@ class ToolbarDropdown<T extends Object> extends StatelessWidget {
     required this.items,
     bool? showArrow,
     bool? highlight,
+    this.hint,
   })  : showArrow = showArrow ?? true,
         highlight = highlight ?? false,
         super(key: key);
@@ -93,6 +95,7 @@ class ToolbarDropdown<T extends Object> extends StatelessWidget {
       child: DropdownButton<T>(
         value: value,
         isExpanded: false,
+        hint: hint,
         items: [
           for (var entry in items.entries)
             DropdownMenuItem(
