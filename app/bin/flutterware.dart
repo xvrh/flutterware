@@ -44,6 +44,7 @@ void main(List<String> args) async {
 
   var loggerUrl = Platform.environment[remoteLoggerServerUrlKey]!;
   var logger = RemoteLogClient(Uri.parse(loggerUrl));
+  logger.printTrace('CLI started with Flutter SDK $flutterSdk');
 
   var context = _Context(
     dartExecutable: dartExecutable,
@@ -102,7 +103,7 @@ Flutter SDK: ${context.flutterSdk.root}
       [
         'run',
         '-d',
-        'macos',
+        Platform.operatingSystem,
         '--release',
         '--machine',
       ],
@@ -123,6 +124,11 @@ Flutter SDK: ${context.flutterSdk.root}
         var event = DaemonProtocol.tryReadEvent(daemonLine);
         if (event is AppStartedEvent) {
           break;
+        } else if (event is AppProgressEvent) {
+          var message = event.message;
+          if (message != null) {
+            context.logClient.printStatus(message);
+          }
         }
       } else {
         context.logClient.printTrace('App: $line');
