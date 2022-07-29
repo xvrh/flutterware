@@ -38,6 +38,53 @@ A new kind of testing built on top of the standard `flutter_test` framework.
 - Easier to write tests that exercise the whole app
 - Deploy the tests as a Web page for an internal documentation of the app.
 
+Example code
+```dart
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  testWidgets('Checkout flow', (tester) async {
+    await tester.pumpWidget(MyApp());
+    await tester.screenshot(name: 'Home page');
+    
+    await tester.tap(find.byIcon(Icons.shopping_cart));
+    await tester.screenshot(name: 'Cart');
+
+    await tester.enterText(find.byType(TextField), '4334');
+    await tester.screenshot(name: 'Enter coupon code');
+
+    await tester.tap(find.text(translations.checkoutButton));
+    await tester.screenshot();
+  });
+}
+```
+
+Or using the high-level API
+```dart
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  testWidgets('Checkout flow', CheckoutTest());
+}
+
+class CheckoutTest extends AppTest {
+  @override
+  Future<void> run() async {
+    await pumpWidget(MyApp());
+    await screenshot(name: 'Home page');
+
+    await tap(find.byIcon(Icons.shopping_cart));
+    await screenshot(name: 'Cart');
+
+    await enterText(TextField, '4334');
+    await screenshot(name: 'Enter coupon code');
+
+    await tap(translations.checkoutButton);
+    await screenshot();
+  }
+}
+```
+
 ### Dependency manager
 
 Overview of your dependencies to monitor the quality.

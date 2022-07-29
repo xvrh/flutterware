@@ -129,6 +129,10 @@ Flutter SDK: ${context.flutterSdk.root}
           if (message != null) {
             context.logClient.printStatus(message);
           }
+        } else if (event is DaemonLogMessageEvent) {
+          context.logClient.printError(event.message);
+        } else if (event is DaemonLogEvent) {
+          context.logClient.printWarning(event.log);
         }
       } else {
         context.logClient.printTrace('App: $line');
