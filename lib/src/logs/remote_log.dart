@@ -21,7 +21,8 @@ class RemoteLogServer {
     return RemoteLogServer._(httpServer, logger);
   }
 
-  String get url => 'http://${server.address.address}:${server.port}';
+  String get url =>
+      'http://${Platform.isWindows ? 'localhost' : server.address.host}:${server.port}';
 
   void _handleRequest(HttpRequest request) async {
     var path = request.uri.pathSegments.firstOrNull;

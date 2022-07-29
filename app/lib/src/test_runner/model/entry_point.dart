@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:path/path.dart' as p;
-import '../project.dart';
-import '../utils/source_code.dart';
+import '../../project.dart';
+import '../../utils/source_code.dart';
 
 const _testLocation = 'test_app';
 
@@ -29,7 +29,7 @@ class TestFile {
   TestFile(this.projectRoot, this.file);
 
   String get relativePath =>
-      p.relative(file.absolute.path, from: projectRoot.absolute.path);
+      p.relative(file.absolute.path, from: projectRoot.absolute.path).replaceAll(r'\', '/');
 }
 
 String entryPointCode(Project project, List<TestFile> files,

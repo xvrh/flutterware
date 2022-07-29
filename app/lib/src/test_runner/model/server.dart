@@ -17,7 +17,7 @@ class Server {
     if (_isStarted) {
       return Uri(
           scheme: 'ws',
-          host: _server.address.host,
+          host: Platform.isWindows ? 'localhost' : _server.address.host,
           port: _server.port,
           path: 'socket');
     }

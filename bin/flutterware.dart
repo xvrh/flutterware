@@ -70,7 +70,6 @@ void main(List<String> arguments) async {
       appPathEnvironmentKey: p.absolute(appPath),
       remoteLoggerServerUrlKey: remoteLogger.url,
     },
-    runInShell: true,
   );
 
   logger.terminal.keystrokes.listen((e) {

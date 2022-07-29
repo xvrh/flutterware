@@ -10,7 +10,7 @@ import '../../project.dart';
 import '../../utils/daemon/commands.dart';
 import '../../utils/daemon/events.dart';
 import '../../utils/daemon/protocol.dart';
-import '../entry_point.dart';
+import 'entry_point.dart';
 import 'server.dart';
 
 export '../../utils/daemon/events.dart' show MessageLevel;
