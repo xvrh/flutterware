@@ -64,16 +64,17 @@ class RemoteLogServer {
         logger.printTrace(command.message);
         break;
       case PrintType.status:
-        logger.printStatus(command.message);
+        logger.printStatus(command.message, wrap: command.wrap);
         break;
       case PrintType.warning:
-        logger.printWarning(command.message);
+        logger.printWarning(command.message, wrap: command.wrap);
         break;
       case PrintType.error:
         var stackTrace = command.stackTrace;
         logger.printError(command.message,
             stackTrace:
-                stackTrace != null ? StackTrace.fromString(stackTrace) : null);
+                stackTrace != null ? StackTrace.fromString(stackTrace) : null,
+            wrap: command.wrap);
         break;
     }
   }
@@ -107,23 +108,26 @@ class PrintLog {
   final PrintType type;
   final String message;
   final String? stackTrace;
+  final bool? wrap;
 
-  PrintLog(this.type, this.message) : stackTrace = null;
+  PrintLog(this.type, this.message, {this.wrap}) : stackTrace = null;
 
-  PrintLog.error(this.message, {this.stackTrace}) : type = PrintType.error;
+  PrintLog.error(this.message, {this.stackTrace, this.wrap})
+      : type = PrintType.error;
 
-  PrintLog._(this.type, this.message, {this.stackTrace});
+  PrintLog._(this.type, this.message, {this.stackTrace, this.wrap});
 
   factory PrintLog.fromJson(Map<String, dynamic> json) {
     return PrintLog._(
         PrintType.values[json['type'] as int], json['message'] as String,
-        stackTrace: json['stackTrace'] as String?);
+        stackTrace: json['stackTrace'] as String?, wrap: json['wrap'] as bool?);
   }
 
   Map<String, dynamic> toJson() => {
         'type': type.index,
         'message': message,
         'stackTrace': stackTrace,
+        'wrap': wrap,
       };
 }
 

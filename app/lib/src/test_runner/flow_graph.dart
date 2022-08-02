@@ -194,11 +194,10 @@ class _FlowMasterState extends State<_FlowMaster> {
   }
 
   void _onInteraction() {
-      setState(() {
-        _updateScale();
-      });
-    }
-
+    setState(() {
+      _updateScale();
+    });
+  }
 
   void _updateScale() {
     _scale = widget.parent._interactionController.value.getMaxScaleOnAxis();
@@ -224,8 +223,7 @@ class _FlowMasterState extends State<_FlowMaster> {
           right: 5,
           bottom: 5,
           child: ZoomButtons(
-            value:
-                widget.parent._interactionController.value.getMaxScaleOnAxis(),
+            value: _scale,
             onScale: (v) {
               widget.parent._interactionController.value =
                   widget.parent._interactionController.value.scaled(v);

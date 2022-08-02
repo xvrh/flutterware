@@ -661,7 +661,7 @@ packages:
     source: hosted
     version: "1.5.1"
   process:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: process
       url: "https://pub.dartlang.org"

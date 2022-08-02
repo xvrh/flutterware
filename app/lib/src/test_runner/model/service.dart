@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:async/async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
@@ -110,6 +111,22 @@ class TestService {
       throw Exception('Only started daemon can be stopped');
     }
     stateValue.daemon.stop();
+  }
+
+  Future<void> addExample() async {
+    var file =
+        File(p.join(project.absolutePath, 'test_app', 'example_test.dart'));
+    file.createSync(recursive: true);
+
+    var exampleContent =
+        await File('../test_app/example_test.dart').readAsString();
+
+    await file.writeAsString(exampleContent, flush: true);
+
+    var stateValue = _state.value;
+    if (stateValue is DaemonState$Connected) {
+      await stateValue.daemon.reload(fullRestart: false);
+    }
   }
 
   void dispose() {

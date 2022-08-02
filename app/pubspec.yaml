@@ -61,6 +61,7 @@ dependencies:
   path:
   path_provider:
   pool:
+  process:
   pub_scores:
     git:
       url: https://github.com/xvrh/pub-scores.git

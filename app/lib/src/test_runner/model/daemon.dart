@@ -5,7 +5,6 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
-import '../../globals.dart';
 import '../../project.dart';
 import '../../utils/daemon/commands.dart';
 import '../../utils/daemon/events.dart';
@@ -147,7 +146,7 @@ class DaemonStarter {
           'flutter-tester'
         ],
         workingDirectory: project.directory.path);
-    await globals.resourceCleaner.killProcessOnNextLaunch(process.pid);
+    await project.context.resourceCleaner.killProcessOnNextLaunch(process.pid);
     var protocol = DaemonProtocol(
         process.stdin,
         process.stdout

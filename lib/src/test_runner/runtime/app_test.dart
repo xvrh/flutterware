@@ -2,7 +2,6 @@ import 'package:flutter/widgets.dart';
 import '../api.dart';
 import 'extract_text.dart';
 import 'run_context.dart';
-import 'setup_test_values.dart';
 
 abstract class AppTest {
   Future<void> setUp() async {}

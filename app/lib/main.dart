@@ -5,8 +5,8 @@ import 'package:flutterware/internals/remote_log_adapter.dart';
 import 'package:logging/logging.dart';
 import 'src/app/app.dart';
 import 'src/constants.dart';
+import 'src/context.dart';
 import 'src/flutter_sdk.dart';
-import 'src/globals.dart';
 import 'src/project.dart';
 
 void main() async {
@@ -15,31 +15,43 @@ void main() async {
 
   if (projectPath == null || flutterSdkPath == null) {
     throw Exception(
-        'This entry point need to be run with some --dart-define parameters. Use main_dev.dart for development.');
+        'This entry point need to be run with some Platform.environment parameters. Use main_dev.dart for development.');
   }
 
   var remoteLoggerUrl = Platform.environment[remoteLoggerUrlKey];
   Uri? loggerUri;
+  RemoteLogClient? remoteLoggerClient;
   if (remoteLoggerUrl != null && remoteLoggerUrl.isNotEmpty) {
     loggerUri = Uri.parse(remoteLoggerUrl);
-    var remoteLoggerClient = RemoteLogClient(loggerUri);
-    globals.logger = remoteLoggerClient;
+    remoteLoggerClient = RemoteLogClient(loggerUri);
   }
+  var appContext = AppContext(
+    logger: remoteLoggerClient ?? LogClient.print(),
+  );
   var project = Project(
+    appContext,
     projectPath,
     FlutterSdkPath(flutterSdkPath),
     loggerUri: loggerUri,
   );
 
-  _setupLogger();
-  await globals.resourceCleaner.initialize();
+  Logger.root
+    ..level = Level.ALL
+    ..onRecord.listen(appContext.logger.printLogRecord);
+  await appContext.resourceCleaner.initialize();
+
   runApp(
     SingleProjectApp(project),
   );
-}
 
-void _setupLogger() {
-  Logger.root
-    ..level = Level.ALL
-    ..onRecord.listen(globals.logger.printLogRecord);
+  appContext.logger.printBox(
+      '''
+Discover the features:
+- Test runner with hot-reload
+- Pub dependencies manager
+- Launcher icon manager
+- ...
+'''
+          .trim(),
+      title: 'Flutterware GUI is ready');
 }

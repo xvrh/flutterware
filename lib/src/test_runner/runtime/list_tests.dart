@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:test_api/src/backend/declarer.dart'; // ignore: implementation_imports
-import 'package:test_api/src/backend/group.dart'; // ignore: implementation_imports
-import 'package:test_api/src/backend/group_entry.dart'; // ignore: implementation_imports
+import 'package:test_api/src/backend/declarer.dart';
+import 'package:test_api/src/backend/group.dart';
+import 'package:test_api/src/backend/group_entry.dart';
 import 'package:test_api/src/backend/test.dart';
 import '../protocol/model/test_reference.dart';
 
-// ignore: implementation_imports
+// ignore_for_file: implementation_imports
 
 Group findTest(Map<String, void Function()> allTests, String fullTestName) {
   var declarer = Declarer(fullTestName: fullTestName);

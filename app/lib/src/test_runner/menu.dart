@@ -54,7 +54,7 @@ class TestMenu extends StatelessWidget {
           );
         } else {
           var client = clients.last;
-          return TestListingView(client);
+          return TestListingView(project.tests, client);
         }
       },
     );

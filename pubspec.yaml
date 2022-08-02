@@ -8,25 +8,27 @@ environment:
   flutter: '>=3.0.0'
 
 dependencies:
-  built_collection:
-  built_value:
-  collection:
+  built_collection: ^5.1.1
+  built_value: ^8.3.0
+  collection: ^1.16.0
   flutter:
     sdk: flutter
   flutter_test:
     sdk: flutter
-  logging:
-  meta:
-  package_config:
-  path:
-  pool:
-  stream_channel:
-  test:
-  test_api:
-  web_socket_channel:
+  logging: ^1.0.0
+  meta: ^1.7.0
+  package_config: ^2.0.0
+  path: ^1.8.0
+  pool: ^1.5.0
+  stream_channel: ^2.1.0
+  test_api: ^0.4.9
+  web_socket_channel: ^2.1.0
 
 dev_dependencies:
+  analyzer:
   build_runner:
   built_value_generator:
+  dart_style:
   json_serializable:
   lints:
+  yaml:

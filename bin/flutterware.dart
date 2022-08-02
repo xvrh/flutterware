@@ -37,7 +37,7 @@ void main(List<String> arguments) async {
   var compiledCliFile = File(p.join(appPath, compiledCliPath));
   //TODO(xha): we should detect if any file has changed and re-compile as needed.
   if (!compiledCliFile.existsSync() ||
-      arguments.contains('--$forceCompileCliOption')) {
+      arguments.contains('--$forceCompileOption')) {
     compiledCliFile.parent.createSync(recursive: true);
     try {
       compiledCliFile.deleteSync();
@@ -45,7 +45,8 @@ void main(List<String> arguments) async {
       // Don't care if the file doesn't exist
     }
 
-    var buildCliProgress = logger.startProgress('Building CLI');
+    var buildCliProgress =
+        logger.startProgress('Building Flutterware executable');
     var pubGetResult = await Process.run(
         Platform.resolvedExecutable, ['pub', 'get'],
         workingDirectory: appPath);
@@ -62,6 +63,7 @@ void main(List<String> arguments) async {
     buildCliProgress.stop();
   }
 
+  logger.printTrace('Start process ${compiledCliFile.path}');
   var process = await Process.start(
     compiledCliFile.path,
     arguments,
@@ -71,6 +73,7 @@ void main(List<String> arguments) async {
       remoteLoggerServerUrlKey: remoteLogger.url,
     },
   );
+  logger.printTrace('Process started (pid ${process.pid})');
 
   logger.terminal.keystrokes.listen((e) {
     if (e.trim() == 'q') {
@@ -80,12 +83,15 @@ void main(List<String> arguments) async {
   });
 
   var code = await process.exitCode;
+  logger.printTrace(
+      'Process exited ($code)');
+
   if (code > 0) {
     logger.printError('CLI terminated with error ($code).\n'
         'Stdout: ${await utf8.decodeStream(process.stdout)}\n'
         'Stderr: ${await utf8.decodeStream(process.stderr)}');
-    exit(code);
   }
+  exit(code);
 }
 
 Logger _createLogger({required bool isVerbose}) {

@@ -7,9 +7,9 @@ abstract class LogClient {
   factory LogClient.print() => _PrintLogClient();
 
   void printBox(String message, {String? title});
-  void printError(String message, {StackTrace? stackTrace});
-  void printWarning(String message);
-  void printStatus(String message);
+  void printError(String message, {StackTrace? stackTrace, bool? wrap});
+  void printWarning(String message, {bool? wrap});
+  void printStatus(String message, {bool? wrap});
   void printTrace(String message);
   ProgressStatus startProgress(String? message);
 }
@@ -21,12 +21,12 @@ class _PrintLogClient implements LogClient {
   }
 
   @override
-  void printError(String message, {StackTrace? stackTrace}) {
+  void printError(String message, {StackTrace? stackTrace, bool? wrap}) {
     print('[ERROR] $message\n$stackTrace');
   }
 
   @override
-  void printStatus(String message) {
+  void printStatus(String message, {bool? wrap}) {
     print('[STATUS] $message');
   }
 
@@ -36,7 +36,7 @@ class _PrintLogClient implements LogClient {
   }
 
   @override
-  void printWarning(String message) {
+  void printWarning(String message, {bool? wrap}) {
     print('[WARNING] $message');
   }
 
@@ -69,19 +69,19 @@ class RemoteLogClient implements LogClient {
   }
 
   @override
-  void printError(String message, {StackTrace? stackTrace}) {
+  void printError(String message, {StackTrace? stackTrace, bool? wrap}) {
     _send(RemoteLogServer.printLogPath,
-        PrintLog.error(message, stackTrace: stackTrace?.toString()));
+        PrintLog.error(message, stackTrace: stackTrace?.toString(), wrap: wrap));
   }
 
   @override
-  void printWarning(String message) {
-    _sendLog(PrintType.warning, message);
+  void printWarning(String message, {bool? wrap}) {
+    _sendLog(PrintType.warning, message, wrap: wrap);
   }
 
   @override
-  void printStatus(String message) {
-    _sendLog(PrintType.status, message);
+  void printStatus(String message, {bool? wrap}) {
+    _sendLog(PrintType.status, message, wrap: wrap);
   }
 
   @override
@@ -100,8 +100,8 @@ class RemoteLogClient implements LogClient {
     _send(RemoteLogServer.stopProgressPath, StopProgress(id));
   }
 
-  void _sendLog(PrintType type, String message) {
-    _send(RemoteLogServer.printLogPath, PrintLog(type, message));
+  void _sendLog(PrintType type, String message, {bool? wrap}) {
+    _send(RemoteLogServer.printLogPath, PrintLog(type, message, wrap: wrap));
   }
 
   Future<void> _send(String path, Object message) async {

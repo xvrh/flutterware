@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:args/command_runner.dart';
@@ -5,8 +6,6 @@ import 'package:flutterware/internals/constants.dart';
 import 'package:flutterware/internals/remote_log.dart';
 import 'package:flutterware/internals/remote_log_adapter.dart';
 import 'package:flutterware_app/src/constants.dart';
-import 'package:flutterware_app/src/utils/daemon/events.dart';
-import 'package:flutterware_app/src/utils/daemon/protocol.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:pubspec_parse/pubspec_parse.dart';
@@ -54,23 +53,34 @@ void main(List<String> args) async {
     logClient: logger,
   );
 
-  var commandRunner = CommandRunner(
-      'flutterware', 'Collection of tools for Flutter development.')
-    ..addCommand(_AppCommand(context))
-    ..argParser.addFlag('verbose', abbr: 'v', help: 'increase logging')
-    ..argParser.addFlag(forceCompileCliOption, hide: true);
-  var argResults = commandRunner.parse(args);
-  if (argResults.command == null &&
-      (argResults.arguments.isEmpty ||
-          argResults.arguments.first.startsWith('-'))) {
-    argResults = commandRunner.parse(['app', ...args]);
-  }
+  await runZoned(
+    () async {
+      var commandRunner = CommandRunner(
+          'flutterware', 'Collection of tools for Flutter development.')
+        ..addCommand(_AppCommand(context))
+        ..argParser.addFlag('verbose', abbr: 'v', help: 'increase logging')
+        ..argParser.addFlag(forceCompileOption, hide: true);
+      var argResults = commandRunner.parse(args);
+      if (argResults.command == null &&
+          (argResults.arguments.isEmpty ||
+              argResults.arguments.first.startsWith('-'))) {
+        argResults = commandRunner.parse(['app', ...args]);
+      }
+      logger.printTrace('Args: ${argResults.arguments}');
 
-  Logger.root
-    ..level = Level.ALL
-    ..onRecord.listen(logger.printLogRecord);
+      Logger.root
+        ..level = Level.ALL
+        ..onRecord.listen(logger.printLogRecord);
 
-  await commandRunner.runCommand(argResults);
+      var result = await commandRunner.runCommand(argResults);
+      logger.printTrace('Command ended with $result');
+    },
+    zoneSpecification: ZoneSpecification(
+      print: (self, parent, zone, message) {
+        logger.printBox(message);
+      },
+    ),
+  );
 }
 
 class _AppCommand extends Command {
@@ -86,6 +96,8 @@ class _AppCommand extends Command {
 
   @override
   void run() async {
+    context.logClient
+        .printTrace('AppCommand ${context.projectDirectory.absolute.path}');
     var appPubspec = Pubspec.parse(await File(
             p.join(context.projectDirectory.absolute.path, 'pubspec.yaml'))
         .readAsString());
@@ -95,20 +107,44 @@ App: ${appPubspec.name} (${context.projectDirectory.absolute.path})
 Flutter SDK: ${context.flutterSdk.root}
 ''', title: 'Flutterware ${await context.flutterwareVersion()}');
 
-    var buildProgress =
-        context.logClient.startProgress('Starting Flutterware GUI');
+    var exeFile = File(p.join(
+        context.appToolPath, _exePathForPlatform(logger: context.logClient)));
+
+    if (!exeFile.existsSync() ||
+        (argResults!.arguments.contains(forceCompileOption))) {
+      context.logClient.printTrace(
+          'Compile GUI (exe: ${exeFile.existsSync()}, option: ${argResults![forceCompileOption]})');
+      var buildProgress =
+          context.logClient.startProgress('Building Flutterware GUI');
+
+      var buildProcess = await Process.start(
+        context.flutterSdk.flutter,
+        [
+          'build',
+          Platform.operatingSystem,
+          '--release',
+        ],
+        workingDirectory: context.appToolPath,
+      );
+
+      await for (var line in buildProcess.stdout
+          .transform(Utf8Decoder())
+          .transform(LineSplitter())) {
+        context.logClient.printStatus(line);
+      }
+      buildProgress.stop();
+      var buildExitCode = await buildProcess.exitCode;
+      if (buildExitCode != 0) {
+        context.logClient.printError(
+            'Failed to build GUI ($buildExitCode): ${await utf8.decodeStream(buildProcess.stderr)}');
+        return;
+      }
+    }
 
     var process = await Process.start(
-      context.flutterSdk.flutter,
-      [
-        'run',
-        '-d',
-        Platform.operatingSystem,
-        '--release',
-        '--machine',
-      ],
+      exeFile.path,
+      [],
       environment: {
-        if (Platform.isMacOS) 'LC_ALL': 'en_US.UTF-8',
         projectDefineKey: context.projectDirectory.absolute.path,
         flutterSdkDefineKey: context.flutterSdk.root,
         remoteLoggerUrlKey: '${context.logClient.uri}',
@@ -116,29 +152,7 @@ Flutter SDK: ${context.flutterSdk.root}
       workingDirectory: context.appToolPath,
     );
 
-    await for (var line
-        in process.stdout.transform(Utf8Decoder()).transform(LineSplitter())) {
-      var daemonLine = DaemonProtocol.tryReadLine(line);
-      if (daemonLine != null) {
-        context.logClient.printTrace('App daemon: $daemonLine');
-        var event = DaemonProtocol.tryReadEvent(daemonLine);
-        if (event is AppStartedEvent) {
-          break;
-        } else if (event is AppProgressEvent) {
-          var message = event.message;
-          if (message != null) {
-            context.logClient.printStatus(message);
-          }
-        } else if (event is DaemonLogMessageEvent) {
-          context.logClient.printError(event.message);
-        } else if (event is DaemonLogEvent) {
-          context.logClient.printWarning(event.log);
-        }
-      } else {
-        context.logClient.printTrace('App: $line');
-      }
-    }
-    buildProgress.stop();
+    unawaited(process.exitCode.then(exit));
   }
 }
 
@@ -171,5 +185,36 @@ class _FlutterSdk {
 
   static bool isValid(_FlutterSdk sdk) {
     return File(sdk.flutter).existsSync();
+  }
+}
+
+String _exePathForPlatform({required LogClient logger}) {
+  if (Platform.isWindows) {
+    return 'build/windows/runner/Release/Flutterware.exe';
+  } else if (Platform.isLinux) {
+    return 'build/linux/${_linuxHostPlatform(logger: logger)}/release/bundle/app';
+  } else {
+    return 'build/macos/Build/Products/Release/Flutterware.app/Contents/MacOS/Flutterware';
+  }
+}
+
+String _linuxHostPlatform({required LogClient logger}) {
+  final hostPlatformCheck = Process.runSync('uname', ['-m']);
+  // On x64 stdout is "uname -m: x86_64"
+  // On arm64 stdout is "uname -m: aarch64, arm64_v8a"
+  if (hostPlatformCheck.exitCode != 0) {
+    logger.printError(
+      'Encountered an error trying to run "uname -m":\n'
+      '  exit code: ${hostPlatformCheck.exitCode}\n'
+      '  stdout: ${hostPlatformCheck.stdout.toString().trimRight()}\n'
+      '  stderr: ${hostPlatformCheck.stderr.toString().trimRight()}\n'
+      'Assuming host platform is x64.',
+    );
+    return 'x64';
+  } else if (hostPlatformCheck.stdout.toString().trim().endsWith('x86_64')) {
+    return 'x64';
+  } else {
+    // We default to ARM if it's not x86_64 and we did not get an error.
+    return 'arm64';
   }
 }
