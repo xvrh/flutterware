@@ -3,9 +3,6 @@ description: 'A set of GUI tools for Flutter development.'
 version: 0.1.1 # Keep it sync with flutterware_app
 homepage: https://github.com/xvrh/flutterware
 
-executables:
-  flutterware:
-
 environment:
   sdk: '>=2.17.0 <3.0.0'
   flutter: '>=3.0.0'
@@ -14,6 +11,7 @@ dependencies:
   built_collection: ^5.1.1
   built_value: ^8.3.0
   collection: ^1.16.0
+  crypto: ^3.0.0
   flutter:
     sdk: flutter
   flutter_test:

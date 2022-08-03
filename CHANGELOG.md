@@ -1,6 +1,6 @@
 ## 0.1.1
 
-- Fix bug when running the CLI
+- Allow to start the app from pub cache.
 
 ## 0.1.0
 
