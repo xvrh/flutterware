@@ -51,6 +51,13 @@ abstract class AppTest {
     await _pumpFramesIfNeeded(pumpFrames);
   }
 
+  Future<void> pump([
+    Duration? duration,
+    EnginePhase phase = EnginePhase.sendSemanticsUpdate,
+  ]) async {
+    await tester.pump(duration, phase);
+  }
+
   Finder _targetToFinder(dynamic target) {
     if (target is Finder) {
       return target;

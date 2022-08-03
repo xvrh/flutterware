@@ -175,8 +175,8 @@ class Dependency implements Disposable {
   List<List<String>>? _dependencyPaths;
 
   List<List<String>> get dependencyPaths {
-    _dependencyPaths =
-        dependenciesGraph(name, (e) => parent._allPackages[e]!.dependants);
+    _dependencyPaths = dependenciesGraph(
+        name, (e) => parent._allPackages[e]?.dependants ?? const {});
     return _dependencyPaths!;
   }
 

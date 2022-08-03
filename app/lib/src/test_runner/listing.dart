@@ -5,14 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/internals/test_runner.dart';
 import '../app/paths.dart' as paths;
 import '../utils/router_outlet.dart';
+import 'model/service.dart';
 import 'protocol/api.dart';
 import 'protocol/listing.dart';
 import 'ui/menu_tree.dart';
 
 class TestListingView extends StatefulWidget {
+  final TestService service;
   final TestRunnerApi client;
 
-  const TestListingView(this.client, {Key? key}) : super(key: key);
+  const TestListingView(this.service, this.client, {Key? key})
+      : super(key: key);
 
   @override
   State<TestListingView> createState() => _TestListingViewState();
@@ -45,9 +48,14 @@ class _TestListingViewState extends State<TestListingView> {
           selectedPath = TreePath.fromEncoded(selectedTest);
         }
 
+        var tests = snapshot.requireData;
+        if (tests.isEmpty) {
+          return _EmptyList(widget);
+        }
+
         return MenuTree(
           selected: selectedPath,
-          entries: _menu(snapshot.requireData),
+          entries: _menu(tests),
           onSelected: (path) {
             context
                 .go('${paths.tests}/run/${Uri.encodeComponent(path.encoded)}');
@@ -92,5 +100,29 @@ class _TestListingViewState extends State<TestListingView> {
   void dispose() {
     _reloadSubscription.cancel();
     super.dispose();
+  }
+}
+
+class _EmptyList extends StatelessWidget {
+  final TestListingView parent;
+
+  const _EmptyList(this.parent);
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: () async {
+        await parent.service.addExample();
+      },
+      style: OutlinedButton.styleFrom(
+        textStyle: const TextStyle(fontSize: 12),
+        minimumSize: Size(0, 30),
+      ),
+      icon: Icon(
+        Icons.add,
+        size: 12,
+      ),
+      label: Text('Add an example'),
+    );
   }
 }

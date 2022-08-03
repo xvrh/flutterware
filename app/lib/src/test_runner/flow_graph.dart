@@ -11,6 +11,7 @@ import 'protocol/run.dart';
 import 'screenshot_frame.dart';
 import 'toolbar.dart';
 import 'ui/interactive_viewer.dart';
+import 'ui/zoom.dart';
 
 class RunView extends StatefulWidget {
   final TestRunnerApi client;
@@ -172,17 +173,41 @@ class ResultIcon extends StatelessWidget {
   }
 }
 
-class _FlowMaster extends StatelessWidget {
+class _FlowMaster extends StatefulWidget {
   final TestRun run;
   final _RunViewState parent;
 
   const _FlowMaster(this.parent, this.run, {Key? key}) : super(key: key);
 
   @override
+  State<_FlowMaster> createState() => _FlowMasterState();
+}
+
+class _FlowMasterState extends State<_FlowMaster> {
+  late double _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.parent._interactionController.addListener(_onInteraction);
+    _updateScale();
+  }
+
+  void _onInteraction() {
+    setState(() {
+      _updateScale();
+    });
+  }
+
+  void _updateScale() {
+    _scale = widget.parent._interactionController.value.getMaxScaleOnAxis();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        _FlowGraph(run),
+        _FlowGraph(widget.run),
         //TODO(xha): re-enable with a more powerful feature to filter tags
         //Positioned(
         //  right: 5,
@@ -194,8 +219,25 @@ class _FlowMaster extends StatelessWidget {
         //    },
         //  ),
         //),
+        Positioned(
+          right: 5,
+          bottom: 5,
+          child: ZoomButtons(
+            value: _scale,
+            onScale: (v) {
+              widget.parent._interactionController.value =
+                  widget.parent._interactionController.value.scaled(v);
+            },
+          ),
+        ),
       ],
     );
+  }
+
+  @override
+  void dispose() {
+    widget.parent._interactionController.removeListener(_onInteraction);
+    super.dispose();
   }
 }
 

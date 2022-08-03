@@ -38,12 +38,14 @@ A new kind of testing built on top of the standard `flutter_test` framework.
 - Easier to write tests that exercise the whole app
 - Deploy the tests as a Web page for an internal documentation of the app.
 
+[Example test](doc/app_tests.md)
+
 ### Dependency manager
 
-Overview of your dependencies to monitor the quality.
+Get an overview of your pub dependencies.
 
-- See Pub & GitHub scores
-- Run `pub upgrade` and preview all changelogs
+- View Pub & GitHub scores
+- Get metric on each packages
 
 ### App's icon change
 

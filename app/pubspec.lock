@@ -661,7 +661,7 @@ packages:
     source: hosted
     version: "1.5.1"
   process:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: process
       url: "https://pub.dartlang.org"
@@ -671,8 +671,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: HEAD
-      resolved-ref: bac20095af251621b0b0464d956dcdc1e5e7fe9d
+      ref: master
+      resolved-ref: "0dcca73906c8eb3f25e1d0bb6e2ee3b85bb7bfab"
       url: "https://github.com/xvrh/pub-scores.git"
     source: git
     version: "1.0.0"

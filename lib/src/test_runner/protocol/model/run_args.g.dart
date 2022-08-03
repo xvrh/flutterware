@@ -32,11 +32,15 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
       'imageRatio',
       serializers.serialize(object.imageRatio,
           specifiedType: const FullType(double)),
-      'locale',
-      serializers.serialize(object.locale,
-          specifiedType: const FullType(SerializableLocale)),
     ];
     Object? value;
+    value = object.locale;
+    if (value != null) {
+      result
+        ..add('locale')
+        ..add(serializers.serialize(value,
+            specifiedType: const FullType(SerializableLocale)));
+    }
     value = object.platformBrightness;
     if (value != null) {
       result
@@ -107,7 +111,7 @@ class _$RunArgs extends RunArgs {
   @override
   final double imageRatio;
   @override
-  final SerializableLocale locale;
+  final SerializableLocale? locale;
   @override
   final int? platformBrightness;
 
@@ -120,7 +124,7 @@ class _$RunArgs extends RunArgs {
       required this.device,
       required this.accessibility,
       required this.imageRatio,
-      required this.locale,
+      this.locale,
       this.platformBrightness})
       : super._() {
     BuiltValueNullFieldError.checkNotNull(id, 'RunArgs', 'id');
@@ -129,7 +133,6 @@ class _$RunArgs extends RunArgs {
     BuiltValueNullFieldError.checkNotNull(
         accessibility, 'RunArgs', 'accessibility');
     BuiltValueNullFieldError.checkNotNull(imageRatio, 'RunArgs', 'imageRatio');
-    BuiltValueNullFieldError.checkNotNull(locale, 'RunArgs', 'locale');
   }
 
   @override
@@ -226,7 +229,7 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
       _device = $v.device.toBuilder();
       _accessibility = $v.accessibility.toBuilder();
       _imageRatio = $v.imageRatio;
-      _locale = $v.locale.toBuilder();
+      _locale = $v.locale?.toBuilder();
       _platformBrightness = $v.platformBrightness;
       _$v = null;
     }
@@ -258,7 +261,7 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
               accessibility: accessibility.build(),
               imageRatio: BuiltValueNullFieldError.checkNotNull(
                   imageRatio, 'RunArgs', 'imageRatio'),
-              locale: locale.build(),
+              locale: _locale?.build(),
               platformBrightness: platformBrightness);
     } catch (_) {
       late String _$failedField;
@@ -271,7 +274,7 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
         accessibility.build();
 
         _$failedField = 'locale';
-        locale.build();
+        _locale?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
             'RunArgs', _$failedField, e.toString());

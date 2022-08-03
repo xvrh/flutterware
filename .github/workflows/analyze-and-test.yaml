@@ -1,0 +1,35 @@
+name: Flutterware
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  analyze_and_test:
+    name: Flutter analyze
+    strategy:
+      matrix:
+        flutter: ['stable']
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ matrix.flutter }}
+      - run: flutter --version
+      - run: flutter pub get
+        working-directory: app
+      - run: flutter pub get
+        working-directory: examples/example
+      - run: flutter analyze
+      - run: flutter test
+        working-directory: app
+      - run: flutter pub run tool/prepare_submit.dart
+      - name: "check for uncommitted changes"
+        run: |
+          git diff --exit-code --stat -- . ':(exclude)*pubspec.lock' \
+          || (echo "##[error] found changed files after build. please run 'dart tool/prepare_submit.dart'" \
+                   "and check in all changes" \
+              && exit 1)
+        shell: bash

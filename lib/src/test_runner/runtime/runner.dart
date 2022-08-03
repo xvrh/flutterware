@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart' as flutter;
 import 'package:logging/logging.dart';
 import 'package:pool/pool.dart';
 import 'package:stream_channel/stream_channel.dart';
-import 'package:test_api/src/backend/group.dart';
+import 'package:test_api/src/backend/group.dart'; // ignore: implementation_imports
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../api.dart';
 import '../protocol/connection.dart';
@@ -21,8 +21,6 @@ import 'fonts.dart';
 import 'list_tests.dart';
 import 'run_context.dart';
 import 'run_group.dart';
-
-// ignore: implementation_imports
 
 final _logger = Logger('runner');
 

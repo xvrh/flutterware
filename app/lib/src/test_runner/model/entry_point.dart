@@ -28,8 +28,9 @@ class TestFile {
 
   TestFile(this.projectRoot, this.file);
 
-  String get relativePath =>
-      p.relative(file.absolute.path, from: projectRoot.absolute.path).replaceAll(r'\', '/');
+  String get relativePath => p
+      .relative(file.absolute.path, from: projectRoot.absolute.path)
+      .replaceAll(r'\', '/');
 }
 
 String entryPointCode(Project project, List<TestFile> files,
