@@ -1,3 +1,7 @@
+## 0.1.2
+
+- Internal maintenance to improve pub's score.
+
 ## 0.1.1
 
 - Allow to start the app from pub cache.

@@ -1,7 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/internals/test_runner.dart';
 import '../utils.dart';
+import 'runtime.dart';
 import 'screens/detail_image.dart';
 
 class DetailPage extends StatelessWidget {

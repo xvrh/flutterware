@@ -37,7 +37,7 @@ String entryPointCode(Project project, List<TestFile> files,
     {required Uri serverUri, required Uri? loggerUri}) {
   var code = StringBuffer()..writeln('''
 // GENERATED-CODE: Flutterware - Test runner feature
-import 'package:flutterware/internals/test_runner_daemon.dart';
+import 'package:flutterware/src/test_runner_daemon.dart';
 ''');
 
   var index = 0;

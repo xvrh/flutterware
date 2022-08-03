@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/internals/test_runner.dart';
 import '../detail.dart';
+import '../runtime.dart';
 
 class ImageDetail extends StatefulWidget {
   final TestRun run;

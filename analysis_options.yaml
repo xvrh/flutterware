@@ -33,7 +33,7 @@ linter:
     # From flutter_lints
     avoid_print: false
     avoid_unnecessary_containers: true
-    avoid_web_libraries_in_flutter: false
+    #avoid_web_libraries_in_flutter: false
     no_logic_in_create_state: true
     prefer_const_constructors: false
     prefer_const_constructors_in_immutables: false

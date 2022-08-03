@@ -1,5 +1,5 @@
 import 'package:logging/logging.dart';
-import 'remote_log.dart';
+import 'remote_log_client.dart';
 
 extension LogClientExtension on LogClient {
   void printLogRecord(LogRecord e) {

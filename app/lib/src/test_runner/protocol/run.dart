@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'package:flutterware/internals/test_runner.dart';
 import 'package:rxdart/rxdart.dart';
+import '../runtime.dart';
 
 class RunHost {
   final Channel _channel;

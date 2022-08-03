@@ -6,7 +6,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:meta/meta.dart';
-import '../../internals/utils.dart';
+import '../utils.dart';
 import 'io.dart';
 import 'terminal.dart' show Terminal, TerminalColor, OutputPreferences;
 

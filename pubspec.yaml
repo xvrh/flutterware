@@ -1,11 +1,19 @@
 name: flutterware
-description: 'A set of GUI tools for Flutter development.'
-version: 0.1.1 # Keep it sync with flutterware_app
+description: 'A collection of GUI tools to help Flutter development. This is a complement to your IDE with Flutter specific needs.'
+version: 0.1.2 # Keep it sync with flutterware_app
 homepage: https://github.com/xvrh/flutterware
 
 environment:
   sdk: '>=2.17.0 <3.0.0'
   flutter: '>=3.0.0'
+
+platforms:
+  android:
+  ios:
+  linux:
+  macos:
+  windows:
+  web:
 
 dependencies:
   built_collection: ^5.1.1

@@ -6,6 +6,8 @@ import 'asset_bundle_web.dart';
 import 'runner.dart';
 import 'setup.dart' show BundleParameters;
 
+// ignore_for_file: avoid_web_libraries_in_flutter
+
 Future<TestBundle> createBundle(BundleParameters params) {
   return WebAssetBundle.create(params);
 }

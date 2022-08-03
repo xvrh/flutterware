@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import '../src/logs/remote_log.dart';
+import 'remote_log_server.dart';
 
 abstract class LogClient {
   factory LogClient.print() => _PrintLogClient();

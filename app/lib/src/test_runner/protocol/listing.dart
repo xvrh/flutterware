@@ -1,6 +1,6 @@
 import 'package:built_collection/built_collection.dart';
-import 'package:flutterware/internals/test_runner.dart';
 import 'package:rxdart/rxdart.dart';
+import '../runtime.dart';
 
 class ListingHost {
   final Channel _channel;

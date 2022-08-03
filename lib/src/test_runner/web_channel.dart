@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:html';
 import 'package:stream_channel/stream_channel.dart';
 
+// ignore_for_file: avoid_web_libraries_in_flutter
+
 StreamChannel<String> createWebChannel(WindowBase destinationWindow) {
   var receiveController = StreamController<String>();
   window.onMessage.listen((event) {
