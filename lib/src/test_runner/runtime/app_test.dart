@@ -25,7 +25,6 @@ import 'run_context.dart';
 /// }
 /// ```
 abstract class AppTest {
-
   /// This function is run before each test and allows to setup the test environment
   Future<void> setUp() async {}
 
