@@ -1,13 +1,15 @@
 import 'dart:io';
-import 'package:flutter/material.dart'; // ignore: implementation_imports
+import 'package:flutter/material.dart';
 import 'package:flutterware/src/logs/remote_log_adapter.dart';
-import 'package:flutterware/src/logs/remote_log_client.dart'; // ignore: implementation_imports
+import 'package:flutterware/src/logs/remote_log_client.dart';
 import 'package:logging/logging.dart';
 import 'src/app/app.dart';
 import 'src/constants.dart';
 import 'src/context.dart';
 import 'src/flutter_sdk.dart';
 import 'src/project.dart';
+
+// ignore_for_file: implementation_imports
 
 void main() async {
   var projectPath = Platform.environment[projectDefineKey];
