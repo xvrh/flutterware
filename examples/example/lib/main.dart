@@ -22,7 +22,7 @@ class MyApp extends StatelessWidget {
         //),
         inputDecorationTheme: InputDecorationTheme(
           border: OutlineInputBorder(),
-        ), 
+        ),
       ),
       home: const MyHomePage(title: 'Flutter Demo Home Page'),
       localizationsDelegates: [

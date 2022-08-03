@@ -70,8 +70,10 @@ class RemoteLogClient implements LogClient {
 
   @override
   void printError(String message, {StackTrace? stackTrace, bool? wrap}) {
-    _send(RemoteLogServer.printLogPath,
-        PrintLog.error(message, stackTrace: stackTrace?.toString(), wrap: wrap));
+    _send(
+        RemoteLogServer.printLogPath,
+        PrintLog.error(message,
+            stackTrace: stackTrace?.toString(), wrap: wrap));
   }
 
   @override

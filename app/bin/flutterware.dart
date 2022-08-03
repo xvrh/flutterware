@@ -110,10 +110,10 @@ Flutter SDK: ${context.flutterSdk.root}
     var exeFile = File(p.join(
         context.appToolPath, _exePathForPlatform(logger: context.logClient)));
 
+    context.logClient.printTrace(
+        'Compile GUI (exe: ${exeFile.existsSync()}, option: ${argResults!.arguments})');
     if (!exeFile.existsSync() ||
-        (argResults!.arguments.contains(forceCompileOption))) {
-      context.logClient.printTrace(
-          'Compile GUI (exe: ${exeFile.existsSync()}, option: ${argResults![forceCompileOption]})');
+        (argResults!.arguments.contains('--$forceCompileOption'))) {
       var buildProgress =
           context.logClient.startProgress('Building Flutterware GUI');
 
@@ -152,7 +152,7 @@ Flutter SDK: ${context.flutterSdk.root}
       workingDirectory: context.appToolPath,
     );
 
-    unawaited(process.exitCode.then(exit));
+    await process.exitCode.then(exit);
   }
 }
 

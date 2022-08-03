@@ -83,8 +83,7 @@ void main(List<String> arguments) async {
   });
 
   var code = await process.exitCode;
-  logger.printTrace(
-      'Process exited ($code)');
+  logger.printTrace('Process exited ($code)');
 
   if (code > 0) {
     logger.printError('CLI terminated with error ($code).\n'

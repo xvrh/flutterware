@@ -51,6 +51,8 @@ Discover the features:
 - Pub dependencies manager
 - Launcher icon manager
 - ...
+
+Contribute your ideas: https://github.com/xvrh/flutterware
 '''
           .trim(),
       title: 'Flutterware GUI is ready');
