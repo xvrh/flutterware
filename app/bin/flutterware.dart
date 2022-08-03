@@ -27,9 +27,9 @@ class _Context {
 
   Future<String> flutterwareVersion() async {
     var pubspecContent =
-        await File(p.join(appToolPath, '..', 'pubspec.yaml')).readAsString();
+        await File(p.join(appToolPath, 'pubspec.yaml')).readAsString();
     var pubspec = Pubspec.parse(pubspecContent);
-    return pubspec.version.toString();
+    return pubspec.version.toString().split('+').first;
   }
 }
 
@@ -96,14 +96,12 @@ class _AppCommand extends Command {
 
   @override
   void run() async {
-    context.logClient
-        .printTrace('AppCommand ${context.projectDirectory.absolute.path}');
-    var appPubspec = Pubspec.parse(await File(
+    var projectPubspec = Pubspec.parse(await File(
             p.join(context.projectDirectory.absolute.path, 'pubspec.yaml'))
         .readAsString());
 
     context.logClient.printBox('''
-App: ${appPubspec.name} (${context.projectDirectory.absolute.path})
+Project: ${projectPubspec.name} (${context.projectDirectory.absolute.path})
 Flutter SDK: ${context.flutterSdk.root}
 ''', title: 'Flutterware ${await context.flutterwareVersion()}');
 

@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:io' as io;
 import 'dart:isolate';
+import 'package:crypto/crypto.dart';
 import 'package:flutterware/internals/constants.dart';
 import 'package:flutterware/src/logs/io.dart';
 import 'package:flutterware/src/logs/logger.dart';
 import 'package:flutterware/src/logs/platform.dart' show LocalPlatform;
 import 'package:flutterware/src/logs/remote_log.dart';
 import 'package:flutterware/src/logs/terminal.dart';
+import 'package:flutterware/src/utils/list_files.dart';
 import 'package:path/path.dart' as p;
 
 void main(List<String> arguments) async {
@@ -19,9 +21,9 @@ void main(List<String> arguments) async {
   var pubPackage =
       await Isolate.resolvePackageUri(Uri.parse('package:flutterware/lib'));
   var packageRoot = pubPackage!.resolve('..').toFilePath();
-  var appPath = p.join(packageRoot, 'app');
+  var sourceAppPath = p.join(packageRoot, 'app');
   if (!File(p.join(packageRoot, 'pubspec.yaml')).existsSync() ||
-      !File(p.join(appPath, 'pubspec.yaml')).existsSync()) {
+      !File(p.join(sourceAppPath, 'pubspec.yaml')).existsSync()) {
     logger.printError('Failed to resolve flutterware (root: $packageRoot)');
     return;
   }
@@ -31,13 +33,22 @@ void main(List<String> arguments) async {
   logger.printTrace('Platform.script: ${Platform.script}');
   logger.printTrace('Flutterware Package: $pubPackage');
   logger.printTrace('PackageRoot: $packageRoot');
-  logger.printTrace('App: $appPath');
+  logger.printTrace('App: $sourceAppPath');
+
+  var copiedSourcePath =
+      p.join(_userHomePath(), '.flutterware', _hash(packageRoot));
+  var appPath = p.join(copiedSourcePath, 'app');
 
   var compiledCliPath = 'build/compiled_cli${Platform.isWindows ? '.exe' : ''}';
-  var compiledCliFile = File(p.join(appPath, compiledCliPath));
+  var compiledCliFile = File(p.join(copiedSourcePath, 'app', compiledCliPath));
   //TODO(xha): we should detect if any file has changed and re-compile as needed.
   if (!compiledCliFile.existsSync() ||
       arguments.contains('--$forceCompileOption')) {
+    var buildCliProgress =
+        logger.startProgress('Building Flutterware executable');
+
+    await _copyDirectory(packageRoot, copiedSourcePath);
+
     compiledCliFile.parent.createSync(recursive: true);
     try {
       compiledCliFile.deleteSync();
@@ -45,8 +56,6 @@ void main(List<String> arguments) async {
       // Don't care if the file doesn't exist
     }
 
-    var buildCliProgress =
-        logger.startProgress('Building Flutterware executable');
     var pubGetResult = await Process.run(
         Platform.resolvedExecutable, ['pub', 'get'],
         workingDirectory: appPath);
@@ -117,4 +126,27 @@ Logger _createLogger({required bool isVerbose}) {
   }
 
   return logger;
+}
+
+Future<void> _copyDirectory(String source, String destination) async {
+  var files = listFilesInDirectory(source);
+  for (var file in files) {
+    var relativePath = p.relative(file.absolute.path, from: source);
+    var targetFile = p.join(destination, relativePath);
+    File(targetFile).createSync(recursive: true);
+    await file.copy(targetFile);
+  }
+}
+
+String _userHomePath() {
+  var envKey = Platform.isWindows ? 'APPDATA' : 'HOME';
+  return Platform.environment[envKey] ?? '.';
+}
+
+String _hash(String input) {
+  return sha1
+      .convert(utf8.encode(input))
+      .bytes
+      .map((b) => b.toRadixString(16))
+      .join('');
 }
