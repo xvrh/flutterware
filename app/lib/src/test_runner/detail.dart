@@ -1,6 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/internals/test_runner.dart';
+import 'runtime.dart';
 import '../utils.dart';
 import 'screens/detail_image.dart';
 

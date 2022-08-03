@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:built_collection/built_collection.dart';
 import 'package:flutter/material.dart' hide InteractiveViewer;
 import 'package:flutter/services.dart';
-import 'package:flutterware/internals/test_runner.dart';
+import 'runtime.dart';
 import '../utils.dart';
 import '../utils/graphite.dart';
 import 'detail.dart';

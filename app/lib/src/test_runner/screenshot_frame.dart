@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutterware/internals/test_runner.dart';
+import 'runtime.dart';
 import '../utils/raw_image_provider.dart';
 import 'ui/phone_status_bar.dart';
 

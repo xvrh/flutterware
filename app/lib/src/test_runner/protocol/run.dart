@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutterware/internals/test_runner.dart';
+import '../runtime.dart';
 import 'package:rxdart/rxdart.dart';
 
 class RunHost {

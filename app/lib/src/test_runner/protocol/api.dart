@@ -1,4 +1,4 @@
-import 'package:flutterware/internals/test_runner.dart';
+import '../runtime.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'listing.dart';
 import 'project.dart';

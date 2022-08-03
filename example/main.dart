@@ -23,6 +23,7 @@ class CheckoutTest extends AppTest {
   }
 }
 
+// == App code (for example purpose)
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 

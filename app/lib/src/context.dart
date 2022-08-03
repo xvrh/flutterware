@@ -1,4 +1,4 @@
-import 'package:flutterware/internals/remote_log.dart';
+import 'package:flutterware/src/logs/remote_log_client.dart'; // ignore: implementation_imports
 import 'utils/resource_cleaner.dart';
 
 class AppContext {

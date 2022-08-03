@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import '../../../internals/remote_log.dart';
-import '../../../internals/remote_log_adapter.dart';
+import '../../logs/remote_log_client.dart';
+import '../../logs/remote_log_adapter.dart';
 import 'runner.dart';
 import 'setup_io.dart' if (dart.library.html) 'setup_web.dart';
 
