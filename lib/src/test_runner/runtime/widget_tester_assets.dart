@@ -25,6 +25,7 @@ extension WidgetTesterAssetsExtension on WidgetTester {
     }
   }
 
+  /// Tries to preload all `Image`s (except `NetworkImage`s) in the current widget tree.
   Future<void> waitForAssets() async {
     if (kIsWeb) {
       return;
@@ -42,6 +43,7 @@ extension WidgetTesterAssetsExtension on WidgetTester {
     });
   }
 
+  /// Tries to preload all `NetworkImage`s in the current widget tree.
   Future<void> waitForNetworkImages() async {
     if (kIsWeb) {
       return;

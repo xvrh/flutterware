@@ -1,3 +1,5 @@
-## 1.0.0
+## 0.1.0
 
-- Initial version.
+- Test runner with screenshots & hot-reload
+- Pub dependencies manager
+- Launcher icon manager

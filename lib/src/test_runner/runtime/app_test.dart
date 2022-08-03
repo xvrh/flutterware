@@ -3,9 +3,34 @@ import '../api.dart';
 import 'extract_text.dart';
 import 'run_context.dart';
 
+/// This class allow for a simpler API to write widget test.
+///
+/// ```dart
+/// void main() {
+///   testApp('Test example', CheckoutTest());
+/// }
+///
+/// class CheckoutTest extends AppTest {
+///   @override
+///   Future<void> run() async {
+///     await pumpWidget(MyApp());
+///     await screenshot();
+///
+///     await tap(ElevatedButton);
+///     await screenshot();
+///
+///     await enterText(TextField, 'Name');
+///     await screenshot();
+///   }
+/// }
+/// ```
 abstract class AppTest {
+  /// This function is run before each test and allows to setup the test environment
   Future<void> setUp() async {}
+
+  /// This function is run after each test and allows to clean the test environment
   Future<void> tearDown() async {}
+
   Future<void> run();
 
   WidgetTester? _tester;
@@ -118,6 +143,7 @@ abstract class AppTest {
     }
   }
 
+  /// Takes a screenshot of the current widget and display it in the Flutterware visualizer
   Future<void> screenshot({String? name, List<String>? tags}) {
     return tester.screenshot(name: name, tags: tags);
   }
