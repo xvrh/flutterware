@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../about/screen.dart';
 import '../dependencies/list.dart';
+import '../drawing/menu.dart';
+import '../drawing/screen.dart';
 import '../icon/image_provider.dart';
 import '../icon/model/service.dart';
 import '../icon/screen.dart';
@@ -77,6 +79,7 @@ class ProjectView extends StatelessWidget {
               ],
             ),
             TestMenu(project),
+            DrawingMenu(project),
           ],
         ),
         Expanded(
@@ -86,6 +89,7 @@ class ProjectView extends StatelessWidget {
               paths.dependencies: (route) => DependenciesScreen(project),
               paths.tests: (route) => TestRunnerScreen(project),
               paths.icon: (route) => IconScreen(project),
+              paths.drawing: (route) => DrawingScreen(),
             },
             onNotFound: (_) => paths.home,
           ),

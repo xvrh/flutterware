@@ -323,7 +323,7 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "0.1.0"
+    version: "0.1.2"
   freezed_annotation:
     dependency: transitive
     description:
@@ -499,6 +499,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.0.2"
+  more:
+    dependency: "direct main"
+    description:
+      name: more
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "3.7.1"
   node_preamble:
     dependency: transitive
     description:
@@ -633,7 +640,7 @@ packages:
     source: hosted
     version: "2.1.0"
   petitparser:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: petitparser
       url: "https://pub.dartlang.org"

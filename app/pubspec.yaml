@@ -55,11 +55,13 @@ dependencies:
   logging:
   markdown:
   meta:
+  more:
   os_detect:
   package_config:
   package_info_plus:
   path:
   path_provider:
+  petitparser:
   pool:
   process:
   pub_scores:

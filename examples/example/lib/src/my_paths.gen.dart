@@ -1,9 +1,3 @@
-import 'package:flutterware_app/src/drawing/model/file.dart';
-import 'package:test/test.dart';
-
-void main() {
-  test('Parse DrawingFile', () {
-    var code = '''
 //@flutterware:drawing=1.0
 import 'package:flutterware/drawing.dart';
 
@@ -15,8 +9,3 @@ final myPath = PathBuilder([
   LineTo(3, 5.3),
   Close(),
 ]);
-''';
-    var file = DrawingFile.parse('file.dart', code);
-    expect(file.toCode(), code);
-  });
-}
