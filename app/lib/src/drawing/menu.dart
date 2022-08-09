@@ -1,6 +1,8 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/drawing/model/file.dart';
-
+import 'package:more/collection.dart';
+import 'package:path/path.dart' as p;
 import '../project.dart';
 import '../ui/side_menu.dart';
 
@@ -15,13 +17,6 @@ class DrawingMenu extends StatelessWidget {
       maintainState: false,
       title: Text('Path & drawing'),
       children: [
-        // List files
-        // Parse each file and add sub menu with components in the file
-        //  (Paths, paints,
-        MenuLink(
-          url: "drawing/files/xx",
-          title: Text('Introduction'),
-        ),
         _ListingMenu(project),
         const SizedBox(height: 10),
         OutlinedButton.icon(
@@ -51,6 +46,8 @@ class _ListingMenu extends StatefulWidget {
 }
 
 class __ListingMenuState extends State<_ListingMenu> {
+  final _expanded = <String>{};
+
   @override
   void initState() {
     super.initState();
@@ -64,11 +61,39 @@ class __ListingMenuState extends State<_ListingMenu> {
       builder: (context, files, child) {
         return Column(
           children: [
-            for (var file in files)
+            for (var file
+                in files.sortedByCompare((e) => e.filePath, compareNatural))
               MenuLine(
-                onTap: () {},
+                onTap: () {
+                  setState(() {
+                    if (_expanded.contains(file.filePath)) {
+                      _expanded.remove(file.filePath);
+                    } else {
+                      _expanded.add(file.filePath);
+                    }
+                  });
+                },
                 isSelected: false,
-                child: Text(file.filePath),
+                expanded: _expanded.contains(file.filePath),
+                child: Row(
+                  children: [
+                    Text(p
+                        .basename(file.filePath)
+                        .removeSuffix(DrawingFile.fileExtension)),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        p.dirname(file.filePath),
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        style: const TextStyle(
+                          color: Colors.black38,
+                          height: 0.9,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
           ],
         );

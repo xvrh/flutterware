@@ -13,7 +13,6 @@ import '../../project.dart';
 final _logger = Logger('drawing_service');
 
 class DrawingService {
-  static const _fileSuffix = '.gen.dart';
 
   final Project project;
   final _files = ValueNotifier<List<DrawingFile>>([]);
@@ -30,8 +29,7 @@ class DrawingService {
   }
 
   void _onFileChange(WatchEvent event)  async {
-    print("${event.path} ${event.type}");
-    if (event.path.endsWith(_fileSuffix)) {
+    if (event.path.endsWith(DrawingFile.fileExtension)) {
       if (event.type == ChangeType.ADD) {
         var drawingFile = await _tryReadFile(File(event.path));
         if (drawingFile != null) {
@@ -54,10 +52,10 @@ class DrawingService {
     await for (var dir in  project.directory.list()) {
       var basedir = p.basename(dir.path);
       if (dir is Directory && !const ['.dart_tool', 'build', 'out'].contains(basedir)) {
-        await for (var file in  dir.list(recursive: true).whereType<File>().where((f) => f.path.endsWith(_fileSuffix))) {
+        await for (var file in  dir.list(recursive: true).whereType<File>().where((f) => f.path.endsWith(DrawingFile.fileExtension))) {
           await tryAdd(file);
         }
-      } else if (dir is File && dir.path.endsWith(_fileSuffix)) {
+      } else if (dir is File && dir.path.endsWith(DrawingFile.fileExtension)) {
         await tryAdd(dir);
       }
     }

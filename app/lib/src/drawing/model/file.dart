@@ -11,6 +11,7 @@ final _formatter = DartFormatter();
 
 class DrawingFile {
   static final fileTag = '//@flutterware:drawing=1.0';
+  static const fileExtension = '.gen.dart';
 
   final String filePath;
   final _paths = <PathElement>[];
