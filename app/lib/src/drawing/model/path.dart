@@ -5,9 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutterware_app/src/drawing/model/property_bag_parser.dart';
 import 'package:flutterware_app/src/drawing/model/utils.dart';
 
+import 'file.dart';
 import 'mockup.dart';
 
-class PathElement {
+class PathElement implements DrawingEntry {
   final ValueNotifier<String> _name;
   final _commands = <PathCommand>[];
   final _mockups = <MockupElement>[];
@@ -47,6 +48,12 @@ class PathElement {
     return null;
   }
 
+  @override
+  ValueListenable<String> get name => _name;
+
+  @override
+  String get typeName => 'Path';
+
   static List<PropertyBag> _readAllComments(Token beginToken) {
     var results = <PropertyBag>[];
     Token? commentToken = beginToken.precedingComments;
@@ -60,6 +67,7 @@ class PathElement {
     return results;
   }
 
+  @override
   String toCode() {
     var code = StringBuffer();
     for (var mockup in _mockups) {
@@ -77,6 +85,7 @@ class PathElement {
     return '$code';
   }
 
+  @override
   void dispose() {
     _name.dispose();
     for (var command in _commands) {

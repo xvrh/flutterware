@@ -89,7 +89,7 @@ class ProjectView extends StatelessWidget {
               paths.dependencies: (route) => DependenciesScreen(project),
               paths.tests: (route) => TestRunnerScreen(project),
               paths.icon: (route) => IconScreen(project),
-              paths.drawing: (route) => DrawingScreen(),
+              paths.drawing: (route) => DrawingScreen(project),
             },
             onNotFound: (_) => paths.home,
           ),

@@ -2,6 +2,7 @@
 
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:dart_style/dart_style.dart';
 
@@ -14,7 +15,7 @@ class DrawingFile {
   static const fileExtension = '.gen.dart';
 
   final String filePath;
-  final _paths = <PathElement>[];
+  final _entries = ValueNotifier<List<DrawingEntry>>([]);
 
   DrawingFile(this.filePath);
 
@@ -23,15 +24,21 @@ class DrawingFile {
     var unit = result.unit;
 
     var file = DrawingFile(filePath);
+
+    var entries = <DrawingEntry>[];
+
     for (var topLevelVariable in unit.declarations.whereType<TopLevelVariableDeclaration>()) {
       var path = PathElement.fromCode(topLevelVariable);
       if (path != null) {
-        file._paths.add(path);
+        entries.add(path);
       }
     }
+    file._entries.value = entries;
 
     return file;
   }
+
+  ValueListenable<List<DrawingEntry>> get entries => _entries;
 
   String toCode() {
     var buffer = StringBuffer('''
@@ -39,7 +46,7 @@ $fileTag
 import 'package:flutterware/drawing.dart';
 ''');
 
-    for (var path in _paths) {
+    for (var path in _entries.value) {
       buffer.writeln(path.toCode());
     }
 
@@ -47,8 +54,16 @@ import 'package:flutterware/drawing.dart';
   }
 
   void dispose() {
-    for (var path in _paths) {
+    for (var path in _entries.value) {
       path.dispose();
     }
+    _entries.dispose();
   }
+}
+
+abstract class DrawingEntry {
+  ValueListenable<String> get name;
+  String get typeName;
+  String toCode();
+  void dispose();
 }
