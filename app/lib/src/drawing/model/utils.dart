@@ -14,12 +14,22 @@ String numToCode(num value, {int maxDigits = 3}) {
 }
 
 double expressionToDouble(Expression expression) {
-  if (expression is DoubleLiteral) {
-    return expression.value;
-  } else if (expression is IntegerLiteral) {
-    return expression.value!.toDouble();
+  var multiplicator = 1;
+  if (expression is PrefixExpression) {
+    multiplicator = expression.operator.toString() == '-' ? -1 : 1;
+    expression = expression.operand;
   }
-  throw UnsupportedError('Expression is not a valid double literal (${expression.runtimeType})');
+
+  double value;
+  if (expression is DoubleLiteral) {
+    value = expression.value;
+  } else if (expression is IntegerLiteral) {
+    value = expression.value!.toDouble();
+  } else {
+    throw UnsupportedError(
+        'Expression is not a valid double literal (${expression.runtimeType})');
+  }
+  return value * multiplicator;
 }
 
 String commentValue(String rawComment) {

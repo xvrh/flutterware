@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/drawing/model/file.dart';
@@ -13,7 +14,6 @@ import '../../project.dart';
 final _logger = Logger('drawing_service');
 
 class DrawingService {
-
   final Project project;
   final _files = ValueNotifier<List<DrawingFile>>([]);
   StreamSubscription? _watcherSubscription;
@@ -28,15 +28,41 @@ class DrawingService {
         DirectoryWatcher(project.directory.path).events.listen(_onFileChange);
   }
 
-  void _onFileChange(WatchEvent event)  async {
+  void _onFileChange(WatchEvent event) async {
     if (event.path.endsWith(DrawingFile.fileExtension)) {
       if (event.type == ChangeType.ADD) {
         var drawingFile = await _tryReadFile(File(event.path));
         if (drawingFile != null) {
           _files.value = [..._files.value, drawingFile];
+          _logger.fine('Added file ${drawingFile.filePath}');
+        }
+      } else if (event.type == ChangeType.MODIFY) {
+        var drawingFile = await _tryReadFile(File(event.path));
+        if (drawingFile != null) {
+          var existingFile = _files.value
+              .firstWhereOrNull((e) => e.filePath == drawingFile.filePath);
+          if (existingFile != null &&
+              existingFile.toCode() != drawingFile.toCode()) {
+            var newFiles = _files.value.toList();
+            newFiles[newFiles.indexOf(existingFile)] = drawingFile;
+            _files.value = newFiles;
+            existingFile.dispose();
+
+            _logger.fine('Updated file ${drawingFile.filePath}');
+          }
+        }
+      } else if (event.type == ChangeType.REMOVE) {
+        var filePath = p.relative(File(event.path).absolute.path,
+            from: project.absolutePath);
+        var existingFile = _files.value
+            .firstWhereOrNull((e) => e.filePath == filePath);
+        if (existingFile != null) {
+          var newFiles = _files.value.toList()..remove(existingFile);
+          _files.value = newFiles;
+          existingFile.dispose();
+          _logger.fine('Remove file $filePath');
         }
       }
-      // remove (+ dispose), add, update (only if content != from last content written)?
     }
   }
 
@@ -49,10 +75,14 @@ class DrawingService {
       }
     }
 
-    await for (var dir in  project.directory.list()) {
+    await for (var dir in project.directory.list()) {
       var basedir = p.basename(dir.path);
-      if (dir is Directory && !const ['.dart_tool', 'build', 'out'].contains(basedir)) {
-        await for (var file in  dir.list(recursive: true).whereType<File>().where((f) => f.path.endsWith(DrawingFile.fileExtension))) {
+      if (dir is Directory &&
+          !const ['.dart_tool', 'build', 'out'].contains(basedir)) {
+        await for (var file in dir
+            .list(recursive: true)
+            .whereType<File>()
+            .where((f) => f.path.endsWith(DrawingFile.fileExtension))) {
           await tryAdd(file);
         }
       } else if (dir is File && dir.path.endsWith(DrawingFile.fileExtension)) {
@@ -66,7 +96,8 @@ class DrawingService {
     var content = await file.readAsString();
     if (content.contains(DrawingFile.fileTag)) {
       try {
-        var filePath = p.relative(file.absolute.path, from: project.absolutePath);
+        var filePath =
+            p.relative(file.absolute.path, from: project.absolutePath);
         return DrawingFile.parse(filePath, content);
       } catch (e, s) {
         _logger.warning('Failed to load file ${file.path}', e, s);

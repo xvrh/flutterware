@@ -33,6 +33,7 @@ dependencies:
   auto_size_text:
   built_collection:
   collection:
+  dart_style:
   device_frame:
   diacritic:
   file_picker:

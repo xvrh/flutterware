@@ -14,10 +14,12 @@ class DrawingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return RouterOutlet({
-      'files/:file': (r) => _FileScreen(
-          project,
-          project.drawing.files.value
-              .firstWhere((e) => e.filePath == r['file']))
+      'files/:file': (r) => ValueListenableBuilder<Iterable<DrawingFile>>(
+          valueListenable: project.drawing.files,
+          builder: (context, files, child) {
+            return _FileScreen(
+                project, files.firstWhere((e) => e.filePath == r['file']));
+          })
     });
   }
 }
@@ -32,8 +34,12 @@ class _FileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return RouterOutlet({
       '': (_) => _FileHomeScreen(file),
-      ':id': (r) => _ComponentScreen(
-          project, file, file.entries.value.firstWhere((e) => e.id == r['id'])),
+      ':name': (r) => ValueListenableBuilder<List<DrawingEntry>>(
+          valueListenable: file.entries,
+          builder: (context, entries, child) {
+            return _ComponentScreen(
+                project, file, entries.firstWhere((e) => e.name == r['name']));
+          }),
     });
   }
 }
@@ -71,7 +77,7 @@ class _ComponentScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var entry = this.entry;
-    if (entry is PathElement) {
+    if (entry is DrawingPath) {
       return PathScreen(project, file, entry);
     } else {
       return Text('Unknown ${entry.typeName}');

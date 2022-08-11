@@ -121,11 +121,7 @@ class __ListingMenuState extends State<_ListingMenu> {
         indent: 1,
         child: Row(
           children: [
-            ValueListenableBuilder<String>(
-                valueListenable: entry.name,
-                builder: (context, name, child) {
-                  return Text(name);
-                }),
+            Text(entry.name),
             const SizedBox(width: 5),
             Expanded(
               child: Text(
@@ -148,5 +144,5 @@ class __ListingMenuState extends State<_ListingMenu> {
       'drawing/files/${Uri.encodeComponent(file.filePath)}';
 
   String _urlForEntry(DrawingFile file, DrawingEntry entry) =>
-      '${_urlForFile(file)}/${entry.id}';
+      '${_urlForFile(file)}/${entry.name}';
 }

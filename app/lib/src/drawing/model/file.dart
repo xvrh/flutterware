@@ -1,7 +1,6 @@
-
-
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:dart_style/dart_style.dart';
@@ -27,8 +26,9 @@ class DrawingFile {
 
     var entries = <DrawingEntry>[];
 
-    for (var topLevelVariable in unit.declarations.whereType<TopLevelVariableDeclaration>()) {
-      var path = PathElement.fromCode(topLevelVariable);
+    for (var topLevelVariable
+        in unit.declarations.whereType<TopLevelVariableDeclaration>()) {
+      var path = DrawingPath.fromCode(topLevelVariable);
       if (path != null) {
         entries.add(path);
       }
@@ -62,8 +62,7 @@ import 'package:flutterware/drawing.dart';
 }
 
 abstract class DrawingEntry {
-  String get id;
-  ValueListenable<String> get name;
+  String get name;
   String get typeName;
   String toCode();
   void dispose();
