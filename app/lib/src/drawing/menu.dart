@@ -111,9 +111,8 @@ class __ListingMenuState extends State<_ListingMenu> {
 
   Iterable<Widget> _selectedEntries(
       DrawingFile file, List<DrawingEntry> entries) sync* {
-    var index = 0;
     for (var entry in entries) {
-      var url = _urlForEntry(file, index);
+      var url = _urlForEntry(file, entry);
       yield MenuLine(
         onTap: () {
           context.router.go(url);
@@ -142,13 +141,12 @@ class __ListingMenuState extends State<_ListingMenu> {
           ],
         ),
       );
-      ++index;
     }
   }
 
   String _urlForFile(DrawingFile file) =>
       'drawing/files/${Uri.encodeComponent(file.filePath)}';
 
-  String _urlForEntry(DrawingFile file, int index) =>
-      '${_urlForFile(file)}/$index';
+  String _urlForEntry(DrawingFile file, DrawingEntry entry) =>
+      '${_urlForFile(file)}/${entry.id}';
 }

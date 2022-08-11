@@ -62,6 +62,7 @@ import 'package:flutterware/drawing.dart';
 }
 
 abstract class DrawingEntry {
+  String get id;
   ValueListenable<String> get name;
   String get typeName;
   String toCode();

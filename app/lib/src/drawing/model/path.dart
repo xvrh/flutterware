@@ -8,7 +8,9 @@ import 'package:flutterware_app/src/drawing/model/utils.dart';
 import 'file.dart';
 import 'mockup.dart';
 
-class PathElement implements DrawingEntry {
+var _globalId = 0;
+
+class PathElement with ChangeNotifier implements DrawingEntry {
   final ValueNotifier<String> _name;
   final _commands = <PathCommand>[];
   final _mockups = <MockupElement>[];
@@ -47,6 +49,9 @@ class PathElement implements DrawingEntry {
 
     return null;
   }
+
+  @override
+  final String id = '${++_globalId}';
 
   @override
   ValueListenable<String> get name => _name;
@@ -95,6 +100,8 @@ class PathElement implements DrawingEntry {
       mockup.dispose();
     }
     _preview?.dispose();
+
+    super.dispose();
   }
 }
 
