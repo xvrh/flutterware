@@ -1,8 +1,11 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/drawing/model/file.dart';
 import 'package:flutterware_app/src/drawing/model/path.dart';
 import 'package:flutterware_app/src/drawing/path_command_editor.dart';
 import 'package:more/math.dart';
+import 'package:path_drawing/path_drawing.dart';
 
 import '../project.dart';
 
@@ -37,8 +40,7 @@ class _Editor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InteractiveViewer(
-      boundaryMargin:
-          const EdgeInsets.only(left: 500, top: 500, bottom: 1000, right: 1000),
+      boundaryMargin: EdgeInsets.zero,
       minScale: 0.2,
       maxScale: 10,
       constrained: false,
@@ -55,52 +57,36 @@ class _Path extends StatelessWidget {
   Widget build(BuildContext context) {
     var uiPath = path.toPath().build();
     var bounds = uiPath.getBounds().inflate(20);
-    //uiPath = uiPath.shift(Offset(-bounds.left, -bounds.top));
+    var offset = Offset(1000, 1000);
+    uiPath = uiPath.shift(offset);
 
-    return Container(
-      //color: Colors.green.withOpacity(0.2),
-      clipBehavior: Clip.none,
-      child: SizedBox(
-        width: 1500,
-        height: 1500,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned.fill(
-              child: Container(
-                color: Colors.blue.withOpacity(0.05),
-                child: CustomPaint(
-                  painter: _Painter(path, uiPath),
-                ),
-              ),
+    return SizedBox(
+      width: 3000,
+      height: 3000,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _Painter(path, uiPath, zeroOffset: offset),
             ),
-            Positioned.fill(
-              left: -bounds.left,
-              top: -bounds.top,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  for (var entry in path.entries)
-                    AnimatedBuilder(
-                      animation: entry,
-                      builder: (context, child) {
-                        if (entry is LineToEntry) {
-                          return LineToEditor(entry);
-                        } else if (entry is MoveToEntry) {
-                          return MoveToEditor(entry);
-                        } else if (entry is CloseEntry) {
-                          return const SizedBox();
-                        } else {
-                          throw StateError(
-                              'Unknown entry ${entry.runtimeType}');
-                        }
-                      },
-                    ),
-                ],
-              ),
+          ),
+          for (var entry in path.entries)
+            AnimatedBuilder(
+              animation: entry,
+              builder: (context, child) {
+                if (entry is LineToEntry) {
+                  return LineToEditor(entry, offset: offset);
+                } else if (entry is MoveToEntry) {
+                  return MoveToEditor(entry, offset: offset);
+                } else if (entry is CloseEntry) {
+                  return const SizedBox();
+                } else {
+                  throw StateError('Unknown entry ${entry.runtimeType}');
+                }
+              },
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -130,8 +116,9 @@ class _SidePanel extends StatelessWidget {
 class _Painter extends CustomPainter {
   final DrawingPath drawing;
   final Path path;
+  final Offset zeroOffset;
 
-  _Painter(this.drawing, this.path);
+  _Painter(this.drawing, this.path, {required this.zeroOffset});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -141,6 +128,32 @@ class _Painter extends CustomPainter {
       ..color = Colors.lightBlue;
 
     canvas.drawPath(path, paint);
+
+    var referencePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..color = Colors.black12;
+
+    var dash = CircularIntervalList<double>([10.0, 5]);
+    void drawDashLine(Offset start, Offset end) {
+      canvas.drawPath(
+          dashPath(
+              Path()
+                ..moveTo(start.dx, start.dy)
+                ..lineTo(end.dx, end.dy),
+              dashArray: dash),
+          referencePaint);
+    }
+
+    drawDashLine(zeroOffset, Offset(size.width, zeroOffset.dy));
+    drawDashLine(zeroOffset, Offset(zeroOffset.dx, size.height));
+
+    var paragraphBuilder = ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: 12))
+      ..pushStyle(ui.TextStyle(color: Colors.black38))
+      ..addText('0, 0');
+    var paragraph = paragraphBuilder.build();
+    paragraph.layout(ui.ParagraphConstraints(width: 100));
+    canvas.drawParagraph(paragraph, Offset(0, -20) + zeroOffset);
   }
 
   @override

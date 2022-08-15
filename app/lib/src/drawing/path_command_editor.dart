@@ -32,28 +32,30 @@ class PointHandle extends StatelessWidget {
 
 class LineToEditor extends StatelessWidget {
   final LineToEntry entry;
+  final Offset offset;
 
-  const LineToEditor(this.entry, {super.key});
+  const LineToEditor(this.entry, {super.key, required this.offset});
 
   @override
   Widget build(BuildContext context) {
     return PointHandle(
-      x: entry.x,
-      y: entry.y,
+      x: entry.x + offset.dx,
+      y: entry.y + offset.dy,
     );
   }
 }
 
 class MoveToEditor extends StatelessWidget {
   final MoveToEntry entry;
+  final Offset offset;
 
-  const MoveToEditor(this.entry, {super.key});
+  const MoveToEditor(this.entry, {super.key, required this.offset});
 
   @override
   Widget build(BuildContext context) {
     return PointHandle(
-      x: entry.x,
-      y: entry.y,
+      x: entry.x + offset.dx,
+      y: entry.y + offset.dy,
     );
   }
 }
