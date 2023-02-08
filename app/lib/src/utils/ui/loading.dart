@@ -119,7 +119,7 @@ OverlayEntry _showLoading(BuildContext context, Widget content) {
       child: content,
     );
   });
-  Overlay.of(context)!.insert(entry);
+  Overlay.of(context).insert(entry);
 
   return entry;
 }

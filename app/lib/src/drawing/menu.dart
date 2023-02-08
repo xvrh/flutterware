@@ -40,7 +40,7 @@ class DrawingMenu extends StatelessWidget {
 class _ListingMenu extends StatefulWidget {
   final Project project;
 
-  const _ListingMenu(this.project, {super.key});
+  const _ListingMenu(this.project);
 
   @override
   State<_ListingMenu> createState() => __ListingMenuState();

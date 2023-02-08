@@ -4,8 +4,8 @@ version: 0.1.2 # Keep it sync with flutterware_app
 homepage: https://github.com/xvrh/flutterware
 
 environment:
-  sdk: '>=2.17.0 <3.0.0'
-  flutter: '>=3.0.0'
+  sdk: '>=2.19.0 <3.0.0'
+  flutter: '>=3.7.0'
 
 platforms:
   android:

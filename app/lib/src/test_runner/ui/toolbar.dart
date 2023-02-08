@@ -236,7 +236,7 @@ class ToolbarPanelState extends State<ToolbarPanel> {
         );
       },
     );
-    Overlay.of(context)!.insert(overlay);
+    Overlay.of(context).insert(overlay);
   }
 
   void hideMenu() {

@@ -164,11 +164,11 @@ class __CheckoutPageState extends State<_CheckoutPage> {
         ),
       ),
     );
-    Overlay.of(context)!.insert(loader);
+    Overlay.of(context).insert(loader);
     var result = await paymentService.pay();
     loader.remove();
 
-    if (result) {
+    if (result && mounted) {
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
