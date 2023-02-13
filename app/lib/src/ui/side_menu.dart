@@ -205,7 +205,7 @@ class _CollapsibleMenuState extends State<CollapsibleMenu> {
       data: theme.copyWith(
         dividerColor: Colors.transparent,
         textTheme: theme.textTheme.copyWith(
-          subtitle1: TextStyle(
+          titleMedium: TextStyle(
             fontWeight: FontWeight.w700,
           ),
         ),

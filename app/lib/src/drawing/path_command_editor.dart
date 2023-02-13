@@ -15,7 +15,7 @@ class PointHandle extends StatelessWidget {
       top: y - pointWidth / 2,
       child: InkWell(
         onTap: () {
-          print("Tap");
+          //TODO(xha): handle selection
         },
         child: Container(
           width: pointWidth,

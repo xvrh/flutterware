@@ -51,7 +51,7 @@ class _FileHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Center(
       child: Text('''Board ${file.filePath} ${file.toCode()}
       
 ====

@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/drawing/model/file.dart';
 import 'package:logging/logging.dart';
 import 'package:rxdart/rxdart.dart';

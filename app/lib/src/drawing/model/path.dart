@@ -21,7 +21,7 @@ class DrawingPath with ChangeNotifier implements DrawingEntry {
     var variable = declaration.variables.variables.first;
     var initializer = variable.initializer;
 
-    var result = DrawingPath(variable.name.name);
+    var result = DrawingPath(variable.name.value().toString());
     if (initializer is MethodInvocation &&
         initializer.methodName.name == 'PathBuilder') {
       var elements = initializer.argumentList.arguments.first as ListLiteral;

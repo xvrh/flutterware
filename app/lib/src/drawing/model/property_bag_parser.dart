@@ -74,9 +74,9 @@ class PropertyBagGrammarDefinition extends GrammarDefinition {
   Parser array() =>
       ref1(token, '[') & ref0(elements).optional() & ref1(token, ']');
   Parser elements() =>
-      ref0(value).separatedBy(ref1(token, ','), includeSeparators: false);
+      ref0(value).plusSeparated(ref1(token, ','));
   Parser members() =>
-      ref0(pair).separatedBy(ref1(token, ' '), includeSeparators: false);
+      ref0(pair).plusSeparated(ref1(token, ' '));
   Parser object() =>
       ref1(token, '{') & ref0(members).optional() & ref1(token, '}');
   Parser pair() => ref0(identifier) & ref1(token, '=') & ref0(value);
@@ -134,8 +134,12 @@ class PropertyBagParserDefinition extends PropertyBagGrammarDefinition {
         final result = <String, dynamic>{};
         if (e[1] != null) {
           for (final element in e[1] as List) {
-            var entry = (element as List)[0] as MapEntry<String, dynamic>;
-            result[entry.key] = entry.value;
+            var entry = (element as SeparatedList).elements[0] as MapEntry<String, dynamic>;
+            var value = entry.value;
+            if (value is SeparatedList) {
+              value = value.elements;
+            }
+            result[entry.key] = value;
           }
         }
 
@@ -156,7 +160,7 @@ class PropertyBagParserDefinition extends PropertyBagGrammarDefinition {
       super.object().cast<List>().map((each) {
         final result = <String, dynamic>{};
         if (each[1] != null) {
-          for (final element in each[1] as List) {
+          for (final element in (each[1] as SeparatedList).elements) {
             var entry = element as MapEntry<String, dynamic>;
             result[entry.key] = entry.value;
           }

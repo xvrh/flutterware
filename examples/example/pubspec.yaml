@@ -32,6 +32,8 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  flutterware:
+    path: ../..
   os_detect:
   package_info_plus:
   path:
@@ -39,8 +41,6 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutterware:
-    path: ../..
   lints:
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

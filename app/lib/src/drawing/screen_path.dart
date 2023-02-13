@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutterware_app/src/drawing/model/file.dart';
 import 'package:flutterware_app/src/drawing/model/path.dart';
 import 'package:flutterware_app/src/drawing/path_command_editor.dart';
-import 'package:more/math.dart';
 import 'package:path_drawing/path_drawing.dart';
 
 import '../project.dart';
@@ -56,7 +55,6 @@ class _Path extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var uiPath = path.toPath().build();
-    var bounds = uiPath.getBounds().inflate(20);
     var offset = Offset(1000, 1000);
     uiPath = uiPath.shift(offset);
 
