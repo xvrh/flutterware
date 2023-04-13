@@ -14,6 +14,9 @@ class AppIconImageProvider extends ImageProvider<Object> {
       codec: _loadAsync(key),
       scale: 1.0,
       debugLabel: 'AppIconImageProvider(${describeIdentity(key)})',
+      informationCollector: () => <DiagnosticsNode>[
+        ErrorDescription('Path: ${image.path}'),
+      ],
     );
   }
 

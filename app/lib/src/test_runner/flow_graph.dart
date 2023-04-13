@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:built_collection/built_collection.dart';
-import 'package:flutter/material.dart' hide InteractiveViewer;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../utils.dart';
 import '../utils/graphite.dart';
@@ -10,7 +10,7 @@ import 'protocol/run.dart';
 import 'runtime.dart';
 import 'screenshot_frame.dart';
 import 'toolbar.dart';
-import 'ui/interactive_viewer.dart';
+//import 'ui/interactive_viewer.dart';
 import 'ui/zoom.dart';
 
 class RunView extends StatefulWidget {
@@ -312,13 +312,17 @@ class __FlowGraphState extends State<_FlowGraph> {
       interactiveBuilder: (context, child) {
         return InteractiveViewer(
           transformationController: parentState._interactionController,
-          scrollControls: _isZoomKeyPressed
-              ? InteractiveViewerScrollControls.scrollScales
-              : InteractiveViewerScrollControls.scrollPans,
+          //scrollControls: _isZoomKeyPressed
+          //    ? InteractiveViewerScrollControls.scrollScales
+          //    : InteractiveViewerScrollControls.scrollPans,
           maxScale: 1.5,
           minScale: 0.1,
           constrained: false,
           boundaryMargin: EdgeInsets.all(5000),
+          //trackpadScrollCausesScale: true,
+          panEnabled: true,
+          scaleEnabled: true,
+
           child: child,
         );
       },

@@ -130,12 +130,13 @@ class AppIcons {
     try {
       var originalImage =
           decodeImage(data) ?? (throw Exception('Fail to load image'));
+      originalImage = originalImage.convert(numChannels: 4);
       var preview = copyResize(originalImage,
           width: size, height: size, interpolation: Interpolation.linear);
 
       return AppIcon(
         ByteData.view(preview.getBytes().buffer),
-        file.absolute.path,
+        p.normalize(file.absolute.path),
         originalWidth: originalImage.width,
         originalHeight: originalImage.height,
         previewWidth: size,
@@ -150,7 +151,7 @@ class AppIcons {
       {required List<IconPlatform> platforms}) async {
     await compute((_) {
       var encoders = {'.png': encodePng, '.ico': encodeIco};
-      var image = decodeImage(bytes)!;
+      var image = decodeImage(bytes)!.convert(numChannels: 4);
       for (var platform in platforms) {
         var iconsForPlatform = icons[platform];
         if (iconsForPlatform != null) {

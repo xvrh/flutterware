@@ -4,8 +4,8 @@ version: 0.1.2 # Keep it sync with flutterware_app
 homepage: https://github.com/xvrh/flutterware
 
 environment:
-  sdk: '>=2.19.0 <3.0.0'
-  flutter: '>=3.7.0'
+  sdk: '^3.0.0-431.0.dev'
+  flutter: '>=3.10.0-4.0.pre.8'
 
 platforms:
   android:
@@ -30,7 +30,7 @@ dependencies:
   path: ^1.8.0
   pool: ^1.5.0
   stream_channel: ^2.1.0
-  test_api: ^0.4.9
+  test_api: ^0.5.1
   web_socket_channel: ^2.1.0
 
 dev_dependencies:
