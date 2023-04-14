@@ -13,12 +13,6 @@ class TestBinding extends AutomatedTestWidgetsFlutterBinding {
     _instance = this;
   }
 
-  /// The current [AutomatedTestWidgetsFlutterBinding], if one has been created.
-  ///
-  /// The binding must be initialized before using this getter. If you
-  /// need the binding to be constructed before calling [testWidgets],
-  /// you can ensure a binding has been constructed by calling the
-  /// [TestWidgetsFlutterBinding.ensureInitialized] function.
   static TestBinding get instance => BindingBase.checkInstance(_instance);
   static TestBinding? _instance;
 
@@ -41,8 +35,6 @@ class TestBinding extends AutomatedTestWidgetsFlutterBinding {
   }
 
   void _afterHotReload() async {
-    await runTest(() async {}, () {});
-    postTest();
     onReloaded?.call();
   }
 

@@ -83,7 +83,7 @@ abstract class AppTest {
     await tester.pump(duration, phase);
   }
 
-  Finder _targetToFinder(dynamic target) {
+  Finder targetToFinder(dynamic target) {
     if (target is Finder) {
       return target;
     } else if (target is String) {
@@ -104,7 +104,7 @@ abstract class AppTest {
     String text, {
     bool pumpFrames = true,
   }) async {
-    var finder = _targetToFinder(target);
+    var finder = targetToFinder(target);
     await tester.enterText(finder, text);
     await _pumpFramesIfNeeded(pumpFrames);
   }
@@ -113,7 +113,7 @@ abstract class AppTest {
     dynamic target, {
     bool pumpFrames = true,
   }) async {
-    var finder = _targetToFinder(target);
+    var finder = targetToFinder(target);
 
     var box = _getElementBox(finder);
     if (box != null) {
@@ -136,14 +136,19 @@ abstract class AppTest {
     return null;
   }
 
+  Future<void> pumpAndSettle() async {
+    await tester.waitForAssets();
+    await tester.pumpAndSettle();
+  }
+
   Future<void> _pumpFramesIfNeeded(bool needed) async {
     if (needed) {
-      await tester.waitForAssets();
-      await tester.pumpAndSettle();
+      await pumpAndSettle();
     }
   }
 
-  /// Takes a screenshot of the current widget and display it in the Flutterware visualizer
+  /// Takes a screenshot of the current widget and display it in the Flutterware
+  /// visualizer
   Future<void> screenshot({String? name, List<String>? tags}) {
     return tester.screenshot(name: name, tags: tags);
   }
