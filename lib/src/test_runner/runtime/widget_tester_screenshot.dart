@@ -33,7 +33,7 @@ extension WidgetTesterScreenshotExtension on WidgetTester {
     }
     context.previousScreens.add(screenId);
 
-    var renderView = binding.renderView;
+    var renderView = binding.renderViews.first;
 
     ui.Brightness? brightnessAt(Offset offset) {
       try {
@@ -65,12 +65,9 @@ extension WidgetTesterScreenshotExtension on WidgetTester {
     context.currentSplitName = null;
 
     await runAsync(() async {
-      ui.Image? image;
-      if (context.args.imageRatio > 0) {
-        image = await _toImage(renderView, context.args);
-      }
       Uint8List? pixels;
-      if (image != null) {
+      if (context.args.imageRatio > 0) {
+        var image = await _toImage(renderView, context.args);
         var byteData =
             (await image.toByteData(format: ui.ImageByteFormat.png))!;
         pixels = byteData.buffer.asUint8List();

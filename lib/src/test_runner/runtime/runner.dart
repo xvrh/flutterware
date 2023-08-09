@@ -136,7 +136,7 @@ class Runner {
       FlutterErrorDetails? error;
       reportTestException = (errorDetails, testDescription) {
         try {
-          _logger.severe('Test error ${errorDetails}');
+          _logger.severe('Test error $errorDetails');
           error = errorDetails;
         } catch (e) {
           // errorDetails.toString() itself can throw an error

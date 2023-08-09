@@ -168,7 +168,8 @@ class __CheckoutPageState extends State<_CheckoutPage> {
     var result = await paymentService.pay();
     loader.remove();
 
-    if (result && mounted) {
+    if (!mounted) return;
+    if (result) {
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(

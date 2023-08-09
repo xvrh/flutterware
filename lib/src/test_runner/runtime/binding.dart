@@ -28,6 +28,9 @@ class TestBinding extends AutomatedTestWidgetsFlutterBinding {
   bool get disableShadows => false;
 
   @override
+  Timeout get defaultTestTimeout => const Timeout(Duration(seconds: 60));
+
+  @override
   Future<void> performReassemble() {
     // In order for Hot reload to work, we need to schedule a test
     Timer.run(_afterHotReload);

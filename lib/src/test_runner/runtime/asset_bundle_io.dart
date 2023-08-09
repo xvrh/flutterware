@@ -9,10 +9,13 @@ import 'setup.dart' show BundleParameters;
 void mockFlutterAssets(AssetBundle delegate) {
   /// Navigation related actions (pop, push, replace) broadcasts these actions via
   /// platform messages.
-  SystemChannels.navigation
-      .setMockMethodCallHandler((MethodCall methodCall) async {});
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(SystemChannels.navigation,
+          (MethodCall methodCall) async {
+    return null;
+  });
 
-  ServicesBinding.instance.defaultBinaryMessenger
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMessageHandler('flutter/assets', (ByteData? message) async {
     assert(message != null);
     var key = utf8.decode(message!.buffer.asUint8List());

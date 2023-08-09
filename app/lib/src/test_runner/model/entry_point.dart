@@ -4,10 +4,10 @@ import 'package:path/path.dart' as p;
 import '../../project.dart';
 import '../../utils/source_code.dart';
 
-const _testLocation = 'test_app';
+const defaultTestLocation = 'test/app_tests';
 
 List<TestFile> collectTestFiles(Directory projectRoot) {
-  var testFolder = Directory(p.join(projectRoot.path, _testLocation));
+  var testFolder = Directory(p.join(projectRoot.path, defaultTestLocation));
   var files = <TestFile>[];
   if (testFolder.existsSync()) {
     for (var file in testFolder
@@ -49,7 +49,7 @@ import 'package:flutterware/src/test_runner_daemon.dart';
   index = 0;
   for (var file in files) {
     code.writeln(
-        "'${p.relative(file.relativePath, from: _testLocation)}': i$index.main,");
+        "'${p.relative(file.relativePath, from: defaultTestLocation)}': i$index.main,");
     ++index;
   }
   code.writeln('''
