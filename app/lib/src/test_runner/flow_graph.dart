@@ -10,7 +10,6 @@ import 'protocol/run.dart';
 import 'runtime.dart';
 import 'screenshot_frame.dart';
 import 'toolbar.dart';
-//import 'ui/interactive_viewer.dart';
 import 'ui/zoom.dart';
 
 class RunView extends StatefulWidget {
@@ -319,7 +318,7 @@ class __FlowGraphState extends State<_FlowGraph> {
           minScale: 0.1,
           constrained: false,
           boundaryMargin: EdgeInsets.all(5000),
-          //trackpadScrollCausesScale: true,
+          trackpadScrollCausesScale: _isZoomKeyPressed,
           panEnabled: true,
           scaleEnabled: true,
 

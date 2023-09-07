@@ -1,0 +1,7 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+
+linter:
+  rules:
+    - require_trailing_commas

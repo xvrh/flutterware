@@ -9,7 +9,7 @@ class AppIconImageProvider extends ImageProvider<Object> {
   AppIconImageProvider(this.image);
 
   @override
-  ImageStreamCompleter loadBuffer(Object key, DecoderBufferCallback decode) {
+  ImageStreamCompleter loadImage(Object key, ImageDecoderCallback decode) {
     return MultiFrameImageStreamCompleter(
       codec: _loadAsync(key),
       scale: 1.0,
