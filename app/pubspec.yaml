@@ -62,6 +62,7 @@ dependencies:
   package_info_plus:
   path:
   path_drawing:
+  path_provider:
   petitparser:
   pool:
   process:

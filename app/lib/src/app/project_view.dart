@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutterware/devbar.dart';
 import '../about/screen.dart';
 import '../dependencies/list.dart';
 import '../drawing/menu.dart';
@@ -14,6 +15,8 @@ import '../ui/side_menu.dart';
 import '../utils/async_value.dart';
 import '../utils/router_outlet.dart';
 import 'paths.dart' as paths;
+
+final enableDrawingPath = FeatureFlag('enableDrawingPath', false);
 
 class ProjectView extends StatelessWidget {
   final Project project;
@@ -79,7 +82,7 @@ class ProjectView extends StatelessWidget {
               ],
             ),
             TestMenu(project),
-            DrawingMenu(project),
+            if (enableDrawingPath.dependsOnValue(context)) DrawingMenu(project),
           ],
         ),
         Expanded(
