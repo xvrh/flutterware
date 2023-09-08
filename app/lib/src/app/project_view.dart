@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutterware/devbar.dart';
 import '../about/screen.dart';
 import '../dependencies/list.dart';
+import '../drawing/menu.dart';
+import '../drawing/screen.dart';
 import '../icon/image_provider.dart';
 import '../icon/model/service.dart';
 import '../icon/screen.dart';
@@ -12,6 +15,8 @@ import '../ui/side_menu.dart';
 import '../utils/async_value.dart';
 import '../utils/router_outlet.dart';
 import 'paths.dart' as paths;
+
+final enableDrawingPath = FeatureFlag('enableDrawingPath', false);
 
 class ProjectView extends StatelessWidget {
   final Project project;
@@ -77,6 +82,7 @@ class ProjectView extends StatelessWidget {
               ],
             ),
             TestMenu(project),
+            if (enableDrawingPath.dependsOnValue(context)) DrawingMenu(project),
           ],
         ),
         Expanded(
@@ -86,6 +92,7 @@ class ProjectView extends StatelessWidget {
               paths.dependencies: (route) => DependenciesScreen(project),
               paths.tests: (route) => TestRunnerScreen(project),
               paths.icon: (route) => IconScreen(project),
+              paths.drawing: (route) => DrawingScreen(project),
             },
             onNotFound: (_) => paths.home,
           ),

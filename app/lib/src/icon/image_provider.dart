@@ -9,11 +9,14 @@ class AppIconImageProvider extends ImageProvider<Object> {
   AppIconImageProvider(this.image);
 
   @override
-  ImageStreamCompleter load(Object key, DecoderCallback decode) {
+  ImageStreamCompleter loadImage(Object key, ImageDecoderCallback decode) {
     return MultiFrameImageStreamCompleter(
       codec: _loadAsync(key),
       scale: 1.0,
       debugLabel: 'AppIconImageProvider(${describeIdentity(key)})',
+      informationCollector: () => <DiagnosticsNode>[
+        ErrorDescription('Path: ${image.path}'),
+      ],
     );
   }
 

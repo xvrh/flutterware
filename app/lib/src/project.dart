@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:pubspec_parse/pubspec_parse.dart';
 import 'context.dart';
 import 'dependencies/model/service.dart';
+import 'drawing/model/service.dart';
 import 'flutter_sdk.dart';
 import 'icon/model/service.dart';
 import 'overview/service.dart';
@@ -22,6 +23,7 @@ class Project {
   late final info = ProjectInfoService(this);
   late final icons = IconService(this);
   late final dependencies = DependenciesService(this);
+  late final drawing = DrawingService(this);
   final Uri? loggerUri;
 
   Project(this.context, String path, this.flutterSdkPath, {this.loggerUri})
@@ -46,5 +48,6 @@ class Project {
     info.dispose();
     icons.dispose();
     dependencies.dispose();
+    drawing.dispose();
   }
 }

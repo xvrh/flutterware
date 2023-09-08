@@ -4,3 +4,4 @@ const tests = 'tests';
 const themes = 'themes';
 const runs = 'runs';
 const icon = 'icon';
+const drawing = 'drawing';

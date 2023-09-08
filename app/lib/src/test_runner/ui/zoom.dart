@@ -34,8 +34,8 @@ class ZoomButtons extends StatelessWidget {
   Widget _button(IconData icon, void Function() onPressed) {
     return TextButton(
       onPressed: onPressed,
-      style:
-          TextButton.styleFrom(primary: Colors.black45, minimumSize: Size.zero),
+      style: TextButton.styleFrom(
+          foregroundColor: Colors.black45, minimumSize: Size.zero),
       child: Icon(
         icon,
         size: 20,

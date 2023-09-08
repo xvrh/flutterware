@@ -122,61 +122,6 @@ class _MenuTreeState extends State<MenuTree> {
   }
 }
 
-/*
-class _LineView extends StatelessWidget {
-  final _Line line;
-  final bool expanded;
-  final VoidCallback onTap;
-  final bool selected;
-  final int extraDepth;
-
-  const _LineView(
-    this.line, {
-    Key? key,
-    required this.expanded,
-    required this.onTap,
-    required this.selected,
-    required this.extraDepth,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        color: selected ? AppColors.link : null,
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(width: 12.0 * (line.depth + extraDepth)),
-            Icon(
-              expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-              size: 17,
-              color: line.isLeaf ? Colors.transparent : Colors.black54,
-            ),
-            const SizedBox(width: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-              child: Icon(
-                line.isLeaf ? Icons.insert_drive_file : Icons.folder,
-                size: 16,
-                color: line.isLeaf ? AppColors.link : Color(0xff8cd3ec),
-              ),
-            ),
-            Expanded(
-              child: Text(
-                line.entry.text,
-                style: TextStyle(color: selected ? Colors.white : null),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-*/
 class MenuEntry {
   final List<MenuEntry>? children;
   final String text;

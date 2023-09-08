@@ -3,6 +3,7 @@ _*
 
 !.gitignore
 !.github
+!.pubignore
 
 # Files and directories created by pub.
 .dart_tool/

@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 
 class FittedApp extends StatefulWidget {
@@ -28,7 +27,8 @@ class _FittedAppState extends State<FittedApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    var size = window.physicalSize / window.devicePixelRatio;
+    var view = View.of(context);
+    var size = view.physicalSize / view.devicePixelRatio;
     var widthRatio = size.width / widget.minimumSize.width;
     var heightRatio = size.height / widget.minimumSize.height;
 

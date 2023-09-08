@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:ui';
+import 'package:path/path.dart' as p;
 import '../../../flutter_test.dart';
 import '../protocol/models.dart';
 import 'path_tracker.dart';
@@ -38,12 +41,33 @@ extension WidgetTesterContextExtension on WidgetTester {
   }
 
   RunContext _createDefaultContextForTest() {
+    Directory? screenshotDirectory;
+    var i = 0;
+
+    String? screenshotPath = const String.fromEnvironment(
+        'screenshots-destination',
+        defaultValue: '');
+    if (screenshotPath.isEmpty) {
+      screenshotPath = Platform.environment['SCREENSHOTS_DESTINATION'];
+    }
+    if (screenshotPath != null) {
+      screenshotDirectory = Directory(screenshotPath)
+        ..createSync(recursive: true);
+    }
+
     return RunContext(
-        RunArgs(['test'],
-            device: DeviceInfo.iPhoneX,
-            accessibility: AccessibilityConfig(),
-            locale: SerializableLocale('en'),
-            imageRatio: 1),
-        addScreen: (_) {});
+      RunArgs(['test'],
+          device: DeviceInfo.iPhoneX,
+          accessibility: AccessibilityConfig(),
+          locale: SerializableLocale('en'),
+          imageRatio: 1),
+      addScreen: (screen) {
+        var image = screen.imageBase64;
+        if (image != null && screenshotDirectory != null) {
+          File(p.join(screenshotDirectory.path, '${++i}.png'))
+              .writeAsBytesSync(base64Decode(image));
+        }
+      },
+    );
   }
 }

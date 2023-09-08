@@ -76,12 +76,12 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: Text(
                   'You have pushed the button this many times: and this need',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headline6,
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
               Text(
                 '$_counter',
-                style: Theme.of(context).textTheme.headline2,
+                style: Theme.of(context).textTheme.displayMedium,
                 textAlign: TextAlign.center,
               ),
             ],

@@ -9,12 +9,13 @@ import 'package:watcher/watcher.dart';
 import '../../project.dart';
 import '../protocol/api.dart';
 import 'daemon.dart';
+import 'entry_point.dart';
 import 'server.dart';
 
 final _logger = Logger('test_runner_service');
 
 class WatchConfig {
-  static final defaultFolders = <String>{'lib', 'test_app'};
+  static final defaultFolders = <String>{'lib', defaultTestLocation};
   final Set<String> folders;
 
   WatchConfig(this.folders);
@@ -114,8 +115,8 @@ class TestService {
   }
 
   Future<void> addExample() async {
-    var file =
-        File(p.join(project.absolutePath, 'test_app', 'example_test.dart'));
+    var file = File(
+        p.join(project.absolutePath, defaultTestLocation, 'example_test.dart'));
     file.createSync(recursive: true);
 
     var exampleContent =

@@ -24,7 +24,7 @@ dart run flutterware
 ```
 The first launch is a bit slow because the desktop app need to be compiled.
 
-<img src="doc/screenshots/shell.png" alt="Flutterware shell" width="600">
+![screenshot](doc/screenshots/shell.png)
 
 ## Features
 

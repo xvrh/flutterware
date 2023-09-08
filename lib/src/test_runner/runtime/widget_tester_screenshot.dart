@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:collection/collection.dart';
 import 'package:flutter/rendering.dart';
@@ -66,12 +65,9 @@ extension WidgetTesterScreenshotExtension on WidgetTester {
     context.currentSplitName = null;
 
     await runAsync(() async {
-      ui.Image? image;
-      if (context.args.imageRatio > 0) {
-        image = await _toImage(renderView, context.args);
-      }
       Uint8List? pixels;
-      if (image != null) {
+      if (context.args.imageRatio > 0) {
+        var image = await _toImage(renderView, context.args);
         var byteData =
             (await image.toByteData(format: ui.ImageByteFormat.png))!;
         pixels = byteData.buffer.asUint8List();

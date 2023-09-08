@@ -119,9 +119,11 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                                 sdkDirectory: project.flutterSdkPath.binDir);
                           }, message: 'Opening Pubviz in browser...');
                         } catch (e) {
-                          await showMessageDialog(context,
-                              message: 'Failed to collect dependencies. '
-                                  'Run "flutter pub get" in the project.');
+                          if (mounted) {
+                            await showMessageDialog(context,
+                                message: 'Failed to collect dependencies. '
+                                    'Run "flutter pub get" in the project.');
+                          }
                         }
                       },
                     ),
@@ -284,7 +286,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
             (p) => sort(p, pubScores), comparator);
 
         return DataTable(
-          dataRowHeight: _DependencyListScreen._rowHeight,
+          dataRowMinHeight: _DependencyListScreen._rowHeight,
           headingRowHeight: _DependencyListScreen._headingHeight,
           showCheckboxColumn: false,
           sortColumnIndex: _sortIndex,

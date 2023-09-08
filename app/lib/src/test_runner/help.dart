@@ -39,7 +39,7 @@ Example:
 import 'package:flutterware/flutter_test.dart';
 
 void main() {
-  testWidgets('Checkout flow', CheckoutTest());
+  testApp('Checkout flow', CheckoutTest());
 }
 
 class CheckoutTest extends AppTest {

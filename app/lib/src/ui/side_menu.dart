@@ -177,12 +177,14 @@ class CollapsibleMenu extends StatefulWidget {
   final Widget title;
   final List<Widget> children;
   final bool initiallyExpanded;
+  final bool maintainState;
 
   const CollapsibleMenu({
     super.key,
     required this.title,
     required this.children,
     bool? initiallyExpanded,
+    this.maintainState = true,
   }) : initiallyExpanded = initiallyExpanded ?? false;
 
   @override
@@ -203,7 +205,7 @@ class _CollapsibleMenuState extends State<CollapsibleMenu> {
       data: theme.copyWith(
         dividerColor: Colors.transparent,
         textTheme: theme.textTheme.copyWith(
-          subtitle1: TextStyle(
+          titleMedium: TextStyle(
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -214,7 +216,7 @@ class _CollapsibleMenuState extends State<CollapsibleMenu> {
         child: CustomExpansionTile(
           key: _expansionTileKey,
           initiallyExpanded: widget.initiallyExpanded,
-          maintainState: true,
+          maintainState: widget.maintainState,
           textColor: AppColors.textSecondary,
           collapsedTextColor: AppColors.textSecondary,
           collapsedIconColor: AppColors.textSecondary,

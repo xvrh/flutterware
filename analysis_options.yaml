@@ -30,6 +30,8 @@ linter:
     unsafe_html: true
     use_raw_strings: true
 
+    avoid_relative_lib_imports: false
+
     # From flutter_lints
     avoid_print: false
     avoid_unnecessary_containers: true

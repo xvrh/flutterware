@@ -12,7 +12,7 @@ class RawImageProvider extends ImageProvider<Object> {
   RawImageProvider(this.image);
 
   @override
-  ImageStreamCompleter load(Object key, DecoderCallback decode) {
+  ImageStreamCompleter loadImage(Object key, ImageDecoderCallback decode) {
     return MultiFrameImageStreamCompleter(
       codec: _loadAsync(key),
       scale: 1.0,

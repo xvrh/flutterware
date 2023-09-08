@@ -1,0 +1,14 @@
+vendored_dependencies:
+  # Specification of which packages to be vendor into:
+  #   lib/src/third_party/<name>/
+  device_frame:
+    package: device_frame
+    version: 1.1.0
+  highlight:
+    package: highlight
+    version: 0.7.0
+  flutter_highlight:
+    package: flutter_highlight
+    version: 0.7.0
+    import_rewrites:
+      highlight: highlight

@@ -25,7 +25,7 @@ class ErrorPanel extends StatelessWidget {
             child: Text(
               message,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyText2,
+              style: theme.textTheme.bodyMedium,
             ),
           ),
           if (onRetry != null)

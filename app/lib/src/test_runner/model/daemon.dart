@@ -166,15 +166,18 @@ class DaemonStarter {
   }
 
   Future<void> _buildBundle() async {
-    var emptyFile = File('build/__empty_${id}__.dart')
-      ..createSync()
+    var emptyFilePath = 'build/__empty_${id}__.dart';
+    var emptyFile = File(p.join(project.directory.path, emptyFilePath))
+      ..createSync(recursive: true)
       ..writeAsStringSync('void main() {}');
 
     try {
       var result = await Process.run(project.flutterSdkPath.flutter,
-          ['build', 'bundle', '--release', emptyFile.path]);
+          ['build', 'bundle', '--release', emptyFilePath],
+          workingDirectory: project.directory.path);
       if (result.exitCode != 0) {
-        throw Exception('Failed to build bundle ${result.stderr}');
+        throw Exception(
+            'Failed to build bundle in [${project.directory.path}] ${result.stderr}');
       }
     } finally {
       emptyFile.deleteSync();

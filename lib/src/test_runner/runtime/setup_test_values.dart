@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../flutter_test.dart';
 import '../protocol/models.dart';
-import 'fake_window_padding.dart';
 import 'run_context.dart';
 
 Future<void> Function(WidgetTester) withTestValues(
@@ -13,22 +12,18 @@ Future<void> Function(WidgetTester) withTestValues(
     var args = runContext.args;
     var device = args.device;
     var binding = AutomatedTestWidgetsFlutterBinding.instance;
-    var window = binding.window;
     var platformDispatcher = binding.platformDispatcher;
 
     var pixelRatio = device.pixelRatio;
-    window.physicalSizeTestValue =
+    tester.view.physicalSize =
         Size(device.width * pixelRatio, device.height * pixelRatio);
-    window.devicePixelRatioTestValue = pixelRatio;
-    window.paddingTestValue = FakeWindowPadding(
-      EdgeInsets.fromLTRB(
-          device.safeArea.left * pixelRatio,
-          device.safeArea.top * pixelRatio,
-          device.safeArea.right * pixelRatio,
-          device.safeArea.bottom * pixelRatio),
+    tester.view.devicePixelRatio = pixelRatio;
+    tester.view.padding = FakeViewPadding(
+      left: device.safeArea.left * pixelRatio,
+      top: device.safeArea.top * pixelRatio,
+      right: device.safeArea.right * pixelRatio,
+      bottom: device.safeArea.bottom * pixelRatio,
     );
-    window.viewConfigurationTestValue =
-        ui.ViewConfiguration(devicePixelRatio: pixelRatio);
     platformDispatcher.textScaleFactorTestValue = args.accessibility.textScale;
     platformDispatcher.accessibilityFeaturesTestValue =
         _FakeAccessibilityFeatures(args.accessibility);
@@ -57,7 +52,8 @@ Future<void> Function(WidgetTester) withTestValues(
       await tester.screenshot(name: 'Error');
       rethrow;
     } finally {
-      binding.window.clearAllTestValues();
+      tester.platformDispatcher.clearAllTestValues();
+      tester.view.reset();
       debugDefaultTargetPlatformOverride = null;
     }
   };
