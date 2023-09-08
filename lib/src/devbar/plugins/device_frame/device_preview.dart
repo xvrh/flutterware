@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/devbar.dart';
-import 'package:flutterware/src/third_party/device_frame/lib/device_frame.dart';
-import 'package:flutterware/src/widget_book/default_device_list.dart';
-
+import '../../../../devbar.dart';
 import '../../../../devbar_plugins/device_frame.dart';
+import '../../../third_party/device_frame/lib/device_frame.dart';
 import '../../../utils/value_stream.dart';
+import '../../../widget_book/default_device_list.dart';
 
 class DevicePreview extends StatelessWidget {
   final Widget child;

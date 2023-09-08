@@ -65,7 +65,9 @@ ThemeData _buildAppTheme() {
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        foregroundColor: Colors.white, backgroundColor: AppColors.primary, elevation: 0,
+        foregroundColor: Colors.white,
+        backgroundColor: AppColors.primary,
+        elevation: 0,
       ),
     ),
     cardColor: Colors.white,

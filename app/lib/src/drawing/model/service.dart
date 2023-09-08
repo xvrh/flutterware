@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:io';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutterware_app/src/drawing/model/file.dart';
 import 'package:logging/logging.dart';
+import 'package:path/path.dart' as p;
 import 'package:rxdart/rxdart.dart';
 import 'package:watcher/watcher.dart';
-import 'package:path/path.dart' as p;
 import '../../project.dart';
+import 'file.dart';
 
 final _logger = Logger('drawing_service');
 
@@ -53,8 +52,8 @@ class DrawingService {
       } else if (event.type == ChangeType.REMOVE) {
         var filePath = p.relative(File(event.path).absolute.path,
             from: project.absolutePath);
-        var existingFile = _files.value
-            .firstWhereOrNull((e) => e.filePath == filePath);
+        var existingFile =
+            _files.value.firstWhereOrNull((e) => e.filePath == filePath);
         if (existingFile != null) {
           var newFiles = _files.value.toList()..remove(existingFile);
           _files.value = newFiles;

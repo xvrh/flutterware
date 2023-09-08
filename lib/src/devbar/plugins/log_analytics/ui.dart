@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/devbar/plugins/log_analytics/plugin.dart';
 import '../../devbar.dart';
 import '../../utils/auto_scroll_to_bottom.dart';
 import '../../utils/json_viewer.dart';
 import '../../utils/timeago/timeago.dart';
+import 'plugin.dart';
 
 class AnalyticsList extends StatelessWidget {
   final LogAnalyticsPlugin service;

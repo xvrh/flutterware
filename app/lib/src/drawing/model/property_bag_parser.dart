@@ -1,8 +1,6 @@
 import 'dart:convert';
-
 import 'package:collection/collection.dart';
 import 'package:petitparser/petitparser.dart';
-
 import 'utils.dart';
 
 class PropertyBag {

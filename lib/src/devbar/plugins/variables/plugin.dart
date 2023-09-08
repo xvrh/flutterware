@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/devbar/devbar.dart';
-
 import '../../../utils/value_stream.dart';
+import '../../devbar.dart';
 import 'file_store.dart';
 import 'store.dart';
 import 'ui.dart';

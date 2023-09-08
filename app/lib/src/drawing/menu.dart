@@ -1,11 +1,11 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/drawing/model/file.dart';
-import 'package:flutterware_app/src/utils.dart';
 import 'package:more/collection.dart';
 import 'package:path/path.dart' as p;
 import '../project.dart';
 import '../ui/side_menu.dart';
+import '../utils.dart';
+import 'model/file.dart';
 
 class DrawingMenu extends StatelessWidget {
   final Project project;

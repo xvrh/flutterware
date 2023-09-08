@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/drawing/model/path.dart';
+import 'model/path.dart';
 
 class PointHandle extends StatelessWidget {
   final double x, y;

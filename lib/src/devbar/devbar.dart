@@ -1,14 +1,13 @@
 import 'dart:async';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import '../utils/value_stream.dart';
-import 'ui/panel.dart';
-import 'ui/service.dart';
+import 'feature_flag.dart';
 import 'ui/button.dart';
 import 'ui/overlay_dialog.dart';
+import 'ui/panel.dart';
+import 'ui/service.dart';
 import 'ui/toasts_overlay.dart';
-import 'feature_flag.dart';
 
 class Devbar extends StatefulWidget {
   final Widget child;

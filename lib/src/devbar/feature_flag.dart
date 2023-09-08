@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'devbar.dart';
 import 'plugins/variables/plugin.dart';

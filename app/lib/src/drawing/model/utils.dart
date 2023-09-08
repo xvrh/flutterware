@@ -1,4 +1,3 @@
-
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:more/char_matcher.dart';
 

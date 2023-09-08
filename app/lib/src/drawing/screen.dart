@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/drawing/model/path.dart';
-import 'package:flutterware_app/src/drawing/screen_path.dart';
-import 'package:flutterware_app/src/project.dart';
-import 'package:flutterware_app/src/utils.dart';
-
+import '../project.dart';
+import '../utils.dart';
 import 'model/file.dart';
+import 'model/path.dart';
+import 'screen_path.dart';
 
 class DrawingScreen extends StatelessWidget {
   final Project project;

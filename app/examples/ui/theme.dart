@@ -138,7 +138,8 @@ class _Tab1State extends State<_Tab1> {
               ),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.stateError),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.stateError),
               onPressed: () {},
               child: Text('Danger button'),
             ),

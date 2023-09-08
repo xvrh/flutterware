@@ -1,7 +1,6 @@
 import 'dart:core' as core;
 import 'dart:core';
 import 'package:flutter/material.dart';
-
 import 'parameters.dart';
 
 export 'app.dart' show WidgetBook;

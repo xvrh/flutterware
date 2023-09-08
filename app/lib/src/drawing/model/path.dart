@@ -2,11 +2,11 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
 import 'package:analyzer/src/dart/ast/token.dart'; //ignore: implementation_imports
 import 'package:flutter/foundation.dart';
-import 'package:flutterware_app/src/drawing/model/property_bag_parser.dart';
-import 'package:flutterware_app/src/drawing/model/utils.dart';
 import 'package:flutterware/drawing.dart';
 import 'file.dart';
 import 'mockup.dart';
+import 'property_bag_parser.dart';
+import 'utils.dart';
 
 class DrawingPath with ChangeNotifier implements DrawingEntry {
   @override
@@ -39,7 +39,7 @@ class DrawingPath with ChangeNotifier implements DrawingEntry {
         if (comment.name == 'mockup') {
           result._mockups.add(MockupElement.fromCode(comment.values));
         } else if (comment.name == 'preview') {
-        result._preview = PaintPreview.fromCode(comment.values);
+          result._preview = PaintPreview.fromCode(comment.values);
         }
       }
 
@@ -87,8 +87,7 @@ class DrawingPath with ChangeNotifier implements DrawingEntry {
 
   PathBuilder toPath() {
     var builder = PathBuilder([
-      for (var entry in _entries)
-        entry.toRuntime(),
+      for (var entry in _entries) entry.toRuntime(),
     ]);
     return builder;
   }
@@ -166,8 +165,7 @@ class MoveToEntry with ChangeNotifier implements PathEntry {
   }
 
   @override
-  String toCode() =>
-      'MoveTo(${numToCode(_x)}, ${numToCode(_y)})';
+  String toCode() => 'MoveTo(${numToCode(_x)}, ${numToCode(_y)})';
 
   @override
   PathCommand toRuntime() => MoveTo(_x, _y);

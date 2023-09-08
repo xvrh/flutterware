@@ -1,12 +1,10 @@
 import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
-import 'package:flutterware_app/src/drawing/model/file.dart';
-import 'package:flutterware_app/src/drawing/model/path.dart';
-import 'package:flutterware_app/src/drawing/path_command_editor.dart';
 import 'package:path_drawing/path_drawing.dart';
-
 import '../project.dart';
+import 'model/file.dart';
+import 'model/path.dart';
+import 'path_command_editor.dart';
 
 class PathScreen extends StatelessWidget {
   final Project project;

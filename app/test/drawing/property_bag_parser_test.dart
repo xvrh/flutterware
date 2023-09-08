@@ -1,6 +1,6 @@
+import 'package:flutterware_app/src/drawing/model/property_bag_parser.dart';
 import 'package:petitparser/petitparser.dart';
 import 'package:petitparser/reflection.dart';
-import 'package:flutterware_app/src/drawing/model/property_bag_parser.dart';
 import 'package:test/test.dart';
 
 void main() {

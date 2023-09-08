@@ -1,8 +1,7 @@
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
-import 'package:flutter/foundation.dart';
 import 'package:dart_style/dart_style.dart';
-
+import 'package:flutter/foundation.dart';
 import 'path.dart';
 
 final _formatter = DartFormatter();

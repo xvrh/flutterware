@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutterware_app/src/drawing/model/property_bag_parser.dart';
+import 'property_bag_parser.dart';
 
 class MockupElement {
   final path = ValueNotifier<String>('');

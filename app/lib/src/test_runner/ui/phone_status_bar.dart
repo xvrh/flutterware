@@ -1,7 +1,7 @@
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
-import 'dart:ui' as ui;
 
 class PhoneStatusBar extends StatelessWidget {
   final Widget child;
@@ -84,11 +84,17 @@ class _StatusBar extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SvgPicture.string(_networkSvg, colorFilter: ui.ColorFilter.mode(topColor, BlendMode.srcIn)),
+                    SvgPicture.string(_networkSvg,
+                        colorFilter:
+                            ui.ColorFilter.mode(topColor, BlendMode.srcIn)),
                     const SizedBox(width: 5),
-                    SvgPicture.string(_wifiSvg, colorFilter: ui.ColorFilter.mode(topColor, BlendMode.srcIn)),
+                    SvgPicture.string(_wifiSvg,
+                        colorFilter:
+                            ui.ColorFilter.mode(topColor, BlendMode.srcIn)),
                     const SizedBox(width: 5),
-                    SvgPicture.string(_batterySvg, colorFilter: ui.ColorFilter.mode(topColor, BlendMode.srcIn)),
+                    SvgPicture.string(_batterySvg,
+                        colorFilter:
+                            ui.ColorFilter.mode(topColor, BlendMode.srcIn)),
                   ],
                 ),
               ),

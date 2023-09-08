@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../utils/value_stream.dart';
 import '../devbar.dart';
-import 'service.dart';
-import 'buttons_overlay.dart';
 import '../utils/animated_clip_rrect.dart';
+import 'buttons_overlay.dart';
+import 'service.dart';
 
 class DevbarPanel extends StatelessWidget {
   const DevbarPanel({Key? key}) : super(key: key);

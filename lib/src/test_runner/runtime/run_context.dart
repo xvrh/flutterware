@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
+import 'package:path/path.dart' as p;
 import '../../../flutter_test.dart';
 import '../protocol/models.dart';
 import 'path_tracker.dart';
-import 'package:path/path.dart' as p;
 
 class RunContext {
   final RunArgs args;
