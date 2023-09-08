@@ -6,15 +6,19 @@ import '../../../third_party/device_frame/lib/device_frame.dart';
 import '../../../utils/value_stream.dart';
 import 'device_preview.dart';
 
-class DeviceFramePlugin implements DevbarPlugin {
+class DeviceFramePlugin extends DevbarPlugin {
   final DevbarState devbar;
   final showFrame = ValueStream<bool>(false);
   final device = ValueStream<DeviceInfo>(Devices.ios.iPhoneSE);
 
-  DeviceFramePlugin(this.devbar) {
+  DeviceFramePlugin._(this.devbar) {
     devbar.ui.addTab(Tab(text: 'Simulator'), _DeviceFramePanel(this));
 
     devbar.ui.addWrapper(DevicePreview.new);
+  }
+
+  static DeviceFramePlugin Function(DevbarState) init() {
+    return (devbar) => DeviceFramePlugin._(devbar);
   }
 
   @override

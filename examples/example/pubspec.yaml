@@ -29,6 +29,7 @@ environment:
 dependencies:
   android_id:
   auto_size_text:
+  collection:
   device_info_plus:
   flutter:
     sdk: flutter
@@ -41,6 +42,7 @@ dependencies:
   os_detect:
   package_info_plus:
   path:
+  path_provider:
   shared_preferences:
 
 dev_dependencies:

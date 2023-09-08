@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutterware/src/devbar/plugins/log_analytics/plugin.dart';
 import '../../devbar.dart';
-import '../../../utils/value_stream.dart';
+import '../../utils/auto_scroll_to_bottom.dart';
 import '../../utils/json_viewer.dart';
 import '../../utils/timeago/timeago.dart';
 
@@ -11,16 +11,18 @@ class AnalyticsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueStreamBuilder<List<AnalyticEvent>>(
+    return AutoScroller<List<AnalyticEvent>>(
       stream: service.events,
-      builder: (context, logs) => ListView.separated(
+      builder: (context, controller, logs) => ListView.separated(
+        padding: const EdgeInsets.only(bottom: 50),
+        controller: controller,
         separatorBuilder: (context, index) => Container(
           height: 1,
           color: Colors.white.withOpacity(0.2),
         ),
         itemCount: logs.length,
         itemBuilder: (context, index) {
-          return EventTile(logs[logs.length - 1 - index]);
+          return EventTile(logs[index]);
         },
       ),
     );

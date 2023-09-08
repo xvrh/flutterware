@@ -8,9 +8,11 @@ import 'package:flutterware/devbar_plugins/log_network.dart';
 import 'package:flutterware/devbar_plugins/logger.dart';
 import 'package:flutterware/devbar_plugins/device_frame.dart';
 import 'package:flutterware/devbar_plugins/variables.dart';
-
-import 'src/devbar/info/info_panel.dart';
-import 'src/devbar/storage/storage_panel.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'src/devbar/info_panel.dart';
+import 'src/devbar/storage_panel.dart';
+import 'package:collection/collection.dart';
 
 final _logger = Logger('devbar_example');
 
@@ -45,13 +47,16 @@ class MyDevBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Devbar(
       plugins: [
-        LoggerPlugin.new,
-        LogNetworkPlugin.new,
-        LogAnalyticsPlugin.new,
-        VariablesPlugin.new,
+        LoggerPlugin.init(),
+        LogNetworkPlugin.init(),
+        LogAnalyticsPlugin.init(),
+        VariablesPlugin.init(
+          filePath: () async => p.join(
+              (await getApplicationSupportDirectory()).path, 'variables.json'),
+        ),
         InfoPlugin.new,
         StoragePlugin.new,
-        DeviceFramePlugin.new,
+        DeviceFramePlugin.init(),
       ],
       flags: [
         superCoolFeature.withDefaultValue,
@@ -76,6 +81,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   final _userController = TextEditingController();
   StreamSubscription? _variableSubscription;
+  DevbarVariable<ApiEnvironment>? _environmentVariable;
 
   @override
   void initState() {
@@ -90,6 +96,15 @@ class _MyAppState extends State<MyApp> {
       _variableSubscription = userVariable.value.listen((event) {
         _userController.text = event;
       });
+
+      _environmentVariable = devbar.variables.picker<ApiEnvironment>(
+        'Environment',
+        defaultValue: ApiEnvironment.prod,
+        fromJson: ApiEnvironment.fromJson,
+        options: {
+          for (var entry in ApiEnvironment.values) entry: entry.name,
+        },
+      );
     }
   }
 
@@ -159,6 +174,35 @@ class _MyAppState extends State<MyApp> {
               Text(
                 'Other feature: ${otherFeature.dependsOnValue(context)}',
               ),
+              Divider(),
+              StreamBuilder<ApiEnvironment>(
+                stream: _environmentVariable?.value,
+                initialData: _environmentVariable?.currentValue,
+                builder: (context, snapshot) {
+                  return Text(
+                    'Environment: ${snapshot.data}',
+                  );
+                },
+              ),
+              Divider(),
+              AddDevbarVariable.text(
+                name: 'MyTextVar',
+                builder: (context, value) {
+                  return Text('MyTextVar: $value');
+                },
+              ),
+              Divider(),
+              AddDevbarVariable.picker<ApiEnvironment>(
+                name: 'Secondary environment',
+                defaultValue: ApiEnvironment.prod,
+                fromJson: ApiEnvironment.fromJson,
+                options: {
+                  for (var entry in ApiEnvironment.values) entry: entry.name,
+                },
+                builder: (context, value) {
+                  return Text('2nd environment: $value');
+                },
+              ),
             ],
           );
         }),
@@ -168,7 +212,7 @@ class _MyAppState extends State<MyApp> {
     if (Devbar.of(context) != null) {
       var availableUsers = MyDevBar.maybeOf(context)?.availableUsers;
       if (availableUsers != null) {
-        widget = DevbarButton(
+        widget = AddDevbarButton(
           button: DevbarDropdown<String>(
             icon: Icons.account_circle,
             onChanged: (v) {
@@ -208,7 +252,8 @@ class _MyPopup extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          DevbarButton(
+          AddDevbarButton(
+            position: DevbarButtonPosition.bottomRight,
             button: DevbarIcon(
               onTap: () {
                 Devbar.of(context)?.ui.toast(Text('Hello'));
@@ -221,4 +266,18 @@ class _MyPopup extends StatelessWidget {
       ),
     );
   }
+}
+
+enum ApiEnvironment {
+  dev,
+  staging,
+  prod;
+
+  const ApiEnvironment();
+
+  static ApiEnvironment? fromJson(Object json) {
+    return ApiEnvironment.values.firstWhereOrNull((e) => e.name == json);
+  }
+
+  String toJson() => name;
 }

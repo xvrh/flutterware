@@ -3,6 +3,8 @@ import '../../utils/value_stream.dart';
 import '../devbar.dart';
 
 class OverlayDialog extends StatelessWidget {
+  const OverlayDialog({super.key});
+
   @override
   Widget build(BuildContext context) {
     var devbar = DevbarState.of(context);

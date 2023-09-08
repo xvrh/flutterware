@@ -1,8 +1,10 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import '../utils/value_stream.dart';
 import 'ui/panel.dart';
-import 'service/ui.dart';
+import 'ui/service.dart';
 import 'ui/button.dart';
 import 'ui/overlay_dialog.dart';
 import 'ui/toasts_overlay.dart';
@@ -10,7 +12,7 @@ import 'feature_flag.dart';
 
 class Devbar extends StatefulWidget {
   final Widget child;
-  final List<DevbarPlugin Function(DevbarState state)> plugins;
+  final List<FutureOr<DevbarPlugin> Function(DevbarState state)> plugins;
   final List<FeatureFlagValue> flags;
   final bool overlayVisible;
 
@@ -35,6 +37,7 @@ class DevbarState extends State<Devbar> {
   final _appKey = GlobalKey();
   late final UiService ui = UiService(this);
   final _plugins = <DevbarPlugin>[];
+  late Future<void> _loadPluginsFuture;
 
   static DevbarState of(BuildContext context) {
     return context.findAncestorStateOfType<DevbarState>()!;
@@ -44,9 +47,15 @@ class DevbarState extends State<Devbar> {
   void initState() {
     super.initState();
 
+    WidgetsBinding.instance.deferFirstFrame();
+    _loadPluginsFuture = _loadPlugins();
+  }
+
+  Future<void> _loadPlugins() async {
     for (var plugin in widget.plugins) {
-      _plugins.add(plugin(this));
+      _plugins.add(await plugin(this));
     }
+    WidgetsBinding.instance.allowFirstFrame();
   }
 
   T plugin<T extends DevbarPlugin>() {
@@ -59,41 +68,53 @@ class DevbarState extends State<Devbar> {
 
   @override
   Widget build(BuildContext context) {
-    return FeatureFlagDevbar(
-      child: Directionality(
-        textDirection: TextDirection.ltr,
-        child: Stack(
-          children: <Widget>[
-            Positioned.fill(
-              child: ValueStreamBuilder<OpenState?>(
-                stream: ui.openState,
-                builder: (context, openState) {
-                  return AnimatedOpacity(
-                    duration: const Duration(milliseconds: 500),
-                    opacity: openState == null ? 0 : 1,
-                    child: DevbarPanel(),
-                  );
-                },
+    return FutureBuilder<void>(
+        future: _loadPluginsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            // Should never appears since we are deferring the first frame
+            return Container(color: Colors.red);
+          }
+
+          return FeatureFlagDevbar(
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Stack(
+                children: <Widget>[
+                  Positioned.fill(
+                    child: ValueStreamBuilder<OpenState?>(
+                      stream: ui.openState,
+                      builder: (context, openState) {
+                        return AnimatedOpacity(
+                          duration: const Duration(milliseconds: 500),
+                          opacity: openState == null ? 0 : 1,
+                          child: DevbarPanel(),
+                        );
+                      },
+                    ),
+                  ),
+                  DevbarAppWrapper(
+                    child: KeyedSubtree(
+                      key: _appKey,
+                      child: widget.child,
+                    ),
+                  ),
+                  Positioned.fill(child: OverlayDialog()),
+                  Visibility(
+                    visible: widget.overlayVisible,
+                    child: AddDevbarButton(
+                      button: DevbarIcon(
+                        onTap: ui.open,
+                        icon: Icons.bug_report,
+                      ),
+                    ),
+                  ),
+                  ToastsOverlay(),
+                ],
               ),
             ),
-            DevbarAppWrapper(
-              child: KeyedSubtree(
-                key: _appKey,
-                child: widget.child,
-              ),
-            ),
-            Positioned.fill(child: OverlayDialog()),
-            Visibility(
-              visible: widget.overlayVisible,
-              child: DevbarButton(
-                button: DevbarIcon(onTap: ui.open, icon: Icons.bug_report),
-              ),
-            ),
-            ToastsOverlay(),
-          ],
-        ),
-      ),
-    );
+          );
+        });
   }
 
   @override

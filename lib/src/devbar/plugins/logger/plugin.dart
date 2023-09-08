@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/devbar/devbar.dart';
 import 'package:logging/logging.dart';
 import '../../../utils/value_stream.dart';
 import '../../devbar.dart';
@@ -31,6 +30,10 @@ class LoggerPlugin implements DevbarPlugin {
     });
 
     visibles.onListen = _applyFilter;
+  }
+
+  static LoggerPlugin Function(DevbarState) init() {
+    return (devbar) => LoggerPlugin(devbar);
   }
 
   void clear() {

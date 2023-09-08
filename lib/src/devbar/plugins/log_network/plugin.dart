@@ -1,6 +1,5 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/devbar/devbar.dart';
 import '../../../utils/value_stream.dart';
 import '../../devbar.dart';
 import 'ui.dart';
@@ -14,6 +13,10 @@ class LogNetworkPlugin implements DevbarPlugin {
   LogNetworkPlugin(this.devbar) {
     devbar.ui
         .addTab(Tab(text: 'Network'), NetworkList(this), hierarchy: ['Logs']);
+  }
+
+  static LogNetworkPlugin Function(DevbarState) init() {
+    return (devbar) => LogNetworkPlugin(devbar);
   }
 
   void clear() {

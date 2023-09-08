@@ -2,43 +2,9 @@ import 'dart:core' as core;
 import 'dart:core';
 import 'package:flutter/material.dart';
 
+import 'parameters.dart';
+
 export 'app.dart' show WidgetBook;
-
-var _v = '''Widget book
-- Create the treeview
-- Visualizer has option to select the size of the viewport + custom
-- Each widget can easily add an option bar (language, preferences etc...)
-- Parameters allow to add even more options                
-- Copy everything from Storybook
-
-- Allow to compile to web
-- Remember last selected widget
-''';
-
-mixin _Parameters {
-  DateTime dateTime(String name) {
-    return DateTime.now();
-  }
-
-  String string(String name, String defaultValue) {
-    return '';
-  }
-
-  core.num num(String name, core.num defaultValue,
-      {core.num? min, core.num? max}) {
-    return 0;
-  }
-
-  core.int int(String name, core.int defaultValue,
-      {core.int? min, core.int? max}) {
-    return 0;
-  }
-
-  core.double double(String name, core.double defaultValue,
-      {core.double? min, core.double? max}) {
-    return 0;
-  }
-}
 
 extension WidgetBookExtension on BuildContext {
   WidgetBookState get book => WidgetBookState.of(this);
@@ -84,7 +50,7 @@ class WidgetBookStateProvider extends InheritedWidget {
   }
 }
 
-abstract class WidgetBookState {
+abstract class WidgetBookState with ParametersMixin {
   static final empty = _EmptyWidgetBookState();
 
   TopBarState get topBar;
@@ -98,7 +64,7 @@ abstract class TopBarState {
   T picker<T>(String name, Map<String, T> values, T defaultValue);
 }
 
-class _EmptyWidgetBookState implements WidgetBookState {
+class _EmptyWidgetBookState with ParametersMixin implements WidgetBookState {
   @override
   final topBar = _EmptyTopBarState();
 }

@@ -9,11 +9,11 @@ final _jsonEncoder = JsonEncoder.withIndent('  ');
 class JsonViewer extends StatelessWidget {
   final dynamic object;
 
-  JsonViewer(this.object);
+  JsonViewer(this.object, {super.key});
 
   @override
   Widget build(BuildContext context) {
-    //TODO(xha): utiliser le widget InteractiveViewer: https://github.com/flutter/flutter/issues/20175
+    //TODO(xha): use the widget InteractiveViewer: https://github.com/flutter/flutter/issues/20175
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
       child: HighlightView(

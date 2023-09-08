@@ -1,18 +1,15 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../utils/value_stream.dart';
 
 class AutoScroller<T> extends StatefulWidget {
   final ValueStream<T> stream;
-  final T initialData;
   final Widget Function(BuildContext, ScrollController, T) builder;
 
   const AutoScroller({
     Key? key,
     required this.stream,
-    required this.initialData,
     required this.builder,
   }) : super(key: key);
 

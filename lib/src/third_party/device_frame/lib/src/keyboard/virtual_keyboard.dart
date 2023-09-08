@@ -1,6 +1,5 @@
 import 'package:flutterware/src/third_party/device_frame/lib/device_frame.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 
 import 'button.dart';
 
@@ -70,6 +69,7 @@ class VirtualKeyboard extends StatelessWidget {
             firstChild: const SizedBox(),
             secondChild: const _VirtualKeyboard(
               height: _VirtualKeyboard.minHeight,
+              spacing: 12,
             ),
             crossFadeState: isEnabled
                 ? CrossFadeState.showSecond

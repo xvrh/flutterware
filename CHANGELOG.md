@@ -1,3 +1,7 @@
+## 0.2.0
+
+- Support Flutter 3.13
+
 ## 0.1.2
 
 - Internal maintenance to improve pub's score.

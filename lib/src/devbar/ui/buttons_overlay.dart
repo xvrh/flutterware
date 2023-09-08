@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../utils/value_stream.dart';
 import '../devbar.dart';
-import '../service/ui.dart';
+import 'service.dart';
 
 class ButtonsOverlay extends StatelessWidget {
   const ButtonsOverlay({super.key});

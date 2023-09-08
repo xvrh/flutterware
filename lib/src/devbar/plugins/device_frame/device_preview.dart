@@ -22,7 +22,7 @@ class DevicePreview extends StatelessWidget {
         return ValueStreamBuilder<DeviceInfo>(
           stream: plugin.device,
           builder: (context, device) {
-            Widget widget = DevbarButton(
+            Widget widget = AddDevbarButton(
               button: DevbarDropdown<DeviceInfo?>(
                 onChanged: (v) {
                   if (v == null) {

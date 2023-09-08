@@ -81,7 +81,7 @@ class WidgetBookAppState extends State<WidgetBook> {
                             ),
                           ),
                         ),
-                        //_SettingsButton(),
+                        _SettingsButton(),
                       ],
                     ),
                   ),
@@ -188,25 +188,6 @@ class WidgetBookAppState extends State<WidgetBook> {
       yield* root.descendants;
     }
   }
-}
-
-class _Router extends RouterDelegate<Object> with ChangeNotifier {
-  final Widget child;
-
-  _Router({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return child;
-  }
-
-  @override
-  core.Future<core.bool> popRoute() async {
-    return true;
-  }
-
-  @override
-  core.Future<void> setNewRoutePath(configuration) async {}
 }
 
 class _SettingsButton extends StatelessWidget {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../utils/value_stream.dart';
+import '../../utils/context_menu_region.dart';
 import 'plugin.dart';
 
 class VariablesPanel extends StatelessWidget {
@@ -9,13 +9,16 @@ class VariablesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueStreamBuilder<List<EditableVariable>>(
+    return StreamBuilder<List<DevbarVariable>>(
       stream: plugin.variables,
+      initialData: plugin.currentVariables,
       builder: (context, snapshot) {
         return ListView(
-          children: [
-            for (var variable in snapshot) _VariableEditor(variable),
-          ],
+          children: ListTile.divideTiles(tiles: [
+            for (var variable in snapshot.requireData)
+              _VariableEditor(variable),
+          ], context: context)
+              .toList(),
         );
       },
     );
@@ -23,33 +26,51 @@ class VariablesPanel extends StatelessWidget {
 }
 
 class _VariableEditor extends StatelessWidget {
-  final EditableVariable variable;
+  final DevbarVariable variable;
 
   const _VariableEditor(this.variable, {Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder(
-      stream: variable.variable.value,
-      initialData: variable.variable.currentValue,
-      builder: (context, snapshot) {
-        var variable = this.variable;
-        if (variable is BoolVariable) {
-          return _BoolEditor(variable);
-        } else if (variable is TextVariable) {
-          return _TextEditor(variable);
-        } else if (variable is PickerVariable) {
-          return _PickerEditor(variable);
-        } else {
-          return ErrorWidget('Unknown variable ${variable.runtimeType}');
-        }
+    return ContextMenuRegion(
+      contextMenuBuilder: (context, offset) {
+        return AdaptiveTextSelectionToolbar.buttonItems(
+          anchors: TextSelectionToolbarAnchors(
+            primaryAnchor: offset,
+          ),
+          buttonItems: <ContextMenuButtonItem>[
+            ContextMenuButtonItem(
+              onPressed: () {
+                ContextMenuController.removeAny();
+                variable.storeValue = null;
+              },
+              label: 'Clear override',
+            ),
+          ],
+        );
       },
+      child: StreamBuilder(
+        stream: variable.value,
+        initialData: variable.currentValue,
+        builder: (context, snapshot) {
+          var variable = this.variable;
+          if (variable is DevbarVariable<bool>) {
+            return _BoolEditor(variable);
+          } else if (variable is DevbarVariable<String>) {
+            return _TextEditor(variable);
+          } else if (variable is DevbarPickerVariable) {
+            return _PickerEditor(variable);
+          } else {
+            return ErrorWidget('Unknown variable ${variable.runtimeType}');
+          }
+        },
+      ),
     );
   }
 }
 
 class _BoolEditor extends StatelessWidget {
-  final BoolVariable variable;
+  final DevbarVariable<bool> variable;
 
   const _BoolEditor(this.variable, {Key? key}) : super(key: key);
 
@@ -57,12 +78,12 @@ class _BoolEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      title: Text(variable.variable.key),
-      subtitle: Text(variable.variable.description ?? ''),
+      title: Text(variable.key),
+      subtitle: Text(variable.description ?? ''),
       trailing: Switch.adaptive(
-        value: variable.variable.currentValue,
+        value: variable.currentValue,
         onChanged: (newValue) {
-          variable.variable.editorValue = newValue;
+          variable.storeValue = newValue;
         },
       ),
     );
@@ -70,7 +91,7 @@ class _BoolEditor extends StatelessWidget {
 }
 
 class _TextEditor extends StatelessWidget {
-  final TextVariable variable;
+  final DevbarVariable<String> variable;
 
   const _TextEditor(this.variable, {Key? key}) : super(key: key);
 
@@ -78,17 +99,17 @@ class _TextEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      title: Text(variable.variable.key),
-      subtitle: Text(variable.variable.description ?? ''),
+      title: Text(variable.key),
+      subtitle: Text(variable.description ?? ''),
       trailing: FractionallySizedBox(
         widthFactor: 0.5,
         child: TextField(
           decoration: InputDecoration(
-            hintText: variable.variable.currentValue,
+            hintText: variable.currentValue,
             isDense: true,
           ),
           onChanged: (newValue) {
-            variable.variable.editorValue = newValue;
+            variable.storeValue = newValue;
           },
         ),
       ),
@@ -97,7 +118,7 @@ class _TextEditor extends StatelessWidget {
 }
 
 class _PickerEditor extends StatelessWidget {
-  final PickerVariable variable;
+  final DevbarPickerVariable variable;
 
   const _PickerEditor(this.variable, {Key? key}) : super(key: key);
 
@@ -105,15 +126,15 @@ class _PickerEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      title: Text(variable.variable.key),
-      subtitle: Text(variable.variable.description ?? ''),
+      title: Text(variable.key),
+      subtitle: Text(variable.description ?? ''),
       trailing: FractionallySizedBox(
         widthFactor: 0.5,
         child: DropdownButton(
           isDense: true,
-          value: variable.variable.currentValue,
+          value: variable.currentValue,
           onChanged: (newValue) {
-            variable.variable.editorValue = newValue;
+            variable.storeValue = newValue;
           },
           isExpanded: true,
           items: [

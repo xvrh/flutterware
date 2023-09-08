@@ -12,10 +12,11 @@ class PropertyBag {
   PropertyBag(this.name, this.values);
 
   static final _parser = PropertyBagParserDefinition().build();
+
   /// Parse a string of the format: name: key=value
   static PropertyBag parse(String input) {
     var result = _parser.parse(input);
-    if (result.isFailure) {
+    if (result is Failure) {
       throw Exception(result.message);
     }
     return result.value as PropertyBag;
@@ -73,10 +74,8 @@ class PropertyBagGrammarDefinition extends GrammarDefinition {
 
   Parser array() =>
       ref1(token, '[') & ref0(elements).optional() & ref1(token, ']');
-  Parser elements() =>
-      ref0(value).plusSeparated(ref1(token, ','));
-  Parser members() =>
-      ref0(pair).plusSeparated(ref1(token, ' '));
+  Parser elements() => ref0(value).plusSeparated(ref1(token, ','));
+  Parser members() => ref0(pair).plusSeparated(ref1(token, ' '));
   Parser object() =>
       ref1(token, '{') & ref0(members).optional() & ref1(token, '}');
   Parser pair() => ref0(identifier) & ref1(token, '=') & ref0(value);
@@ -134,7 +133,8 @@ class PropertyBagParserDefinition extends PropertyBagGrammarDefinition {
         final result = <String, dynamic>{};
         if (e[1] != null) {
           for (final element in e[1] as List) {
-            var entry = (element as SeparatedList).elements[0] as MapEntry<String, dynamic>;
+            var entry = (element as SeparatedList).elements[0]
+                as MapEntry<String, dynamic>;
             var value = entry.value;
             if (value is SeparatedList) {
               value = value.elements;
@@ -187,11 +187,15 @@ class PropertyBagParserDefinition extends PropertyBagGrammarDefinition {
       super.numberToken().map((each) => num.parse(each as String));
 
   @override
-  Parser stringPrimitive() =>
-      super.stringPrimitive().cast<List>().map((each) => (each[1] as List).join());
+  Parser stringPrimitive() => super
+      .stringPrimitive()
+      .cast<List>()
+      .map((each) => (each[1] as List).join());
   @override
-  Parser characterEscape() =>
-      super.characterEscape().cast<List>().map((each) => jsonEscapeChars[each[1] as String]);
+  Parser characterEscape() => super
+      .characterEscape()
+      .cast<List>()
+      .map((each) => jsonEscapeChars[each[1] as String]);
   @override
   Parser characterUnicode() =>
       super.characterUnicode().cast<List>().map((each) {

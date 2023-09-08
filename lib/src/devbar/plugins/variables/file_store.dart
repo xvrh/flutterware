@@ -5,15 +5,15 @@ import 'dart:io';
 import 'store.dart';
 
 class FileVariableStore implements VariablesStore {
-  final File? file;
+  final File file;
   Map<String, Object?> values;
 
-  FileVariableStore(this.file, this.values);
+  FileVariableStore._(this.file, this.values);
 
-  static Future<FileVariableStore> load(File? dataFile) async {
+  static Future<FileVariableStore> load(File dataFile) async {
     Map<String, Object?>? initialData;
 
-    if (dataFile != null && dataFile.existsSync()) {
+    if (dataFile.existsSync()) {
       try {
         var variableContent = await dataFile.readAsString();
         initialData = jsonDecode(variableContent) as Map<String, Object?>;
@@ -21,19 +21,12 @@ class FileVariableStore implements VariablesStore {
         print('Failed to load initial variables $e');
       }
     }
-    return FileVariableStore(dataFile, initialData ?? const {});
+    return FileVariableStore._(dataFile, initialData ?? {});
   }
 
-  @override
-  void save(Map<String, Object> data) {
-    var file = this.file;
-    if (file == null) {
-      return;
-    }
-    values = data;
+  void _save() {
     try {
-      file.writeAsString(jsonEncode(data));
-      print('Saved variables ${jsonEncode(data)} $file');
+      file.writeAsStringSync(jsonEncode(values));
     } catch (e) {
       print('Failed to save variable $e');
     }
@@ -41,4 +34,17 @@ class FileVariableStore implements VariablesStore {
 
   @override
   Object? operator [](String key) => values[key];
+
+  @override
+  void operator []=(String key, Object? value) {
+    if (value == null) {
+      values.remove(key);
+    } else {
+      values[key] = value;
+    }
+    _save();
+  }
+
+  @override
+  List<String> get keys => values.keys.toList();
 }

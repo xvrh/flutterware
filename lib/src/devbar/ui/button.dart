@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import '../devbar.dart';
-import '../service/ui.dart';
+import 'service.dart';
 
-class DevbarButton extends StatefulWidget {
+class AddDevbarButton extends StatefulWidget {
   final Widget? child;
   final Widget button;
   final DevbarButtonPosition? position;
 
-  const DevbarButton({
+  const AddDevbarButton({
     Key? key,
     this.child,
     required this.button,
@@ -15,10 +15,10 @@ class DevbarButton extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<DevbarButton> createState() => _DevbarButtonState();
+  State<AddDevbarButton> createState() => _AddDevbarButtonState();
 }
 
-class _DevbarButtonState extends State<DevbarButton> {
+class _AddDevbarButtonState extends State<AddDevbarButton> {
   late DevbarButtonHandle _buttonHandle;
 
   @override

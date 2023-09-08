@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../utils/value_stream.dart';
 import '../devbar.dart';
-import '../service/ui.dart';
+import 'service.dart';
 
 class ToastsOverlay extends StatelessWidget {
+  const ToastsOverlay({super.key});
+
   @override
   Widget build(BuildContext context) {
     var service = DevbarState.of(context).ui;
@@ -28,7 +30,11 @@ class Toast extends StatelessWidget {
   final Widget child;
   final Color backgroundColor, textColor;
 
-  Toast({required this.child, Color? backgroundColor, Color? textColor})
+  Toast(
+      {super.key,
+      required this.child,
+      Color? backgroundColor,
+      Color? textColor})
       : backgroundColor = backgroundColor ?? Colors.grey,
         textColor = textColor ?? Colors.white;
 

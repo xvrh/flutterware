@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/devbar/devbar.dart';
 import '../../../utils/value_stream.dart';
 import '../../devbar.dart';
 import 'ui.dart';
@@ -12,6 +11,10 @@ class LogAnalyticsPlugin implements DevbarPlugin {
   LogAnalyticsPlugin(this.devbar) {
     devbar.ui.addTab(Tab(text: 'Analytics'), AnalyticsList(this),
         hierarchy: ['Logs']);
+  }
+
+  static LogAnalyticsPlugin Function(DevbarState) init() {
+    return (devbar) => LogAnalyticsPlugin(devbar);
   }
 
   void log(String eventName, [Map<String, dynamic>? parameter]) {

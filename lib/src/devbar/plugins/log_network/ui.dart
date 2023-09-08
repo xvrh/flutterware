@@ -27,7 +27,6 @@ class NetworkList extends StatelessWidget {
         Expanded(
           child: AutoScroller<List<NetworkRequest>>(
             stream: service.requests,
-            initialData: service.requests.value,
             builder: (context, controller, data) {
               return ListView.separated(
                 controller: controller,

@@ -382,7 +382,7 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "0.1.2"
+    version: "0.2.0"
   freezed_annotation:
     dependency: transitive
     description:
@@ -708,7 +708,7 @@ packages:
     description:
       path: "."
       ref: master
-      resolved-ref: "10836b4f17760f76814009b2b7dc67abc5ed5e12"
+      resolved-ref: "3244ebefaebbc2286802d59119535660ecd85393"
       url: "https://github.com/xvrh/pub-scores.git"
     source: git
     version: "1.0.0"

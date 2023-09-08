@@ -65,7 +65,6 @@ class _LoggerListState extends State<LoggerList> {
         Expanded(
           child: AutoScroller<List<LogRecord>>(
             stream: widget.service.visibles,
-            initialData: widget.service.visibles.value,
             builder: (context, controller, logs) => ListView.separated(
               separatorBuilder: (context, index) => Container(
                 height: 1,

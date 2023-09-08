@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutterware/devbar.dart';
+import 'package:flutterware/devbar_plugins/variables.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StoragePlugin extends DevbarPlugin {
@@ -15,26 +16,33 @@ class StoragePlugin extends DevbarPlugin {
 }
 
 class StoragePanel extends StatelessWidget {
+  const StoragePanel({super.key});
+
   @override
   Widget build(BuildContext context) {
     var devbar = DevbarState.of(context);
+    var variablePlugin = devbar.maybePlugin<VariablesPlugin>();
+
+    var tabs = [
+      Tab(child: Text('Preferences')),
+      Tab(child: Text('Secure')),
+      if (variablePlugin != null) Tab(child: Text('Variables')),
+    ];
+    var tabsContent = [
+      _SharedPreferencesList(),
+      _SecureStorageList(),
+      if (variablePlugin != null) _VariablesStorageList(variablePlugin),
+    ];
+
     return DefaultTabController(
-      length: 2,
+      length: tabs.length,
       child: Scaffold(
         appBar: TabBar(
-          tabs: [
-            Tab(child: Text('Preferences')),
-            Tab(child: Text('Secure')),
-            //Tab(child: Text('Variables')),
-          ],
+          tabs: tabs,
           isScrollable: true,
         ),
         body: TabBarView(
-          children: [
-            _SharedPreferencesList(),
-            _SecureStorageList(),
-            //_VariablesStorageList(devbar.variables.savedData),
-          ],
+          children: tabsContent,
         ),
       ),
     );
@@ -126,35 +134,41 @@ class __SecureStorageListState extends State<_SecureStorageList> {
   }
 }
 
-// class _VariablesStorageList extends StatefulWidget {
-//
-//   const _VariablesStorageList({Key? key}) : super(key: key);
-//
-//   @override
-//   __VariablesStorageListState createState() => __VariablesStorageListState();
-// }
-//
-// class __VariablesStorageListState extends State<_VariablesStorageList> {
-//   @override
-//   Widget build(BuildContext context) {
-//     var devbar = DevbarState.of(context);
-//     return ListView(
-//       children: [
-//         for (var entry in devbar.variables.savedData.values.entries)
-//           ListTile(
-//             title: Text(entry.key),
-//             subtitle: Text(entry.value.toString()),
-//             trailing: IconButton(
-//               onPressed: () {
-//                 setState(() {
-//                   widget.data.values.remove(entry.key);
-//                   widget.data.saveValues(widget.data.values);
-//                 });
-//               },
-//               icon: Icon(Icons.delete),
-//             ),
-//           ),
-//       ],
-//     );
-//   }
-// }
+class _VariablesStorageList extends StatefulWidget {
+  final VariablesPlugin variables;
+
+  const _VariablesStorageList(this.variables, {Key? key}) : super(key: key);
+
+  @override
+  __VariablesStorageListState createState() => __VariablesStorageListState();
+}
+
+class __VariablesStorageListState extends State<_VariablesStorageList> {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<DevbarVariable>>(
+      stream: widget.variables.variables,
+      initialData: widget.variables.currentVariables,
+      builder: (context, variables) {
+        return ListView(
+          children: [
+            for (var entry in variables.requireData)
+              if (entry.storeValue != null)
+                ListTile(
+                  title: Text(entry.key),
+                  subtitle: Text(entry.currentValue.toString()),
+                  trailing: IconButton(
+                    onPressed: () {
+                      setState(() {
+                        entry.storeValue = null;
+                      });
+                    },
+                    icon: Icon(Icons.delete),
+                  ),
+                ),
+          ],
+        );
+      },
+    );
+  }
+}

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutterware/src/third_party/highlight/lib/highlight.dart' show highlight, Node;
+import 'package:flutterware/src/third_party/highlight/lib/highlight.dart'
+    show highlight, Node;
 
 /// Highlight Flutter Widget
 class HighlightView extends StatelessWidget {
@@ -29,6 +30,7 @@ class HighlightView extends StatelessWidget {
 
   HighlightView(
     String input, {
+    super.key,
     this.language,
     this.theme = const {},
     this.padding,
@@ -37,32 +39,33 @@ class HighlightView extends StatelessWidget {
   }) : source = input.replaceAll('\t', ' ' * tabSize);
 
   List<TextSpan> _convert(List<Node> nodes) {
-    List<TextSpan> spans = [];
+    var spans = <TextSpan>[];
     var currentSpans = spans;
-    List<List<TextSpan>> stack = [];
+    var stack = <List<TextSpan>>[];
 
-    _traverse(Node node) {
+    void traverse(Node node) {
       if (node.value != null) {
         currentSpans.add(node.className == null
             ? TextSpan(text: node.value)
             : TextSpan(text: node.value, style: theme[node.className!]));
       } else if (node.children != null) {
-        List<TextSpan> tmp = [];
-        currentSpans.add(TextSpan(children: tmp, style: theme[node.className!]));
+        var tmp = <TextSpan>[];
+        currentSpans
+            .add(TextSpan(children: tmp, style: theme[node.className!]));
         stack.add(currentSpans);
         currentSpans = tmp;
 
-        node.children!.forEach((n) {
-          _traverse(n);
+        for (var n in node.children!) {
+          traverse(n);
           if (n == node.children!.last) {
             currentSpans = stack.isEmpty ? spans : stack.removeLast();
           }
-        });
+        }
       }
     }
 
     for (var node in nodes) {
-      _traverse(node);
+      traverse(node);
     }
 
     return spans;
@@ -79,12 +82,12 @@ class HighlightView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var _textStyle = TextStyle(
+    var newTextStyle = TextStyle(
       fontFamily: _defaultFontFamily,
       color: theme[_rootKey]?.color ?? _defaultFontColor,
     );
     if (textStyle != null) {
-      _textStyle = _textStyle.merge(textStyle);
+      newTextStyle = newTextStyle.merge(textStyle);
     }
 
     return Container(
@@ -92,8 +95,9 @@ class HighlightView extends StatelessWidget {
       padding: padding,
       child: RichText(
         text: TextSpan(
-          style: _textStyle,
-          children: _convert(highlight.parse(source, language: language).nodes!),
+          style: newTextStyle,
+          children:
+              _convert(highlight.parse(source, language: language).nodes!),
         ),
       ),
     );

@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutterware/src/third_party/device_frame/lib/src/info/info.dart';
 
 import 'package:flutterware/src/third_party/device_frame/lib/src/devices/android/samsung_galaxy_s20/device.dart'

@@ -1,10 +1,10 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../third_party/device_frame/lib/device_frame.dart';
 import 'app.dart';
 import 'default_device_list.dart';
+import 'parameters.dart';
 import 'toolbar.dart';
 import 'widget_book.dart';
 
@@ -26,7 +26,9 @@ class DetailView extends StatefulWidget {
   State<DetailView> createState() => _DetailViewState();
 }
 
-class _DetailViewState extends State<DetailView> implements WidgetBookState {
+class _DetailViewState extends State<DetailView>
+    with ParametersMixin
+    implements WidgetBookState {
   DeviceInfo? _device = Devices.ios.iPhoneSE;
   bool _visibleFrame = true;
   Orientation _orientation = Orientation.portrait;
@@ -224,47 +226,5 @@ class Breadcrumb extends StatelessWidget {
         ]
       ],
     );
-  }
-}
-
-class _CheckerPainter extends CustomPainter {
-  final bgColor = Colors.grey.withOpacity(0.1);
-  final fgColor = Colors.white;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    var rectSide = 40.0;
-    var horizontalSquaresCount = size.width / rectSide;
-    var verticalSquaresCount = size.height / rectSide;
-
-    final paint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = bgColor;
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
-
-    var dx = 0.0, dy = 0.0;
-    final rectsPath = Path();
-    for (var j = 0; j < verticalSquaresCount; j++) {
-      for (var i = 0; i < horizontalSquaresCount; i++) {
-        if (i % 2 == 0 && j % 2 != 0 || i % 2 != 0 && j % 2 == 0) {
-          final rectX = dx;
-          final rectY = dy;
-          final innerRect = Rect.fromLTWH(rectX, rectY, rectSide, rectSide);
-          rectsPath.addRect(innerRect);
-        }
-        dx += rectSide;
-      }
-      dy += rectSide;
-      dx = 0;
-    }
-    paint
-      ..style = PaintingStyle.fill
-      ..color = fgColor;
-    canvas.drawPath(rectsPath, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return false;
   }
 }
