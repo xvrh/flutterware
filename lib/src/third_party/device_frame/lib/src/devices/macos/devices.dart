@@ -1,7 +1,6 @@
-import 'package:flutterware/src/third_party/device_frame/lib/src/info/info.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/macos/macbook_pro/device.dart'
-    as i_macbook_pro;
+import '../../info/info.dart';
+import 'macbook_pro/device.dart' as i_macbook_pro;
 
 /// A set of macOS devices.
 class MacOSDevices {

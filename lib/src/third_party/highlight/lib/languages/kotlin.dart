@@ -1,7 +1,7 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-import '../src/mode.dart';
 import '../src/common_modes.dart';
+import '../src/mode.dart';
 
 final kotlin = Mode(refs: {
   '~contains~7~contains~2~contains~0~contains~0': Mode(variants: [

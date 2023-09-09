@@ -117,27 +117,29 @@ class _DetailViewState extends State<DetailView>
             });
           },
         ),
-        ToolbarCheckbox(
-          title: 'Frame:',
-          value: _visibleFrame,
-          onChanged: (v) {
-            setState(() {
-              _visibleFrame = v;
-            });
-          },
-        ),
-        ToolbarDropdown<Orientation>(
-          value: _orientation,
-          onChanged: (v) {
-            setState(() {
-              _orientation = v!;
-            });
-          },
-          items: {
-            Orientation.portrait: Text('Portrait'),
-            Orientation.landscape: Text('Landscape'),
-          },
-        ),
+        if (_device != null) ...[
+          ToolbarCheckbox(
+            title: 'Frame:',
+            value: _visibleFrame,
+            onChanged: (v) {
+              setState(() {
+                _visibleFrame = v;
+              });
+            },
+          ),
+          ToolbarDropdown<Orientation>(
+            value: _orientation,
+            onChanged: (v) {
+              setState(() {
+                _orientation = v!;
+              });
+            },
+            items: {
+              Orientation.portrait: Text('Portrait'),
+              Orientation.landscape: Text('Landscape'),
+            },
+          ),
+        ],
         for (var picker
             in {...widget.appState.topBarPickers, ..._topBarPickers}.entries)
           ToolbarPicker(

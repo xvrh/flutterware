@@ -1,3 +1,7 @@
+## 0.2.1
+
+- Add search field to up-coming `storybook` feature
+
 ## 0.2.0
 
 - Support Flutter 3.13

@@ -12,6 +12,7 @@ linter:
     avoid_final_parameters: true
     avoid_setters_without_getters: true
     cast_nullable_to_non_nullable: true
+    cancel_subscriptions: true
     close_sinks: true
     conditional_uri_does_not_exist: true
     no_adjacent_strings_in_list: true

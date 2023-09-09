@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'detail.dart';
 import 'index.dart';
+import 'search.dart';
 import 'treeview.dart';
 import 'widget_book.dart';
 
@@ -43,6 +44,7 @@ class WidgetBookAppState extends State<WidgetBook> {
     } else {
       selected = TreeEntry(null, MapEntry('', allBooks));
     }
+
     return MaterialApp(
       color: Colors.red,
       debugShowCheckedModeBanner: false,
@@ -51,59 +53,15 @@ class WidgetBookAppState extends State<WidgetBook> {
         body: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              width: 200,
-              decoration: BoxDecoration(
-                color: _menuBackground,
-                border: Border(
-                  right: BorderSide(color: Color(0xffe4e5e8), width: 1),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 15, top: 10),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                _selected = null;
-                              });
-                            },
-                            child: Text(
-                              widget.title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                        _SettingsButton(),
-                      ],
-                    ),
-                  ),
-                  _SearchField(),
-                  Expanded(
-                    child: TreeView<TreeEntry>(
-                      entries: entries,
-                      onSelected: (e) {
-                        setState(() {
-                          _selected = e.path;
-                        });
-                      },
-                      selected: selected,
-                      adapter: TreeEntryAdapter(
-                        children: (e) => e.children,
-                        title: (e) => e.title,
-                        ancestors: (e) => e.parent?.breadcrumb ?? [],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            _Menu(
+              title: widget.title,
+              entries: entries,
+              selected: selected,
+              onSelect: (e) {
+                setState(() {
+                  _selected = e?.path;
+                });
+              },
             ),
             Expanded(
               child: selected == null ? SizedBox() : _detailOrListing(selected),
@@ -190,7 +148,116 @@ class WidgetBookAppState extends State<WidgetBook> {
   }
 }
 
+class _Menu extends StatefulWidget {
+  final String title;
+  final List<TreeEntry> entries;
+  final TreeEntry? selected;
+  final void Function(TreeEntry?) onSelect;
+
+  const _Menu(
+      {required this.entries,
+      required this.title,
+      this.selected,
+      required this.onSelect});
+
+  @override
+  State<_Menu> createState() => __MenuState();
+}
+
+class __MenuState extends State<_Menu> {
+  final _treeView = GlobalKey<TreeViewState>();
+  String? _search;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget results;
+    var adapter = TreeEntryAdapter<TreeEntry>(
+      children: (e) => e.children,
+      title: (e) => e.title,
+      ancestors: (e) => e.parent?.breadcrumb ?? [],
+    );
+    if (_search case var search?) {
+      results = SearchResults(
+          query: search,
+          entries: widget.entries,
+          onSelected: widget.onSelect,
+          selected: widget.selected,
+          adapter: adapter,
+          breadcrumbBuilder: (e) {
+            return _SearchBreadcrumb(e);
+          });
+    } else {
+      results = TreeView<TreeEntry>(
+        key: _treeView,
+        entries: widget.entries,
+        onSelected: widget.onSelect,
+        selected: widget.selected,
+        adapter: adapter,
+      );
+    }
+
+    return Container(
+      width: 300,
+      decoration: BoxDecoration(
+        color: _menuBackground,
+        border: Border(
+          right: BorderSide(color: Color(0xffe4e5e8), width: 1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 15),
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      widget.onSelect(null);
+                    },
+                    child: Text(
+                      widget.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                _SettingsButton(
+                  onExpandAll: () {
+                    _treeView.currentState!.expandAll();
+                  },
+                  onCollapseAll: () {
+                    _treeView.currentState!.collapseAll();
+                  },
+                ),
+              ],
+            ),
+          ),
+          _SearchField(
+            onSearch: (q) {
+              setState(() {
+                _search = q;
+              });
+            },
+          ),
+          Expanded(
+            child: results,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SettingsButton extends StatelessWidget {
+  final void Function() onExpandAll;
+  final void Function() onCollapseAll;
+
+  const _SettingsButton(
+      {required this.onExpandAll, required this.onCollapseAll});
+
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton(
@@ -201,20 +268,41 @@ class _SettingsButton extends StatelessWidget {
       iconSize: 15,
       itemBuilder: (c) => [
         PopupMenuItem(
-          child: Text('Some option'),
-        )
+          onTap: onExpandAll,
+          child: Text('Expand all'),
+        ),
+        PopupMenuItem(
+          onTap: onCollapseAll,
+          child: Text('Collapse all'),
+        ),
       ],
     );
   }
 }
 
 class _SearchField extends StatefulWidget {
+  final void Function(String?) onSearch;
+
+  const _SearchField({required this.onSearch});
+
   @override
   State<_SearchField> createState() => _SearchFieldState();
 }
 
 class _SearchFieldState extends State<_SearchField> {
   final _textController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+
+    _textController.addListener(_search);
+  }
+
+  void _search() {
+    var query = _textController.text.trim();
+    widget.onSearch(query.isEmpty ? null : query);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -226,16 +314,21 @@ class _SearchFieldState extends State<_SearchField> {
           hintText: 'Filter',
           prefixIcon: Icon(Icons.search),
           prefixIconConstraints: BoxConstraints(minHeight: 40, minWidth: 40),
-          suffixIconConstraints: BoxConstraints(minHeight: 40),
+          suffixIconConstraints: BoxConstraints(),
           suffixIcon: _textController.text.isNotEmpty
-              ? IconButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.clear();
-                    });
-                    FocusScope.of(context).unfocus();
-                  },
-                  icon: Icon(Icons.clear))
+              ? SizedBox(
+                  height: 30,
+                  child: IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _textController.clear();
+                      });
+                      FocusScope.of(context).unfocus();
+                    },
+                    icon: Icon(Icons.clear),
+                    padding: EdgeInsets.zero,
+                  ),
+                )
               : null,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
@@ -243,6 +336,7 @@ class _SearchFieldState extends State<_SearchField> {
           contentPadding: EdgeInsets.zero,
           isDense: true,
         ),
+        style: const TextStyle(fontSize: 13),
         onChanged: (v) {
           setState(() {
             // Update suffix
@@ -256,6 +350,33 @@ class _SearchFieldState extends State<_SearchField> {
   void dispose() {
     _textController.dispose();
     super.dispose();
+  }
+}
+
+class _SearchBreadcrumb extends StatelessWidget {
+  final TreeEntry entry;
+
+  const _SearchBreadcrumb(this.entry);
+
+  @override
+  Widget build(BuildContext context) {
+    var breadcrumb = entry.parent?.breadcrumb ?? [];
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        for (var e in breadcrumb) ...[
+          Text(
+            e.title,
+            style: const TextStyle(fontSize: 12),
+          ),
+          if (e != breadcrumb.last)
+            Icon(
+              Icons.arrow_right,
+              size: 10,
+            )
+        ]
+      ],
+    );
   }
 }
 

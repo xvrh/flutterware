@@ -1,6 +1,5 @@
-import 'package:flutterware/src/third_party/device_frame/lib/device_frame.dart';
 import 'package:flutter/material.dart';
-
+import '../../device_frame.dart';
 import 'button.dart';
 
 /// Display a simulated on screen keyboard at the bottom of a [child] widget.

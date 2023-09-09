@@ -1,9 +1,9 @@
-import 'package:flutterware/src/third_party/highlight/lib/languages/all.dart';
-import 'package:flutterware/src/third_party/highlight/lib/src/highlight.dart';
+import 'languages/all.dart';
+import 'src/highlight.dart';
 
-export 'package:flutterware/src/third_party/highlight/lib/src/highlight.dart';
-export 'package:flutterware/src/third_party/highlight/lib/src/node.dart';
-export 'package:flutterware/src/third_party/highlight/lib/src/mode.dart';
-export 'package:flutterware/src/third_party/highlight/lib/src/result.dart';
+export 'src/highlight.dart';
+export 'src/mode.dart';
+export 'src/node.dart';
+export 'src/result.dart';
 
 final highlight = Highlight()..registerLanguages(allLanguages);

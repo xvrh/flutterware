@@ -1,7 +1,7 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-import '../src/mode.dart';
 import '../src/common_modes.dart';
+import '../src/mode.dart';
 
 final tp = Mode(refs: {
   '~contains~0~contains~2': Mode(className: "symbol", begin: ":[^\\]]+"),

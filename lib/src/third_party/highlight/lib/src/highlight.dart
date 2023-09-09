@@ -1,9 +1,9 @@
 import 'package:collection/collection.dart' show IterableExtension;
-import 'package:flutterware/src/third_party/highlight/lib/languages/plaintext.dart';
-import 'utils.dart';
-import 'node.dart';
+import '../languages/plaintext.dart';
 import 'mode.dart';
+import 'node.dart';
 import 'result.dart';
+import 'utils.dart';
 
 class Highlight {
   final _languages = {}.cast<String, Mode>();
