@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-
 import 'device_type.dart';
 
 /// A unique identifier that represents a device.

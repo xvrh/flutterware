@@ -1,10 +1,9 @@
-import 'package:flutterware/src/third_party/device_frame/lib/src/info/info.dart';
-
+import '../info/info.dart';
 import 'android/devices.dart';
 import 'ios/devices.dart';
 import 'linux/devices.dart';
-import 'windows/devices.dart';
 import 'macos/devices.dart';
+import 'windows/devices.dart';
 
 /// A list of common device specifications sorted by target platform.
 abstract class Devices {

@@ -40,5 +40,6 @@ dev_dependencies:
   dart_style:
   json_serializable:
   lints:
+  process_runner:
   vendor:
   yaml:

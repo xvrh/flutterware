@@ -31,10 +31,10 @@ class TreeView<T> extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<TreeView<T>> createState() => _TreeViewState<T>();
+  State<TreeView<T>> createState() => TreeViewState<T>();
 }
 
-class _TreeViewState<T> extends State<TreeView<T>> {
+class TreeViewState<T> extends State<TreeView<T>> {
   final _expanded = <T>{};
 
   @override
@@ -42,6 +42,19 @@ class _TreeViewState<T> extends State<TreeView<T>> {
     return ListView(
         padding: const EdgeInsets.only(bottom: 20),
         children: _flattenedEntries().toList());
+  }
+
+  void expandAll() {
+    setState(() {
+      _expanded.addAll(
+          widget.entries.where((e) => widget.adapter.children(e) != null));
+    });
+  }
+
+  void collapseAll() {
+    setState(() {
+      _expanded.clear();
+    });
   }
 
   Iterable<_LineView> _flattenedEntries() {

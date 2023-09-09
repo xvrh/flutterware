@@ -1,7 +1,7 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-import '../src/mode.dart';
 import '../src/common_modes.dart';
+import '../src/mode.dart';
 
 final prolog = Mode(refs: {
   '~contains~2~contains~4~contains~9': Mode(

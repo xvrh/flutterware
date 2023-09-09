@@ -1,18 +1,12 @@
-import 'package:flutterware/src/third_party/device_frame/lib/src/info/info.dart';
-
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/android/samsung_galaxy_s20/device.dart'
-    as i_samsung_galaxy_s20;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/android/samsung_galaxy_note20/device.dart'
-    as i_samsung_galaxy_note20;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/android/samsung_galaxy_note20_ultra/device.dart'
-    as i_samsung_galaxy_note20_ultra;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/android/samsung_galaxy_a50/device.dart'
-    as samsung_galaxy_a50;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/android/oneplus_8_pro/device.dart'
-    as i_oneplus_8_pro;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/android/sony_xperia_1_ii/device.dart'
-    as i_sony_xperia_1_ii;
 import 'package:flutter/material.dart';
+import '../../info/info.dart';
+import 'oneplus_8_pro/device.dart' as i_oneplus_8_pro;
+import 'samsung_galaxy_a50/device.dart' as samsung_galaxy_a50;
+import 'samsung_galaxy_note20/device.dart' as i_samsung_galaxy_note20;
+import 'samsung_galaxy_note20_ultra/device.dart'
+    as i_samsung_galaxy_note20_ultra;
+import 'samsung_galaxy_s20/device.dart' as i_samsung_galaxy_s20;
+import 'sony_xperia_1_ii/device.dart' as i_sony_xperia_1_ii;
 
 /// A set of iOS devices.
 class AndroidDevices {

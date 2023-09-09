@@ -1,5 +1,5 @@
-import 'node.dart';
 import 'mode.dart';
+import 'node.dart';
 
 class Result {
   int? relevance;

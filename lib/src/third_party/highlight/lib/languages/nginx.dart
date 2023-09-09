@@ -1,7 +1,7 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-import '../src/mode.dart';
 import '../src/common_modes.dart';
+import '../src/mode.dart';
 
 final nginx = Mode(refs: {
   '~contains~2~contains~0~starts~contains~1~contains~1':

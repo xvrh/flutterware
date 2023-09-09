@@ -1,29 +1,16 @@
-import 'package:flutterware/src/third_party/device_frame/lib/src/info/info.dart';
-
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/iphone_12_mini/device.dart'
-    as i_iphone_12_mini;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/iphone_12/device.dart'
-    as i_iphone_12;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/iphone_12_pro_max/device.dart'
-    as i_iphone_12_pro_max;
-
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/iphone_13_mini/device.dart'
-    as i_iphone_13_mini;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/iphone_13/device.dart'
-    as i_iphone_13;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/iphone_13_pro_max/device.dart'
-    as i_iphone_13_pro_max;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/iphone_se/device.dart'
-    as i_iphone_se;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/ipad_air_4/device.dart'
-    as i_ipad_air_4;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/ipad/device.dart' as i_ipad;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/ipad_pro_11inches/device.dart'
-    as i_ipad_pro_11inches;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/ipad_pro_12Inches_gen2/device.dart'
-    as i_ipad_12inches_gen2;
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/ios/ipad_pro_12Inches_gen4/device.dart'
-    as i_ipad_12inches_gen4;
+import '../../info/info.dart';
+import 'ipad/device.dart' as i_ipad;
+import 'ipad_air_4/device.dart' as i_ipad_air_4;
+import 'ipad_pro_11inches/device.dart' as i_ipad_pro_11inches;
+import 'ipad_pro_12Inches_gen2/device.dart' as i_ipad_12inches_gen2;
+import 'ipad_pro_12Inches_gen4/device.dart' as i_ipad_12inches_gen4;
+import 'iphone_12/device.dart' as i_iphone_12;
+import 'iphone_12_mini/device.dart' as i_iphone_12_mini;
+import 'iphone_12_pro_max/device.dart' as i_iphone_12_pro_max;
+import 'iphone_13/device.dart' as i_iphone_13;
+import 'iphone_13_mini/device.dart' as i_iphone_13_mini;
+import 'iphone_13_pro_max/device.dart' as i_iphone_13_pro_max;
+import 'iphone_se/device.dart' as i_iphone_se;
 
 /// A set of iOS devices.
 class IosDevices {

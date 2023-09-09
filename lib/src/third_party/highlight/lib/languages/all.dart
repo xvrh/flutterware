@@ -64,9 +64,11 @@ import 'gcode.dart';
 import 'gherkin.dart';
 import 'glsl.dart';
 import 'gml.dart';
+import 'gn.dart';
 import 'go.dart';
 import 'golo.dart';
 import 'gradle.dart';
+import 'graphql.dart';
 import 'groovy.dart';
 import 'haml.dart';
 import 'handlebars.dart';
@@ -154,6 +156,7 @@ import 'shell.dart';
 import 'smali.dart';
 import 'smalltalk.dart';
 import 'sml.dart';
+import 'solidity.dart';
 import 'sqf.dart';
 import 'sql.dart';
 import 'stan.dart';
@@ -177,16 +180,13 @@ import 'vbscript.dart';
 import 'verilog.dart';
 import 'vhdl.dart';
 import 'vim.dart';
+import 'vue.dart';
 import 'x86asm.dart';
 import 'xl.dart';
 import 'xml.dart';
 import 'xquery.dart';
 import 'yaml.dart';
 import 'zephir.dart';
-import 'vue.dart';
-import 'graphql.dart';
-import 'gn.dart';
-import 'solidity.dart';
 
 final communityLanguages = {
   'vue': vue,

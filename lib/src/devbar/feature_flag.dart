@@ -150,6 +150,7 @@ class _FlagToVariableState extends State<_FlagToVariable> {
     }
 
     DevbarVariable? variable;
+    // ignore: cancel_subscriptions
     StreamSubscription? variableSubscription;
     if (flagValue is FeatureFlagValue<bool>) {
       variable = _devbar.variables.checkbox(flag.name,

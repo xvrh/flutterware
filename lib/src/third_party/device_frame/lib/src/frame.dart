@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import 'info/device_type.dart';
 import 'info/info.dart';
 

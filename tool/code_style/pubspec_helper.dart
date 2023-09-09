@@ -25,7 +25,7 @@ List<File> _findPubspecs(Directory root, String file) {
 
     if (!dirName.startsWith('.') &&
         !dirName.startsWith('_') &&
-        (!hasPubspec || !const ['web', 'lib', 'test'].contains(dirName))) {
+        (!hasPubspec || !const ['web'].contains(dirName))) {
       results.addAll(_findPubspecs(dir, file));
     }
   }

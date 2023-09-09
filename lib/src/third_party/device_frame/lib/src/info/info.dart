@@ -1,12 +1,11 @@
 import 'package:collection/collection.dart';
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/generic/desktop_monitor/device.dart';
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/generic/laptop/device.dart';
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/generic/phone/device.dart';
-import 'package:flutterware/src/third_party/device_frame/lib/src/devices/generic/tablet/device.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
-
+import '../devices/generic/desktop_monitor/device.dart';
+import '../devices/generic/laptop/device.dart';
+import '../devices/generic/phone/device.dart';
+import '../devices/generic/tablet/device.dart';
 import 'identifier.dart';
 
 part 'info.freezed.dart';
