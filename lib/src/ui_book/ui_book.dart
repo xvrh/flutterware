@@ -3,10 +3,10 @@ import 'dart:core';
 import 'package:flutter/material.dart';
 import 'parameters.dart';
 
-export 'app.dart' show WidgetBook;
+export 'app.dart' show UIBook;
 
-extension WidgetBookExtension on BuildContext {
-  WidgetBookState get book => WidgetBookState.of(this);
+extension UIBookExtension on BuildContext {
+  UIBookState get book => UIBookState.of(this);
 }
 
 class WidgetContainer extends StatelessWidget {
@@ -29,43 +29,47 @@ class WidgetContainer extends StatelessWidget {
   }
 }
 
-class WidgetBookStateProvider extends InheritedWidget {
-  final WidgetBookState state;
+class UIBookStateProvider extends InheritedWidget {
+  final UIBookState state;
 
-  const WidgetBookStateProvider({
+  const UIBookStateProvider({
     super.key,
     required super.child,
     required this.state,
   });
 
-  static WidgetBookStateProvider of(BuildContext context) {
-    return context
-        .dependOnInheritedWidgetOfExactType<WidgetBookStateProvider>()!;
+  static UIBookStateProvider of(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<UIBookStateProvider>()!;
   }
 
   @override
-  bool updateShouldNotify(WidgetBookStateProvider oldWidget) {
+  bool updateShouldNotify(UIBookStateProvider oldWidget) {
     return oldWidget.state != state;
   }
 }
 
-abstract class WidgetBookState with ParametersMixin {
-  static final empty = _EmptyWidgetBookState();
+abstract class UIBookState {
+  static final empty = _EmptyUIBookState();
 
   TopBarState get topBar;
 
-  static WidgetBookState of(BuildContext context) {
-    return WidgetBookStateProvider.of(context).state;
+  Parameters get knobs;
+
+  static UIBookState of(BuildContext context) {
+    return UIBookStateProvider.of(context).state;
   }
 }
 
 abstract class TopBarState {
-  T picker<T>(String name, Map<String, T> values, T defaultValue);
+  T picker<T>(String name, Map<String, T> options, T defaultValue);
 }
 
-class _EmptyWidgetBookState with ParametersMixin implements WidgetBookState {
+class _EmptyUIBookState implements UIBookState {
   @override
   final topBar = _EmptyTopBarState();
+
+  @override
+  final knobs = Parameters();
 }
 
 class _EmptyTopBarState implements TopBarState {

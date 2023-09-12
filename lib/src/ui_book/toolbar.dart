@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 const _buttonBackground = Color(0xffeaeaea);
@@ -217,5 +219,125 @@ class ToolbarCheckbox extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class ToolbarPanel extends StatefulWidget {
+  final Widget button;
+  final Widget panel;
+
+  const ToolbarPanel({Key? key, required this.button, required this.panel})
+      : super(key: key);
+
+  @override
+  State<ToolbarPanel> createState() => ToolbarPanelState();
+
+  static ToolbarPanelState of(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<_ToolbarPanelProvider>()!
+        .panel;
+  }
+}
+
+class ToolbarPanelState extends State<ToolbarPanel> {
+  final _refreshStream = StreamController.broadcast();
+  final LayerLink layerLink = LayerLink();
+  OverlayEntry? _overlayEntry;
+
+  void showMenu() {
+    hideMenu();
+    var overlay = _overlayEntry = OverlayEntry(
+      builder: (BuildContext context) {
+        return _ToolbarPanelProvider(
+          panel: this,
+          child: Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: hideMenu,
+              child: _Menu(
+                link: layerLink,
+                panelState: this,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    Overlay.of(context).insert(overlay);
+  }
+
+  void hideMenu() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _refreshStream.add(null);
+    return ElevatedButton(
+      onPressed: () {
+        showMenu();
+      },
+      child: CompositedTransformTarget(
+        link: layerLink,
+        child: widget.button,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshStream.close();
+    super.dispose();
+  }
+}
+
+class _Menu extends StatelessWidget {
+  final LayerLink link;
+  final ToolbarPanelState panelState;
+
+  const _Menu({
+    Key? key,
+    required this.link,
+    required this.panelState,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    return Align(
+      alignment: Alignment.topLeft,
+      child: CompositedTransformFollower(
+        link: link,
+        offset: Offset(-20, 22),
+        child: Card(
+          color: theme.canvasColor,
+          child: GestureDetector(
+            onTap: () {},
+            behavior: HitTestBehavior.opaque,
+            child: StreamBuilder<void>(
+              stream: panelState._refreshStream.stream,
+              builder: (context, snapshot) {
+                return panelState.widget.panel;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolbarPanelProvider extends InheritedWidget {
+  final ToolbarPanelState panel;
+  const _ToolbarPanelProvider({
+    Key? key,
+    required Widget child,
+    required this.panel,
+  }) : super(key: key, child: child);
+
+  @override
+  bool updateShouldNotify(_ToolbarPanelProvider oldWidget) {
+    return true;
   }
 }

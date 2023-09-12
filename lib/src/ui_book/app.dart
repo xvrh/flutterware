@@ -2,20 +2,24 @@ import 'dart:core' as core;
 import 'dart:core';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import '../third_party/device_frame/lib/device_frame.dart';
+import 'default_device_list.dart';
 import 'detail.dart';
+import 'device_choice_panel.dart';
 import 'index.dart';
+import 'parameters.dart';
 import 'search.dart';
 import 'treeview.dart';
-import 'widget_book.dart';
+import 'ui_book.dart';
 
 const _menuBackground = Color(0xfff7f9fc);
 
-class WidgetBook extends StatefulWidget {
+class UIBook extends StatefulWidget {
   final String title;
   final Map<String, dynamic> Function() books;
   final Widget Function(BuildContext, Widget) appBuilder;
 
-  const WidgetBook({
+  const UIBook({
     super.key,
     required this.title,
     required this.books,
@@ -23,14 +27,25 @@ class WidgetBook extends StatefulWidget {
   });
 
   @override
-  State<WidgetBook> createState() => WidgetBookAppState();
+  State<UIBook> createState() => UIBookAppState();
 
-  static WidgetBook of(BuildContext context) =>
-      context.findAncestorWidgetOfExactType<WidgetBook>()!;
+  static UIBook of(BuildContext context) =>
+      context.findAncestorWidgetOfExactType<UIBook>()!;
 }
 
-class WidgetBookAppState extends State<WidgetBook> {
-  final topBarPickers = <String, PickerState>{};
+class UIBookAppState extends State<UIBook> {
+  final topBarPickers = <String, PickerParameter>{};
+  DeviceChoice device = DeviceChoice(
+      isEnabled: true,
+      useMosaic: false,
+      single: SingleDeviceChoice(
+        device: Devices.ios.iPhoneSE,
+        orientation: Orientation.portrait,
+        showFrame: true,
+      ),
+      mosaic: MosaicDeviceChoice(
+          devices: defaultDevices.keys.toSet(),
+          orientations: Orientation.values.toSet()));
   String? _selected;
 
   @override
@@ -124,8 +139,8 @@ class WidgetBookAppState extends State<WidgetBook> {
           ],
         ),
       );
-      return WidgetBookStateProvider(
-        state: WidgetBookState.empty,
+      return UIBookStateProvider(
+        state: UIBookState.empty,
         child: Builder(builder: (context) {
           return widget.appBuilder(
             context,
