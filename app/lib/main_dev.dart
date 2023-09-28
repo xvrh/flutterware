@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/logs/remote_log_client.dart'; // ignore: implementation_imports
+// ignore: implementation_imports
+import 'package:flutterware/src/logs/remote_log_client.dart';
 import 'package:logging/logging.dart';
 import 'src/app/app.dart';
 import 'src/app/project_view.dart';
