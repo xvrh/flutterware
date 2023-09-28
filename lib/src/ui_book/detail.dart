@@ -1,6 +1,4 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/default_device_list.dart';
 import 'package:flutterware/src/ui_book/device_choice_panel.dart';
 import '../third_party/device_frame/lib/device_frame.dart';
 import 'app.dart';
@@ -95,6 +93,7 @@ class _DetailViewState extends State<DetailView> implements UIBookState {
           context,
           Material(
             child: Center(
+              key: _appKey,
               child: value,
             ),
           ),
@@ -184,7 +183,6 @@ class _DetailViewState extends State<DetailView> implements UIBookState {
         breadcrumb,
         toolbar,
         Expanded(
-          key: _appKey,
           child: ExcludeFocus(child: mainWidget),
         ),
         if (knobs.parameters.isNotEmpty) ...[

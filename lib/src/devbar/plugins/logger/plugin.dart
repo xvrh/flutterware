@@ -5,6 +5,7 @@ import '../../../utils/value_stream.dart';
 import '../../devbar.dart';
 import 'ui.dart';
 
+/// A plugin for the Devbar which add a tab to display logs from `package:logging`
 class LoggerPlugin implements DevbarPlugin {
   static const _maxHistory = 1000;
   final DevbarState _devbar;

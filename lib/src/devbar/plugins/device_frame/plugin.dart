@@ -5,6 +5,7 @@ import '../../../third_party/device_frame/lib/device_frame.dart';
 import '../../../utils/value_stream.dart';
 import 'device_preview.dart';
 
+/// A plugin for the Devbar which allow to preview the app on different screen sizes.
 class DeviceFramePlugin extends DevbarPlugin {
   final DevbarState devbar;
   final showFrame = ValueStream<bool>(false);

@@ -6,7 +6,7 @@ part of 'test_run.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<TestRun> _$testRunSerializer = _$TestRunSerializer();
+Serializer<TestRun> _$testRunSerializer = new _$TestRunSerializer();
 
 class _$TestRunSerializer implements StructuredSerializer<TestRun> {
   @override
@@ -26,8 +26,8 @@ class _$TestRunSerializer implements StructuredSerializer<TestRun> {
           specifiedType: const FullType(RunArgs)),
       'screens',
       serializers.serialize(object.screens,
-          specifiedType:
-              const FullType(BuiltMap, [FullType(String), FullType(Screen)])),
+          specifiedType: const FullType(BuiltMap,
+              const [const FullType(String), const FullType(Screen)])),
     ];
     Object? value;
     value = object.result;
@@ -43,7 +43,7 @@ class _$TestRunSerializer implements StructuredSerializer<TestRun> {
   @override
   TestRun deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = TestRunBuilder();
+    final result = new TestRunBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -61,8 +61,8 @@ class _$TestRunSerializer implements StructuredSerializer<TestRun> {
           break;
         case 'screens':
           result.screens.replace(serializers.deserialize(value,
-              specifiedType: const FullType(
-                  BuiltMap, [FullType(String), FullType(Screen)]))!);
+              specifiedType: const FullType(BuiltMap,
+                  const [const FullType(String), const FullType(Screen)]))!);
           break;
         case 'result':
           result.result.replace(serializers.deserialize(value,
@@ -86,7 +86,7 @@ class _$TestRun extends TestRun {
   final RunResult? result;
 
   factory _$TestRun([void Function(TestRunBuilder)? updates]) =>
-      (TestRunBuilder()..update(updates))._build();
+      (new TestRunBuilder()..update(updates))._build();
 
   _$TestRun._(
       {required this.test,
@@ -94,9 +94,9 @@ class _$TestRun extends TestRun {
       required this.screens,
       this.result})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(test, 'TestRun', 'test');
-    BuiltValueNullFieldError.checkNotNull(args, 'TestRun', 'args');
-    BuiltValueNullFieldError.checkNotNull(screens, 'TestRun', 'screens');
+    BuiltValueNullFieldError.checkNotNull(test, r'TestRun', 'test');
+    BuiltValueNullFieldError.checkNotNull(args, r'TestRun', 'args');
+    BuiltValueNullFieldError.checkNotNull(screens, r'TestRun', 'screens');
   }
 
   @override
@@ -104,7 +104,7 @@ class _$TestRun extends TestRun {
       (toBuilder()..update(updates)).build();
 
   @override
-  TestRunBuilder toBuilder() => TestRunBuilder()..replace(this);
+  TestRunBuilder toBuilder() => new TestRunBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -118,14 +118,18 @@ class _$TestRun extends TestRun {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc($jc($jc(0, test.hashCode), args.hashCode), screens.hashCode),
-        result.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, test.hashCode);
+    _$hash = $jc(_$hash, args.hashCode);
+    _$hash = $jc(_$hash, screens.hashCode);
+    _$hash = $jc(_$hash, result.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('TestRun')
+    return (newBuiltValueToStringHelper(r'TestRun')
           ..add('test', test)
           ..add('args', args)
           ..add('screens', screens)
@@ -138,20 +142,20 @@ class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
   _$TestRun? _$v;
 
   TestReferenceBuilder? _test;
-  TestReferenceBuilder get test => _$this._test ??= TestReferenceBuilder();
+  TestReferenceBuilder get test => _$this._test ??= new TestReferenceBuilder();
   set test(TestReferenceBuilder? test) => _$this._test = test;
 
   RunArgsBuilder? _args;
-  RunArgsBuilder get args => _$this._args ??= RunArgsBuilder();
+  RunArgsBuilder get args => _$this._args ??= new RunArgsBuilder();
   set args(RunArgsBuilder? args) => _$this._args = args;
 
   MapBuilder<String, Screen>? _screens;
   MapBuilder<String, Screen> get screens =>
-      _$this._screens ??= MapBuilder<String, Screen>();
+      _$this._screens ??= new MapBuilder<String, Screen>();
   set screens(MapBuilder<String, Screen>? screens) => _$this._screens = screens;
 
   RunResultBuilder? _result;
-  RunResultBuilder get result => _$this._result ??= RunResultBuilder();
+  RunResultBuilder get result => _$this._result ??= new RunResultBuilder();
   set result(RunResultBuilder? result) => _$this._result = result;
 
   TestRunBuilder();
@@ -186,7 +190,7 @@ class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
     _$TestRun _$result;
     try {
       _$result = _$v ??
-          _$TestRun._(
+          new _$TestRun._(
               test: test.build(),
               args: args.build(),
               screens: screens.build(),
@@ -203,8 +207,8 @@ class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
         _$failedField = 'result';
         _result?.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError(
-            'TestRun', _$failedField, e.toString());
+        throw new BuiltValueNestedFieldError(
+            r'TestRun', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -213,4 +217,4 @@ class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

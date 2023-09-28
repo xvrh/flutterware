@@ -1,3 +1,7 @@
+## 0.3.0
+
+- Rename `widget_book` to `ui_book`
+
 ## 0.2.1
 
 - Add search field to up-coming `storybook` feature

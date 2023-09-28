@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutterware_app/src/ui_book/service/service.dart';
 import 'package:path/path.dart' as p;
 import 'package:pubspec_parse/pubspec_parse.dart';
 import 'context.dart';
 import 'dependencies/model/service.dart';
 import 'drawing/model/service.dart';
-import 'flutter_sdk.dart';
+import 'utils/flutter_sdk.dart';
 import 'icon/model/service.dart';
 import 'overview/service.dart';
 import 'test_runner/model/service.dart';
@@ -24,6 +25,7 @@ class Project {
   late final icons = IconService(this);
   late final dependencies = DependenciesService(this);
   late final drawing = DrawingService(this);
+  late final uiBook = UIBookService(this);
   final Uri? loggerUri;
 
   Project(this.context, String path, this.flutterSdkPath, {this.loggerUri})

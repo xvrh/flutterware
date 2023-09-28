@@ -2,10 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:logging/logging.dart';
-import '../flutter_sdk.dart';
+import 'flutter_sdk.dart';
 import 'daemon/commands.dart';
 import 'daemon/events.dart';
 import 'daemon/protocol.dart';
+import 'package:stream_transform/stream_transform.dart';
 
 final _logger = Logger('flutter_daemon_process');
 
@@ -43,6 +44,16 @@ class FlutterRunProcess {
     throw Exception('Failed to run flutter app');
   }
 
+  Stream<Event> get onEvent => _protocol.onEvent;
+
+  Stream<DaemonLogEvent> get onLog => onEvent.whereType<DaemonLogEvent>();
+
+  Stream<DaemonLogMessageEvent> get onLogMessage =>
+      onEvent.whereType<DaemonLogMessageEvent>();
+
+  Stream<AppProgressEvent> get onProgress =>
+      onEvent.whereType<AppProgressEvent>();
+
   Future<void> reload({required bool fullRestart}) async {
     await _protocol
         .sendCommand(AppRestartCommand(appId: appId, fullRestart: fullRestart));
@@ -54,4 +65,8 @@ class FlutterRunProcess {
   }
 
   Future<void> get onExit => _process.exitCode;
+
+  void kill() {
+    _process.kill();
+  }
 }

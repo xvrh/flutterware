@@ -10,7 +10,7 @@ import 'package:stream_channel/stream_channel.dart';
 import 'package:test_api/src/backend/group.dart'; // ignore: implementation_imports
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../api.dart';
-import '../protocol/connection.dart';
+import '../../utils/connection/connection.dart';
 import '../protocol/domains/listing.dart';
 import '../protocol/domains/project.dart';
 import '../protocol/domains/run.dart';

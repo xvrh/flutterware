@@ -6,9 +6,9 @@ part of 'message.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-const MessageType _$request = MessageType._('request');
-const MessageType _$response = MessageType._('response');
-const MessageType _$error = MessageType._('error');
+const MessageType _$request = const MessageType._('request');
+const MessageType _$response = const MessageType._('response');
+const MessageType _$error = const MessageType._('error');
 
 MessageType _$valueOf(String name) {
   switch (name) {
@@ -19,23 +19,23 @@ MessageType _$valueOf(String name) {
     case 'error':
       return _$error;
     default:
-      throw ArgumentError(name);
+      throw new ArgumentError(name);
   }
 }
 
 final BuiltSet<MessageType> _$values =
-    BuiltSet<MessageType>(const <MessageType>[
+    new BuiltSet<MessageType>(const <MessageType>[
   _$request,
   _$response,
   _$error,
 ]);
 
-Serializers _$messageSerializers = (Serializers().toBuilder()
+Serializers _$messageSerializers = (new Serializers().toBuilder()
       ..add(Message.serializer)
       ..add(MessageType.serializer))
     .build();
-Serializer<Message> _$messageSerializer = _$MessageSerializer();
-Serializer<MessageType> _$messageTypeSerializer = _$MessageTypeSerializer();
+Serializer<Message> _$messageSerializer = new _$MessageSerializer();
+Serializer<MessageType> _$messageTypeSerializer = new _$MessageTypeSerializer();
 
 class _$MessageSerializer implements StructuredSerializer<Message> {
   @override
@@ -83,7 +83,7 @@ class _$MessageSerializer implements StructuredSerializer<Message> {
   @override
   Message deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = MessageBuilder();
+    final result = new MessageBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -160,7 +160,7 @@ class _$Message extends Message {
   final String? serializedParameter3;
 
   factory _$Message([void Function(MessageBuilder)? updates]) =>
-      (MessageBuilder()..update(updates))._build();
+      (new MessageBuilder()..update(updates))._build();
 
   _$Message._(
       {required this.type,
@@ -171,12 +171,12 @@ class _$Message extends Message {
       this.serializedParameter2,
       this.serializedParameter3})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(type, 'Message', 'type');
-    BuiltValueNullFieldError.checkNotNull(id, 'Message', 'id');
-    BuiltValueNullFieldError.checkNotNull(channel, 'Message', 'channel');
-    BuiltValueNullFieldError.checkNotNull(method, 'Message', 'method');
+    BuiltValueNullFieldError.checkNotNull(type, r'Message', 'type');
+    BuiltValueNullFieldError.checkNotNull(id, r'Message', 'id');
+    BuiltValueNullFieldError.checkNotNull(channel, r'Message', 'channel');
+    BuiltValueNullFieldError.checkNotNull(method, r'Message', 'method');
     BuiltValueNullFieldError.checkNotNull(
-        serializedParameter1, 'Message', 'serializedParameter1');
+        serializedParameter1, r'Message', 'serializedParameter1');
   }
 
   @override
@@ -184,7 +184,7 @@ class _$Message extends Message {
       (toBuilder()..update(updates)).build();
 
   @override
-  MessageBuilder toBuilder() => MessageBuilder()..replace(this);
+  MessageBuilder toBuilder() => new MessageBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -201,21 +201,21 @@ class _$Message extends Message {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc(
-            $jc(
-                $jc(
-                    $jc($jc($jc(0, type.hashCode), id.hashCode),
-                        channel.hashCode),
-                    method.hashCode),
-                serializedParameter1.hashCode),
-            serializedParameter2.hashCode),
-        serializedParameter3.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, type.hashCode);
+    _$hash = $jc(_$hash, id.hashCode);
+    _$hash = $jc(_$hash, channel.hashCode);
+    _$hash = $jc(_$hash, method.hashCode);
+    _$hash = $jc(_$hash, serializedParameter1.hashCode);
+    _$hash = $jc(_$hash, serializedParameter2.hashCode);
+    _$hash = $jc(_$hash, serializedParameter3.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('Message')
+    return (newBuiltValueToStringHelper(r'Message')
           ..add('type', type)
           ..add('id', id)
           ..add('channel', channel)
@@ -294,16 +294,16 @@ class MessageBuilder implements Builder<Message, MessageBuilder> {
 
   _$Message _build() {
     final _$result = _$v ??
-        _$Message._(
+        new _$Message._(
             type:
-                BuiltValueNullFieldError.checkNotNull(type, 'Message', 'type'),
-            id: BuiltValueNullFieldError.checkNotNull(id, 'Message', 'id'),
+                BuiltValueNullFieldError.checkNotNull(type, r'Message', 'type'),
+            id: BuiltValueNullFieldError.checkNotNull(id, r'Message', 'id'),
             channel: BuiltValueNullFieldError.checkNotNull(
-                channel, 'Message', 'channel'),
+                channel, r'Message', 'channel'),
             method: BuiltValueNullFieldError.checkNotNull(
-                method, 'Message', 'method'),
+                method, r'Message', 'method'),
             serializedParameter1: BuiltValueNullFieldError.checkNotNull(
-                serializedParameter1, 'Message', 'serializedParameter1'),
+                serializedParameter1, r'Message', 'serializedParameter1'),
             serializedParameter2: serializedParameter2,
             serializedParameter3: serializedParameter3);
     replace(_$result);
@@ -311,4 +311,4 @@ class MessageBuilder implements Builder<Message, MessageBuilder> {
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

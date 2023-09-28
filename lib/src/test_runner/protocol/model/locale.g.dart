@@ -7,7 +7,7 @@ part of 'locale.dart';
 // **************************************************************************
 
 Serializer<SerializableLocale> _$serializableLocaleSerializer =
-    _$SerializableLocaleSerializer();
+    new _$SerializableLocaleSerializer();
 
 class _$SerializableLocaleSerializer
     implements StructuredSerializer<SerializableLocale> {
@@ -40,7 +40,7 @@ class _$SerializableLocaleSerializer
   SerializableLocale deserialize(
       Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = SerializableLocaleBuilder();
+    final result = new SerializableLocaleBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -71,11 +71,11 @@ class _$SerializableLocale extends SerializableLocale {
 
   factory _$SerializableLocale(
           [void Function(SerializableLocaleBuilder)? updates]) =>
-      (SerializableLocaleBuilder()..update(updates))._build();
+      (new SerializableLocaleBuilder()..update(updates))._build();
 
   _$SerializableLocale._({required this.language, this.country}) : super._() {
     BuiltValueNullFieldError.checkNotNull(
-        language, 'SerializableLocale', 'language');
+        language, r'SerializableLocale', 'language');
   }
 
   @override
@@ -85,7 +85,7 @@ class _$SerializableLocale extends SerializableLocale {
 
   @override
   SerializableLocaleBuilder toBuilder() =>
-      SerializableLocaleBuilder()..replace(this);
+      new SerializableLocaleBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -97,12 +97,16 @@ class _$SerializableLocale extends SerializableLocale {
 
   @override
   int get hashCode {
-    return $jf($jc($jc(0, language.hashCode), country.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, language.hashCode);
+    _$hash = $jc(_$hash, country.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('SerializableLocale')
+    return (newBuiltValueToStringHelper(r'SerializableLocale')
           ..add('language', language)
           ..add('country', country))
         .toString();
@@ -149,13 +153,13 @@ class SerializableLocaleBuilder
 
   _$SerializableLocale _build() {
     final _$result = _$v ??
-        _$SerializableLocale._(
+        new _$SerializableLocale._(
             language: BuiltValueNullFieldError.checkNotNull(
-                language, 'SerializableLocale', 'language'),
+                language, r'SerializableLocale', 'language'),
             country: country);
     replace(_$result);
     return _$result;
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

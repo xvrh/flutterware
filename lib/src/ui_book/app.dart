@@ -68,7 +68,7 @@ class UIBookAppState extends State<UIBook> {
         body: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Menu(
+            Menu(
               title: widget.title,
               entries: entries,
               selected: selected,
@@ -163,23 +163,25 @@ class UIBookAppState extends State<UIBook> {
   }
 }
 
-class _Menu extends StatefulWidget {
+class Menu extends StatefulWidget {
   final String title;
   final List<TreeEntry> entries;
   final TreeEntry? selected;
   final void Function(TreeEntry?) onSelect;
 
-  const _Menu(
-      {required this.entries,
-      required this.title,
-      this.selected,
-      required this.onSelect});
+  const Menu({
+    super.key,
+    required this.entries,
+    required this.title,
+    this.selected,
+    required this.onSelect,
+  });
 
   @override
-  State<_Menu> createState() => __MenuState();
+  State<Menu> createState() => _MenuState();
 }
 
-class __MenuState extends State<_Menu> {
+class _MenuState extends State<Menu> {
   final _treeView = GlobalKey<TreeViewState>();
   String? _search;
 

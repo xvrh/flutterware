@@ -7,7 +7,7 @@ part of 'test_reference.dart';
 // **************************************************************************
 
 Serializer<TestReference> _$testReferenceSerializer =
-    _$TestReferenceSerializer();
+    new _$TestReferenceSerializer();
 
 class _$TestReferenceSerializer implements StructuredSerializer<TestReference> {
   @override
@@ -21,7 +21,8 @@ class _$TestReferenceSerializer implements StructuredSerializer<TestReference> {
     final result = <Object?>[
       'name',
       serializers.serialize(object.name,
-          specifiedType: const FullType(BuiltList, [FullType(String)])),
+          specifiedType:
+              const FullType(BuiltList, const [const FullType(String)])),
     ];
     Object? value;
     value = object.description;
@@ -38,7 +39,7 @@ class _$TestReferenceSerializer implements StructuredSerializer<TestReference> {
   TestReference deserialize(
       Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = TestReferenceBuilder();
+    final result = new TestReferenceBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -48,7 +49,8 @@ class _$TestReferenceSerializer implements StructuredSerializer<TestReference> {
       switch (key) {
         case 'name':
           result.name.replace(serializers.deserialize(value,
-                  specifiedType: const FullType(BuiltList, [FullType(String)]))!
+                  specifiedType: const FullType(
+                      BuiltList, const [const FullType(String)]))!
               as BuiltList<Object?>);
           break;
         case 'description':
@@ -69,10 +71,10 @@ class _$TestReference extends TestReference {
   final String? description;
 
   factory _$TestReference([void Function(TestReferenceBuilder)? updates]) =>
-      (TestReferenceBuilder()..update(updates))._build();
+      (new TestReferenceBuilder()..update(updates))._build();
 
   _$TestReference._({required this.name, this.description}) : super._() {
-    BuiltValueNullFieldError.checkNotNull(name, 'TestReference', 'name');
+    BuiltValueNullFieldError.checkNotNull(name, r'TestReference', 'name');
   }
 
   @override
@@ -80,7 +82,7 @@ class _$TestReference extends TestReference {
       (toBuilder()..update(updates)).build();
 
   @override
-  TestReferenceBuilder toBuilder() => TestReferenceBuilder()..replace(this);
+  TestReferenceBuilder toBuilder() => new TestReferenceBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -92,12 +94,16 @@ class _$TestReference extends TestReference {
 
   @override
   int get hashCode {
-    return $jf($jc($jc(0, name.hashCode), description.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, name.hashCode);
+    _$hash = $jc(_$hash, description.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('TestReference')
+    return (newBuiltValueToStringHelper(r'TestReference')
           ..add('name', name)
           ..add('description', description))
         .toString();
@@ -109,7 +115,7 @@ class TestReferenceBuilder
   _$TestReference? _$v;
 
   ListBuilder<String>? _name;
-  ListBuilder<String> get name => _$this._name ??= ListBuilder<String>();
+  ListBuilder<String> get name => _$this._name ??= new ListBuilder<String>();
   set name(ListBuilder<String>? name) => _$this._name = name;
 
   String? _description;
@@ -146,15 +152,15 @@ class TestReferenceBuilder
     _$TestReference _$result;
     try {
       _$result = _$v ??
-          _$TestReference._(name: name.build(), description: description);
+          new _$TestReference._(name: name.build(), description: description);
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'name';
         name.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError(
-            'TestReference', _$failedField, e.toString());
+        throw new BuiltValueNestedFieldError(
+            r'TestReference', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -163,4 +169,4 @@ class TestReferenceBuilder
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

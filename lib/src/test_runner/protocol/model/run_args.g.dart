@@ -6,7 +6,7 @@ part of 'run_args.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<RunArgs> _$runArgsSerializer = _$RunArgsSerializer();
+Serializer<RunArgs> _$runArgsSerializer = new _$RunArgsSerializer();
 
 class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
   @override
@@ -22,7 +22,8 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
       serializers.serialize(object.id, specifiedType: const FullType(int)),
       'testName',
       serializers.serialize(object.testName,
-          specifiedType: const FullType(BuiltList, [FullType(String)])),
+          specifiedType:
+              const FullType(BuiltList, const [const FullType(String)])),
       'device',
       serializers.serialize(object.device,
           specifiedType: const FullType(DeviceInfo)),
@@ -53,7 +54,7 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
   @override
   RunArgs deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = RunArgsBuilder();
+    final result = new RunArgsBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -67,7 +68,8 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
           break;
         case 'testName':
           result.testName.replace(serializers.deserialize(value,
-                  specifiedType: const FullType(BuiltList, [FullType(String)]))!
+                  specifiedType: const FullType(
+                      BuiltList, const [const FullType(String)]))!
               as BuiltList<Object?>);
           break;
         case 'device':
@@ -116,7 +118,7 @@ class _$RunArgs extends RunArgs {
   final int? platformBrightness;
 
   factory _$RunArgs([void Function(RunArgsBuilder)? updates]) =>
-      (RunArgsBuilder()..update(updates))._build();
+      (new RunArgsBuilder()..update(updates))._build();
 
   _$RunArgs._(
       {required this.id,
@@ -127,12 +129,12 @@ class _$RunArgs extends RunArgs {
       this.locale,
       this.platformBrightness})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(id, 'RunArgs', 'id');
-    BuiltValueNullFieldError.checkNotNull(testName, 'RunArgs', 'testName');
-    BuiltValueNullFieldError.checkNotNull(device, 'RunArgs', 'device');
+    BuiltValueNullFieldError.checkNotNull(id, r'RunArgs', 'id');
+    BuiltValueNullFieldError.checkNotNull(testName, r'RunArgs', 'testName');
+    BuiltValueNullFieldError.checkNotNull(device, r'RunArgs', 'device');
     BuiltValueNullFieldError.checkNotNull(
-        accessibility, 'RunArgs', 'accessibility');
-    BuiltValueNullFieldError.checkNotNull(imageRatio, 'RunArgs', 'imageRatio');
+        accessibility, r'RunArgs', 'accessibility');
+    BuiltValueNullFieldError.checkNotNull(imageRatio, r'RunArgs', 'imageRatio');
   }
 
   @override
@@ -140,7 +142,7 @@ class _$RunArgs extends RunArgs {
       (toBuilder()..update(updates)).build();
 
   @override
-  RunArgsBuilder toBuilder() => RunArgsBuilder()..replace(this);
+  RunArgsBuilder toBuilder() => new RunArgsBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -157,21 +159,21 @@ class _$RunArgs extends RunArgs {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc(
-            $jc(
-                $jc(
-                    $jc($jc($jc(0, id.hashCode), testName.hashCode),
-                        device.hashCode),
-                    accessibility.hashCode),
-                imageRatio.hashCode),
-            locale.hashCode),
-        platformBrightness.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, id.hashCode);
+    _$hash = $jc(_$hash, testName.hashCode);
+    _$hash = $jc(_$hash, device.hashCode);
+    _$hash = $jc(_$hash, accessibility.hashCode);
+    _$hash = $jc(_$hash, imageRatio.hashCode);
+    _$hash = $jc(_$hash, locale.hashCode);
+    _$hash = $jc(_$hash, platformBrightness.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('RunArgs')
+    return (newBuiltValueToStringHelper(r'RunArgs')
           ..add('id', id)
           ..add('testName', testName)
           ..add('device', device)
@@ -192,16 +194,16 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
 
   ListBuilder<String>? _testName;
   ListBuilder<String> get testName =>
-      _$this._testName ??= ListBuilder<String>();
+      _$this._testName ??= new ListBuilder<String>();
   set testName(ListBuilder<String>? testName) => _$this._testName = testName;
 
   DeviceInfoBuilder? _device;
-  DeviceInfoBuilder get device => _$this._device ??= DeviceInfoBuilder();
+  DeviceInfoBuilder get device => _$this._device ??= new DeviceInfoBuilder();
   set device(DeviceInfoBuilder? device) => _$this._device = device;
 
   AccessibilityConfigBuilder? _accessibility;
   AccessibilityConfigBuilder get accessibility =>
-      _$this._accessibility ??= AccessibilityConfigBuilder();
+      _$this._accessibility ??= new AccessibilityConfigBuilder();
   set accessibility(AccessibilityConfigBuilder? accessibility) =>
       _$this._accessibility = accessibility;
 
@@ -211,7 +213,7 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
 
   SerializableLocaleBuilder? _locale;
   SerializableLocaleBuilder get locale =>
-      _$this._locale ??= SerializableLocaleBuilder();
+      _$this._locale ??= new SerializableLocaleBuilder();
   set locale(SerializableLocaleBuilder? locale) => _$this._locale = locale;
 
   int? _platformBrightness;
@@ -254,13 +256,13 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
     _$RunArgs _$result;
     try {
       _$result = _$v ??
-          _$RunArgs._(
-              id: BuiltValueNullFieldError.checkNotNull(id, 'RunArgs', 'id'),
+          new _$RunArgs._(
+              id: BuiltValueNullFieldError.checkNotNull(id, r'RunArgs', 'id'),
               testName: testName.build(),
               device: device.build(),
               accessibility: accessibility.build(),
               imageRatio: BuiltValueNullFieldError.checkNotNull(
-                  imageRatio, 'RunArgs', 'imageRatio'),
+                  imageRatio, r'RunArgs', 'imageRatio'),
               locale: _locale?.build(),
               platformBrightness: platformBrightness);
     } catch (_) {
@@ -276,8 +278,8 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
         _$failedField = 'locale';
         _locale?.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError(
-            'RunArgs', _$failedField, e.toString());
+        throw new BuiltValueNestedFieldError(
+            r'RunArgs', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -286,4 +288,4 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

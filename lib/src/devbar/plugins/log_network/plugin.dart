@@ -4,6 +4,7 @@ import '../../../utils/value_stream.dart';
 import '../../devbar.dart';
 import 'ui.dart';
 
+/// A plugin for the Devbar which add a tab to display network requests and responses.
 class LogNetworkPlugin implements DevbarPlugin {
   static const _maxRequest = 200;
 
@@ -105,6 +106,7 @@ class ErrorResponse {
       {required this.code, required this.reason, required this.message});
 }
 
+/// Extension to add `context.network` shortcut.
 extension LogNetworkPluginDevbarExtension on DevbarState {
   LogNetworkPlugin get network => plugin<LogNetworkPlugin>();
 }

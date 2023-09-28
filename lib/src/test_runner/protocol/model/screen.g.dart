@@ -6,11 +6,11 @@ part of 'screen.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<NewScreen> _$newScreenSerializer = _$NewScreenSerializer();
-Serializer<ImageFile> _$imageFileSerializer = _$ImageFileSerializer();
-Serializer<Screen> _$screenSerializer = _$ScreenSerializer();
-Serializer<TextInfo> _$textInfoSerializer = _$TextInfoSerializer();
-Serializer<ScreenLink> _$screenLinkSerializer = _$ScreenLinkSerializer();
+Serializer<NewScreen> _$newScreenSerializer = new _$NewScreenSerializer();
+Serializer<ImageFile> _$imageFileSerializer = new _$ImageFileSerializer();
+Serializer<Screen> _$screenSerializer = new _$ScreenSerializer();
+Serializer<TextInfo> _$textInfoSerializer = new _$TextInfoSerializer();
+Serializer<ScreenLink> _$screenLinkSerializer = new _$ScreenLinkSerializer();
 
 class _$NewScreenSerializer implements StructuredSerializer<NewScreen> {
   @override
@@ -61,7 +61,7 @@ class _$NewScreenSerializer implements StructuredSerializer<NewScreen> {
   @override
   NewScreen deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = NewScreenBuilder();
+    final result = new NewScreenBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -120,7 +120,7 @@ class _$ImageFileSerializer implements StructuredSerializer<ImageFile> {
   @override
   ImageFile deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = ImageFileBuilder();
+    final result = new ImageFileBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -161,10 +161,12 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
       serializers.serialize(object.id, specifiedType: const FullType(String)),
       'texts',
       serializers.serialize(object.texts,
-          specifiedType: const FullType(BuiltList, [FullType(TextInfo)])),
+          specifiedType:
+              const FullType(BuiltList, const [const FullType(TextInfo)])),
       'next',
       serializers.serialize(object.next,
-          specifiedType: const FullType(BuiltList, [FullType(ScreenLink)])),
+          specifiedType:
+              const FullType(BuiltList, const [const FullType(ScreenLink)])),
       'name',
       serializers.serialize(object.name, specifiedType: const FullType(String)),
     ];
@@ -207,8 +209,8 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
       result
         ..add('supportedLocales')
         ..add(serializers.serialize(value,
-            specifiedType:
-                const FullType(BuiltList, [FullType(SerializableLocale)])));
+            specifiedType: const FullType(
+                BuiltList, const [const FullType(SerializableLocale)])));
     }
     return result;
   }
@@ -216,7 +218,7 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
   @override
   Screen deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = ScreenBuilder();
+    final result = new ScreenBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -230,14 +232,14 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
           break;
         case 'texts':
           result.texts.replace(serializers.deserialize(value,
-                  specifiedType:
-                      const FullType(BuiltList, [FullType(TextInfo)]))!
+                  specifiedType: const FullType(
+                      BuiltList, const [const FullType(TextInfo)]))!
               as BuiltList<Object?>);
           break;
         case 'next':
           result.next.replace(serializers.deserialize(value,
-                  specifiedType:
-                      const FullType(BuiltList, [FullType(ScreenLink)]))!
+                  specifiedType: const FullType(
+                      BuiltList, const [const FullType(ScreenLink)]))!
               as BuiltList<Object?>);
           break;
         case 'splitName':
@@ -267,7 +269,7 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
         case 'supportedLocales':
           result.supportedLocales.replace(serializers.deserialize(value,
                   specifiedType: const FullType(
-                      BuiltList, [FullType(SerializableLocale)]))!
+                      BuiltList, const [const FullType(SerializableLocale)]))!
               as BuiltList<Object?>);
           break;
       }
@@ -332,7 +334,7 @@ class _$TextInfoSerializer implements StructuredSerializer<TextInfo> {
   @override
   TextInfo deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = TextInfoBuilder();
+    final result = new TextInfoBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -406,7 +408,7 @@ class _$ScreenLinkSerializer implements StructuredSerializer<ScreenLink> {
   @override
   ScreenLink deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = ScreenLinkBuilder();
+    final result = new ScreenLinkBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -442,7 +444,7 @@ class _$NewScreen extends NewScreen {
   final ImageFile? imageFile;
 
   factory _$NewScreen([void Function(NewScreenBuilder)? updates]) =>
-      (NewScreenBuilder()..update(updates))._build();
+      (new NewScreenBuilder()..update(updates))._build();
 
   _$NewScreen._(
       {required this.screen,
@@ -451,7 +453,7 @@ class _$NewScreen extends NewScreen {
       this.imageBase64,
       this.imageFile})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(screen, 'NewScreen', 'screen');
+    BuiltValueNullFieldError.checkNotNull(screen, r'NewScreen', 'screen');
   }
 
   @override
@@ -459,7 +461,7 @@ class _$NewScreen extends NewScreen {
       (toBuilder()..update(updates)).build();
 
   @override
-  NewScreenBuilder toBuilder() => NewScreenBuilder()..replace(this);
+  NewScreenBuilder toBuilder() => new NewScreenBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -474,17 +476,19 @@ class _$NewScreen extends NewScreen {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc(
-            $jc($jc($jc(0, screen.hashCode), parent.hashCode),
-                parentRectangle.hashCode),
-            imageBase64.hashCode),
-        imageFile.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, screen.hashCode);
+    _$hash = $jc(_$hash, parent.hashCode);
+    _$hash = $jc(_$hash, parentRectangle.hashCode);
+    _$hash = $jc(_$hash, imageBase64.hashCode);
+    _$hash = $jc(_$hash, imageFile.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('NewScreen')
+    return (newBuiltValueToStringHelper(r'NewScreen')
           ..add('screen', screen)
           ..add('parent', parent)
           ..add('parentRectangle', parentRectangle)
@@ -498,7 +502,7 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
   _$NewScreen? _$v;
 
   ScreenBuilder? _screen;
-  ScreenBuilder get screen => _$this._screen ??= ScreenBuilder();
+  ScreenBuilder get screen => _$this._screen ??= new ScreenBuilder();
   set screen(ScreenBuilder? screen) => _$this._screen = screen;
 
   String? _parent;
@@ -507,7 +511,7 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
 
   RectangleBuilder? _parentRectangle;
   RectangleBuilder get parentRectangle =>
-      _$this._parentRectangle ??= RectangleBuilder();
+      _$this._parentRectangle ??= new RectangleBuilder();
   set parentRectangle(RectangleBuilder? parentRectangle) =>
       _$this._parentRectangle = parentRectangle;
 
@@ -516,7 +520,8 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
   set imageBase64(String? imageBase64) => _$this._imageBase64 = imageBase64;
 
   ImageFileBuilder? _imageFile;
-  ImageFileBuilder get imageFile => _$this._imageFile ??= ImageFileBuilder();
+  ImageFileBuilder get imageFile =>
+      _$this._imageFile ??= new ImageFileBuilder();
   set imageFile(ImageFileBuilder? imageFile) => _$this._imageFile = imageFile;
 
   NewScreenBuilder();
@@ -552,7 +557,7 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
     _$NewScreen _$result;
     try {
       _$result = _$v ??
-          _$NewScreen._(
+          new _$NewScreen._(
               screen: screen.build(),
               parent: parent,
               parentRectangle: _parentRectangle?.build(),
@@ -570,8 +575,8 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
         _$failedField = 'imageFile';
         _imageFile?.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError(
-            'NewScreen', _$failedField, e.toString());
+        throw new BuiltValueNestedFieldError(
+            r'NewScreen', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -589,13 +594,13 @@ class _$ImageFile extends ImageFile {
   final int height;
 
   factory _$ImageFile([void Function(ImageFileBuilder)? updates]) =>
-      (ImageFileBuilder()..update(updates))._build();
+      (new ImageFileBuilder()..update(updates))._build();
 
   _$ImageFile._({required this.path, required this.width, required this.height})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(path, 'ImageFile', 'path');
-    BuiltValueNullFieldError.checkNotNull(width, 'ImageFile', 'width');
-    BuiltValueNullFieldError.checkNotNull(height, 'ImageFile', 'height');
+    BuiltValueNullFieldError.checkNotNull(path, r'ImageFile', 'path');
+    BuiltValueNullFieldError.checkNotNull(width, r'ImageFile', 'width');
+    BuiltValueNullFieldError.checkNotNull(height, r'ImageFile', 'height');
   }
 
   @override
@@ -603,7 +608,7 @@ class _$ImageFile extends ImageFile {
       (toBuilder()..update(updates)).build();
 
   @override
-  ImageFileBuilder toBuilder() => ImageFileBuilder()..replace(this);
+  ImageFileBuilder toBuilder() => new ImageFileBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -616,13 +621,17 @@ class _$ImageFile extends ImageFile {
 
   @override
   int get hashCode {
-    return $jf(
-        $jc($jc($jc(0, path.hashCode), width.hashCode), height.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, path.hashCode);
+    _$hash = $jc(_$hash, width.hashCode);
+    _$hash = $jc(_$hash, height.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('ImageFile')
+    return (newBuiltValueToStringHelper(r'ImageFile')
           ..add('path', path)
           ..add('width', width)
           ..add('height', height))
@@ -674,13 +683,13 @@ class ImageFileBuilder implements Builder<ImageFile, ImageFileBuilder> {
 
   _$ImageFile _build() {
     final _$result = _$v ??
-        _$ImageFile._(
+        new _$ImageFile._(
             path: BuiltValueNullFieldError.checkNotNull(
-                path, 'ImageFile', 'path'),
+                path, r'ImageFile', 'path'),
             width: BuiltValueNullFieldError.checkNotNull(
-                width, 'ImageFile', 'width'),
+                width, r'ImageFile', 'width'),
             height: BuiltValueNullFieldError.checkNotNull(
-                height, 'ImageFile', 'height'));
+                height, r'ImageFile', 'height'));
     replace(_$result);
     return _$result;
   }
@@ -709,7 +718,7 @@ class _$Screen extends Screen {
   final BuiltList<SerializableLocale>? supportedLocales;
 
   factory _$Screen([void Function(ScreenBuilder)? updates]) =>
-      (ScreenBuilder()..update(updates))._build();
+      (new ScreenBuilder()..update(updates))._build();
 
   _$Screen._(
       {required this.id,
@@ -723,10 +732,10 @@ class _$Screen extends Screen {
       this.bottomBrightness,
       this.supportedLocales})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(id, 'Screen', 'id');
-    BuiltValueNullFieldError.checkNotNull(texts, 'Screen', 'texts');
-    BuiltValueNullFieldError.checkNotNull(next, 'Screen', 'next');
-    BuiltValueNullFieldError.checkNotNull(name, 'Screen', 'name');
+    BuiltValueNullFieldError.checkNotNull(id, r'Screen', 'id');
+    BuiltValueNullFieldError.checkNotNull(texts, r'Screen', 'texts');
+    BuiltValueNullFieldError.checkNotNull(next, r'Screen', 'next');
+    BuiltValueNullFieldError.checkNotNull(name, r'Screen', 'name');
   }
 
   @override
@@ -734,7 +743,7 @@ class _$Screen extends Screen {
       (toBuilder()..update(updates)).build();
 
   @override
-  ScreenBuilder toBuilder() => ScreenBuilder()..replace(this);
+  ScreenBuilder toBuilder() => new ScreenBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -754,27 +763,24 @@ class _$Screen extends Screen {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc(
-            $jc(
-                $jc(
-                    $jc(
-                        $jc(
-                            $jc(
-                                $jc($jc($jc(0, id.hashCode), texts.hashCode),
-                                    next.hashCode),
-                                splitName.hashCode),
-                            name.hashCode),
-                        imageBytes.hashCode),
-                    imageFile.hashCode),
-                topBrightness.hashCode),
-            bottomBrightness.hashCode),
-        supportedLocales.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, id.hashCode);
+    _$hash = $jc(_$hash, texts.hashCode);
+    _$hash = $jc(_$hash, next.hashCode);
+    _$hash = $jc(_$hash, splitName.hashCode);
+    _$hash = $jc(_$hash, name.hashCode);
+    _$hash = $jc(_$hash, imageBytes.hashCode);
+    _$hash = $jc(_$hash, imageFile.hashCode);
+    _$hash = $jc(_$hash, topBrightness.hashCode);
+    _$hash = $jc(_$hash, bottomBrightness.hashCode);
+    _$hash = $jc(_$hash, supportedLocales.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('Screen')
+    return (newBuiltValueToStringHelper(r'Screen')
           ..add('id', id)
           ..add('texts', texts)
           ..add('next', next)
@@ -797,12 +803,13 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
   set id(String? id) => _$this._id = id;
 
   ListBuilder<TextInfo>? _texts;
-  ListBuilder<TextInfo> get texts => _$this._texts ??= ListBuilder<TextInfo>();
+  ListBuilder<TextInfo> get texts =>
+      _$this._texts ??= new ListBuilder<TextInfo>();
   set texts(ListBuilder<TextInfo>? texts) => _$this._texts = texts;
 
   ListBuilder<ScreenLink>? _next;
   ListBuilder<ScreenLink> get next =>
-      _$this._next ??= ListBuilder<ScreenLink>();
+      _$this._next ??= new ListBuilder<ScreenLink>();
   set next(ListBuilder<ScreenLink>? next) => _$this._next = next;
 
   String? _splitName;
@@ -818,7 +825,8 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
   set imageBytes(Uint8List? imageBytes) => _$this._imageBytes = imageBytes;
 
   ImageFileBuilder? _imageFile;
-  ImageFileBuilder get imageFile => _$this._imageFile ??= ImageFileBuilder();
+  ImageFileBuilder get imageFile =>
+      _$this._imageFile ??= new ImageFileBuilder();
   set imageFile(ImageFileBuilder? imageFile) => _$this._imageFile = imageFile;
 
   int? _topBrightness;
@@ -833,7 +841,7 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
 
   ListBuilder<SerializableLocale>? _supportedLocales;
   ListBuilder<SerializableLocale> get supportedLocales =>
-      _$this._supportedLocales ??= ListBuilder<SerializableLocale>();
+      _$this._supportedLocales ??= new ListBuilder<SerializableLocale>();
   set supportedLocales(ListBuilder<SerializableLocale>? supportedLocales) =>
       _$this._supportedLocales = supportedLocales;
 
@@ -875,13 +883,13 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
     _$Screen _$result;
     try {
       _$result = _$v ??
-          _$Screen._(
-              id: BuiltValueNullFieldError.checkNotNull(id, 'Screen', 'id'),
+          new _$Screen._(
+              id: BuiltValueNullFieldError.checkNotNull(id, r'Screen', 'id'),
               texts: texts.build(),
               next: next.build(),
               splitName: splitName,
-              name:
-                  BuiltValueNullFieldError.checkNotNull(name, 'Screen', 'name'),
+              name: BuiltValueNullFieldError.checkNotNull(
+                  name, r'Screen', 'name'),
               imageBytes: imageBytes,
               imageFile: _imageFile?.build(),
               topBrightness: topBrightness,
@@ -901,7 +909,8 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
         _$failedField = 'supportedLocales';
         _supportedLocales?.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError('Screen', _$failedField, e.toString());
+        throw new BuiltValueNestedFieldError(
+            r'Screen', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -929,7 +938,7 @@ class _$TextInfo extends TextInfo {
   final int? fontWeight;
 
   factory _$TextInfo([void Function(TextInfoBuilder)? updates]) =>
-      (TextInfoBuilder()..update(updates))._build();
+      (new TextInfoBuilder()..update(updates))._build();
 
   _$TextInfo._(
       {required this.translationKey,
@@ -942,12 +951,12 @@ class _$TextInfo extends TextInfo {
       this.fontWeight})
       : super._() {
     BuiltValueNullFieldError.checkNotNull(
-        translationKey, 'TextInfo', 'translationKey');
+        translationKey, r'TextInfo', 'translationKey');
     BuiltValueNullFieldError.checkNotNull(
-        rawTranslation, 'TextInfo', 'rawTranslation');
-    BuiltValueNullFieldError.checkNotNull(text, 'TextInfo', 'text');
+        rawTranslation, r'TextInfo', 'rawTranslation');
+    BuiltValueNullFieldError.checkNotNull(text, r'TextInfo', 'text');
     BuiltValueNullFieldError.checkNotNull(
-        globalRectangle, 'TextInfo', 'globalRectangle');
+        globalRectangle, r'TextInfo', 'globalRectangle');
   }
 
   @override
@@ -955,7 +964,7 @@ class _$TextInfo extends TextInfo {
       (toBuilder()..update(updates)).build();
 
   @override
-  TextInfoBuilder toBuilder() => TextInfoBuilder()..replace(this);
+  TextInfoBuilder toBuilder() => new TextInfoBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -973,25 +982,22 @@ class _$TextInfo extends TextInfo {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc(
-            $jc(
-                $jc(
-                    $jc(
-                        $jc(
-                            $jc($jc(0, translationKey.hashCode),
-                                rawTranslation.hashCode),
-                            text.hashCode),
-                        globalRectangle.hashCode),
-                    fontFamily.hashCode),
-                fontSize.hashCode),
-            color.hashCode),
-        fontWeight.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, translationKey.hashCode);
+    _$hash = $jc(_$hash, rawTranslation.hashCode);
+    _$hash = $jc(_$hash, text.hashCode);
+    _$hash = $jc(_$hash, globalRectangle.hashCode);
+    _$hash = $jc(_$hash, fontFamily.hashCode);
+    _$hash = $jc(_$hash, fontSize.hashCode);
+    _$hash = $jc(_$hash, color.hashCode);
+    _$hash = $jc(_$hash, fontWeight.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('TextInfo')
+    return (newBuiltValueToStringHelper(r'TextInfo')
           ..add('translationKey', translationKey)
           ..add('rawTranslation', rawTranslation)
           ..add('text', text)
@@ -1023,7 +1029,7 @@ class TextInfoBuilder implements Builder<TextInfo, TextInfoBuilder> {
 
   RectangleBuilder? _globalRectangle;
   RectangleBuilder get globalRectangle =>
-      _$this._globalRectangle ??= RectangleBuilder();
+      _$this._globalRectangle ??= new RectangleBuilder();
   set globalRectangle(RectangleBuilder? globalRectangle) =>
       _$this._globalRectangle = globalRectangle;
 
@@ -1079,13 +1085,13 @@ class TextInfoBuilder implements Builder<TextInfo, TextInfoBuilder> {
     _$TextInfo _$result;
     try {
       _$result = _$v ??
-          _$TextInfo._(
+          new _$TextInfo._(
               translationKey: BuiltValueNullFieldError.checkNotNull(
-                  translationKey, 'TextInfo', 'translationKey'),
+                  translationKey, r'TextInfo', 'translationKey'),
               rawTranslation: BuiltValueNullFieldError.checkNotNull(
-                  rawTranslation, 'TextInfo', 'rawTranslation'),
+                  rawTranslation, r'TextInfo', 'rawTranslation'),
               text: BuiltValueNullFieldError.checkNotNull(
-                  text, 'TextInfo', 'text'),
+                  text, r'TextInfo', 'text'),
               globalRectangle: globalRectangle.build(),
               fontFamily: fontFamily,
               fontSize: fontSize,
@@ -1097,8 +1103,8 @@ class TextInfoBuilder implements Builder<TextInfo, TextInfoBuilder> {
         _$failedField = 'globalRectangle';
         globalRectangle.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError(
-            'TextInfo', _$failedField, e.toString());
+        throw new BuiltValueNestedFieldError(
+            r'TextInfo', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -1114,10 +1120,10 @@ class _$ScreenLink extends ScreenLink {
   final Rectangle? tapRect;
 
   factory _$ScreenLink([void Function(ScreenLinkBuilder)? updates]) =>
-      (ScreenLinkBuilder()..update(updates))._build();
+      (new ScreenLinkBuilder()..update(updates))._build();
 
   _$ScreenLink._({required this.to, this.tapRect}) : super._() {
-    BuiltValueNullFieldError.checkNotNull(to, 'ScreenLink', 'to');
+    BuiltValueNullFieldError.checkNotNull(to, r'ScreenLink', 'to');
   }
 
   @override
@@ -1125,7 +1131,7 @@ class _$ScreenLink extends ScreenLink {
       (toBuilder()..update(updates)).build();
 
   @override
-  ScreenLinkBuilder toBuilder() => ScreenLinkBuilder()..replace(this);
+  ScreenLinkBuilder toBuilder() => new ScreenLinkBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -1135,12 +1141,16 @@ class _$ScreenLink extends ScreenLink {
 
   @override
   int get hashCode {
-    return $jf($jc($jc(0, to.hashCode), tapRect.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, to.hashCode);
+    _$hash = $jc(_$hash, tapRect.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('ScreenLink')
+    return (newBuiltValueToStringHelper(r'ScreenLink')
           ..add('to', to)
           ..add('tapRect', tapRect))
         .toString();
@@ -1155,7 +1165,7 @@ class ScreenLinkBuilder implements Builder<ScreenLink, ScreenLinkBuilder> {
   set to(String? to) => _$this._to = to;
 
   RectangleBuilder? _tapRect;
-  RectangleBuilder get tapRect => _$this._tapRect ??= RectangleBuilder();
+  RectangleBuilder get tapRect => _$this._tapRect ??= new RectangleBuilder();
   set tapRect(RectangleBuilder? tapRect) => _$this._tapRect = tapRect;
 
   ScreenLinkBuilder();
@@ -1188,8 +1198,9 @@ class ScreenLinkBuilder implements Builder<ScreenLink, ScreenLinkBuilder> {
     _$ScreenLink _$result;
     try {
       _$result = _$v ??
-          _$ScreenLink._(
-              to: BuiltValueNullFieldError.checkNotNull(to, 'ScreenLink', 'to'),
+          new _$ScreenLink._(
+              to: BuiltValueNullFieldError.checkNotNull(
+                  to, r'ScreenLink', 'to'),
               tapRect: _tapRect?.build());
     } catch (_) {
       late String _$failedField;
@@ -1197,8 +1208,8 @@ class ScreenLinkBuilder implements Builder<ScreenLink, ScreenLinkBuilder> {
         _$failedField = 'tapRect';
         _tapRect?.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError(
-            'ScreenLink', _$failedField, e.toString());
+        throw new BuiltValueNestedFieldError(
+            r'ScreenLink', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -1207,4 +1218,4 @@ class ScreenLinkBuilder implements Builder<ScreenLink, ScreenLinkBuilder> {
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

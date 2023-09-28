@@ -144,6 +144,7 @@ Flutter SDK: ${context.flutterSdk.root}
       [],
       environment: {
         projectDefineKey: context.projectDirectory.absolute.path,
+        appToolPathKey: context.appToolPath,
         flutterSdkDefineKey: context.flutterSdk.root,
         remoteLoggerUrlKey: '${context.logClient.uri}',
       },

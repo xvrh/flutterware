@@ -6,7 +6,7 @@ part of 'rectangle.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<Rectangle> _$rectangleSerializer = _$RectangleSerializer();
+Serializer<Rectangle> _$rectangleSerializer = new _$RectangleSerializer();
 
 class _$RectangleSerializer implements StructuredSerializer<Rectangle> {
   @override
@@ -36,7 +36,7 @@ class _$RectangleSerializer implements StructuredSerializer<Rectangle> {
   @override
   Rectangle deserialize(Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = RectangleBuilder();
+    final result = new RectangleBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -78,7 +78,7 @@ class _$Rectangle extends Rectangle {
   final double bottom;
 
   factory _$Rectangle([void Function(RectangleBuilder)? updates]) =>
-      (RectangleBuilder()..update(updates))._build();
+      (new RectangleBuilder()..update(updates))._build();
 
   _$Rectangle._(
       {required this.left,
@@ -86,10 +86,10 @@ class _$Rectangle extends Rectangle {
       required this.right,
       required this.bottom})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(left, 'Rectangle', 'left');
-    BuiltValueNullFieldError.checkNotNull(top, 'Rectangle', 'top');
-    BuiltValueNullFieldError.checkNotNull(right, 'Rectangle', 'right');
-    BuiltValueNullFieldError.checkNotNull(bottom, 'Rectangle', 'bottom');
+    BuiltValueNullFieldError.checkNotNull(left, r'Rectangle', 'left');
+    BuiltValueNullFieldError.checkNotNull(top, r'Rectangle', 'top');
+    BuiltValueNullFieldError.checkNotNull(right, r'Rectangle', 'right');
+    BuiltValueNullFieldError.checkNotNull(bottom, r'Rectangle', 'bottom');
   }
 
   @override
@@ -97,7 +97,7 @@ class _$Rectangle extends Rectangle {
       (toBuilder()..update(updates)).build();
 
   @override
-  RectangleBuilder toBuilder() => RectangleBuilder()..replace(this);
+  RectangleBuilder toBuilder() => new RectangleBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -111,14 +111,18 @@ class _$Rectangle extends Rectangle {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc($jc($jc(0, left.hashCode), top.hashCode), right.hashCode),
-        bottom.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, left.hashCode);
+    _$hash = $jc(_$hash, top.hashCode);
+    _$hash = $jc(_$hash, right.hashCode);
+    _$hash = $jc(_$hash, bottom.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('Rectangle')
+    return (newBuiltValueToStringHelper(r'Rectangle')
           ..add('left', left)
           ..add('top', top)
           ..add('right', right)
@@ -176,17 +180,18 @@ class RectangleBuilder implements Builder<Rectangle, RectangleBuilder> {
 
   _$Rectangle _build() {
     final _$result = _$v ??
-        _$Rectangle._(
+        new _$Rectangle._(
             left: BuiltValueNullFieldError.checkNotNull(
-                left, 'Rectangle', 'left'),
-            top: BuiltValueNullFieldError.checkNotNull(top, 'Rectangle', 'top'),
+                left, r'Rectangle', 'left'),
+            top:
+                BuiltValueNullFieldError.checkNotNull(top, r'Rectangle', 'top'),
             right: BuiltValueNullFieldError.checkNotNull(
-                right, 'Rectangle', 'right'),
+                right, r'Rectangle', 'right'),
             bottom: BuiltValueNullFieldError.checkNotNull(
-                bottom, 'Rectangle', 'bottom'));
+                bottom, r'Rectangle', 'bottom'));
     replace(_$result);
     return _$result;
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

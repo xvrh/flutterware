@@ -3,6 +3,7 @@ import '../../../utils/value_stream.dart';
 import '../../devbar.dart';
 import 'ui.dart';
 
+/// A plugin for the Devbar which add a tab to display analytics events.
 class LogAnalyticsPlugin implements DevbarPlugin {
   static const _maxEvents = 200;
   final DevbarState devbar;
@@ -44,6 +45,7 @@ class AnalyticEvent {
   AnalyticEvent(this.name, this.parameters);
 }
 
+/// Extension to add `context.analytics` shortcut.
 extension AnalyticsPluginDevbarExtension on DevbarState {
   LogAnalyticsPlugin get analytics => plugin<LogAnalyticsPlugin>();
 }
