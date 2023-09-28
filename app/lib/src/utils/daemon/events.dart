@@ -2,7 +2,7 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'events.g.dart';
 
-abstract class Event {
+sealed class Event {
   static Event? decode(String event, Map<String, dynamic> params) {
     switch (event) {
       case 'daemon.connected':

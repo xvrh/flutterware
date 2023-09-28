@@ -1,4 +1,4 @@
-import '../connection.dart';
+import '../../../utils/connection/connection.dart';
 
 class ProjectClient {
   final Channel _channel;

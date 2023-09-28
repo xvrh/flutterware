@@ -156,14 +156,14 @@ class _$DeviceInfo extends DeviceInfo {
       required this.pixelRatio,
       required this.safeArea})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(id, 'DeviceInfo', 'id');
-    BuiltValueNullFieldError.checkNotNull(name, 'DeviceInfo', 'name');
-    BuiltValueNullFieldError.checkNotNull(platform, 'DeviceInfo', 'platform');
-    BuiltValueNullFieldError.checkNotNull(width, 'DeviceInfo', 'width');
-    BuiltValueNullFieldError.checkNotNull(height, 'DeviceInfo', 'height');
+    BuiltValueNullFieldError.checkNotNull(id, r'DeviceInfo', 'id');
+    BuiltValueNullFieldError.checkNotNull(name, r'DeviceInfo', 'name');
+    BuiltValueNullFieldError.checkNotNull(platform, r'DeviceInfo', 'platform');
+    BuiltValueNullFieldError.checkNotNull(width, r'DeviceInfo', 'width');
+    BuiltValueNullFieldError.checkNotNull(height, r'DeviceInfo', 'height');
     BuiltValueNullFieldError.checkNotNull(
-        pixelRatio, 'DeviceInfo', 'pixelRatio');
-    BuiltValueNullFieldError.checkNotNull(safeArea, 'DeviceInfo', 'safeArea');
+        pixelRatio, r'DeviceInfo', 'pixelRatio');
+    BuiltValueNullFieldError.checkNotNull(safeArea, r'DeviceInfo', 'safeArea');
   }
 
   @override
@@ -188,21 +188,21 @@ class _$DeviceInfo extends DeviceInfo {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc(
-            $jc(
-                $jc(
-                    $jc($jc($jc(0, id.hashCode), name.hashCode),
-                        platform.hashCode),
-                    width.hashCode),
-                height.hashCode),
-            pixelRatio.hashCode),
-        safeArea.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, id.hashCode);
+    _$hash = $jc(_$hash, name.hashCode);
+    _$hash = $jc(_$hash, platform.hashCode);
+    _$hash = $jc(_$hash, width.hashCode);
+    _$hash = $jc(_$hash, height.hashCode);
+    _$hash = $jc(_$hash, pixelRatio.hashCode);
+    _$hash = $jc(_$hash, safeArea.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('DeviceInfo')
+    return (newBuiltValueToStringHelper(r'DeviceInfo')
           ..add('id', id)
           ..add('name', name)
           ..add('platform', platform)
@@ -281,17 +281,18 @@ class DeviceInfoBuilder implements Builder<DeviceInfo, DeviceInfoBuilder> {
     try {
       _$result = _$v ??
           _$DeviceInfo._(
-              id: BuiltValueNullFieldError.checkNotNull(id, 'DeviceInfo', 'id'),
+              id: BuiltValueNullFieldError.checkNotNull(
+                  id, r'DeviceInfo', 'id'),
               name: BuiltValueNullFieldError.checkNotNull(
-                  name, 'DeviceInfo', 'name'),
+                  name, r'DeviceInfo', 'name'),
               platform: BuiltValueNullFieldError.checkNotNull(
-                  platform, 'DeviceInfo', 'platform'),
+                  platform, r'DeviceInfo', 'platform'),
               width: BuiltValueNullFieldError.checkNotNull(
-                  width, 'DeviceInfo', 'width'),
+                  width, r'DeviceInfo', 'width'),
               height: BuiltValueNullFieldError.checkNotNull(
-                  height, 'DeviceInfo', 'height'),
+                  height, r'DeviceInfo', 'height'),
               pixelRatio: BuiltValueNullFieldError.checkNotNull(
-                  pixelRatio, 'DeviceInfo', 'pixelRatio'),
+                  pixelRatio, r'DeviceInfo', 'pixelRatio'),
               safeArea: safeArea.build());
     } catch (_) {
       late String _$failedField;
@@ -300,7 +301,7 @@ class DeviceInfoBuilder implements Builder<DeviceInfo, DeviceInfoBuilder> {
         safeArea.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            'DeviceInfo', _$failedField, e.toString());
+            r'DeviceInfo', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -309,4 +310,4 @@ class DeviceInfoBuilder implements Builder<DeviceInfo, DeviceInfoBuilder> {
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

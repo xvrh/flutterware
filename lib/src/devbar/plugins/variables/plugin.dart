@@ -8,6 +8,7 @@ import 'file_store.dart';
 import 'store.dart';
 import 'ui.dart';
 
+/// A plugin for the Devbar to manage variables.
 class VariablesPlugin implements DevbarPlugin {
   final DevbarState devbar;
   final _variables = ValueStream<List<DevbarVariable>>([]);

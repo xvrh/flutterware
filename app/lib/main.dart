@@ -6,13 +6,14 @@ import 'package:logging/logging.dart';
 import 'src/app/app.dart';
 import 'src/constants.dart';
 import 'src/context.dart';
-import 'src/flutter_sdk.dart';
 import 'src/project.dart';
+import 'src/utils/flutter_sdk.dart';
 
 // ignore_for_file: implementation_imports
 
 void main() async {
   var projectPath = Platform.environment[projectDefineKey];
+  var appToolPath = Platform.environment[appToolPathKey];
   var flutterSdkPath = Platform.environment[flutterSdkDefineKey];
 
   if (projectPath == null || flutterSdkPath == null) {
@@ -29,6 +30,7 @@ void main() async {
   }
   var appContext = AppContext(
     logger: remoteLoggerClient ?? LogClient.print(),
+    appToolDirectory: appToolPath != null ? Directory(appToolPath) : null,
   );
   var project = Project(
     appContext,

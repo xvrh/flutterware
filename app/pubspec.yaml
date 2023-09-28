@@ -15,7 +15,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 0.2.1+1
+version: 0.3.0+1
 
 environment:
   sdk: '^3.1.0'
@@ -40,7 +40,6 @@ dependencies:
   file_selector:
   flutter:
     sdk: flutter
-  flutter_highlight:
   flutter_markdown:
   flutter_svg:
   flutter_web_plugins:
@@ -72,16 +71,12 @@ dependencies:
       ref: master
   pub_semver:
   pubspec_parse:
-  pubviz:
-    git:
-      url: https://github.com/xvrh/pubviz.git
-      ref: 8c8732b8856ec403a9b91a976aabde8bc0358063
-    #path: ../../pubviz
   rxdart:
   shelf:
   shelf_router:
   shelf_web_socket:
   stream_channel:
+  stream_transform:
   url_launcher:
   vector_math:
   watcher:

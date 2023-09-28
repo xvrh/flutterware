@@ -1,14 +1,12 @@
 import 'dart:io';
-import 'package:path/path.dart' as p;
 import 'package:process_runner/process_runner.dart';
-import 'code_style/list_files.dart';
+import 'package:project_tools/project_tools.dart';
 
 void main() async {
   var process = ProcessRunner(printOutputDefault: true);
-  for (var project in allFilesInRepository()
-      .whereType<File>()
-      .where((f) => p.basename(f.path) == 'pubspec.yaml')) {
-    await process.runProcess(['flutter', 'pub', 'get'],
-        workingDirectory: project.parent, failOk: true);
+  var flutterSdk = FlutterSdk.current;
+  for (var project in DartProject.find(Directory.current)) {
+    await process.runProcess([flutterSdk.flutter, 'pub', 'get'],
+        workingDirectory: project.directory, failOk: true);
   }
 }

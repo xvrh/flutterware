@@ -94,9 +94,9 @@ class _$TestRun extends TestRun {
       required this.screens,
       this.result})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(test, 'TestRun', 'test');
-    BuiltValueNullFieldError.checkNotNull(args, 'TestRun', 'args');
-    BuiltValueNullFieldError.checkNotNull(screens, 'TestRun', 'screens');
+    BuiltValueNullFieldError.checkNotNull(test, r'TestRun', 'test');
+    BuiltValueNullFieldError.checkNotNull(args, r'TestRun', 'args');
+    BuiltValueNullFieldError.checkNotNull(screens, r'TestRun', 'screens');
   }
 
   @override
@@ -118,14 +118,18 @@ class _$TestRun extends TestRun {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc($jc($jc(0, test.hashCode), args.hashCode), screens.hashCode),
-        result.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, test.hashCode);
+    _$hash = $jc(_$hash, args.hashCode);
+    _$hash = $jc(_$hash, screens.hashCode);
+    _$hash = $jc(_$hash, result.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('TestRun')
+    return (newBuiltValueToStringHelper(r'TestRun')
           ..add('test', test)
           ..add('args', args)
           ..add('screens', screens)
@@ -204,7 +208,7 @@ class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
         _result?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            'TestRun', _$failedField, e.toString());
+            r'TestRun', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -213,4 +217,4 @@ class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

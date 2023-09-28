@@ -5,7 +5,6 @@ import 'model/rectangle.dart';
 export 'model/accessibility.dart';
 export 'model/device_info.dart';
 export 'model/locale.dart';
-export 'model/message.dart';
 export 'model/rectangle.dart';
 export 'model/run_args.dart';
 export 'model/run_result.dart';

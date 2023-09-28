@@ -1,12 +1,10 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:pub_scores/pub_scores.dart';
-import 'package:pubviz/open.dart' as pubviz;
 import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
-import '../utils/ui/message_dialog.dart';
 import 'detail.dart';
 import 'model/package_imports.dart';
 import 'model/service.dart';
@@ -110,23 +108,6 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                 PopupMenuButton(
                   elevation: 2,
                   itemBuilder: (context) => [
-                    PopupMenuItem(
-                      child: Text('Visualize in browser'),
-                      onTap: () async {
-                        try {
-                          await withLoader((_) async {
-                            await pubviz.openBrowser(project.absolutePath,
-                                sdkDirectory: project.flutterSdkPath.binDir);
-                          }, message: 'Opening Pubviz in browser...');
-                        } catch (e) {
-                          if (mounted) {
-                            await showMessageDialog(context,
-                                message: 'Failed to collect dependencies. '
-                                    'Run "flutter pub get" in the project.');
-                          }
-                        }
-                      },
-                    ),
                     PopupMenuItem(
                       child: Text('Reload'),
                       onTap: () {

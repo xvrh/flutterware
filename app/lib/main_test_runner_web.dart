@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:html';
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/web.dart'; // ignore: implementation_imports
+// ignore: implementation_imports
+import 'package:flutterware/src/web.dart';
 import 'package:rxdart/rxdart.dart';
 import 'src/test_runner/app_connected.dart';
 import 'src/test_runner/protocol/api.dart';

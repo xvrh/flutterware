@@ -451,7 +451,7 @@ class _$NewScreen extends NewScreen {
       this.imageBase64,
       this.imageFile})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(screen, 'NewScreen', 'screen');
+    BuiltValueNullFieldError.checkNotNull(screen, r'NewScreen', 'screen');
   }
 
   @override
@@ -474,17 +474,19 @@ class _$NewScreen extends NewScreen {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc(
-            $jc($jc($jc(0, screen.hashCode), parent.hashCode),
-                parentRectangle.hashCode),
-            imageBase64.hashCode),
-        imageFile.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, screen.hashCode);
+    _$hash = $jc(_$hash, parent.hashCode);
+    _$hash = $jc(_$hash, parentRectangle.hashCode);
+    _$hash = $jc(_$hash, imageBase64.hashCode);
+    _$hash = $jc(_$hash, imageFile.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('NewScreen')
+    return (newBuiltValueToStringHelper(r'NewScreen')
           ..add('screen', screen)
           ..add('parent', parent)
           ..add('parentRectangle', parentRectangle)
@@ -571,7 +573,7 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
         _imageFile?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            'NewScreen', _$failedField, e.toString());
+            r'NewScreen', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -593,9 +595,9 @@ class _$ImageFile extends ImageFile {
 
   _$ImageFile._({required this.path, required this.width, required this.height})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(path, 'ImageFile', 'path');
-    BuiltValueNullFieldError.checkNotNull(width, 'ImageFile', 'width');
-    BuiltValueNullFieldError.checkNotNull(height, 'ImageFile', 'height');
+    BuiltValueNullFieldError.checkNotNull(path, r'ImageFile', 'path');
+    BuiltValueNullFieldError.checkNotNull(width, r'ImageFile', 'width');
+    BuiltValueNullFieldError.checkNotNull(height, r'ImageFile', 'height');
   }
 
   @override
@@ -616,13 +618,17 @@ class _$ImageFile extends ImageFile {
 
   @override
   int get hashCode {
-    return $jf(
-        $jc($jc($jc(0, path.hashCode), width.hashCode), height.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, path.hashCode);
+    _$hash = $jc(_$hash, width.hashCode);
+    _$hash = $jc(_$hash, height.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('ImageFile')
+    return (newBuiltValueToStringHelper(r'ImageFile')
           ..add('path', path)
           ..add('width', width)
           ..add('height', height))
@@ -676,11 +682,11 @@ class ImageFileBuilder implements Builder<ImageFile, ImageFileBuilder> {
     final _$result = _$v ??
         _$ImageFile._(
             path: BuiltValueNullFieldError.checkNotNull(
-                path, 'ImageFile', 'path'),
+                path, r'ImageFile', 'path'),
             width: BuiltValueNullFieldError.checkNotNull(
-                width, 'ImageFile', 'width'),
+                width, r'ImageFile', 'width'),
             height: BuiltValueNullFieldError.checkNotNull(
-                height, 'ImageFile', 'height'));
+                height, r'ImageFile', 'height'));
     replace(_$result);
     return _$result;
   }
@@ -723,10 +729,10 @@ class _$Screen extends Screen {
       this.bottomBrightness,
       this.supportedLocales})
       : super._() {
-    BuiltValueNullFieldError.checkNotNull(id, 'Screen', 'id');
-    BuiltValueNullFieldError.checkNotNull(texts, 'Screen', 'texts');
-    BuiltValueNullFieldError.checkNotNull(next, 'Screen', 'next');
-    BuiltValueNullFieldError.checkNotNull(name, 'Screen', 'name');
+    BuiltValueNullFieldError.checkNotNull(id, r'Screen', 'id');
+    BuiltValueNullFieldError.checkNotNull(texts, r'Screen', 'texts');
+    BuiltValueNullFieldError.checkNotNull(next, r'Screen', 'next');
+    BuiltValueNullFieldError.checkNotNull(name, r'Screen', 'name');
   }
 
   @override
@@ -754,27 +760,24 @@ class _$Screen extends Screen {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc(
-            $jc(
-                $jc(
-                    $jc(
-                        $jc(
-                            $jc(
-                                $jc($jc($jc(0, id.hashCode), texts.hashCode),
-                                    next.hashCode),
-                                splitName.hashCode),
-                            name.hashCode),
-                        imageBytes.hashCode),
-                    imageFile.hashCode),
-                topBrightness.hashCode),
-            bottomBrightness.hashCode),
-        supportedLocales.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, id.hashCode);
+    _$hash = $jc(_$hash, texts.hashCode);
+    _$hash = $jc(_$hash, next.hashCode);
+    _$hash = $jc(_$hash, splitName.hashCode);
+    _$hash = $jc(_$hash, name.hashCode);
+    _$hash = $jc(_$hash, imageBytes.hashCode);
+    _$hash = $jc(_$hash, imageFile.hashCode);
+    _$hash = $jc(_$hash, topBrightness.hashCode);
+    _$hash = $jc(_$hash, bottomBrightness.hashCode);
+    _$hash = $jc(_$hash, supportedLocales.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('Screen')
+    return (newBuiltValueToStringHelper(r'Screen')
           ..add('id', id)
           ..add('texts', texts)
           ..add('next', next)
@@ -876,12 +879,12 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
     try {
       _$result = _$v ??
           _$Screen._(
-              id: BuiltValueNullFieldError.checkNotNull(id, 'Screen', 'id'),
+              id: BuiltValueNullFieldError.checkNotNull(id, r'Screen', 'id'),
               texts: texts.build(),
               next: next.build(),
               splitName: splitName,
-              name:
-                  BuiltValueNullFieldError.checkNotNull(name, 'Screen', 'name'),
+              name: BuiltValueNullFieldError.checkNotNull(
+                  name, r'Screen', 'name'),
               imageBytes: imageBytes,
               imageFile: _imageFile?.build(),
               topBrightness: topBrightness,
@@ -901,7 +904,8 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
         _$failedField = 'supportedLocales';
         _supportedLocales?.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError('Screen', _$failedField, e.toString());
+        throw BuiltValueNestedFieldError(
+            r'Screen', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -942,12 +946,12 @@ class _$TextInfo extends TextInfo {
       this.fontWeight})
       : super._() {
     BuiltValueNullFieldError.checkNotNull(
-        translationKey, 'TextInfo', 'translationKey');
+        translationKey, r'TextInfo', 'translationKey');
     BuiltValueNullFieldError.checkNotNull(
-        rawTranslation, 'TextInfo', 'rawTranslation');
-    BuiltValueNullFieldError.checkNotNull(text, 'TextInfo', 'text');
+        rawTranslation, r'TextInfo', 'rawTranslation');
+    BuiltValueNullFieldError.checkNotNull(text, r'TextInfo', 'text');
     BuiltValueNullFieldError.checkNotNull(
-        globalRectangle, 'TextInfo', 'globalRectangle');
+        globalRectangle, r'TextInfo', 'globalRectangle');
   }
 
   @override
@@ -973,25 +977,22 @@ class _$TextInfo extends TextInfo {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc(
-            $jc(
-                $jc(
-                    $jc(
-                        $jc(
-                            $jc($jc(0, translationKey.hashCode),
-                                rawTranslation.hashCode),
-                            text.hashCode),
-                        globalRectangle.hashCode),
-                    fontFamily.hashCode),
-                fontSize.hashCode),
-            color.hashCode),
-        fontWeight.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, translationKey.hashCode);
+    _$hash = $jc(_$hash, rawTranslation.hashCode);
+    _$hash = $jc(_$hash, text.hashCode);
+    _$hash = $jc(_$hash, globalRectangle.hashCode);
+    _$hash = $jc(_$hash, fontFamily.hashCode);
+    _$hash = $jc(_$hash, fontSize.hashCode);
+    _$hash = $jc(_$hash, color.hashCode);
+    _$hash = $jc(_$hash, fontWeight.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('TextInfo')
+    return (newBuiltValueToStringHelper(r'TextInfo')
           ..add('translationKey', translationKey)
           ..add('rawTranslation', rawTranslation)
           ..add('text', text)
@@ -1081,11 +1082,11 @@ class TextInfoBuilder implements Builder<TextInfo, TextInfoBuilder> {
       _$result = _$v ??
           _$TextInfo._(
               translationKey: BuiltValueNullFieldError.checkNotNull(
-                  translationKey, 'TextInfo', 'translationKey'),
+                  translationKey, r'TextInfo', 'translationKey'),
               rawTranslation: BuiltValueNullFieldError.checkNotNull(
-                  rawTranslation, 'TextInfo', 'rawTranslation'),
+                  rawTranslation, r'TextInfo', 'rawTranslation'),
               text: BuiltValueNullFieldError.checkNotNull(
-                  text, 'TextInfo', 'text'),
+                  text, r'TextInfo', 'text'),
               globalRectangle: globalRectangle.build(),
               fontFamily: fontFamily,
               fontSize: fontSize,
@@ -1098,7 +1099,7 @@ class TextInfoBuilder implements Builder<TextInfo, TextInfoBuilder> {
         globalRectangle.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            'TextInfo', _$failedField, e.toString());
+            r'TextInfo', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -1117,7 +1118,7 @@ class _$ScreenLink extends ScreenLink {
       (ScreenLinkBuilder()..update(updates))._build();
 
   _$ScreenLink._({required this.to, this.tapRect}) : super._() {
-    BuiltValueNullFieldError.checkNotNull(to, 'ScreenLink', 'to');
+    BuiltValueNullFieldError.checkNotNull(to, r'ScreenLink', 'to');
   }
 
   @override
@@ -1135,12 +1136,16 @@ class _$ScreenLink extends ScreenLink {
 
   @override
   int get hashCode {
-    return $jf($jc($jc(0, to.hashCode), tapRect.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, to.hashCode);
+    _$hash = $jc(_$hash, tapRect.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('ScreenLink')
+    return (newBuiltValueToStringHelper(r'ScreenLink')
           ..add('to', to)
           ..add('tapRect', tapRect))
         .toString();
@@ -1189,7 +1194,8 @@ class ScreenLinkBuilder implements Builder<ScreenLink, ScreenLinkBuilder> {
     try {
       _$result = _$v ??
           _$ScreenLink._(
-              to: BuiltValueNullFieldError.checkNotNull(to, 'ScreenLink', 'to'),
+              to: BuiltValueNullFieldError.checkNotNull(
+                  to, r'ScreenLink', 'to'),
               tapRect: _tapRect?.build());
     } catch (_) {
       late String _$failedField;
@@ -1198,7 +1204,7 @@ class ScreenLinkBuilder implements Builder<ScreenLink, ScreenLinkBuilder> {
         _tapRect?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            'ScreenLink', _$failedField, e.toString());
+            r'ScreenLink', _$failedField, e.toString());
       }
       rethrow;
     }
@@ -1207,4 +1213,4 @@ class ScreenLinkBuilder implements Builder<ScreenLink, ScreenLinkBuilder> {
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

@@ -1,5 +1,5 @@
 import 'package:built_collection/built_collection.dart';
-import '../connection.dart';
+import '../../../utils/connection/connection.dart';
 import '../models.dart' show TestReference;
 
 class ListingClient {

@@ -9,6 +9,7 @@ import 'ui/panel.dart';
 import 'ui/service.dart';
 import 'ui/toasts_overlay.dart';
 
+/// Wrapper around the application to add a hidden developer UI beneath it.
 class Devbar extends StatefulWidget {
   final Widget child;
   final List<FutureOr<DevbarPlugin> Function(DevbarState state)> plugins;
@@ -68,52 +69,53 @@ class DevbarState extends State<Devbar> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<void>(
-        future: _loadPluginsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            // Should never appears since we are deferring the first frame
-            return Container(color: Colors.red);
-          }
+      future: _loadPluginsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          // Should never appears since we are deferring the first frame
+          return Container(color: Colors.red);
+        }
 
-          return FeatureFlagDevbar(
-            child: Directionality(
-              textDirection: TextDirection.ltr,
-              child: Stack(
-                children: <Widget>[
-                  Positioned.fill(
-                    child: ValueStreamBuilder<OpenState?>(
-                      stream: ui.openState,
-                      builder: (context, openState) {
-                        return AnimatedOpacity(
-                          duration: const Duration(milliseconds: 500),
-                          opacity: openState == null ? 0 : 1,
-                          child: DevbarPanel(),
-                        );
-                      },
+        return FeatureFlagDevbar(
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Stack(
+              children: <Widget>[
+                Positioned.fill(
+                  child: ValueStreamBuilder<OpenState?>(
+                    stream: ui.openState,
+                    builder: (context, openState) {
+                      return AnimatedOpacity(
+                        duration: const Duration(milliseconds: 500),
+                        opacity: openState == null ? 0 : 1,
+                        child: DevbarPanel(),
+                      );
+                    },
+                  ),
+                ),
+                DevbarAppWrapper(
+                  child: KeyedSubtree(
+                    key: _appKey,
+                    child: widget.child,
+                  ),
+                ),
+                Positioned.fill(child: OverlayDialog()),
+                Visibility(
+                  visible: widget.overlayVisible,
+                  child: AddDevbarButton(
+                    button: DevbarIcon(
+                      onTap: ui.open,
+                      icon: Icons.bug_report,
                     ),
                   ),
-                  DevbarAppWrapper(
-                    child: KeyedSubtree(
-                      key: _appKey,
-                      child: widget.child,
-                    ),
-                  ),
-                  Positioned.fill(child: OverlayDialog()),
-                  Visibility(
-                    visible: widget.overlayVisible,
-                    child: AddDevbarButton(
-                      button: DevbarIcon(
-                        onTap: ui.open,
-                        icon: Icons.bug_report,
-                      ),
-                    ),
-                  ),
-                  ToastsOverlay(),
-                ],
-              ),
+                ),
+                ToastsOverlay(),
+              ],
             ),
-          );
-        });
+          ),
+        );
+      },
+    );
   }
 
   @override

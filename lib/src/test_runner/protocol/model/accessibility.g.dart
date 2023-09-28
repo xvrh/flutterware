@@ -137,21 +137,21 @@ class _$AccessibilityConfig extends AccessibilityConfig {
       required this.onOffSwitchLabels})
       : super._() {
     BuiltValueNullFieldError.checkNotNull(
-        textScale, 'AccessibilityConfig', 'textScale');
+        textScale, r'AccessibilityConfig', 'textScale');
     BuiltValueNullFieldError.checkNotNull(
-        boldText, 'AccessibilityConfig', 'boldText');
+        boldText, r'AccessibilityConfig', 'boldText');
     BuiltValueNullFieldError.checkNotNull(
-        accessibleNavigation, 'AccessibilityConfig', 'accessibleNavigation');
+        accessibleNavigation, r'AccessibilityConfig', 'accessibleNavigation');
     BuiltValueNullFieldError.checkNotNull(
-        disableAnimations, 'AccessibilityConfig', 'disableAnimations');
+        disableAnimations, r'AccessibilityConfig', 'disableAnimations');
     BuiltValueNullFieldError.checkNotNull(
-        highContrast, 'AccessibilityConfig', 'highContrast');
+        highContrast, r'AccessibilityConfig', 'highContrast');
     BuiltValueNullFieldError.checkNotNull(
-        invertColors, 'AccessibilityConfig', 'invertColors');
+        invertColors, r'AccessibilityConfig', 'invertColors');
     BuiltValueNullFieldError.checkNotNull(
-        reduceMotion, 'AccessibilityConfig', 'reduceMotion');
+        reduceMotion, r'AccessibilityConfig', 'reduceMotion');
     BuiltValueNullFieldError.checkNotNull(
-        onOffSwitchLabels, 'AccessibilityConfig', 'onOffSwitchLabels');
+        onOffSwitchLabels, r'AccessibilityConfig', 'onOffSwitchLabels');
   }
 
   @override
@@ -179,23 +179,22 @@ class _$AccessibilityConfig extends AccessibilityConfig {
 
   @override
   int get hashCode {
-    return $jf($jc(
-        $jc(
-            $jc(
-                $jc(
-                    $jc(
-                        $jc($jc($jc(0, textScale.hashCode), boldText.hashCode),
-                            accessibleNavigation.hashCode),
-                        disableAnimations.hashCode),
-                    highContrast.hashCode),
-                invertColors.hashCode),
-            reduceMotion.hashCode),
-        onOffSwitchLabels.hashCode));
+    var _$hash = 0;
+    _$hash = $jc(_$hash, textScale.hashCode);
+    _$hash = $jc(_$hash, boldText.hashCode);
+    _$hash = $jc(_$hash, accessibleNavigation.hashCode);
+    _$hash = $jc(_$hash, disableAnimations.hashCode);
+    _$hash = $jc(_$hash, highContrast.hashCode);
+    _$hash = $jc(_$hash, invertColors.hashCode);
+    _$hash = $jc(_$hash, reduceMotion.hashCode);
+    _$hash = $jc(_$hash, onOffSwitchLabels.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper('AccessibilityConfig')
+    return (newBuiltValueToStringHelper(r'AccessibilityConfig')
           ..add('textScale', textScale)
           ..add('boldText', boldText)
           ..add('accessibleNavigation', accessibleNavigation)
@@ -283,23 +282,23 @@ class AccessibilityConfigBuilder
     final _$result = _$v ??
         _$AccessibilityConfig._(
             textScale: BuiltValueNullFieldError.checkNotNull(
-                textScale, 'AccessibilityConfig', 'textScale'),
+                textScale, r'AccessibilityConfig', 'textScale'),
             boldText: BuiltValueNullFieldError.checkNotNull(
-                boldText, 'AccessibilityConfig', 'boldText'),
+                boldText, r'AccessibilityConfig', 'boldText'),
             accessibleNavigation: BuiltValueNullFieldError.checkNotNull(
-                accessibleNavigation, 'AccessibilityConfig', 'accessibleNavigation'),
+                accessibleNavigation, r'AccessibilityConfig', 'accessibleNavigation'),
             disableAnimations: BuiltValueNullFieldError.checkNotNull(
-                disableAnimations, 'AccessibilityConfig', 'disableAnimations'),
+                disableAnimations, r'AccessibilityConfig', 'disableAnimations'),
             highContrast: BuiltValueNullFieldError.checkNotNull(
-                highContrast, 'AccessibilityConfig', 'highContrast'),
+                highContrast, r'AccessibilityConfig', 'highContrast'),
             invertColors: BuiltValueNullFieldError.checkNotNull(
-                invertColors, 'AccessibilityConfig', 'invertColors'),
+                invertColors, r'AccessibilityConfig', 'invertColors'),
             reduceMotion: BuiltValueNullFieldError.checkNotNull(
-                reduceMotion, 'AccessibilityConfig', 'reduceMotion'),
-            onOffSwitchLabels: BuiltValueNullFieldError.checkNotNull(onOffSwitchLabels, 'AccessibilityConfig', 'onOffSwitchLabels'));
+                reduceMotion, r'AccessibilityConfig', 'reduceMotion'),
+            onOffSwitchLabels: BuiltValueNullFieldError.checkNotNull(onOffSwitchLabels, r'AccessibilityConfig', 'onOffSwitchLabels'));
     replace(_$result);
     return _$result;
   }
 }
 
-// ignore_for_file: always_put_control_body_on_new_line,always_specify_types,annotate_overrides,avoid_annotating_with_dynamic,avoid_as,avoid_catches_without_on_clauses,avoid_returning_this,deprecated_member_use_from_same_package,lines_longer_than_80_chars,no_leading_underscores_for_local_identifiers,omit_local_variable_types,prefer_expression_function_bodies,sort_constructors_first,test_types_in_equals,unnecessary_const,unnecessary_new
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint
