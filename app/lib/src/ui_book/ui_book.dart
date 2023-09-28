@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import '../app/paths.dart' as paths;
 import '../project.dart';

@@ -1,15 +1,13 @@
 import 'dart:io';
 import 'dart:math';
-
-import 'package:flutterware_app/src/project.dart';
-import 'package:flutterware_app/src/ui_book/service/server.dart';
-import 'package:flutterware_app/src/utils/daemon/protocol.dart';
-import 'package:flutterware_app/src/utils/flutter_run_process.dart';
 import 'package:logging/logging.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:path/path.dart' as p;
-
+import 'package:rxdart/rxdart.dart';
+import '../../project.dart';
 import '../../utils/connection.dart';
+import '../../utils/daemon/protocol.dart';
+import '../../utils/flutter_run_process.dart';
+import 'server.dart';
 
 final _logger = Logger('ui_book_service');
 

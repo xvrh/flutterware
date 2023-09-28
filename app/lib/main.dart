@@ -6,8 +6,8 @@ import 'package:logging/logging.dart';
 import 'src/app/app.dart';
 import 'src/constants.dart';
 import 'src/context.dart';
-import 'src/utils/flutter_sdk.dart';
 import 'src/project.dart';
+import 'src/utils/flutter_sdk.dart';
 
 // ignore_for_file: implementation_imports
 

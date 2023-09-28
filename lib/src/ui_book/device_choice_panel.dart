@@ -1,8 +1,6 @@
 import 'dart:math';
-
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/third_party/device_frame/lib/device_frame.dart';
-
+import '../third_party/device_frame/lib/device_frame.dart';
 import 'default_device_list.dart';
 import 'toolbar.dart';
 

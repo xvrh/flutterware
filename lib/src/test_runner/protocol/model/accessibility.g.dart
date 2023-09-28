@@ -7,7 +7,7 @@ part of 'accessibility.dart';
 // **************************************************************************
 
 Serializer<AccessibilityConfig> _$accessibilityConfigSerializer =
-    new _$AccessibilityConfigSerializer();
+    _$AccessibilityConfigSerializer();
 
 class _$AccessibilityConfigSerializer
     implements StructuredSerializer<AccessibilityConfig> {
@@ -57,7 +57,7 @@ class _$AccessibilityConfigSerializer
   AccessibilityConfig deserialize(
       Serializers serializers, Iterable<Object?> serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    final result = new AccessibilityConfigBuilder();
+    final result = AccessibilityConfigBuilder();
 
     final iterator = serialized.iterator;
     while (iterator.moveNext()) {
@@ -124,7 +124,7 @@ class _$AccessibilityConfig extends AccessibilityConfig {
 
   factory _$AccessibilityConfig(
           [void Function(AccessibilityConfigBuilder)? updates]) =>
-      (new AccessibilityConfigBuilder()..update(updates))._build();
+      (AccessibilityConfigBuilder()..update(updates))._build();
 
   _$AccessibilityConfig._(
       {required this.textScale,
@@ -161,7 +161,7 @@ class _$AccessibilityConfig extends AccessibilityConfig {
 
   @override
   AccessibilityConfigBuilder toBuilder() =>
-      new AccessibilityConfigBuilder()..replace(this);
+      AccessibilityConfigBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -280,7 +280,7 @@ class AccessibilityConfigBuilder
 
   _$AccessibilityConfig _build() {
     final _$result = _$v ??
-        new _$AccessibilityConfig._(
+        _$AccessibilityConfig._(
             textScale: BuiltValueNullFieldError.checkNotNull(
                 textScale, r'AccessibilityConfig', 'textScale'),
             boldText: BuiltValueNullFieldError.checkNotNull(
@@ -295,8 +295,7 @@ class AccessibilityConfigBuilder
                 invertColors, r'AccessibilityConfig', 'invertColors'),
             reduceMotion: BuiltValueNullFieldError.checkNotNull(
                 reduceMotion, r'AccessibilityConfig', 'reduceMotion'),
-            onOffSwitchLabels:
-                BuiltValueNullFieldError.checkNotNull(onOffSwitchLabels, r'AccessibilityConfig', 'onOffSwitchLabels'));
+            onOffSwitchLabels: BuiltValueNullFieldError.checkNotNull(onOffSwitchLabels, r'AccessibilityConfig', 'onOffSwitchLabels'));
     replace(_$result);
     return _$result;
   }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/parameters.dart';
+import 'parameters.dart';
 
 class ParametersEditor extends StatelessWidget {
   final EditableParameters parameters;

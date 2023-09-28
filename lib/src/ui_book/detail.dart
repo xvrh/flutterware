@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/device_choice_panel.dart';
 import '../third_party/device_frame/lib/device_frame.dart';
 import 'app.dart';
-import 'parameters_editor.dart';
+import 'device_choice_panel.dart';
 import 'parameters.dart';
+import 'parameters_editor.dart';
 import 'toolbar.dart';
 import 'ui_book.dart';
 

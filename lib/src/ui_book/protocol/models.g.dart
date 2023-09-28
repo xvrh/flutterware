@@ -9,7 +9,7 @@ part of 'models.dart';
 class _$ScreenConfiguration extends ScreenConfiguration {
   factory _$ScreenConfiguration(
           [void Function(ScreenConfigurationBuilder)? updates]) =>
-      (new ScreenConfigurationBuilder()..update(updates))._build();
+      (ScreenConfigurationBuilder()..update(updates))._build();
 
   _$ScreenConfiguration._() : super._();
 
@@ -20,7 +20,7 @@ class _$ScreenConfiguration extends ScreenConfiguration {
 
   @override
   ScreenConfigurationBuilder toBuilder() =>
-      new ScreenConfigurationBuilder()..replace(this);
+      ScreenConfigurationBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
@@ -60,7 +60,7 @@ class ScreenConfigurationBuilder
   ScreenConfiguration build() => _build();
 
   _$ScreenConfiguration _build() {
-    final _$result = _$v ?? new _$ScreenConfiguration._();
+    final _$result = _$v ?? _$ScreenConfiguration._();
     replace(_$result);
     return _$result;
   }

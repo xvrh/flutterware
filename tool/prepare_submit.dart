@@ -1,7 +1,11 @@
-import 'code_style/fix_absolute_import.dart' as fix_absolute_import;
-import 'code_style/fix_import_order.dart' as fix_import_order;
+import 'dart:io';
+import 'package:project_tools/project_tools.dart';
 
 void main() {
-  fix_absolute_import.main();
-  fix_import_order.main();
+  for (var project in DartProject.find(Directory.current)) {
+    for (var modifiedFile in formatProject(project)) {
+      print('Formatted: ${modifiedFile.project.packageName}:'
+          '${modifiedFile.relativePath}');
+    }
+  }
 }

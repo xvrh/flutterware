@@ -1,17 +1,17 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutterware_app/src/ui_book/service/service.dart';
 import 'package:path/path.dart' as p;
 import 'package:pubspec_parse/pubspec_parse.dart';
 import 'context.dart';
 import 'dependencies/model/service.dart';
 import 'drawing/model/service.dart';
-import 'utils/flutter_sdk.dart';
 import 'icon/model/service.dart';
 import 'overview/service.dart';
 import 'test_runner/model/service.dart';
+import 'ui_book/service/service.dart';
 import 'utils/async_value.dart';
+import 'utils/flutter_sdk.dart';
 
 export 'package:pubspec_parse/pubspec_parse.dart' show Pubspec;
 

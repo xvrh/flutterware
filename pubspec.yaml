@@ -41,5 +41,9 @@ dev_dependencies:
   json_serializable:
   lints:
   process_runner:
+  project_tools:
+    git:
+      url: https://github.com/xvrh/project_tools.dart.git
+      ref: '76d200c'
   vendor:
   yaml:
