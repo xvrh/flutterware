@@ -12,7 +12,7 @@ import 'ui/toasts_overlay.dart';
 /// Wrapper around the application to add a hidden developer UI beneath it.
 class Devbar extends StatefulWidget {
   final Widget child;
-  final List<FutureOr<DevbarPlugin> Function(DevbarState state)> plugins;
+  final List<DevbarPluginFactory> plugins;
   final List<FeatureFlagValue> flags;
   final bool overlayVisible;
 
@@ -127,6 +127,9 @@ class DevbarState extends State<Devbar> {
     super.dispose();
   }
 }
+
+typedef DevbarPluginFactory = FutureOr<DevbarPlugin> Function(
+    DevbarState state);
 
 abstract class DevbarPlugin {
   void dispose();

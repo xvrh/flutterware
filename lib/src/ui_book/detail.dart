@@ -27,7 +27,7 @@ class DetailView extends StatefulWidget {
 
 class _DetailViewState extends State<DetailView> implements UIBookState {
   final _topBarPickers = <String, PickerParameter>{};
-  GlobalKey _appKey = GlobalKey();
+  Key _appKey = UniqueKey();
   final _knobsPanelKey = GlobalKey();
   bool _isDuringAppBuild = false;
 
@@ -69,7 +69,7 @@ class _DetailViewState extends State<DetailView> implements UIBookState {
 
   void _onRefreshParameter() {
     setState(() {
-      _appKey = GlobalKey();
+      _appKey = UniqueKey();
     });
   }
 

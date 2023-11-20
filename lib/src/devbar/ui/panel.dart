@@ -5,23 +5,81 @@ import '../utils/animated_clip_rrect.dart';
 import 'buttons_overlay.dart';
 import 'service.dart';
 
-class DevbarPanel extends StatelessWidget {
+class DevbarPanel extends StatefulWidget {
   const DevbarPanel({Key? key}) : super(key: key);
 
   @override
+  State<DevbarPanel> createState() => _DevbarPanelState();
+}
+
+class _DevbarPanelState extends State<DevbarPanel> {
+  final _router = _RouterDelegate();
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    // This uses the router version on purpose
+    // This is important to prevent stealing the deeplinking behaviour from the main app.
+    return MaterialApp.router(
+      routerDelegate: _router,
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true),
-      home: _Home(this),
     );
   }
 }
 
-class _Home extends StatelessWidget {
-  final DevbarPanel parent;
+class _RouterDelegate extends RouterDelegate<Object>
+    with ChangeNotifier, PopNavigatorRouterDelegateMixin<Object>
+    implements RouteInformationParser<Object> {
+  @override
+  Widget build(BuildContext context) {
+    var page = MaterialPage(
+      child: _Home(),
+    );
+    return Navigator(
+      requestFocus: false,
+      key: navigatorKey,
+      pages: [
+        page,
+      ],
+      onPopPage: (route, result) {
+        if (!route.didPop(result)) {
+          return false;
+        }
+        notifyListeners();
+        return true;
+      },
+      onGenerateRoute: (r) {
+        throw UnimplementedError();
+      },
+    );
+  }
 
-  _Home(this.parent, {Key? key}) : super(key: key);
+  @override
+  final navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  Future<void> setNewRoutePath(Object configuration) async {}
+
+  @override
+  Future<Object> parseRouteInformation(
+      RouteInformation routeInformation) async {
+    return Object();
+  }
+
+  @override
+  Future<Object> parseRouteInformationWithDependencies(
+      RouteInformation routeInformation, BuildContext context) {
+    return parseRouteInformation(routeInformation);
+  }
+
+  @override
+  RouteInformation restoreRouteInformation(Object configuration) {
+    return RouteInformation();
+  }
+}
+
+class _Home extends StatelessWidget {
+  _Home({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
