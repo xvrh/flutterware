@@ -56,10 +56,10 @@ class _VariableEditor extends StatelessWidget {
           var variable = this.variable;
           if (variable is DevbarVariable<bool>) {
             return _BoolEditor(variable);
-          } else if (variable is DevbarVariable<String>) {
-            return _TextEditor(variable);
           } else if (variable is DevbarPickerVariable) {
             return _PickerEditor(variable);
+          } else if (variable is DevbarVariable<String>) {
+            return _TextEditor(variable);
           } else {
             return ErrorWidget('Unknown variable ${variable.runtimeType}');
           }

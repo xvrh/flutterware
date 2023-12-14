@@ -19,7 +19,7 @@ class AddDevbarVariable {
       _BoolWidget(
           name: name, builder: builder, defaultValue: defaultValue, key: key);
 
-  static Widget picker<T>(
+  static Widget picker<T extends Object>(
           {required String name,
           String? description,
           required Widget Function(BuildContext, T) builder,
