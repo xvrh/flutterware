@@ -11,3 +11,4 @@ export 'src/devbar/ui/button.dart'
 export 'src/devbar/ui/service.dart'
     show DevbarButtonHandle, DevbarButtonPosition, DevbarTab;
 export 'src/devbar/ui/toasts_overlay.dart' show Toast;
+export 'src/devbar/knobs/knobs.dart' show AddDevbarKnobs, DevbarKnobs;

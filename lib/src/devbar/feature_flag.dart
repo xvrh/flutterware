@@ -9,8 +9,7 @@ class FeatureFlag<T> {
 
   final T _defaultValue;
 
-  FeatureFlag(this.name, this._defaultValue,
-      {this.description, bool? addToDevbar})
+  FeatureFlag(this.name, this._defaultValue, {this.description})
       : assert(T != dynamic && T != Null);
 
   FeatureFlagValue<T> withValue(T newValue) =>
