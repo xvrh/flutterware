@@ -9,7 +9,7 @@ class Toolbar extends StatelessWidget {
 
   final List<Widget> children;
 
-  const Toolbar({Key? key, required this.children}) : super(key: key);
+  const Toolbar({super.key, required this.children});
 
   @override
   Widget build(BuildContext context) {
@@ -74,15 +74,14 @@ class ToolbarDropdown<T> extends StatelessWidget {
   final bool highlight;
 
   const ToolbarDropdown({
-    Key? key,
+    super.key,
     required this.value,
     required this.onChanged,
     required this.items,
     bool? showArrow,
     bool? highlight,
   })  : showArrow = showArrow ?? true,
-        highlight = highlight ?? false,
-        super(key: key);
+        highlight = highlight ?? false;
 
   @override
   Widget build(BuildContext context) {
@@ -123,13 +122,13 @@ class ToolbarPicker<T> extends StatelessWidget {
   final Map<T, Widget>? itemTiles;
 
   const ToolbarPicker({
-    Key? key,
+    super.key,
     this.title,
     required this.value,
     required this.onChanged,
     required this.items,
     this.itemTiles,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -225,8 +224,7 @@ class ToolbarPanel extends StatefulWidget {
   final Widget button;
   final Widget panel;
 
-  const ToolbarPanel({Key? key, required this.button, required this.panel})
-      : super(key: key);
+  const ToolbarPanel({super.key, required this.button, required this.panel});
 
   @override
   State<ToolbarPanel> createState() => ToolbarPanelState();
@@ -296,10 +294,9 @@ class _Menu extends StatelessWidget {
   final ToolbarPanelState panelState;
 
   const _Menu({
-    Key? key,
     required this.link,
     required this.panelState,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -330,10 +327,9 @@ class _Menu extends StatelessWidget {
 class _ToolbarPanelProvider extends InheritedWidget {
   final ToolbarPanelState panel;
   const _ToolbarPanelProvider({
-    Key? key,
-    required Widget child,
+    required super.child,
     required this.panel,
-  }) : super(key: key, child: child);
+  });
 
   @override
   bool updateShouldNotify(_ToolbarPanelProvider oldWidget) {

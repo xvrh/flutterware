@@ -18,7 +18,7 @@ class State {
 }
 
 class GraphMatrix extends GraphBasic {
-  GraphMatrix({required List<NodeInput> list}) : super(list: list);
+  GraphMatrix({required super.list});
 
   bool joinHasUnresolvedIncomes(NodeOutput item) {
     return item.passedIncomes.length != incomes(item.id).length;

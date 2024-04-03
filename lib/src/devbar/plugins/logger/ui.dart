@@ -86,7 +86,7 @@ class _LoggerListState extends State<LoggerList> {
 class LogTile extends StatelessWidget {
   final LogRecord record;
 
-  const LogTile(this.record, {Key? key}) : super(key: key);
+  const LogTile(this.record, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +121,7 @@ class LogTile extends StatelessWidget {
 class _DetailDialog extends StatelessWidget {
   final LogRecord record;
 
-  const _DetailDialog(this.record, {Key? key}) : super(key: key);
+  const _DetailDialog(this.record);
 
   @override
   Widget build(BuildContext context) {

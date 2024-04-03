@@ -8,7 +8,7 @@ class DetailPage extends StatelessWidget {
   final TestRun run;
   final String screenId;
 
-  const DetailPage(this.run, this.screenId, {Key? key}) : super(key: key);
+  const DetailPage(this.run, this.screenId, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -35,11 +35,11 @@ class DetailSkeleton extends StatelessWidget {
   const DetailSkeleton(
     this.run,
     this.screen, {
-    Key? key,
+    super.key,
     required this.main,
     required this.sidebar,
     required this.onOverLink,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -111,8 +111,7 @@ class _ScreenView extends StatelessWidget {
   final Screen screen;
   final Widget child;
 
-  const _ScreenView(this.run, this.screen, {Key? key, required this.child})
-      : super(key: key);
+  const _ScreenView(this.run, this.screen, {required this.child});
 
   @override
   Widget build(BuildContext context) {

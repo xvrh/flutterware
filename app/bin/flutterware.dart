@@ -193,7 +193,7 @@ String _exePathForPlatform({required LogClient logger}) {
   } else if (Platform.isLinux) {
     return 'build/linux/${_linuxHostPlatform(logger: logger)}/release/bundle/app';
   } else {
-    return 'build/macos/Build/Products/Release/Flutterware.app/Contents/MacOS/Flutterware';
+    return 'build/macos/Build/Products/Release/app.app/Contents/MacOS/app';
   }
 }
 

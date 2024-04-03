@@ -5,23 +5,81 @@ import '../utils/animated_clip_rrect.dart';
 import 'buttons_overlay.dart';
 import 'service.dart';
 
-class DevbarPanel extends StatelessWidget {
-  const DevbarPanel({Key? key}) : super(key: key);
+class DevbarPanel extends StatefulWidget {
+  const DevbarPanel({super.key});
+
+  @override
+  State<DevbarPanel> createState() => _DevbarPanelState();
+}
+
+class _DevbarPanelState extends State<DevbarPanel> {
+  final _router = _RouterDelegate();
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    // This uses the router version on purpose
+    // This is important to prevent stealing the deeplinking behaviour from the main app.
+    return MaterialApp.router(
+      routerDelegate: _router,
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true),
-      home: _Home(this),
     );
   }
 }
 
-class _Home extends StatelessWidget {
-  final DevbarPanel parent;
+class _RouterDelegate extends RouterDelegate<Object>
+    with ChangeNotifier, PopNavigatorRouterDelegateMixin<Object>
+    implements RouteInformationParser<Object> {
+  @override
+  Widget build(BuildContext context) {
+    var page = MaterialPage(
+      child: _Home(),
+    );
+    return Navigator(
+      requestFocus: false,
+      key: navigatorKey,
+      pages: [
+        page,
+      ],
+      onPopPage: (route, result) {
+        if (!route.didPop(result)) {
+          return false;
+        }
+        notifyListeners();
+        return true;
+      },
+      onGenerateRoute: (r) {
+        throw UnimplementedError();
+      },
+    );
+  }
 
-  _Home(this.parent, {Key? key}) : super(key: key);
+  @override
+  final navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  Future<void> setNewRoutePath(Object configuration) async {}
+
+  @override
+  Future<Object> parseRouteInformation(
+      RouteInformation routeInformation) async {
+    return Object();
+  }
+
+  @override
+  Future<Object> parseRouteInformationWithDependencies(
+      RouteInformation routeInformation, BuildContext context) {
+    return parseRouteInformation(routeInformation);
+  }
+
+  @override
+  RouteInformation restoreRouteInformation(Object configuration) {
+    return RouteInformation();
+  }
+}
+
+class _Home extends StatelessWidget {
+  _Home();
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +141,7 @@ class DevbarAppWrapper extends StatelessWidget {
   final _containerKey = GlobalKey();
   final Widget child;
 
-  DevbarAppWrapper({Key? key, required this.child}) : super(key: key);
+  DevbarAppWrapper({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -141,8 +199,8 @@ class _AnimatedScreenWrapper extends StatelessWidget {
   final _duration = const Duration(milliseconds: 300);
   final _curve = Curves.easeInOut;
 
-  const _AnimatedScreenWrapper({Key? key, this.openState, required this.child})
-      : super(key: key);
+  const _AnimatedScreenWrapper(
+      {super.key, this.openState, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -197,7 +255,7 @@ class _AnimatedScreenWrapper extends StatelessWidget {
 }
 
 class _PreviewTools extends StatelessWidget {
-  const _PreviewTools({Key? key}) : super(key: key);
+  const _PreviewTools();
 
   @override
   Widget build(BuildContext context) {
@@ -225,8 +283,7 @@ class _ToolButton extends StatelessWidget {
   final void Function()? onTap;
   final IconData icon;
 
-  const _ToolButton({Key? key, this.onTap, required this.icon})
-      : super(key: key);
+  const _ToolButton({this.onTap, required this.icon});
 
   @override
   Widget build(BuildContext context) {

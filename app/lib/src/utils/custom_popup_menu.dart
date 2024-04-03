@@ -30,7 +30,7 @@ class CustomPopupMenuButton<T> extends StatefulWidget {
   ///
   /// The [itemBuilder] argument must not be null.
   const CustomPopupMenuButton({
-    Key? key,
+    super.key,
     required this.itemBuilder,
     this.initialValue,
     this.onSelected,
@@ -50,11 +50,10 @@ class CustomPopupMenuButton<T> extends StatefulWidget {
     this.constraints,
     this.iconConstraints,
     this.position = PopupMenuPosition.over,
-  })  : assert(
+  }) : assert(
           !(child != null && icon != null),
           'You can only pass [child] or [icon], not both.',
-        ),
-        super(key: key);
+        );
 
   /// Called when the button is pressed to create the items to show in the menu.
   final PopupMenuItemBuilder<T> itemBuilder;

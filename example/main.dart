@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/flutter_test.dart';
 
 void main() {
-  testWidgets('Checkout flow', CheckoutTest());
+  testWidgets('Checkout flow', CheckoutTest().call);
 }
 
 class CheckoutTest extends AppTest {

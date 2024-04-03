@@ -279,7 +279,7 @@ class _$_DeviceInfo with DiagnosticableTreeMixin implements _DeviceInfo {
   }
 
   @override
-  bool operator ==(dynamic other) {
+  bool operator ==(Object other) {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$_DeviceInfo &&

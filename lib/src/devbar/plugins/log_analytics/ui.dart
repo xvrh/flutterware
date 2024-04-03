@@ -32,7 +32,7 @@ class AnalyticsList extends StatelessWidget {
 class EventTile extends StatelessWidget {
   final AnalyticEvent event;
 
-  const EventTile(this.event, {Key? key}) : super(key: key);
+  const EventTile(this.event, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +57,7 @@ class EventTile extends StatelessWidget {
 class _DetailDialog extends StatelessWidget {
   final AnalyticEvent event;
 
-  const _DetailDialog(this.event, {Key? key}) : super(key: key);
+  const _DetailDialog(this.event);
 
   @override
   Widget build(BuildContext context) {

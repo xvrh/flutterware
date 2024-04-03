@@ -9,8 +9,7 @@ class SideMenu extends StatelessWidget {
   final List<Widget> children;
   final List<Widget>? bottom;
 
-  const SideMenu({Key? key, required this.children, this.bottom})
-      : super(key: key);
+  const SideMenu({super.key, required this.children, this.bottom});
 
   @override
   Widget build(BuildContext context) {
@@ -48,8 +47,7 @@ class MenuLink extends StatefulWidget {
   final String url;
   final Widget title;
 
-  const MenuLink({required this.url, required this.title, Key? key})
-      : super(key: key);
+  const MenuLink({required this.url, required this.title, super.key});
 
   @override
   State<MenuLink> createState() => _MenuLinkState();

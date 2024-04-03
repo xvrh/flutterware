@@ -14,11 +14,11 @@ class MessageDialog extends StatelessWidget {
   final VoidCallback? analyticsCallback;
 
   const MessageDialog({
-    Key? key,
+    super.key,
     this.title,
     required this.message,
     this.analyticsCallback,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -52,8 +52,7 @@ class _Tab<T> extends StatefulWidget {
   final Future<T> Function() future;
   final Widget Function(BuildContext, T) builder;
 
-  const _Tab({Key? key, required this.future, required this.builder})
-      : super(key: key);
+  const _Tab({super.key, required this.future, required this.builder});
 
   @override
   __TabState<T> createState() => __TabState<T>();

@@ -23,7 +23,7 @@ final enableUIBook = FeatureFlag('enableUIBook', false);
 class ProjectView extends StatelessWidget {
   final Project project;
 
-  const ProjectView(this.project, {Key? key}) : super(key: key);
+  const ProjectView(this.project, {super.key});
 
   @override
   Widget build(BuildContext context) {

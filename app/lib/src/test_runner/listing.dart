@@ -14,8 +14,7 @@ class TestListingView extends StatefulWidget {
   final TestService service;
   final TestRunnerApi client;
 
-  const TestListingView(this.service, this.client, {Key? key})
-      : super(key: key);
+  const TestListingView(this.service, this.client, {super.key});
 
   @override
   State<TestListingView> createState() => _TestListingViewState();

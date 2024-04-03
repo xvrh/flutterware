@@ -61,8 +61,7 @@ TextStyle styleFromElement(Element candidate) {
 }
 
 class TextFinder extends MatchFinder {
-  TextFinder(this.text, {bool skipOffstage = true})
-      : super(skipOffstage: skipOffstage);
+  TextFinder(this.text, {super.skipOffstage});
 
   final String text;
 

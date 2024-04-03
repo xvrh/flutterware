@@ -49,7 +49,7 @@ class NetworkList extends StatelessWidget {
 class RequestTile extends StatelessWidget {
   final NetworkRequest request;
 
-  const RequestTile(this.request, {Key? key}) : super(key: key);
+  const RequestTile(this.request, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +84,7 @@ class RequestTile extends StatelessWidget {
 class RequestDialog extends StatelessWidget {
   final NetworkRequest request;
 
-  const RequestDialog(this.request, {Key? key}) : super(key: key);
+  const RequestDialog(this.request, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -130,7 +130,7 @@ class RequestDialog extends StatelessWidget {
 class _RequestTab extends StatelessWidget {
   final NetworkRequest request;
 
-  const _RequestTab(this.request, {Key? key}) : super(key: key);
+  const _RequestTab(this.request);
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +159,7 @@ class _RequestTab extends StatelessWidget {
 class _ResponseTab extends StatelessWidget {
   final NetworkRequest request;
 
-  const _ResponseTab(this.request, {Key? key}) : super(key: key);
+  const _ResponseTab(this.request);
 
   @override
   Widget build(BuildContext context) {
@@ -174,7 +174,7 @@ class _ResponseTab extends StatelessWidget {
 class _ErrorTab extends StatelessWidget {
   final ErrorResponse response;
 
-  const _ErrorTab(this.response, {Key? key}) : super(key: key);
+  const _ErrorTab(this.response);
 
   @override
   Widget build(BuildContext context) {

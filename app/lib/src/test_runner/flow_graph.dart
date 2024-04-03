@@ -148,7 +148,7 @@ class _RunViewState extends State<RunView> {
 class ResultIcon extends StatelessWidget {
   final RunResult result;
 
-  const ResultIcon(this.result, {Key? key}) : super(key: key);
+  const ResultIcon(this.result, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -176,7 +176,7 @@ class _FlowMaster extends StatefulWidget {
   final TestRun run;
   final _RunViewState parent;
 
-  const _FlowMaster(this.parent, this.run, {Key? key}) : super(key: key);
+  const _FlowMaster(this.parent, this.run);
 
   @override
   State<_FlowMaster> createState() => _FlowMasterState();
@@ -243,7 +243,7 @@ class _FlowMasterState extends State<_FlowMaster> {
 class _FlowGraph extends StatefulWidget {
   final TestRun run;
 
-  const _FlowGraph(this.run, {Key? key}) : super(key: key);
+  const _FlowGraph(this.run);
 
   @override
   __FlowGraphState createState() => __FlowGraphState();
@@ -251,23 +251,22 @@ class _FlowGraph extends StatefulWidget {
 
 class __FlowGraphState extends State<_FlowGraph> {
   late List<NodeInput> _inputs;
-  bool _isZoomKeyPressed = false;
 
   @override
   void initState() {
     super.initState();
     _fillInput();
-    RawKeyboard.instance.addListener(_onKeyPressed);
+    HardwareKeyboard.instance.addHandler(_keyboardHandler);
   }
 
-  void _onKeyPressed(RawKeyEvent event) {
-    var zoomKeyPressed = event.isControlPressed || event.isMetaPressed;
-    if (_isZoomKeyPressed != zoomKeyPressed) {
-      setState(() {
-        _isZoomKeyPressed = zoomKeyPressed;
-      });
-    }
+  bool _keyboardHandler(KeyEvent event) {
+    setState(() {});
+    return false;
   }
+
+  bool get _isZoomKeyPressed =>
+      HardwareKeyboard.instance.isControlPressed ||
+      HardwareKeyboard.instance.isMetaPressed;
 
   @override
   void didUpdateWidget(covariant _FlowGraph oldWidget) {
@@ -369,7 +368,7 @@ class __FlowGraphState extends State<_FlowGraph> {
 
   @override
   void dispose() {
-    RawKeyboard.instance.removeListener(_onKeyPressed);
+    HardwareKeyboard.instance.removeHandler(_keyboardHandler);
     super.dispose();
   }
 }
@@ -378,7 +377,7 @@ class _ScreenView extends StatelessWidget {
   final TestRun run;
   final Screen screen;
 
-  const _ScreenView(this.run, this.screen, {Key? key}) : super(key: key);
+  const _ScreenView(this.run, this.screen, {super.key});
 
   @override
   Widget build(BuildContext context) {

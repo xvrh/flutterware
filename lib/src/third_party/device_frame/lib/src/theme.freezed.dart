@@ -122,7 +122,7 @@ class _$_DeviceFrameStyle
   }
 
   @override
-  bool operator ==(dynamic other) {
+  bool operator ==(Object other) {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$_DeviceFrameStyle &&
@@ -321,7 +321,7 @@ class _$_DeviceKeyboardStyle
   }
 
   @override
-  bool operator ==(dynamic other) {
+  bool operator ==(Object other) {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$_DeviceKeyboardStyle &&

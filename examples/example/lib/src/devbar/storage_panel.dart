@@ -137,7 +137,7 @@ class __SecureStorageListState extends State<_SecureStorageList> {
 class _VariablesStorageList extends StatefulWidget {
   final VariablesPlugin variables;
 
-  const _VariablesStorageList(this.variables, {Key? key}) : super(key: key);
+  const _VariablesStorageList(this.variables);
 
   @override
   __VariablesStorageListState createState() => __VariablesStorageListState();

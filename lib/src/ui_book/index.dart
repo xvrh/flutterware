@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../third_party/device_frame/lib/device_frame.dart';
 import 'app.dart';
@@ -48,8 +49,11 @@ class IndexView extends StatelessWidget {
     ];
 
     if (isRoot) {
-      return ListView(
-        children: widgets,
+      return FittedWidget(
+        minimumSize: Size(600, 100),
+        child: ListView(
+          children: widgets,
+        ),
       );
     } else {
       return Column(
@@ -167,5 +171,43 @@ class _Folder extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class FittedWidget extends StatelessWidget {
+  final Widget child;
+  final Size minimumSize;
+
+  const FittedWidget(
+      {super.key, required this.child, required this.minimumSize});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      var size = constraints.biggest;
+      var widthRatio = size.width / minimumSize.width;
+      var heightRatio = size.height / minimumSize.height;
+
+      var width = size.width;
+      var height = size.height;
+
+      if (min(widthRatio, heightRatio) < 1) {
+        if (widthRatio < heightRatio) {
+          width = minimumSize.width;
+          height = size.height / widthRatio;
+        } else {
+          height = minimumSize.height;
+          width = size.width / heightRatio;
+        }
+      }
+
+      return FittedBox(
+        child: SizedBox(
+          width: width,
+          height: height,
+          child: child,
+        ),
+      );
+    });
   }
 }

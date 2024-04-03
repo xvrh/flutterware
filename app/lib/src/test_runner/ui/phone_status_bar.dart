@@ -11,13 +11,13 @@ class PhoneStatusBar extends StatelessWidget {
   final EdgeInsets viewPadding;
 
   const PhoneStatusBar({
-    Key? key,
+    super.key,
     required this.child,
     required this.leftText,
     required this.viewPadding,
     required this.topBrightness,
     required this.bottomBrightness,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +40,7 @@ class PhoneStatusBar extends StatelessWidget {
 class _StatusBar extends StatelessWidget {
   final PhoneStatusBar parent;
 
-  const _StatusBar(this.parent, {Key? key}) : super(key: key);
+  const _StatusBar(this.parent);
 
   static Color _colorFor(Brightness brightness) =>
       brightness == Brightness.light ? Colors.white : Colors.black;

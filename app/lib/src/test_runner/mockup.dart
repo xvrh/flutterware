@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class MockupOverlay extends StatefulWidget {
-  const MockupOverlay({Key? key}) : super(key: key);
+  const MockupOverlay({super.key});
 
   @override
   State<MockupOverlay> createState() => _MockupOverlayState();

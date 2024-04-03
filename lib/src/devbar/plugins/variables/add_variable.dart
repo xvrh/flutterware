@@ -19,7 +19,7 @@ class AddDevbarVariable {
       _BoolWidget(
           name: name, builder: builder, defaultValue: defaultValue, key: key);
 
-  static Widget picker<T>(
+  static Widget picker<T extends Object>(
           {required String name,
           String? description,
           required Widget Function(BuildContext, T) builder,
@@ -52,8 +52,8 @@ class _PickerWidget<T> extends StatefulWidget {
     required this.options,
     required this.defaultValue,
     this.fromJson,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   __PickerWidgetState<T> createState() => __PickerWidgetState<T>();

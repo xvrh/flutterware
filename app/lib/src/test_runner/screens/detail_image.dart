@@ -6,7 +6,7 @@ class ImageDetail extends StatefulWidget {
   final TestRun run;
   final Screen screen;
 
-  const ImageDetail(this.run, this.screen, {Key? key}) : super(key: key);
+  const ImageDetail(this.run, this.screen, {super.key});
 
   @override
   State<ImageDetail> createState() => _ImageDetailState();
@@ -107,10 +107,9 @@ class _Screenshot extends StatelessWidget {
   const _Screenshot(
     this.run,
     this.screen, {
-    Key? key,
     this.selectedTextInfo,
     this.selectedLink,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +136,7 @@ class _Screenshot extends StatelessWidget {
 class _TextRect extends StatelessWidget {
   final TextInfo text;
 
-  const _TextRect(this.text, {Key? key}) : super(key: key);
+  const _TextRect(this.text);
 
   @override
   Widget build(BuildContext context) {
@@ -159,8 +158,7 @@ class _LinkRect extends StatelessWidget {
   final ScreenLink link;
   final bool isSelected;
 
-  const _LinkRect(this.link, {Key? key, required this.isSelected})
-      : super(key: key);
+  const _LinkRect(this.link, {required this.isSelected});
 
   @override
   Widget build(BuildContext context) {

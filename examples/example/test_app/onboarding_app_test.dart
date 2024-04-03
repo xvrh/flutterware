@@ -6,7 +6,7 @@ import 'package:flutterware_example/main.dart';
 // Start flutterware tool to run those tests:
 // dart run flutterware app
 void main() {
-  testApp('Without auto screenshot', _OnboardingNotAutoTest());
+  testApp('Without auto screenshot', _OnboardingNotAutoTest().call);
 }
 
 class _OnboardingNotAutoTest extends AppTest {

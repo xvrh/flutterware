@@ -23,7 +23,7 @@ class ToolbarParameters {
 
 class ToolBarScope extends StatefulWidget {
   final Widget child;
-  const ToolBarScope({Key? key, required this.child}) : super(key: key);
+  const ToolBarScope({super.key, required this.child});
 
   @override
   ToolBarScopeState createState() => ToolBarScopeState();
@@ -55,14 +55,14 @@ class RunToolbar extends StatefulWidget {
   final Set<SerializableLocale>? supportedLocales;
 
   const RunToolbar({
-    Key? key,
+    super.key,
     required this.child,
     required this.initialParameters,
     required this.onChanged,
     this.leadingActions,
     this.trailingActions,
     required this.supportedLocales,
-  }) : super(key: key);
+  });
 
   @override
   State<RunToolbar> createState() => _RunToolbarState();
@@ -176,10 +176,9 @@ class _AccessibilityPanel extends StatefulWidget {
   final void Function(AccessibilityConfig) onChanged;
 
   const _AccessibilityPanel({
-    Key? key,
     required this.initialValue,
     required this.onChanged,
-  }) : super(key: key);
+  });
 
   @override
   State<_AccessibilityPanel> createState() => _AccessibilityPanelState();

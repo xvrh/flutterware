@@ -7,10 +7,10 @@ class AutoScroller<T> extends StatefulWidget {
   final Widget Function(BuildContext, ScrollController, T) builder;
 
   const AutoScroller({
-    Key? key,
+    super.key,
     required this.stream,
     required this.builder,
-  }) : super(key: key);
+  });
 
   @override
   State<AutoScroller<T>> createState() => _AutoScrollerState<T>();

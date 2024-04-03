@@ -26,7 +26,13 @@ class ParametersEditor extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 50),
         children: [
           for (var parameter in parameters.parameters.entries)
-            KnobLine(name: parameter.key, editor: _editorFor(parameter.value)),
+            _KnobLine(
+              name: parameter.key,
+              editor: ListenableBuilder(
+                listenable: parameter.value,
+                builder: (context, _) => _editorFor(parameter.value),
+              ),
+            ),
         ],
       ),
     );
@@ -46,11 +52,11 @@ class ParametersEditor extends StatelessWidget {
   }
 }
 
-class KnobLine extends StatelessWidget {
+class _KnobLine extends StatelessWidget {
   final String name;
   final Widget editor;
 
-  const KnobLine({super.key, required this.name, required this.editor});
+  const _KnobLine({required this.name, required this.editor});
 
   @override
   Widget build(BuildContext context) {

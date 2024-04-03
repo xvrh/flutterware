@@ -9,13 +9,12 @@ class MenuTree extends StatefulWidget {
   final int extraDepth;
 
   const MenuTree({
-    Key? key,
+    super.key,
     required this.entries,
     this.selected,
     required this.onSelected,
     int? extraDepth,
-  })  : extraDepth = extraDepth ?? 0,
-        super(key: key);
+  }) : extraDepth = extraDepth ?? 0;
 
   @override
   State<MenuTree> createState() => _MenuTreeState();

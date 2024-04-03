@@ -74,6 +74,7 @@ abstract class AppTest {
   }) async {
     await tester.pumpWidget(widget);
     await _pumpFramesIfNeeded(pumpFrames);
+    await _screenshotIfNeeded();
   }
 
   Future<void> pump([
@@ -83,17 +84,17 @@ abstract class AppTest {
     await tester.pump(duration, phase);
   }
 
-  Finder targetToFinder(dynamic target) {
+  Finder targetToFinder(dynamic target, {bool skipOffStage = true}) {
     if (target is Finder) {
       return target;
     } else if (target is String) {
-      return TextFinder(target);
+      return TextFinder(target, skipOffstage: skipOffStage);
     } else if (target is IconData) {
-      return find.byIcon(target);
+      return find.byIcon(target, skipOffstage: skipOffStage);
     } else if (target is Key) {
-      return find.byKey(target);
+      return find.byKey(target, skipOffstage: skipOffStage);
     } else if (target is Type) {
-      return find.byType(target);
+      return find.byType(target, skipOffstage: skipOffStage);
     } else {
       throw StateError('Unsupported target ${target.runtimeType}');
     }
@@ -107,11 +108,13 @@ abstract class AppTest {
     var finder = targetToFinder(target);
     await tester.enterText(finder, text);
     await _pumpFramesIfNeeded(pumpFrames);
+    await _screenshotIfNeeded();
   }
 
   Future<void> tap(
     dynamic target, {
     bool pumpFrames = true,
+    bool warnIfMissed = true,
   }) async {
     var finder = targetToFinder(target);
 
@@ -121,8 +124,25 @@ abstract class AppTest {
           box.localToGlobal(box.size.topLeft(Offset.zero)) & box.size;
     }
 
-    await tester.tap(finder);
+    await tester.tap(finder, warnIfMissed: warnIfMissed);
     await _pumpFramesIfNeeded(pumpFrames);
+    await _screenshotIfNeeded();
+  }
+
+  Future<void> dragUntilVisible(dynamic target, dynamic scrollview,
+      {Offset? moveStep}) async {
+    var finder = targetToFinder(target, skipOffStage: false);
+    var scrollFinder = targetToFinder(scrollview);
+    await tester.dragUntilVisible(
+        finder, scrollFinder, moveStep ?? Offset(0, -100));
+    await pumpAndSettle();
+  }
+
+  Future<void> ensureVisible(dynamic target) async {
+    var finder = targetToFinder(target, skipOffStage: false);
+    await tester.ensureVisible(finder);
+    await pumpAndSettle();
+    await _screenshotIfNeeded();
   }
 
   RenderBox? _getElementBox(Finder finder) {
@@ -147,9 +167,17 @@ abstract class AppTest {
     }
   }
 
+  bool autoScreenshot = false;
+
   /// Takes a screenshot of the current widget and display it in the Flutterware
   /// visualizer
   Future<void> screenshot({String? name, List<String>? tags}) {
     return tester.screenshot(name: name, tags: tags);
+  }
+
+  Future<void> _screenshotIfNeeded() async {
+    if (autoScreenshot) {
+      await screenshot();
+    }
   }
 }

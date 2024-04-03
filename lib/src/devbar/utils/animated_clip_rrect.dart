@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 class AnimatedClipRRect extends ImplicitlyAnimatedWidget {
   AnimatedClipRRect({
-    Key? key,
+    super.key,
     required this.borderRadius,
     required this.child,
-    Curve curve = Curves.linear,
-    required Duration duration,
-    VoidCallback? onEnd,
-  }) : super(key: key, curve: curve, duration: duration, onEnd: onEnd);
+    super.curve,
+    required super.duration,
+    super.onEnd,
+  });
 
   final BorderRadius borderRadius;
 

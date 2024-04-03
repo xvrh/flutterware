@@ -8,11 +8,11 @@ class AddDevbarButton extends StatefulWidget {
   final DevbarButtonPosition? position;
 
   const AddDevbarButton({
-    Key? key,
+    super.key,
     this.child,
     required this.button,
     this.position,
-  }) : super(key: key);
+  });
 
   @override
   State<AddDevbarButton> createState() => _AddDevbarButtonState();
@@ -49,8 +49,7 @@ class DevbarIcon extends StatelessWidget {
   final Color? color;
 
   const DevbarIcon(
-      {Key? key, required this.onTap, required this.icon, this.color})
-      : super(key: key);
+      {super.key, required this.onTap, required this.icon, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -99,12 +98,12 @@ class DevbarDropdown<T> extends StatefulWidget {
   final Map<T, Widget> values;
 
   const DevbarDropdown({
-    Key? key,
+    super.key,
     required this.onChanged,
     required this.icon,
     this.color,
     required this.values,
-  }) : super(key: key);
+  });
 
   @override
   State<DevbarDropdown<T>> createState() => _DevbarDropdownButtonState<T>();

@@ -33,7 +33,7 @@ extension WidgetTesterScreenshotExtension on WidgetTester {
     }
     context.previousScreens.add(screenId);
 
-    var renderView = binding.renderView;
+    var renderView = binding.renderViews.first;
 
     ui.Brightness? brightnessAt(Offset offset) {
       try {
