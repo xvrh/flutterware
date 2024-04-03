@@ -18,7 +18,7 @@ class _HelpScreenState extends State<HelpScreen> {
       child: Card(
         child: Markdown(
           controller: _scrollController,
-          data: '''          
+          data: '''
 ## App test
 
 ### Features

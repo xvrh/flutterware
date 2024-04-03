@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/devbar/ui/button.dart';
-
 import '../../ui_book/parameters.dart';
 import '../../ui_book/parameters_editor.dart';
 import '../devbar.dart';
+import '../ui/button.dart';
 import '../ui/service.dart';
 
 typedef DevbarKnobs = Parameters;

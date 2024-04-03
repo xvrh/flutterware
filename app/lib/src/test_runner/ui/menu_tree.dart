@@ -14,7 +14,7 @@ class MenuTree extends StatefulWidget {
     this.selected,
     required this.onSelected,
     int? extraDepth,
-  })  : extraDepth = extraDepth ?? 0;
+  }) : extraDepth = extraDepth ?? 0;
 
   @override
   State<MenuTree> createState() => _MenuTreeState();

@@ -266,7 +266,7 @@ class __FlowGraphState extends State<_FlowGraph> {
 
   bool get _isZoomKeyPressed =>
       HardwareKeyboard.instance.isControlPressed ||
-          HardwareKeyboard.instance.isMetaPressed;
+      HardwareKeyboard.instance.isMetaPressed;
 
   @override
   void didUpdateWidget(covariant _FlowGraph oldWidget) {

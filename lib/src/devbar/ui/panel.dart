@@ -199,7 +199,8 @@ class _AnimatedScreenWrapper extends StatelessWidget {
   final _duration = const Duration(milliseconds: 300);
   final _curve = Curves.easeInOut;
 
-  const _AnimatedScreenWrapper({super.key, this.openState, required this.child});
+  const _AnimatedScreenWrapper(
+      {super.key, this.openState, required this.child});
 
   @override
   Widget build(BuildContext context) {

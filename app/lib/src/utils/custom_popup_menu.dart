@@ -50,7 +50,7 @@ class CustomPopupMenuButton<T> extends StatefulWidget {
     this.constraints,
     this.iconConstraints,
     this.position = PopupMenuPosition.over,
-  })  : assert(
+  }) : assert(
           !(child != null && icon != null),
           'You can only pass [child] or [icon], not both.',
         );

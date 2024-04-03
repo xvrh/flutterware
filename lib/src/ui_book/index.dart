@@ -1,5 +1,4 @@
 import 'dart:math';
-
 import 'package:flutter/material.dart';
 import '../third_party/device_frame/lib/device_frame.dart';
 import 'app.dart';
