@@ -1,3 +1,7 @@
+## 0.4.0
+
+- Improve `package:flutterware/devbar.dart`
+
 ## 0.3.0
 
 - Rename `widget_book` to `ui_book`
