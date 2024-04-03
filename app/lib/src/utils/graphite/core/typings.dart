@@ -39,30 +39,18 @@ class MatrixNode extends NodeOutput {
   MatrixNode({
     required this.x,
     required this.y,
-    required String id,
-    required List<String> next,
-    AnchorType? anchorType,
-    String? from,
-    String? to,
-    AnchorOrientation? orientation,
-    bool isAnchor = false,
-    AnchorMargin? anchorMargin,
-    List<String> passedIncomes = const [],
-    List<String> renderIncomes = const [],
-    int? childrenOnMatrix,
-  }) : super(
-          id: id,
-          next: next,
-          anchorType: anchorType,
-          from: from,
-          to: to,
-          orientation: orientation,
-          isAnchor: isAnchor,
-          anchorMargin: anchorMargin,
-          passedIncomes: passedIncomes,
-          renderIncomes: renderIncomes,
-          childrenOnMatrix: childrenOnMatrix,
-        );
+    required super.id,
+    required super.next,
+    super.anchorType,
+    super.from,
+    super.to,
+    super.orientation,
+    super.isAnchor,
+    super.anchorMargin,
+    super.passedIncomes,
+    super.renderIncomes,
+    super.childrenOnMatrix,
+  });
   static MatrixNode fromNodeOutput(
       {required int x, required int y, required NodeOutput nodeOutput}) {
     return MatrixNode(
@@ -88,8 +76,8 @@ class MatrixNode extends NodeOutput {
 
 class NodeOutput extends NodeInput {
   NodeOutput({
-    required String id,
-    required List<String> next,
+    required super.id,
+    required super.next,
     this.anchorType,
     this.from,
     this.to,
@@ -99,7 +87,7 @@ class NodeOutput extends NodeInput {
     this.renderIncomes = const [],
     this.childrenOnMatrix,
     this.anchorMargin,
-  }) : super(id: id, next: next);
+  });
 
   final AnchorType? anchorType;
   final String? from;

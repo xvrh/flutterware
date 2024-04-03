@@ -52,8 +52,8 @@ class _PickerWidget<T> extends StatefulWidget {
     required this.options,
     required this.defaultValue,
     this.fromJson,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   __PickerWidgetState<T> createState() => __PickerWidgetState<T>();

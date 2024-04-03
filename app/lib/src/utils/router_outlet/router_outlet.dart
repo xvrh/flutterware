@@ -11,8 +11,7 @@ class RouterOutlet extends StatefulWidget {
   final Map<String, RouteBuilder> routes;
   final String? Function(OnNotFoundEvent)? onNotFound;
 
-  const RouterOutlet(this.routes, {Key? key, this.onNotFound})
-      : super(key: key);
+  const RouterOutlet(this.routes, {super.key, this.onNotFound});
 
   static Widget root({required Widget child}) => RouterRootAuto(child: child);
 

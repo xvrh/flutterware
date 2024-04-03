@@ -5,10 +5,10 @@ class Browser extends StatelessWidget {
   final String url;
 
   const Browser({
-    Key? key,
+    super.key,
     required this.content,
     required this.url,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

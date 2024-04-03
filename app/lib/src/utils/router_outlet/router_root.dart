@@ -10,8 +10,7 @@ class RouterRoot extends StatefulWidget {
   final UrlSource urlSource;
   final Widget child;
 
-  const RouterRoot({Key? key, required this.urlSource, required this.child})
-      : super(key: key);
+  const RouterRoot({super.key, required this.urlSource, required this.child});
 
   @override
   State<RouterRoot> createState() => _RouterRootState();
@@ -43,7 +42,7 @@ class _RouterRootState extends State<RouterRoot> {
 class SubMatchTracker extends StatefulWidget {
   final Widget child;
 
-  const SubMatchTracker({Key? key, required this.child}) : super(key: key);
+  const SubMatchTracker({super.key, required this.child});
 
   @override
   SubMatchTrackerState createState() => SubMatchTrackerState();
@@ -93,10 +92,10 @@ class SubMatches extends InheritedWidget {
   final List<MatchedPath> allMatches;
 
   const SubMatches({
-    Key? key,
-    required Widget child,
+    super.key,
+    required super.child,
     required this.allMatches,
-  }) : super(key: key, child: child);
+  });
 
   static List<MatchedPath> of(BuildContext context) {
     final result = context.dependOnInheritedWidgetOfExactType<SubMatches>()!;
@@ -112,7 +111,7 @@ class SubMatches extends InheritedWidget {
 class RouterRootAuto extends StatefulWidget {
   final Widget child;
 
-  const RouterRootAuto({Key? key, required this.child}) : super(key: key);
+  const RouterRootAuto({super.key, required this.child});
 
   @override
   State<RouterRootAuto> createState() => _RouterRootAuto();

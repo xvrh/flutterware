@@ -6,7 +6,7 @@ import 'buttons_overlay.dart';
 import 'service.dart';
 
 class DevbarPanel extends StatefulWidget {
-  const DevbarPanel({Key? key}) : super(key: key);
+  const DevbarPanel({super.key});
 
   @override
   State<DevbarPanel> createState() => _DevbarPanelState();
@@ -79,7 +79,7 @@ class _RouterDelegate extends RouterDelegate<Object>
 }
 
 class _Home extends StatelessWidget {
-  _Home({Key? key}) : super(key: key);
+  _Home();
 
   @override
   Widget build(BuildContext context) {
@@ -141,7 +141,7 @@ class DevbarAppWrapper extends StatelessWidget {
   final _containerKey = GlobalKey();
   final Widget child;
 
-  DevbarAppWrapper({Key? key, required this.child}) : super(key: key);
+  DevbarAppWrapper({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -199,8 +199,7 @@ class _AnimatedScreenWrapper extends StatelessWidget {
   final _duration = const Duration(milliseconds: 300);
   final _curve = Curves.easeInOut;
 
-  const _AnimatedScreenWrapper({Key? key, this.openState, required this.child})
-      : super(key: key);
+  const _AnimatedScreenWrapper({super.key, this.openState, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -255,7 +254,7 @@ class _AnimatedScreenWrapper extends StatelessWidget {
 }
 
 class _PreviewTools extends StatelessWidget {
-  const _PreviewTools({Key? key}) : super(key: key);
+  const _PreviewTools();
 
   @override
   Widget build(BuildContext context) {
@@ -283,8 +282,7 @@ class _ToolButton extends StatelessWidget {
   final void Function()? onTap;
   final IconData icon;
 
-  const _ToolButton({Key? key, this.onTap, required this.icon})
-      : super(key: key);
+  const _ToolButton({this.onTap, required this.icon});
 
   @override
   Widget build(BuildContext context) {

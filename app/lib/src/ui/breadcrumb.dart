@@ -6,7 +6,7 @@ class BackBar extends StatelessWidget {
   final String text;
   final String url;
 
-  const BackBar(this.text, {Key? key, this.url = '..'}) : super(key: key);
+  const BackBar(this.text, {super.key, this.url = '..'});
 
   @override
   Widget build(BuildContext context) {

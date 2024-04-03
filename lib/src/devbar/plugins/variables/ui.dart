@@ -28,7 +28,7 @@ class VariablesPanel extends StatelessWidget {
 class _VariableEditor extends StatelessWidget {
   final DevbarVariable variable;
 
-  const _VariableEditor(this.variable, {Key? key}) : super(key: key);
+  const _VariableEditor(this.variable);
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +72,7 @@ class _VariableEditor extends StatelessWidget {
 class _BoolEditor extends StatelessWidget {
   final DevbarVariable<bool> variable;
 
-  const _BoolEditor(this.variable, {Key? key}) : super(key: key);
+  const _BoolEditor(this.variable);
 
   @override
   Widget build(BuildContext context) {
@@ -93,7 +93,7 @@ class _BoolEditor extends StatelessWidget {
 class _TextEditor extends StatelessWidget {
   final DevbarVariable<String> variable;
 
-  const _TextEditor(this.variable, {Key? key}) : super(key: key);
+  const _TextEditor(this.variable);
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +120,7 @@ class _TextEditor extends StatelessWidget {
 class _PickerEditor extends StatelessWidget {
   final DevbarPickerVariable variable;
 
-  const _PickerEditor(this.variable, {Key? key}) : super(key: key);
+  const _PickerEditor(this.variable);
 
   @override
   Widget build(BuildContext context) {

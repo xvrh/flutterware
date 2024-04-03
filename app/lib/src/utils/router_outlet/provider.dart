@@ -5,10 +5,10 @@ class MatchedPathProvider extends InheritedWidget {
   final MatchedPath path;
 
   const MatchedPathProvider({
-    Key? key,
-    required Widget child,
+    super.key,
+    required super.child,
     required this.path,
-  }) : super(key: key, child: child);
+  });
 
   static MatchedPath of(BuildContext context) {
     final result =

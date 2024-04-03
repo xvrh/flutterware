@@ -12,9 +12,9 @@ class TestRunView extends StatelessWidget {
 
   const TestRunView(
     this.client, {
-    Key? key,
+    super.key,
     this.reloadToolbar,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

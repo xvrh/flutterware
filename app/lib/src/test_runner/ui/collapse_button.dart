@@ -5,10 +5,10 @@ class CollapseButton extends StatelessWidget {
   final void Function(bool) onChanged;
 
   const CollapseButton({
-    Key? key,
+    super.key,
     required this.isCollapsed,
     required this.onChanged,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

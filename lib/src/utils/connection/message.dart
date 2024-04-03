@@ -39,7 +39,7 @@ class MessageType extends EnumClass {
   static const MessageType response = _$response;
   static const MessageType error = _$error;
 
-  const MessageType._(String name) : super(name);
+  const MessageType._(super.name);
 
   static BuiltSet<MessageType> get values => _$values;
   static MessageType valueOf(String name) => _$valueOf(name);

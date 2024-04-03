@@ -9,7 +9,7 @@ import 'project_view.dart';
 class SingleProjectApp extends StatelessWidget {
   final Project project;
 
-  const SingleProjectApp(this.project, {Key? key}) : super(key: key);
+  const SingleProjectApp(this.project, {super.key});
 
   @override
   Widget build(BuildContext context) {

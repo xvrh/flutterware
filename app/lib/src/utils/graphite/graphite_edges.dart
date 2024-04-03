@@ -7,10 +7,10 @@ class GraphiteEdges extends StatefulWidget {
   final Matrix matrix;
 
   const GraphiteEdges({
-    Key? key,
+    super.key,
     required this.child,
     required this.matrix,
-  }) : super(key: key);
+  });
 
   @override
   State<GraphiteEdges> createState() => _GraphiteEdgesState();

@@ -6,7 +6,7 @@ import 'typings.dart';
 const maxIterations = 1000;
 
 class Graph extends GraphMatrix {
-  Graph({required List<NodeInput> list}) : super(list: list);
+  Graph({required super.list});
 
   void handleSplitNode(NodeOutput item, State state, TraverseQueue levelQueue) {
     var isInserted = processOrSkipNodeOnMatrix(item, state);

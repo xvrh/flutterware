@@ -23,12 +23,12 @@ class TreeView<T> extends StatefulWidget {
   final TreeEntryAdapter<T> adapter;
 
   const TreeView({
-    Key? key,
+    super.key,
     required this.entries,
     this.selected,
     required this.onSelected,
     required this.adapter,
-  }) : super(key: key);
+  });
 
   @override
   State<TreeView<T>> createState() => TreeViewState<T>();
@@ -108,7 +108,6 @@ class _LineView extends StatelessWidget {
   final bool isLeaf;
 
   const _LineView({
-    Key? key,
     required this.depth,
     required this.expanded,
     required this.onTap,
@@ -116,7 +115,7 @@ class _LineView extends StatelessWidget {
     required this.selected,
     required this.title,
     required this.isLeaf,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

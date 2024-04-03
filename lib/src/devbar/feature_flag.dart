@@ -56,8 +56,7 @@ class FeatureFlagValue<T> {
 class FeatureFlags extends InheritedWidget {
   final Map<FeatureFlag, FeatureFlagValue> values;
 
-  FeatureFlags._({required Widget child, required this.values})
-      : super(child: child);
+  FeatureFlags._({required super.child, required this.values});
 
   static Widget merge({
     required Widget child,
@@ -90,7 +89,7 @@ class FeatureFlags extends InheritedWidget {
 class FeatureFlagDevbar extends StatelessWidget {
   final Widget child;
 
-  const FeatureFlagDevbar({Key? key, required this.child}) : super(key: key);
+  const FeatureFlagDevbar({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +104,7 @@ class FeatureFlagDevbar extends StatelessWidget {
 class _FlagToVariable extends StatefulWidget {
   final Widget child;
 
-  const _FlagToVariable({Key? key, required this.child}) : super(key: key);
+  const _FlagToVariable({required this.child});
 
   @override
   _FlagToVariableState createState() => _FlagToVariableState();

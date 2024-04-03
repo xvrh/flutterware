@@ -38,7 +38,7 @@ void main() async {
 class _StandaloneApp extends StatelessWidget {
   final Widget app;
 
-  const _StandaloneApp(this.app, {Key? key}) : super(key: key);
+  const _StandaloneApp(this.app);
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +56,7 @@ class _StandaloneApp extends StatelessWidget {
 class _App extends StatelessWidget {
   final ValueStream<List<TestRunnerApi>> clients;
 
-  const _App(this.clients, {Key? key}) : super(key: key);
+  const _App(this.clients);
 
   @override
   Widget build(BuildContext context) {

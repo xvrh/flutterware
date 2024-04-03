@@ -16,7 +16,7 @@ class DirectGraph extends StatefulWidget {
     required this.list,
     required this.cellSize,
     required this.cellPadding,
-    Key? key,
+    super.key,
     this.paintBuilder,
     this.builder,
     this.contactEdgesDistance = 5.0,
@@ -26,7 +26,7 @@ class DirectGraph extends StatefulWidget {
     required this.interactiveBuilder,
     this.pathBuilder,
     this.edgeTooltip,
-  }) : super(key: key);
+  });
 
   final Size cellSize;
   final double cellPadding;

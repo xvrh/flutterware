@@ -203,7 +203,7 @@ class DevicePlatform extends EnumClass {
   static const DevicePlatform android = _$android;
   static const DevicePlatform iOS = _$ios;
 
-  const DevicePlatform._(String name) : super(name);
+  const DevicePlatform._(super.name);
 
   static BuiltSet<DevicePlatform> get values => _$vls;
   static DevicePlatform valueOf(String name) => _$vlOf(name);

@@ -34,7 +34,7 @@ class Server {
     var router = Router();
     router.get('/socket', _socketHandler);
 
-    _server = await io.serve(router, InternetAddress.anyIPv4, port);
+    _server = await io.serve(router.call, InternetAddress.anyIPv4, port);
     _server.defaultResponseHeaders.set('Access-Control-Allow-Origin', '*');
 
     print('Server started ws://${_server.address.host}:${_server.port}');

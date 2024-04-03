@@ -39,7 +39,7 @@ class ButtonsOverlay extends StatelessWidget {
 class _Buttons extends StatefulWidget {
   final Iterable<DevbarButtonHandle> buttons;
 
-  const _Buttons(this.buttons, {Key? key}) : super(key: key);
+  const _Buttons(this.buttons);
 
   @override
   __ButtonsState createState() => __ButtonsState();

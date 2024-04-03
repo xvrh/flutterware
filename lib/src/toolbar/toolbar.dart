@@ -9,12 +9,11 @@ class Toolbar extends StatelessWidget {
   final Widget child;
 
   const Toolbar(
-      {Key? key,
+      {super.key,
       ToolbarPosition? position,
       required this.child,
       required this.items})
-      : position = position ?? ToolbarPosition.top,
-        super(key: key);
+      : position = position ?? ToolbarPosition.top;
 
   @override
   Widget build(BuildContext context) {
@@ -49,8 +48,7 @@ class _Toolbar extends StatelessWidget {
   final ToolbarPosition position;
   final List<Widget> children;
 
-  const _Toolbar({Key? key, required this.position, required this.children})
-      : super(key: key);
+  const _Toolbar({required this.position, required this.children});
 
   @override
   Widget build(BuildContext context) {
@@ -125,15 +123,14 @@ class ToolbarDropdown<T extends Object> extends StatelessWidget {
   final bool highlight;
 
   const ToolbarDropdown({
-    Key? key,
+    super.key,
     required this.value,
     required this.onChanged,
     required this.items,
     bool? showArrow,
     bool? highlight,
   })  : showArrow = showArrow ?? true,
-        highlight = highlight ?? false,
-        super(key: key);
+        highlight = highlight ?? false;
 
   @override
   Widget build(BuildContext context) {
@@ -174,13 +171,13 @@ class ToolbarPicker<T> extends StatelessWidget {
   final Map<T, Widget>? itemTiles;
 
   const ToolbarPicker({
-    Key? key,
+    super.key,
     this.title,
     required this.value,
     required this.onChanged,
     required this.items,
     this.itemTiles,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

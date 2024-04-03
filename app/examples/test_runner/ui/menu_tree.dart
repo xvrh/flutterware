@@ -5,7 +5,7 @@ import 'package:flutterware_app/src/utils/debug.dart';
 void main() => runDebugApp(MenuTreeExample());
 
 class MenuTreeExample extends StatefulWidget {
-  const MenuTreeExample({Key? key}) : super(key: key);
+  const MenuTreeExample({super.key});
 
   @override
   State<MenuTreeExample> createState() => _MenuTreeExampleState();

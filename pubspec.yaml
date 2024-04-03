@@ -1,6 +1,6 @@
 name: flutterware
 description: 'A collection of GUI tools to help Flutter development. This is a complement to your IDE with Flutter specific needs.'
-version: 0.3.0 # Keep it sync with flutterware_app
+version: 0.4.0 # Keep it sync with flutterware_app
 homepage: https://github.com/xvrh/flutterware
 
 environment:
@@ -45,5 +45,4 @@ dev_dependencies:
     git:
       url: https://github.com/xvrh/project_tools.dart.git
       ref: '76d200c'
-  vendor:
   yaml:

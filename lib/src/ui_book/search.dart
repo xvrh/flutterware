@@ -10,14 +10,14 @@ class SearchResults<T> extends StatefulWidget {
   final Widget Function(T entry) breadcrumbBuilder;
 
   const SearchResults({
-    Key? key,
+    super.key,
     required this.query,
     required this.entries,
     this.selected,
     required this.onSelected,
     required this.adapter,
     required this.breadcrumbBuilder,
-  }) : super(key: key);
+  });
 
   @override
   State<SearchResults<T>> createState() => SearchResultsState<T>();
@@ -85,14 +85,13 @@ class _LineView extends StatelessWidget {
   final Widget? breadcrumb;
 
   const _LineView({
-    Key? key,
     required this.onTap,
     required this.selected,
     required this.title,
     required this.isLeaf,
     required this.query,
     required this.breadcrumb,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

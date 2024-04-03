@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
 
 void main() {
-  testApp('Test example', CheckoutTest());
+  testApp('Test example', CheckoutTest().call);
 }
 
 class CheckoutTest extends AppTest {
