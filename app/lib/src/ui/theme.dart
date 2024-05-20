@@ -91,7 +91,7 @@ ThemeData _buildAppTheme() {
       contentPadding: EdgeInsets.symmetric(vertical: 13, horizontal: 10),
     ),
     dataTableTheme: base.dataTableTheme.copyWith(
-      headingRowColor: MaterialStateProperty.all(AppColors.tableHeader),
+      headingRowColor: WidgetStateProperty.all(AppColors.tableHeader),
       headingTextStyle: const TextStyle(
         fontSize: 13,
         color: AppColors.textSecondary,

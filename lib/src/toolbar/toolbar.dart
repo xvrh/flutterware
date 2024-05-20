@@ -96,14 +96,14 @@ class _Toolbar extends StatelessWidget {
   ElevatedButtonThemeData _buttonTheme() {
     return ElevatedButtonThemeData(
       style: ButtonStyle(
-        elevation: MaterialStateProperty.all(0),
-        shape: MaterialStateProperty.all(
+        elevation: WidgetStateProperty.all(0),
+        shape: WidgetStateProperty.all(
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
         ),
-        backgroundColor: MaterialStateProperty.all(_buttonBackground),
-        foregroundColor: MaterialStateProperty.all(Colors.black87),
+        backgroundColor: WidgetStateProperty.all(_buttonBackground),
+        foregroundColor: WidgetStateProperty.all(Colors.black87),
         visualDensity: VisualDensity.compact,
-        textStyle: MaterialStateProperty.all(_textStyle),
+        textStyle: WidgetStateProperty.all(_textStyle),
       ),
     );
   }
