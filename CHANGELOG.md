@@ -1,3 +1,7 @@
+## 0.4.1
+
+- Increase test_api constraint
+
 ## 0.4.0
 
 - Improve `package:flutterware/devbar.dart`
