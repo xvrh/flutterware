@@ -75,8 +75,8 @@ class _Icon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 35,
-      height: 35,
+      width: 30,
+      height: 30,
       decoration: BoxDecoration(
         color: (color ?? Colors.black54).withOpacity(0.1),
         shape: BoxShape.circle,
