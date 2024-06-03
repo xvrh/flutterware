@@ -251,7 +251,7 @@ packages:
       path: "../.."
       relative: true
     source: path
-    version: "0.4.1"
+    version: "0.4.2"
   frontend_server_client:
     dependency: transitive
     description:
@@ -779,4 +779,4 @@ packages:
     version: "3.1.2"
 sdks:
   dart: ">=3.4.0 <4.0.0"
-  flutter: ">=3.19.0"
+  flutter: ">=3.22.0"
