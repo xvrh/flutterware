@@ -24,7 +24,7 @@ class ButtonsOverlay extends StatelessWidget {
 
               return SafeArea(
                 child: Stack(children: [
-                  Positioned(top: 0, right: -10, child: _Buttons(tops)),
+                  Positioned(top: -10, right: -10, child: _Buttons(tops)),
                   Positioned(bottom: 0, right: -10, child: _Buttons(bottoms)),
                 ]),
               );

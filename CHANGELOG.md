@@ -1,3 +1,7 @@
+## 0.4.2
+
+- Move the devbar button slightly
+
 ## 0.4.1
 
 - Increase test_api constraint
