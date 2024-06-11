@@ -91,9 +91,8 @@ class UIBookAppState extends State<UIBook> {
                 },
               ),
               Expanded(
-                child: selected == null
-                    ? SizedBox()
-                    : _detailOrListing(selected),
+                child:
+                    selected == null ? SizedBox() : _detailOrListing(selected),
               ),
             ],
           ),

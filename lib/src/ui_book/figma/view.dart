@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/figma/link.dart';
-import 'package:flutterware/src/ui_book/figma/provider.dart';
-import 'package:flutterware/src/ui_book/figma/ui/column.dart';
-import 'package:flutterware/src/ui_book/figma/ui/settings.dart';
-
 import '../../utils/value_stream.dart';
 import '../app.dart';
+import 'link.dart';
+import 'provider.dart';
 import 'ui/clipboard_button.dart';
+import 'ui/column.dart';
 import 'ui/info_dialog.dart';
+import 'ui/settings.dart';
 
 class FigmaView extends StatelessWidget {
   final TreeEntry entry;
@@ -17,7 +16,8 @@ class FigmaView extends StatelessWidget {
   FigmaView({
     super.key,
     required this.child,
-    required this.entry, required this.floatDefaultWidth,
+    required this.entry,
+    required this.floatDefaultWidth,
   });
 
   @override

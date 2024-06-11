@@ -1,15 +1,14 @@
 import 'dart:io';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/figma/downloader_io.dart';
-import 'package:flutterware/src/ui_book/figma/personal_settings_storage_io.dart';
 import '../../utils/value_stream.dart';
 import 'clipboard_watcher.dart';
+import 'downloader_io.dart';
 import 'link.dart';
 import 'links_source_io.dart';
 import 'links_source_web.dart';
+import 'personal_settings_storage_io.dart';
 
 class FigmaUserConfig {
   final String? apiToken;

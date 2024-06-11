@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/figma/ui/colors.dart';
-import 'package:flutterware/src/ui_book/toolbar.dart';
-
 import '../../../utils/value_stream.dart';
+import '../../toolbar.dart';
+import 'colors.dart';
 
 class AddLinkButton extends StatelessWidget {
   final void Function(String) onSubmit;
   final ValueStream<String?> clipboardWatcher;
 
-  const AddLinkButton({super.key, required this.onSubmit, required this.clipboardWatcher,});
+  const AddLinkButton({
+    super.key,
+    required this.onSubmit,
+    required this.clipboardWatcher,
+  });
 
   @override
   Widget build(BuildContext context) {

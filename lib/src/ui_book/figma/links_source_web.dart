@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
-import 'package:flutterware/src/ui_book/figma/link.dart';
-import 'package:flutterware/src/ui_book/figma/service.dart';
+import 'link.dart';
+import 'service.dart';
 
 class FigmaDownloaderWeb extends FigmaDownloader {
   @override

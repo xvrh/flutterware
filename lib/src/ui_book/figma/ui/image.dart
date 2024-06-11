@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/figma/downloader_io.dart';
-import 'package:flutterware/src/ui_book/figma/link.dart';
-import 'package:flutterware/src/ui_book/figma/service.dart';
-
+import '../downloader_io.dart';
+import '../link.dart';
+import '../service.dart';
 import 'settings.dart';
 
 class FigmaImage extends StatelessWidget {

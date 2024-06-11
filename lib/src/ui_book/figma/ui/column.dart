@@ -1,13 +1,11 @@
 import 'dart:math';
-
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/figma/service.dart';
-import 'package:flutterware/src/ui_book/figma/ui/colors.dart';
-import 'package:flutterware/src/ui_book/figma/ui/floating.dart';
-import 'package:flutterware/src/ui_book/figma/ui/image.dart';
-
 import '../link.dart';
+import '../service.dart';
 import 'add_link_button.dart';
+import 'colors.dart';
+import 'floating.dart';
+import 'image.dart';
 
 final _radius = Radius.circular(10);
 final _borderRadius = BorderRadius.only(
@@ -33,7 +31,8 @@ class FigmaPreviewer extends StatefulWidget {
     required this.figmaLinks,
     required this.onAddLink,
     required this.onLinkSettings,
-    required this.clipboardButton, required this.floatDefaultWidth,
+    required this.clipboardButton,
+    required this.floatDefaultWidth,
   });
 
   @override
@@ -67,7 +66,8 @@ class _FigmaPreviewerState extends State<FigmaPreviewer> {
         );
       },
       onAcceptWithDetails: (d) {
-        var localOffset = (context.findRenderObject()! as RenderBox).globalToLocal(d.offset);
+        var localOffset =
+            (context.findRenderObject()! as RenderBox).globalToLocal(d.offset);
         setState(() {
           _floatingLinks[d.data] = FloatPosition(
             offset: localOffset + Offset(10, -15),

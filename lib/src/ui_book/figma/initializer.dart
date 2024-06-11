@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/figma/service.dart';
+import 'service.dart';
 
 class FigmaServiceInitializer extends StatefulWidget {
   final FigmaUserConfig config;

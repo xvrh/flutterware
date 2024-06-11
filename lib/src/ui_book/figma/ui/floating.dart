@@ -1,7 +1,5 @@
 import 'dart:math';
-
 import 'package:flutter/material.dart';
-
 import '../../toolbar.dart';
 import '../link.dart';
 import '../service.dart';
@@ -128,7 +126,7 @@ class _FloatingPreview extends StatelessWidget {
               ),
             ),
             _dragHandle(
-               Opacity(
+              Opacity(
                 opacity: position.opacity,
                 child: FigmaImage(service, link),
               ),

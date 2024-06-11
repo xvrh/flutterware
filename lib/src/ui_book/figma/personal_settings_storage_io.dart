@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'service.dart';
 
 class PersonalSettingsStorageIO extends PersonalSettingsStorage {

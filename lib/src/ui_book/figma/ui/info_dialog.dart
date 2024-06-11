@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutterware/src/ui_book/app.dart';
-import 'package:flutterware/src/ui_book/figma/service.dart';
-
+import '../../app.dart';
 import '../link.dart';
+import '../service.dart';
 
 Future<void> showFigmaLinkDialog(BuildContext context, FigmaService service,
     TreeEntry entry, FigmaLink link) async {

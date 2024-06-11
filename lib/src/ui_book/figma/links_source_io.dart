@@ -1,8 +1,5 @@
-
-
 import 'dart:convert';
 import 'dart:io';
-
 import 'service.dart';
 
 class FigmaLinksSourceIO implements FigmaLinksSource {

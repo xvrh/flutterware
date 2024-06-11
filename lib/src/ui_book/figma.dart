@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/figma/provider.dart';
-
+import 'figma/provider.dart';
 import 'figma/service.dart';
 
 class Figma extends StatefulWidget {

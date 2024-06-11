@@ -1,5 +1,3 @@
-
-
 import 'package:flutter/material.dart';
 
 final figmaBorderColor = const Color(0xff222222);

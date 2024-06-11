@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/figma/service.dart';
+import '../service.dart';
 
 Future<void> showFigmaSettingsDialog(
     BuildContext context, FigmaService service) async {

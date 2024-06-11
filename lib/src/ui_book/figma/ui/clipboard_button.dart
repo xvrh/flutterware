@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/ui_book/app.dart';
-import 'package:flutterware/src/ui_book/figma/service.dart';
-import 'package:flutterware/src/utils/value_stream.dart';
+import '../../../utils/value_stream.dart';
+import '../../app.dart';
+import '../service.dart';
 
 class ClipboardButton extends StatelessWidget {
   final FigmaService service;

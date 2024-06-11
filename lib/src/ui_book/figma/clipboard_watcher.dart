@@ -1,12 +1,8 @@
-
-
 import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutterware/src/ui_book/figma/link.dart';
-
 import '../../utils/value_stream.dart';
+import 'link.dart';
 
 class ClipboardWatcher {
   late final Timer _timer;

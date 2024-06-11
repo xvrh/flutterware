@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
-import 'package:flutterware/src/ui_book/figma/service.dart';
-import 'package:http/http.dart';
 import 'package:flutter/rendering.dart';
+import 'package:http/http.dart';
 import 'package:path/path.dart' as p;
 import 'link.dart';
+import 'service.dart';
 
 class FigmaCredentialsRequiredException implements Exception {}
 
@@ -16,7 +16,8 @@ class FigmaDownloaderIO implements FigmaDownloader {
   FigmaDownloaderIO(this.cache);
 
   @override
-  Future<ImageProvider> readFigmaScreenshot(FigmaLink url, {FigmaCredentials? credentials}) async {
+  Future<ImageProvider> readFigmaScreenshot(FigmaLink url,
+      {FigmaCredentials? credentials}) async {
     if (credentials == null) {
       throw FigmaCredentialsRequiredException();
     }
@@ -35,7 +36,8 @@ class FigmaDownloaderIO implements FigmaDownloader {
     cache.remove(link);
   }
 
-  Future<Uint8List> _download(FigmaId id, {required FigmaCredentials credentials}) async {
+  Future<Uint8List> _download(FigmaId id,
+      {required FigmaCredentials credentials}) async {
     var basePath = Uri(
         scheme: 'https',
         host: 'api.figma.com',
