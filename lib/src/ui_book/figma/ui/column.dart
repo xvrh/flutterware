@@ -42,7 +42,7 @@ class FigmaPreviewer extends StatefulWidget {
 class _FigmaPreviewerState extends State<FigmaPreviewer> {
   late bool _isCollapsed = widget.figmaLinks.isEmpty;
   final _floatingLinks = <FigmaLink, FloatPosition>{};
-  final double _width = 200;
+  double _width = 200;
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +119,7 @@ class _FigmaPreviewerState extends State<FigmaPreviewer> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(child: child),
-          SizedBox(
+          _dragHandle(SizedBox(
             width: _width,
             child: Container(
               decoration: BoxDecoration(
@@ -177,10 +177,41 @@ class _FigmaPreviewerState extends State<FigmaPreviewer> {
                 ],
               ),
             ),
-          ),
+          )),
         ],
       );
     }
+  }
+
+  Widget _dragHandle(Widget child) {
+    return Stack(
+      children: [
+        child,
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Listener(
+            onPointerMove: (v) {
+              setState(() {
+                _width -= v.delta.dx;
+                _width = min(max(_width, 150), 600);
+              });
+            },
+            child: MouseRegion(
+              cursor: SystemMouseCursors.resizeColumn,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: Colors.black54),
+                ),
+                height: 30,
+                width: 8,
+              ),
+            ),
+          ),
+        )
+      ],
+    );
   }
 }
 

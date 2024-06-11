@@ -193,7 +193,7 @@ class _DetailViewState extends State<DetailView> implements UIBookState {
             floatDefaultWidth: () {
               // TODO(xha): try to use _deviceFrameKey.currentState to get the
               // actual size of the element inside the phone frame
-              return 400;
+              return 300;
             },
             child: mainWidget,
           ),
