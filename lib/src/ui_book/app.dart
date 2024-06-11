@@ -6,6 +6,8 @@ import '../third_party/device_frame/lib/device_frame.dart';
 import 'default_device_list.dart';
 import 'detail.dart';
 import 'device_choice_panel.dart';
+import 'figma/provider.dart';
+import 'figma/service.dart';
 import 'index.dart';
 import 'parameters.dart';
 import 'search.dart';
@@ -18,13 +20,19 @@ class UIBook extends StatefulWidget {
   final String title;
   final Map<String, dynamic> Function() books;
   final Widget Function(BuildContext, Widget) appBuilder;
+  final FigmaUserConfig figmaConfig;
 
-  const UIBook({
+  UIBook({
     super.key,
     required this.title,
     required this.books,
     required this.appBuilder,
-  });
+    String? figmaApiToken,
+    String? figmaLinksPath,
+  }) : figmaConfig = FigmaUserConfig(
+          apiToken: figmaApiToken,
+          linksPath: figmaLinksPath,
+        );
 
   @override
   State<UIBook> createState() => UIBookAppState();
@@ -36,16 +44,18 @@ class UIBook extends StatefulWidget {
 class UIBookAppState extends State<UIBook> {
   final topBarPickers = <String, PickerParameter>{};
   DeviceChoice device = DeviceChoice(
-      isEnabled: true,
-      useMosaic: false,
-      single: SingleDeviceChoice(
-        device: Devices.ios.iPhoneSE,
-        orientation: Orientation.portrait,
-        showFrame: true,
-      ),
-      mosaic: MosaicDeviceChoice(
-          devices: defaultDevices.keys.toSet(),
-          orientations: Orientation.values.toSet()));
+    isEnabled: true,
+    useMosaic: false,
+    single: SingleDeviceChoice(
+      device: Devices.ios.iPhoneSE,
+      orientation: Orientation.portrait,
+      showFrame: true,
+    ),
+    mosaic: MosaicDeviceChoice(
+      devices: defaultDevices.keys.toSet(),
+      orientations: Orientation.values.toSet(),
+    ),
+  );
   String? _selected;
 
   @override
@@ -65,23 +75,28 @@ class UIBookAppState extends State<UIBook> {
       debugShowCheckedModeBanner: false,
       theme: ThemeData.light(useMaterial3: true),
       home: Scaffold(
-        body: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Menu(
-              title: widget.title,
-              entries: entries,
-              selected: selected,
-              onSelect: (e) {
-                setState(() {
-                  _selected = e?.path;
-                });
-              },
-            ),
-            Expanded(
-              child: selected == null ? SizedBox() : _detailOrListing(selected),
-            ),
-          ],
+        body: FigmaProvider(
+          userConfig: widget.figmaConfig,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Menu(
+                title: widget.title,
+                entries: entries,
+                selected: selected,
+                onSelect: (e) {
+                  setState(() {
+                    _selected = e?.path;
+                  });
+                },
+              ),
+              Expanded(
+                child: selected == null
+                    ? SizedBox()
+                    : _detailOrListing(selected),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -130,7 +145,6 @@ class UIBookAppState extends State<UIBook> {
                 entry.children ?? [],
                 onSelect: (e) {
                   setState(() {
-                    print('Select ${e.path}');
                     _selected = e.path;
                   });
                 },

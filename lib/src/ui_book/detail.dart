@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../third_party/device_frame/lib/device_frame.dart';
 import 'app.dart';
 import 'device_choice_panel.dart';
+import 'figma/view.dart';
 import 'parameters.dart';
 import 'parameters_editor.dart';
 import 'toolbar.dart';
@@ -26,6 +27,7 @@ class DetailView extends StatefulWidget {
 }
 
 class _DetailViewState extends State<DetailView> implements UIBookState {
+  final _deviceFrameKey = GlobalKey<__SingleDeviceWrapperState>();
   final _topBarPickers = <String, PickerParameter>{};
   Key _appKey = UniqueKey();
   final _knobsPanelKey = GlobalKey();
@@ -110,7 +112,10 @@ class _DetailViewState extends State<DetailView> implements UIBookState {
             device: device.single.device,
             isFrameVisible: device.single.showFrame,
             orientation: device.single.orientation,
-            screen: result,
+            screen: _SingleDeviceWrapper(
+              key: _deviceFrameKey,
+              child: result,
+            ),
           );
         }
       } else {
@@ -183,7 +188,15 @@ class _DetailViewState extends State<DetailView> implements UIBookState {
         breadcrumb,
         toolbar,
         Expanded(
-          child: ExcludeFocus(child: mainWidget),
+          child: FigmaView(
+            entry: widget.entry,
+            floatDefaultWidth: () {
+              // TODO(xha): try to use _deviceFrameKey.currentState to get the
+              // actual size of the element inside the phone frame
+              return 400;
+            },
+            child: mainWidget,
+          ),
         ),
         if (knobs.parameters.isNotEmpty) ...[
           Divider(),
@@ -248,22 +261,39 @@ class _Mosaic extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      child: IgnorePointer(
-        child: Wrap(
-          children: [
-            for (var orientation in mosaic.orientations)
-              for (var device in mosaic.devices)
-                SizedBox(
-                  width: 200,
-                  child: DeviceFrame(
-                    orientation: orientation,
-                    device: device,
-                    screen: child,
+      child: ExcludeFocus(
+        child: IgnorePointer(
+          child: Wrap(
+            children: [
+              for (var orientation in mosaic.orientations)
+                for (var device in mosaic.devices)
+                  SizedBox(
+                    width: 200,
+                    child: DeviceFrame(
+                      orientation: orientation,
+                      device: device,
+                      screen: child,
+                    ),
                   ),
-                ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+}
+
+class _SingleDeviceWrapper extends StatefulWidget {
+  final Widget child;
+  const _SingleDeviceWrapper({super.key, required this.child});
+
+  @override
+  State<_SingleDeviceWrapper> createState() => __SingleDeviceWrapperState();
+}
+
+class __SingleDeviceWrapperState extends State<_SingleDeviceWrapper> {
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
   }
 }

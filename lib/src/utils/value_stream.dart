@@ -26,6 +26,11 @@ class ValueStream<T> {
     _controller.onListen = onListen;
   }
 
+  void Function()? get onCancel => _controller.onCancel;
+  set onCancel(void Function()? onCancel) {
+    _controller.onCancel = onCancel;
+  }
+
   void dispose() {
     _controller.close();
   }
