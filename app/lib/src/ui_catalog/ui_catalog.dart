@@ -4,10 +4,10 @@ import '../app/paths.dart' as paths;
 import '../project.dart';
 import '../ui/side_menu.dart';
 
-class UIBookScreen extends StatelessWidget {
+class UICatalogScreen extends StatelessWidget {
   final Project project;
 
-  const UIBookScreen(this.project, {super.key});
+  const UICatalogScreen(this.project, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +25,7 @@ class UIBookScreen extends StatelessWidget {
               children: [
                 ElevatedButton(
                     onPressed: () {
-                      project.uiBook.start();
+                      project.uiCatalog.start();
                     },
                     child: Text('Start')),
                 Text('''
@@ -50,16 +50,16 @@ Steps:
   }
 }
 
-class UIBookMenu extends StatelessWidget {
-  const UIBookMenu({super.key});
+class UICatalogMenu extends StatelessWidget {
+  const UICatalogMenu({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: MenuLink(
-        url: paths.uiBook,
-        title: Text('UI Book'),
+        url: paths.uiCatalog,
+        title: Text('UI Catalog'),
       ),
     );
   }

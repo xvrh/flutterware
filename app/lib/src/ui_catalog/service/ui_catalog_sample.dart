@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_book.dart';
+import 'package:flutterware/ui_catalog.dart';
 
 void main() async {
-  runApp(UIBook(
-    title: 'My Storybook',
-    books: () => books,
+  runApp(UICatalog(
+    title: 'My UI Catalog',
+    catalog: () => catalog,
     appBuilder: (context, child) => MaterialApp(
       debugShowCheckedModeBanner: false,
       home: child,
@@ -12,7 +12,7 @@ void main() async {
   ));
 }
 
-Map<String, dynamic> get books => {
+Map<String, dynamic> get catalog => {
       'Sample 1': _MyView(),
     };
 
@@ -21,7 +21,8 @@ class _MyView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: FlutterLogo(
-        size: context.book.knobs.double('size', 50, min: 20, max: 100),
+        size:
+            context.uiCatalog.parameters.double('size', 50, min: 20, max: 100),
       ),
     );
   }

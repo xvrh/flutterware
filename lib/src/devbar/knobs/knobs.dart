@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../ui_book/parameters.dart';
-import '../../ui_book/parameters_editor.dart';
+import '../../ui_catalog/parameters.dart';
+import '../../ui_catalog/parameters_editor.dart';
 import '../devbar.dart';
 import '../ui/button.dart';
 import '../ui/service.dart';

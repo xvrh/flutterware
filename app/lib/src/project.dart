@@ -9,7 +9,7 @@ import 'drawing/model/service.dart';
 import 'icon/model/service.dart';
 import 'overview/service.dart';
 import 'test_runner/model/service.dart';
-import 'ui_book/service/service.dart';
+import 'ui_catalog/service/service.dart';
 import 'utils/async_value.dart';
 import 'utils/flutter_sdk.dart';
 
@@ -25,7 +25,7 @@ class Project {
   late final icons = IconService(this);
   late final dependencies = DependenciesService(this);
   late final drawing = DrawingService(this);
-  late final uiBook = UIBookService(this);
+  late final uiCatalog = UICatalogService(this);
   final Uri? loggerUri;
 
   Project(this.context, String path, this.flutterSdkPath, {this.loggerUri})

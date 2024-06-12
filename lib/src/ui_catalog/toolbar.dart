@@ -223,8 +223,21 @@ class ToolbarCheckbox extends StatelessWidget {
 class ToolbarPanel extends StatefulWidget {
   final Widget button;
   final Widget panel;
+  final Widget Function(
+      {required VoidCallback onPressed, required Widget button})? buttonBuilder;
+  final Offset panelOffset;
+  final Alignment panelTargetAnchor;
+  final Alignment panelFollowerAnchor;
 
-  const ToolbarPanel({super.key, required this.button, required this.panel});
+  const ToolbarPanel({
+    super.key,
+    required this.button,
+    required this.panel,
+    this.buttonBuilder,
+    this.panelOffset = Offset.zero,
+    this.panelTargetAnchor = Alignment.bottomLeft,
+    this.panelFollowerAnchor = Alignment.topLeft,
+  });
 
   @override
   State<ToolbarPanel> createState() => ToolbarPanelState();
@@ -271,15 +284,19 @@ class ToolbarPanelState extends State<ToolbarPanel> {
   @override
   Widget build(BuildContext context) {
     _refreshStream.add(null);
-    return ElevatedButton(
-      onPressed: () {
-        showMenu();
-      },
-      child: CompositedTransformTarget(
-        link: layerLink,
-        child: widget.button,
-      ),
+
+    var child = CompositedTransformTarget(
+      link: layerLink,
+      child: widget.button,
     );
+    if (widget.buttonBuilder case var iconBuilder?) {
+      return iconBuilder(onPressed: showMenu, button: child);
+    } else {
+      return ElevatedButton(
+        onPressed: showMenu,
+        child: child,
+      );
+    }
   }
 
   @override
@@ -305,7 +322,9 @@ class _Menu extends StatelessWidget {
       alignment: Alignment.topLeft,
       child: CompositedTransformFollower(
         link: link,
-        offset: Offset(-20, 22),
+        offset: panelState.widget.panelOffset,
+        targetAnchor: panelState.widget.panelTargetAnchor,
+        followerAnchor: panelState.widget.panelFollowerAnchor,
         child: Card(
           color: theme.canvasColor,
           child: GestureDetector(
