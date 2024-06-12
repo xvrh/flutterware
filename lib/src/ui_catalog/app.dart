@@ -12,20 +12,20 @@ import 'index.dart';
 import 'parameters.dart';
 import 'search.dart';
 import 'treeview.dart';
-import 'ui_book.dart';
+import 'ui_catalog.dart';
 
 const _menuBackground = Color(0xfff7f9fc);
 
-class UIBook extends StatefulWidget {
+class UICatalog extends StatefulWidget {
   final String title;
-  final Map<String, dynamic> Function() books;
+  final Map<String, dynamic> Function() catalog;
   final Widget Function(BuildContext, Widget) appBuilder;
   final FigmaUserConfig figmaConfig;
 
-  UIBook({
+  UICatalog({
     super.key,
     required this.title,
-    required this.books,
+    required this.catalog,
     required this.appBuilder,
     String? figmaApiToken,
     String? figmaLinksPath,
@@ -35,13 +35,13 @@ class UIBook extends StatefulWidget {
         );
 
   @override
-  State<UIBook> createState() => UIBookAppState();
+  State<UICatalog> createState() => UICatalogAppState();
 
-  static UIBook of(BuildContext context) =>
-      context.findAncestorWidgetOfExactType<UIBook>()!;
+  static UICatalog of(BuildContext context) =>
+      context.findAncestorWidgetOfExactType<UICatalog>()!;
 }
 
-class UIBookAppState extends State<UIBook> {
+class UICatalogAppState extends State<UICatalog> {
   final topBarPickers = <String, PickerParameter>{};
   DeviceChoice device = DeviceChoice(
     isEnabled: true,
@@ -60,14 +60,14 @@ class UIBookAppState extends State<UIBook> {
 
   @override
   Widget build(BuildContext context) {
-    var allBooks = widget.books();
-    var entries = _mapToEntries(allBooks);
+    var allCatalog = widget.catalog();
+    var entries = _mapToEntries(allCatalog);
     TreeEntry? selected;
     if (_selected case var selectedPath?) {
       selected =
           _flatEntries(entries).firstWhereOrNull((e) => e.path == selectedPath);
     } else {
-      selected = TreeEntry(null, MapEntry('', allBooks));
+      selected = TreeEntry(null, MapEntry('', allCatalog));
     }
 
     return MaterialApp(
@@ -152,8 +152,8 @@ class UIBookAppState extends State<UIBook> {
           ],
         ),
       );
-      return UIBookStateProvider(
-        state: UIBookState.empty,
+      return UICatalogStateProvider(
+        state: UICatalogState.empty,
         child: Builder(builder: (context) {
           return widget.appBuilder(
             context,

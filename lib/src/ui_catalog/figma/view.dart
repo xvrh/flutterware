@@ -36,9 +36,11 @@ class FigmaView extends StatelessWidget {
                 }
               : null,
           figmaLinks: snapshot,
-          onAddLink: (v) {
-            figmaService.addLink(path, v);
-          },
+          onAddLink: figmaService.canAddLink
+              ? (v) {
+                  figmaService.addLink(path, v);
+                }
+              : null,
           onLinkSettings: (link) {
             showFigmaLinkDialog(context, figmaService, entry, link);
           },

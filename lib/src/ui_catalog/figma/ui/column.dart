@@ -17,7 +17,7 @@ class FigmaPreviewer extends StatefulWidget {
   final FigmaService service;
   final Widget child;
   final void Function()? onOpenSettings;
-  final void Function(String) onAddLink;
+  final void Function(String)? onAddLink;
   final void Function(FigmaLink) onLinkSettings;
   final List<FigmaLink> figmaLinks;
   final Widget clipboardButton;
@@ -162,11 +162,12 @@ class _FigmaPreviewerState extends State<FigmaPreviewer> {
                   widget.clipboardButton,
                   Row(
                     children: [
-                      AddLinkButton(
-                        onSubmit: widget.onAddLink,
-                        clipboardWatcher:
-                            widget.service.clipboardWatcher.proposedLink,
-                      ),
+                      if (widget.onAddLink case var onAddLink?)
+                        AddLinkButton(
+                          onSubmit: onAddLink,
+                          clipboardWatcher:
+                              widget.service.clipboardWatcher.proposedLink,
+                        ),
                       Expanded(child: const SizedBox()),
                       IconButton(
                         onPressed: widget.onOpenSettings,

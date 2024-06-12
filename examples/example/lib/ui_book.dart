@@ -1,12 +1,12 @@
 import 'dart:core' as core;
 import 'dart:core';
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_book.dart';
+import 'package:flutterware/ui_catalog.dart';
 
 void main() async {
-  runApp(UIBook(
+  runApp(UICatalog(
     title: 'My UI Catalog',
-    books: () => books,
+    catalog: () => catalog,
     appBuilder: (context, child) => MaterialApp(
       debugShowCheckedModeBanner: false,
       home: child,
@@ -15,7 +15,7 @@ void main() async {
   ));
 }
 
-Map<String, dynamic> get books => {
+Map<String, dynamic> get catalog => {
       'Dashboard': _DashboardBook(),
       'Weather': {
         'Loading': CircularProgressIndicator(),
@@ -35,14 +35,15 @@ class _DashboardBook extends StatelessWidget {
         'https://www.figma.com/design/aaa/bbb?node-id=93-2293',
       ],
       child: DashboardTile(
-        title: context.book.knobs.string('title', 'My title'),
-        count: context.book.knobs.int('count', 1, min: 0, max: 100),
-        logoStyle: context.book.knobs.picker(
+        title: context.uiCatalog.parameters.string('title', 'My title'),
+        count: context.uiCatalog.parameters.int('count', 1, min: 0, max: 100),
+        logoStyle: context.uiCatalog.parameters.picker(
             'logoStyle',
             {for (var v in FlutterLogoStyle.values) v.toString(): v},
             FlutterLogoStyle.markOnly),
-        logoSize: context.book.knobs.double('logoSize', 100),
-        redBackground: context.book.knobs.bool('redBackground', false),
+        logoSize: context.uiCatalog.parameters.double('logoSize', 100),
+        redBackground:
+            context.uiCatalog.parameters.bool('redBackground', false),
       ),
     );
   }
@@ -91,7 +92,7 @@ class WithTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var count = context.book.knobs.int('counter', 0);
+    var count = context.uiCatalog.parameters.int('counter', 0);
     return Scaffold(
       appBar: AppBar(
         title: Text('With text fields'),

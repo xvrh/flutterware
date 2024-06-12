@@ -6,13 +6,13 @@ import 'figma/view.dart';
 import 'parameters.dart';
 import 'parameters_editor.dart';
 import 'toolbar.dart';
-import 'ui_book.dart';
+import 'ui_catalog.dart';
 
 class DetailView extends StatefulWidget {
   final TreeEntry entry;
   final dynamic value;
   final void Function(TreeEntry) onSelect;
-  final UIBookAppState appState;
+  final UICatalogAppState appState;
 
   const DetailView(
     this.entry,
@@ -26,7 +26,7 @@ class DetailView extends StatefulWidget {
   State<DetailView> createState() => _DetailViewState();
 }
 
-class _DetailViewState extends State<DetailView> implements UIBookState {
+class _DetailViewState extends State<DetailView> implements UICatalogState {
   final _deviceFrameKey = GlobalKey<__SingleDeviceWrapperState>();
   final _topBarPickers = <String, PickerParameter>{};
   Key _appKey = UniqueKey();
@@ -37,7 +37,7 @@ class _DetailViewState extends State<DetailView> implements UIBookState {
   late final topBar = _TopBarAdapter(this);
 
   @override
-  late final EditableParameters knobs = EditableParameters(
+  late final EditableParameters parameters = EditableParameters(
       onRefresh: _onRefreshParameter, onAdded: _onAddedParameter);
 
   T _topBarPicker<T>(String name, Map<String, T> options, T defaultValue) {
@@ -83,7 +83,7 @@ class _DetailViewState extends State<DetailView> implements UIBookState {
 
   @override
   Widget build(BuildContext context) {
-    var book = UIBook.of(context);
+    var book = UICatalog.of(context);
     var value = widget.value;
     var device = widget.appState.device;
 
@@ -127,7 +127,7 @@ class _DetailViewState extends State<DetailView> implements UIBookState {
       );
     }
 
-    mainWidget = UIBookStateProvider(state: this, child: mainWidget);
+    mainWidget = UICatalogStateProvider(state: this, child: mainWidget);
 
     var breadcrumbHeight = 40.0;
     var breadcrumb = Padding(
@@ -198,11 +198,11 @@ class _DetailViewState extends State<DetailView> implements UIBookState {
             child: mainWidget,
           ),
         ),
-        if (knobs.parameters.isNotEmpty) ...[
+        if (parameters.parameters.isNotEmpty) ...[
           Divider(),
           SizedBox(
             height: 200,
-            child: ParametersEditor(knobs, key: _knobsPanelKey),
+            child: ParametersEditor(parameters, key: _knobsPanelKey),
           ),
         ]
       ],

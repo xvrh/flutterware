@@ -1,3 +1,7 @@
+## 0.5.0
+
+- Add Figma integration to `ui_catalog`
+
 ## 0.4.2
 
 - Move the devbar button slightly

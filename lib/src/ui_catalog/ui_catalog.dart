@@ -3,10 +3,10 @@ import 'dart:core';
 import 'package:flutter/material.dart';
 import 'parameters.dart';
 
-export 'app.dart' show UIBook;
+export 'app.dart' show UICatalog;
 
 extension UIBookExtension on BuildContext {
-  UIBookState get book => UIBookState.of(this);
+  UICatalogState get uiCatalog => UICatalogState.of(this);
 }
 
 class WidgetContainer extends StatelessWidget {
@@ -29,34 +29,35 @@ class WidgetContainer extends StatelessWidget {
   }
 }
 
-class UIBookStateProvider extends InheritedWidget {
-  final UIBookState state;
+class UICatalogStateProvider extends InheritedWidget {
+  final UICatalogState state;
 
-  const UIBookStateProvider({
+  const UICatalogStateProvider({
     super.key,
     required super.child,
     required this.state,
   });
 
-  static UIBookStateProvider of(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<UIBookStateProvider>()!;
+  static UICatalogStateProvider of(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<UICatalogStateProvider>()!;
   }
 
   @override
-  bool updateShouldNotify(UIBookStateProvider oldWidget) {
+  bool updateShouldNotify(UICatalogStateProvider oldWidget) {
     return oldWidget.state != state;
   }
 }
 
-abstract class UIBookState {
-  static final empty = _EmptyUIBookState();
+abstract class UICatalogState {
+  static final empty = _EmptyUICatalogState();
 
   TopBarState get topBar;
 
-  Parameters get knobs;
+  Parameters get parameters;
 
-  static UIBookState of(BuildContext context) {
-    return UIBookStateProvider.of(context).state;
+  static UICatalogState of(BuildContext context) {
+    return UICatalogStateProvider.of(context).state;
   }
 }
 
@@ -64,12 +65,12 @@ abstract class TopBarState {
   T picker<T>(String name, Map<String, T> options, T defaultValue);
 }
 
-class _EmptyUIBookState implements UIBookState {
+class _EmptyUICatalogState implements UICatalogState {
   @override
   final topBar = _EmptyTopBarState();
 
   @override
-  final knobs = Parameters();
+  final parameters = Parameters();
 }
 
 class _EmptyTopBarState implements TopBarState {

@@ -11,7 +11,7 @@ import 'server.dart';
 
 final _logger = Logger('ui_book_service');
 
-class UIBookService {
+class UICatalogService {
   static const _mainSuffix = 'ui_book.dart';
 
   final Project project;
@@ -21,7 +21,7 @@ class UIBookService {
   final String _entryPointPath;
   Server? _server;
 
-  UIBookService(this.project)
+  UICatalogService(this.project)
       : _entryPointPath = p.join('build', 'flutterware',
             'ui_book_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(99999)}.dart');
 

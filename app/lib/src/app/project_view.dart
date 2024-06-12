@@ -12,7 +12,7 @@ import '../project.dart';
 import '../test_runner/menu.dart';
 import '../test_runner/screen.dart';
 import '../ui/side_menu.dart';
-import '../ui_book/ui_book.dart';
+import '../ui_catalog/ui_catalog.dart';
 import '../utils/async_value.dart';
 import '../utils/router_outlet.dart';
 import 'paths.dart' as paths;
@@ -84,7 +84,7 @@ class ProjectView extends StatelessWidget {
               ],
             ),
             TestMenu(project),
-            if (enableUIBook.dependsOnValue(context)) UIBookMenu(),
+            if (enableUIBook.dependsOnValue(context)) UICatalogMenu(),
             if (enableDrawingPath.dependsOnValue(context)) DrawingMenu(project),
           ],
         ),
@@ -94,7 +94,7 @@ class ProjectView extends StatelessWidget {
               paths.home: (route) => OverviewScreen(project),
               paths.dependencies: (route) => DependenciesScreen(project),
               paths.tests: (route) => TestRunnerScreen(project),
-              paths.uiBook: (route) => UIBookScreen(project),
+              paths.uiCatalog: (route) => UICatalogScreen(project),
               paths.icon: (route) => IconScreen(project),
               paths.drawing: (route) => DrawingScreen(project),
             },

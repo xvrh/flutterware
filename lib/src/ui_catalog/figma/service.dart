@@ -92,6 +92,8 @@ class FigmaService {
     return stream;
   }
 
+  bool get canAddLink => source.canSave;
+
   void addLink(String path, String uri) {
     var list = _links.links[path] ??= [];
     var link = FigmaLink(uri);
