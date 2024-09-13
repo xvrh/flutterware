@@ -41,12 +41,8 @@ class _RouterDelegate extends RouterDelegate<Object>
       pages: [
         page,
       ],
-      onPopPage: (route, result) {
-        if (!route.didPop(result)) {
-          return false;
-        }
+      onDidRemovePage: (page) {
         notifyListeners();
-        return true;
       },
       onGenerateRoute: (r) {
         throw UnimplementedError();

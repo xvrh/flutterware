@@ -3,7 +3,7 @@ import 'package:meta/meta.dart';
 import 'runtime/setup_test_values.dart';
 
 export 'package:flutter_test/flutter_test.dart' hide testWidgets;
-export 'runtime/app_test.dart' show AppTest;
+export 'runtime/app_test.dart' show AppTest, Screenshot;
 export 'runtime/widget_tester_assets.dart' show WidgetTesterAssetsExtension;
 export 'runtime/widget_tester_screenshot.dart'
     show WidgetTesterScreenshotExtension;
