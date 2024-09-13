@@ -40,6 +40,8 @@ class _TestRunnerScreenState extends State<TestRunnerScreen> {
           break;
       }
 
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

@@ -71,10 +71,11 @@ abstract class AppTest {
   Future<void> pumpWidget(
     Widget widget, {
     bool pumpFrames = true,
+    Screenshot? screenshot,
   }) async {
     await tester.pumpWidget(widget);
     await _pumpFramesIfNeeded(pumpFrames);
-    await _screenshotIfNeeded();
+    await _screenshotIfNeeded(screenshot);
   }
 
   Future<void> pump([
@@ -104,17 +105,19 @@ abstract class AppTest {
     dynamic target,
     String text, {
     bool pumpFrames = true,
+    Screenshot? screenshot,
   }) async {
     var finder = targetToFinder(target);
     await tester.enterText(finder, text);
     await _pumpFramesIfNeeded(pumpFrames);
-    await _screenshotIfNeeded();
+    await _screenshotIfNeeded(screenshot);
   }
 
   Future<void> tap(
     dynamic target, {
     bool pumpFrames = true,
     bool warnIfMissed = true,
+    Screenshot? screenshot,
   }) async {
     var finder = targetToFinder(target);
 
@@ -126,7 +129,7 @@ abstract class AppTest {
 
     await tester.tap(finder, warnIfMissed: warnIfMissed);
     await _pumpFramesIfNeeded(pumpFrames);
-    await _screenshotIfNeeded();
+    await _screenshotIfNeeded(screenshot);
   }
 
   Future<void> dragUntilVisible(dynamic target, dynamic scrollview,
@@ -138,11 +141,11 @@ abstract class AppTest {
     await pumpAndSettle();
   }
 
-  Future<void> ensureVisible(dynamic target) async {
+  Future<void> ensureVisible(dynamic target, {Screenshot? screenshot}) async {
     var finder = targetToFinder(target, skipOffStage: false);
     await tester.ensureVisible(finder);
     await pumpAndSettle();
-    await _screenshotIfNeeded();
+    await _screenshotIfNeeded(screenshot);
   }
 
   RenderBox? _getElementBox(Finder finder) {
@@ -167,17 +170,31 @@ abstract class AppTest {
     }
   }
 
-  bool autoScreenshot = false;
+  bool autoScreenshot = true;
 
   /// Takes a screenshot of the current widget and display it in the Flutterware
   /// visualizer
-  Future<void> screenshot({String? name, List<String>? tags}) {
-    return tester.screenshot(name: name, tags: tags);
+  Future<void> screenshot({String? name, List<String>? tags}) async {
+    for (var i = 0; i < 5; i++) {
+      await pump();
+    }
+    await tester.screenshot(name: name, tags: tags);
   }
 
-  Future<void> _screenshotIfNeeded() async {
-    if (autoScreenshot) {
-      await screenshot();
+  Future<void> _screenshotIfNeeded(Screenshot? screenshotInfo) async {
+    if (screenshotInfo == Screenshot.skip) return;
+
+    if (autoScreenshot || screenshotInfo != null) {
+      await screenshot(name: screenshotInfo?.name, tags: screenshotInfo?.tags);
     }
   }
+}
+
+class Screenshot {
+  final String? name;
+  final List<String>? tags;
+
+  Screenshot({this.name, this.tags});
+
+  static final skip = Screenshot();
 }
