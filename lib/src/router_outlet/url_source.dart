@@ -1,6 +1,6 @@
 import 'path.dart';
-import 'url_source_fake.dart'
-    if (dart.library.js_interop) 'url_source_web.dart' as source;
+import 'url_source_fake.dart' if (dart.library.js_interop) 'url_source_web.dart'
+    as source;
 
 UrlSource Function() urlSourceFactory = UrlSource.auto;
 

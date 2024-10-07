@@ -183,9 +183,12 @@ void main() {
 
     expect(rootMatch.isSelectedType('home'), RouteSelectedType.descendant);
     expect(rootMatch.isSelectedType('users'), null);
-    expect(rootMatch.isSelectedType('home/profile'), RouteSelectedType.descendant);
-    expect(rootMatch.isSelectedType('/home/profile/'), RouteSelectedType.descendant);
-    expect(rootMatch.isSelectedType('/home/profile'), RouteSelectedType.descendant);
+    expect(
+        rootMatch.isSelectedType('home/profile'), RouteSelectedType.descendant);
+    expect(rootMatch.isSelectedType('/home/profile/'),
+        RouteSelectedType.descendant);
+    expect(rootMatch.isSelectedType('/home/profile'),
+        RouteSelectedType.descendant);
     expect(profileMatch.isSelectedType(''), RouteSelectedType.descendant);
     expect(profileMatch.isSelectedType('1'), RouteSelectedType.self);
     expect(profileMatch.isSelectedType('1/'), RouteSelectedType.self);

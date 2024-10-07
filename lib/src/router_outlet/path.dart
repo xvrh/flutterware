@@ -91,7 +91,7 @@ class PathPattern {
   int get hashCode => pattern.hashCode;
 }
 
-enum RouteSelectedType {self, descendant}
+enum RouteSelectedType { self, descendant }
 
 class MatchedPath {
   final PathPattern pattern;
