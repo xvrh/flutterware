@@ -1,4 +1,4 @@
-import 'package:flutterware_app/src/utils/router_outlet/path.dart';
+import 'package:flutterware/src/router_outlet/path.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -181,15 +181,18 @@ void main() {
     var profileMatch =
         path.rootMatch.matchesRemaining(PathPattern('home/profile'))!;
 
-    expect(rootMatch.selection('home'), SelectionType.ancestor);
-    expect(rootMatch.selection('users'), SelectionType.none);
-    expect(rootMatch.selection('home/profile'), SelectionType.ancestor);
-    expect(rootMatch.selection('/home/profile/'), SelectionType.ancestor);
-    expect(rootMatch.selection('/home/profile'), SelectionType.ancestor);
-    expect(profileMatch.selection(''), SelectionType.ancestor);
-    expect(profileMatch.selection('1'), SelectionType.selected);
-    expect(profileMatch.selection('1/'), SelectionType.selected);
-    expect(profileMatch.selection('/1'), SelectionType.none);
+    expect(rootMatch.isSelectedType('home'), RouteSelectedType.descendant);
+    expect(rootMatch.isSelectedType('users'), null);
+    expect(
+        rootMatch.isSelectedType('home/profile'), RouteSelectedType.descendant);
+    expect(rootMatch.isSelectedType('/home/profile/'),
+        RouteSelectedType.descendant);
+    expect(rootMatch.isSelectedType('/home/profile'),
+        RouteSelectedType.descendant);
+    expect(profileMatch.isSelectedType(''), RouteSelectedType.descendant);
+    expect(profileMatch.isSelectedType('1'), RouteSelectedType.self);
+    expect(profileMatch.isSelectedType('1/'), RouteSelectedType.self);
+    expect(profileMatch.isSelectedType('/1'), null);
   });
 
   test('MatchedPath.selectedIndex', () {

@@ -82,13 +82,13 @@ class _RouterOutletState extends State<RouterOutlet> {
     if (redirect != null) {
       context.go(redirect);
     } else {
-      // TODO(xha): Up the chain to call onNotFound. If nothing found, back to
+      // TODO: Up the chain to call onNotFound. If nothing found, back to
       // the root (and take the first path)
     }
 
-    //TODO(xha): allow to customize (provide a builder at root) + provide a builder
+    //TODO: allow to customize (provide a builder at root) + provide a builder
     // in outlet
-    // TODO(xha): allow _RouteBuilder to return a FutureOr<Widget> and return
+    // TODO: allow _RouteBuilder to return a FutureOr<Widget> and return
     // a RouteLoader() which handle the LoadingState & ErrorState
     // => Maybe just easier to provide it as a utility class to return in the builder
     // itself
