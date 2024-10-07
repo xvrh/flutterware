@@ -116,7 +116,7 @@ class RouterRootAuto extends StatefulWidget {
 }
 
 class _RouterRootAuto extends State<RouterRootAuto> {
-  final _urlSource = urlSourceFactory();
+  final _urlSource = UrlSource.defaultFactory();
 
   @override
   void initState() {
