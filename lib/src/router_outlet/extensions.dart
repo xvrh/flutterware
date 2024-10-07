@@ -1,9 +1,6 @@
 import 'package:flutter/widgets.dart';
-import 'path.dart';
 import 'provider.dart';
 import 'router_root.dart';
-
-export 'path.dart' show SelectionType;
 
 extension UrlRouterExtension on BuildContext {
   void go(String url) => router.go(url);
@@ -32,10 +29,6 @@ class RouterReference {
 
   bool isSelected(String url) {
     return path.isSelected(url);
-  }
-
-  SelectionType selection(String url) {
-    return path.selection(url);
   }
 
   int? selectedIndex(Iterable<String> urls) {

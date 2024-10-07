@@ -1,11 +1,9 @@
 import 'package:flutter/widgets.dart';
-import 'package:rxdart/rxdart.dart';
+import '../utils/value_stream.dart';
 import 'path.dart';
 import 'provider.dart';
 import 'url_source.dart';
 
-//TODO(xha): try to get rid of the class, we can just inject it at the first
-// RouterOutlet?
 class RouterRoot extends StatefulWidget {
   final UrlSource urlSource;
   final Widget child;
@@ -53,7 +51,7 @@ class SubMatchTracker extends StatefulWidget {
 }
 
 class SubMatchTrackerState extends State<SubMatchTracker> {
-  final allMatches = BehaviorSubject<List<MatchedPath>>.seeded([]);
+  final allMatches = ValueStream<List<MatchedPath>>([]);
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +81,7 @@ class SubMatchTrackerState extends State<SubMatchTracker> {
 
   @override
   void dispose() {
-    allMatches.close();
+    allMatches.dispose();
     super.dispose();
   }
 }
@@ -118,7 +116,7 @@ class RouterRootAuto extends StatefulWidget {
 }
 
 class _RouterRootAuto extends State<RouterRootAuto> {
-  final _urlSource = UrlSource.forPlatform();
+  final _urlSource = urlSourceFactory();
 
   @override
   void initState() {

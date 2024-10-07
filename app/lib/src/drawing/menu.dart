@@ -72,8 +72,7 @@ class __ListingMenuState extends State<_ListingMenu> {
         onTap: () {
           context.router.go(_urlForFile(file));
         },
-        isSelected: context.router.selection(_urlForFile(file)) ==
-            SelectionType.selected,
+        isSelected: context.router.isSelected(_urlForFile(file)),
         expanded: isExpanded,
         child: Row(
           children: [
@@ -117,7 +116,7 @@ class __ListingMenuState extends State<_ListingMenu> {
         onTap: () {
           context.router.go(url);
         },
-        isSelected: context.router.selection(url) == SelectionType.selected,
+        isSelected: context.router.isSelected(url),
         indent: 1,
         child: Row(
           children: [
