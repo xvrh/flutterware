@@ -6,7 +6,7 @@ import 'url_source_fake.dart' as fake_lib;
 abstract class UrlSource {
   static UrlSource auto() => source.createSource();
 
-  static UrlSource defaultFactory() => UrlSource.auto();
+  static UrlSource Function() defaultFactory = UrlSource.auto;
 
   static UrlSource fake() => fake_lib.createSource();
 
