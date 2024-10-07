@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:flutterware/devbar.dart';
-import 'package:flutterware/devbar_plugins/log_network.dart';
 import 'package:http/http.dart';
+import '../../../../devbar.dart';
+import '../../../../devbar_plugins/log_network.dart';
 
 class DevbarHttpClient extends BaseClient {
   static int _id = 0;

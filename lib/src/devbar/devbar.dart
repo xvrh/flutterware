@@ -9,7 +9,7 @@ import 'ui/panel.dart';
 import 'ui/service.dart';
 import 'ui/toasts_overlay.dart';
 
-final _devbarKeys = <GlobalKey<DevbarState>>[];
+final _devbarStates = <DevbarState>[];
 
 /// Wrapper around the application to add a hidden developer UI beneath it.
 class Devbar extends StatefulWidget {
@@ -34,8 +34,7 @@ class Devbar extends StatefulWidget {
     return context.findAncestorStateOfType<DevbarState>();
   }
 
-  static List<DevbarState> get instances =>
-      _devbarKeys.map((d) => d.currentState).nonNulls.toList();
+  static List<DevbarState> get instances => _devbarStates;
 }
 
 class DevbarState extends State<Devbar> {
@@ -51,6 +50,8 @@ class DevbarState extends State<Devbar> {
   @override
   void initState() {
     super.initState();
+
+    _devbarStates.add(this);
 
     WidgetsBinding.instance.deferFirstFrame();
     _loadPluginsFuture = _loadPlugins();
@@ -125,6 +126,7 @@ class DevbarState extends State<Devbar> {
 
   @override
   void dispose() {
+    _devbarStates.remove(this);
     ui.dispose();
     for (var plugin in _plugins) {
       plugin.dispose();
