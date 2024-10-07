@@ -9,6 +9,8 @@ import 'ui/panel.dart';
 import 'ui/service.dart';
 import 'ui/toasts_overlay.dart';
 
+final _devbarKeys = <GlobalKey<DevbarState>>[];
+
 /// Wrapper around the application to add a hidden developer UI beneath it.
 class Devbar extends StatefulWidget {
   final Widget child;
@@ -31,6 +33,9 @@ class Devbar extends StatefulWidget {
   static DevbarState? of(BuildContext context) {
     return context.findAncestorStateOfType<DevbarState>();
   }
+
+  static List<DevbarState> get instances =>
+      _devbarKeys.map((d) => d.currentState).nonNulls.toList();
 }
 
 class DevbarState extends State<Devbar> {
