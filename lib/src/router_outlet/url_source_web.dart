@@ -10,14 +10,13 @@ UrlSource createSource() => UrlSourceWeb();
 class UrlSourceWeb implements UrlSource {
   final _onChangeController = StreamController<PagePath>.broadcast();
   late PagePath _current;
-  late StreamSubscription _hashChangeSubscription;
 
   UrlSourceWeb() {
     setUrlStrategy(null);
 
     html.window.addEventListener(
         'hashchange',
-        (_) {
+        () {
           go(_getHash());
         }.toJS);
 
@@ -52,6 +51,5 @@ class UrlSourceWeb implements UrlSource {
   @override
   void dispose() {
     _onChangeController.close();
-    _hashChangeSubscription.cancel();
   }
 }
