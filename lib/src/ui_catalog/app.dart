@@ -441,10 +441,11 @@ class TreeEntry {
 
   List<TreeEntry>? get children {
     var mapValue = entry.value;
-    if (mapValue is Map<String, dynamic>) {
-      return mapValue.entries.map((e) => TreeEntry(this, e)).toList();
+    if (mapValue is Map) {
+      return mapValue.entries
+          .map((e) => TreeEntry(this, MapEntry('${e.key}', e.value)))
+          .toList();
     }
-    assert(mapValue is! Map);
     return null;
   }
 
