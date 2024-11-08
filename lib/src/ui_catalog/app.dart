@@ -16,11 +16,16 @@ import 'ui_catalog.dart';
 
 const _menuBackground = Color(0xfff7f9fc);
 
+enum FormFactor { mobile, desktop, all }
+
+typedef FormFactorPicker = FormFactor? Function(String);
+
 class UICatalog extends StatefulWidget {
   final String title;
   final Map<String, dynamic> Function() catalog;
   final Widget Function(BuildContext, Widget) appBuilder;
   final FigmaUserConfig figmaConfig;
+  final FormFactorPicker? formFactor;
 
   UICatalog({
     super.key,
@@ -29,6 +34,7 @@ class UICatalog extends StatefulWidget {
     required this.appBuilder,
     String? figmaApiToken,
     String? figmaLinksPath,
+    this.formFactor,
   }) : figmaConfig = FigmaUserConfig(
           apiToken: figmaApiToken,
           linksPath: figmaLinksPath,
@@ -43,20 +49,56 @@ class UICatalog extends StatefulWidget {
 
 class UICatalogAppState extends State<UICatalog> {
   final topBarPickers = <String, PickerParameter>{};
-  DeviceChoice device = DeviceChoice(
+  DeviceChoice mobileDevice = DeviceChoice(
     isEnabled: true,
     useMosaic: false,
+    availableDevices: defaultMobileDevices,
     single: SingleDeviceChoice(
       device: Devices.ios.iPhoneSE,
       orientation: Orientation.portrait,
       showFrame: true,
     ),
     mosaic: MosaicDeviceChoice(
-      devices: defaultDevices.keys.toSet(),
+      devices: defaultMobileDevices.keys.toSet(),
       orientations: Orientation.values.toSet(),
     ),
   );
+  DeviceChoice desktopDevice = DeviceChoice(
+    isEnabled: false,
+    useMosaic: false,
+    availableDevices: defaultDesktopDevices,
+    single: SingleDeviceChoice(
+      device: Devices.macOS.macBookPro,
+      orientation: Orientation.landscape,
+      showFrame: true,
+    ),
+    mosaic: MosaicDeviceChoice(
+      devices: defaultDesktopDevices.keys.toSet(),
+      orientations: {Orientation.landscape},
+    ),
+  );
   String? _selected;
+
+  DeviceChoice deviceForEntry(TreeEntry entry) {
+    var formFactor = widget.formFactor?.call(entry.path) ?? FormFactor.all;
+    return switch (formFactor) {
+      FormFactor.mobile => mobileDevice,
+      FormFactor.all => mobileDevice,
+      FormFactor.desktop => desktopDevice,
+    };
+  }
+
+  void setDeviceForEntry(TreeEntry entry, DeviceChoice choice) {
+    var formFactor = widget.formFactor?.call(entry.path) ?? FormFactor.all;
+    switch (formFactor) {
+      case FormFactor.mobile:
+        mobileDevice = choice;
+      case FormFactor.all:
+        mobileDevice = choice;
+      case FormFactor.desktop:
+        desktopDevice = choice;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,6 +184,7 @@ class UICatalogAppState extends State<UICatalog> {
               child: IndexView(
                 isRoot: true,
                 entry.children ?? [],
+                formFactorPicker: widget.formFactor,
                 onSelect: (e) {
                   setState(() {
                     _selected = e.path;

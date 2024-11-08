@@ -85,7 +85,7 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
   Widget build(BuildContext context) {
     var book = UICatalog.of(context);
     var value = widget.value;
-    var device = widget.appState.device;
+    var device = widget.appState.deviceForEntry(widget.entry);
 
     Widget mainWidget;
     if (value is Widget) {
@@ -150,7 +150,8 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
                   value: device.isEnabled,
                   onChanged: (v) {
                     setState(() {
-                      widget.appState.device = device.copyWith(isEnabled: v);
+                      widget.appState.setDeviceForEntry(
+                          widget.entry, device.copyWith(isEnabled: v));
                     });
                   },
                 ),
@@ -161,7 +162,7 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
             choice: device,
             onChanged: (v) {
               setState(() {
-                widget.appState.device = v;
+                widget.appState.setDeviceForEntry(widget.entry, v);
               });
             },
           ),

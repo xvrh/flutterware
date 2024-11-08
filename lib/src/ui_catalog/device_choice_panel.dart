@@ -1,7 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../third_party/device_frame/lib/device_frame.dart';
-import 'default_device_list.dart';
 import 'toolbar.dart';
 
 class DeviceChoice {
@@ -9,12 +8,14 @@ class DeviceChoice {
   final bool useMosaic;
   final SingleDeviceChoice single;
   final MosaicDeviceChoice mosaic;
+  final Map<DeviceInfo, String> availableDevices;
 
   DeviceChoice({
     required this.isEnabled,
     required this.single,
     required this.mosaic,
     required this.useMosaic,
+    required this.availableDevices,
   });
 
   DeviceChoice copyWith({
@@ -28,6 +29,7 @@ class DeviceChoice {
       single: single ?? this.single,
       mosaic: mosaic ?? this.mosaic,
       useMosaic: useMosaic ?? this.useMosaic,
+      availableDevices: availableDevices,
     );
   }
 }
@@ -148,7 +150,7 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
                   ),
                 ),
                 Divider(),
-                for (var device in defaultDevices.entries)
+                for (var device in widget.choice.availableDevices.entries)
                   _DeviceTile(
                     leading: Radio(
                       value: device.key,
@@ -202,7 +204,7 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
                   title: Text('All'),
                   leading: Checkbox(
                     value: widget.choice.mosaic.devices.length ==
-                            defaultDevices.length
+                            widget.choice.availableDevices.length
                         ? true
                         : widget.choice.mosaic.devices.isEmpty
                             ? false
@@ -213,7 +215,8 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
                       if (widget.choice.mosaic.devices.isNotEmpty) {
                         newDevices = {};
                       } else {
-                        newDevices = defaultDevices.keys.toSet();
+                        newDevices =
+                            widget.choice.availableDevices.keys.toSet();
                       }
                       widget.onChanged(widget.choice.copyWith(
                           mosaic: widget.choice.mosaic
@@ -221,7 +224,7 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
                     },
                   ),
                 ),
-                for (var device in defaultDevices.entries)
+                for (var device in widget.choice.availableDevices.entries)
                   _DeviceTile(
                     title: device.value,
                     device: device.key,

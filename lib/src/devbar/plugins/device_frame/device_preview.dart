@@ -33,7 +33,7 @@ class DevicePreview extends StatelessWidget {
                 icon: Icons.phone_android,
                 color: Colors.blue,
                 values: {
-                  for (var device in defaultDevices.entries)
+                  for (var device in defaultMobileDevices.entries)
                     device.key: Text(device.value),
                   null: Text('Close frame'),
                 },
