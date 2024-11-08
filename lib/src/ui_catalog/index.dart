@@ -8,12 +8,14 @@ class IndexView extends StatelessWidget {
   final List<TreeEntry> children;
   final void Function(TreeEntry) onSelect;
   final bool isRoot;
+  final FormFactorPicker? formFactorPicker;
 
   const IndexView(
     this.children, {
     super.key,
     required this.onSelect,
     required this.isRoot,
+    required this.formFactorPicker,
   });
 
   @override
@@ -37,6 +39,7 @@ class IndexView extends StatelessWidget {
               onTap: () {
                 onSelect(child);
               },
+              formFactor: formFactorPicker?.call(child.path) ?? FormFactor.all,
             )
         ],
       ),
@@ -44,7 +47,12 @@ class IndexView extends StatelessWidget {
         _Folder(
           title: folder.title,
           onSelect: () => onSelect(folder),
-          child: IndexView(folder.children!, onSelect: onSelect, isRoot: false),
+          child: IndexView(
+            folder.children!,
+            onSelect: onSelect,
+            isRoot: false,
+            formFactorPicker: formFactorPicker,
+          ),
         )
     ];
 
@@ -69,8 +77,14 @@ class _IndexPreview extends StatelessWidget {
   final TreeEntry entry;
   final dynamic value;
   final VoidCallback onTap;
+  final FormFactor formFactor;
 
-  _IndexPreview(this.entry, this.value, {required this.onTap});
+  _IndexPreview(
+    this.entry,
+    this.value, {
+    required this.onTap,
+    required this.formFactor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +95,11 @@ class _IndexPreview extends StatelessWidget {
         child: value,
       );
       mainWidget = DeviceFrame(
-        device: Devices.android.smallPhone,
+        device: switch (formFactor) {
+          FormFactor.mobile => Devices.android.smallPhone,
+          FormFactor.all => Devices.android.smallPhone,
+          FormFactor.desktop => Devices.windows.laptop,
+        },
         screen: widget,
         isFrameVisible: false,
       );

@@ -1,6 +1,6 @@
 import '../third_party/device_frame/lib/device_frame.dart';
 
-final defaultDevices = {
+final defaultMobileDevices = {
   Devices.ios.iPhoneSE: 'iPhone SE',
   Devices.ios.iPad: 'iPad',
   Devices.ios.iPhone13: 'iPhone 13',
@@ -12,4 +12,11 @@ final defaultDevices = {
   Devices.android.smallTablet: 'Android small tablet',
   Devices.android.mediumTablet: 'Android medium tablet',
   Devices.android.largeTablet: 'Android large tablet',
+};
+
+final defaultDesktopDevices = {
+  Devices.macOS.macBookPro: 'MacBook Pro',
+  Devices.macOS.wideMonitor: 'Wide monitor',
+  Devices.windows.laptop: 'Windows laptop',
+  Devices.linux.laptop: 'Linux laptop',
 };
