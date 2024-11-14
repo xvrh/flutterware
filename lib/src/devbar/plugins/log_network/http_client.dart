@@ -5,11 +5,11 @@ import '../../../../devbar_plugins/log_network.dart';
 
 class DevbarHttpClient extends BaseClient {
   static int _id = 0;
-  final String apiName;
+  final String? apiName;
   final Client inner;
   final DevbarState? devbar;
 
-  DevbarHttpClient(this.inner, {required this.apiName, this.devbar});
+  DevbarHttpClient(this.inner, {this.apiName, this.devbar});
 
   List<DevbarState> get _instances {
     if (devbar case var instance?) {
