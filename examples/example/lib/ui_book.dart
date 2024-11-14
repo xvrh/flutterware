@@ -44,6 +44,12 @@ class _DashboardBook extends StatelessWidget {
         logoSize: context.uiCatalog.parameters.double('logoSize', 100),
         redBackground:
             context.uiCatalog.parameters.bool('redBackground', false),
+        dateTime:
+            context.uiCatalog.parameters.dateTime('dateTime', DateTime(2024)),
+        dateOnly: context.uiCatalog.parameters
+            .dateTime('dateOnly', DateTime(2024), dateOnly: true),
+        nullableDateTime: context.uiCatalog.parameters
+            .nullableDateTime('nullableDateTime', null),
       ),
     );
   }
@@ -57,6 +63,9 @@ class DashboardTile extends StatelessWidget {
   final FlutterLogoStyle logoStyle;
   final double logoSize;
   final bool redBackground;
+  final DateTime dateTime;
+  final DateTime dateOnly;
+  final DateTime? nullableDateTime;
 
   const DashboardTile({
     super.key,
@@ -65,6 +74,9 @@ class DashboardTile extends StatelessWidget {
     required this.logoStyle,
     required this.logoSize,
     required this.redBackground,
+    required this.dateTime,
+    required this.dateOnly,
+    this.nullableDateTime,
   });
 
   @override
@@ -79,7 +91,10 @@ class DashboardTile extends StatelessWidget {
               size: logoSize,
             ),
             Text(title),
-            for (var i = 0; i < count; i++) Text('Item $i')
+            for (var i = 0; i < count; i++) Text('Item $i'),
+            Text(dateTime.toString()),
+            Text(dateOnly.toString()),
+            Text(nullableDateTime.toString()),
           ],
         ),
       ),
