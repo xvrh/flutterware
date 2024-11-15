@@ -39,16 +39,13 @@ class ParametersEditor extends StatelessWidget {
   }
 
   Widget _editorFor(Parameter parameter) {
-    if (parameter is StringParameter) {
-      return _StringEditor(parameter);
-    } else if (parameter is BoolParameter) {
-      return _BoolEditor(parameter);
-    } else if (parameter is NumParameter) {
-      return _NumEditor(parameter);
-    } else if (parameter is PickerParameter) {
-      return _PickerEditor(parameter);
-    }
-    throw Exception('Unknown parameter type: ${parameter.runtimeType}');
+    return switch (parameter) {
+      StringParameter() => _StringEditor(parameter),
+      BoolParameter() => _BoolEditor(parameter),
+      NumParameter<num>() => _NumEditor(parameter),
+      PickerParameter() => _PickerEditor(parameter),
+      DateTimeParameter() => _DateTimeEditor(parameter),
+    };
   }
 }
 
@@ -207,5 +204,105 @@ class _PickerEditor<T> extends StatelessWidget {
         parameter.value = v;
       },
     );
+  }
+}
+
+class _DateTimeEditor extends StatelessWidget {
+  final DateTimeParameter parameter;
+
+  const _DateTimeEditor(this.parameter);
+
+  @override
+  Widget build(BuildContext context) {
+    var value = parameter.requiredValue;
+
+    String pad(int value) => '$value'.padLeft(2, '0');
+
+    String formatted;
+    if (value == null) {
+      formatted = '<null>';
+    } else {
+      formatted = '${value.year}-${pad(value.month)}-${pad(value.day)}';
+      if (!parameter.dateOnly) {
+        formatted += ' ${pad(value.hour)}:${pad(value.minute)}';
+      }
+    }
+
+    return Row(
+      children: [
+        TextButton(
+          onPressed: () async {
+            var previousValue = value;
+            var pickedDate = await showDatePicker(
+                context: context,
+                firstDate: DateTime(0),
+                lastDate: DateTime(2100),
+                initialDate: value);
+            if (pickedDate != null) {
+              var pickedTime = TimeOfDay(hour: 0, minute: 0);
+              if (!parameter.dateOnly && context.mounted) {
+                pickedTime = await showTimePicker(
+                        context: context,
+                        initialTime: value != null
+                            ? TimeOfDay(hour: value.hour, minute: value.minute)
+                            : pickedTime) ??
+                    pickedTime;
+              }
+              var newValue = parameter.value = pickedDate.copyWith(
+                  hour: pickedTime.hour, minute: pickedTime.minute);
+
+              if (previousValue != null && previousValue.isUtc) {
+                switchUtc(true, newValue);
+              }
+            }
+          },
+          child: Text(formatted),
+        ),
+        if (parameter.isNullable && value != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 10),
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(minimumSize: Size.zero),
+              onPressed: () {
+                parameter.value = null;
+              },
+              child: Text('Clear'),
+            ),
+          ),
+        if (value != null)
+          InkWell(
+            onTap: () {
+              switchUtc(!value.isUtc, value);
+            },
+            child: Row(
+              children: [
+                Checkbox(
+                  value: value.isUtc,
+                  onChanged: (v) => switchUtc(v!, value),
+                ),
+                Text('utc'),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  void switchUtc(bool isUtc, DateTime value) {
+    parameter.value = isUtc
+        ? DateTime.utc(
+            value.year,
+            value.month,
+            value.day,
+            value.hour,
+            value.minute,
+          )
+        : DateTime(
+            value.year,
+            value.month,
+            value.day,
+            value.hour,
+            value.minute,
+          );
   }
 }

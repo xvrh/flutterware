@@ -29,6 +29,16 @@ class Parameters {
   T picker<T>(String name, Map<String, T> values, T defaultValue) {
     return defaultValue;
   }
+
+  DateTime? nullableDateTime(String name, DateTime? defaultValue,
+      {core.bool dateOnly = false}) {
+    return defaultValue;
+  }
+
+  DateTime dateTime(String name, DateTime defaultValue,
+      {core.bool dateOnly = false}) {
+    return defaultValue;
+  }
 }
 
 class EditableParameters implements Parameters {
@@ -120,6 +130,24 @@ class EditableParameters implements Parameters {
     return parameter.requiredValue;
   }
 
+  @override
+  DateTime? nullableDateTime(String name, DateTime? defaultValue,
+      {core.bool dateOnly = false}) {
+    var parameter = _addParameter(
+        name, () => DateTimeParameter(isNullable: true, dateOnly: dateOnly))
+      ..defaultValue = defaultValue;
+    return parameter.requiredValue;
+  }
+
+  @override
+  DateTime dateTime(String name, DateTime defaultValue,
+      {core.bool dateOnly = false}) {
+    var parameter = _addParameter(
+        name, () => DateTimeParameter(isNullable: false, dateOnly: dateOnly))
+      ..defaultValue = defaultValue;
+    return parameter.requiredValue!;
+  }
+
   void dispose() {
     for (var parameter in parameters.values) {
       parameter.dispose();
@@ -163,4 +191,11 @@ class PickerParameter<T> extends Parameter<T> {
   Map<String, T> options;
 
   PickerParameter({required this.options}) : super(options.values.first);
+}
+
+class DateTimeParameter extends Parameter<DateTime?> {
+  final bool isNullable;
+  final bool dateOnly;
+  DateTimeParameter({required this.isNullable, required this.dateOnly})
+      : super(null);
 }
