@@ -80,7 +80,8 @@ class _Icon extends StatelessWidget {
       decoration: BoxDecoration(
         color: (color ?? Colors.black54).withValues(alpha: 0.1),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 3),
+        border:
+            Border.all(color: Colors.white.withValues(alpha: 0.5), width: 3),
       ),
       child: Icon(
         icon,

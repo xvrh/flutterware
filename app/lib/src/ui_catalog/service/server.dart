@@ -15,8 +15,7 @@ class Server {
   static Future<Server> start(
       {required void Function(Connection) onRemove,
       required void Function(Connection) onAdd}) async {
-    var server =
-        await shelf.serve(shelf.webSocketHandler((channel, _) {
+    var server = await shelf.serve(shelf.webSocketHandler((channel, _) {
       late Connection connection;
       connection = Connection(channel.cast<String>(), modelSerializers)
         ..listen(onClose: () {
