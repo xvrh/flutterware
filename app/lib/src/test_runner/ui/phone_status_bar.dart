@@ -113,7 +113,7 @@ class _StatusBar extends StatelessWidget {
                     child: Container(
                       height: 5,
                       decoration: BoxDecoration(
-                        color: bottomColor.withOpacity(0.9),
+                        color: bottomColor.withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(2.5),
                       ),
                     ),

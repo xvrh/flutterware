@@ -13,7 +13,16 @@ class RouterOutlet extends StatefulWidget {
 
   const RouterOutlet(this.routes, {super.key, this.onNotFound});
 
-  static Widget root({required Widget child}) => RouterRootAuto(child: child);
+  static Widget root({required Widget child}) {
+    return Builder(builder: (context) {
+      var source = RouterRoot.maybeSourceOf(context);
+      if (source == null) {
+        return RouterRootAuto(child: child);
+      } else {
+        return child;
+      }
+    });
+  }
 
   @override
   State<RouterOutlet> createState() => _RouterOutletState();

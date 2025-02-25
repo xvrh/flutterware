@@ -356,7 +356,7 @@ class __FlowGraphState extends State<_FlowGraph> {
           return EdgeTooltip(
             splitName,
             style: TextStyle(
-              color: Colors.blueGrey.withOpacity(0.8),
+              color: Colors.blueGrey.withValues(alpha: 0.8),
               fontSize: 15,
             ),
           );

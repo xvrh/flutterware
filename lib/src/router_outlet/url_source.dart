@@ -8,7 +8,8 @@ abstract class UrlSource {
 
   static UrlSource Function() defaultFactory = UrlSource.auto;
 
-  static UrlSource fake() => fake_lib.createSource();
+  static UrlSource fake({PagePath? initial}) =>
+      fake_lib.UrlSourceFake(initial: initial);
 
   void go(PagePath path);
   Stream<PagePath> get onChange;

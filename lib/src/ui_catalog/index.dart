@@ -165,9 +165,9 @@ class _Folder extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
       decoration: BoxDecoration(
-        color: folderColor.withOpacity(0.1),
+        color: folderColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: folderColor.withOpacity(0.5), width: 1),
+        border: Border.all(color: folderColor.withValues(alpha: 0.5), width: 1),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),

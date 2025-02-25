@@ -201,7 +201,7 @@ class _FigmaPreviewerState extends State<FigmaPreviewer> {
               cursor: SystemMouseCursors.resizeColumn,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.5),
+                  color: Colors.white.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(5),
                   border: Border.all(color: Colors.black54),
                 ),

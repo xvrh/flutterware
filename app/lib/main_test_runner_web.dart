@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'dart:html';
+import 'dart:js_interop';
+import 'package:web/web.dart' as web;
 import 'package:flutter/material.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/web.dart';
@@ -11,15 +12,14 @@ import 'src/utils/router_outlet.dart';
 void main() async {
   late BehaviorSubject<List<TestRunnerApi>> subject;
 
-  var iframe = IFrameElement()
-    //ignore: unsafe_html
+  var iframe = web.HTMLIFrameElement()
     ..src = 'client/index.html'
     ..height = '0'
     ..width = '0';
 
   late StreamSubscription onMessageSubscription;
-  onMessageSubscription = window.onMessage.listen((e) {
-    if (e.data == onConnectedMessage) {
+  onMessageSubscription = web.window.onMessage.listen((e) {
+    if (e.data.dartify() == onConnectedMessage) {
       onMessageSubscription.cancel();
       var channel = createWebChannel(iframe.contentWindow!);
       var client = TestRunnerApi(channel, onClose: () {
@@ -29,7 +29,7 @@ void main() async {
     }
   });
 
-  document.body!.children.add(iframe);
+  web.document.body!.children.add(iframe);
 
   subject = BehaviorSubject.seeded([]);
   runApp(_StandaloneApp(_App(subject.stream)));

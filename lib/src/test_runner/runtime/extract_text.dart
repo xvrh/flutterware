@@ -19,7 +19,7 @@ TextInfo textInfoFromElement(String translationKey, Element element,
           globalRectangle: Rectangle.fromLTRB(
               topLeft.dx, topLeft.dy, bottomRight.dx, bottomRight.dy))
       .rebuild((b) => b
-        ..color = style.color?.value
+        ..color = style.color?.toARGB32()
         ..fontSize = style.fontSize
         ..fontFamily = style.fontFamily
         ..fontWeight = style.fontWeight?.index);

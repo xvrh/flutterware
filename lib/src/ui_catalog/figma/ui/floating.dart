@@ -96,7 +96,7 @@ class _FloatingPreview extends StatelessWidget {
           children: [
             Container(
               decoration: BoxDecoration(
-                  color: Colors.greenAccent.withOpacity(0.9),
+                  color: Colors.greenAccent.withValues(alpha: 0.9),
                   border: Border.all(color: figmaBorderColor, width: 1),
                   borderRadius: BorderRadius.circular(4)),
               child: Row(

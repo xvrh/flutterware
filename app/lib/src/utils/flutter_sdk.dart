@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:collection/collection.dart';
 import 'package:path/path.dart' as p;
 import 'package:pub_semver/pub_semver.dart';
 import 'async_value.dart';
@@ -75,7 +74,7 @@ class FlutterSdkPath {
     }
     sdks.add(await _whichFlutter());
 
-    return sdks.whereNotNull().toSet();
+    return sdks.nonNulls.toSet();
   }
 
   static Future<FlutterSdkPath?> _whichFlutter() async {

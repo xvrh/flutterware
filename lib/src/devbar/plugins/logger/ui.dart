@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 import '../../devbar.dart';
 import '../../utils/auto_scroll_to_bottom.dart';
@@ -68,7 +69,7 @@ class _LoggerListState extends State<LoggerList> {
             builder: (context, controller, logs) => ListView.separated(
               separatorBuilder: (context, index) => Container(
                 height: 1,
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
               ),
               controller: controller,
               itemCount: logs.length,
@@ -133,7 +134,7 @@ class _DetailDialog extends StatelessWidget {
           shrinkWrap: true,
           children: [
             ListTile(
-              title: Text(record.message),
+              title: SelectableText(record.message),
               subtitle: Text(record.time.toString()),
             ),
             ListTile(
@@ -154,6 +155,13 @@ class _DetailDialog extends StatelessWidget {
         ),
       ),
       actions: [
+        TextButton.icon(
+          icon: Icon(Icons.copy),
+          label: Text('Copy'),
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: record.message));
+          },
+        ),
         TextButton(
           onPressed: () {
             Navigator.pop(context);

@@ -18,7 +18,7 @@ class AnalyticsList extends StatelessWidget {
         controller: controller,
         separatorBuilder: (context, index) => Container(
           height: 1,
-          color: Colors.white.withOpacity(0.2),
+          color: Colors.white.withValues(alpha: 0.2),
         ),
         itemCount: logs.length,
         itemBuilder: (context, index) {

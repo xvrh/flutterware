@@ -2,9 +2,10 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:dart_style/dart_style.dart';
 import 'package:flutter/foundation.dart';
+import 'package:pub_semver/pub_semver.dart';
 import 'path.dart';
 
-final _formatter = DartFormatter();
+final _formatter = DartFormatter(languageVersion: Version(3, 5, 0));
 
 class DrawingFile {
   static final fileTag = '//@flutterware:drawing=1.0';
