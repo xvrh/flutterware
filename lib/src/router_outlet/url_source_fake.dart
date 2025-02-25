@@ -6,7 +6,9 @@ UrlSource createSource() => UrlSourceFake();
 
 class UrlSourceFake implements UrlSource {
   final _onChangeController = StreamController<PagePath>.broadcast();
-  PagePath _current = PagePath.root;
+  late PagePath _current;
+
+  UrlSourceFake({PagePath? initial}):_current = initial ?? PagePath.root;
 
   @override
   Stream<PagePath> get onChange => _onChangeController.stream;

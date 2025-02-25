@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:shelf/shelf_io.dart' as shelf;
 import 'package:shelf_web_socket/shelf_web_socket.dart' as shelf;
-import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../utils/connection.dart';
 import 'models.dart';
 import 'udp_discovery.dart';
@@ -17,7 +16,7 @@ class Server {
       {required void Function(Connection) onRemove,
       required void Function(Connection) onAdd}) async {
     var server =
-        await shelf.serve(shelf.webSocketHandler((WebSocketChannel channel) {
+        await shelf.serve(shelf.webSocketHandler((channel, _) {
       late Connection connection;
       connection = Connection(channel.cast<String>(), modelSerializers)
         ..listen(onClose: () {

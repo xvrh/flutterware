@@ -1,7 +1,5 @@
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
-//ignore: implementation_imports
-import 'package:analyzer/src/dart/ast/token.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutterware/drawing.dart';
 import 'file.dart';

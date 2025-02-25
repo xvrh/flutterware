@@ -80,6 +80,7 @@ dependencies:
   url_launcher:
   vector_math:
   watcher:
+  web:
   web_socket_channel:
   win32:
   yaml:

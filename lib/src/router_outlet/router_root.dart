@@ -19,6 +19,11 @@ class RouterRoot extends StatefulWidget {
         .widget
         .urlSource;
   }
+
+  static UrlSource? maybeSourceOf(BuildContext context) {
+    return context
+        .findAncestorStateOfType<_RouterRootState>()?.widget.urlSource;
+  }
 }
 
 class _RouterRootState extends State<RouterRoot> {

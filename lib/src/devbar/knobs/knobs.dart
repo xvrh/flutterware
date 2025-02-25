@@ -69,7 +69,7 @@ class _BottomSheet extends StatelessWidget {
     return Container(
       height: MediaQuery.sizeOf(context).height / 3,
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.02),
+        color: Colors.black.withValues(alpha: 0.02),
         border: Border(top: BorderSide(width: 2)),
       ),
       child: Column(
