@@ -153,26 +153,24 @@ class DevbarAppWrapper extends StatelessWidget {
           Positioned.fill(child: ButtonsOverlay()),
         ]);
 
-        return LayoutBuilder(builder: (context, constraints) {
-          var size = constraints.biggest;
-          Widget screen = Container(
-            width: size.width,
-            height: size.height,
-            alignment: Alignment.center,
-            child: appWidget,
-          );
+        var mediaQuery = MediaQuery.of(context);
+        Widget screen = Container(
+          width: mediaQuery.size.width,
+          height: mediaQuery.size.height,
+          alignment: Alignment.center,
+          child: appWidget,
+        );
 
-          screen = _AnimatedScreenWrapper(
-            key: _containerKey,
-            openState: openState,
-            child: FittedBox(
-              fit: BoxFit.contain,
-              child: screen,
-            ),
-          );
+        screen = _AnimatedScreenWrapper(
+          key: _containerKey,
+          openState: openState,
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: screen,
+          ),
+        );
 
-          return screen;
-        });
+        return screen;
       },
     );
   }
