@@ -44,22 +44,30 @@ class VariablesPlugin implements DevbarPlugin {
 
   DevbarVariable<bool> checkbox(String key,
       {String? description, bool defaultValue = false}) {
-    var variable = DevbarVariable<bool>(this, key,
-        defaultValue: defaultValue, description: description);
-
-    _variables.add([..._variables.value, variable]);
-
-    return variable;
+    return add(DevbarVariableDefinition<bool>(key,
+        defaultValue: defaultValue, description: description));
   }
 
   DevbarVariable<String> text(String key,
       {String? description, String defaultValue = ''}) {
-    var variable = DevbarVariable<String>(this, key,
-        defaultValue: defaultValue, description: description);
+    return add(DevbarVariableDefinition(key,
+        defaultValue: defaultValue, description: description));
+  }
 
-    _variables.add([..._variables.value, variable]);
-
-    return variable;
+  DevbarVariable<T> slider<T extends num>(String key,
+      {String? description,
+      required T defaultValue,
+      required T min,
+      required T max,
+      required T step}) {
+    return add(DevbarSliderVariableDefinition<T>(
+      key,
+      defaultValue: defaultValue,
+      description: description,
+      min: min,
+      max: max,
+      step: step,
+    ));
   }
 
   DevbarVariable<T> picker<T>(
@@ -69,15 +77,21 @@ class VariablesPlugin implements DevbarPlugin {
     required Map<T, String> options,
     T? Function(Object)? fromJson,
   }) {
-    var variable = DevbarPickerVariable<T>(this, key,
+    return add(DevbarPickerVariableDefinition<T>(key,
         defaultValue: defaultValue,
         description: description,
         fromJson: fromJson,
-        options: options);
+        options: options));
+  }
 
+  DevbarVariable<T> add<T>(DevbarVariableDefinition<T> definition) {
+    var variable = DevbarVariable<T>(this, definition);
     _variables.add([..._variables.value, variable]);
-
     return variable;
+  }
+
+  void addVariable<T>(DevbarVariable<T> variable) {
+    _variables.add([..._variables.value, variable]);
   }
 
   void remove(DevbarVariable variable) {
@@ -89,7 +103,7 @@ class VariablesPlugin implements DevbarPlugin {
   List<DevbarVariable> get currentVariables => _variables.value;
 
   void _storeValue(DevbarVariable devbarVariable, Object? editorValue) {
-    store[devbarVariable.key] = editorValue;
+    store[devbarVariable.definition.key] = editorValue;
   }
 
   @override
@@ -104,30 +118,28 @@ class VariablesPlugin implements DevbarPlugin {
 class DevbarVariable<T> {
   final VariablesPlugin service;
   late final ValueStream<T> _value;
-  final String key;
-  final String? description;
-  final T defaultValue;
-  final T? Function(Object)? fromJson;
+  final DevbarVariableDefinition<T> definition;
 
-  DevbarVariable(
-    this.service,
-    this.key, {
-    required this.defaultValue,
-    required this.description,
-    this.fromJson,
-  }) {
+  DevbarVariable(this.service, this.definition) {
+    assert(T != dynamic);
     _value = ValueStream<T>(_computedValue);
   }
 
+  String get key => definition.key;
+
+  String? get description => definition.description;
+
+  T get defaultValue => definition.defaultValue;
+
   T? get storeValue {
-    var value = service.store[key];
+    var value = service.store[definition.key];
     if (value is T) {
       return value;
-    } else if (fromJson case var fromJson? when value != null) {
+    } else if (definition.fromJson case var fromJson? when value != null) {
       try {
         return fromJson(value);
       } catch (e) {
-        print('Fail to read value for $key: $e');
+        print('Fail to read value for ${definition.key}: $e');
         return null;
       }
     }
@@ -140,15 +152,17 @@ class DevbarVariable<T> {
   }
 
   T? get overrideValue {
-    var value = service.overrides[key];
+    var value = service.overrides[definition.key];
     if (value == null) return null;
     if (value is! T) {
-      throw Exception('Devbar initial value for $key is not of type $T');
+      throw Exception(
+          'Devbar initial value for ${definition.key} is not of type $T');
     }
     return value;
   }
 
-  T get _computedValue => storeValue ?? overrideValue ?? defaultValue;
+  T get _computedValue =>
+      storeValue ?? overrideValue ?? definition.defaultValue;
 
   void _update() {
     var computed = _computedValue;
@@ -165,13 +179,80 @@ class DevbarVariable<T> {
   Stream<T> get value => _value.stream;
 
   T get currentValue => _value.value;
+
+  static DevbarVariableDefinition<T> picker<T>(
+    String key, {
+    String? description,
+    required T defaultValue,
+    required Map<T, String> options,
+    T? Function(Object)? fromJson,
+  }) {
+    return DevbarPickerVariableDefinition<T>(key,
+        defaultValue: defaultValue, description: description, options: options);
+  }
+
+  static DevbarVariableDefinition<String> text(String key,
+      {String? description, String defaultValue = ''}) {
+    return DevbarVariableDefinition<String>(key,
+        defaultValue: defaultValue, description: description);
+  }
+
+  static DevbarVariableDefinition<bool> checkbox(String key,
+      {String? description, bool defaultValue = false}) {
+    return DevbarVariableDefinition<bool>(key,
+        defaultValue: defaultValue, description: description);
+  }
+
+  static DevbarVariableDefinition<T> slider<T extends num>(String key,
+      {String? description,
+      required T defaultValue,
+      required T min,
+      required T max,
+      required T step}) {
+    return DevbarSliderVariableDefinition<T>(key,
+        defaultValue: defaultValue,
+        description: description,
+        min: min,
+        max: max,
+        step: step);
+  }
 }
 
-class DevbarPickerVariable<T> extends DevbarVariable<T> {
+class DevbarVariableDefinition<T> {
+  final String key;
+  final String? description;
+  final T defaultValue;
+  final T? Function(Object)? fromJson;
+
+  DevbarVariableDefinition(this.key,
+      {required this.description, required this.defaultValue, this.fromJson});
+
+  DevbarVariable<T> addVariable(VariablesPlugin plugin) => plugin.add<T>(this);
+}
+
+class DevbarSliderVariableDefinition<T extends num>
+    extends DevbarVariableDefinition<T> {
+  final T min;
+  final T max;
+  final T step;
+
+  DevbarSliderVariableDefinition(
+    super.key, {
+    required super.defaultValue,
+    required super.description,
+    super.fromJson,
+    required this.min,
+    required this.max,
+    required this.step,
+  });
+
+  bool get isInt => T == int;
+}
+
+class DevbarPickerVariableDefinition<T> extends DevbarVariableDefinition<T> {
   final Map<T, String> options;
 
-  DevbarPickerVariable(
-    super.service,
+  DevbarPickerVariableDefinition(
     super.key, {
     required super.defaultValue,
     required super.description,
