@@ -17,6 +17,15 @@ final _logger = Logger('devbar_example');
 
 final superCoolFeature = FeatureFlag('superCoolFeature', false);
 final otherFeature = FeatureFlag('otherFeature', false);
+final numFeature =
+    FeatureFlag.slider('numFeature', 0, min: 0, max: 10, step: 1);
+final pickerFeature = FeatureFlag.picker<ApiEnvironment>(
+  'pickerFeature',
+  ApiEnvironment.prod,
+  options: {
+    for (var entry in ApiEnvironment.values) entry: entry.name,
+  },
+);
 
 void main() {
   runApp(_EntryPoint());
@@ -60,6 +69,8 @@ class MyDevBar extends StatelessWidget {
       flags: [
         superCoolFeature.withDefaultValue,
         otherFeature.withValue(true),
+        numFeature.withDefaultValue,
+        pickerFeature.withDefaultValue,
       ],
       child: child,
     );
@@ -172,6 +183,14 @@ class _MyAppState extends State<MyApp> {
               Divider(),
               Text(
                 'Other feature: ${otherFeature.dependsOnValue(context)}',
+              ),
+              Divider(),
+              Text(
+                'Num feature: ${numFeature.dependsOnValue(context)}',
+              ),
+              Divider(),
+              Text(
+                'Picker feature: ${pickerFeature.dependsOnValue(context)}',
               ),
               Divider(),
               StreamBuilder<ApiEnvironment>(

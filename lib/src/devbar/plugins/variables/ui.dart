@@ -54,10 +54,13 @@ class _VariableEditor extends StatelessWidget {
         initialData: variable.currentValue,
         builder: (context, snapshot) {
           var variable = this.variable;
-          if (variable is DevbarVariable<bool>) {
+          var definition = this.variable.definition;
+          if (definition is DevbarPickerVariableDefinition) {
+            return _PickerEditor(variable, definition);
+          } else if (definition is DevbarSliderVariableDefinition) {
+            return _SliderEditor(variable as DevbarVariable<num>, definition);
+          } else if (variable is DevbarVariable<bool>) {
             return _BoolEditor(variable);
-          } else if (variable is DevbarPickerVariable) {
-            return _PickerEditor(variable);
           } else if (variable is DevbarVariable<String>) {
             return _TextEditor(variable);
           } else {
@@ -78,8 +81,8 @@ class _BoolEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      title: Text(variable.key),
-      subtitle: Text(variable.description ?? ''),
+      title: Text(variable.definition.key),
+      subtitle: Text(variable.definition.description ?? ''),
       trailing: Switch.adaptive(
         value: variable.currentValue,
         onChanged: (newValue) {
@@ -99,8 +102,8 @@ class _TextEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      title: Text(variable.key),
-      subtitle: Text(variable.description ?? ''),
+      title: Text(variable.definition.key),
+      subtitle: Text(variable.definition.description ?? ''),
       trailing: FractionallySizedBox(
         widthFactor: 0.5,
         child: TextField(
@@ -118,16 +121,17 @@ class _TextEditor extends StatelessWidget {
 }
 
 class _PickerEditor extends StatelessWidget {
-  final DevbarPickerVariable variable;
+  final DevbarVariable variable;
+  final DevbarPickerVariableDefinition definition;
 
-  const _PickerEditor(this.variable);
+  const _PickerEditor(this.variable, this.definition);
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      title: Text(variable.key),
-      subtitle: Text(variable.description ?? ''),
+      title: Text(definition.key),
+      subtitle: Text(definition.description ?? ''),
       trailing: FractionallySizedBox(
         widthFactor: 0.5,
         child: DropdownButton(
@@ -138,9 +142,43 @@ class _PickerEditor extends StatelessWidget {
           },
           isExpanded: true,
           items: [
-            for (var option in variable.options.entries)
+            for (var option in definition.options.entries)
               DropdownMenuItem(value: option.key, child: Text(option.value)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SliderEditor extends StatelessWidget {
+  final DevbarVariable<num> variable;
+  final DevbarSliderVariableDefinition definition;
+
+  const _SliderEditor(this.variable, this.definition);
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      title: Text(variable.definition.key),
+      subtitle: Text(variable.definition.description ?? ''),
+      trailing: FractionallySizedBox(
+        widthFactor: 0.5,
+        child: Slider(
+          value: variable.currentValue.toDouble(),
+          min: definition.min.toDouble(),
+          max: definition.max.toDouble(),
+          divisions:
+              ((definition.max - definition.min) / definition.step).toInt(),
+          onChanged: (v) {
+            var currentValue = (v / definition.step).round() * definition.step;
+            if (definition.isInt) {
+              currentValue = currentValue.toInt();
+            }
+
+            variable.storeValue = currentValue;
+          },
         ),
       ),
     );

@@ -4,13 +4,46 @@ import 'devbar.dart';
 import 'plugins/variables/plugin.dart';
 
 class FeatureFlag<T> {
-  final String name;
-  final String? description;
+  final DevbarVariableDefinition<T> _definition;
 
-  final T _defaultValue;
+  FeatureFlag(String name, T defaultValue, {String? description})
+      : _definition = DevbarVariableDefinition<T>(name,
+            defaultValue: defaultValue, description: description),
+        assert(T != dynamic && T != Null);
 
-  FeatureFlag(this.name, this._defaultValue, {this.description})
-      : assert(T != dynamic && T != Null);
+  FeatureFlag._(this._definition) : assert(T != dynamic && T != Null);
+
+  static FeatureFlag<T> picker<T>(String name, T defaultValue,
+      {String? description,
+      required Map<T, String> options,
+      T? Function(Object)? fromJson}) {
+    return FeatureFlag<T>._(
+      DevbarPickerVariableDefinition<T>(name,
+          description: description,
+          options: options,
+          fromJson: fromJson,
+          defaultValue: defaultValue),
+    );
+  }
+
+  static FeatureFlag<T> slider<T extends num>(String name, T defaultValue,
+      {required T min, required T max, required T step, String? description}) {
+    return FeatureFlag<T>._(
+      DevbarSliderVariableDefinition<T>(name,
+          description: description,
+          min: min,
+          max: max,
+          step: step,
+          defaultValue: defaultValue),
+    );
+  }
+
+  String get name => _definition.key;
+  String? get description => _definition.description;
+  T get _defaultValue => _definition.defaultValue;
+
+  DevbarVariable<T> _addVariable(VariablesPlugin service) =>
+      service.add<T>(_definition);
 
   FeatureFlagValue<T> withValue(T newValue) =>
       FeatureFlagValue<T>(this, newValue);
@@ -147,22 +180,17 @@ class _FlagToVariableState extends State<_FlagToVariable> {
       return;
     }
 
-    DevbarVariable? variable;
-    // ignore: cancel_subscriptions
-    StreamSubscription? variableSubscription;
-    if (flagValue is FeatureFlagValue<bool>) {
-      variable = _devbar.variables.checkbox(flag.name,
-          description: flag.description, defaultValue: flagValue._value);
-    }
+    var variable = flag._addVariable(_devbar.variables);
 
-    if (variable != null) {
-      flagValue = flag.withValue(variable.currentValue);
-      variableSubscription = variable.value.listen((newValue) {
-        setState(() {
-          _flagValues[flag]!.value = flag.withValue(newValue);
-        });
+    flagValue = flag.withValue(variable.currentValue);
+
+    // ignore: cancel_subscriptions
+    var variableSubscription = variable.value.listen((newValue) {
+      setState(() {
+        _flagValues[flag]!.value = flag.withValue(newValue);
       });
-    }
+    });
+
     _flagValues[flag] = FlagRegistration(flagValue,
         variable: variable, variableSubscription: variableSubscription);
   }
