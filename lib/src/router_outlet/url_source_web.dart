@@ -17,7 +17,10 @@ class UrlSourceWeb implements UrlSource {
     html.window.addEventListener(
         'hashchange',
         () {
-          go(_getHash());
+          var path = _getHash();
+          if (path != _current) {
+            go(path);
+          }
         }.toJS);
 
     _current = _getHash();

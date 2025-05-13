@@ -9,21 +9,42 @@ class PagePath {
 
   final List<String> _segments;
   final bool isAbsolute;
+  final Map<String, String> queryParameters;
+  final Map<String, dynamic> extra;
 
-  PagePath._(this._segments, {required this.isAbsolute})
-      : assert(_segments.every((s) => s.isNotEmpty));
+  PagePath._(this._segments,
+      {required this.isAbsolute,
+      Map<String, String>? queryParameters,
+      Map<String, dynamic>? extra})
+      : assert(_segments.every((s) => s.isNotEmpty)),
+        queryParameters = queryParameters ?? const {},
+        extra = extra ?? const {};
 
-  factory PagePath(String path, {bool? isAbsolute}) {
+  factory PagePath(String path,
+      {bool? isAbsolute, Map<String, dynamic>? extra}) {
     path = path.trim();
+    var pathAndQuery = path.split('?');
+    path = pathAndQuery.first;
+
     isAbsolute ??= path.startsWith('/');
     path = _trimSlashes(path);
+
     var segments = path.split('/').where((e) => e.isNotEmpty).toList();
     if (segments.isNotEmpty) {
       var normalized = p.url.normalize(segments.join('/'));
       segments = p.url.split(normalized);
     }
 
-    return PagePath._(segments, isAbsolute: isAbsolute);
+    Map<String, String>? queryParameters;
+    if (pathAndQuery.length > 1) {
+      var query = pathAndQuery[1];
+      queryParameters = Uri(query: query).queryParameters;
+    }
+
+    return PagePath._(segments,
+        isAbsolute: isAbsolute,
+        queryParameters: queryParameters,
+        extra: extra);
   }
 
   MatchedPath? matches(PathPattern pattern) {
@@ -41,19 +62,33 @@ class PagePath {
       pattern: PathPattern._empty,
       remaining: asRelative,
       args: const {},
+      queryParameters: queryParameters,
+      extra: extra,
     );
   }
 
   PagePath get asRelative => PagePath._(_segments, isAbsolute: false);
 
-  PagePath subPath(PagePath subPath) {
+  PagePath subPath(PagePath subPath, {Map<String, dynamic>? extra}) {
     assert(!subPath.isAbsolute);
-    return PagePath(p.url.join(toString(), subPath.toString()),
-        isAbsolute: isAbsolute);
+    return PagePath(p.url.join(toPath(), subPath.toPath()),
+        isAbsolute: isAbsolute, extra: extra);
+  }
+
+  String toPath() {
+    return (isAbsolute ? '/' : '') + _segments.join('/');
   }
 
   @override
-  String toString() => (isAbsolute ? '/' : '') + _segments.join('/');
+  String toString() {
+    var query = '';
+    if (queryParameters.isNotEmpty) {
+      query += '?';
+      query += Uri(queryParameters: queryParameters).query;
+    }
+
+    return toPath() + query;
+  }
 
   @override
   bool operator ==(other) =>
@@ -100,6 +135,8 @@ class MatchedPath {
   final PagePath current;
   final PagePath remaining;
   final Map<String, String> args;
+  final Map<String, String> queryParameters;
+  final Map<String, dynamic> extra;
 
   MatchedPath._({
     required this.pattern,
@@ -108,6 +145,8 @@ class MatchedPath {
     required this.current,
     required this.remaining,
     required this.args,
+    required this.queryParameters,
+    required this.extra,
   })  : assert(matched.isAbsolute),
         assert(full.isAbsolute);
 
@@ -117,12 +156,13 @@ class MatchedPath {
 
   core.int int(String key) => core.int.parse(this[key]);
 
-  PagePath go(String url) {
+  PagePath go(String url, {Map<String, dynamic>? extra}) {
     PagePath newPath;
     if (url.startsWith('/')) {
-      newPath = PagePath(url);
+      newPath = PagePath(url, extra: extra);
     } else {
-      newPath = matched.subPath(PagePath(url));
+      newPath = matched
+          .subPath(PagePath(url), extra: extra);
     }
     assert(newPath.isAbsolute);
     return newPath;
@@ -181,16 +221,18 @@ class MatchedPath {
     }
 
     return MatchedPath._(
-      full: full,
-      current: PagePath._(matchedSegments, isAbsolute: false),
-      matched: PagePath._([...matched._segments, ...matchedSegments],
-          isAbsolute: true),
-      pattern: pattern,
-      remaining: PagePath._(
-          remainingSegments.skip(pattern._segments.length).toList(),
-          isAbsolute: false),
-      args: parameters,
-    );
+        full: full,
+        current: PagePath._(matchedSegments,
+            isAbsolute: false),
+        matched: PagePath._([...matched._segments, ...matchedSegments],
+            isAbsolute: true),
+        pattern: pattern,
+        remaining: PagePath._(
+            remainingSegments.skip(pattern._segments.length).toList(),
+            isAbsolute: false),
+        args: parameters,
+        queryParameters: queryParameters,
+        extra: extra);
   }
 
   @override
