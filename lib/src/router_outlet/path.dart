@@ -42,9 +42,7 @@ class PagePath {
     }
 
     return PagePath._(segments,
-        isAbsolute: isAbsolute,
-        queryParameters: queryParameters,
-        extra: extra);
+        isAbsolute: isAbsolute, queryParameters: queryParameters, extra: extra);
   }
 
   MatchedPath? matches(PathPattern pattern) {
@@ -161,8 +159,7 @@ class MatchedPath {
     if (url.startsWith('/')) {
       newPath = PagePath(url, extra: extra);
     } else {
-      newPath = matched
-          .subPath(PagePath(url), extra: extra);
+      newPath = matched.subPath(PagePath(url), extra: extra);
     }
     assert(newPath.isAbsolute);
     return newPath;
@@ -222,8 +219,7 @@ class MatchedPath {
 
     return MatchedPath._(
         full: full,
-        current: PagePath._(matchedSegments,
-            isAbsolute: false),
+        current: PagePath._(matchedSegments, isAbsolute: false),
         matched: PagePath._([...matched._segments, ...matchedSegments],
             isAbsolute: true),
         pattern: pattern,
