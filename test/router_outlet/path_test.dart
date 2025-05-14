@@ -200,4 +200,63 @@ void main() {
     var matched = path.rootMatch;
     expect(matched.selectedIndex(['', 'users', 'other']), 1);
   });
+
+  test('Query parameters in PagePath', () {
+    expect(PagePath('some/url?query=true&param=false').queryParameters,
+        {'query': 'true', 'param': 'false'});
+    expect(PagePath('some/url?').queryParameters, {});
+    expect(PagePath('some/url').queryParameters, {});
+    expect(PagePath('some/url?a').queryParameters, {'a': ''});
+    expect(PagePath('some/url?a').toString(), 'some/url?a');
+    expect(PagePath('some/url?query=true&param=false').toString(),
+        'some/url?query=true&param=false');
+  });
+
+  test('MatchedPath decode query parameters parameters', () {
+    var path = PagePath('/users/machin?arg=1');
+
+    var matched = path.rootMatch.matchesRemaining(PathPattern('users/:name'))!;
+
+    expect(matched.queryParameters, {'arg': '1'});
+    expect(matched.full.toString(), '/users/machin?arg=1');
+    expect(matched.current.toString(), 'users/machin');
+  });
+
+  test('MatchedPath.go 3 with query parameters', () {
+    var path = PagePath('/users/1/profile?auto');
+    var matched = path.rootMatch
+        .matchesRemaining(PathPattern('users'))!
+        .matchesRemaining(PathPattern(':id'))!;
+
+    var newPath = matched.go('url');
+    expect(newPath.toString(), '/users/1/url');
+
+    var newPath2 = matched.go('/url');
+    expect(newPath2.toString(), '/url');
+  });
+
+  test('MatchedPath.go 3 with extra parameters', () {
+    var path = PagePath('/users/1/profile?auto');
+    var matched = path.rootMatch
+        .matchesRemaining(PathPattern('users'))!
+        .matchesRemaining(PathPattern(':id'))!;
+
+    var newPath = matched.go('url', extra: {'one': 1});
+    expect(newPath.extra, {'one': 1});
+
+    var newPath2 = matched.go('/url');
+    expect(newPath2.extra, {});
+  });
+
+  test('Navigate with extra parameters', () {
+    var matched = PagePath.root.rootMatch;
+
+    var newPath = matched.go('/', extra: {'one': 1});
+    expect(newPath.extra, {'one': 1});
+    expect(newPath.isAbsolute, true);
+    expect(newPath.toPath(), '/');
+
+    var newPath2 = matched.go('/url');
+    expect(newPath2.extra, {});
+  });
 }

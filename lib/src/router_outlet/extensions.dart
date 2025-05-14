@@ -3,7 +3,8 @@ import 'provider.dart';
 import 'router_root.dart';
 
 extension UrlRouterExtension on BuildContext {
-  void go(String url) => router.go(url);
+  void go(String url, {Map<String, dynamic>? extra}) =>
+      router.go(url, extra: extra);
 
   RouterReference get router => RouterReference(this);
 }
@@ -22,8 +23,8 @@ class RouterReference {
     };
   }
 
-  void go(String url) {
-    var newPath = path.go(url);
+  void go(String url, {Map<String, dynamic>? extra}) {
+    var newPath = path.go(url, extra: extra);
     urlSource.go(newPath);
   }
 
