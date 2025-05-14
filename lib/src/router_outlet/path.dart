@@ -93,6 +93,15 @@ class PagePath {
       (other is PagePath && other.toString() == toString()) ||
       (other is String && other == toString());
 
+  bool equalsWithExtra(PagePath other) {
+    return equalsWithoutExtra(other) &&
+        const MapEquality().equals(extra, other.extra);
+  }
+
+  bool equalsWithoutExtra(PagePath other) {
+    return other.toString() == toString();
+  }
+
   @override
   int get hashCode => toString().hashCode;
 }

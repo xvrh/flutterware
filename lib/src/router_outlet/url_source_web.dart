@@ -18,7 +18,9 @@ class UrlSourceWeb implements UrlSource {
         'hashchange',
         () {
           var path = _getHash();
-          if (path != _current) {
+          // Path with extra should not be replaced with the event triggered
+          // by the change in the hash
+          if (!path.equalsWithoutExtra(_current)) {
             go(path);
           }
         }.toJS);
@@ -44,7 +46,8 @@ class UrlSourceWeb implements UrlSource {
   void go(PagePath path) {
     assert(path.isAbsolute);
 
-    if (path != current) {
+    // Change in the extra should trigger an onChange
+    if (!path.equalsWithExtra(current)) {
       _current = path;
       _onChangeController.add(path);
       html.window.location.hash = path.toString();
