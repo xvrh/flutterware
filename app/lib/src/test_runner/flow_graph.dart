@@ -26,7 +26,8 @@ class RunView extends StatefulWidget {
 
 class _RunViewState extends State<RunView> {
   final _interactionController = TransformationController()
-    ..value = ((Matrix4.identity() * 0.5 as Matrix4)..translate(50.0, 100.0));
+    ..value = ((Matrix4.identity() * 0.5 as Matrix4)
+      ..translateByDouble(50.0, 100.0, 0, 1));
   late RunReference _runReference;
   late StreamSubscription _reloadSubscription;
 
@@ -224,8 +225,9 @@ class _FlowMasterState extends State<_FlowMaster> {
           child: ZoomButtons(
             value: _scale,
             onScale: (v) {
-              widget.parent._interactionController.value =
-                  widget.parent._interactionController.value.scaled(v);
+              widget.parent._interactionController.value = widget
+                  .parent._interactionController.value
+                  .scaledByDouble(v, v, v, 1.0);
             },
           ),
         ),
