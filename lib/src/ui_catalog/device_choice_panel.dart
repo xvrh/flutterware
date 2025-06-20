@@ -125,52 +125,53 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
         body: TabBarView(
           controller: _tabController,
           children: [
-            ListView(
-              children: [
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  child: SegmentedButton<Orientation>(
-                    segments: [
-                      ButtonSegment(
-                        value: Orientation.portrait,
-                        label: Text('Portrait'),
-                      ),
-                      ButtonSegment(
-                        value: Orientation.landscape,
-                        label: Text('Landscape'),
-                      ),
-                    ],
-                    selected: {widget.choice.single.orientation},
-                    onSelectionChanged: (v) {
-                      widget.onChanged(widget.choice.copyWith(
-                          single: widget.choice.single
-                              .copyWith(orientation: v.first)));
-                    },
+            RadioGroup<DeviceInfo>(
+              groupValue: widget.choice.single.device,
+              onChanged: (device) {
+                widget.onChanged(widget.choice.copyWith(
+                    single: widget.choice.single.copyWith(device: device)));
+              },
+              child: ListView(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
+                    child: SegmentedButton<Orientation>(
+                      segments: [
+                        ButtonSegment(
+                          value: Orientation.portrait,
+                          label: Text('Portrait'),
+                        ),
+                        ButtonSegment(
+                          value: Orientation.landscape,
+                          label: Text('Landscape'),
+                        ),
+                      ],
+                      selected: {widget.choice.single.orientation},
+                      onSelectionChanged: (v) {
+                        widget.onChanged(widget.choice.copyWith(
+                            single: widget.choice.single
+                                .copyWith(orientation: v.first)));
+                      },
+                    ),
                   ),
-                ),
-                Divider(),
-                for (var device in widget.choice.availableDevices.entries)
-                  _DeviceTile(
-                    leading: Radio(
-                      value: device.key,
-                      groupValue: widget.choice.single.device,
-                      onChanged: (v) {
+                  Divider(),
+                  for (var device in widget.choice.availableDevices.entries)
+                    _DeviceTile(
+                      leading: Radio<DeviceInfo>(
+                        value: device.key,
+                      ),
+                      title: device.value,
+                      device: device.key,
+                      onTap: () {
                         widget.onChanged(widget.choice.copyWith(
                             single: widget.choice.single
                                 .copyWith(device: device.key)));
+                        ToolbarPanel.of(context).hideMenu();
                       },
                     ),
-                    title: device.value,
-                    device: device.key,
-                    onTap: () {
-                      widget.onChanged(widget.choice.copyWith(
-                          single: widget.choice.single
-                              .copyWith(device: device.key)));
-                      ToolbarPanel.of(context).hideMenu();
-                    },
-                  ),
-              ],
+                ],
+              ),
             ),
             ListView(
               children: [
