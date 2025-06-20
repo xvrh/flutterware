@@ -64,7 +64,7 @@ class Connection {
     _channels.add(channel);
   }
 
-  String _serializeParameter(parameter) {
+  String _serializeParameter(Object? parameter) {
     if (parameter == null) {
       return '';
     } else {

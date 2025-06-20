@@ -37,7 +37,7 @@ class PropertyBag {
     return objects.entries.map((e) => '${e.key}=${_value(e.value)}').join(' ');
   }
 
-  static String _value(object) {
+  static String _value(Object? object) {
     if (object is String) {
       return jsonEncode(object);
     } else if (object is num) {
