@@ -42,8 +42,9 @@ class FeatureFlag<T> {
   String? get description => _definition.description;
   T get _defaultValue => _definition.defaultValue;
 
-  DevbarVariable<T> _addVariable(VariablesPlugin service) =>
-      service.add<T>(_definition);
+  DevbarVariable<T> _addVariable(
+          VariablesPlugin service, FeatureFlagValue<T>? value) =>
+      service.add<T>(_definition, flagValue: value);
 
   FeatureFlagValue<T> withValue(T newValue) =>
       FeatureFlagValue<T>(this, newValue);
@@ -55,7 +56,7 @@ class FeatureFlag<T> {
     if (holder != null) {
       var flagValue = holder.find(this);
       if (flagValue != null) {
-        return flagValue._value;
+        return flagValue.value;
       }
     }
     return _defaultValue;
@@ -66,7 +67,7 @@ class FeatureFlag<T> {
     if (holder != null) {
       var flagValue = holder.find(this);
       if (flagValue != null) {
-        return flagValue._value;
+        return flagValue.value;
       }
     }
     return _defaultValue;
@@ -78,12 +79,12 @@ class FeatureFlag<T> {
 
 class FeatureFlagValue<T> {
   final FeatureFlag flag;
-  final T _value;
+  final T value;
 
-  FeatureFlagValue(this.flag, this._value);
+  FeatureFlagValue(this.flag, this.value);
 
   @override
-  String toString() => 'FeatureFlagValue<$T>(${flag.name}, value: $_value)';
+  String toString() => 'FeatureFlagValue<$T>(${flag.name}, value: $value)';
 }
 
 class FeatureFlags extends InheritedWidget {
@@ -180,7 +181,7 @@ class _FlagToVariableState extends State<_FlagToVariable> {
       return;
     }
 
-    var variable = flag._addVariable(_devbar.variables);
+    var variable = flag._addVariable(_devbar.variables, flagValue);
 
     flagValue = flag.withValue(variable.currentValue);
 
