@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterware/devbar.dart';
 import '../../../utils/value_stream.dart';
 import '../../devbar.dart';
 import 'file_store.dart';
@@ -84,8 +85,9 @@ class VariablesPlugin implements DevbarPlugin {
         options: options));
   }
 
-  DevbarVariable<T> add<T>(DevbarVariableDefinition<T> definition) {
-    var variable = DevbarVariable<T>(this, definition);
+  DevbarVariable<T> add<T>(DevbarVariableDefinition<T> definition,
+      {FeatureFlagValue<T>? flagValue}) {
+    var variable = DevbarVariable<T>(this, definition, flagValue: flagValue);
     _variables.add([..._variables.value, variable]);
     return variable;
   }
@@ -119,8 +121,9 @@ class DevbarVariable<T> {
   final VariablesPlugin service;
   late final ValueStream<T> _value;
   final DevbarVariableDefinition<T> definition;
+  final FeatureFlagValue<T>? flagValue;
 
-  DevbarVariable(this.service, this.definition) {
+  DevbarVariable(this.service, this.definition, {required this.flagValue}) {
     assert(T != dynamic);
     _value = ValueStream<T>(_computedValue);
   }
@@ -162,7 +165,10 @@ class DevbarVariable<T> {
   }
 
   T get _computedValue =>
-      storeValue ?? overrideValue ?? definition.defaultValue;
+      storeValue ??
+      overrideValue ??
+      flagValue?.value ??
+      definition.defaultValue;
 
   void _update() {
     var computed = _computedValue;
