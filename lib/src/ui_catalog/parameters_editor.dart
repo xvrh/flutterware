@@ -19,7 +19,7 @@ class ParametersEditor extends StatelessWidget {
           ),
         ),
         sliderTheme: SliderThemeData(
-          showValueIndicator: ShowValueIndicator.always,
+          showValueIndicator: ShowValueIndicator.onDrag,
         ),
       ),
       child: ListView(
@@ -45,6 +45,7 @@ class ParametersEditor extends StatelessWidget {
       NumParameter<num>() => _NumEditor(parameter),
       PickerParameter() => _PickerEditor(parameter),
       DateTimeParameter() => _DateTimeEditor(parameter),
+      ActionButtonParameter() => _ButtonEditor(parameter),
     };
   }
 }
@@ -304,5 +305,19 @@ class _DateTimeEditor extends StatelessWidget {
             value.hour,
             value.minute,
           );
+  }
+}
+
+class _ButtonEditor<T> extends StatelessWidget {
+  final ActionButtonParameter parameter;
+
+  const _ButtonEditor(this.parameter);
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton(
+      onPressed: parameter.onPressed,
+      child: Text(parameter.text),
+    );
   }
 }
