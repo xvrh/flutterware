@@ -39,6 +39,8 @@ class Parameters {
       {core.bool dateOnly = false}) {
     return defaultValue;
   }
+
+  void button(String name, String text, VoidCallback onTap) {}
 }
 
 class EditableParameters implements Parameters {
@@ -148,6 +150,14 @@ class EditableParameters implements Parameters {
     return parameter.requiredValue!;
   }
 
+  @override
+  void button(String name, String text, VoidCallback onPressed) {
+    _addParameter(
+        name, () => ActionButtonParameter(text: text, onPressed: onPressed))
+      ..text = text
+      ..onPressed = onPressed;
+  }
+
   void dispose() {
     for (var parameter in parameters.values) {
       parameter.dispose();
@@ -198,4 +208,14 @@ class DateTimeParameter extends Parameter<DateTime?> {
   final bool dateOnly;
   DateTimeParameter({required this.isNullable, required this.dateOnly})
       : super(null);
+}
+
+class ActionButtonParameter extends Parameter {
+  String text;
+  VoidCallback onPressed;
+
+  ActionButtonParameter({
+    required this.text,
+    required this.onPressed,
+  }) : super(null);
 }

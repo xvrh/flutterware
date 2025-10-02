@@ -38,9 +38,8 @@ class UICatalogStateProvider extends InheritedWidget {
     required this.state,
   });
 
-  static UICatalogStateProvider of(BuildContext context) {
-    return context
-        .dependOnInheritedWidgetOfExactType<UICatalogStateProvider>()!;
+  static UICatalogStateProvider? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<UICatalogStateProvider>();
   }
 
   @override
@@ -57,7 +56,8 @@ abstract class UICatalogState {
   Parameters get parameters;
 
   static UICatalogState of(BuildContext context) {
-    return UICatalogStateProvider.of(context).state;
+    final provider = UICatalogStateProvider.maybeOf(context);
+    return provider?.state ?? UICatalogState.empty;
   }
 }
 

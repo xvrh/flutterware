@@ -220,7 +220,7 @@ class _Tab1State extends State<_Tab1> {
                   DropdownMenuItem(value: 0, child: Text('First value')),
                   DropdownMenuItem(value: 1, child: Text('Second value')),
                 ],
-                value: 0,
+                initialValue: 0,
                 onChanged: (v) {},
               ),
             ),
