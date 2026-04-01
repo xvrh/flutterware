@@ -118,17 +118,20 @@ class _IndexPreview extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: Container(
-                  constraints: BoxConstraints(maxHeight: 200, maxWidth: 200),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
+                child: Material(
+                  color: Colors.white,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.black12, width: 1),
+                    side: BorderSide(color: Colors.black12, width: 1),
                   ),
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: mainWidget,
+                  clipBehavior: Clip.antiAlias,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: 200, maxWidth: 200),
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: mainWidget,
+                      ),
                     ),
                   ),
                 ),
@@ -136,6 +139,7 @@ class _IndexPreview extends StatelessWidget {
               Text(
                 entry.title,
                 textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w300,
