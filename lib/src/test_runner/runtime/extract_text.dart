@@ -22,7 +22,7 @@ TextInfo textInfoFromElement(String translationKey, Element element,
         ..color = style.color?.toARGB32()
         ..fontSize = style.fontSize
         ..fontFamily = style.fontFamily
-        ..fontWeight = style.fontWeight?.index);
+        ..fontWeight = style.fontWeight?.value);
 }
 
 String? textFromElement(Element candidate) {

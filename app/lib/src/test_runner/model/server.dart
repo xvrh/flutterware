@@ -41,7 +41,7 @@ class Server {
   }
 
   FutureOr<Response> _socketHandler(Request request) {
-    return webSocketHandler((channel, _) => _onConnect(request, channel))(
+    return webSocketHandler((WebSocketChannel channel, _) => _onConnect(request, channel))(
         request);
   }
 

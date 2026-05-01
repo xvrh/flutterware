@@ -87,4 +87,13 @@ class _FakeAccessibilityFeatures implements ui.AccessibilityFeatures {
 
   @override
   bool get supportsAnnounce => false;
+
+  @override
+  bool get autoPlayAnimatedImages => true;
+
+  @override
+  bool get autoPlayVideos => true;
+
+  @override
+  bool get deterministicCursor => false;
 }

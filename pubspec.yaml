@@ -4,8 +4,12 @@ version: 0.5.1 # Keep it sync with flutterware_app
 homepage: https://github.com/xvrh/flutterware
 
 environment:
-  sdk: '^3.3.0'
+  sdk: ^3.6.0
   flutter: '>=3.21.0'
+
+workspace:
+  - app
+  - examples/example
 
 platforms:
   android:
