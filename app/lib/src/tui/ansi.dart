@@ -66,7 +66,17 @@ class Ansi {
 ///   after a character write).
 /// - Foreground, background, and style SGR are re-emitted only when they
 ///   change between successive printed cells.
-String encodeDiff(CellBuffer front, CellBuffer back) {
+///
+/// The optional [originRow] and [originCol] are added to every absolute
+/// cursor move emitted. Pass them when rendering into a sub-region of the
+/// terminal (e.g. inline mode); the back buffer is still addressed from
+/// (0, 0) on the caller's side.
+String encodeDiff(
+  CellBuffer front,
+  CellBuffer back, {
+  int originRow = 0,
+  int originCol = 0,
+}) {
   if (front.rows != back.rows || front.cols != back.cols) {
     throw ArgumentError(
         'size mismatch: ${front.rows}×${front.cols} vs ${back.rows}×${back.cols}');
@@ -91,7 +101,7 @@ String encodeDiff(CellBuffer front, CellBuffer back) {
 
       // Emit a cursor move if we are not already at this position.
       if (cursorRow != r || cursorCol != c) {
-        buf.write(Ansi.moveTo(r, c));
+        buf.write(Ansi.moveTo(r + originRow, c + originCol));
       }
 
       // Emit SGR transitions only for what changed.

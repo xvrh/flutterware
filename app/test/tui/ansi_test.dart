@@ -165,6 +165,39 @@ void main() {
       expect(() => encodeDiff(front, back), throwsA(isA<ArgumentError>()));
     });
 
+    test('originRow shifts all cursor moves down', () {
+      final front = CellBuffer(1, 2);
+      final back = CellBuffer(1, 2);
+      back.set(0, 0, Cell(rune: 0x41));
+      back.set(0, 1, Cell(rune: 0x42));
+      final out = encodeDiff(front, back, originRow: 5);
+      // The single cursor move for the first cell should target row 5+0=5
+      // (1-indexed: 6), col 0 (1-indexed: 1).
+      expect(out, contains('\x1b[6;1H'));
+      expect(out, contains('AB'));
+    });
+
+    test('originCol shifts all cursor moves right', () {
+      final front = CellBuffer(1, 1);
+      final back = CellBuffer(1, 1);
+      back.set(0, 0, Cell(rune: 0x41));
+      final out = encodeDiff(front, back, originCol: 10);
+      // Move target: row 0+0=0 (1-indexed: 1), col 0+10=10 (1-indexed: 11).
+      expect(out, contains('\x1b[1;11H'));
+    });
+
+    test('default origin (0, 0) preserves existing behavior', () {
+      // Regression guard: omitting the new params must produce identical output
+      // to the pre-extension version.
+      final front = CellBuffer(1, 1);
+      final back = CellBuffer(1, 1);
+      back.set(0, 0, Cell(rune: 0x41));
+      final withDefault = encodeDiff(front, back);
+      final withExplicit = encodeDiff(front, back, originRow: 0, originCol: 0);
+      expect(withDefault, withExplicit);
+      expect(withDefault, contains('\x1b[1;1H'));
+    });
+
     test('style-to-zero with unchanged color re-emits fg/bg after reset', () {
       // Two cells: first is bold red 'A'; second is plain red 'B'.
       // When the encoder prints 'A', lastStyle becomes TextStyle.bold.
