@@ -32,6 +32,8 @@ dart run bin/passthrough.dart run -- <command>
 
 - [ ] **External SIGINT**: in one terminal, run `dart run bin/passthrough.dart run -- sleep 30`. In another, find the parent's pid and `kill -INT <pid>`. The child sleep should exit; parent should print summary with exit 130.
 
+- [ ] **Terminal mode restored after crash**: pick any command that fails fast (e.g. `dart run bin/passthrough.dart run -- /no/such/binary`). After the parent exits, type at the shell — characters should echo and line editing should work. (Covers spec verification row 10, which can't run under `flutter test` since stdin isn't a TTY there.)
+
 ## Pass criteria
 
 All four interactive scenarios usable. Parent shell never left in a broken tty state.

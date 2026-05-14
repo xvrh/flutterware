@@ -18,7 +18,7 @@ class PtyProcessImpl implements PtyProcess {
   late final ReceivePort _rp;
 
   PtyProcessImpl._(this._masterFd, this._pid, this._libc)
-      : _output = StreamController<Uint8List>.broadcast();
+      : _output = StreamController<Uint8List>();
 
   static Future<PtyProcessImpl> spawn(
     String executable,
@@ -103,6 +103,7 @@ class PtyProcessImpl implements PtyProcess {
       } else if (msg is _ExitEvent) {
         if (!_exitCode.isCompleted) _exitCode.complete(msg.code);
         _output.close();
+        _libc.close(_masterFd);
         _rp.close();
       }
     });
