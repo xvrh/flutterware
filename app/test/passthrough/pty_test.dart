@@ -78,4 +78,24 @@ void main() {
     await pty.output.listen(bytes.addAll).asFuture<void>();
     expect(utf8.decode(bytes), contains('123'));
   });
+
+  test('resize() updates window size mid-run', () async {
+    // Spawn a script that prints size on SIGWINCH then exits.
+    final pty = await spawnPty(
+      '/bin/bash',
+      [
+        '-c',
+        'trap "stty size; exit 0" WINCH; sleep 5 & wait',
+      ],
+      cols: 80,
+      rows: 24,
+    );
+    // Give bash a moment to install the trap.
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    pty.resize(150, 50);
+
+    final bytes = <int>[];
+    await pty.output.listen(bytes.addAll).asFuture<void>();
+    expect(utf8.decode(bytes), contains('150'));
+  }, timeout: const Timeout(Duration(seconds: 10)));
 }
