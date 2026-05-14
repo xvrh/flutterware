@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'pty_impl.dart';
 
 /// Handle to a child process running under a pseudo-terminal.
 abstract class PtyProcess {
@@ -30,6 +31,11 @@ Future<PtyProcess> spawnPty(
   String? workingDirectory,
   int? cols,
   int? rows,
-}) async {
-  throw UnimplementedError('Implemented in Task 4.');
-}
+}) =>
+    PtyProcessImpl.spawn(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      cols: cols,
+      rows: rows,
+    );
