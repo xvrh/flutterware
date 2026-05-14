@@ -5,6 +5,26 @@ import 'ansi.dart';
 import 'buffer.dart';
 import 'input.dart';
 
+/// Rendering mode for a [Terminal] session.
+sealed class TerminalMode {
+  const TerminalMode();
+}
+
+/// Take over the whole terminal via the alt-screen buffer. The default.
+final class FullScreenMode extends TerminalMode {
+  const FullScreenMode();
+}
+
+/// Render into a fixed-height region anchored at the cursor's position
+/// when [Terminal.run] starts. Normal scrollback above the region is
+/// preserved. Suitable for status panels and dashboards that coexist with
+/// regular CLI output.
+final class InlineMode extends TerminalMode {
+  /// Height of the region in rows. Must be > 0.
+  final int rows;
+  const InlineMode({required this.rows}) : assert(rows > 0);
+}
+
 /// Owns the terminal lifecycle: alt-screen entry/exit, raw-mode stdin,
 /// signal handling, double-buffered painting, and crash-safe restore.
 ///
@@ -19,12 +39,18 @@ class Terminal {
   /// Run [body] inside an active terminal session. The terminal is restored
   /// to its previous state on normal completion, on uncaught error, and on
   /// SIGINT/SIGTERM/SIGHUP.
-  static Future<void> run(FutureOr<void> Function(Terminal terminal) body) async {
-    final terminal = Terminal._();
+  static Future<void> run(
+    FutureOr<void> Function(Terminal terminal) body, {
+    TerminalMode mode = const FullScreenMode(),
+  }) async {
+    final terminal = Terminal._(mode);
     await terminal._run(body);
   }
 
-  Terminal._();
+  Terminal._(this._mode);
+
+  // ignore: unused_field — wired up in Task 4 (inline-mode branching)
+  final TerminalMode _mode;
 
   int _rows = 0;
   int _cols = 0;
