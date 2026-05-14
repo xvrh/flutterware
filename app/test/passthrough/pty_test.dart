@@ -112,4 +112,20 @@ void main() {
     await pty.output.listen(bytes.addAll).asFuture<void>();
     expect(utf8.decode(bytes), contains('got=hello'));
   });
+
+  test('1000 lines from child are all received in order', () async {
+    final pty = await spawnPty(
+      '/bin/bash',
+      ['-c', 'for i in \$(seq 1 1000); do echo line\$i; done'],
+    );
+    final bytes = <int>[];
+    await pty.output.listen(bytes.addAll).asFuture<void>();
+    final text = utf8.decode(bytes);
+    for (final i in [1, 250, 500, 750, 1000]) {
+      expect(text, contains('line$i'));
+    }
+    final pos1 = text.indexOf('line1\n');
+    final pos1000 = text.indexOf('line1000');
+    expect(pos1, lessThan(pos1000));
+  });
 }
