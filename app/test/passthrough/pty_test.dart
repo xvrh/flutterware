@@ -23,4 +23,10 @@ void main() {
     await pty.output.drain<void>();
     expect(await pty.exitCode, equals(0));
   });
+
+  test('nonexistent binary exits 127', () async {
+    final pty = await spawnPty('/no/such/binary_xyz', []);
+    await pty.output.drain<void>();
+    expect(await pty.exitCode, equals(127));
+  });
 }
