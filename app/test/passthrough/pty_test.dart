@@ -45,4 +45,14 @@ void main() {
     expect(out, anyOf(contains('/tmp'), contains('/private/tmp')));
     expect(await pty.exitCode, equals(0));
   });
+
+  test('child sees stdout as a TTY', () async {
+    final pty = await spawnPty(
+      '/bin/bash',
+      ['-c', '[ -t 1 ] && echo IS_TTY || echo NOT_TTY'],
+    );
+    final bytes = <int>[];
+    await pty.output.listen(bytes.addAll).asFuture<void>();
+    expect(utf8.decode(bytes), contains('IS_TTY'));
+  });
 }
