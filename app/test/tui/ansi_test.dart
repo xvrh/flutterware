@@ -107,7 +107,6 @@ void main() {
       final out = encodeDiff(front, back);
       // First move to (0,1) = CSI 1;2H. After writing 'A', the cursor is at
       // (0,2), so the next 'B' should follow without another CSI move.
-      final moves = '\x1b['.allMatches(out).length;
       // We expect: one CSI for move + at most SGR transitions. With both
       // cells default colored from empty state, SGR may or may not appear.
       // The number of move sequences (matching CSI <num>;<num>H) must be 1.
@@ -164,6 +163,40 @@ void main() {
       final front = CellBuffer(2, 2);
       final back = CellBuffer(3, 3);
       expect(() => encodeDiff(front, back), throwsA(isA<ArgumentError>()));
+    });
+
+    test('style-to-zero with unchanged color re-emits fg/bg after reset', () {
+      // Two cells: first is bold red 'A'; second is plain red 'B'.
+      // When the encoder prints 'A', lastStyle becomes TextStyle.bold.
+      // When it then prints 'B' (style 0, same red fg), it must emit a reset
+      // (0) followed by red fg again — otherwise the reset would clear the
+      // color to terminal default.
+      final front = CellBuffer(1, 2);
+      final back = CellBuffer(1, 2);
+      back.set(0, 0, Cell(rune: 0x41, fg: Color.red, style: TextStyle.bold));
+      back.set(0, 1, Cell(rune: 0x42, fg: Color.red /* style: 0 */));
+      final out = encodeDiff(front, back);
+      // Must include a reset ('0') and re-apply red ('31') for the second cell.
+      expect(out, contains('0'));
+      expect(out, contains('31'));
+      expect(out, contains('A'));
+      expect(out, contains('B'));
+    });
+
+    test('non-zero style transitions to a different non-zero style', () {
+      // Two cells: first is bold 'A'; second is italic 'B'. After printing 'A',
+      // lastStyle becomes TextStyle.bold. For 'B' the style differs, so the
+      // encoder must reset (emit '0') then apply italic ('3').
+      final front = CellBuffer(1, 2);
+      final back = CellBuffer(1, 2);
+      back.set(0, 0, Cell(rune: 0x41, style: TextStyle.bold));
+      back.set(0, 1, Cell(rune: 0x42, style: TextStyle.italic));
+      final out = encodeDiff(front, back);
+      // Reset is emitted before 'B'; italic param '3' appears; both runes present.
+      expect(out, contains('0'));
+      expect(out, contains('3'));
+      expect(out, contains('A'));
+      expect(out, contains('B'));
     });
   });
 }
