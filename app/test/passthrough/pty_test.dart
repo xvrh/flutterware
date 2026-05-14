@@ -98,4 +98,18 @@ void main() {
     await pty.output.listen(bytes.addAll).asFuture<void>();
     expect(utf8.decode(bytes), contains('150'));
   }, timeout: const Timeout(Duration(seconds: 10)));
+
+  test('writeInput forwards bytes to child stdin', () async {
+    final pty = await spawnPty(
+      '/bin/bash',
+      ['-c', 'read x; echo got=\$x'],
+    );
+    // Give bash a moment to reach the `read` call.
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    pty.writeInput(utf8.encode('hello\n'));
+
+    final bytes = <int>[];
+    await pty.output.listen(bytes.addAll).asFuture<void>();
+    expect(utf8.decode(bytes), contains('got=hello'));
+  });
 }
