@@ -66,7 +66,7 @@ class Terminal {
   StreamSubscription<KeyEvent>? _keysSub;
   final _subs = <StreamSubscription>[];
 
-  final _stdinController = StreamController<List<int>>();
+  final _stdinController = StreamController<List<int>>.broadcast();
   StreamSubscription<List<int>>? _stdinSub;
   int _originRow = 0;
   int _originCol = 0;
@@ -114,6 +114,7 @@ class Terminal {
       onDone: _stdinController.close,
     );
 
+    var pendingLeftover = const <int>[];
     final mode = _mode;
     if (mode is InlineMode) {
       stdout.write(Ansi.hideCursor);
@@ -128,10 +129,7 @@ class Terminal {
       _originRow = result.row;
       _originCol = 0;
       _anchored = true;
-      // Replay leftover bytes so the key parser sees them next.
-      if (result.leftoverBytes.isNotEmpty) {
-        _stdinController.add(result.leftoverBytes);
-      }
+      pendingLeftover = result.leftoverBytes;
 
       _rows = mode.rows;
       _cols = stdout.terminalColumns;
@@ -156,6 +154,11 @@ class Terminal {
       onError: _keysController.addError,
       onDone: _keysController.close,
     );
+    // Replay leftover bytes from the cursor-position query now that the parser
+    // is subscribed and ready to receive them.
+    if (pendingLeftover.isNotEmpty) {
+      _stdinController.add(pendingLeftover);
+    }
 
     // SIGWINCH — Unix only.
     try {
