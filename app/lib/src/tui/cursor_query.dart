@@ -147,6 +147,10 @@ Future<CursorPositionResult> queryCursorPosition({
     onDone: () {
       if (!completer.isCompleted) {
         // Stream closed before a response arrived. Treat as timeout-like.
+        if (pending.isNotEmpty) {
+          leftover.addAll(pending);
+          pending.clear();
+        }
         completer.complete(CursorPositionResult(
           row: fallbackRow,
           col: 0,
@@ -161,11 +165,17 @@ Future<CursorPositionResult> queryCursorPosition({
   try {
     final result = await completer.future.timeout(
       timeout,
-      onTimeout: () => CursorPositionResult(
-        row: fallbackRow,
-        col: 0,
-        leftoverBytes: List.unmodifiable(leftover),
-      ),
+      onTimeout: () {
+        if (pending.isNotEmpty) {
+          leftover.addAll(pending);
+          pending.clear();
+        }
+        return CursorPositionResult(
+          row: fallbackRow,
+          col: 0,
+          leftoverBytes: List.unmodifiable(leftover),
+        );
+      },
     );
     return result;
   } finally {

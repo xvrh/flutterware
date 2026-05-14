@@ -140,5 +140,26 @@ void main() {
       expect(result.leftoverBytes, [0x58, 0x59]);
       await input.close();
     });
+
+    test('timeout with mid-sequence pending bytes forwards them as leftover', () async {
+      // The terminal started sending what looked like a response but never
+      // completed it. The bytes ESC [ 1 are "tentatively consumed" by the
+      // parser; on timeout they must be forwarded as leftover, not dropped.
+      final input = StreamController<List<int>>();
+      final future = queryCursorPosition(
+        bytes: input.stream,
+        write: (_) {},
+        fallbackRow: 7,
+        timeout: const Duration(milliseconds: 50),
+      );
+
+      input.add([0x1b, 0x5b, 0x31]); // ESC [ 1 — partial response
+      // No further bytes; timeout fires.
+
+      final result = await future;
+      expect(result.row, 7);
+      expect(result.leftoverBytes, [0x1b, 0x5b, 0x31]);
+      await input.close();
+    });
   });
 }
