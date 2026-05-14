@@ -93,6 +93,9 @@ Future<int> runUnderPty({
     outputSub = pty.output.listen(
       tee.add,
       onDone: outputDone.complete,
+      onError: (Object e, StackTrace st) {
+        if (!outputDone.isCompleted) outputDone.completeError(e, st);
+      },
     );
 
     // Parent stdin → PTY input.
@@ -122,9 +125,13 @@ Future<int> runUnderPty({
 
     return code;
   } finally {
-    if (stdin.hasTerminal) {
-      stdin.lineMode = originalLineMode;
-      stdin.echoMode = originalEchoMode;
+    try {
+      if (stdin.hasTerminal) {
+        stdin.lineMode = originalLineMode;
+        stdin.echoMode = originalEchoMode;
+      }
+    } catch (_) {
+      // If terminal vanished mid-run, swallow — subscription cleanup must still run.
     }
     await stdinSub?.cancel();
     await winchSub?.cancel();
