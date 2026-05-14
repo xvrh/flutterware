@@ -10,6 +10,8 @@
 
 **Deviation from spec, flagged:** The spec describes snapshotting parent termios via `tcgetattr` into the child PTY at spawn. For phase 1 we pass `nullptr` to `forkpty`, letting the kernel use default termios. Reason: portable `termios` struct layout differs significantly between macOS and Linux (different field sizes, different `NCCS`), and none of the verification tests depend on the snapshot. Interactive tools (`vi`, `bash`, `top`) call `tcsetattr` themselves and don't rely on inherited termios. If a real-world test reveals a need, we add it as a follow-up.
 
+**ABI gotcha — `ioctl` is variadic:** `ioctl(int fd, unsigned long request, ...)` is a variadic C function. On Apple Silicon (arm64), the AArch64 calling convention passes variadic arguments on the stack, not in registers — so the FFI typedef MUST declare the trailing `winsize*` with `VarArgs<(Pointer<WinSize>,)>` (available since Dart 3.0), otherwise the kernel reads garbage and `TIOCSWINSZ` silently fails. Linux x86_64 happens to tolerate the non-variadic declaration because the SysV AMD64 ABI passes the first 6 integer/pointer args in registers regardless, but that's incidental — the variadic form is the portably correct one. `forkpty` is fixed-arity, so initial window size is unaffected; only `resize()` (Task 3 / Task 11) hits this path.
+
 ---
 
 ## File map
@@ -861,7 +863,7 @@ git commit -m "passthrough: prove ANSI escapes survive PTY pipeline"
 
 ---
 
-## Task 10: Initial window size (tput cols)
+## Task 10: Initial window size (stty size)
 
 **Files:**
 - Modify: `app/test/passthrough/pty_test.dart`
@@ -874,7 +876,7 @@ Append:
 test('cols/rows on spawn are respected by child', () async {
   final pty = await spawnPty(
     '/bin/bash',
-    ['-c', 'tput cols'],
+    ['-c', 'stty size'],
     cols: 123,
     rows: 40,
   );
@@ -914,12 +916,12 @@ Append:
 
 ```dart
 test('resize() updates window size mid-run', () async {
-  // Spawn a script that prints cols on SIGWINCH then exits.
+  // Spawn a script that prints size on SIGWINCH then exits.
   final pty = await spawnPty(
     '/bin/bash',
     [
       '-c',
-      'trap "tput cols; exit 0" WINCH; sleep 5 & wait',
+      'trap "stty size; exit 0" WINCH; sleep 5 & wait',
     ],
     cols: 80,
     rows: 24,
