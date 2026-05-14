@@ -14,10 +14,10 @@ class TextStyle {
 /// or 24-bit RGB. Equality is structural.
 class Color {
   final int _kind; // 0 = default, 1 = ansi, 2 = rgb
-  final int ansiIndex; // valid when _kind == 1; 0..15
+  final int _ansiIndex; // valid when _kind == 1; 0..15
   final int r, g, b; // valid when _kind == 2
 
-  const Color._(this._kind, this.ansiIndex, this.r, this.g, this.b);
+  const Color._(this._kind, this._ansiIndex, this.r, this.g, this.b);
 
   static const Color defaultFg = Color._(0, 0, 0, 0, 0);
   static const Color defaultBg = Color._(0, 1, 0, 0, 0); // sentinel distinct from defaultFg
@@ -41,25 +41,30 @@ class Color {
   static const Color brightWhite = Color._(1, 15, 0, 0, 0);
 
   const factory Color.rgb(int r, int g, int b) = Color._rgb;
-  const Color._rgb(this.r, this.g, this.b) : _kind = 2, ansiIndex = 0;
+  const Color._rgb(this.r, this.g, this.b) : _kind = 2, _ansiIndex = 0;
+
+  int get ansiIndex {
+    assert(_kind == 1, 'ansiIndex is only valid for ANSI colors (kind=1), got kind=$_kind');
+    return _ansiIndex;
+  }
 
   bool get isDefault => _kind == 0;
   bool get isAnsi => _kind == 1;
   bool get isRgb => _kind == 2;
-  bool get isDefaultFg => _kind == 0 && ansiIndex == 0;
-  bool get isDefaultBg => _kind == 0 && ansiIndex == 1;
+  bool get isDefaultFg => _kind == 0 && _ansiIndex == 0;
+  bool get isDefaultBg => _kind == 0 && _ansiIndex == 1;
 
   @override
   bool operator ==(Object other) =>
       other is Color &&
       _kind == other._kind &&
-      ansiIndex == other.ansiIndex &&
+      _ansiIndex == other._ansiIndex &&
       r == other.r &&
       g == other.g &&
       b == other.b;
 
   @override
-  int get hashCode => Object.hash(_kind, ansiIndex, r, g, b);
+  int get hashCode => Object.hash(_kind, _ansiIndex, r, g, b);
 }
 
 /// A single terminal cell. Immutable.

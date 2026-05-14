@@ -50,4 +50,22 @@ void main() {
       expect(combined & TextStyle.italic, 0);
     });
   });
+
+  group('kind predicates', () {
+    test('kind predicates', () {
+      expect(Color.defaultFg.isDefault, isTrue);
+      expect(Color.defaultBg.isDefault, isTrue);
+      expect(Color.red.isAnsi, isTrue);
+      expect(Color.rgb(1, 2, 3).isRgb, isTrue);
+
+      expect(Color.defaultFg.isDefaultFg, isTrue);
+      expect(Color.defaultFg.isDefaultBg, isFalse);
+      expect(Color.defaultBg.isDefaultBg, isTrue);
+      expect(Color.defaultBg.isDefaultFg, isFalse);
+
+      // Cross checks: non-default isn't default
+      expect(Color.red.isDefault, isFalse);
+      expect(Color.rgb(0, 0, 0).isAnsi, isFalse);
+    });
+  });
 }
