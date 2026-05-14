@@ -64,8 +64,11 @@ typedef _WriteDart = int Function(int, Pointer<Uint8>, int);
 typedef _CloseNative = Int32 Function(Int32);
 typedef _CloseDart = int Function(int);
 
-// ioctl is variadic; we only need the (fd, request, winsize*) shape.
-typedef _IoctlNative = Int32 Function(Int32, IntPtr, Pointer<WinSize>);
+// ioctl is variadic in C. On Apple Silicon (arm64), variadic args go on the
+// stack, not in registers — so we MUST mark the trailing arg with VarArgs or
+// the kernel reads garbage. Linux x86_64 happens to work either way, but this
+// is the portably correct declaration.
+typedef _IoctlNative = Int32 Function(Int32, IntPtr, VarArgs<(Pointer<WinSize>,)>);
 typedef _IoctlDart = int Function(int, int, Pointer<WinSize>);
 
 typedef _GetpidNative = Int32 Function();
