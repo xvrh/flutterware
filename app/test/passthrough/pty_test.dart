@@ -66,4 +66,16 @@ void main() {
     // ESC [ 31 m  =  0x1b 0x5b 0x33 0x31 0x6d
     expect(bytes, containsAllInOrder([0x1b, 0x5b, 0x33, 0x31, 0x6d]));
   });
+
+  test('cols/rows on spawn are respected by child', () async {
+    final pty = await spawnPty(
+      '/bin/bash',
+      ['-c', 'stty size'],
+      cols: 123,
+      rows: 40,
+    );
+    final bytes = <int>[];
+    await pty.output.listen(bytes.addAll).asFuture<void>();
+    expect(utf8.decode(bytes), contains('123'));
+  });
 }
