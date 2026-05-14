@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'ansi.dart';
 import 'buffer.dart';
+import 'cursor_query.dart';
 import 'input.dart';
 
 /// Rendering mode for a [Terminal] session.
@@ -49,7 +50,6 @@ class Terminal {
 
   Terminal._(this._mode);
 
-  // ignore: unused_field — wired up in Task 4 (inline-mode branching)
   final TerminalMode _mode;
 
   int _rows = 0;
@@ -66,6 +66,12 @@ class Terminal {
   StreamSubscription<KeyEvent>? _keysSub;
   final _subs = <StreamSubscription>[];
 
+  final _stdinController = StreamController<List<int>>();
+  StreamSubscription<List<int>>? _stdinSub;
+  int _originRow = 0;
+  int _originCol = 0;
+  bool _anchored = false;
+
   int get rows => _rows;
   int get cols => _cols;
   /// Emits when the terminal is resized. The caller is responsible for
@@ -78,7 +84,7 @@ class Terminal {
 
   Future<void> _run(FutureOr<void> Function(Terminal) body) async {
     _installSignalHandlers();
-    _enter();
+    await _enter();
     try {
       await runZonedGuarded(() async {
         await body(this);
@@ -93,47 +99,92 @@ class Terminal {
     }
   }
 
-  void _enter() {
+  Future<void> _enter() async {
     _wasEcho = stdin.echoMode;
     _wasLine = stdin.lineMode;
     stdin.echoMode = false;
     stdin.lineMode = false;
 
-    stdout.write(Ansi.enterAltScreen);
-    stdout.write(Ansi.hideCursor);
-    stdout.write(Ansi.clearScreen);
-    stdout.write(Ansi.moveTo(0, 0));
+    // Pipe stdin into our internal controller. Both the cursor-position query
+    // (briefly, during inline-mode entry) and the key parser (for the rest of
+    // the session) consume from _stdinController.stream.
+    _stdinSub = stdin.listen(
+      _stdinController.add,
+      onError: _stdinController.addError,
+      onDone: _stdinController.close,
+    );
 
-    _rows = stdout.terminalLines;
-    _cols = stdout.terminalColumns;
+    final mode = _mode;
+    if (mode is InlineMode) {
+      stdout.write(Ansi.hideCursor);
+      stdout.write('\n' * mode.rows);
+      stdout.write('\x1b[${mode.rows}F'); // CPL: cursor previous line × rows
+
+      final result = await queryCursorPosition(
+        bytes: _stdinController.stream,
+        write: stdout.add,
+        fallbackRow: stdout.terminalLines - mode.rows,
+      );
+      _originRow = result.row;
+      _originCol = 0;
+      _anchored = true;
+      // Replay leftover bytes so the key parser sees them next.
+      if (result.leftoverBytes.isNotEmpty) {
+        _stdinController.add(result.leftoverBytes);
+      }
+
+      _rows = mode.rows;
+      _cols = stdout.terminalColumns;
+    } else {
+      stdout.write(Ansi.enterAltScreen);
+      stdout.write(Ansi.hideCursor);
+      stdout.write(Ansi.clearScreen);
+      stdout.write(Ansi.moveTo(0, 0));
+      _originRow = 0;
+      _originCol = 0;
+      _anchored = true;
+      _rows = stdout.terminalLines;
+      _cols = stdout.terminalColumns;
+    }
+
     _front = CellBuffer(_rows, _cols);
     _back = CellBuffer(_rows, _cols);
 
-    // Pipe parsed key events into the public stream.
-    _keysSub = parseKeyEvents(stdin).listen(
+    // Hook up the key parser to the (now free) _stdinController.stream.
+    _keysSub = parseKeyEvents(_stdinController.stream).listen(
       _keysController.add,
       onError: _keysController.addError,
       onDone: _keysController.close,
     );
 
-    // SIGWINCH — Unix only. Errors silently ignored on platforms without it.
+    // SIGWINCH — Unix only.
     try {
       _subs.add(ProcessSignal.sigwinch.watch().listen((_) => _onResize()));
     } catch (_) {/* not supported on this platform */}
   }
 
   void _onResize() {
-    final newRows = stdout.terminalLines;
     final newCols = stdout.terminalColumns;
-    if (newRows == _rows && newCols == _cols) return;
-    _rows = newRows;
-    _cols = newCols;
-    _front = CellBuffer(_rows, _cols);
-    _back = CellBuffer(_rows, _cols);
-    // Force a full repaint by clearing the screen; the caller will redraw
-    // on the next resizes event and the diff will show every cell as changed.
-    stdout.write(Ansi.clearScreen);
-    stdout.write(Ansi.moveTo(0, 0));
+    final mode = _mode;
+    if (mode is InlineMode) {
+      if (newCols == _cols) return; // height is fixed; only columns can change
+      _cols = newCols;
+      _front = CellBuffer(_rows, _cols);
+      _back = CellBuffer(_rows, _cols);
+      // Do NOT clearScreen — that would wipe scrollback content above the
+      // inline region. Callers should repaint in response to the resizes
+      // event; the new (empty) _front means every cell will appear changed
+      // and be repainted.
+    } else {
+      final newRows = stdout.terminalLines;
+      if (newRows == _rows && newCols == _cols) return;
+      _rows = newRows;
+      _cols = newCols;
+      _front = CellBuffer(_rows, _cols);
+      _back = CellBuffer(_rows, _cols);
+      stdout.write(Ansi.clearScreen);
+      stdout.write(Ansi.moveTo(0, 0));
+    }
     _resizeController.add(null);
   }
 
@@ -160,7 +211,7 @@ class Terminal {
   void draw(void Function(CellBuffer buffer) paint) {
     _back.clear();
     paint(_back);
-    final diff = encodeDiff(_front, _back);
+    final diff = encodeDiff(_front, _back, originRow: _originRow, originCol: _originCol);
     if (diff.isNotEmpty) {
       stdout.write(diff);
     }
@@ -176,15 +227,26 @@ class Terminal {
     }
     _subs.clear();
     _keysSub?.cancel();
+    _stdinSub?.cancel();
     if (!_keysController.isClosed) _keysController.close();
     if (!_resizeController.isClosed) _resizeController.close();
+    if (!_stdinController.isClosed) _stdinController.close();
 
     // Write restore sequences synchronously so they reach the terminal even
     // on the way out of the process.
     try {
       stdout.write(Ansi.resetStyle);
-      stdout.write(Ansi.showCursor);
-      stdout.write(Ansi.exitAltScreen);
+      if (_mode is InlineMode) {
+        if (_anchored) {
+          stdout.write(Ansi.moveTo(_originRow, 0));
+          stdout.write('\x1b[J'); // clear to end of screen
+        }
+        stdout.write(Ansi.showCursor);
+        stdout.write('\n'); // next prompt on a fresh line
+      } else {
+        stdout.write(Ansi.showCursor);
+        stdout.write(Ansi.exitAltScreen);
+      }
     } catch (_) {/* stdout may already be closed */}
 
     try {
