@@ -1,9 +1,6 @@
 import 'dart:async';
 
-import '../buffer.dart';
-import '../cell.dart';
-import '../input.dart';
-import '../terminal.dart';
+import '../tui.dart';
 
 Future<void> main() async {
   await Terminal.run((terminal) async {

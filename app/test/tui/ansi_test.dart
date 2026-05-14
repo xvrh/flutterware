@@ -177,7 +177,9 @@ void main() {
       back.set(0, 1, Cell(rune: 0x42, fg: Color.red /* style: 0 */));
       final out = encodeDiff(front, back);
       // Must include a reset ('0') and re-apply red ('31') for the second cell.
-      expect(out, contains('0'));
+      // Match a `0` SGR param surrounded by either CSI `[` or `;` on the left
+      // and either `m` or `;` on the right — i.e. a real reset, not part of '31'.
+      expect(out, matches(RegExp(r'(\x1b\[|;)0(;|m)')));
       expect(out, contains('31'));
       expect(out, contains('A'));
       expect(out, contains('B'));
@@ -193,8 +195,11 @@ void main() {
       back.set(0, 1, Cell(rune: 0x42, style: TextStyle.italic));
       final out = encodeDiff(front, back);
       // Reset is emitted before 'B'; italic param '3' appears; both runes present.
-      expect(out, contains('0'));
-      expect(out, contains('3'));
+      // Match a `0` SGR param surrounded by either CSI `[` or `;` on the left
+      // and either `m` or `;` on the right — i.e. a real reset, not part of '31'.
+      expect(out, matches(RegExp(r'(\x1b\[|;)0(;|m)')));
+      // Italic SGR param '3' similarly bounded.
+      expect(out, matches(RegExp(r'(\x1b\[|;)3(;|m)')));
       expect(out, contains('A'));
       expect(out, contains('B'));
     });

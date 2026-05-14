@@ -36,13 +36,18 @@ class Terminal {
   bool _restored = false;
 
   final _resizeController = StreamController<void>.broadcast();
-  final _keysController = StreamController<KeyEvent>();
+  final _keysController = StreamController<KeyEvent>.broadcast();
   StreamSubscription<KeyEvent>? _keysSub;
   final _subs = <StreamSubscription>[];
 
   int get rows => _rows;
   int get cols => _cols;
+  /// Emits when the terminal is resized. The caller is responsible for
+  /// calling [draw] in response — the engine clears the screen on resize
+  /// but does not repaint until asked.
   Stream<void> get resizes => _resizeController.stream;
+
+  /// Stream of parsed key events. Broadcast, so multiple listeners are OK.
   Stream<KeyEvent> get keys => _keysController.stream;
 
   Future<void> _run(FutureOr<void> Function(Terminal) body) async {
