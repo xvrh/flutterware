@@ -19,9 +19,6 @@ jobs:
           channel: ${{ matrix.flutter }}
       - run: flutter --version
       - run: flutter pub get
-        working-directory: app
-      - run: flutter pub get
-        working-directory: examples/example
       - run: flutter analyze
       - run: flutter test
         working-directory: app
