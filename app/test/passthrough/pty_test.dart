@@ -55,4 +55,15 @@ void main() {
     await pty.output.listen(bytes.addAll).asFuture<void>();
     expect(utf8.decode(bytes), contains('IS_TTY'));
   });
+
+  test('ANSI color codes are not stripped', () async {
+    final pty = await spawnPty(
+      '/bin/bash',
+      ['-c', "printf '\\033[31mred\\033[0m\\n'"],
+    );
+    final bytes = <int>[];
+    await pty.output.listen(bytes.addAll).asFuture<void>();
+    // ESC [ 31 m  =  0x1b 0x5b 0x33 0x31 0x6d
+    expect(bytes, containsAllInOrder([0x1b, 0x5b, 0x33, 0x31, 0x6d]));
+  });
 }
