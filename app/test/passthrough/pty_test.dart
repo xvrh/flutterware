@@ -29,4 +29,10 @@ void main() {
     await pty.output.drain<void>();
     expect(await pty.exitCode, equals(127));
   });
+
+  test('SIGINT death gives exit 130', () async {
+    final pty = await spawnPty('/bin/bash', ['-c', 'kill -INT \$\$; sleep 5']);
+    await pty.output.drain<void>();
+    expect(await pty.exitCode, equals(130));
+  });
 }
