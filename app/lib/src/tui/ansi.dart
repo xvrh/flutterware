@@ -57,10 +57,79 @@ class Ansi {
 }
 
 /// Encode the difference between [front] (current screen state) and [back]
-/// (desired state) as a string of ANSI escape sequences. Returns an empty
-/// string if there are no changes.
+/// (desired state) as a string of ANSI escape sequences.
 ///
-/// Defined in a later task.
+/// Optimizations:
+/// - Unchanged cells are skipped.
+/// - When the next changed cell is the immediate horizontal neighbor of the
+///   previous one, the cursor move is omitted (the cursor advances naturally
+///   after a character write).
+/// - Foreground, background, and style SGR are re-emitted only when they
+///   change between successive printed cells.
 String encodeDiff(CellBuffer front, CellBuffer back) {
-  throw UnimplementedError('see Task 4');
+  if (front.rows != back.rows || front.cols != back.cols) {
+    throw ArgumentError(
+        'size mismatch: ${front.rows}×${front.cols} vs ${back.rows}×${back.cols}');
+  }
+
+  final buf = StringBuffer();
+
+  // Track cursor position. -1 means "unknown / must emit move before next write".
+  int cursorRow = -1;
+  int cursorCol = -1;
+
+  // Track the last SGR state we wrote. null means "unknown".
+  Color? lastFg;
+  Color? lastBg;
+  int? lastStyle;
+
+  for (var r = 0; r < back.rows; r++) {
+    for (var c = 0; c < back.cols; c++) {
+      final f = front.get(r, c);
+      final b = back.get(r, c);
+      if (f == b) continue;
+
+      // Emit a cursor move if we are not already at this position.
+      if (cursorRow != r || cursorCol != c) {
+        buf.write(Ansi.moveTo(r, c));
+      }
+
+      // Emit SGR transitions only for what changed.
+      final params = <String>[];
+      if (lastFg == null || lastFg != b.fg) {
+        params.add(Ansi.sgrForeground(b.fg));
+      }
+      if (lastBg == null || lastBg != b.bg) {
+        params.add(Ansi.sgrBackground(b.bg));
+      }
+      if (lastStyle == null || lastStyle != b.style) {
+        // Style transitions are simplest when we reset and re-apply, otherwise
+        // we'd need to track which bits to turn off.
+        if (lastStyle != null && lastStyle != 0) {
+          params.insert(0, '0');
+          // After reset, fg/bg also reset — re-emit them.
+          if (!params.contains(Ansi.sgrForeground(b.fg))) {
+            params.add(Ansi.sgrForeground(b.fg));
+          }
+          if (!params.contains(Ansi.sgrBackground(b.bg))) {
+            params.add(Ansi.sgrBackground(b.bg));
+          }
+        }
+        params.addAll(Ansi.sgrStyle(b.style));
+      }
+      if (params.isNotEmpty) {
+        buf.write('${Ansi.csi}${params.join(';')}m');
+      }
+
+      buf.writeCharCode(b.rune);
+
+      lastFg = b.fg;
+      lastBg = b.bg;
+      lastStyle = b.style;
+      cursorRow = r;
+      cursorCol = c + 1; // cursor advances after a char write
+    }
+  }
+
+  return buf.toString();
 }
