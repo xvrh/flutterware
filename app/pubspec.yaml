@@ -31,6 +31,7 @@ resolution: workspace
 dependencies:
   analyzer:
   args:
+  ffi:
   async:
   auto_size_text:
   built_collection:
