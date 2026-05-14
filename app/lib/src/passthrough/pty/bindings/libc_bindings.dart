@@ -1,4 +1,9 @@
-// ignore_for_file: non_constant_identifier_names, camel_case_types
+// ignore_for_file: non_constant_identifier_names, camel_case_types, constant_identifier_names, library_private_types_in_public_api
+//
+// Rationale: this file mirrors libc/libutil one-to-one for readability against
+// `man` pages. POSIX names are SCREAMING_CASE for signals and constants; the
+// private FFI typedefs (e.g. _ForkptyDart) are deliberately scoped to this
+// file to keep the public surface small.
 
 import 'dart:ffi';
 import 'dart:io' show Platform;

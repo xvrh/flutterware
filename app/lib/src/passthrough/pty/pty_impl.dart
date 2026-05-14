@@ -15,7 +15,6 @@ class PtyProcessImpl implements PtyProcess {
   final LibcBindings _libc;
   final StreamController<Uint8List> _output;
   final Completer<int> _exitCode = Completer<int>();
-  late final Isolate _reader;
   late final ReceivePort _rp;
 
   PtyProcessImpl._(this._masterFd, this._pid, this._libc)
@@ -94,7 +93,7 @@ class PtyProcessImpl implements PtyProcess {
 
   Future<void> _startReader() async {
     _rp = ReceivePort();
-    _reader = await Isolate.spawn(
+    await Isolate.spawn(
       _readerEntry,
       _ReaderArgs(_masterFd, _pid, _rp.sendPort),
     );
