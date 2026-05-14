@@ -175,10 +175,9 @@ KeyEvent? _consume(Queue<int> bytes, {required bool streamClosed}) {
       return const CharKey(rune: 0xFFFD /* replacement */, modifiers: {});
     }
     var rune = first & (0xff >> (byteLen + 1));
-    final consumed = <int>[bytes.removeFirst()];
+    bytes.removeFirst();
     for (var i = 1; i < byteLen; i++) {
       final next = bytes.removeFirst();
-      consumed.add(next);
       rune = (rune << 6) | (next & 0x3f);
     }
     return CharKey(rune: rune, modifiers: const {});
@@ -314,9 +313,10 @@ Set<Modifier> _xtermModifiers(int param) {
 KeyEvent? _consumeSs3(Queue<int> bytes, {required bool streamClosed}) {
   // ESC O X — we need 3 bytes.
   if (bytes.length < 3) {
-    return streamClosed
-        ? (bytes.removeFirst(), const SpecialKey(code: SpecialKeyCode.escape, modifiers: {})).$2
-        : null;
+    if (!streamClosed) return null;
+    bytes.removeFirst(); // ESC
+    if (bytes.isNotEmpty) bytes.removeFirst(); // O
+    return const SpecialKey(code: SpecialKeyCode.escape, modifiers: {});
   }
   bytes.removeFirst(); // ESC
   bytes.removeFirst(); // O

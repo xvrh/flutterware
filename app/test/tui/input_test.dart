@@ -153,5 +153,23 @@ void main() {
         const SpecialKey(code: SpecialKeyCode.up, modifiers: {}),
       ]);
     });
+
+    test('incomplete SS3 at stream close drains both ESC and O', () async {
+      // Only ESC and O delivered; stream then closes. Implementation must drain
+      // both bytes and emit escape — NOT escape + CharKey('O').
+      final events = await parse([[0x1b, 0x4f]]);
+      expect(events, [
+        const SpecialKey(code: SpecialKeyCode.escape, modifiers: {}),
+      ]);
+    });
+
+    test('incomplete UTF-8 at stream close yields replacement character', () async {
+      // A 2-byte UTF-8 leading byte arrives but the second byte never does.
+      // Stream closes. Implementation must emit U+FFFD.
+      final events = await parse([[0xc3]]);
+      expect(events, [
+        const CharKey(rune: 0xFFFD, modifiers: {}),
+      ]);
+    });
   });
 }
