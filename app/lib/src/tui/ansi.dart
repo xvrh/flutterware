@@ -75,8 +75,8 @@ String encodeDiff(CellBuffer front, CellBuffer back) {
   final buf = StringBuffer();
 
   // Track cursor position. -1 means "unknown / must emit move before next write".
-  int cursorRow = -1;
-  int cursorCol = -1;
+  var cursorRow = -1;
+  var cursorCol = -1;
 
   // Track the last SGR state we wrote. null means "unknown".
   Color? lastFg;

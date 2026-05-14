@@ -254,7 +254,7 @@ KeyEvent _interpretCsi(List<int> paramBytes, int finalByte) {
   // Modifier param (xterm convention: 1=none, 2=shift, 3=alt, 4=shift+alt,
   // 5=ctrl, 6=ctrl+shift, 7=ctrl+alt, 8=ctrl+shift+alt). Apparent in
   // sequences like `ESC [1;<mod><final>` or `ESC [<n>;<mod>~`.
-  Set<Modifier> mods = const {};
+  var mods = const <Modifier>{};
   if (params.length >= 2) {
     mods = _xtermModifiers(params[1]);
   }
