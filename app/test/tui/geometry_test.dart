@@ -25,6 +25,11 @@ void main() {
       expect(CellSize(-1, 5).isEmpty, isTrue);
       expect(CellSize(3, 4).isEmpty, isFalse);
     });
+
+    test('structural equality', () {
+      expect(CellSize(3, 4), CellSize(3, 4));
+      expect(CellSize(3, 4) == CellSize(4, 3), isFalse);
+    });
   });
 
   group('CellRect', () {
@@ -85,6 +90,12 @@ void main() {
     test('deflate past collapse yields an empty rect', () {
       var r = CellRect.fromTLWH(0, 0, 3, 3);
       expect(r.deflate(5).isEmpty, isTrue);
+    });
+
+    test('intersect of edge-adjacent rects is empty', () {
+      var a = CellRect.fromTLWH(0, 0, 2, 2);
+      var b = CellRect.fromTLWH(0, 2, 2, 2); // shares the right edge of a
+      expect(a.intersect(b).isEmpty, isTrue);
     });
   });
 }
