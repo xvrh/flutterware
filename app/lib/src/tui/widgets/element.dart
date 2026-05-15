@@ -251,6 +251,11 @@ abstract class Element implements BuildContext {
   // --- activate / deactivate / unmount ---
 
   /// Transitions this element from inactive back to active.
+  ///
+  /// [_dependencies] is preserved across deactivation (deactivate does NOT
+  /// unregister) so that if the set is non-empty we know the element had
+  /// inherited dependencies and must re-run [didChangeDependencies] — those
+  /// widgets may have changed while the element was parked inactive.
   void activate() {
     assert(_lifecycleState == _ElementLifecycle.inactive);
     var hadDependencies = _dependencies?.isNotEmpty ?? false;
@@ -266,15 +271,25 @@ abstract class Element implements BuildContext {
   }
 
   /// Transitions this element from active to inactive.
+  ///
+  /// Intentionally does NOT call [_unregisterDependencies]: keeping
+  /// [_dependencies] intact lets [activate] detect that the element had
+  /// inherited dependencies and must re-run [didChangeDependencies] on
+  /// reactivation. A deactivated dependent remaining in an
+  /// [InheritedElement._dependents] is harmless — [notifyClients] →
+  /// [markNeedsBuild] early-returns for non-active elements.
   void deactivate() {
     assert(_lifecycleState == _ElementLifecycle.active);
     assert(_widget != null);
-    _unregisterDependencies();
     _inheritedElements = null;
     _lifecycleState = _ElementLifecycle.inactive;
   }
 
   /// Permanently removes this element from the tree.
+  ///
+  /// Unlike [deactivate], this calls [_unregisterDependencies] to remove the
+  /// element from each ancestor [InheritedElement]'s dependent set — it will
+  /// never be reactivated.
   void unmount() {
     assert(_lifecycleState == _ElementLifecycle.inactive);
     assert(_widget != null);
@@ -286,8 +301,8 @@ abstract class Element implements BuildContext {
   }
 
   /// Drops this element from every [InheritedElement] it depends on, then
-  /// clears its own dependency set. Called whenever the element leaves the
-  /// active tree so stale dependents are not rebuilt.
+  /// clears its own dependency set. Called only from [unmount] — [deactivate]
+  /// intentionally leaves [_dependencies] intact for [activate] to inspect.
   void _unregisterDependencies() {
     var dependencies = _dependencies;
     if (dependencies != null && dependencies.isNotEmpty) {
