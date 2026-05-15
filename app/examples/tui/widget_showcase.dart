@@ -443,6 +443,98 @@ class TypeScene extends StatelessWidget {
   }
 }
 
+/// Scene name labels, indexed 0–4, used by [Header] tabs and the build switch.
+const _sceneNames = ['Plasma', 'Stars', 'Charts', 'Layout', 'Type'];
+
+/// Persistent chrome header: a 3-row fixed-height region showing the app title,
+/// scene tabs, and an animated color gradient bar.
+class Header extends StatelessWidget {
+  const Header({required this.time, required this.scene, super.key});
+
+  final double time;
+  final int scene;
+
+  @override
+  Widget build(BuildContext context) {
+    var t = time;
+
+    // Row 2: five scene tabs; active one bold+bright, others dim.
+    var tabs = <Widget>[];
+    for (var i = 0; i < _sceneNames.length; i++) {
+      if (i > 0) tabs.add(SizedBox(width: 2));
+      var isActive = i == scene;
+      tabs.add(Text(
+        '${i + 1} ${_sceneNames[i]}',
+        fg: isActive ? Color.brightWhite : Color.brightBlack,
+        style: isActive ? TextStyle.bold : 0,
+      ));
+    }
+
+    // Row 3: animated 1-cell-tall gradient bar.
+    var gradientBar = ConstrainedBox(
+      constraints: BoxConstraints.tightFor(height: 1),
+      child: Painted((painter, size) {
+        for (var col = 0; col < size.cols; col++) {
+          painter.fillRect(
+            CellRect.fromTLWH(0, col, 1, 1),
+            Cell(
+              rune: 0x20,
+              bg: hsv((col / size.cols + t * 0.3) % 1.0, 0.8, 0.7),
+            ),
+          );
+        }
+      }),
+    );
+
+    return ConstrainedBox(
+      constraints: BoxConstraints.tightFor(height: 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'flutterware · widget showcase',
+            fg: Color.brightWhite,
+            style: TextStyle.bold,
+            hAlign: HorizontalAlign.center,
+          ),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: tabs),
+          gradientBar,
+        ],
+      ),
+    );
+  }
+}
+
+/// Persistent chrome footer: a 1-row fixed-height region with key hints on the
+/// left and live FPS (or PAUSED) on the right.
+class Footer extends StatelessWidget {
+  const Footer({required this.fps, required this.paused, super.key});
+
+  final int fps;
+  final bool paused;
+
+  @override
+  Widget build(BuildContext context) {
+    var rightText = paused
+        ? Text('PAUSED', fg: Color.brightYellow)
+        : Text('$fps fps', fg: Color.brightBlack);
+
+    return ConstrainedBox(
+      constraints: BoxConstraints.tightFor(height: 1),
+      child: Row(
+        children: [
+          Text(
+            '←/→ scene · 1-5 jump · space pause · q quit',
+            fg: Color.brightBlack,
+          ),
+          Expanded(child: SizedBox()),
+          rightText,
+        ],
+      ),
+    );
+  }
+}
+
 /// Root of the showcase. Owns the animation clock and (later) input + scenes.
 class ShowcaseApp extends StatefulWidget {
   const ShowcaseApp({super.key});
@@ -454,11 +546,20 @@ class ShowcaseApp extends StatefulWidget {
 class _ShowcaseState extends State<ShowcaseApp> {
   Timer? _timer;
   double _time = 0;
+  // ignore: prefer_final_fields
+  int _scene = 0;
+  // ignore: prefer_final_fields
+  bool _paused = false;
+  double _fps = 0;
 
   @override
   void initState() {
     _timer = Timer.periodic(const Duration(milliseconds: 33), (_) {
-      setState(() => _time += 0.033);
+      setState(() {
+        if (!_paused) _time += 0.033;
+        // Smoothed FPS estimate: target is 1000ms / 33ms ≈ 30.3 fps.
+        _fps = _fps * 0.9 + (1000 / 33) * 0.1;
+      });
     });
   }
 
@@ -469,9 +570,21 @@ class _ShowcaseState extends State<ShowcaseApp> {
 
   @override
   Widget build(BuildContext context) {
-    return (_time ~/ 5) % 2 == 0
-        ? LayoutLabScene(time: _time)
-        : TypeScene(time: _time);
+    var scene = switch (_scene) {
+      0 => PlasmaScene(time: _time),
+      1 => StarfieldScene(time: _time),
+      2 => ChartsScene(time: _time),
+      3 => LayoutLabScene(time: _time),
+      _ => TypeScene(time: _time),
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Header(time: _time, scene: _scene),
+        Expanded(flex: 1, child: scene),
+        Footer(fps: _fps.round(), paused: _paused),
+      ],
+    );
   }
 }
 
