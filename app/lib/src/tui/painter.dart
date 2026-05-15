@@ -194,4 +194,48 @@ class Painter {
     _put(bottom, left, glyph(chars.bottomLeft));
     _put(bottom, right, glyph(chars.bottomRight));
   }
+
+  /// Draw [text] inside [rect].
+  ///
+  /// When [wrap] is true, [text] is word-wrapped to the rect width; otherwise
+  /// it is split only on '\n' and long lines are clipped at the right edge.
+  /// The line block is positioned vertically by [vAlign] and each line
+  /// horizontally by [hAlign]. Rows that overflow the rect height are dropped.
+  void drawText(
+    CellRect rect,
+    String text, {
+    Color fg = Color.defaultFg,
+    Color bg = Color.defaultBg,
+    int style = 0,
+    HorizontalAlign hAlign = HorizontalAlign.left,
+    VerticalAlign vAlign = VerticalAlign.top,
+    bool wrap = true,
+  }) {
+    if (rect.isEmpty) return;
+
+    var lines = wrap ? wrapText(text, rect.width) : text.split('\n');
+    var visibleCount = lines.length < rect.height ? lines.length : rect.height;
+    var extraRows = rect.height - visibleCount;
+    var rowOffset = switch (vAlign) {
+      VerticalAlign.top => 0,
+      VerticalAlign.center => extraRows ~/ 2,
+      VerticalAlign.bottom => extraRows,
+    };
+
+    for (var i = 0; i < visibleCount; i++) {
+      var runes = lines[i].runes.toList();
+      var extraCols = rect.width - runes.length;
+      var colOffset = switch (hAlign) {
+        HorizontalAlign.left => 0,
+        HorizontalAlign.center => extraCols < 0 ? 0 : extraCols ~/ 2,
+        HorizontalAlign.right => extraCols < 0 ? 0 : extraCols,
+      };
+      var row = rect.top + rowOffset + i;
+      for (var j = 0; j < runes.length; j++) {
+        var col = rect.left + colOffset + j;
+        if (col >= rect.right) break; // clip to the rect right edge
+        _put(row, col, Cell(rune: runes[j], fg: fg, bg: bg, style: style));
+      }
+    }
+  }
 }

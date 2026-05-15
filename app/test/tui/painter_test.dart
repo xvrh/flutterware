@@ -173,4 +173,93 @@ void main() {
       expect(dump(b), ['+--+', '|  |', '    ', '    ']);
     });
   });
+
+  group('Painter.drawText', () {
+    test('left/top aligned single line', () {
+      var b = CellBuffer(2, 8);
+      Painter(b).drawText(CellRect.fromTLWH(0, 0, 8, 2), 'hi');
+      expect(dump(b), ['hi      ', '        ']);
+    });
+
+    test('horizontal center alignment', () {
+      var b = CellBuffer(1, 7);
+      Painter(b).drawText(
+        CellRect.fromTLWH(0, 0, 7, 1),
+        'odd',
+        hAlign: HorizontalAlign.center,
+      );
+      // 7 - 3 = 4 spare cols, 2 each side.
+      expect(dump(b), ['  odd  ']);
+    });
+
+    test('horizontal right alignment', () {
+      var b = CellBuffer(1, 6);
+      Painter(b).drawText(
+        CellRect.fromTLWH(0, 0, 6, 1),
+        'abc',
+        hAlign: HorizontalAlign.right,
+      );
+      expect(dump(b), ['   abc']);
+    });
+
+    test('vertical center alignment', () {
+      var b = CellBuffer(3, 3);
+      Painter(b).drawText(
+        CellRect.fromTLWH(0, 0, 3, 3),
+        'x',
+        vAlign: VerticalAlign.center,
+      );
+      expect(dump(b), ['   ', 'x  ', '   ']);
+    });
+
+    test('vertical bottom alignment', () {
+      var b = CellBuffer(3, 3);
+      Painter(b).drawText(
+        CellRect.fromTLWH(0, 0, 3, 3),
+        'x',
+        vAlign: VerticalAlign.bottom,
+      );
+      expect(dump(b), ['   ', '   ', 'x  ']);
+    });
+
+    test('wraps long text across rows', () {
+      var b = CellBuffer(2, 7);
+      Painter(b).drawText(
+        CellRect.fromTLWH(0, 0, 7, 2),
+        'one two three',
+      );
+      expect(dump(b), ['one two', 'three  ']);
+    });
+
+    test('drops wrapped rows that overflow the rect height', () {
+      var b = CellBuffer(3, 7);
+      Painter(b).drawText(
+        CellRect.fromTLWH(0, 0, 7, 1), // only one row tall
+        'one two three',
+      );
+      expect(dump(b), ['one two', '       ', '       ']);
+    });
+
+    test('unwrapped long line is clipped at the rect right edge', () {
+      var b = CellBuffer(1, 8);
+      Painter(b).drawText(
+        CellRect.fromTLWH(0, 0, 4, 1),
+        'abcdefgh',
+        wrap: false,
+      );
+      expect(dump(b), ['abcd    ']);
+    });
+
+    test('text is offset by the rect position', () {
+      var b = CellBuffer(3, 6);
+      Painter(b).drawText(CellRect.fromTLWH(1, 2, 4, 1), 'ab');
+      expect(dump(b), ['      ', '  ab  ', '      ']);
+    });
+
+    test('empty rect draws nothing', () {
+      var b = CellBuffer(2, 2);
+      Painter(b).drawText(CellRect.fromTLWH(0, 0, 0, 0), 'x');
+      expect(dump(b), ['  ', '  ']);
+    });
+  });
 }
