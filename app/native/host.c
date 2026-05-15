@@ -34,7 +34,13 @@ static bool PresentSoftware(void* user_data, const void* allocation,
   size_t size = row_bytes * height;
   pthread_mutex_lock(&g_mutex);
   if (size > g_frame_capacity) {
-    g_frame = realloc(g_frame, size);
+    unsigned char* grown = realloc(g_frame, size);
+    if (!grown) {
+      // Cannot capture this frame; leave prior state untouched.
+      pthread_mutex_unlock(&g_mutex);
+      return true;
+    }
+    g_frame = grown;
     g_frame_capacity = size;
   }
   memcpy(g_frame, allocation, size);
@@ -78,6 +84,11 @@ static bool Before(const struct timespec* a, const struct timespec* b) {
 
 // Writes the captured frame: a 12-byte little-endian header
 // (width, height, row_bytes) followed by the raw pixels. Caller holds g_mutex.
+//
+// `width` is the logical window width (kWidth): the software present callback
+// only reports `row_bytes` (a stride that may exceed width*4) and `height`, so
+// the logical width cannot be derived from it. `height` and `row_bytes` come
+// from the callback so they always match the actual `g_frame` payload.
 static bool WriteFrame(const char* path) {
   FILE* f = fopen(path, "wb");
   if (!f) {
