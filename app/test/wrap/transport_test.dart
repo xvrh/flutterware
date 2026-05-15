@@ -34,4 +34,18 @@ void main() {
     await sink.close();
     expect(code, 7);
   }, timeout: const Timeout(Duration(minutes: 1)));
+
+  test('runIntercepted captures stderr into the sink', () async {
+    final file = File(p.join(tmp.path, 'cap-stderr.log'));
+    final sink = file.openWrite();
+    final code = await runIntercepted(
+      executable: '/bin/bash',
+      arguments: const ['-c', 'echo to-stderr 1>&2'],
+      captureSink: sink,
+    );
+    await sink.flush();
+    await sink.close();
+    expect(code, 0);
+    expect(file.readAsStringSync(), contains('to-stderr'));
+  }, timeout: const Timeout(Duration(minutes: 1)));
 }

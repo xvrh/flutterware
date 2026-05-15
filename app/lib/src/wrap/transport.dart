@@ -65,6 +65,9 @@ Future<int> _runPiped({
       captureSink.add(chunk);
     },
     onDone: outDone.complete,
+    onError: (Object e, StackTrace st) {
+      if (!outDone.isCompleted) outDone.completeError(e, st);
+    },
   );
   proc.stderr.listen(
     (chunk) {
@@ -72,11 +75,17 @@ Future<int> _runPiped({
       captureSink.add(chunk);
     },
     onDone: errDone.complete,
+    onError: (Object e, StackTrace st) {
+      if (!errDone.isCompleted) errDone.completeError(e, st);
+    },
   );
 
-  final code = await proc.exitCode;
-  await outDone.future;
-  await errDone.future;
-  await stdinSub?.cancel();
-  return code;
+  try {
+    final code = await proc.exitCode;
+    await outDone.future;
+    await errDone.future;
+    return code;
+  } finally {
+    await stdinSub?.cancel();
+  }
 }
