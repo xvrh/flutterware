@@ -35,6 +35,10 @@ class FlutterCache {
       p.join(flutterPatchedSdkDir, 'platform_strong.dill');
 
   /// ICU data the engine needs at startup.
+  //
+  // `darwin-x64` is the canonical macOS desktop artifact directory for every
+  // host architecture (including Apple Silicon) — there is no `darwin-arm64`
+  // engine dir, and the engine binaries shipped here are universal.
   String get icuData => p.join(_engine, 'darwin-x64', 'icudtl.dat');
 
   /// The engine revision the cached artifacts were built at. Used to fetch the
