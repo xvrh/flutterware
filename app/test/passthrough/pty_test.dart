@@ -37,7 +37,8 @@ void main() {
   });
 
   test('workingDirectory: /tmp makes pwd report /tmp', () async {
-    final pty = await spawnPty('/bin/bash', ['-c', 'pwd'], workingDirectory: '/tmp');
+    final pty =
+        await spawnPty('/bin/bash', ['-c', 'pwd'], workingDirectory: '/tmp');
     final bytes = <int>[];
     await pty.output.listen(bytes.addAll).asFuture<void>();
     final out = utf8.decode(bytes);

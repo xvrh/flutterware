@@ -17,8 +17,7 @@ class PassthroughCommand extends Command<int> {
 
   PassthroughCommand() {
     argParser
-      ..addOption('cwd',
-          help: 'Working directory for the child process.')
+      ..addOption('cwd', help: 'Working directory for the child process.')
       ..addFlag('print-capture-summary',
           defaultsTo: true,
           help: 'After exit, print captured byte count + exit code to stderr.');
@@ -31,7 +30,8 @@ class PassthroughCommand extends Command<int> {
     final rest = argResults!.rest;
 
     if (rest.isEmpty) {
-      stderr.writeln('Usage: passthrough run [options] -- <executable> [args...]');
+      stderr.writeln(
+          'Usage: passthrough run [options] -- <executable> [args...]');
       return 64;
     }
 
@@ -119,8 +119,8 @@ Future<int> runUnderPty({
     await outputDone.future;
 
     if (printSummary) {
-      stderr.writeln(
-          '[passthrough] captured ${tee.byteCount} bytes, exit $code');
+      stderr
+          .writeln('[passthrough] captured ${tee.byteCount} bytes, exit $code');
     }
 
     return code;
