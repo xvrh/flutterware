@@ -263,6 +263,15 @@ void main() {
       expect(flex.children, [a, c, b]);
     });
 
+    test('insert after the last child appends it', () {
+      var a = RenderText('a');
+      var b = RenderText('b');
+      var c = RenderText('c');
+      var flex = RenderFlex(direction: Axis.vertical, children: [a, b]);
+      flex.insert(c, after: b);
+      expect(flex.children, [a, b, c]);
+    });
+
     test('move relocates an existing child without re-adopting', () {
       var a = RenderText('a');
       var b = RenderText('b');
@@ -271,6 +280,15 @@ void main() {
       flex.move(c, after: null);
       expect(flex.children, [c, a, b]);
       expect(c.parent, flex);
+    });
+
+    test('move with explicit after relocates correctly', () {
+      var a = RenderText('a');
+      var b = RenderText('b');
+      var c = RenderText('c');
+      var flex = RenderFlex(direction: Axis.vertical, children: [a, b, c]);
+      flex.move(a, after: b);
+      expect(flex.children, [b, a, c]);
     });
   });
 }

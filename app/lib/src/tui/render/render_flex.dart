@@ -97,7 +97,7 @@ class RenderFlex extends RenderBox {
       _children.insert(0, child);
     } else {
       var index = _children.indexOf(after);
-      assert(index != -1, 'insert() `after` child is not in this RenderFlex.');
+      assert(index != -1, '`after` is not a child of this RenderFlex.');
       _children.insert(index + 1, child);
     }
   }
