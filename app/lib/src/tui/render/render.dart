@@ -16,3 +16,4 @@ part 'render_padding.dart';
 part 'render_constrained_box.dart';
 part 'render_decorated_box.dart';
 part 'render_flex.dart';
+part 'render_view.dart';
