@@ -31,7 +31,6 @@ resolution: workspace
 dependencies:
   analyzer:
   args:
-  ffi:
   async:
   auto_size_text:
   built_collection:
@@ -39,6 +38,7 @@ dependencies:
   dart_style:
   device_frame:
   diacritic:
+  ffi:
   file_picker:
   file_selector:
   flutter:

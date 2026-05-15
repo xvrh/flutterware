@@ -31,7 +31,7 @@ void main() {
   });
 
   test('SIGINT death gives exit 130', () async {
-    final pty = await spawnPty('/bin/bash', ['-c', 'kill -INT \$\$; sleep 5']);
+    final pty = await spawnPty('/bin/bash', ['-c', r'kill -INT $$; sleep 5']);
     await pty.output.drain<void>();
     expect(await pty.exitCode, equals(130));
   });
@@ -59,7 +59,7 @@ void main() {
   test('ANSI color codes are not stripped', () async {
     final pty = await spawnPty(
       '/bin/bash',
-      ['-c', "printf '\\033[31mred\\033[0m\\n'"],
+      ['-c', r"printf '\033[31mred\033[0m\n'"],
     );
     final bytes = <int>[];
     await pty.output.listen(bytes.addAll).asFuture<void>();
@@ -102,7 +102,7 @@ void main() {
   test('writeInput forwards bytes to child stdin', () async {
     final pty = await spawnPty(
       '/bin/bash',
-      ['-c', 'read x; echo got=\$x'],
+      ['-c', r'read x; echo got=$x'],
     );
     // Give bash a moment to reach the `read` call.
     await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -116,7 +116,7 @@ void main() {
   test('1000 lines from child are all received in order', () async {
     final pty = await spawnPty(
       '/bin/bash',
-      ['-c', 'for i in \$(seq 1 1000); do echo line\$i; done'],
+      ['-c', r'for i in $(seq 1 1000); do echo line$i; done'],
     );
     final bytes = <int>[];
     await pty.output.listen(bytes.addAll).asFuture<void>();
