@@ -5,8 +5,10 @@ declarative UI that renders to a character grid instead of pixels.
 
 The long-term goal mirrors Flutter's three-tree pipeline
 (Widget → Element → RenderObject), but the render and engine layers are
-terminal-shaped rather than Skia-shaped. **This package is currently at stage 3: engine, paint kit, and render tree.**
-There is no widget layer yet — see [the roadmap](../../../../docs/superpowers/tui-roadmap.md) for the staged plan.
+terminal-shaped rather than Skia-shaped. **This package is currently at
+stage 3: engine, paint kit, and render tree.** There is no widget layer yet —
+see [the roadmap](../../../../docs/superpowers/tui-roadmap.md) for the staged
+plan.
 
 ## What's here
 
@@ -87,6 +89,9 @@ Stage 3 is intentionally scoped. Not yet supported:
 - No widget layer yet (`Widget`/`Element`/`setState`) — stage 4.
 - Repaint is whole-tree: with no layer model, `markNeedsPaint` repaints
   everything. Re-layout *is* localized to relayout boundaries.
+- No render object clips its children. A child larger than its slot (e.g. a
+  `FlexFit.loose` child, or content overflowing a panel) will bleed; a parent
+  must opt into `Painter.clip` itself. A `RenderClipRect` is left for stage 4.
 - No mouse input.
 - No wide-character / emoji width handling — every cell is one column.
 - Windows: compiles and runs, but signal-driven features (resize) are
