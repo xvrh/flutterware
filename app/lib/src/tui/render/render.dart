@@ -3,9 +3,12 @@
 /// classes can share library-private layout state.
 library;
 
+import '../cell.dart';
 import '../geometry.dart';
 import '../painter.dart';
+import '../text_wrap.dart';
 
 part 'box_constraints.dart';
 part 'render_object.dart';
 part 'render_box.dart';
+part 'render_text.dart';
