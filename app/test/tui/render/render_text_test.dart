@@ -1,4 +1,5 @@
 import 'package:flutterware_app/src/tui/buffer.dart';
+import 'package:flutterware_app/src/tui/cell.dart';
 import 'package:flutterware_app/src/tui/geometry.dart';
 import 'package:flutterware_app/src/tui/painter.dart';
 import 'package:flutterware_app/src/tui/render/render.dart';
@@ -77,6 +78,29 @@ void main() {
       // _needsLayout is private; observe it via a fresh layout changing size.
       t.layout(BoxConstraints(maxWidth: 10, maxHeight: 3));
       expect(t.size.cols, 5);
+    });
+
+    test('wrap setter triggers re-layout', () {
+      var t = RenderText('one two three four');
+      var constraints = BoxConstraints(maxWidth: 8, maxHeight: 10);
+      t.layout(constraints);
+      // Confirm wrapping: 3 rows.
+      expect(t.size.rows, 3);
+      // Turn off wrapping — observe the layout changes on the next layout pass.
+      t.wrap = false;
+      t.layout(constraints);
+      expect(t.size.rows, 1);
+    });
+
+    test('paint-only setter marks needs-paint, not needs-layout', () {
+      var text = RenderText('hello');
+      var owner = PipelineOwner();
+      text.attach(owner);
+      text.layout(BoxConstraints(maxWidth: 20, maxHeight: 5));
+      owner.clearNeedsPaint();
+      // fg is paint-only; changing it should mark the owner dirty for paint.
+      text.fg = Color.red;
+      expect(owner.needsPaint, isTrue);
     });
   });
 }
