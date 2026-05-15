@@ -257,6 +257,11 @@ abstract class Element implements BuildContext {
 
   /// Transitions this element from inactive back to active.
   ///
+  /// **Currently dormant in Stage 4**: [inflateWidget] always creates a fresh
+  /// element, so no element ever transitions inactive→active; this exists as
+  /// forward-compat scaffolding for a future GlobalKey / inactive-element-reuse
+  /// stage.
+  ///
   /// [_dependencies] is preserved across deactivation (deactivate does NOT
   /// unregister) so that if the set is non-empty we know the element had
   /// inherited dependencies and must re-run [didChangeDependencies] — those

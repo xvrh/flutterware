@@ -86,6 +86,7 @@ frames.
 ## Widgets quick start
 
 ```dart
+import 'dart:async';
 import 'package:flutterware_app/src/tui/tui.dart';
 
 class Counter extends StatefulWidget {
@@ -96,10 +97,34 @@ class Counter extends StatefulWidget {
 
 class _CounterState extends State<Counter> {
   var _count = 0;
+  StreamSubscription<KeyEvent>? _keySub;
+  var _subscribed = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_subscribed) {
+      _subscribed = true;
+      _keySub = TerminalApp.of(context).keys.listen((event) {
+        if (event is CharKey && event.rune == 0x71 /* 'q' */) {
+          TerminalApp.of(context).exit();
+        } else {
+          setState(() => _count++);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _keySub?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => Column(children: [
         Text('Count: $_count'),
-        Text('(press any key to increment, q to quit)'),
+        Text("(press any key to increment, 'q' to quit)"),
       ]);
 }
 
