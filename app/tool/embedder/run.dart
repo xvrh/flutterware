@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:flutterware_app/src/embedder/compiler.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
+import 'package:flutterware_app/src/embedder/raw_frame.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
-/// Downloads FlutterEmbedder.framework if needed, compiles hello.dart,
-/// builds the C host, runs it. Exits with the host's exit code.
+/// Downloads FlutterEmbedder.framework if needed, compiles scene.dart, builds
+/// the C host, renders one frame, and encodes it to a PNG.
 Future<void> main() async {
   // <app>/tool/embedder/run.dart -> <app>
   var packageRoot =
@@ -14,19 +16,21 @@ Future<void> main() async {
   var repoRoot = p.dirname(packageRoot);
   var cache = FlutterCache.fromRunningSdk();
 
-  var assetsDir = p.join(packageRoot, 'build', 'embedder', 'assets');
+  var buildDir = p.join(packageRoot, 'build', 'embedder');
+  var assetsDir = p.join(buildDir, 'assets');
   var kernelBlob = p.join(assetsDir, 'kernel_blob.bin');
-  var nativeBuildDir = p.join(packageRoot, 'build', 'embedder', 'native');
+  var nativeBuildDir = p.join(buildDir, 'native');
   var engineDir = p.join(packageRoot, '.engine');
+  var rawFrame = p.join(buildDir, 'scene.rawframe');
+  var pngPath = p.join(buildDir, 'scene.png');
 
   await _ensureEmbedderFramework(cache, engineDir);
 
-  stdout.writeln('[run] compiling hello.dart -> kernel_blob.bin');
+  stdout.writeln('[run] compiling scene.dart -> kernel_blob.bin');
   await compileToKernel(
-    entrypoint: p.join(packageRoot, 'tool', 'embedder', 'hello.dart'),
+    entrypoint: p.join(packageRoot, 'tool', 'embedder', 'scene.dart'),
     outputDill: kernelBlob,
-    packageConfig:
-        p.join(repoRoot, '.dart_tool', 'package_config.json'),
+    packageConfig: p.join(repoRoot, '.dart_tool', 'package_config.json'),
     cache: cache,
   );
 
@@ -38,13 +42,22 @@ Future<void> main() async {
   ]);
   await _run('cmake', ['--build', nativeBuildDir]);
 
-  stdout.writeln('[run] starting the engine host');
+  stdout.writeln('[run] rendering the scene');
   var host = await Process.start(
     p.join(nativeBuildDir, 'host'),
-    [assetsDir, cache.icuData],
+    [assetsDir, cache.icuData, rawFrame],
     mode: ProcessStartMode.inheritStdio,
   );
-  exit(await host.exitCode);
+  var hostExit = await host.exitCode;
+  if (hostExit != 0) {
+    stderr.writeln('[run] host failed ($hostExit)');
+    exit(hostExit);
+  }
+
+  stdout.writeln('[run] encoding PNG');
+  var image = decodeRawFrame(File(rawFrame).readAsBytesSync());
+  File(pngPath).writeAsBytesSync(img.encodePng(image));
+  stdout.writeln('[run] wrote $pngPath');
 }
 
 /// Ensures `FlutterEmbedder.framework` (the C embedder API, not part of the
