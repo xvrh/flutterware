@@ -55,5 +55,7 @@ void input_handle_key(FlutterEngine engine, const uint8_t* p, size_t len) {
   ev.timestamp = (double)rd_u64(p, 24);
   ev.character = NULL;
   ev.synthesized = false;
+  // device_type has no zero enumerator; the engine rejects an unset value.
+  ev.device_type = kFlutterKeyEventDeviceTypeKeyboard;
   FlutterEngineSendKeyEvent(engine, &ev, NULL, NULL);
 }
