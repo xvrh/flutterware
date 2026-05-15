@@ -9,6 +9,8 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    EmbedderTexturePlugin.register(
+      with: flutterViewController.registrar(forPlugin: "EmbedderTexturePlugin"))
 
     super.awakeFromNib()
   }
