@@ -1,17 +1,18 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:flutterware_app/src/embedder/compiler.dart';
+import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
+import 'package:flutterware_app/src/embedder/protocol.dart';
 import 'package:flutterware_app/src/embedder/raw_frame.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
-/// Downloads FlutterEmbedder.framework if needed, compiles scene.dart, builds
-/// the C host, renders one frame, and encodes it to a PNG.
+/// Spawns the embedder guest, captures its first rendered frame, and encodes
+/// it to a PNG at `build/embedder/scene.png`.
 Future<void> main() async {
   // <app>/tool/embedder/run.dart -> <app>
   var packageRoot = p.dirname(p.dirname(p.dirname(p.fromUri(Platform.script))));
-  // This is a pub workspace: package_config.json lives at the repo root.
   var repoRoot = p.dirname(packageRoot);
   var cache = FlutterCache.fromRunningSdk();
 
@@ -22,83 +23,76 @@ Future<void> main() async {
   var engineDir = p.join(packageRoot, '.engine');
   var rawFrame = p.join(buildDir, 'scene.rawframe');
   var pngPath = p.join(buildDir, 'scene.png');
+  var socketPath = p.join(buildDir, 'embedder.sock');
 
-  await _ensureEmbedderFramework(cache, engineDir);
+  Directory(buildDir).createSync(recursive: true);
 
-  stdout.writeln('[run] compiling scene.dart -> kernel_blob.bin');
-  await compileToKernel(
-    entrypoint: p.join(packageRoot, 'tool', 'embedder', 'scene.dart'),
-    outputDill: kernelBlob,
+  await ensureEmbedderFramework(cache, engineDir);
+  await compileScene(
+    scenePath: p.join(packageRoot, 'tool', 'embedder', 'scene.dart'),
+    kernelBlob: kernelBlob,
     packageConfig: p.join(repoRoot, '.dart_tool', 'package_config.json'),
     cache: cache,
   );
+  var hostPath = await buildHost(
+    nativeSourceDir: p.join(packageRoot, 'native'),
+    nativeBuildDir: nativeBuildDir,
+    engineDir: engineDir,
+  );
 
-  stdout.writeln('[run] configuring + building the C host');
-  await _run('cmake', [
-    '-S',
-    p.join(packageRoot, 'native'),
-    '-B',
-    nativeBuildDir,
-    '-DFLUTTER_FRAMEWORK_DIR=$engineDir',
-  ]);
-  await _run('cmake', ['--build', nativeBuildDir]);
+  var socketFile = File(socketPath);
+  if (socketFile.existsSync()) socketFile.deleteSync();
+  var server = await ServerSocket.bind(
+      InternetAddress(socketPath, type: InternetAddressType.unix), 0);
 
-  stdout.writeln('[run] rendering the scene');
-  var host = await Process.start(
-    p.join(nativeBuildDir, 'host'),
-    [assetsDir, cache.icuData, rawFrame],
+  stdout.writeln('[run] spawning guest');
+  var guest = await Process.start(
+    hostPath,
+    [
+      assetsDir,
+      cache.icuData,
+      socketPath,
+      '800',
+      '600',
+      '--capture-raw',
+      rawFrame
+    ],
     mode: ProcessStartMode.inheritStdio,
   );
-  var hostExit = await host.exitCode;
-  if (hostExit != 0) {
-    stderr.writeln('[run] host failed ($hostExit)');
-    exit(hostExit);
+
+  var conn = await server.first;
+  var reader = FrameReader();
+  var gotFrame = false;
+  loop:
+  await for (var chunk in conn) {
+    for (var message in reader.addBytes(chunk)) {
+      if (message is FrameReadyMessage) {
+        gotFrame = true;
+        break loop;
+      }
+      if (message is ErrorMessage) {
+        stderr.writeln('[run] guest error: ${message.message}');
+        guest.kill();
+        await server.close();
+        exit(1);
+      }
+    }
+  }
+
+  conn.add(encodeMessage(const ShutdownMessage()));
+  await conn.flush();
+  await conn.close();
+  await guest.exitCode;
+  await server.close();
+  if (socketFile.existsSync()) socketFile.deleteSync();
+
+  if (!gotFrame) {
+    stderr.writeln('[run] guest closed the socket before rendering a frame');
+    exit(1);
   }
 
   stdout.writeln('[run] encoding PNG');
   var image = decodeRawFrame(File(rawFrame).readAsBytesSync());
   File(pngPath).writeAsBytesSync(img.encodePng(image));
   stdout.writeln('[run] wrote $pngPath');
-}
-
-/// Ensures `FlutterEmbedder.framework` (the C embedder API, not part of the
-/// local Flutter cache) is present under [engineDir], downloading it from
-/// Flutter's artifact storage if it is missing or built for a different engine
-/// revision.
-Future<void> _ensureEmbedderFramework(
-    FlutterCache cache, String engineDir) async {
-  var revision = cache.engineRevision;
-  var frameworkDir = p.join(engineDir, 'FlutterEmbedder.framework');
-  var stamp = File(p.join(engineDir, 'engine.revision'));
-  if (Directory(frameworkDir).existsSync() &&
-      stamp.existsSync() &&
-      stamp.readAsStringSync().trim() == revision) {
-    return;
-  }
-
-  stdout.writeln('[run] downloading FlutterEmbedder.framework ($revision)');
-  if (Directory(frameworkDir).existsSync()) {
-    Directory(frameworkDir).deleteSync(recursive: true);
-  }
-  Directory(engineDir).createSync(recursive: true);
-
-  var url = 'https://storage.googleapis.com/flutter_infra_release/flutter/'
-      '$revision/darwin-x64/FlutterEmbedder.framework.zip';
-  var zip = p.join(engineDir, 'FlutterEmbedder.framework.zip');
-  await _run('curl', ['-fSL', url, '-o', zip]);
-  // The zip's root entries are the framework's contents, so extract straight
-  // into the `FlutterEmbedder.framework` directory.
-  await _run('unzip', ['-q', '-o', zip, '-d', frameworkDir]);
-  File(zip).deleteSync();
-  stamp.writeAsStringSync(revision);
-}
-
-Future<void> _run(String executable, List<String> args) async {
-  var process = await Process.start(executable, args,
-      mode: ProcessStartMode.inheritStdio);
-  var code = await process.exitCode;
-  if (code != 0) {
-    stderr.writeln('[run] `$executable ${args.join(' ')}` failed ($code)');
-    exit(code);
-  }
 }
