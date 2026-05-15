@@ -26,6 +26,8 @@ class PipelineOwner {
   /// A boundary's re-layout may clean nested boundaries enqueued in the same
   /// pass; those are skipped.
   void flushLayout() {
+    // while loop, not for: laying out a boundary can enqueue new dirty nodes
+    // (e.g. via layout callbacks), which must be flushed in the same pass.
     while (_nodesNeedingLayout.isNotEmpty) {
       var dirty = _nodesNeedingLayout.toList()
         ..sort((a, b) => a.depth - b.depth);
@@ -134,6 +136,8 @@ abstract class RenderObject {
     }
     if (_relayoutBoundary != this) {
       _needsLayout = true;
+      assert(_parent != null,
+          'A non-root render object must have a parent to bubble layout to.');
       _parent!.markNeedsLayout();
     } else {
       _needsLayout = true;
