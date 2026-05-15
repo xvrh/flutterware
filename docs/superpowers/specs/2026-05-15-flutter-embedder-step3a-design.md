@@ -70,8 +70,9 @@ view is genuinely interactive. Software renderer only — no Metal, no hot reloa
   carries a framed protocol (surface handles, frame-ready notifications, resize,
   input, shutdown). Keeping it off stdout means the guest's Dart `print()`
   output stays clean, human-readable, and separately viewable — preserving the
-  step-1/2 debugging affordance. The socket is also the natural carrier for
-  passing `IOSurface` mach ports across the process boundary via `SCM_RIGHTS`.
+  step-1/2 debugging affordance. The socket also carries the `IOSurface`
+  identifiers needed to share surfaces across the process boundary (see Control
+  protocol below).
 - **GUI owns the guest lifecycle.** A dev-harness screen in the flutterware app
   (reachable when running via `main_dev.dart`) spawns and manages the guest. The
   orchestration logic in `tool/embedder/run.dart` (ensure framework, compile,
@@ -101,7 +102,7 @@ All paths are under `app/`.
 
 | Unit | Responsibility | Interface |
 |---|---|---|
-| `EmbedderTexturePlugin` (Swift/Obj-C) | A `FlutterPlugin` with access to the host engine's `FlutterTextureRegistrar`. Implements the `FlutterTexture` protocol (`copyPixelBuffer`). Wraps each shared `IOSurface` as a `CVPixelBuffer`. | A `MethodChannel`: `createTexture(machPorts) -> textureId`, `markFrameAvailable(textureId, ringIndex)`, `disposeTexture(textureId)` |
+| `EmbedderTexturePlugin` (Swift/Obj-C) | A `FlutterPlugin` with access to the host engine's `FlutterTextureRegistrar`. Implements the `FlutterTexture` protocol (`copyPixelBuffer`). Looks up each shared `IOSurface` by ID and wraps it as a `CVPixelBuffer`. | A `MethodChannel`: `createTexture(surfaceIds) -> textureId`, `markFrameAvailable(textureId, ringIndex)`, `disposeTexture(textureId)` |
 
 The plugin is registered alongside the app's generated plugins in the macOS
 `Runner`.
@@ -114,8 +115,8 @@ grows past one responsibility it is split into focused translation units:
 | Unit | Responsibility |
 |---|---|
 | `host.c` | Engine lifecycle, the main loop, ties the pieces together. |
-| `ipc.c` | Unix socket: connect, framed read/write, the wire protocol, `SCM_RIGHTS` mach-port transfer. |
-| `surface.c` | `IOSurface` allocation, the triple-buffer ring, `memcpy` from the present callback, mach-port export. |
+| `ipc.c` | Unix socket: connect, framed read/write, the wire protocol. |
+| `surface.c` | `IOSurface` allocation, the triple-buffer ring, `memcpy` from the present callback, surface-ID export. |
 | `input.c` | Translate protocol pointer/key messages into `FlutterEngineSendPointerEvent` and the engine's key-event calls. |
 
 `CMakeLists.txt` adds the new sources and links `IOSurface` /
@@ -137,16 +138,20 @@ plugin via the `MethodChannel` — one cheap call per frame.
 
 ## Control protocol
 
-Framed, length-prefixed messages over the Unix domain socket. `IOSurface`
-handles travel as mach ports in `SCM_RIGHTS` ancillary data alongside the
-message that announces them.
+Framed, length-prefixed messages over the Unix domain socket. Shared
+`IOSurface`s are identified by their global `IOSurfaceID` (a `uint32` from
+`IOSurfaceGetID`); the GUI recreates a local reference with `IOSurfaceLookup`.
+The IDs travel as ordinary fields in the `SurfacesAllocated` message — no
+ancillary data or mach-port transfer is needed. (`IOSurfaceLookup` is
+deprecated but functional within a login session; the non-deprecated mach-port
+path is an option to revisit, not a 3a requirement.)
 
 **Guest → GUI:**
 
 - `Ready` — the engine has started.
-- `SurfacesAllocated{count, width, height, rowBytes}` + 3 mach ports — sent on
-  startup and after every resize. Carries a generation counter so the GUI can
-  discard frames that reference superseded surfaces.
+- `SurfacesAllocated{generation, count, width, height, rowBytes, surfaceIds[3]}`
+  — sent on startup and after every resize. The `generation` counter lets the
+  GUI discard frames that reference superseded surfaces.
 - `FrameReady{ringIndex, frameId}` — a frame is composited into ring slot
   `ringIndex`. `frameId` increases strictly monotonically.
 - `Error{message}` — a fatal guest-side error.
@@ -166,8 +171,8 @@ message that announces them.
    `FlutterEmbedder.framework` is present, compiles `scene.dart` → kernel,
    generates a socket path, spawns the guest, and accepts the connection.
 2. The guest connects, starts the engine, allocates the three `IOSurface`s, and
-   sends `Ready` followed by `SurfacesAllocated` (with the mach ports).
-3. Dart passes the mach ports to the plugin via `createTexture` → the plugin
+   sends `Ready` followed by `SurfacesAllocated` (with the surface IDs).
+3. Dart passes the surface IDs to the plugin via `createTexture` → the plugin
    registers the external texture and returns a `textureId` → the screen's
    `Texture` widget binds to it.
 4. The animated scene presents continuously: each `surface_present_callback`
