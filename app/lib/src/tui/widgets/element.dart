@@ -14,16 +14,18 @@ abstract class BuildContext {
   /// The nearest descendant render object, or null if there is none yet.
   RenderObject? findRenderObject();
 
-  /// Returns the nearest ancestor inherited widget of type [T], registering
+  /// Returns the nearest ancestor [InheritedWidget] of type [T], registering
   /// this context as a dependent so it rebuilds when that widget changes.
   ///
-  /// `T` is bound on [Widget] only because `InheritedWidget` is not yet
-  /// declared (it arrives in a later task); the intent is `InheritedWidget`.
-  T? dependOnInheritedWidgetOfExactType<T extends Widget>();
+  /// The optional [aspect] tags the dependency; [InheritedElement] subclasses
+  /// may use it to rebuild only dependents whose aspect changed. Returns null
+  /// when there is no such ancestor.
+  T? dependOnInheritedWidgetOfExactType<T extends InheritedWidget>(
+      {Object? aspect});
 
-  /// Returns the nearest ancestor inherited widget of type [T] without
+  /// Returns the nearest ancestor [InheritedWidget] of type [T] without
   /// registering a dependency.
-  T? getInheritedWidgetOfExactType<T extends Widget>();
+  T? getInheritedWidgetOfExactType<T extends InheritedWidget>();
 }
 
 /// The stages of an [Element]'s life: created but unmounted ([initial]), in
@@ -49,10 +51,14 @@ abstract class Element implements BuildContext {
   bool _dirty = true;
   bool _inDirtyList = false;
 
-  /// The inherited-widget lookup map, inherited from the parent. Narrowed to
-  /// `InheritedElement` values in a later task.
-  Map<Type, Element>? _inheritedElements;
-  Set<Element>? _dependencies;
+  /// The inherited-widget lookup map, inherited from the parent: a widget
+  /// runtime type to the nearest ancestor [InheritedElement] of that type.
+  /// Enables `O(1)` ancestor lookup from any element.
+  Map<Type, InheritedElement>? _inheritedElements;
+
+  /// The [InheritedElement]s this element currently depends on. Used to
+  /// unregister this element from each when it is rebuilt or leaves the tree.
+  Set<InheritedElement>? _dependencies;
 
   @override
   Widget get widget => _widget!;
@@ -255,7 +261,7 @@ abstract class Element implements BuildContext {
       _owner!.scheduleBuildFor(this);
     }
     if (hadDependencies) {
-      _didChangeDependencies();
+      didChangeDependencies();
     }
   }
 
@@ -263,10 +269,7 @@ abstract class Element implements BuildContext {
   void deactivate() {
     assert(_lifecycleState == _ElementLifecycle.active);
     assert(_widget != null);
-    if (_dependencies != null && _dependencies!.isNotEmpty) {
-      // Dependency de-registration is wired up with InheritedElement later.
-      _dependencies!.clear();
-    }
+    _unregisterDependencies();
     _inheritedElements = null;
     _lifecycleState = _ElementLifecycle.inactive;
   }
@@ -276,9 +279,32 @@ abstract class Element implements BuildContext {
     assert(_lifecycleState == _ElementLifecycle.inactive);
     assert(_widget != null);
     assert(_owner != null);
+    _unregisterDependencies();
     _widget = null;
     _dependencies = null;
     _lifecycleState = _ElementLifecycle.defunct;
+  }
+
+  /// Drops this element from every [InheritedElement] it depends on, then
+  /// clears its own dependency set. Called whenever the element leaves the
+  /// active tree so stale dependents are not rebuilt.
+  void _unregisterDependencies() {
+    var dependencies = _dependencies;
+    if (dependencies != null && dependencies.isNotEmpty) {
+      for (var ancestor in dependencies) {
+        ancestor.removeDependent(this);
+      }
+      dependencies.clear();
+    }
+  }
+
+  /// Notifies this element that an inherited widget it depends on changed.
+  ///
+  /// Called by [InheritedElement] when an ancestor inherited widget updates.
+  /// The base records the change so the next rebuild runs; [StatefulElement]
+  /// forwards it to the [State]'s `didChangeDependencies`.
+  void didChangeDependencies() {
+    _didChangeDependencies();
   }
 
   /// Hook invoked when an inherited dependency changes. Overridden by
@@ -306,19 +332,29 @@ abstract class Element implements BuildContext {
   // --- BuildContext / InheritedWidget ---
 
   @override
-  T? dependOnInheritedWidgetOfExactType<T extends Widget>() {
+  T? dependOnInheritedWidgetOfExactType<T extends InheritedWidget>(
+      {Object? aspect}) {
     var ancestor = _inheritedElements?[T];
     if (ancestor == null) {
       return null;
     }
-    // Dependency registration is wired up when InheritedElement lands.
+    ancestor.updateDependencies(this, aspect);
     return ancestor.widget as T;
   }
 
   @override
-  T? getInheritedWidgetOfExactType<T extends Widget>() {
+  T? getInheritedWidgetOfExactType<T extends InheritedWidget>() {
     var ancestor = _inheritedElements?[T];
     return ancestor?.widget as T?;
+  }
+
+  /// Applies [widget]'s parent data to descendant render objects.
+  ///
+  /// The base recurses into children; `RenderObjectElement` (a later task)
+  /// overrides this to call [ParentDataWidget.applyParentData] on its render
+  /// object. [ParentDataElement] drives this walk after mount and update.
+  void _applyParentDataTo(ParentDataWidget widget) {
+    visitChildren((child) => child._applyParentDataTo(widget));
   }
 }
 

@@ -9,3 +9,4 @@ part 'key.dart';
 part 'widget.dart';
 part 'element.dart';
 part 'build_owner.dart';
+part 'inherited.dart';
