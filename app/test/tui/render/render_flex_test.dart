@@ -107,6 +107,24 @@ void main() {
       expect(mainOffset(row.children[0], Axis.horizontal), 0);
       expect(mainOffset(row.children[1], Axis.horizontal), 8);
     });
+
+    test('spaceAround distributes leftover with half-size edge gaps', () {
+      // 2 children, leftover 6: _gapWeights → [1,2,1], sum=4.
+      // _splitProportional(6,[1,2,1]) → [1,3,2].
+      // child0 at 1, child1 at 1+2+3=6.
+      var row = build(MainAxisAlignment.spaceAround);
+      expect(mainOffset(row.children[0], Axis.horizontal), 1);
+      expect(mainOffset(row.children[1], Axis.horizontal), 6);
+    });
+
+    test('spaceEvenly distributes leftover across n+1 equal gaps', () {
+      // 2 children, leftover 6: _gapWeights → [1,1,1], sum=3.
+      // _splitProportional(6,[1,1,1]) → [2,2,2].
+      // child0 at 2, child1 at 2+2+2=6.
+      var row = build(MainAxisAlignment.spaceEvenly);
+      expect(mainOffset(row.children[0], Axis.horizontal), 2);
+      expect(mainOffset(row.children[1], Axis.horizontal), 6);
+    });
   });
 
   group('RenderFlex CrossAxisAlignment', () {
@@ -154,6 +172,18 @@ void main() {
       expect(y.size.cols, 20);
     });
 
+    test('a loose flex child may stay smaller than its allotment', () {
+      var fixed = _FixedBox(CellSize(1, 4));
+      var flexible = _FixedBox(CellSize(1, 1));
+      var row =
+          RenderFlex(direction: Axis.horizontal, children: [fixed, flexible]);
+      // Default fit is FlexFit.loose — do not pass fit:.
+      row.setFlex(flexible, 1);
+      row.layout(BoxConstraints.tight(CellSize(1, 20)));
+      // Allotted 16 cells (20-4) but, being loose, keeps its natural width 1.
+      expect(flexible.size.cols, 1);
+    });
+
     test('integer distribution tiles the parent exactly with no gap', () {
       var x = _FixedBox(CellSize(1, 1));
       var y = _FixedBox(CellSize(1, 1));
@@ -199,6 +229,19 @@ void main() {
       var b = _FixedBox(CellSize(7, 1));
       var row = RenderFlex(direction: Axis.horizontal, children: [a, b]);
       expect(row.getMaxIntrinsicHeight(100), 7);
+    });
+
+    test('main intrinsic accounts for flex children', () {
+      // inflexible child: width=4; flex child: width=6, flex=2.
+      // fraction = ceil(6/2) = 3; result = 4 + 3*2 = 10.
+      var inflexible = _FixedBox(CellSize(1, 4));
+      var flexChild = _FixedBox(CellSize(1, 6));
+      var row = RenderFlex(
+        direction: Axis.horizontal,
+        children: [inflexible, flexChild],
+      );
+      row.setFlex(flexChild, 2);
+      expect(row.getMaxIntrinsicWidth(100), 10);
     });
   });
 }

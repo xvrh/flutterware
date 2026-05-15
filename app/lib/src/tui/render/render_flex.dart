@@ -116,9 +116,9 @@ class RenderFlex extends RenderBox {
   CellOffset _offsetFor(int main, int cross) =>
       _isHorizontal ? CellOffset(cross, main) : CellOffset(main, cross);
 
-  /// Distributes [total] across the slots proportional to [weights], with the
-  /// rounding remainder handed out front-to-back so the result sums to [total]
-  /// exactly (a Bresenham-style integer split).
+  /// Distributes [total] across the slots proportional to [weights]; the
+  /// rounding remainder is spread across the slots by a cumulative-floor
+  /// (Bresenham) split, so the parts always sum to exactly [total].
   static List<int> _splitProportional(int total, List<int> weights) {
     var sum = weights.fold<int>(0, (a, b) => a + b);
     if (sum <= 0 || total <= 0) {
