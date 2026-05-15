@@ -58,10 +58,18 @@ class SurfacesAllocatedMessage extends EmbedderMessage {
 }
 
 class FrameReadyMessage extends EmbedderMessage {
-  const FrameReadyMessage({required this.ringIndex, required this.frameId});
+  const FrameReadyMessage({
+    required this.ringIndex,
+    required this.frameId,
+    required this.generation,
+  });
 
   final int ringIndex;
   final int frameId;
+
+  /// The surface-ring generation this frame was composited against; lets the
+  /// GUI discard frames that reference superseded surfaces.
+  final int generation;
 }
 
 class ErrorMessage extends EmbedderMessage {
@@ -157,6 +165,7 @@ Uint8List encodeMessage(EmbedderMessage message) {
       body.addByte(MessageType.frameReady.tag);
       _u32(body, message.ringIndex);
       _u64(body, message.frameId);
+      _u32(body, message.generation);
     case ErrorMessage():
       body.addByte(MessageType.error.tag);
       var bytes = utf8.encode(message.message);
@@ -226,6 +235,7 @@ EmbedderMessage decodeMessageBody(Uint8List body) {
       return FrameReadyMessage(
         ringIndex: data.getUint32(0, Endian.little),
         frameId: data.getUint64(4, Endian.little),
+        generation: data.getUint32(12, Endian.little),
       );
     case MessageType.error:
       var len = data.getUint32(0, Endian.little);

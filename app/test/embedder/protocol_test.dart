@@ -35,10 +35,11 @@ void main() {
   });
 
   test('round-trips FrameReady with a large frameId', () {
-    var msg =
-        roundTrip(const FrameReadyMessage(ringIndex: 2, frameId: 0x100000001));
+    var msg = roundTrip(const FrameReadyMessage(
+        ringIndex: 2, frameId: 0x100000001, generation: 5));
     expect(msg.ringIndex, 2);
     expect(msg.frameId, 0x100000001);
+    expect(msg.generation, 5);
   });
 
   test('round-trips Error', () {
@@ -89,7 +90,8 @@ void main() {
   test('FrameReader splits two concatenated frames', () {
     var bytes = BytesBuilder()
       ..add(encodeMessage(const ReadyMessage()))
-      ..add(encodeMessage(const FrameReadyMessage(ringIndex: 0, frameId: 1)));
+      ..add(encodeMessage(
+          const FrameReadyMessage(ringIndex: 0, frameId: 1, generation: 0)));
     var decoded = FrameReader().addBytes(bytes.toBytes()).toList();
     expect(decoded, hasLength(2));
     expect(decoded[0], isA<ReadyMessage>());
@@ -97,8 +99,8 @@ void main() {
   });
 
   test('FrameReader reassembles a frame delivered byte by byte', () {
-    var frame =
-        encodeMessage(const FrameReadyMessage(ringIndex: 1, frameId: 9));
+    var frame = encodeMessage(
+        const FrameReadyMessage(ringIndex: 1, frameId: 9, generation: 0));
     var reader = FrameReader();
     var decoded = <EmbedderMessage>[];
     for (var b in frame) {

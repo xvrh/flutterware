@@ -94,10 +94,12 @@ static bool PresentSoftware(void* user_data, const void* allocation,
       WriteRawCapture(g_capture_path, allocation, row_bytes, height);
       g_captured = true;
     }
-    uint8_t payload[12];
+    uint8_t payload[16];
     uint32_t ring_index = (uint32_t)slot;
+    uint32_t generation = g_generation;
     memcpy(payload + 0, &ring_index, 4);
     memcpy(payload + 4, &frame_id, 8);
+    memcpy(payload + 12, &generation, 4);
     ipc_send(g_socket, kMsgFrameReady, payload, sizeof(payload));
   }
   pthread_mutex_unlock(&g_ring_mutex);

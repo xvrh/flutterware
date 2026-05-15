@@ -5,8 +5,8 @@ import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:path/path.dart' as p;
 
 /// Ensures the embedder engine framework, compiles `scene.dart`, and builds the
-/// C guest. Prints `HOST_PATH=<absolute path>` and `ASSETS_DIR=<absolute path>`
-/// on success. Run with the Flutter SDK's `dart`.
+/// C guest. On success prints three lines — `ASSETS_DIR=`, `ICU_DATA=`, and
+/// `HOST_PATH=`. Run with the Flutter SDK's `dart`.
 ///
 /// Usage: dart run tool/embedder/build_guest.dart
 Future<void> main() async {

@@ -68,7 +68,15 @@ class EmbeddedEngine extends ChangeNotifier {
         debugPrint('[guest:err] $line');
       });
 
-      _conn = await _server!.first;
+      // Accept the guest's connection, but don't hang forever if the guest
+      // dies before connecting — race the accept against the process exit.
+      Socket? connected;
+      var accepted = _server!.first.then((c) => connected = c);
+      await Future.any([accepted, _guest!.exitCode]);
+      if (connected == null) {
+        throw StateError('the embedder guest exited before connecting');
+      }
+      _conn = connected;
       _conn!.listen(_onSocketData, onDone: _onSocketClosed);
     } catch (e) {
       _fail('$e');
@@ -114,7 +122,9 @@ class EmbeddedEngine extends ChangeNotifier {
       case SurfacesAllocatedMessage():
         await _onSurfaces(message);
       case FrameReadyMessage():
-        if (textureId != null) {
+        // Discard frames composited against superseded surfaces; their ring
+        // slots no longer match the texture the plugin currently holds.
+        if (textureId != null && message.generation == _currentGeneration) {
           await _channel.invokeMethod('markFrameAvailable', {
             'textureId': textureId,
             'ringIndex': message.ringIndex,
