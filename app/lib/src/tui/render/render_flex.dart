@@ -33,19 +33,49 @@ class FlexParentData extends BoxParentData {
 /// shared mechanism behind `Row` and `Column`.
 class RenderFlex extends RenderBox {
   RenderFlex({
-    required this.direction,
-    this.mainAxisAlignment = MainAxisAlignment.start,
-    this.crossAxisAlignment = CrossAxisAlignment.start,
-    this.mainAxisSize = MainAxisSize.max,
+    required Axis direction,
+    MainAxisAlignment mainAxisAlignment = MainAxisAlignment.start,
+    CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.start,
+    MainAxisSize mainAxisSize = MainAxisSize.max,
     List<RenderBox> children = const [],
-  }) {
+  })  : _direction = direction,
+        _mainAxisAlignment = mainAxisAlignment,
+        _crossAxisAlignment = crossAxisAlignment,
+        _mainAxisSize = mainAxisSize {
     addAll(children);
   }
 
-  Axis direction;
-  MainAxisAlignment mainAxisAlignment;
-  CrossAxisAlignment crossAxisAlignment;
-  MainAxisSize mainAxisSize;
+  Axis _direction;
+  Axis get direction => _direction;
+  set direction(Axis value) {
+    if (value == _direction) return;
+    _direction = value;
+    markNeedsLayout();
+  }
+
+  MainAxisAlignment _mainAxisAlignment;
+  MainAxisAlignment get mainAxisAlignment => _mainAxisAlignment;
+  set mainAxisAlignment(MainAxisAlignment value) {
+    if (value == _mainAxisAlignment) return;
+    _mainAxisAlignment = value;
+    markNeedsLayout();
+  }
+
+  CrossAxisAlignment _crossAxisAlignment;
+  CrossAxisAlignment get crossAxisAlignment => _crossAxisAlignment;
+  set crossAxisAlignment(CrossAxisAlignment value) {
+    if (value == _crossAxisAlignment) return;
+    _crossAxisAlignment = value;
+    markNeedsLayout();
+  }
+
+  MainAxisSize _mainAxisSize;
+  MainAxisSize get mainAxisSize => _mainAxisSize;
+  set mainAxisSize(MainAxisSize value) {
+    if (value == _mainAxisSize) return;
+    _mainAxisSize = value;
+    markNeedsLayout();
+  }
 
   final List<RenderBox> _children = [];
 
