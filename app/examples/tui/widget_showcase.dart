@@ -164,6 +164,126 @@ class StarfieldScene extends StatelessWidget {
   }
 }
 
+/// Scene 3: a [Row] of two bordered panels — left is a custom-paint area chart,
+/// right is an animated bar chart built entirely from real widgets.
+///
+/// [maxBarRows] is a fixed budget for the bar chart value→height mapping;
+/// the area chart uses the real [size.rows] from its [Painted] callback.
+class ChartsScene extends StatelessWidget {
+  const ChartsScene({required this.time, super.key});
+
+  final double time;
+
+  // Fixed height budget for the bar chart bars (in terminal rows).
+  static const int _maxBarRows = 12;
+  static const int _barCount = 7;
+
+  @override
+  Widget build(BuildContext context) {
+    var t = time;
+
+    // --- Left panel: custom-paint area chart ---
+    var leftBody = Painted((painter, size) {
+      for (var x = 0; x < size.cols; x++) {
+        var f = (0.5 +
+                0.3 * math.sin(x * 0.3 + t * 2) +
+                0.15 * math.sin(x * 0.7 - t))
+            .clamp(0.0, 1.0);
+        // Total filled height in pixels (rows * 1 pixel per row here).
+        var filledPixels = f * size.rows;
+        var fullRows = filledPixels.floor();
+        var crestFrac = filledPixels - fullRows;
+
+        // Fill full rows from the bottom up.
+        for (var row = 0; row < fullRows; row++) {
+          var cellRow = size.rows - 1 - row;
+          var heightFrac = (row + 1) / size.rows;
+          // Green at the bottom, cyan at the top.
+          var cellColor = lerpColor(
+              Color.rgb(0, 200, 80), Color.rgb(0, 220, 220), heightFrac);
+          painter.fillRect(CellRect.fromTLWH(cellRow, x, 1, 1),
+              Cell(rune: 0x2588, fg: cellColor, bg: Color.rgb(0, 0, 0)));
+        }
+
+        // Crest cell with eighth-block precision.
+        if (crestFrac > 0 && fullRows < size.rows) {
+          var cellRow = size.rows - 1 - fullRows;
+          var heightFrac = (fullRows + crestFrac) / size.rows;
+          var crestColor = lerpColor(
+              Color.rgb(0, 200, 80), Color.rgb(0, 220, 220), heightFrac);
+          var rune = eighthBlock(crestFrac);
+          // Eighth-block runes grow upward: rune is rendered as fg on bg.
+          painter.fillRect(CellRect.fromTLWH(cellRow, x, 1, 1),
+              Cell(rune: rune, fg: crestColor, bg: Color.rgb(0, 0, 0)));
+        }
+      }
+    });
+
+    // --- Right panel: real-widget bar chart ---
+    // Each bar: value v in 0..1, mapped to height h in 1..maxBarRows.
+    // A flex spacer above the bar bottom-aligns it.
+    var bars = <Widget>[];
+    for (var i = 0; i < _barCount; i++) {
+      var v = (1 + math.sin(t * 1.5 + i * 0.6)) / 2;
+      var h = (v * _maxBarRows).round().clamp(1, _maxBarRows);
+      var gap = (_maxBarRows - h).clamp(1, _maxBarRows - 1);
+      var barColor = hsv(i / _barCount, 0.8, 0.9);
+      if (i > 0) bars.add(SizedBox(width: 1));
+      bars.add(
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: gap, child: SizedBox()),
+              SizedBox(
+                height: h,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    fill: Cell(rune: 0x20, bg: barColor),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    var rightBody = Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: bars,
+    );
+
+    // Helper to wrap content in a bordered panel with a title.
+    Widget panel(String title, Widget body, Color accent) {
+      return Expanded(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: BoxBorder(chars: BorderChars.rounded(), fg: accent),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(1),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(title, fg: accent, style: TextStyle.bold),
+                Expanded(child: body),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        panel('signal · custom paint', leftBody, Color.cyan),
+        panel('bars · flex layout', rightBody, Color.magenta),
+      ],
+    );
+  }
+}
+
 /// Root of the showcase. Owns the animation clock and (later) input + scenes.
 class ShowcaseApp extends StatefulWidget {
   const ShowcaseApp({super.key});
@@ -190,9 +310,7 @@ class _ShowcaseState extends State<ShowcaseApp> {
 
   @override
   Widget build(BuildContext context) {
-    return ((_time ~/ 4) % 2 == 0)
-        ? PlasmaScene(time: _time)
-        : StarfieldScene(time: _time);
+    return ChartsScene(time: _time);
   }
 }
 
