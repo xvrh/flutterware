@@ -143,6 +143,17 @@ void main() {
       expect(b.get(2, 0).rune, '|'.runes.first);
     });
 
+    test('a 1-tall rect does not crash and draws horizontal edges', () {
+      var b = CellBuffer(1, 4);
+      Painter(b).drawBorder(
+        CellRect.fromTLWH(0, 0, 4, 1),
+        chars: BorderChars.ascii(),
+      );
+      // No exception; the middle cells are horizontal edges.
+      expect(b.get(0, 1).rune, '-'.runes.first);
+      expect(b.get(0, 2).rune, '-'.runes.first);
+    });
+
     test('an empty rect draws nothing', () {
       var b = CellBuffer(3, 3);
       Painter(b).drawBorder(

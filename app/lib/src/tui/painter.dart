@@ -177,14 +177,17 @@ class Painter {
     var left = rect.left;
     var right = rect.right - 1;
 
+    var hCell = glyph(chars.horizontal);
+    var vCell = glyph(chars.vertical);
+
     // Edges first; corners overwrite the ends.
     for (var c = left; c <= right; c++) {
-      _put(top, c, glyph(chars.horizontal));
-      _put(bottom, c, glyph(chars.horizontal));
+      _put(top, c, hCell);
+      _put(bottom, c, hCell);
     }
     for (var r = top; r <= bottom; r++) {
-      _put(r, left, glyph(chars.vertical));
-      _put(r, right, glyph(chars.vertical));
+      _put(r, left, vCell);
+      _put(r, right, vCell);
     }
     _put(top, left, glyph(chars.topLeft));
     _put(top, right, glyph(chars.topRight));
