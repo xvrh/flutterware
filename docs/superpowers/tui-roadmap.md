@@ -26,7 +26,7 @@ could use a richer status/dashboard UI.
 | **1.5 Inline mode** | A fixed-height region anchored at the cursor, alongside full-screen | ✅ Done |
 | **`print_above`** | Print log lines into scrollback above an inline region | ✅ Done |
 | **2. Paint kit** | `CellRect`/`CellSize` geometry + procedural paint helpers (text, border, fill) | ✅ Done |
-| **3. Render tree** | `RenderObject`/`RenderBox`, `BoxConstraints`, `Row`/`Column`/`Padding` | ⬜ Not started |
+| **3. Render tree** | `RenderObject`/`RenderBox`, `BoxConstraints`, `Row`/`Column`/`Padding` | ✅ Done |
 | **4. Widget layer** | `Widget`/`Element`, `StatelessWidget`/`StatefulWidget`, `setState` | ⬜ Not started |
 | **5. Integration** | Replace the flutterware CLI startup UX with a real TUI screen | ⬜ Not started |
 
@@ -44,6 +44,8 @@ framework.
   [plan](plans/2026-05-15-tui-print-above.md)
 - Stage 2 — [spec](specs/2026-05-15-tui-stage2-paint-kit-design.md) ·
   [plan](plans/2026-05-15-tui-stage2-paint-kit.md)
+- Stage 3 — [spec](specs/2026-05-15-tui-stage3-render-tree-design.md) ·
+  [plan](plans/2026-05-15-tui-stage3-render-tree.md)
 
 ## Key design decisions
 
