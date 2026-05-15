@@ -27,7 +27,7 @@ plan.
 | `render/` | The render tree: `RenderObject`/`RenderBox`, `BoxConstraints`, `RenderFlex`/`RenderPadding`/`RenderText`/`RenderDecoratedBox`/`RenderConstrainedBox`, `RenderTuiView` |
 | `widgets/` | The widget layer: `Widget`/`Element`/`State`, `BuildOwner`, `InheritedWidget`, concrete widgets (`Text`, `Row`, `Column`, …), `TuiBinding`, and `runApp` |
 
-Examples live in `app/examples/tui/`.
+Examples live in `app/examples/tui/`. The richest is `widget_showcase.dart`, an animated five-scene showcase reel (plasma, starfield, charts, layout lab, typography) with keyboard navigation — run it with `cd app && dart run examples/tui/widget_showcase.dart`.
 
 ## Quick start
 
