@@ -86,12 +86,16 @@ unchanged.
   the surface. (Considered and rejected: sending `FrameReady` synchronously
   with no fence — risks tearing; a cross-process `MTLSharedEvent` — more
   rigorous but significantly more complex than warranted here.)
-- **Deferred ring release on resize.** A resize between `get_next_drawable` and
-  `present_drawable` must not free a texture the engine is still rendering
-  into. `surface_ring_init` allocates a fresh ring but does not free the
-  outgoing one; the outgoing ring is *retired* and released only once a frame
-  has been presented against the new ring. At most one retired ring is held at
-  a time.
+- **Resize handled on the raster thread.** A resize must not free a texture the
+  engine is still rendering into. Rather than retiring rings across threads,
+  the ring is reallocated inside `get_next_drawable` itself: that callback
+  receives a `FlutterFrameInfo` carrying the size the engine wants, and if it
+  differs from the current ring the guest reallocates the ring right there. At
+  the start of `get_next_drawable` the engine holds no texture (the previous
+  frame has already been presented), so the outgoing ring frees immediately and
+  safely. The ring becomes strictly raster-thread-owned: the resize message
+  handler only forwards window metrics and the pixel ratio to the engine and
+  never touches the ring, so no cross-thread ring mutex is needed.
 - **`surface.c` → `surface.m`.** Creating `MTLTexture`s and command buffers
   requires Objective-C, so the surface translation unit becomes Objective-C
   (compiled with ARC). It is the natural home for all of: the shared
@@ -120,18 +124,18 @@ All paths are under `app/`.
 
 | Unit | Responsibility | Change in 3b |
 |---|---|---|
-| `host.c` (C) | Engine lifecycle, main socket loop, ties the pieces together. | Renderer config becomes `kMetal`; registers `get_next_drawable_callback` and `present_drawable_callback`; `PresentSoftware` deleted. Resize handling, socket loop, lifecycle otherwise unchanged. |
-| `surface.m` (Obj-C, ARC) — was `surface.c` | The shared `MTLDevice` + `MTLCommandQueue`; the ring of *(IOSurface, MTLTexture)* pairs; the present fence; retired-ring release. | New file (renamed). `surface_ring_present(rgba,…)` removed; new functions added (see below). |
+| `host.c` (C) | Engine lifecycle, main socket loop, ties the pieces together. | Renderer config becomes `kMetal`; registers `get_next_drawable_callback` and `present_drawable_callback`; `PresentSoftware` deleted. The `Resize` handler now only stores the pixel ratio and forwards window metrics — the ring is reallocated inside `get_next_drawable`. Socket loop and lifecycle otherwise unchanged. |
+| `surface.m` (Obj-C, ARC) — was `surface.c` | The shared `MTLDevice` + `MTLCommandQueue`; the ring of *(IOSurface, MTLTexture)* pairs; the present fence. | New file (renamed). `surface_ring_present(rgba,…)` removed; new functions added (see below). |
 | `ipc.{c,h}` (C) | Unix socket: connect, framed read/write, wire protocol. | Unchanged. |
 | `input.c` (C) | Translate protocol pointer/key messages into engine calls. | Unchanged. |
 | `CMakeLists.txt` | Build the single `host` executable. | `surface.m` replaces `surface.c`, compiled with `-fobjc-arc`; links `-framework Metal` in addition to the existing frameworks. |
 
-`surface.h` interface after 3b (names indicative; finalised during planning):
+`surface.h` interface after 3b:
 
 - `bool surface_ring_init(int width, int height)` — allocates the shared
   device/queue on first call, then a fresh ring of *(IOSurface, MTLTexture)*
-  pairs; retires (does not free) any previous ring. Returns false on failure.
-- `void surface_ring_destroy(void)` — releases the current and any retired ring.
+  pairs, releasing any previous ring. Returns false on failure.
+- `void surface_ring_destroy(void)` — releases the ring.
 - `const void* surface_metal_device(void)` — the `MTLDevice` handle for the
   renderer config.
 - `const void* surface_metal_queue(void)` — the `MTLCommandQueue` handle for
@@ -140,21 +144,16 @@ All paths are under `app/`.
   ring slot, handed to the engine from `get_next_drawable_callback`.
 - `int surface_ring_acquire(void)` — the slot index the engine should render
   into next (the current `g_next`); does not advance.
-- `void surface_ring_present(int slot)` — advances the ring and releases any
-  retired ring now that a frame has been presented against the current one.
-- `void surface_ring_present_fence(int slot, void (*on_done)(int slot))` —
-  commits an empty command buffer on `present_command_queue`; invokes `on_done`
-  from its completion handler.
+- `void surface_ring_advance(void)` — advances `g_next` to the next slot;
+  called from `present_drawable_callback`.
+- `void surface_present_fence(void (*on_complete)(void* user_data), void* user_data)`
+  — commits an empty command buffer on `present_command_queue`; invokes
+  `on_complete(user_data)` from its completion handler.
+- `const void* surface_lock(int slot)` / `void surface_unlock(int slot)` —
+  `IOSurfaceLock`/`Unlock` a slot and return its base address, used under
+  `--capture-raw` to read pixels back.
 - `surface_ring_ids`, `surface_ring_width`, `surface_ring_height`,
   `surface_ring_row_bytes` — unchanged from 3a.
-- A capture-readback helper used under `--capture-raw`: `IOSurfaceLock`s a slot
-  and exposes its base address + stride so `host.c` can write the raw file.
-
-(The exact split of `surface_ring_present` vs `surface_ring_present_fence` and
-their signatures may be refined during planning, as long as the contract holds:
-the ring advances on present, the retired ring is released after a present
-against the new ring, and `FrameReady` is emitted from the GPU completion
-handler.)
 
 ### GUI side — Dart and native
 
@@ -178,15 +177,17 @@ their exact layouts; `Resize`, `PointerEvent`, `KeyEvent`, `Shutdown`, `Ready`,
    `kMetal` renderer config, and sends `Ready` then `SurfacesAllocated` — as in
    3a.
 2. Per frame, on the engine raster thread:
-   1. The engine calls `get_next_drawable_callback` → the guest returns the
-      current ring slot's `MTLTexture` in a `FlutterMetalTexture`
-      (`texture_id` = slot index, `destruction_callback` = NULL — the guest owns
-      the ring).
+   1. The engine calls `get_next_drawable_callback` with a `FlutterFrameInfo`.
+      If the requested size differs from the current ring, the guest
+      reallocates the ring, bumps `generation`, and sends a new
+      `SurfacesAllocated`. It then returns the current ring slot's `MTLTexture`
+      in a `FlutterMetalTexture` (`texture_id` = slot index,
+      `destruction_callback` = NULL — the guest owns the ring).
    2. The engine renders the composited frame into that IOSurface-backed
       `MTLTexture`, submitting its command buffer on `present_command_queue`.
    3. The engine calls `present_drawable_callback` → the guest reads the slot
-      from `texture_id`, advances the ring, releases any retired ring, and
-      commits an empty command buffer on `present_command_queue`.
+      from `texture_id`, advances the ring, and commits an empty command buffer
+      on `present_command_queue`.
    4. The empty buffer's `addCompletedHandler` fires after the GPU finishes the
       render → the guest sends `FrameReady{ringIndex = slot, frameId,
       generation}`. Under `--capture-raw`, the handler also `IOSurfaceLock`s the
@@ -194,11 +195,11 @@ their exact layouts; `Resize`, `PointerEvent`, `KeyEvent`, `Shutdown`, `Ready`,
 3. The GUI receives `FrameReady` → `markFrameAvailable` → the host engine
    composites the `IOSurface` directly — zero copy, no `memcpy`, no channel
    swap.
-4. Resize: `surface_ring_init` allocates fresh surfaces + textures, retires the
-   old ring, bumps `generation`, and sends a new `SurfacesAllocated`; the
-   retired ring is released after the next present against the new ring.
-   Generation gating discards frames composited against superseded surfaces, as
-   in 3a.
+4. Resize: a `Resize` message makes the guest store the pixel ratio and call
+   `FlutterEngineSendWindowMetricsEvent`. The engine then schedules a frame at
+   the new size; the ring is reallocated inside the next
+   `get_next_drawable_callback` (step 2.1). Generation gating discards frames
+   composited against superseded surfaces, as in 3a.
 5. Shutdown: `Shutdown` → the guest releases the ring (current + retired) and
    exits.
 
@@ -212,10 +213,10 @@ Carried over from 3a, plus new Metal-specific failure modes:
 - **`newTextureWithDescriptor:iosurface:` fails** — treated like an
   `IOSurface` allocation failure: the guest sends `Error` and exits before the
   engine starts, or fails the resize and keeps the existing ring.
-- **Resize race against an in-flight texture** — handled structurally by the
-  deferred ring release: the engine's in-flight texture (held between
-  `get_next` and `present`) belongs to a ring that is retired, not freed, until
-  a frame is presented against the new ring.
+- **Resize race against an in-flight texture** — handled structurally by
+  reallocating the ring inside `get_next_drawable` on the raster thread: at that
+  point the engine holds no texture, so the outgoing ring is freed safely and
+  no other thread ever mutates the ring.
 - All 3a modes (framework download/compile failure, guest crash/EOF, malformed
   frame, generation-gated resize race) are unchanged.
 
@@ -231,11 +232,12 @@ Carried over from 3a, plus new Metal-specific failure modes:
   display.
 - `app/test/embedder/raw_frame_test.dart` and `raw_frame.dart` — **updated** for
   BGRA byte order (the raw capture file changes from RGBA to BGRA).
-- **Headless PNG smoke** — `tool/embedder/run.dart` still spawns a guest with
-  `--capture-raw`, awaits the first `FrameReady`, reads the raw file, and
-  encodes a PNG; it swaps BGRA→RGBA when encoding. This keeps an automated
-  visual artifact, important because screenshots cannot be captured in the
-  agent environment.
+- **Headless PNG smoke** — `tool/embedder/run.dart` is unchanged; it still
+  spawns a guest with `--capture-raw`, awaits the first `FrameReady`, calls
+  `decodeRawFrame`, and encodes a PNG. The BGRA→RGBA handling lives entirely in
+  `decodeRawFrame` (its `ChannelOrder`), so `run.dart` needs no change. This
+  keeps an automated visual artifact, important because screenshots cannot be
+  captured in the agent environment.
 - `app/integration_test/embedder/compiler_test.dart` and `flutter_cache_test.dart`
   — carried over unchanged.
 - **Manual** — run via the GUI harness and confirm: the animated scene renders
