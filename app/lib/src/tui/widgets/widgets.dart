@@ -10,3 +10,4 @@ part 'widget.dart';
 part 'element.dart';
 part 'build_owner.dart';
 part 'inherited.dart';
+part 'render_object_widget.dart';
