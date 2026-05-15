@@ -3,8 +3,6 @@
 // ←/→ or 1-5 switch scenes · space pauses · q quits.
 
 import 'dart:async';
-import 'dart:math'
-    as math; // ignore: unused_import — used by scenes added in Tasks 2–4
 
 import 'package:flutterware_app/src/tui/tui.dart';
 
