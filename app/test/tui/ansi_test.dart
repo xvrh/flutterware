@@ -238,4 +238,53 @@ void main() {
       expect(out, contains('B'));
     });
   });
+
+  group('encodeRow', () {
+    test('empty row produces empty string', () {
+      final buffer = CellBuffer(1, 5);
+      expect(encodeRow(buffer), '');
+    });
+
+    test('plain row emits runes with no leading cursor move', () {
+      final buffer = CellBuffer(1, 5);
+      buffer.writeAt(0, 0, 'Hi');
+      final out = encodeRow(buffer);
+      expect(out, contains('Hi'));
+      expect(out, isNot(matches(RegExp(r'\x1b\[\d+;\d+H'))));
+    });
+
+    test('trailing blank cells are dropped', () {
+      final buffer = CellBuffer(1, 10);
+      buffer.writeAt(0, 0, 'ab');
+      // Row is "ab" followed by 8 blank cells; output must not pad them.
+      final out = encodeRow(buffer);
+      expect(out.endsWith('b'), isTrue);
+    });
+
+    test('rowIndex selects the row', () {
+      final buffer = CellBuffer(3, 5);
+      buffer.writeAt(2, 0, 'Xy');
+      expect(encodeRow(buffer, rowIndex: 2), contains('Xy'));
+      expect(encodeRow(buffer, rowIndex: 0), '');
+    });
+
+    test('foreground color emits SGR once per run', () {
+      final buffer = CellBuffer(1, 3);
+      buffer.writeAt(0, 0, 'RR', fg: Color.red);
+      final out = encodeRow(buffer);
+      expect('31'.allMatches(out).length, 1);
+      expect(out, contains('RR'));
+    });
+
+    test('style transition resets and re-applies color', () {
+      final buffer = CellBuffer(1, 2);
+      buffer.set(0, 0, Cell(rune: 0x41, fg: Color.red, style: TextStyle.bold));
+      buffer.set(0, 1, Cell(rune: 0x42, fg: Color.red));
+      final out = encodeRow(buffer);
+      expect(out, matches(RegExp(r'(\x1b\[|;)0(;|m)')));
+      expect(out, contains('31'));
+      expect(out, contains('A'));
+      expect(out, contains('B'));
+    });
+  });
 }

@@ -143,3 +143,61 @@ String encodeDiff(
 
   return buf.toString();
 }
+
+/// Encode a single row of [buffer] (the row at [rowIndex]) as ANSI SGR +
+/// characters, starting at the current cursor position. No leading cursor
+/// move is emitted.
+///
+/// Trailing cells equal to [Cell.empty] are dropped — the caller is expected
+/// to follow the output with an erase-to-end-of-line (`\x1b[K`) so a short
+/// line leaves no stale cells behind.
+///
+/// SGR foreground/background/style transitions are coalesced the same way
+/// [encodeDiff] coalesces them between successive cells.
+String encodeRow(CellBuffer buffer, {int rowIndex = 0}) {
+  // Find the last non-blank cell so trailing blanks are not emitted.
+  var lastCol = -1;
+  for (var c = 0; c < buffer.cols; c++) {
+    if (buffer.get(rowIndex, c) != Cell.empty) lastCol = c;
+  }
+  if (lastCol < 0) return '';
+
+  final buf = StringBuffer();
+  Color? lastFg;
+  Color? lastBg;
+  int? lastStyle;
+
+  for (var c = 0; c <= lastCol; c++) {
+    final cell = buffer.get(rowIndex, c);
+    final params = <String>[];
+    if (lastFg == null || lastFg != cell.fg) {
+      params.add(Ansi.sgrForeground(cell.fg));
+    }
+    if (lastBg == null || lastBg != cell.bg) {
+      params.add(Ansi.sgrBackground(cell.bg));
+    }
+    if (lastStyle == null || lastStyle != cell.style) {
+      if (lastStyle != null && lastStyle != 0) {
+        params.insert(0, '0');
+        // After reset, fg/bg also reset — re-emit them.
+        if (!params.contains(Ansi.sgrForeground(cell.fg))) {
+          params.add(Ansi.sgrForeground(cell.fg));
+        }
+        if (!params.contains(Ansi.sgrBackground(cell.bg))) {
+          params.add(Ansi.sgrBackground(cell.bg));
+        }
+      }
+      params.addAll(Ansi.sgrStyle(cell.style));
+    }
+    if (params.isNotEmpty) {
+      buf.write('${Ansi.csi}${params.join(';')}m');
+    }
+    buf.writeCharCode(cell.rune);
+
+    lastFg = cell.fg;
+    lastBg = cell.bg;
+    lastStyle = cell.style;
+  }
+
+  return buf.toString();
+}
