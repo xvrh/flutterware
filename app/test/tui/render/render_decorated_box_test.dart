@@ -20,6 +20,18 @@ class _FixedBox extends RenderBox {
   void performLayout() {
     size = constraints.constrain(natural);
   }
+
+  @override
+  int computeMinIntrinsicWidth(int height) => natural.cols;
+
+  @override
+  int computeMaxIntrinsicWidth(int height) => natural.cols;
+
+  @override
+  int computeMinIntrinsicHeight(int width) => natural.rows;
+
+  @override
+  int computeMaxIntrinsicHeight(int width) => natural.rows;
 }
 
 void main() {
@@ -63,6 +75,16 @@ void main() {
       var buffer = CellBuffer(2, 2);
       box.paint(Painter(buffer));
       expect(dump(buffer), ['..', '..']);
+    });
+
+    test('intrinsics delegate to the child', () {
+      var child = _FixedBox(CellSize(4, 9)); // 4 rows, 9 cols
+      var box = RenderDecoratedBox(
+        decoration: BoxDecoration(border: BoxBorder()),
+        child: child,
+      );
+      expect(box.getMaxIntrinsicWidth(100), 9);
+      expect(box.getMaxIntrinsicHeight(100), 4);
     });
   });
 }

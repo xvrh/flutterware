@@ -36,6 +36,7 @@ class RenderDecoratedBox extends RenderBox with RenderBoxWithChild {
   BoxDecoration _decoration;
   BoxDecoration get decoration => _decoration;
   set decoration(BoxDecoration value) {
+    // BoxDecoration has no structural equality; reuse a reference to skip the repaint.
     if (identical(value, _decoration)) return;
     _decoration = value;
     markNeedsPaint();
