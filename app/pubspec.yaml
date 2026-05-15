@@ -38,6 +38,7 @@ dependencies:
   dart_style:
   device_frame:
   diacritic:
+  ffi:
   file_picker:
   file_selector:
   flutter:
