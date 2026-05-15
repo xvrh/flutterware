@@ -24,7 +24,7 @@ could use a richer status/dashboard UI.
 |-------|------------------|--------|
 | **1. Engine** | Terminal lifecycle, `CellBuffer`, diff-to-ANSI, key parsing, crash-safe restore | ✅ Done |
 | **1.5 Inline mode** | A fixed-height region anchored at the cursor, alongside full-screen | ✅ Done |
-| **`print_above`** | Print log lines into scrollback above an inline region | ⏳ Next |
+| **`print_above`** | Print log lines into scrollback above an inline region | ✅ Done |
 | **2. Paint kit** | `Rect`/`CellSize` geometry + procedural paint helpers (text, border, fill) | ⬜ Not started |
 | **3. Render tree** | `RenderObject`/`RenderBox`, `BoxConstraints`, `Row`/`Column`/`Padding` | ⬜ Not started |
 | **4. Widget layer** | `Widget`/`Element`, `StatelessWidget`/`StatefulWidget`, `setState` | ⬜ Not started |
@@ -40,6 +40,8 @@ framework.
   [plan](plans/2026-05-14-tui-step1-engine.md)
 - Stage 1.5 inline mode — [spec](specs/2026-05-14-tui-step1-inline-mode-design.md) ·
   [plan](plans/2026-05-14-tui-step1-inline-mode.md)
+- `print_above` — [spec](specs/2026-05-15-tui-print-above-design.md) ·
+  [plan](plans/2026-05-15-tui-print-above.md)
 
 ## Key design decisions
 
@@ -71,21 +73,18 @@ Recorded so future work doesn't re-litigate them:
   fixed-height region at the cursor). `TerminalMode` is a sealed class so the
   set is closed and exhaustively switchable.
 
-## `print_above` — the next step
+## `print_above`
 
 Inline mode renders a fixed region anchored at the cursor. `print_above` (the
-ratatui `insert_before` capability) lets inline-mode code emit log/output lines
-that scroll into the terminal scrollback **above** the region, without
+ratatui `insert_before` capability) lets inline-mode code emit log/output
+lines that scroll into the terminal scrollback **above** the region, without
 disturbing the region itself.
 
-It was deliberately scoped out of the inline-mode work — see the "Non-goals"
-and "Open questions deferred" sections of the
-[inline-mode spec](specs/2026-05-14-tui-step1-inline-mode-design.md). The core
-design tension: printing above the region shifts it down, so the region's
-absolute anchor row (`_originRow` in `terminal.dart`) drifts and must be kept
-in sync. The likely approach is a `Terminal.printAbove` that moves the cursor
-to the region's top, opens space with insert-line (`ESC[L`) or a scroll-region
-command, writes the lines, and bumps `_originRow`.
+`Terminal.printAbove` writes the new lines at the region's top row and lets
+the terminal scroll them into real scrollback, recomputes the region's anchor
+row (`_originRow`), then redraws the region by replaying the last `draw()`
+paint callback. `printTextAbove` is the plain-text convenience over it. See
+the [design spec](specs/2026-05-15-tui-print-above-design.md).
 
 ## Known limitations carried forward
 
