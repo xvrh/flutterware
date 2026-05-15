@@ -546,11 +546,11 @@ class ShowcaseApp extends StatefulWidget {
 class _ShowcaseState extends State<ShowcaseApp> {
   Timer? _timer;
   double _time = 0;
-  // ignore: prefer_final_fields
   int _scene = 0;
-  // ignore: prefer_final_fields
   bool _paused = false;
   double _fps = 0;
+  StreamSubscription<KeyEvent>? _keySub;
+  bool _subscribed = false;
 
   @override
   void initState() {
@@ -564,8 +564,34 @@ class _ShowcaseState extends State<ShowcaseApp> {
   }
 
   @override
+  void didChangeDependencies() {
+    if (_subscribed) return;
+    _subscribed = true;
+    var app = TerminalApp.of(context);
+    _keySub = app.keys.listen((event) {
+      if (event is CharKey) {
+        var r = event.rune;
+        if (r == 0x71 /* q */) {
+          app.exit();
+        } else if (r == 0x20 /* space */) {
+          setState(() => _paused = !_paused);
+        } else if (r >= 0x31 && r <= 0x35 /* '1'..'5' */) {
+          setState(() => _scene = r - 0x31);
+        }
+      } else if (event is SpecialKey) {
+        if (event.code == SpecialKeyCode.right) {
+          setState(() => _scene = (_scene + 1) % 5);
+        } else if (event.code == SpecialKeyCode.left) {
+          setState(() => _scene = (_scene - 1 + 5) % 5);
+        }
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
+    unawaited(_keySub?.cancel());
   }
 
   @override
