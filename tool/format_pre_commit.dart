@@ -51,12 +51,15 @@ Directory _gitRoot() {
 }
 
 List<String> _stagedDartFiles(Directory gitRoot) {
-  final result = Process.runSync('git', [
-    'diff',
-    '--cached',
-    '--name-only',
-    '--diff-filter=ACMR',
-  ], workingDirectory: gitRoot.path);
+  final result = Process.runSync(
+      'git',
+      [
+        'diff',
+        '--cached',
+        '--name-only',
+        '--diff-filter=ACMR',
+      ],
+      workingDirectory: gitRoot.path);
   if (result.exitCode != 0) {
     throw StateError('git diff --cached failed: ${result.stderr}');
   }
