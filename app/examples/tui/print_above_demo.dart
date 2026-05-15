@@ -16,7 +16,15 @@ Future<void> main() async {
 
 // Braille spinner frames.
 const _spinner = [
-  0x280B, 0x2819, 0x2839, 0x2838, 0x283C, 0x2834, 0x2826, 0x2827, 0x2807,
+  0x280B,
+  0x2819,
+  0x2839,
+  0x2838,
+  0x283C,
+  0x2834,
+  0x2826,
+  0x2827,
+  0x2807,
   0x280F,
 ];
 
@@ -51,8 +59,7 @@ Future<void> _dashboard(Terminal terminal) async {
     frames++;
     terminal.draw((b) {
       final w = terminal.cols;
-      _drawBorder(b, 0, 0, terminal.rows, w,
-          title: ' flutterware build ');
+      _drawBorder(b, 0, 0, terminal.rows, w, title: ' flutterware build ');
 
       final progress = (emitted / _script.length * 100).round();
       final color = done ? Color.brightGreen : Color.brightCyan;
@@ -62,7 +69,8 @@ Future<void> _dashboard(Terminal terminal) async {
           1,
           2,
           Cell(
-              rune: done ? 0x2714 /* heavy check */
+              rune: done
+                  ? 0x2714 /* heavy check */
                   : _spinner[frames % _spinner.length],
               fg: color));
       b.writeAt(1, 4, done ? 'Build complete' : 'Building...',
