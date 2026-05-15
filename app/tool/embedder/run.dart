@@ -10,8 +10,7 @@ import 'package:path/path.dart' as p;
 /// the C host, renders one frame, and encodes it to a PNG.
 Future<void> main() async {
   // <app>/tool/embedder/run.dart -> <app>
-  var packageRoot =
-      p.dirname(p.dirname(p.dirname(p.fromUri(Platform.script))));
+  var packageRoot = p.dirname(p.dirname(p.dirname(p.fromUri(Platform.script))));
   // This is a pub workspace: package_config.json lives at the repo root.
   var repoRoot = p.dirname(packageRoot);
   var cache = FlutterCache.fromRunningSdk();
@@ -36,8 +35,10 @@ Future<void> main() async {
 
   stdout.writeln('[run] configuring + building the C host');
   await _run('cmake', [
-    '-S', p.join(packageRoot, 'native'),
-    '-B', nativeBuildDir,
+    '-S',
+    p.join(packageRoot, 'native'),
+    '-B',
+    nativeBuildDir,
     '-DFLUTTER_FRAMEWORK_DIR=$engineDir',
   ]);
   await _run('cmake', ['--build', nativeBuildDir]);

@@ -18,8 +18,8 @@ void main() {
     printOnFailure('stderr:\n${result.stderr}');
     expect(result.exitCode, 0);
 
-    var pngFile = File(
-        p.join(Directory.current.path, 'build', 'embedder', 'scene.png'));
+    var pngFile =
+        File(p.join(Directory.current.path, 'build', 'embedder', 'scene.png'));
     expect(pngFile.existsSync(), isTrue, reason: 'scene.png should exist');
 
     var image = decodePng(pngFile.readAsBytesSync())!;

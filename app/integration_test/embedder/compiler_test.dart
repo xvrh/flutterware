@@ -17,8 +17,7 @@ void main() {
     var dill = await compileToKernel(
       entrypoint: p.join(packageRoot, 'tool', 'embedder', 'scene.dart'),
       outputDill: outputDill,
-      packageConfig:
-          p.join(repoRoot, '.dart_tool', 'package_config.json'),
+      packageConfig: p.join(repoRoot, '.dart_tool', 'package_config.json'),
     );
 
     expect(dill.existsSync(), isTrue);
