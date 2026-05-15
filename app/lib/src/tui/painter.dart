@@ -1,0 +1,243 @@
+import 'buffer.dart';
+import 'cell.dart';
+import 'geometry.dart';
+import 'text_wrap.dart';
+
+/// Horizontal placement of text within a rect.
+enum HorizontalAlign { left, center, right }
+
+/// Vertical placement of text within a rect.
+enum VerticalAlign { top, center, bottom }
+
+/// The six glyphs that make up a box border.
+class BorderChars {
+  final String topLeft;
+  final String topRight;
+  final String bottomLeft;
+  final String bottomRight;
+
+  /// Top and bottom edges.
+  final String horizontal;
+
+  /// Left and right edges.
+  final String vertical;
+
+  const BorderChars({
+    required this.topLeft,
+    required this.topRight,
+    required this.bottomLeft,
+    required this.bottomRight,
+    required this.horizontal,
+    required this.vertical,
+  });
+
+  const BorderChars.single()
+      : topLeft = '┌',
+        topRight = '┐',
+        bottomLeft = '└',
+        bottomRight = '┘',
+        horizontal = '─',
+        vertical = '│';
+
+  const BorderChars.double()
+      : topLeft = '╔',
+        topRight = '╗',
+        bottomLeft = '╚',
+        bottomRight = '╝',
+        horizontal = '═',
+        vertical = '║';
+
+  const BorderChars.rounded()
+      : topLeft = '╭',
+        topRight = '╮',
+        bottomLeft = '╰',
+        bottomRight = '╯',
+        horizontal = '─',
+        vertical = '│';
+
+  const BorderChars.thick()
+      : topLeft = '┏',
+        topRight = '┓',
+        bottomLeft = '┗',
+        bottomRight = '┛',
+        horizontal = '━',
+        vertical = '┃';
+
+  const BorderChars.ascii()
+      : topLeft = '+',
+        topRight = '+',
+        bottomLeft = '+',
+        bottomRight = '+',
+        horizontal = '-',
+        vertical = '|';
+}
+
+/// A drawing surface over a [CellBuffer], carrying a translation [_origin] and
+/// a [_clip] rectangle (both in buffer coordinates).
+///
+/// [translate] and [clip] return new [Painter]s that share the same buffer —
+/// the functional "shared canvas with an offset" model. Every write routes
+/// through [_put], so content outside the clip can never be painted.
+class Painter {
+  final CellBuffer _buffer;
+  final CellOffset _origin;
+  final CellRect _clip;
+
+  /// A painter over the whole [buffer]: identity offset, clip = full buffer.
+  Painter(CellBuffer buffer)
+      : _buffer = buffer,
+        _origin = CellOffset.zero,
+        _clip = CellRect.fromTLWH(0, 0, buffer.cols, buffer.rows);
+
+  Painter._(this._buffer, this._origin, this._clip);
+
+  /// The visible region in *local* coordinates (the clip, un-shifted by the
+  /// origin). Helpers that fill "everything" target this.
+  CellRect get bounds => _clip.shift(CellOffset(-_origin.row, -_origin.col));
+
+  /// A painter whose local origin is shifted by [offset].
+  Painter translate(CellOffset offset) =>
+      Painter._(_buffer, _origin + offset, _clip);
+
+  /// A painter clipped to [rect] (in local coordinates), intersected with the
+  /// current clip.
+  Painter clip(CellRect rect) =>
+      Painter._(_buffer, _origin, _clip.intersect(rect.shift(_origin)));
+
+  /// The single write chokepoint: translate local coords by the origin, drop
+  /// anything outside the clip, otherwise write to the buffer.
+  void _put(int row, int col, Cell cell) {
+    var r = row + _origin.row;
+    var c = col + _origin.col;
+    if (r < _clip.top || r >= _clip.bottom) return;
+    if (c < _clip.left || c >= _clip.right) return;
+    _buffer.set(r, c, cell);
+  }
+
+  /// Fill the entire visible region with [cell].
+  void fill(Cell cell) => fillRect(bounds, cell);
+
+  /// Fill [rect] (local coordinates) with [cell].
+  void fillRect(CellRect rect, Cell cell) {
+    for (var r = rect.top; r < rect.bottom; r++) {
+      for (var c = rect.left; c < rect.right; c++) {
+        _put(r, c, cell);
+      }
+    }
+  }
+
+  /// Draw a horizontal run of [length] cells starting at [start].
+  void drawHLine(
+    CellOffset start,
+    int length, {
+    int rune = 0x2500, // '─'
+    Color fg = Color.defaultFg,
+    Color bg = Color.defaultBg,
+    int style = 0,
+  }) {
+    var cell = Cell(rune: rune, fg: fg, bg: bg, style: style);
+    for (var i = 0; i < length; i++) {
+      _put(start.row, start.col + i, cell);
+    }
+  }
+
+  /// Draw a vertical run of [length] cells starting at [start].
+  void drawVLine(
+    CellOffset start,
+    int length, {
+    int rune = 0x2502, // '│'
+    Color fg = Color.defaultFg,
+    Color bg = Color.defaultBg,
+    int style = 0,
+  }) {
+    var cell = Cell(rune: rune, fg: fg, bg: bg, style: style);
+    for (var i = 0; i < length; i++) {
+      _put(start.row + i, start.col, cell);
+    }
+  }
+
+  /// Draw a box border around the perimeter of [rect] using [chars].
+  ///
+  /// The interior is left untouched. A rect narrower or shorter than 2 cells
+  /// degrades gracefully — it draws what edge cells it can without crashing.
+  void drawBorder(
+    CellRect rect, {
+    BorderChars chars = const BorderChars.single(),
+    Color fg = Color.defaultFg,
+    Color bg = Color.defaultBg,
+    int style = 0,
+  }) {
+    if (rect.isEmpty) return;
+
+    Cell glyph(String s) =>
+        Cell(rune: s.runes.first, fg: fg, bg: bg, style: style);
+
+    var top = rect.top;
+    var bottom = rect.bottom - 1;
+    var left = rect.left;
+    var right = rect.right - 1;
+
+    var hCell = glyph(chars.horizontal);
+    var vCell = glyph(chars.vertical);
+
+    // Edges first; corners overwrite the ends.
+    for (var c = left; c <= right; c++) {
+      _put(top, c, hCell);
+      _put(bottom, c, hCell);
+    }
+    for (var r = top; r <= bottom; r++) {
+      _put(r, left, vCell);
+      _put(r, right, vCell);
+    }
+    _put(top, left, glyph(chars.topLeft));
+    _put(top, right, glyph(chars.topRight));
+    _put(bottom, left, glyph(chars.bottomLeft));
+    _put(bottom, right, glyph(chars.bottomRight));
+  }
+
+  /// Draw [text] inside [rect].
+  ///
+  /// When [wrap] is true, [text] is word-wrapped to the rect width; otherwise
+  /// it is split only on '\n' and long lines are clipped at the right edge.
+  /// The line block is positioned vertically by [vAlign] and each line
+  /// horizontally by [hAlign]. When there are more lines than [rect] is tall,
+  /// the leading lines are kept and the trailing overflow is dropped,
+  /// regardless of [vAlign].
+  void drawText(
+    CellRect rect,
+    String text, {
+    Color fg = Color.defaultFg,
+    Color bg = Color.defaultBg,
+    int style = 0,
+    HorizontalAlign hAlign = HorizontalAlign.left,
+    VerticalAlign vAlign = VerticalAlign.top,
+    bool wrap = true,
+  }) {
+    if (rect.isEmpty) return;
+
+    var lines = wrap ? wrapText(text, rect.width) : text.split('\n');
+    var visibleCount = lines.length < rect.height ? lines.length : rect.height;
+    var extraRows = rect.height - visibleCount;
+    var rowOffset = switch (vAlign) {
+      VerticalAlign.top => 0,
+      VerticalAlign.center => extraRows ~/ 2,
+      VerticalAlign.bottom => extraRows,
+    };
+
+    for (var i = 0; i < visibleCount; i++) {
+      var runes = lines[i].runes.toList();
+      var extraCols = rect.width - runes.length;
+      var colOffset = switch (hAlign) {
+        HorizontalAlign.left => 0,
+        HorizontalAlign.center => extraCols < 0 ? 0 : extraCols ~/ 2,
+        HorizontalAlign.right => extraCols < 0 ? 0 : extraCols,
+      };
+      var row = rect.top + rowOffset + i;
+      for (var j = 0; j < runes.length; j++) {
+        var col = rect.left + colOffset + j;
+        if (col >= rect.right) break; // clip to the rect right edge
+        _put(row, col, Cell(rune: runes[j], fg: fg, bg: bg, style: style));
+      }
+    }
+  }
+}
