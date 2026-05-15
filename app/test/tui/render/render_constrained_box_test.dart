@@ -12,7 +12,13 @@ class _FixedBox extends RenderBox {
   }
 
   @override
+  int computeMinIntrinsicWidth(int height) => natural.cols;
+
+  @override
   int computeMaxIntrinsicWidth(int height) => natural.cols;
+
+  @override
+  int computeMinIntrinsicHeight(int width) => natural.rows;
 
   @override
   int computeMaxIntrinsicHeight(int width) => natural.rows;
@@ -48,6 +54,37 @@ void main() {
       );
       box.layout(BoxConstraints(maxWidth: 99, maxHeight: 99));
       expect(box.size, CellSize(3, 4));
+    });
+
+    test('tight additional-constraint axis overrides the child intrinsic', () {
+      // additionalConstraints fixes width to 7; child reports intrinsic width 20.
+      // CellSize(rows, cols) — so cols=20 means width=20.
+      var child = _FixedBox(CellSize(10, 20));
+      var box = RenderConstrainedBox(
+        additionalConstraints: BoxConstraints.tightFor(width: 7),
+        child: child,
+      );
+      // The tight axis (min == max == 7) must win over the child's 20.
+      expect(box.getMaxIntrinsicWidth(100), 7);
+    });
+
+    test('non-tight axis passes child intrinsic through, clamped to max', () {
+      // Child intrinsic width 12 falls inside [0, 30] → returned as-is.
+      // CellSize(rows, cols) — cols=12 means width=12.
+      var child = _FixedBox(CellSize(10, 12));
+      var box = RenderConstrainedBox(
+        additionalConstraints: BoxConstraints(minWidth: 0, maxWidth: 30),
+        child: child,
+      );
+      expect(box.getMaxIntrinsicWidth(100), 12);
+
+      // Child intrinsic width 50 exceeds maxWidth 30 → clamped to 30.
+      var wideChild = _FixedBox(CellSize(10, 50));
+      var clampingBox = RenderConstrainedBox(
+        additionalConstraints: BoxConstraints(minWidth: 0, maxWidth: 30),
+        child: wideChild,
+      );
+      expect(clampingBox.getMaxIntrinsicWidth(100), 30);
     });
   });
 }
