@@ -3,6 +3,8 @@
 /// Widget/Element/State classes share library-private lifecycle state.
 library;
 
+import '../cell.dart';
+import '../painter.dart';
 import '../render/render.dart';
 
 part 'key.dart';
@@ -11,3 +13,4 @@ part 'element.dart';
 part 'build_owner.dart';
 part 'inherited.dart';
 part 'render_object_widget.dart';
+part 'basic.dart';
