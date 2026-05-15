@@ -3,4 +3,9 @@
 /// Widget/Element/State classes share library-private lifecycle state.
 library;
 
+import '../render/render.dart';
+
 part 'key.dart';
+part 'widget.dart';
+part 'element.dart';
+part 'build_owner.dart';

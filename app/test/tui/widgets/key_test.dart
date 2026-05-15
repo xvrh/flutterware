@@ -34,4 +34,31 @@ void main() {
   test('Key factory builds a ValueKey<String>', () {
     expect(Key('x'), ValueKey<String>('x'));
   });
+
+  group('Widget.canUpdate', () {
+    test('true for same type and key', () {
+      expect(Widget.canUpdate(_W(key: Key('a')), _W(key: Key('a'))), isTrue);
+    });
+    test('false for different key', () {
+      expect(Widget.canUpdate(_W(key: Key('a')), _W(key: Key('b'))), isFalse);
+    });
+    test('false for different runtimeType', () {
+      expect(Widget.canUpdate(_W(), _W2()), isFalse);
+    });
+    test('true for same type, both keyless', () {
+      expect(Widget.canUpdate(_W(), _W()), isTrue);
+    });
+  });
+}
+
+class _W extends StatelessWidget {
+  const _W({super.key});
+  @override
+  Widget build(BuildContext context) => this;
+}
+
+class _W2 extends StatelessWidget {
+  const _W2();
+  @override
+  Widget build(BuildContext context) => this;
 }
