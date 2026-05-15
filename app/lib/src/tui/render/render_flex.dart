@@ -76,6 +76,32 @@ class RenderFlex extends RenderBox {
     }
   }
 
+  /// Inserts [child], placing it immediately after [after] (or first when
+  /// [after] is null). Adopts the child.
+  void insert(RenderBox child, {RenderBox? after}) {
+    _insertIntoList(child, after);
+    adoptChild(child);
+  }
+
+  /// Relocates an already-adopted [child] to immediately after [after] (or
+  /// first when [after] is null). Does not re-adopt.
+  void move(RenderBox child, {RenderBox? after}) {
+    assert(_children.contains(child), 'move() child must already be present.');
+    _children.remove(child);
+    _insertIntoList(child, after);
+    markNeedsLayout();
+  }
+
+  void _insertIntoList(RenderBox child, RenderBox? after) {
+    if (after == null) {
+      _children.insert(0, child);
+    } else {
+      var index = _children.indexOf(after);
+      assert(index != -1, 'insert() `after` child is not in this RenderFlex.');
+      _children.insert(index + 1, child);
+    }
+  }
+
   /// Sets the flex factor and fit of an already-added [child].
   void setFlex(RenderBox child, int flex, {FlexFit fit = FlexFit.loose}) {
     var pd = child.parentData! as FlexParentData;

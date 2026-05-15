@@ -244,4 +244,33 @@ void main() {
       expect(row.getMaxIntrinsicWidth(100), 10);
     });
   });
+
+  group('insert / move', () {
+    test('insert after null places child first', () {
+      var a = RenderText('a');
+      var b = RenderText('b');
+      var flex = RenderFlex(direction: Axis.vertical, children: [a]);
+      flex.insert(b, after: null);
+      expect(flex.children, [b, a]);
+    });
+
+    test('insert after a child places it immediately following', () {
+      var a = RenderText('a');
+      var b = RenderText('b');
+      var c = RenderText('c');
+      var flex = RenderFlex(direction: Axis.vertical, children: [a, b]);
+      flex.insert(c, after: a);
+      expect(flex.children, [a, c, b]);
+    });
+
+    test('move relocates an existing child without re-adopting', () {
+      var a = RenderText('a');
+      var b = RenderText('b');
+      var c = RenderText('c');
+      var flex = RenderFlex(direction: Axis.vertical, children: [a, b, c]);
+      flex.move(c, after: null);
+      expect(flex.children, [c, a, b]);
+      expect(c.parent, flex);
+    });
+  });
 }
