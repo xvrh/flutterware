@@ -101,6 +101,11 @@ class Terminal {
   int get rows => _rows;
   int get cols => _cols;
 
+  /// Absolute terminal row of the region's top-left corner — its anchor.
+  /// Always 0 in full-screen mode. In inline mode it is captured at entry
+  /// and advanced by [printAbove] as lines scroll above the region.
+  int get originRow => _originRow;
+
   /// Emits when the terminal is resized. The caller is responsible for
   /// calling [draw] in response — the engine clears the screen on resize
   /// but does not repaint until asked.

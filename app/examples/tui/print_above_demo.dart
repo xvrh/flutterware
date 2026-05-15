@@ -1,20 +1,46 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutterware_app/src/tui/tui.dart';
 
-/// print_above showcase: a simulated `flutter build` whose log lines stream
-/// into the terminal scrollback while a status panel stays pinned below.
+/// print_above mechanism demo — an instrumented, step-through walkthrough of
+/// how [Terminal.printAbove] scrolls log lines into the terminal scrollback
+/// above an anchored inline region.
 ///
-/// Exercises [Terminal.printAbove] (colored log lines into scrollback),
-/// the region staying intact and re-anchored after each insert, and a
-/// timer-driven animated panel rendered with [Terminal.draw].
+/// The bordered inline panel shows the live state of the mechanism: the
+/// region's anchor row (`_originRow`), the terminal height, the "pin point",
+/// the drift-vs-pinned phase, and how many lines have scrolled off into
+/// scrollback. A horizontal gauge stands in for the vertical screen so the
+/// region's position is visible at a glance. Each emitted line narrates what
+/// that single `printAbove` call did, so the scrollback itself becomes a
+/// readable transcript of the mechanism.
+///
+/// Controls: [space] emit one line · [a] toggle auto-play · [q] quit.
 Future<void> main() async {
-  print('--- flutterware build (print_above demo) ---');
-  await Terminal.run(_dashboard, mode: const InlineMode(rows: 5));
-  print('--- build finished; back to normal shell output ---');
+  print('print_above — scrolling mechanism demo');
+  print('');
+  print('The bordered panel below is an inline region. Every log line above');
+  print('it is emitted by ONE Terminal.printAbove(1, ...) call. The mechanism');
+  print('has two phases:');
+  print('');
+  print('  DRIFTING  the region has empty rows below it, so a new line just');
+  print('            pushes the region DOWN — nothing leaves the screen and');
+  print('            the anchor row (_originRow) increases by one.');
+  print('  PINNED    the region sits on the last screen row, so a new line');
+  print('            SCROLLS the screen — the top line drops into real');
+  print('            scrollback and the anchor row stays put.');
+  print('');
+  print('Tip: launch this in a tall terminal with lots of empty space below');
+  print('the prompt to watch the DRIFTING phase first. With the prompt near');
+  print('the bottom the region anchors there and starts already PINNED.');
+  print('');
+
+  await Terminal.run(_demo, mode: const InlineMode(rows: 9));
+
+  print('--- demo exited; the narrated log lines remain in scrollback ---');
 }
 
-// Braille spinner frames.
+// Braille spinner frames, for liveness.
 const _spinner = [
   0x280B,
   0x2819,
@@ -28,153 +54,217 @@ const _spinner = [
   0x280F,
 ];
 
-// A scripted build log: (level, message). level: 0 info, 1 warn, 2 error.
-const _script = <(int, String)>[
-  (0, 'Resolving dependencies...'),
-  (0, 'Got dependencies.'),
-  (0, 'Running Gradle task assembleDebug...'),
-  (0, 'Compiling lib/main.dart'),
-  (0, 'Compiling lib/src/app.dart'),
-  (1, 'lib/src/app.dart:42: unused import'),
-  (0, 'Compiling lib/src/widgets/home.dart'),
-  (0, 'Compiling lib/src/widgets/details.dart'),
-  (1, 'lib/src/widgets/details.dart:88: deprecated API'),
-  (0, 'Linking native libraries'),
-  (2, 'ld: duplicate symbol _kFoo (recovered)'),
-  (0, 'Bundling assets'),
-  (0, 'Optimizing icon tree-shaking'),
-  (0, 'Signing build/app/outputs/apk/debug/app-debug.apk'),
-  (0, 'Built build/app/outputs/apk/debug/app-debug.apk (24.1MB)'),
-];
-
-Future<void> _dashboard(Terminal terminal) async {
-  final start = DateTime.now();
-  var frames = 0;
+Future<void> _demo(Terminal terminal) async {
   var emitted = 0;
-  var warns = 0;
-  var errors = 0;
-  var done = false;
+  var scrolledOff = 0;
+  var auto = false;
+  var frames = 0;
+  var lastNote = 'press [space] to emit the first line';
+
+  int screenHeight() => stdout.terminalLines;
+  int pinPoint() => screenHeight() - terminal.rows;
 
   void repaint() {
     frames++;
     terminal.draw((b) {
       final w = terminal.cols;
-      _drawBorder(b, 0, 0, terminal.rows, w, title: ' flutterware build ');
+      final origin = terminal.originRow;
+      final pin = pinPoint();
+      final drifting = origin < pin;
+      final spin = String.fromCharCode(_spinner[frames % _spinner.length]);
 
-      final progress = (emitted / _script.length * 100).round();
-      final color = done ? Color.brightGreen : Color.brightCyan;
+      _drawBorder(b, terminal.rows, w,
+          title: ' print_above · scrolling mechanism $spin ');
 
-      // Row 1: spinner + phase label.
-      b.set(
-          1,
-          2,
-          Cell(
-              rune: done
-                  ? 0x2714 /* heavy check */
-                  : _spinner[frames % _spinner.length],
-              fg: color));
-      b.writeAt(1, 4, done ? 'Build complete' : 'Building...',
-          style: TextStyle.bold, fg: color);
-
-      // Row 2: progress bar + percentage.
-      final barStart = 2;
-      final barEnd = w - 8;
-      final barWidth = (barEnd - barStart).clamp(0, w);
-      final filled = (barWidth * progress / 100).round();
-      for (var i = 0; i < barWidth; i++) {
-        b.set(
-          2,
-          barStart + i,
-          i < filled
-              ? Cell(rune: 0x2588, fg: color)
-              : const Cell(rune: 0x2591, fg: Color.brightBlack),
-        );
+      // Row 1 — current phase.
+      b.writeAt(1, 2, 'PHASE', style: TextStyle.bold);
+      if (drifting) {
+        b.writeAt(1, 8, 'DRIFTING',
+            fg: Color.brightYellow, style: TextStyle.bold);
+        b.writeAt(1, 17,
+            '— ${pin - origin} row(s) of headroom; next line moves the region down',
+            style: TextStyle.dim);
+      } else {
+        b.writeAt(1, 8, 'PINNED', fg: Color.brightGreen, style: TextStyle.bold);
+        b.writeAt(1, 15,
+            '— region on the last row; next line scrolls into scrollback',
+            style: TextStyle.dim);
       }
-      b.writeAt(2, barEnd + 1, '${progress.toString().padLeft(3)}%', fg: color);
 
-      // Row 3: counts + elapsed + quit hint.
-      final elapsed = DateTime.now().difference(start);
-      b.writeAt(3, 2,
-          'warnings $warns   errors $errors   elapsed ${elapsed.inSeconds}s',
-          style: TextStyle.dim);
-      b.writeAt(3, w - 19, 'press q to quit', style: TextStyle.dim);
+      // Row 2 — viewport gauge: a horizontal stand-in for the vertical
+      // screen. Left edge = screen row 0, right edge = the last screen row.
+      _drawGauge(b, 2, w,
+          origin: origin,
+          regionRows: terminal.rows,
+          screenHeight: screenHeight(),
+          scrolledOff: scrolledOff);
+
+      // Row 3 — the last action.
+      b.writeAt(3, 2, 'last: $lastNote', style: TextStyle.dim);
+
+      // Row 4/5 — the mechanism's numbers.
+      b.writeAt(
+          4,
+          2,
+          'anchor _originRow = ${origin.toString().padLeft(3)}     '
+          'screen height = ${screenHeight()}     '
+          'region rows = ${terminal.rows}',
+          fg: Color.brightCyan);
+      b.writeAt(
+          5,
+          2,
+          'pin point (height - region rows) = $pin     '
+          'next printAbove ${drifting ? "drifts the region" : "scrolls the screen"}',
+          fg: Color.brightCyan);
+
+      // Row 6 — running counts. Every emitted line is either still visible
+      // above the region or has scrolled off into scrollback.
+      b.writeAt(
+          6,
+          2,
+          'emitted = $emitted      on-screen above = ${emitted - scrolledOff}'
+          '      in scrollback = $scrolledOff',
+          style: TextStyle.bold);
+
+      // Row 7 — controls.
+      final controls =
+          '[space] emit   [a] auto:${auto ? "ON " : "off"}   [q] quit';
+      final controlsCol = (w - 2 - controls.length).clamp(2, w);
+      b.writeAt(7, controlsCol, controls, fg: Color.brightBlack);
     });
   }
 
-  // Quit when the user presses q, or 1.5s after the build finishes.
-  final quit = Completer<void>();
-  void maybeFinish() {
-    if (emitted >= _script.length && !done) {
-      done = true;
-      Timer(const Duration(milliseconds: 1500), () {
-        if (!quit.isCompleted) quit.complete();
-      });
-    }
-  }
-
-  // Emit one scripted log line into the scrollback above the panel.
-  void emitLogLine() {
-    if (emitted >= _script.length) return;
-    final (level, message) = _script[emitted];
+  // Emit one log line via a single Terminal.printAbove(1, ...) call and
+  // narrate, in the line itself, exactly what that call did.
+  void emitNext() {
+    final before = terminal.originRow;
+    final pin = pinPoint();
+    // A one-row printAbove drifts the region down by one row while it has
+    // headroom; once pinned, the anchor holds and one line scrolls off.
+    final after = before < pin ? before + 1 : before;
+    final scrolled = 1 - (after - before); // 0 while drifting, 1 once pinned
     emitted++;
-    final (tag, color) = switch (level) {
-      2 => ('ERROR', Color.brightRed),
-      1 => (' WARN', Color.brightYellow),
-      _ => (' INFO', Color.brightGreen),
-    };
-    if (level == 1) warns++;
-    if (level == 2) errors++;
-    // The tag is colored; the message is default-colored. Two printTextAbove
-    // calls would be two scrollback rows, so build one styled line via the
-    // printAbove primitive instead.
+    scrolledOff += scrolled;
+
+    final pinned = scrolled == 1;
+    final tag = pinned ? ' SCROLL ' : ' DRIFT  ';
+    final tagColor = pinned ? Color.brightGreen : Color.brightYellow;
+    final detail = pinned
+        ? 'screen scrolled — top line pushed into scrollback; anchor held at $after'
+        : 'region pushed down — anchor _originRow $before → $after';
+
+    lastNote = '#$emitted ${pinned ? "SCROLL" : "DRIFT"} — $detail';
+
     terminal.printAbove(1, (b) {
-      b.writeAt(0, 0, tag, fg: color, style: TextStyle.bold);
-      b.writeAt(0, 6, message);
+      b.writeAt(0, 0, '#${emitted.toString().padLeft(3)}',
+          fg: Color.brightBlack);
+      b.writeAt(0, 5, tag,
+          fg: Color.black, bg: tagColor, style: TextStyle.bold);
+      b.writeAt(0, 14, 'printAbove(1)  →  $detail');
     });
     repaint();
-    maybeFinish();
   }
 
   repaint();
   final resizeSub = terminal.resizes.listen((_) => repaint());
-  final ticker =
-      Timer.periodic(const Duration(milliseconds: 100), (_) => repaint());
-  final logTicker =
-      Timer.periodic(const Duration(milliseconds: 350), (_) => emitLogLine());
+  // A gentle ticker keeps the spinner alive while idle.
+  final spinTicker =
+      Timer.periodic(const Duration(milliseconds: 120), (_) => repaint());
+  Timer? autoTicker;
 
+  void setAuto(bool on) {
+    if (auto == on) return;
+    auto = on;
+    autoTicker?.cancel();
+    autoTicker = on
+        ? Timer.periodic(const Duration(milliseconds: 700), (_) => emitNext())
+        : null;
+    repaint();
+  }
+
+  final quit = Completer<void>();
   final keySub = terminal.keys.listen((event) {
-    if (event is CharKey && event.rune == 0x71 /* q */) {
-      if (!quit.isCompleted) quit.complete();
+    if (event is! CharKey) return;
+    switch (event.rune) {
+      case 0x71: // q
+        if (!quit.isCompleted) quit.complete();
+      case 0x20: // space
+        emitNext();
+      case 0x61: // a
+        setAuto(!auto);
     }
   });
 
   try {
     await quit.future;
   } finally {
-    ticker.cancel();
-    logTicker.cancel();
+    spinTicker.cancel();
+    autoTicker?.cancel();
     await resizeSub.cancel();
     await keySub.cancel();
   }
 }
 
-void _drawBorder(CellBuffer b, int row, int col, int rows, int cols,
-    {String? title}) {
+/// Draws the viewport gauge on [row]: a horizontal bar standing in for the
+/// vertical screen. The region's span is highlighted; as it drifts the block
+/// slides right, then sticks at the right edge once pinned. A `N↑` marker on
+/// the left counts lines that have scrolled off into scrollback.
+void _drawGauge(
+  CellBuffer b,
+  int row,
+  int width, {
+  required int origin,
+  required int regionRows,
+  required int screenHeight,
+  required int scrolledOff,
+}) {
+  final marker = scrolledOff > 0 ? '$scrolledOff↑' : '';
+  if (marker.isNotEmpty) {
+    b.writeAt(row, 2, marker, fg: Color.brightGreen, style: TextStyle.bold);
+  }
+  final trackStart = 2 + (marker.isEmpty ? 0 : marker.length + 1) + 1;
+  final trackEnd = width - 3;
+  final trackLen = trackEnd - trackStart;
+  if (trackLen < 4 || screenHeight <= 0) return;
+
+  b.set(row, trackStart - 1, const Cell(rune: 0x5B /* [ */));
+  b.set(row, trackEnd, const Cell(rune: 0x5D /* ] */));
+
+  final regStart =
+      (origin * trackLen / screenHeight).floor().clamp(0, trackLen - 1);
+  var regEnd = ((origin + regionRows) * trackLen / screenHeight)
+      .ceil()
+      .clamp(1, trackLen);
+  if (regEnd <= regStart) regEnd = regStart + 1;
+
+  for (var i = 0; i < trackLen; i++) {
+    final inRegion = i >= regStart && i < regEnd;
+    b.set(
+      row,
+      trackStart + i,
+      inRegion
+          ? const Cell(rune: 0x2588 /* full block */, fg: Color.brightCyan)
+          : const Cell(rune: 0x00B7 /* middle dot */, fg: Color.brightBlack),
+    );
+  }
+}
+
+void _drawBorder(CellBuffer b, int rows, int cols, {String? title}) {
   const tl = 0x250C, tr = 0x2510, bl = 0x2514, br = 0x2518;
   const h = 0x2500, v = 0x2502;
-  b.set(row, col, const Cell(rune: tl));
-  b.set(row, col + cols - 1, const Cell(rune: tr));
-  b.set(row + rows - 1, col, const Cell(rune: bl));
-  b.set(row + rows - 1, col + cols - 1, const Cell(rune: br));
-  for (var c = col + 1; c < col + cols - 1; c++) {
-    b.set(row, c, const Cell(rune: h));
-    b.set(row + rows - 1, c, const Cell(rune: h));
+  b.set(0, 0, const Cell(rune: tl));
+  b.set(0, cols - 1, const Cell(rune: tr));
+  b.set(rows - 1, 0, const Cell(rune: bl));
+  b.set(rows - 1, cols - 1, const Cell(rune: br));
+  for (var c = 1; c < cols - 1; c++) {
+    b.set(0, c, const Cell(rune: h));
+    b.set(rows - 1, c, const Cell(rune: h));
   }
-  for (var r = row + 1; r < row + rows - 1; r++) {
-    b.set(r, col, const Cell(rune: v));
-    b.set(r, col + cols - 1, const Cell(rune: v));
+  for (var r = 1; r < rows - 1; r++) {
+    b.set(r, 0, const Cell(rune: v));
+    b.set(r, cols - 1, const Cell(rune: v));
   }
   if (title != null) {
-    b.writeAt(row, col + 2, title, style: TextStyle.bold);
+    b.writeAt(0, 2, title, style: TextStyle.bold);
   }
 }
