@@ -158,15 +158,17 @@ int main(int argc, char** argv) {
   bool ok = have_frame && WriteFrame(output_path);
   pthread_mutex_unlock(&g_mutex);
 
-  FlutterEngineShutdown(engine);
-
+  // FlutterEngineShutdown blocks indefinitely with the software renderer
+  // (the engine's internal threads have no vsync source to drain). Since this
+  // process only needs to write the PNG and exit, skip graceful shutdown and
+  // let the OS reclaim resources.
   if (!have_frame) {
     fprintf(stderr, "Timed out waiting for a rendered frame.\n");
-    return 1;
+    exit(1);
   }
   if (!ok) {
     fprintf(stderr, "Failed to write %s\n", output_path);
-    return 1;
+    exit(1);
   }
-  return 0;
+  exit(0);
 }

@@ -5,7 +5,7 @@ import 'package:image/image.dart';
 /// Decodes a raw frame file written by the embedder C host into an [Image].
 ///
 /// File layout: a 12-byte little-endian header (`width`, `height`, `rowBytes`
-/// as `uint32`) followed by `rowBytes * height` pixel bytes in BGRA order.
+/// as `uint32`) followed by `rowBytes * height` pixel bytes in RGBA order.
 /// `rowBytes` is a stride and may exceed `width * 4`.
 Image decodeRawFrame(Uint8List fileBytes) {
   if (fileBytes.length < 12) {
@@ -36,6 +36,6 @@ Image decodeRawFrame(Uint8List fileBytes) {
     bytesOffset: fileBytes.offsetInBytes + 12,
     numChannels: 4,
     rowStride: rowBytes,
-    order: ChannelOrder.bgra,
+    order: ChannelOrder.rgba,
   );
 }
