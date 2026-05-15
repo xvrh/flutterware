@@ -294,7 +294,7 @@ class Terminal {
 
     _front = CellBuffer(_rows, _cols);
     _back.clear();
-    (_lastPaint ?? (_) {})(_back);
+    _lastPaint?.call(_back);
     out.write(encodeDiff(_front, _back,
         originRow: _originRow, originCol: _originCol));
     _front.copyFrom(_back);
