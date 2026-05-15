@@ -10,10 +10,14 @@ animated, interactive scene with the software renderer into shared
 ## Run the GUI harness
 
 ```sh
-cd app && flutter run -t lib/main_embedder_dev.dart -d macos
+cd app && flutter run -t lib/main_embedder_dev.dart -d macos \
+  --dart-define=FLUTTERWARE_APP_ROOT="$(pwd)" \
+  --dart-define=FLUTTER_SDK_ROOT="$(cd "$(dirname "$(which flutter)")/.." && pwd)"
 ```
 
-This builds and spawns the guest, then shows its live output.
+This builds and spawns the guest, then shows its live output. A macOS app
+launched by `flutter run` has no usable environment or working directory, so
+the `app/` package root and Flutter SDK root are passed via `--dart-define`.
 
 ## Run the headless smoke
 
