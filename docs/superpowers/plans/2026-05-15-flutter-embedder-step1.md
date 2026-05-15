@@ -223,11 +223,14 @@ void main() {
     addTearDown(() => outDir.deleteSync(recursive: true));
     var outputDill = p.join(outDir.path, 'kernel_blob.bin');
 
+    // This is a pub workspace: the single package_config.json lives at the
+    // repo root (the parent of the embedder package), not per-member.
+    var repoRoot = p.dirname(packageRoot);
     var dill = await compileToKernel(
       entrypoint: p.join(packageRoot, 'example', 'hello.dart'),
       outputDill: outputDill,
       packageConfig:
-          p.join(packageRoot, '.dart_tool', 'package_config.json'),
+          p.join(repoRoot, '.dart_tool', 'package_config.json'),
     );
 
     expect(dill.existsSync(), isTrue);
@@ -330,8 +333,10 @@ Future<void> main(List<String> args) async {
   }
   var entrypoint = p.absolute(args[0]);
   var outputDill = p.absolute(args[1]);
+  // This is a pub workspace: package_config.json lives at the repo root.
+  // Platform.script -> <repo>/embedder/bin/compile.dart, so go up three dirs.
   var packageConfig = p.join(
-      p.dirname(p.dirname(Platform.script.toFilePath())),
+      p.dirname(p.dirname(p.dirname(Platform.script.toFilePath()))),
       '.dart_tool',
       'package_config.json');
 
@@ -569,6 +574,8 @@ import 'package:path/path.dart' as p;
 Future<void> main() async {
   // <embedder>/tool/run.dart -> <embedder>
   var packageRoot = p.dirname(p.dirname(p.fromUri(Platform.script)));
+  // This is a pub workspace: package_config.json lives at the repo root.
+  var repoRoot = p.dirname(packageRoot);
   var cache = FlutterCache.fromRunningSdk();
 
   var assetsDir = p.join(packageRoot, 'build', 'assets');
@@ -580,7 +587,7 @@ Future<void> main() async {
     entrypoint: p.join(packageRoot, 'example', 'hello.dart'),
     outputDill: kernelBlob,
     packageConfig:
-        p.join(packageRoot, '.dart_tool', 'package_config.json'),
+        p.join(repoRoot, '.dart_tool', 'package_config.json'),
     cache: cache,
   );
 
