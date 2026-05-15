@@ -93,6 +93,17 @@ Future<void> _dashboard(Terminal terminal) async {
     });
   }
 
+  // Quit when the user presses q, or 1.5s after the build finishes.
+  final quit = Completer<void>();
+  void maybeFinish() {
+    if (emitted >= _script.length && !done) {
+      done = true;
+      Timer(const Duration(milliseconds: 1500), () {
+        if (!quit.isCompleted) quit.complete();
+      });
+    }
+  }
+
   // Emit one scripted log line into the scrollback above the panel.
   void emitLogLine() {
     if (emitted >= _script.length) return;
@@ -113,6 +124,7 @@ Future<void> _dashboard(Terminal terminal) async {
       b.writeAt(0, 6, message);
     });
     repaint();
+    maybeFinish();
   }
 
   repaint();
@@ -122,32 +134,17 @@ Future<void> _dashboard(Terminal terminal) async {
   final logTicker =
       Timer.periodic(const Duration(milliseconds: 350), (_) => emitLogLine());
 
-  // Quit when the user presses q, or 1.5s after the build finishes.
-  final quit = Completer<void>();
-  void maybeFinish() {
-    if (emitted >= _script.length && !done) {
-      done = true;
-      logTicker.cancel();
-      Timer(const Duration(milliseconds: 1500), () {
-        if (!quit.isCompleted) quit.complete();
-      });
-    }
-  }
-
   final keySub = terminal.keys.listen((event) {
     if (event is CharKey && event.rune == 0x71 /* q */) {
       if (!quit.isCompleted) quit.complete();
     }
   });
-  final finishTicker = Timer.periodic(
-      const Duration(milliseconds: 100), (_) => maybeFinish());
 
   try {
     await quit.future;
   } finally {
     ticker.cancel();
     logTicker.cancel();
-    finishTicker.cancel();
     await resizeSub.cancel();
     await keySub.cancel();
   }
