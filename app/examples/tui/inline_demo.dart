@@ -21,8 +21,16 @@ Future<void> main() async {
 
 // Braille spinner frames.
 const _spinner = [
-  0x280B, 0x2819, 0x2839, 0x2838, 0x283C,
-  0x2834, 0x2826, 0x2827, 0x2807, 0x280F,
+  0x280B,
+  0x2819,
+  0x2839,
+  0x2838,
+  0x283C,
+  0x2834,
+  0x2826,
+  0x2827,
+  0x2807,
+  0x280F,
 ];
 
 Future<void> _statusPanel(Terminal terminal) async {
@@ -44,8 +52,12 @@ Future<void> _statusPanel(Terminal terminal) async {
       final (label, color) = _phase(progress);
 
       // Row 1: spinner + phase label + progress bar + percentage.
-      b.set(1, 2,
-          Cell(rune: _spinner[frames % _spinner.length], fg: Color.brightYellow));
+      b.set(
+          1,
+          2,
+          Cell(
+              rune: _spinner[frames % _spinner.length],
+              fg: Color.brightYellow));
       b.writeAt(1, 4, label.padRight(15), style: TextStyle.bold, fg: color);
       final barStart = 20;
       final barEnd = w - 7;

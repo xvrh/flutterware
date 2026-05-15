@@ -20,7 +20,8 @@ class Color {
   const Color._(this._kind, this._ansiIndex, this.r, this.g, this.b);
 
   static const Color defaultFg = Color._(0, 0, 0, 0, 0);
-  static const Color defaultBg = Color._(0, 1, 0, 0, 0); // sentinel distinct from defaultFg
+  static const Color defaultBg =
+      Color._(0, 1, 0, 0, 0); // sentinel distinct from defaultFg
 
   // 16 ANSI named colors (indices match the ANSI SGR convention).
   static const Color black = Color._(1, 0, 0, 0, 0);
@@ -41,10 +42,13 @@ class Color {
   static const Color brightWhite = Color._(1, 15, 0, 0, 0);
 
   const factory Color.rgb(int r, int g, int b) = Color._rgb;
-  const Color._rgb(this.r, this.g, this.b) : _kind = 2, _ansiIndex = 0;
+  const Color._rgb(this.r, this.g, this.b)
+      : _kind = 2,
+        _ansiIndex = 0;
 
   int get ansiIndex {
-    assert(_kind == 1, 'ansiIndex is only valid for ANSI colors (kind=1), got kind=$_kind');
+    assert(_kind == 1,
+        'ansiIndex is only valid for ANSI colors (kind=1), got kind=$_kind');
     return _ansiIndex;
   }
 

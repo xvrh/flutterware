@@ -74,6 +74,7 @@ class Terminal {
 
   int get rows => _rows;
   int get cols => _cols;
+
   /// Emits when the terminal is resized. The caller is responsible for
   /// calling [draw] in response — the engine clears the screen on resize
   /// but does not repaint until asked.
@@ -214,7 +215,8 @@ class Terminal {
   void draw(void Function(CellBuffer buffer) paint) {
     _back.clear();
     paint(_back);
-    final diff = encodeDiff(_front, _back, originRow: _originRow, originCol: _originCol);
+    final diff =
+        encodeDiff(_front, _back, originRow: _originRow, originCol: _originCol);
     if (diff.isNotEmpty) {
       stdout.write(diff);
     }

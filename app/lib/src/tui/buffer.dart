@@ -62,7 +62,8 @@ class CellBuffer {
 
   void copyFrom(CellBuffer other) {
     if (other.rows != rows || other.cols != cols) {
-      throw ArgumentError('size mismatch: $rows×$cols vs ${other.rows}×${other.cols}');
+      throw ArgumentError(
+          'size mismatch: $rows×$cols vs ${other.rows}×${other.cols}');
     }
     for (var i = 0; i < _cells.length; i++) {
       _cells[i] = other._cells[i];

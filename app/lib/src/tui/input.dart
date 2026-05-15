@@ -18,7 +18,18 @@ enum SpecialKeyCode {
   pageDown,
   delete,
   insert,
-  f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12,
+  f1,
+  f2,
+  f3,
+  f4,
+  f5,
+  f6,
+  f7,
+  f8,
+  f9,
+  f10,
+  f11,
+  f12,
 }
 
 sealed class KeyEvent {
@@ -205,7 +216,8 @@ KeyEvent? _consumeCsi(Queue<int> bytes, {required bool streamClosed}) {
   // and finally one final byte (0x40–0x7e).
   final paramBytes = <int>[];
   var idx = 0;
-  while (idx < snapshot.length && snapshot[idx] >= 0x30 && snapshot[idx] <= 0x3f) {
+  while (
+      idx < snapshot.length && snapshot[idx] >= 0x30 && snapshot[idx] <= 0x3f) {
     paramBytes.add(snapshot[idx]);
     idx++;
   }

@@ -48,7 +48,8 @@ void main() {
       await input.close();
     });
 
-    test('non-response bytes before the response are forwarded as leftover', () async {
+    test('non-response bytes before the response are forwarded as leftover',
+        () async {
       // The user typed 'A' before the response arrived.
       final input = StreamController<List<int>>();
       final future = queryCursorPosition(
@@ -67,7 +68,8 @@ void main() {
       await input.close();
     });
 
-    test('non-response bytes after the response are forwarded as leftover', () async {
+    test('non-response bytes after the response are forwarded as leftover',
+        () async {
       // The user typed 'B' right after the response.
       final input = StreamController<List<int>>();
       final future = queryCursorPosition(
@@ -99,7 +101,8 @@ void main() {
         fallbackRow: -1,
       );
 
-      input.add('\x1b[A'.codeUnits);     // arrow up — must NOT be consumed as response
+      input.add(
+          '\x1b[A'.codeUnits); // arrow up — must NOT be consumed as response
       input.add('\x1b[10;20R'.codeUnits); // real response
 
       final result = await future;
@@ -123,7 +126,8 @@ void main() {
       await input.close();
     });
 
-    test('timeout forwards any bytes received before timeout as leftover', () async {
+    test('timeout forwards any bytes received before timeout as leftover',
+        () async {
       final input = StreamController<List<int>>();
       final future = queryCursorPosition(
         bytes: input.stream,
@@ -141,7 +145,8 @@ void main() {
       await input.close();
     });
 
-    test('timeout with mid-sequence pending bytes forwards them as leftover', () async {
+    test('timeout with mid-sequence pending bytes forwards them as leftover',
+        () async {
       // The terminal started sending what looked like a response but never
       // completed it. The bytes ESC [ 1 are "tentatively consumed" by the
       // parser; on timeout they must be forwarded as leftover, not dropped.

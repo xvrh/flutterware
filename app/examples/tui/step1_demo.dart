@@ -31,8 +31,16 @@ const _ansiColors = <(String, Color)>[
 
 // Braille spinner frames.
 const _spinner = [
-  0x280B, 0x2819, 0x2839, 0x2838, 0x283C,
-  0x2834, 0x2826, 0x2827, 0x2807, 0x280F,
+  0x280B,
+  0x2819,
+  0x2839,
+  0x2838,
+  0x283C,
+  0x2834,
+  0x2826,
+  0x2827,
+  0x2807,
+  0x280F,
 ];
 
 Future<void> _showcase(Terminal terminal) async {
@@ -115,8 +123,12 @@ Future<void> _showcase(Terminal terminal) async {
       b.writeAt(row, 26, 'Frames:', style: TextStyle.bold);
       b.writeAt(row, 34, '$frames', fg: Color.brightCyan);
       b.writeAt(row, 46, 'Spinner:', style: TextStyle.bold);
-      b.set(row, 55,
-          Cell(rune: _spinner[frames % _spinner.length], fg: Color.brightYellow));
+      b.set(
+          row,
+          55,
+          Cell(
+              rune: _spinner[frames % _spinner.length],
+              fg: Color.brightYellow));
       row += 2;
 
       // Scrolling log of recent key events.

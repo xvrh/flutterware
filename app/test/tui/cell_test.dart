@@ -37,8 +37,16 @@ void main() {
     });
 
     test('value equality', () {
-      final a = Cell(rune: 0x41, fg: Color.red, bg: Color.defaultBg, style: TextStyle.bold);
-      final b = Cell(rune: 0x41, fg: Color.red, bg: Color.defaultBg, style: TextStyle.bold);
+      final a = Cell(
+          rune: 0x41,
+          fg: Color.red,
+          bg: Color.defaultBg,
+          style: TextStyle.bold);
+      final b = Cell(
+          rune: 0x41,
+          fg: Color.red,
+          bg: Color.defaultBg,
+          style: TextStyle.bold);
       expect(a, equals(b));
       expect(a.hashCode, equals(b.hashCode));
     });
