@@ -6,3 +6,4 @@ library;
 import '../geometry.dart';
 
 part 'box_constraints.dart';
+part 'render_object.dart';
