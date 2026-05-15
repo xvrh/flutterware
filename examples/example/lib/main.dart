@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+const _fwMarker = String.fromEnvironment('FW_MARKER', defaultValue: '<none>');
+
 void main() {
   runApp(const MyApp());
 }
@@ -65,6 +67,9 @@ class _MyHomePageState extends State<MyHomePage> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         children: [
+          Text('FW_MARKER: $_fwMarker',
+              key: const Key('fw-marker'),
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           Text('Language: ${Localizations.localeOf(context).languageCode}'),
           Text(MaterialLocalizations.of(context).alertDialogLabel),
           Text(MaterialLocalizations.of(context).invalidTimeLabel),
