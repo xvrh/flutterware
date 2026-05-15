@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
-  test('compiles hello.dart to a non-empty kernel blob', () async {
+  test('compiles scene.dart to a non-empty kernel blob', () async {
     var packageRoot = Directory.current.path; // `dart test` runs from <app>
     var outDir = Directory.systemTemp.createTempSync('embedder_compile_test');
     addTearDown(() => outDir.deleteSync(recursive: true));
@@ -15,7 +15,7 @@ void main() {
     // repo root (the parent of the app package), not per-member.
     var repoRoot = p.dirname(packageRoot);
     var dill = await compileToKernel(
-      entrypoint: p.join(packageRoot, 'tool', 'embedder', 'hello.dart'),
+      entrypoint: p.join(packageRoot, 'tool', 'embedder', 'scene.dart'),
       outputDill: outputDill,
       packageConfig:
           p.join(repoRoot, '.dart_tool', 'package_config.json'),
