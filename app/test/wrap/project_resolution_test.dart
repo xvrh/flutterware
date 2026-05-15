@@ -35,4 +35,22 @@ void main() {
     Directory(p.join(tmp.path, '.git')).createSync();
     expect(resolveWorktreeName(tmp), equals(p.basename(tmp.path)));
   });
+
+  test('resolveProject returns a ProjectContext for a nested directory', () {
+    File(p.join(tmp.path, 'flutter_version')).writeAsStringSync('3.44.0\n');
+    Directory(p.join(tmp.path, '.git')).createSync();
+    final nested = Directory(p.join(tmp.path, 'sub'))..createSync();
+    final ctx = resolveProject(nested);
+    expect(ctx, isNotNull);
+    expect(ctx!.projectRoot.resolveSymbolicLinksSync(),
+        equals(tmp.resolveSymbolicLinksSync()));
+    expect(ctx.worktreeName, equals(p.basename(tmp.path)));
+  });
+
+  test(
+      'resolveProject returns null when start is not inside a flutterware project',
+      () {
+    final isolated = Directory(p.join(tmp.path, 'no_marker'))..createSync();
+    expect(resolveProject(isolated), isNull);
+  });
 }
