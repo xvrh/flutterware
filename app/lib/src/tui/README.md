@@ -82,7 +82,7 @@ frames.
 
 ## Current limitations
 
-Stage 1 is intentionally scoped. Not yet supported:
+Stage 3 is intentionally scoped. Not yet supported:
 
 - No widget layer yet (`Widget`/`Element`/`setState`) — stage 4.
 - Repaint is whole-tree: with no layer model, `markNeedsPaint` repaints
