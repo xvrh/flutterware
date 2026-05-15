@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../tui.dart';
+import 'package:flutterware_app/src/tui/tui.dart';
 
 Future<void> main() async {
   await Terminal.run((terminal) async {
