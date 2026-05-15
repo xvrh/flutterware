@@ -2,10 +2,11 @@
 
 Experimental Flutter engine embedder, part of `flutterware_app`.
 
-**Step 3a (current):** an out-of-process Flutter-engine guest renders an
-animated, interactive scene with the software renderer into shared
-`IOSurface`s; the flutterware desktop GUI displays it live in an external
-`Texture`. The panel is resizable and forwards pointer/keyboard input.
+**Step 3b (current):** an out-of-process Flutter-engine guest renders an
+animated, interactive scene with the **Metal renderer**, directly into shared
+`IOSurface`-backed Metal textures — a zero-copy path with no per-frame copy.
+The flutterware desktop GUI displays it live in an external `Texture`. The
+panel is resizable and forwards pointer/keyboard input.
 
 ## Run the GUI harness
 
@@ -31,10 +32,11 @@ Spawns the guest and writes its first frame to `app/build/embedder/scene.png`.
 
 Two processes, a Unix-domain-socket control channel, and shared `IOSurface`s:
 
-- **Guest** (`native/`) — the long-lived C host embedding `FlutterEmbedder`.
-  `host.c` runs the engine; `surface.{c,h}` is the `IOSurface` triple-buffer
-  ring; `ipc.{c,h}` is the framed socket protocol; `input.{c,h}` translates
-  pointer/key events.
+- **Guest** (`native/`) — the long-lived C/Objective-C host embedding
+  `FlutterEmbedder`. `host.c` runs the engine with the Metal renderer;
+  `surface.{m,h}` owns the `MTLDevice`/`MTLCommandQueue` and the ring of
+  `IOSurface`-backed Metal textures; `ipc.{c,h}` is the framed socket protocol;
+  `input.{c,h}` translates pointer/key events.
 - **GUI runtime** (`lib/src/embedder/`) — `embedded_engine.dart` builds and
   spawns the guest, owns the socket, and bridges frames to the texture;
   `embedder_harness_screen.dart` is the dev screen; `protocol.dart` is the wire
@@ -60,5 +62,5 @@ The GUI texture path is verified manually via the harness.
 
 ## Not yet implemented
 
-GPU/Metal rendering and a zero-copy path (step 3b), hot reload (step 4), text
-input/IME, multiple embedded engines, non-macOS platforms.
+Hot reload (step 4), text input/IME, multiple embedded engines, non-macOS
+platforms.

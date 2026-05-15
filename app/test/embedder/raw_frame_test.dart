@@ -16,9 +16,9 @@ Uint8List _rawFrame(int width, int height, int rowBytes, List<int> pixels) {
 }
 
 void main() {
-  test('decodes a tight 2x1 RGBA buffer', () {
-    // Pixel 0 = blue (B=255), pixel 1 = red (R=255), RGBA byte order.
-    var pixels = [0, 0, 255, 255, 255, 0, 0, 255];
+  test('decodes a tight 2x1 BGRA buffer', () {
+    // Pixel 0 = blue (B=255), pixel 1 = red (R=255), BGRA byte order.
+    var pixels = [255, 0, 0, 255, 0, 0, 255, 255];
     var image = decodeRawFrame(_rawFrame(2, 1, 8, pixels));
 
     expect(image.width, 2);
@@ -35,8 +35,8 @@ void main() {
 
   test('honours row-stride padding', () {
     // 1x2 image, rowBytes 8 = 4 pixel bytes + 4 padding bytes per row.
-    var row0 = [0, 0, 255, 255, 9, 9, 9, 9]; // blue + padding (RGBA)
-    var row1 = [255, 0, 0, 255, 9, 9, 9, 9]; // red + padding (RGBA)
+    var row0 = [255, 0, 0, 255, 9, 9, 9, 9]; // blue + padding (BGRA)
+    var row1 = [0, 0, 255, 255, 9, 9, 9, 9]; // red + padding (BGRA)
     var image = decodeRawFrame(_rawFrame(1, 2, 8, [...row0, ...row1]));
 
     expect(image.width, 1);
