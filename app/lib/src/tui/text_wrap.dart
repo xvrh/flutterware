@@ -4,6 +4,8 @@ library;
 /// Wrap [text] to lines no wider than [width] runes.
 ///
 /// Splits on existing '\n' first, then word-wraps each segment on spaces.
+/// Runs of spaces collapse to one and leading/trailing spaces are trimmed;
+/// blank lines from consecutive '\n' are preserved.
 /// A single word longer than [width] is hard-broken at the width boundary.
 /// When [width] <= 0, returns the segments split only on '\n'.
 List<String> wrapText(String text, int width) {
@@ -13,7 +15,7 @@ List<String> wrapText(String text, int width) {
   var lines = <String>[];
   for (var segment in segments) {
     var current = '';
-    for (var word in segment.split(' ')) {
+    for (var word in segment.split(' ').where((w) => w.isNotEmpty)) {
       var w = word;
       // Hard-break a word that cannot fit even on its own line.
       while (w.runes.length > width) {

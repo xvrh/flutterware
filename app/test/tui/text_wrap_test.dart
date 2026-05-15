@@ -34,5 +34,17 @@ void main() {
     test('empty string yields one empty line', () {
       expect(wrapText('', 10), ['']);
     });
+
+    test('collapses runs of spaces', () {
+      expect(wrapText('a   b', 20), ['a b']);
+    });
+
+    test('trims leading and trailing spaces', () {
+      expect(wrapText('  hi  ', 20), ['hi']);
+    });
+
+    test('trailing space does not create a ghost empty line', () {
+      expect(wrapText('hello ', 5), ['hello']);
+    });
   });
 }
