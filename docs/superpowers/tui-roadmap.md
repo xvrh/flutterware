@@ -27,7 +27,7 @@ could use a richer status/dashboard UI.
 | **`print_above`** | Print log lines into scrollback above an inline region | ✅ Done |
 | **2. Paint kit** | `CellRect`/`CellSize` geometry + procedural paint helpers (text, border, fill) | ✅ Done |
 | **3. Render tree** | `RenderObject`/`RenderBox`, `BoxConstraints`, `Row`/`Column`/`Padding` | ✅ Done |
-| **4. Widget layer** | `Widget`/`Element`, `StatelessWidget`/`StatefulWidget`, `setState` | ⬜ Not started |
+| **4. Widget layer** | `Widget`/`Element`, `StatelessWidget`/`StatefulWidget`, `setState` | ✅ Done |
 | **5. Integration** | Replace the flutterware CLI startup UX with a real TUI screen | ⬜ Not started |
 
 Each stage is independently useful: after stage 1 you have a working terminal
@@ -46,6 +46,8 @@ framework.
   [plan](plans/2026-05-15-tui-stage2-paint-kit.md)
 - Stage 3 — [spec](specs/2026-05-15-tui-stage3-render-tree-design.md) ·
   [plan](plans/2026-05-15-tui-stage3-render-tree.md)
+- Stage 4 — [spec](specs/2026-05-15-tui-stage4-widget-layer-design.md) ·
+  [plan](plans/2026-05-15-tui-stage4-widget-layer.md)
 
 ## Key design decisions
 
@@ -92,7 +94,7 @@ the [design spec](specs/2026-05-15-tui-print-above-design.md).
 
 ## Known limitations carried forward
 
-These are accepted in stage 1 and should be revisited as later stages land:
+These are accepted in earlier stages and should be revisited as later stages land:
 
 - Non-tty stdin throws `StdinException` on startup (before alt-screen entry —
   no terminal damage). A try/catch with a fallback would fix it.
@@ -100,6 +102,10 @@ These are accepted in stage 1 and should be revisited as later stages land:
   dropped, between the cursor-query subscription cancelling and the key parser
   subscribing.
 - No re-anchoring when the terminal height shrinks below the inline region.
-- No wide-character / emoji width handling — deferred to stage 4, when the
-  `Text` widget arrives. The `Cell.width` field is reserved for it.
+- No wide-character / emoji width handling — the `Text` widget arrived in
+  stage 4, but wide-character support is deferred to a later stage. The
+  `Cell.width` field is reserved for it.
+- No GlobalKey, focus system, or animation/tickers — deferred beyond stage 4.
+- Repaint is whole-tree: with no layer model, `markNeedsPaint` repaints
+  everything. Localized repaint is deferred to a later stage.
 - Windows: signal-driven features (resize via SIGWINCH) are Unix-only.
