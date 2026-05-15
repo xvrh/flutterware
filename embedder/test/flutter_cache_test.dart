@@ -11,12 +11,7 @@ void main() {
         reason: 'platform_strong.dill should exist at ${cache.platformDill}');
     expect(File(cache.icuData).existsSync(), isTrue,
         reason: 'icudtl.dat should exist at ${cache.icuData}');
-    expect(
-        Directory(cache.macOsFrameworkDir).existsSync(), isTrue,
-        reason: 'framework dir should exist at ${cache.macOsFrameworkDir}');
-    expect(
-        Directory('${cache.macOsFrameworkDir}/FlutterMacOS.framework')
-            .existsSync(),
-        isTrue);
+    expect(cache.engineRevision, matches(RegExp(r'^[0-9a-f]{40}$')),
+        reason: 'engine.stamp should hold a 40-char git revision');
   });
 }

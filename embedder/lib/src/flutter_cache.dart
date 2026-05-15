@@ -37,7 +37,8 @@ class FlutterCache {
   /// ICU data the engine needs at startup.
   String get icuData => p.join(_engine, 'darwin-x64', 'icudtl.dat');
 
-  /// Directory containing `FlutterMacOS.framework` (the `-F` link path).
-  String get macOsFrameworkDir => p.join(_engine, 'darwin-x64',
-      'FlutterMacOS.xcframework', 'macos-arm64_x86_64');
+  /// The engine revision the cached artifacts were built at. Used to fetch the
+  /// matching `FlutterEmbedder.framework` from Flutter's artifact storage.
+  String get engineRevision =>
+      File(p.join(cacheDir, 'engine.stamp')).readAsStringSync().trim();
 }
