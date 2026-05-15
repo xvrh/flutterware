@@ -12,7 +12,7 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('wrap_inst');
     // A fake "shared SDK".
     sdk = Directory(p.join(tmp.path, 'sharedsdk'))..createSync();
-    Directory(p.join(sdk.path, 'bin'))..createSync();
+    Directory(p.join(sdk.path, 'bin')).createSync();
     Directory(p.join(sdk.path, 'bin', 'cache')).createSync();
     File(p.join(sdk.path, 'bin', 'flutter')).writeAsStringSync('#real\n');
     File(p.join(sdk.path, 'bin', 'dart')).writeAsStringSync('#real\n');
