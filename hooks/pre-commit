@@ -1,0 +1,55 @@
+#!/bin/bash
+# Pre-commit hook — formats staged Dart files so unformatted code never
+# reaches CI. Enabled per-clone via `core.hooksPath=hooks`; run once:
+#
+#   dart tool/install_hooks.dart
+#
+# Compiles tool/format_pre_commit.dart to an AOT binary the first time it
+# runs, and whenever its source or the relevant pubspec.lock entries change.
+# Every subsequent commit just execs the cached binary — no `pub get`, no
+# `dart run`, near-instant.
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+BIN=build/pre_commit
+LOCKHASH=build/pre_commit.lockhash
+SOURCE=tool/format_pre_commit.dart
+
+# Hash only the pubspec.lock entries we compile against, so unrelated
+# dependency bumps don't force a rebuild.
+relevant_lockhash() {
+  awk '
+    /^  (analyzer|dart_style|path|project_tools|pub_semver):/ {p=1; print; next}
+    /^  [a-z][a-z0-9_]*:[[:space:]]*$/ {p=0}
+    p
+  ' pubspec.lock | cksum | awk '{print $1"-"$2}'
+}
+
+CURRENT_LOCKHASH=$(relevant_lockhash)
+
+needs_build=0
+if [ ! -x "$BIN" ]; then
+  needs_build=1
+elif [ ! -f "$LOCKHASH" ] || [ "$(cat "$LOCKHASH")" != "$CURRENT_LOCKHASH" ]; then
+  needs_build=1
+elif [ "$SOURCE" -nt "$BIN" ]; then
+  needs_build=1
+fi
+
+if [ "$needs_build" = 1 ]; then
+  # Compiling needs resolved deps. If they're missing, skip the hook
+  # gracefully rather than block the commit — CI still catches formatting.
+  if [ ! -f .dart_tool/package_config.json ]; then
+    echo "pre-commit: deps not resolved — run 'flutter pub get' to enable the format hook"
+    exit 0
+  fi
+  echo "pre-commit: building $BIN..."
+  mkdir -p build
+  dart compile exe "$SOURCE" -o "$BIN"
+  echo "$CURRENT_LOCKHASH" > "$LOCKHASH"
+fi
+
+exec "$BIN"
