@@ -200,7 +200,9 @@ class Painter {
   /// When [wrap] is true, [text] is word-wrapped to the rect width; otherwise
   /// it is split only on '\n' and long lines are clipped at the right edge.
   /// The line block is positioned vertically by [vAlign] and each line
-  /// horizontally by [hAlign]. Rows that overflow the rect height are dropped.
+  /// horizontally by [hAlign]. When there are more lines than [rect] is tall,
+  /// the leading lines are kept and the trailing overflow is dropped,
+  /// regardless of [vAlign].
   void drawText(
     CellRect rect,
     String text, {
