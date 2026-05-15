@@ -112,4 +112,54 @@ void main() {
       expect(c.vertical, '|');
     });
   });
+
+  group('Painter.drawBorder', () {
+    test('draws an ascii box around the rect', () {
+      var b = CellBuffer(3, 4);
+      Painter(b).drawBorder(
+        CellRect.fromTLWH(0, 0, 4, 3),
+        chars: BorderChars.ascii(),
+      );
+      expect(dump(b), ['+--+', '|  |', '+--+']);
+    });
+
+    test('leaves the interior untouched', () {
+      var b = CellBuffer(3, 3);
+      Painter(b).drawBorder(
+        CellRect.fromTLWH(0, 0, 3, 3),
+        chars: BorderChars.ascii(),
+      );
+      expect(b.get(1, 1).rune, 0x20); // still blank
+    });
+
+    test('a 1-wide rect does not crash and draws vertical edges', () {
+      var b = CellBuffer(4, 1);
+      Painter(b).drawBorder(
+        CellRect.fromTLWH(0, 0, 1, 4),
+        chars: BorderChars.ascii(),
+      );
+      // Middle rows are vertical edges; no exception thrown.
+      expect(b.get(1, 0).rune, '|'.runes.first);
+      expect(b.get(2, 0).rune, '|'.runes.first);
+    });
+
+    test('an empty rect draws nothing', () {
+      var b = CellBuffer(3, 3);
+      Painter(b).drawBorder(
+        CellRect.fromTLWH(0, 0, 0, 0),
+        chars: BorderChars.ascii(),
+      );
+      expect(dump(b), ['   ', '   ', '   ']);
+    });
+
+    test('respects the clip', () {
+      var b = CellBuffer(4, 4);
+      Painter(b).clip(CellRect.fromTLWH(0, 0, 4, 2)).drawBorder(
+            CellRect.fromTLWH(0, 0, 4, 4),
+            chars: BorderChars.ascii(),
+          );
+      // Only the top two rows of the border survive the clip.
+      expect(dump(b), ['+--+', '|  |', '    ', '    ']);
+    });
+  });
 }

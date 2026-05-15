@@ -155,4 +155,40 @@ class Painter {
       _put(start.row + i, start.col, cell);
     }
   }
+
+  /// Draw a box border around the perimeter of [rect] using [chars].
+  ///
+  /// The interior is left untouched. A rect narrower or shorter than 2 cells
+  /// degrades gracefully — it draws what edge cells it can without crashing.
+  void drawBorder(
+    CellRect rect, {
+    BorderChars chars = const BorderChars.single(),
+    Color fg = Color.defaultFg,
+    Color bg = Color.defaultBg,
+    int style = 0,
+  }) {
+    if (rect.isEmpty) return;
+
+    Cell glyph(String s) =>
+        Cell(rune: s.runes.first, fg: fg, bg: bg, style: style);
+
+    var top = rect.top;
+    var bottom = rect.bottom - 1;
+    var left = rect.left;
+    var right = rect.right - 1;
+
+    // Edges first; corners overwrite the ends.
+    for (var c = left; c <= right; c++) {
+      _put(top, c, glyph(chars.horizontal));
+      _put(bottom, c, glyph(chars.horizontal));
+    }
+    for (var r = top; r <= bottom; r++) {
+      _put(r, left, glyph(chars.vertical));
+      _put(r, right, glyph(chars.vertical));
+    }
+    _put(top, left, glyph(chars.topLeft));
+    _put(top, right, glyph(chars.topRight));
+    _put(bottom, left, glyph(chars.bottomLeft));
+    _put(bottom, right, glyph(chars.bottomRight));
+  }
 }
