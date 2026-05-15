@@ -27,7 +27,8 @@ void main() {
 
     final dir = p.join(tmp.path, 'sessions', 'sess-1');
     expect(File(p.join(dir, 'output.log')).readAsStringSync(), 'hello');
-    final meta = jsonDecode(File(p.join(dir, 'meta.json')).readAsStringSync());
+    final meta = jsonDecode(File(p.join(dir, 'meta.json')).readAsStringSync())
+        as Map<String, Object?>;
     expect(meta['exitCode'], 0);
     expect(meta['worktree'], 'main');
   });
