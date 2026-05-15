@@ -133,13 +133,18 @@ abstract class Element implements BuildContext {
   }
 
   /// Rebuilds this element if it is active and dirty.
+  ///
+  /// Does not assert `!_dirty` afterwards: a `markNeedsBuild()` issued
+  /// *during* [performRebuild] (e.g. a `setState` inside `build`) legitimately
+  /// re-dirties this element. [BuildOwner.buildScope] re-sorts and revisits
+  /// such elements within the same pass, so the re-entrant request is honoured
+  /// rather than swallowed.
   void rebuild({bool force = false}) {
     assert(_lifecycleState != _ElementLifecycle.initial);
     if (_lifecycleState != _ElementLifecycle.active || (!_dirty && !force)) {
       return;
     }
     performRebuild();
-    assert(!_dirty);
   }
 
   /// Performs the subclass-specific rebuild. The base clears the dirty flag.
