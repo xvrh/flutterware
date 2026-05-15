@@ -79,6 +79,34 @@ void main() {
       expect(c.smallest, CellSize(1, 2));
     });
 
+    test('deflate collapse: max is pinned to min when insets exceed max', () {
+      // Insets of 3 on each side → horizontal/vertical total is 6, which
+      // exceeds maxWidth 4 and maxHeight 4. Both maxes must be pinned to the
+      // resulting min (0) rather than going negative.
+      var c =
+          BoxConstraints(minWidth: 0, maxWidth: 4, minHeight: 0, maxHeight: 4);
+      var d = c.deflate(EdgeInsets.all(3));
+      expect(d.minWidth, 0);
+      expect(d.maxWidth, 0); // pinned to minWidth — never below it
+      expect(d.minHeight, 0);
+      expect(d.maxHeight, 0); // pinned to minHeight — never below it
+      // Constraint stays normalised.
+      expect(d.maxWidth >= d.minWidth, isTrue);
+      expect(d.maxHeight >= d.minHeight, isTrue);
+    });
+
+    test('enforce clamps a too-small child up to the parent minimum', () {
+      var child = BoxConstraints.loose(CellSize(1, 1));
+      var parent = BoxConstraints(
+          minWidth: 5, maxWidth: 10, minHeight: 5, maxHeight: 10);
+      var e = child.enforce(parent);
+      expect(e.minWidth, 5);
+      expect(e.minHeight, 5);
+      // Result must still be a valid (normalised) constraint.
+      expect(e.maxWidth >= e.minWidth, isTrue);
+      expect(e.maxHeight >= e.minHeight, isTrue);
+    });
+
     test('equality is structural', () {
       expect(BoxConstraints.tight(CellSize(2, 2)),
           BoxConstraints.tight(CellSize(2, 2)));
