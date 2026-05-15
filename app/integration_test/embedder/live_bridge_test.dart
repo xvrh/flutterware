@@ -53,7 +53,6 @@ void main() {
 
     var conn = await server.first;
     var reader = FrameReader();
-    // ignore: close_sinks, closed below via the socket's onDone handler.
     var incoming = StreamController<EmbedderMessage>();
     conn.listen((chunk) {
       for (var message in reader.addBytes(chunk)) {
@@ -104,5 +103,6 @@ void main() {
 
     conn.add(encodeMessage(const ShutdownMessage()));
     await conn.flush();
+    await conn.close();
   }, timeout: const Timeout(Duration(minutes: 3)));
 }
