@@ -256,6 +256,18 @@ void main() {
       expect(dump(b), ['      ', '  ab  ', '      ']);
     });
 
+    test('respects the clip; alignment stays relative to the logical rect', () {
+      var b = CellBuffer(1, 8);
+      // 'ab' right-aligned in an 8-wide rect lands on cols 6 and 7.
+      // The clip cuts off col 7, so only 'a' (col 6) survives.
+      Painter(b).clip(CellRect.fromTLWH(0, 0, 7, 1)).drawText(
+            CellRect.fromTLWH(0, 0, 8, 1),
+            'ab',
+            hAlign: HorizontalAlign.right,
+          );
+      expect(dump(b), ['      a ']);
+    });
+
     test('empty rect draws nothing', () {
       var b = CellBuffer(2, 2);
       Painter(b).drawText(CellRect.fromTLWH(0, 0, 0, 0), 'x');
