@@ -1,28 +1,29 @@
 import 'dart:io';
 
-import 'package:flutterware_embedder/compiler.dart';
-import 'package:flutterware_embedder/src/flutter_cache.dart';
+import 'package:flutterware_app/src/embedder/compiler.dart';
+import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:path/path.dart' as p;
 
-/// Downloads FlutterEmbedder.framework if needed, compiles example/hello.dart,
+/// Downloads FlutterEmbedder.framework if needed, compiles hello.dart,
 /// builds the C host, runs it. Exits with the host's exit code.
 Future<void> main() async {
-  // <embedder>/tool/run.dart -> <embedder>
-  var packageRoot = p.dirname(p.dirname(p.fromUri(Platform.script)));
+  // <app>/tool/embedder/run.dart -> <app>
+  var packageRoot =
+      p.dirname(p.dirname(p.dirname(p.fromUri(Platform.script))));
   // This is a pub workspace: package_config.json lives at the repo root.
   var repoRoot = p.dirname(packageRoot);
   var cache = FlutterCache.fromRunningSdk();
 
-  var assetsDir = p.join(packageRoot, 'build', 'assets');
+  var assetsDir = p.join(packageRoot, 'build', 'embedder', 'assets');
   var kernelBlob = p.join(assetsDir, 'kernel_blob.bin');
-  var nativeBuildDir = p.join(packageRoot, 'build', 'native');
+  var nativeBuildDir = p.join(packageRoot, 'build', 'embedder', 'native');
   var engineDir = p.join(packageRoot, '.engine');
 
   await _ensureEmbedderFramework(cache, engineDir);
 
   stdout.writeln('[run] compiling hello.dart -> kernel_blob.bin');
   await compileToKernel(
-    entrypoint: p.join(packageRoot, 'example', 'hello.dart'),
+    entrypoint: p.join(packageRoot, 'tool', 'embedder', 'hello.dart'),
     outputDill: kernelBlob,
     packageConfig:
         p.join(repoRoot, '.dart_tool', 'package_config.json'),

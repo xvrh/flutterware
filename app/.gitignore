@@ -31,6 +31,9 @@
 .pub/
 /build/
 
+# Embedder: downloaded FlutterEmbedder.framework (see lib/src/embedder/)
+/.engine/
+
 # Web related
 lib/generated_plugin_registrant.dart
 

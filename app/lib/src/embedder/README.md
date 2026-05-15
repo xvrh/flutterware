@@ -1,6 +1,6 @@
-# flutterware_embedder
+# Embedder
 
-Experimental Flutter engine embedder.
+Experimental Flutter engine embedder, part of `flutterware_app`.
 
 **Step 1 (current):** compile a hello-world Dart program to kernel with the
 Flutter `frontend_server` and run it headless inside a C host that embeds the
@@ -10,7 +10,7 @@ No window, no rendering.
 ## Run it
 
 ```sh
-dart run embedder/tool/run.dart
+dart run app/tool/embedder/run.dart
 ```
 
 Run with the Dart SDK bundled in your Flutter checkout
@@ -19,35 +19,49 @@ Run with the Dart SDK bundled in your Flutter checkout
 
 ## How it works
 
-`tool/run.dart` chains four steps:
+`tool/embedder/run.dart` chains four steps:
 
 1. **Fetch the engine.** The C embedder API (`FlutterEngineRun`, …) is not
    exported by the `FlutterMacOS.framework` in the local Flutter cache — that is
    the high-level Obj-C desktop framework. The C API ships in a separate
    artifact, `FlutterEmbedder.framework`, downloaded from Flutter's artifact
    storage keyed by the engine revision in `<flutter>/bin/cache/engine.stamp`
-   and cached under `embedder/.engine/` (gitignored).
-2. **Compile.** `frontend_server` compiles `example/hello.dart` against the
-   Flutter patched SDK into `build/assets/kernel_blob.bin`.
+   and cached under `app/.engine/` (gitignored).
+2. **Compile.** `frontend_server` compiles `tool/embedder/hello.dart` against
+   the Flutter patched SDK into `build/embedder/assets/kernel_blob.bin`.
 3. **Build the host.** CMake builds `native/host.c` against
    `FlutterEmbedder.framework`.
 4. **Run.** The host starts the engine headless (software renderer, no window),
    the engine runs the kernel's `main()`, and Dart `print()` output arrives via
    the embedder API's `log_message_callback` and is echoed to stdout.
 
-## Layout
+## Layout (paths relative to `app/`)
 
-- `lib/compiler.dart` — drives `frontend_server` to produce `kernel_blob.bin`.
-- `lib/src/flutter_cache.dart` — locates Flutter cache artifacts and the engine
-  revision.
-- `bin/compile.dart` — CLI wrapper around the compiler.
+- `lib/src/embedder/compiler.dart` — drives `frontend_server` to produce
+  `kernel_blob.bin`.
+- `lib/src/embedder/flutter_cache.dart` — locates Flutter cache artifacts and
+  the engine revision.
+- `tool/embedder/compile.dart` — CLI wrapper around the compiler.
+- `tool/embedder/run.dart` — orchestrator: fetch engine → compile → build host
+  → run.
+- `tool/embedder/hello.dart` — the sample program that gets compiled and run.
 - `native/host.c` — C host embedding the Flutter engine (software renderer,
   headless).
 - `native/flutter_embedder.h` — vendored engine embedder header. **Must match
   the engine revision in your Flutter cache.** Re-download it (see the
   implementation plan) after upgrading Flutter.
 - `native/CMakeLists.txt` — builds the host.
-- `tool/run.dart` — orchestrator: fetch engine → compile → build host → run.
+
+## Tests
+
+The embedder tests live in `app/integration_test/embedder/` — they touch the
+real Flutter toolchain (and one builds the C host and downloads the engine
+framework), so they are kept out of the default `flutter test` run. Run them
+explicitly with the Flutter-bundled Dart:
+
+```sh
+cd app && dart test integration_test/embedder
+```
 
 ## Not yet implemented
 

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:frontend_server_client/frontend_server_client.dart';
 
-import 'src/flutter_cache.dart';
+import 'flutter_cache.dart';
 
 /// Compiles [entrypoint] to a Flutter-target kernel blob at [outputDill] using
 /// the Flutter cache's `frontend_server`.

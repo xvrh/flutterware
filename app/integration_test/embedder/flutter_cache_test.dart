@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutterware_embedder/src/flutter_cache.dart';
+import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:test/test.dart';
 
 void main() {

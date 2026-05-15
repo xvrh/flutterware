@@ -5,8 +5,9 @@ import 'package:test/test.dart';
 
 void main() {
   test('hello world runs end to end through the engine embedder', () async {
-    // `dart test` runs with the package root as the current directory.
-    var runScript = p.join(Directory.current.path, 'tool', 'run.dart');
+    // `dart test` runs with the package root (<app>) as the current directory.
+    var runScript =
+        p.join(Directory.current.path, 'tool', 'embedder', 'run.dart');
 
     var result =
         await Process.run(Platform.resolvedExecutable, ['run', runScript]);

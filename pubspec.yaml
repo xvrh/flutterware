@@ -10,7 +10,6 @@ environment:
 workspace:
   - app
   - examples/example
-  - embedder
 
 platforms:
   android:
