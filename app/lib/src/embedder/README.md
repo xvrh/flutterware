@@ -2,76 +2,63 @@
 
 Experimental Flutter engine embedder, part of `flutterware_app`.
 
-**Step 2 (current):** compile a static `runApp` Flutter UI to kernel with the
-Flutter `frontend_server`, render it headless inside a C host that embeds the
-prebuilt Flutter engine, and capture the rendered frame to a PNG. No window, no
-GUI integration, no hot reload.
+**Step 3a (current):** an out-of-process Flutter-engine guest renders an
+animated, interactive scene with the software renderer into shared
+`IOSurface`s; the flutterware desktop GUI displays it live in an external
+`Texture`. The panel is resizable and forwards pointer/keyboard input.
 
-## Run it
+## Run the GUI harness
+
+```sh
+cd app && flutter run -t lib/main_embedder_dev.dart -d macos \
+  --dart-define=FLUTTERWARE_APP_ROOT="$(pwd)" \
+  --dart-define=FLUTTER_SDK_ROOT="$(cd "$(dirname "$(which flutter)")/.." && pwd)"
+```
+
+This builds and spawns the guest, then shows its live output. A macOS app
+launched by `flutter run` has no usable environment or working directory, so
+the `app/` package root and Flutter SDK root are passed via `--dart-define`.
+
+## Run the headless smoke
 
 ```sh
 dart run app/tool/embedder/run.dart
 ```
 
-Run with the Dart SDK bundled in your Flutter checkout
-(`<flutter>/bin/cache/dart-sdk/bin/dart`). The first run downloads
-`FlutterEmbedder.framework` (~31 MB); later runs reuse the cached copy. The
-output PNG is written to `app/build/embedder/scene.png`.
+Spawns the guest and writes its first frame to `app/build/embedder/scene.png`.
 
 ## How it works
 
-`tool/embedder/run.dart` chains these steps:
+Two processes, a Unix-domain-socket control channel, and shared `IOSurface`s:
 
-1. **Fetch the engine.** The C embedder API (`FlutterEngineRun`, …) is not
-   exported by the `FlutterMacOS.framework` in the local Flutter cache — that is
-   the high-level Obj-C desktop framework. The C API ships in a separate
-   artifact, `FlutterEmbedder.framework`, downloaded from Flutter's artifact
-   storage keyed by the engine revision in `<flutter>/bin/cache/engine.stamp`
-   and cached under `app/.engine/` (gitignored).
-2. **Compile.** `frontend_server` compiles `tool/embedder/scene.dart` against
-   the Flutter patched SDK into `build/embedder/assets/kernel_blob.bin`.
-3. **Build the host.** CMake builds `native/host.c` against
-   `FlutterEmbedder.framework`.
-4. **Render.** The host starts the engine headless (software renderer, no
-   window), sends a window-metrics event, lets the UI settle, and writes the
-   composited frame to a raw file (`build/embedder/scene.rawframe`).
-5. **Encode.** The orchestrator decodes the raw frame and encodes
-   `build/embedder/scene.png`.
+- **Guest** (`native/`) — the long-lived C host embedding `FlutterEmbedder`.
+  `host.c` runs the engine; `surface.{c,h}` is the `IOSurface` triple-buffer
+  ring; `ipc.{c,h}` is the framed socket protocol; `input.{c,h}` translates
+  pointer/key events.
+- **GUI runtime** (`lib/src/embedder/`) — `embedded_engine.dart` builds and
+  spawns the guest, owns the socket, and bridges frames to the texture;
+  `embedder_harness_screen.dart` is the dev screen; `protocol.dart` is the wire
+  codec; `embedder_build.dart` / `tool/embedder/build_guest.dart` orchestrate
+  the build.
+- **Native plugin** (`macos/Runner/EmbedderTexturePlugin.swift`) — registers
+  the external `FlutterTexture` and wraps each `IOSurface` as a `CVPixelBuffer`.
 
-## Layout (paths relative to `app/`)
-
-- `lib/src/embedder/compiler.dart` — drives `frontend_server` to produce
-  `kernel_blob.bin`.
-- `lib/src/embedder/flutter_cache.dart` — locates Flutter cache artifacts and
-  the engine revision.
-- `lib/src/embedder/raw_frame.dart` — decodes the host's raw frame file into a
-  `package:image` `Image`.
-- `tool/embedder/compile.dart` — CLI wrapper around the compiler.
-- `tool/embedder/run.dart` — orchestrator: fetch engine → compile → build host
-  → render → encode PNG.
-- `tool/embedder/scene.dart` — the Flutter app that gets rendered.
-- `native/host.c` — C host embedding the Flutter engine (software renderer,
-  headless) that renders and captures a frame.
-- `native/flutter_embedder.h` — vendored engine embedder header. **Must match
-  the engine revision in your Flutter cache.** Re-download it (see the
-  implementation plan) after upgrading Flutter.
-- `native/CMakeLists.txt` — builds the host.
+The guest announces surfaces by `IOSurfaceID`, signals each frame with
+`FrameReady`, and accepts `Resize`/`PointerEvent`/`KeyEvent`/`Shutdown`.
 
 ## Tests
 
-The embedder tests live in two places:
-
-- `app/test/embedder/raw_frame_test.dart` — a fast unit test; runs in the
-  default `flutter test`.
-- `app/integration_test/embedder/` — tests that touch the real Flutter
-  toolchain (one builds the C host and renders); kept out of the default
-  `flutter test`. Run them explicitly:
+- `app/test/embedder/` — fast unit tests (`raw_frame_test`, `protocol_test`).
+- `app/integration_test/embedder/` — heavy tests (`compiler_test`,
+  `flutter_cache_test`, `live_bridge_test`):
 
   ```sh
   cd app && dart test integration_test/embedder
   ```
 
+The GUI texture path is verified manually via the harness.
+
 ## Not yet implemented
 
-Live display in the flutterware desktop GUI, GPU/Metal rendering and external
-textures, hot reload, animation, non-macOS platforms.
+GPU/Metal rendering and a zero-copy path (step 3b), hot reload (step 4), text
+input/IME, multiple embedded engines, non-macOS platforms.
