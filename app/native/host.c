@@ -1,7 +1,7 @@
-// Long-lived Flutter-engine guest: runs a kernel blob, renders with the
-// software renderer into shared IOSurfaces, and exchanges frames + input with
-// a controlling process over a Unix domain socket.
-#include <pthread.h>
+// Long-lived Flutter-engine guest: runs a kernel blob, renders with the Metal
+// renderer directly into shared IOSurface-backed Metal textures (zero-copy),
+// and exchanges frames + input with a controlling process over a Unix domain
+// socket.
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -15,7 +15,8 @@
 
 static int g_socket = -1;
 static FlutterEngine g_engine = NULL;
-static pthread_mutex_t g_ring_mutex = PTHREAD_MUTEX_INITIALIZER;
+// generation and frame_id are only touched on the engine raster thread (inside
+// the drawable callbacks), and once at startup before the engine runs.
 static uint32_t g_generation = 0;
 static uint64_t g_frame_id = 0;
 static double g_pixel_ratio = 1.0;
@@ -38,16 +39,21 @@ static void OnLogMessage(const char* tag, const char* message,
 }
 
 // Writes a step-2 raw frame file: 12-byte LE header (width, height, row_bytes)
-// then the raw RGBA pixels straight from the software renderer.
-static void WriteRawCapture(const char* path, const void* rgba,
-                            size_t row_bytes, size_t height) {
+// then the raw BGRA pixels read back from ring slot `slot`.
+static void WriteRawCapture(const char* path, int slot) {
+  const void* base = surface_lock(slot);
+  if (!base) return;
+  size_t row_bytes = surface_ring_row_bytes();
+  size_t height = (size_t)surface_ring_height();
   FILE* f = fopen(path, "wb");
-  if (!f) return;
-  uint32_t header[3] = {(uint32_t)surface_ring_width(), (uint32_t)height,
-                        (uint32_t)row_bytes};
-  fwrite(header, sizeof(uint32_t), 3, f);
-  fwrite(rgba, 1, row_bytes * height, f);
-  fclose(f);
+  if (f) {
+    uint32_t header[3] = {(uint32_t)surface_ring_width(), (uint32_t)height,
+                          (uint32_t)row_bytes};
+    fwrite(header, sizeof(uint32_t), 3, f);
+    fwrite(base, 1, row_bytes * height, f);
+    fclose(f);
+  }
+  surface_unlock(slot);
 }
 
 static void SendSurfacesAllocated(void) {
@@ -79,30 +85,67 @@ static void SendWindowMetrics(int width, int height, double pixel_ratio) {
   FlutterEngineSendWindowMetricsEvent(g_engine, &metrics);
 }
 
-// Software renderer present callback (engine raster thread). Copies the frame
-// into the ring and notifies the GUI. FrameReady is sent under g_ring_mutex so
-// it is always ordered after the matching SurfacesAllocated.
-static bool PresentSoftware(void* user_data, const void* allocation,
-                            size_t row_bytes, size_t height) {
-  (void)user_data;
-  pthread_mutex_lock(&g_ring_mutex);
-  int slot = surface_ring_present(allocation, row_bytes, height);
-  if (slot >= 0) {
-    g_frame_id++;
-    uint64_t frame_id = g_frame_id;
-    if (g_capture_path && !g_captured) {
-      WriteRawCapture(g_capture_path, allocation, row_bytes, height);
-      g_captured = true;
-    }
-    uint8_t payload[16];
-    uint32_t ring_index = (uint32_t)slot;
-    uint32_t generation = g_generation;
-    memcpy(payload + 0, &ring_index, 4);
-    memcpy(payload + 4, &frame_id, 8);
-    memcpy(payload + 12, &generation, 4);
-    ipc_send(g_socket, kMsgFrameReady, payload, sizeof(payload));
+// Carries the identity of a presented frame to the GPU completion handler.
+typedef struct {
+  uint32_t ring_index;
+  uint64_t frame_id;
+  uint32_t generation;
+} PresentedFrame;
+
+// Runs on a Metal-internal thread once the engine's render for this frame has
+// finished on the GPU. The surface is fully written by now, so it is safe to
+// read it back and to tell the GUI the frame is ready.
+static void OnFramePresented(void* user_data) {
+  PresentedFrame* frame = (PresentedFrame*)user_data;
+  if (g_capture_path && !g_captured) {
+    WriteRawCapture(g_capture_path, (int)frame->ring_index);
+    g_captured = true;
   }
-  pthread_mutex_unlock(&g_ring_mutex);
+  uint8_t payload[16];
+  memcpy(payload + 0, &frame->ring_index, 4);
+  memcpy(payload + 4, &frame->frame_id, 8);
+  memcpy(payload + 12, &frame->generation, 4);
+  ipc_send(g_socket, kMsgFrameReady, payload, sizeof(payload));
+  free(frame);
+}
+
+// Engine raster thread: hands the engine the next ring slot's Metal texture.
+// If the engine asks for a size different from the current ring (a resize),
+// the ring is reallocated here — at this point the engine holds no texture, so
+// freeing the old ring is safe and no cross-thread locking is needed.
+static FlutterMetalTexture GetNextDrawable(
+    void* user_data, const FlutterFrameInfo* frame_info) {
+  (void)user_data;
+  int width = (int)frame_info->size.width;
+  int height = (int)frame_info->size.height;
+  if (width != surface_ring_width() || height != surface_ring_height()) {
+    if (surface_ring_init(width, height)) {
+      g_generation++;
+      SendSurfacesAllocated();
+    }
+  }
+  int slot = surface_ring_acquire();
+  FlutterMetalTexture texture = {0};
+  texture.struct_size = sizeof(FlutterMetalTexture);
+  texture.texture_id = slot;
+  texture.texture = surface_ring_texture(slot);
+  texture.user_data = NULL;
+  texture.destruction_callback = NULL;  // the guest owns the ring.
+  return texture;
+}
+
+// Engine raster thread: the engine has submitted its render into this slot's
+// texture. Advance the ring and fence the GPU; FrameReady is sent from the
+// fence's completion handler so the GUI never reads a half-rendered surface.
+static bool PresentDrawable(void* user_data,
+                            const FlutterMetalTexture* texture) {
+  (void)user_data;
+  PresentedFrame* frame = (PresentedFrame*)malloc(sizeof(PresentedFrame));
+  frame->ring_index = (uint32_t)texture->texture_id;
+  frame->frame_id = ++g_frame_id;
+  frame->generation = g_generation;
+  surface_ring_advance();
+  surface_present_fence(OnFramePresented, frame);
   return true;
 }
 
@@ -132,15 +175,18 @@ int main(int argc, char** argv) {
   }
 
   if (!surface_ring_init(width, height)) {
-    const char* msg = "IOSurface allocation failed";
+    const char* msg = "Metal surface allocation failed";
     ipc_send(g_socket, kMsgError, (const uint8_t*)msg, strlen(msg));
     return 1;
   }
 
   FlutterRendererConfig renderer = {0};
-  renderer.type = kSoftware;
-  renderer.software.struct_size = sizeof(FlutterSoftwareRendererConfig);
-  renderer.software.surface_present_callback = PresentSoftware;
+  renderer.type = kMetal;
+  renderer.metal.struct_size = sizeof(FlutterMetalRendererConfig);
+  renderer.metal.device = surface_metal_device();
+  renderer.metal.present_command_queue = surface_metal_queue();
+  renderer.metal.get_next_drawable_callback = GetNextDrawable;
+  renderer.metal.present_drawable_callback = PresentDrawable;
 
   FlutterProjectArgs args = {0};
   args.struct_size = sizeof(FlutterProjectArgs);
@@ -175,13 +221,9 @@ int main(int argc, char** argv) {
       memcpy(&new_width, payload + 0, 4);
       memcpy(&new_height, payload + 4, 4);
       memcpy(&pixel_ratio, payload + 8, 8);
-      pthread_mutex_lock(&g_ring_mutex);
       g_pixel_ratio = pixel_ratio;
-      if (surface_ring_init((int)new_width, (int)new_height)) {
-        g_generation++;
-        SendSurfacesAllocated();
-      }
-      pthread_mutex_unlock(&g_ring_mutex);
+      // The ring is reallocated inside GetNextDrawable on the raster thread;
+      // here we only nudge the engine to render at the new size.
       SendWindowMetrics((int)new_width, (int)new_height, pixel_ratio);
     } else if (type == kMsgPointerEvent) {
       input_handle_pointer(g_engine, payload, len);
@@ -194,8 +236,7 @@ int main(int argc, char** argv) {
     free(payload);
   }
 
-  // FlutterEngineShutdown blocks with the software renderer; just release the
-  // surfaces and let the OS reclaim the rest.
+  // Just release the surfaces and let the OS reclaim the rest.
   surface_ring_destroy();
   return 0;
 }
