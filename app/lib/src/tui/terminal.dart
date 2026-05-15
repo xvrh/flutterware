@@ -26,6 +26,27 @@ final class InlineMode extends TerminalMode {
   const InlineMode({required this.rows}) : assert(rows > 0);
 }
 
+/// Compute the inline region's new origin row after [linesPrinted] lines are
+/// printed into the scrollback above it.
+///
+/// The region drifts downward as lines are inserted above it, until it is
+/// pinned against the bottom of the terminal (`terminalLines - regionRows`),
+/// after which further lines scroll the screen and the anchor stays put.
+/// Clamped to a minimum of 0 so a terminal shorter than the region still
+/// yields a valid row.
+int anchorRowAfterPrintAbove({
+  required int originRow,
+  required int regionRows,
+  required int linesPrinted,
+  required int terminalLines,
+}) {
+  final maxOrigin = terminalLines - regionRows;
+  var next = originRow + linesPrinted;
+  if (next > maxOrigin) next = maxOrigin;
+  if (next < 0) next = 0;
+  return next;
+}
+
 /// Owns the terminal lifecycle: alt-screen entry/exit, raw-mode stdin,
 /// signal handling, double-buffered painting, and crash-safe restore.
 ///
