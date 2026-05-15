@@ -35,12 +35,20 @@ abstract class RenderBox extends RenderObject {
         sizedByParent ||
         constraints.isTight ||
         p is! RenderBox;
-    var boundary = p is RenderBox && !isBoundary ? p._relayoutBoundary : this;
+    RenderObject? boundary;
+    if (p is RenderBox && !isBoundary) {
+      assert(p._relayoutBoundary != null,
+          'A child must be laid out after its parent.');
+      boundary = p._relayoutBoundary;
+    } else {
+      boundary = this;
+    }
 
     if (!_needsLayout && constraints == _constraints) {
       if (boundary != _relayoutBoundary) {
         _relayoutBoundary = boundary;
         visitChildren(
+            // Every child of a RenderBox is itself a RenderBox.
             (child) => (child as RenderBox)._propagateRelayoutBoundary());
       }
       return;
@@ -64,6 +72,7 @@ abstract class RenderBox extends RenderObject {
     if (parentBoundary != _relayoutBoundary) {
       _relayoutBoundary = parentBoundary;
       visitChildren(
+          // Every child of a RenderBox is itself a RenderBox.
           (child) => (child as RenderBox)._propagateRelayoutBoundary());
     }
   }
