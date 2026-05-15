@@ -15,8 +15,12 @@ class BorderChars {
   final String topRight;
   final String bottomLeft;
   final String bottomRight;
-  final String horizontal; // top and bottom edges
-  final String vertical; // left and right edges
+
+  /// Top and bottom edges.
+  final String horizontal;
+
+  /// Left and right edges.
+  final String vertical;
 
   const BorderChars({
     required this.topLeft,
@@ -126,7 +130,7 @@ class Painter {
   void drawHLine(
     CellOffset start,
     int length, {
-    int rune = 0x2500,
+    int rune = 0x2500, // '─'
     Color fg = Color.defaultFg,
     Color bg = Color.defaultBg,
     int style = 0,
@@ -141,7 +145,7 @@ class Painter {
   void drawVLine(
     CellOffset start,
     int length, {
-    int rune = 0x2502,
+    int rune = 0x2502, // '│'
     Color fg = Color.defaultFg,
     Color bg = Color.defaultBg,
     int style = 0,

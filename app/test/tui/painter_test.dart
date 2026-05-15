@@ -93,6 +93,8 @@ void main() {
       var b = CellBuffer(1, 3);
       Painter(b).drawHLine(CellOffset(0, 0), 0, rune: 0x2a);
       expect(dump(b), ['   ']);
+      Painter(b).drawVLine(CellOffset(0, 0), -2, rune: 0x2a);
+      expect(dump(b), ['   ']);
     });
   });
 
