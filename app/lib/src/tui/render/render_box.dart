@@ -31,8 +31,11 @@ abstract class RenderBox extends RenderObject {
   /// whether the child becomes its own relayout boundary.
   void layout(BoxConstraints constraints, {bool parentUsesSize = false}) {
     var p = parent;
-    var isBoundary = !parentUsesSize || sizedByParent || p is! RenderBox;
-    var boundary = isBoundary ? this : p._relayoutBoundary;
+    var isBoundary = !parentUsesSize ||
+        sizedByParent ||
+        constraints.isTight ||
+        p is! RenderBox;
+    var boundary = p is RenderBox && !isBoundary ? p._relayoutBoundary : this;
 
     if (!_needsLayout && constraints == _constraints) {
       if (boundary != _relayoutBoundary) {

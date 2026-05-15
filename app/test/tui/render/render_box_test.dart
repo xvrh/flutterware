@@ -85,25 +85,44 @@ void main() {
   });
 
   group('relayout boundary localization', () {
-    test(
-        'a tight-constrained child is its own relayout boundary, so '
-        'dirtying its child does not dirty the parent', () {
-      // parent (loose) -> mid (laid out tight) -> leaf
+    test('a box receiving tight constraints is its own relayout boundary', () {
+      // mid is laid out tight and passes those tight constraints straight to
+      // leaf, so leaf is also its own boundary. Dirtying leaf re-lays only
+      // leaf — the dirty does not bubble up to mid.
       var leaf = _FixedBox(CellSize(1, 1));
       var mid = _PassBox(leaf);
       var owner = PipelineOwner();
 
-      // Lay the subtree out once with mid receiving tight constraints.
       mid.attach(owner);
       mid.layout(BoxConstraints.tight(CellSize(5, 5)));
       expect(leaf.layoutCount, 1);
       expect(mid.layoutCount, 1);
 
-      // Dirtying the leaf must enqueue mid (the boundary), not bubble past it.
       leaf.markNeedsLayout();
       owner.flushLayout();
       expect(leaf.layoutCount, 2);
-      expect(mid.layoutCount, 2);
+      expect(mid.layoutCount, 1); // mid untouched — leaf is its own boundary
+    });
+
+    test(
+        'a box receiving non-tight constraints bubbles dirty to its parent '
+        'boundary', () {
+      // mid is laid out with loose (non-tight) constraints and passes them to
+      // leaf, so leaf is NOT its own boundary — its boundary is mid. Dirtying
+      // leaf enqueues mid, and the flush re-lays the whole mid subtree.
+      var leaf = _FixedBox(CellSize(1, 1));
+      var mid = _PassBox(leaf);
+      var owner = PipelineOwner();
+
+      mid.attach(owner);
+      mid.layout(BoxConstraints.loose(CellSize(5, 5)));
+      expect(leaf.layoutCount, 1);
+      expect(mid.layoutCount, 1);
+
+      leaf.markNeedsLayout();
+      owner.flushLayout();
+      expect(mid.layoutCount, 2); // mid (the relayout boundary) re-laid out
+      expect(leaf.layoutCount, 2); // and its child with it
     });
   });
 }
