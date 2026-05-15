@@ -32,6 +32,9 @@ class EmbeddedEngine extends ChangeNotifier {
   Socket? _conn;
   Process? _guest;
   final FrameReader _reader = FrameReader();
+  // Socket messages must be handled strictly in arrival order; each handler is
+  // chained after the previous one completes rather than run concurrently.
+  Future<void> _handleChain = Future.value();
   int _currentGeneration = -1;
   bool _disposed = false;
 
@@ -111,7 +114,9 @@ class EmbeddedEngine extends ChangeNotifier {
 
   void _onSocketData(Uint8List chunk) {
     for (var message in _reader.addBytes(chunk)) {
-      unawaited(_handle(message));
+      _handleChain = _handleChain
+          .then((_) => _handle(message))
+          .catchError((Object e) => _fail('$e'));
     }
   }
 

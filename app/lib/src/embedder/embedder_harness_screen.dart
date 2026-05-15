@@ -43,9 +43,11 @@ class _EmbedderHarnessScreenState extends State<EmbedderHarnessScreen> {
 
   void _maybeResize(Size size, double dpr) {
     if (size == _lastReportedSize) return;
+    var width = (size.width * dpr).round();
+    var height = (size.height * dpr).round();
+    if (width < 1 || height < 1) return;
     _lastReportedSize = size;
-    _engine.resize(
-        (size.width * dpr).round(), (size.height * dpr).round(), dpr);
+    _engine.resize(width, height, dpr);
   }
 
   void _sendPointer(PointerPhase phase, Offset local, double dpr,

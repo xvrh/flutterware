@@ -10,7 +10,6 @@ static int g_next;
 
 static IOSurfaceRef CreateSurface(int width, int height) {
   int bpe = 4;
-  int bpr = width * 4;
   int pixel_format = 0x42475241;  // 'BGRA'
   CFMutableDictionaryRef props = CFDictionaryCreateMutable(
       kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
@@ -18,13 +17,16 @@ static IOSurfaceRef CreateSurface(int width, int height) {
   CFNumberRef w = CFNumberCreate(NULL, kCFNumberIntType, &width);
   CFNumberRef h = CFNumberCreate(NULL, kCFNumberIntType, &height);
   CFNumberRef e = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
-  CFNumberRef r = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
   CFNumberRef f = CFNumberCreate(NULL, kCFNumberIntType, &pixel_format);
   CFDictionarySetValue(props, kIOSurfaceWidth, w);
   CFDictionarySetValue(props, kIOSurfaceHeight, h);
   CFDictionarySetValue(props, kIOSurfaceBytesPerElement, e);
-  CFDictionarySetValue(props, kIOSurfaceBytesPerRow, r);
   CFDictionarySetValue(props, kIOSurfacePixelFormat, f);
+  // Deliberately do NOT set kIOSurfaceBytesPerRow: width*4 is not necessarily
+  // a valid (aligned) row stride, and an unaligned value makes IOSurfaceCreate
+  // fail outright for some widths. Letting IOSurface pick the stride keeps
+  // creation reliable at every window size; surface_ring_present and the
+  // CVPixelBuffer wrapper both read the real stride via IOSurfaceGetBytesPerRow.
   // The GUI process resolves these surfaces with IOSurfaceLookup(id); that
   // only works for surfaces flagged global. Deprecated, but the companion of
   // the by-ID sharing the design chose for step 3a.
@@ -33,20 +35,27 @@ static IOSurfaceRef CreateSurface(int width, int height) {
   CFRelease(w);
   CFRelease(h);
   CFRelease(e);
-  CFRelease(r);
   CFRelease(f);
   CFRelease(props);
   return surface;
 }
 
 bool surface_ring_init(int width, int height) {
-  surface_ring_destroy();
+  if (width <= 0 || height <= 0) return false;
+  // Build the new ring into temporaries first; only swap in (and release the
+  // old ring) once every surface allocated. A failed re-allocation then leaves
+  // the existing ring intact and still presentable.
+  IOSurfaceRef fresh[SURFACE_RING_COUNT];
   for (int i = 0; i < SURFACE_RING_COUNT; i++) {
-    g_ring[i] = CreateSurface(width, height);
-    if (!g_ring[i]) {
-      surface_ring_destroy();
+    fresh[i] = CreateSurface(width, height);
+    if (!fresh[i]) {
+      for (int j = 0; j < i; j++) CFRelease(fresh[j]);
       return false;
     }
+  }
+  surface_ring_destroy();
+  for (int i = 0; i < SURFACE_RING_COUNT; i++) {
+    g_ring[i] = fresh[i];
   }
   g_width = width;
   g_height = height;
@@ -75,7 +84,12 @@ int surface_ring_present(const void* rgba, size_t row_bytes, size_t height) {
   size_t dst_stride = IOSurfaceGetBytesPerRow(surface);
   const uint8_t* src = (const uint8_t*)rgba;
   size_t rows = height < (size_t)g_height ? height : (size_t)g_height;
-  size_t cols = (size_t)g_width;
+  // During a resize the engine may briefly present a frame sized for the old
+  // window into a freshly allocated (different-sized) surface. Clamp to both
+  // the surface width and what the source row actually holds so the copy
+  // never reads past the engine's buffer.
+  size_t src_cols = row_bytes / 4;
+  size_t cols = (size_t)g_width < src_cols ? (size_t)g_width : src_cols;
   for (size_t y = 0; y < rows; y++) {
     const uint8_t* s = src + y * row_bytes;
     uint8_t* d = dst + y * dst_stride;
