@@ -84,4 +84,27 @@ void main() {
     expect(result.exitCode, 0);
     expect(result.stdout.toString(), contains('still-runs'));
   }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('degrade with an unrunnable real binary exits non-zero, no crash',
+      () async {
+    final outside = Directory.systemTemp.createTempSync('wrap_badbin');
+    addTearDown(() => outside.deleteSync(recursive: true));
+    final result = await Process.run(
+      dart,
+      [
+        'run',
+        wrapScript,
+        'run',
+        '--real',
+        '/no/such/binary_xyz',
+        '--kind',
+        'flutter',
+        '--',
+        'run',
+      ],
+      workingDirectory: outside.path,
+    );
+    expect(result.exitCode, isNot(0));
+    expect(result.exitCode, isNot(255));
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }
