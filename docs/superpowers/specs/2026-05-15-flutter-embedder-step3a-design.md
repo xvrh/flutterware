@@ -218,10 +218,11 @@ path is an option to revisit, not a 3a requirement.)
 - `app/integration_test/embedder/compiler_test.dart` and `flutter_cache_test.dart`
   — carried over from step 2, updated only if the scene entrypoint path changes.
 - **Headless PNG smoke** — `tool/embedder/run.dart` is rebuilt as a thin
-  protocol client: connect to a guest, capture one `IOSurface` frame, encode a
-  PNG. This keeps a quick visual artifact and reuses the new harness. Step 2's
-  raw-frame *file* format, `raw_frame.dart`, and `raw_frame_test.dart` are
-  superseded by reading the `IOSurface` directly and are removed. Step 2's
+  protocol client: spawn a guest with a `--capture-raw <path>` flag, await the
+  first `FrameReady`, read the raw frame file the guest dumped, and encode a
+  PNG. This keeps a quick visual artifact without reading an `IOSurface` from
+  Dart. Step 2's `raw_frame.dart` and `raw_frame_test.dart` are kept — the guest
+  reuses the step-2 raw-frame *file* format for `--capture-raw`. Step 2's
   `render_test.dart` is replaced by `live_bridge_test.dart` above.
 - **Manual** — run via `main_dev.dart`, open the harness screen, and confirm:
   the animated scene renders live, resizing the panel reflows the guest UI, and
