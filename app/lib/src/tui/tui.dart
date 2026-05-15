@@ -1,4 +1,4 @@
-/// Public surface of the TUI engine (stage 1) and paint kit (stage 2).
+/// Public surface of the TUI engine (stage 1), paint kit (stage 2), and render tree (stage 3).
 library;
 
 export 'ansi.dart' show Ansi;
@@ -10,3 +10,27 @@ export 'input.dart'
 export 'painter.dart' show Painter, BorderChars, HorizontalAlign, VerticalAlign;
 export 'terminal.dart' show Terminal, TerminalMode, FullScreenMode, InlineMode;
 export 'text_wrap.dart' show wrapText;
+export 'render/render.dart'
+    show
+        BoxConstraints,
+        EdgeInsets,
+        RenderObject,
+        ParentData,
+        BoxParentData,
+        PipelineOwner,
+        RenderBox,
+        RenderBoxWithChild,
+        RenderText,
+        RenderPadding,
+        RenderConstrainedBox,
+        RenderDecoratedBox,
+        BoxDecoration,
+        BoxBorder,
+        RenderFlex,
+        FlexParentData,
+        FlexFit,
+        Axis,
+        MainAxisAlignment,
+        CrossAxisAlignment,
+        MainAxisSize,
+        RenderTuiView;

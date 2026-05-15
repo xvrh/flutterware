@@ -5,10 +5,8 @@ declarative UI that renders to a character grid instead of pixels.
 
 The long-term goal mirrors Flutter's three-tree pipeline
 (Widget → Element → RenderObject), but the render and engine layers are
-terminal-shaped rather than Skia-shaped. **This package is currently stage 1:
-the engine layer only.** There are no widgets, layout, or render objects yet —
-see [the roadmap](../../../../docs/superpowers/tui-roadmap.md) for the staged
-plan.
+terminal-shaped rather than Skia-shaped. **This package is currently at stage 3: engine, paint kit, and render tree.**
+There is no widget layer yet — see [the roadmap](../../../../docs/superpowers/tui-roadmap.md) for the staged plan.
 
 ## What's here
 
@@ -21,6 +19,10 @@ plan.
 | `cursor_query.dart` | Cursor-position query (`ESC[6n`) used to anchor inline mode |
 | `terminal.dart` | `Terminal` — lifecycle, signal handling, double-buffered painting |
 | `tui.dart` | Barrel file: the public API surface |
+| `geometry.dart` | `CellOffset`, `CellSize`, `CellRect` — integer-cell geometry |
+| `painter.dart` | `Painter` — offset+clip drawing surface; `BorderChars`, text helpers |
+| `text_wrap.dart` | `wrapText` — pure word-wrapping |
+| `render/` | The render tree: `RenderObject`/`RenderBox`, `BoxConstraints`, `RenderFlex`/`RenderPadding`/`RenderText`/`RenderDecoratedBox`/`RenderConstrainedBox`, `RenderTuiView` |
 
 Examples live in `app/examples/tui/`.
 
@@ -82,7 +84,9 @@ frames.
 
 Stage 1 is intentionally scoped. Not yet supported:
 
-- No layout, widgets, or render objects (stages 2–4).
+- No widget layer yet (`Widget`/`Element`/`setState`) — stage 4.
+- Repaint is whole-tree: with no layer model, `markNeedsPaint` repaints
+  everything. Re-layout *is* localized to relayout boundaries.
 - No mouse input.
 - No wide-character / emoji width handling — every cell is one column.
 - Windows: compiles and runs, but signal-driven features (resize) are
