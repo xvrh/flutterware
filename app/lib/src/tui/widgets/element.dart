@@ -348,8 +348,9 @@ abstract class ComponentElement extends Element {
 
   @override
   void performRebuild() {
+    super
+        .performRebuild(); // clears _dirty before build() so re-entrant markNeedsBuild() is not swallowed
     var built = build();
-    super.performRebuild();
     _child = updateChild(_child, built, _slot);
     assert(_child != null);
   }
