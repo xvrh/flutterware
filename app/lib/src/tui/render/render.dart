@@ -4,6 +4,8 @@
 library;
 
 import '../geometry.dart';
+import '../painter.dart';
 
 part 'box_constraints.dart';
 part 'render_object.dart';
+part 'render_box.dart';
