@@ -54,9 +54,11 @@ class RenderTuiView extends RenderObject {
     }
   }
 
-  /// Registers the view for its first layout. Call once, after [attach] and
-  /// after [child] is set.
+  /// Registers the view for its first layout. Must be called once, after
+  /// [attach] and after [child] is set.
   void prepareInitialFrame() {
+    assert(
+        attached, 'RenderTuiView must be attached to a PipelineOwner first.');
     _relayoutBoundary = this;
     _needsLayout = true;
     owner!._nodesNeedingLayout.add(this);
@@ -64,11 +66,13 @@ class RenderTuiView extends RenderObject {
 
   @override
   void performLayout() {
-    _child?.layout(BoxConstraints.tight(_configuration), parentUsesSize: true);
+    _child?.layout(BoxConstraints.tight(_configuration), parentUsesSize: false);
   }
 
   /// Flushes any pending layout and paints the whole tree into [painter].
   void compositeFrame(Painter painter) {
+    assert(
+        attached, 'RenderTuiView must be attached to a PipelineOwner first.');
     owner!.flushLayout();
     _child?.paint(painter);
     owner!.clearNeedsPaint();
