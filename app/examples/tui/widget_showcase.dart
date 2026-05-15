@@ -3,6 +3,7 @@
 // ←/→ or 1-5 switch scenes · space pauses · q quits.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutterware_app/src/tui/tui.dart';
 
@@ -88,6 +89,81 @@ int eighthBlock(double frac) {
   return 0x2580 + level; // 0x2581..0x2588
 }
 
+/// Scene 1: a full-screen RGB sine-plasma field, painted at 2x vertical
+/// resolution with the half-block trick.
+class PlasmaScene extends StatelessWidget {
+  const PlasmaScene({required this.time, super.key});
+
+  final double time;
+
+  Color _pixel(int px, int py, double t) {
+    var v = math.sin(px / 8 + t) +
+        math.sin(py / 6 + t * 1.3) +
+        math.sin((px + py) / 10 + t * 0.7);
+    var n = (v + 3) / 6; // normalize -3..3 → 0..1
+    return hsv(n, 1.0, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var t = time;
+    return Painted((painter, size) {
+      for (var row = 0; row < size.rows; row++) {
+        for (var col = 0; col < size.cols; col++) {
+          var top = _pixel(col, row * 2, t);
+          var bottom = _pixel(col, row * 2 + 1, t);
+          painter.fillRect(CellRect.fromTLWH(row, col, 1, 1),
+              Cell(rune: 0x2580, fg: top, bg: bottom));
+        }
+      }
+    });
+  }
+}
+
+/// Scene 2: a 3D parallax starfield warping past the camera.
+class StarfieldScene extends StatelessWidget {
+  const StarfieldScene({required this.time, super.key});
+
+  final double time;
+
+  static final List<({double x, double y, double z})> _stars = () {
+    var rng = math.Random(42);
+    return List.generate(
+        140,
+        (_) => (
+              x: rng.nextDouble() * 2 - 1,
+              y: rng.nextDouble() * 2 - 1,
+              z: rng.nextDouble(),
+            ));
+  }();
+
+  @override
+  Widget build(BuildContext context) {
+    var t = time;
+    return Painted((painter, size) {
+      var black = Color.rgb(0, 0, 0);
+      painter.fill(Cell(rune: 0x20, bg: black));
+      var cx = size.cols / 2;
+      var cyPix = size.rows; // half-block: rows*2 pixels tall, center at rows
+      for (var s in _stars) {
+        var z = (s.z - t * 0.25) % 1.0;
+        var d = z * 0.95 + 0.05;
+        var sx = (cx + s.x / d * cx).round();
+        var syPix = (cyPix + s.y / d * cyPix).round();
+        if (sx < 0 || sx >= size.cols) continue;
+        var cellRow = syPix ~/ 2;
+        if (cellRow < 0 || cellRow >= size.rows) continue;
+        var b = (1 - z).clamp(0.0, 1.0);
+        var c = lerpColor(black, Color.rgb(255, 255, 255), b);
+        var top = syPix.isEven ? c : black;
+        var bottom = syPix.isEven ? black : c;
+        painter.fillRect(CellRect.fromTLWH(cellRow, sx, 1, 1),
+            Cell(rune: 0x2580, fg: top, bg: bottom));
+      }
+    });
+  }
+}
+
 /// Root of the showcase. Owns the animation clock and (later) input + scenes.
 class ShowcaseApp extends StatefulWidget {
   const ShowcaseApp({super.key});
@@ -114,17 +190,9 @@ class _ShowcaseState extends State<ShowcaseApp> {
 
   @override
   Widget build(BuildContext context) {
-    var t = _time;
-    return Painted((painter, size) {
-      for (var row = 0; row < size.rows; row++) {
-        for (var col = 0; col < size.cols; col++) {
-          var c = hsv(
-              (col / size.cols + row / size.rows + t * 0.2) % 1.0, 0.7, 0.9);
-          painter.fillRect(
-              CellRect.fromTLWH(row, col, 1, 1), Cell(rune: 0x20, bg: c));
-        }
-      }
-    });
+    return ((_time ~/ 4) % 2 == 0)
+        ? PlasmaScene(time: _time)
+        : StarfieldScene(time: _time);
   }
 }
 
