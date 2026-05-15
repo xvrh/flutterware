@@ -1,18 +1,14 @@
 import 'package:flutterware_app/src/tui/buffer.dart';
-import 'package:flutterware_app/src/tui/geometry.dart';
 import 'package:flutterware_app/src/tui/painter.dart';
 import 'package:flutterware_app/src/tui/render/render.dart';
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
+import '_harness.dart' as harness;
+
 /// Mounts [widget] in a binding and runs one frame; returns the binding.
-TuiBinding pump(Widget widget, {int rows = 4, int cols = 10}) {
-  var binding = TuiBinding();
-  binding.attachRootWidget(widget);
-  binding.handleResize(CellSize(rows, cols));
-  binding.drawFrame(Painter(CellBuffer(rows, cols)));
-  return binding;
-}
+TuiBinding pump(Widget widget, {int rows = 4, int cols = 10}) =>
+    harness.pump(widget, rows: rows, cols: cols).binding;
 
 /// A widget whose subtree is swapped between frames by mutating [App.body].
 class App extends StatefulWidget {

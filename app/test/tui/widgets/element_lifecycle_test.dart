@@ -1,8 +1,7 @@
-import 'package:flutterware_app/src/tui/buffer.dart';
-import 'package:flutterware_app/src/tui/geometry.dart';
-import 'package:flutterware_app/src/tui/painter.dart';
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
+
+import '_harness.dart';
 
 /// Shared lifecycle-call log; reset in [setUp].
 var log = <String>[];
@@ -48,43 +47,6 @@ class ProbeState extends State<Probe> {
   }
 }
 
-/// A stateful host that swaps its built subtree between frames.
-class Host extends StatefulWidget {
-  const Host({super.key});
-
-  static Widget body = const Text('');
-  static HostState? last;
-
-  @override
-  State<Host> createState() => HostState();
-}
-
-class HostState extends State<Host> {
-  @override
-  void initState() {
-    Host.last = this;
-  }
-
-  void show(Widget body) => setState(() => Host.body = body);
-
-  @override
-  Widget build(BuildContext context) => Host.body;
-}
-
-TuiBinding pump(Widget body) {
-  Host.body = body;
-  var binding = TuiBinding();
-  binding.attachRootWidget(const Host());
-  binding.handleResize(CellSize(8, 12));
-  binding.drawFrame(Painter(CellBuffer(8, 12)));
-  return binding;
-}
-
-void rebuild(TuiBinding binding, Widget body) {
-  Host.last!.show(body);
-  binding.drawFrame(Painter(CellBuffer(8, 12)));
-}
-
 void main() {
   setUp(() {
     log = <String>[];
@@ -112,12 +74,12 @@ void main() {
   });
 
   test('mount runs initState -> didChangeDependencies -> build in order', () {
-    pump(const Probe('a'));
+    pumpHosted(const Probe('a'));
     expect(log, ['initState a', 'didChangeDependencies a', 'build a']);
   });
 
   test('rebuild with a same-type widget runs didUpdateWidget then build', () {
-    var binding = pump(const Probe('a'));
+    var binding = pumpHosted(const Probe('a'));
     log.clear();
 
     rebuild(binding, const Probe('b'));
@@ -125,7 +87,7 @@ void main() {
   });
 
   test('removing a widget runs deactivate then dispose', () {
-    var binding = pump(const Probe('a'));
+    var binding = pumpHosted(const Probe('a'));
     log.clear();
 
     // Replace the Probe with a plain Text => the Probe leaves the tree.
@@ -134,7 +96,7 @@ void main() {
   });
 
   test('State.mounted flips false after the element is unmounted', () {
-    var binding = pump(const Probe('a'));
+    var binding = pumpHosted(const Probe('a'));
     var state = Probe.lastState!;
     expect(state.mounted, isTrue);
 
@@ -143,7 +105,7 @@ void main() {
   });
 
   test('the State is the same instance across a same-type rebuild', () {
-    var binding = pump(const Probe('a'));
+    var binding = pumpHosted(const Probe('a'));
     var first = Probe.lastState!;
 
     rebuild(binding, const Probe('b'));

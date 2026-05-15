@@ -5,27 +5,9 @@ import 'package:flutterware_app/src/tui/render/render.dart';
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
-/// Reads the buffer back as one string per row.
-List<String> dump(CellBuffer b) => [
-      for (var r = 0; r < b.rows; r++)
-        String.fromCharCodes([
-          for (var c = 0; c < b.cols; c++) b.get(r, c).rune,
-        ]),
-    ];
+import '_harness.dart';
 
-/// Mounts [widget] in a fresh binding sized [rows]x[cols], runs one frame, and
-/// returns the painted buffer alongside the binding for further frames.
-({TuiBinding binding, CellBuffer buffer}) pump(
-    Widget widget, int rows, int cols) {
-  var binding = TuiBinding();
-  binding.attachRootWidget(widget);
-  binding.handleResize(CellSize(rows, cols));
-  var buffer = CellBuffer(rows, cols);
-  binding.drawFrame(Painter(buffer));
-  return (binding: binding, buffer: buffer);
-}
-
-/// Paints one more frame into a fresh buffer of the binding's current size.
+/// Paints one more frame into a fresh buffer sized [rows]x[cols].
 CellBuffer reframe(TuiBinding binding, int rows, int cols) {
   var buffer = CellBuffer(rows, cols);
   binding.handleResize(CellSize(rows, cols));
@@ -59,7 +41,7 @@ class CounterState extends State<Counter> {
 
 void main() {
   test('drawFrame runs build -> layout -> paint end to end', () {
-    var r = pump(const Text('hello'), 1, 8);
+    var r = pump(const Text('hello'), rows: 1, cols: 8);
     expect(dump(r.buffer)[0], 'hello   ');
     // The render tree was spliced and laid out.
     expect(r.binding.renderView.child, isA<RenderText>());
@@ -68,7 +50,7 @@ void main() {
 
   test('a setState-driven counter shows the new value after a second frame',
       () {
-    var r = pump(const Counter(), 1, 4);
+    var r = pump(const Counter(), rows: 1, cols: 4);
     expect(dump(r.buffer)[0], '0   ');
 
     Counter.last!.bump();
@@ -82,7 +64,7 @@ void main() {
   });
 
   test('handleResize changes configuration and the next frame re-lays out', () {
-    var r = pump(const Text('x'), 1, 1);
+    var r = pump(const Text('x'), rows: 1, cols: 1);
     expect(r.binding.renderView.configuration, CellSize(1, 1));
     expect((r.binding.renderView.child! as RenderText).size, CellSize(1, 1));
 
@@ -102,7 +84,7 @@ void main() {
   });
 
   test('onFrameNeeded fires when a mounted setState schedules a build', () {
-    var r = pump(const Counter(), 1, 4);
+    var r = pump(const Counter(), rows: 1, cols: 4);
     var frames = 0;
     r.binding.onFrameNeeded = () => frames += 1;
 

@@ -55,7 +55,8 @@ class RenderTuiView extends RenderObject {
   }
 
   /// Registers the view for its first layout. Must be called once, after
-  /// [attach] and after [child] is set.
+  /// [attach]. The child need not be set yet; when it is later attached via
+  /// [adoptChild], it re-marks the view for layout under the tight constraint.
   void prepareInitialFrame() {
     assert(
         attached, 'RenderTuiView must be attached to a PipelineOwner first.');

@@ -1,46 +1,8 @@
-import 'package:flutterware_app/src/tui/buffer.dart';
-import 'package:flutterware_app/src/tui/geometry.dart';
-import 'package:flutterware_app/src/tui/painter.dart';
 import 'package:flutterware_app/src/tui/render/render.dart';
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
-/// A stateful host whose [build] returns whatever widget is set on it.
-class Host extends StatefulWidget {
-  const Host({super.key});
-
-  static Widget body = const Text('');
-  static HostState? last;
-
-  @override
-  State<Host> createState() => HostState();
-}
-
-class HostState extends State<Host> {
-  @override
-  void initState() {
-    Host.last = this;
-  }
-
-  void show(Widget body) => setState(() => Host.body = body);
-
-  @override
-  Widget build(BuildContext context) => Host.body;
-}
-
-TuiBinding pump(Widget body) {
-  Host.body = body;
-  var binding = TuiBinding();
-  binding.attachRootWidget(const Host());
-  binding.handleResize(CellSize(8, 12));
-  binding.drawFrame(Painter(CellBuffer(8, 12)));
-  return binding;
-}
-
-void rebuild(TuiBinding binding, Widget body) {
-  Host.last!.show(body);
-  binding.drawFrame(Painter(CellBuffer(8, 12)));
-}
+import '_harness.dart';
 
 List<RenderText> texts(TuiBinding binding) =>
     (binding.renderView.child! as RenderFlex)
@@ -50,7 +12,7 @@ List<RenderText> texts(TuiBinding binding) =>
 
 void main() {
   test('keyed reorder reuses the same RenderText instances', () {
-    var binding = pump(const Column(children: [
+    var binding = pumpHosted(const Column(children: [
       Text('a', key: ValueKey('a')),
       Text('b', key: ValueKey('b')),
       Text('c', key: ValueKey('c')),
@@ -75,7 +37,7 @@ void main() {
   });
 
   test('mid-list insert keeps the surrounding keyed children', () {
-    var binding = pump(const Column(children: [
+    var binding = pumpHosted(const Column(children: [
       Text('a', key: ValueKey('a')),
       Text('c', key: ValueKey('c')),
     ]));
@@ -98,7 +60,7 @@ void main() {
   });
 
   test('removal drops the render object and keeps the others', () {
-    var binding = pump(const Column(children: [
+    var binding = pumpHosted(const Column(children: [
       Text('a', key: ValueKey('a')),
       Text('b', key: ValueKey('b')),
       Text('c', key: ValueKey('c')),
@@ -121,7 +83,7 @@ void main() {
 
   test('a type change tears down the old render object and inflates a new one',
       () {
-    var binding = pump(const Column(children: [Text('only')]));
+    var binding = pumpHosted(const Column(children: [Text('only')]));
     var oldChild = (binding.renderView.child! as RenderFlex).children.single;
     expect(oldChild, isA<RenderText>());
 
@@ -138,7 +100,7 @@ void main() {
   });
 
   test('keyless same-type children update in place', () {
-    var binding = pump(const Column(children: [Text('a'), Text('b')]));
+    var binding = pumpHosted(const Column(children: [Text('a'), Text('b')]));
     var before = texts(binding);
 
     rebuild(binding, const Column(children: [Text('a2'), Text('b2')]));

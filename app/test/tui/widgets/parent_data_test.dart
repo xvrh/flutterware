@@ -5,42 +5,7 @@ import 'package:flutterware_app/src/tui/render/render.dart';
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
-/// A stateful host that swaps its built subtree between frames.
-class Host extends StatefulWidget {
-  const Host({super.key});
-
-  static Widget body = const Text('');
-  static HostState? last;
-
-  @override
-  State<Host> createState() => HostState();
-}
-
-class HostState extends State<Host> {
-  @override
-  void initState() {
-    Host.last = this;
-  }
-
-  void show(Widget body) => setState(() => Host.body = body);
-
-  @override
-  Widget build(BuildContext context) => Host.body;
-}
-
-TuiBinding pump(Widget body) {
-  Host.body = body;
-  var binding = TuiBinding();
-  binding.attachRootWidget(const Host());
-  binding.handleResize(CellSize(8, 20));
-  binding.drawFrame(Painter(CellBuffer(8, 20)));
-  return binding;
-}
-
-void rebuild(TuiBinding binding, Widget body) {
-  Host.last!.show(body);
-  binding.drawFrame(Painter(CellBuffer(8, 20)));
-}
+import '_harness.dart';
 
 /// The parent data of the [RenderFlex]'s single child.
 FlexParentData onlyChildParentData(TuiBinding binding) {
@@ -52,7 +17,7 @@ void main() {
   test('Expanded writes flex and a tight fit into the child FlexParentData',
       () {
     var binding =
-        pump(const Row(children: [Expanded(flex: 2, child: Text('x'))]));
+        pumpHosted(const Row(children: [Expanded(flex: 2, child: Text('x'))]));
     var pd = onlyChildParentData(binding);
     expect(pd.flex, 2);
     expect(pd.fit, FlexFit.tight);
@@ -60,7 +25,7 @@ void main() {
 
   test('Flexible writes flex and a loose fit', () {
     var binding =
-        pump(const Row(children: [Flexible(flex: 3, child: Text('x'))]));
+        pumpHosted(const Row(children: [Flexible(flex: 3, child: Text('x'))]));
     var pd = onlyChildParentData(binding);
     expect(pd.flex, 3);
     expect(pd.fit, FlexFit.loose);
@@ -68,7 +33,7 @@ void main() {
 
   test('rebuilding with a new flex updates the FlexParentData', () {
     var binding =
-        pump(const Row(children: [Expanded(flex: 2, child: Text('x'))]));
+        pumpHosted(const Row(children: [Expanded(flex: 2, child: Text('x'))]));
     expect(onlyChildParentData(binding).flex, 2);
 
     rebuild(
@@ -79,7 +44,7 @@ void main() {
 
   test('switching Expanded to Flexible changes the fit', () {
     var binding =
-        pump(const Row(children: [Expanded(flex: 1, child: Text('x'))]));
+        pumpHosted(const Row(children: [Expanded(flex: 1, child: Text('x'))]));
     expect(onlyChildParentData(binding).fit, FlexFit.tight);
 
     rebuild(
@@ -89,7 +54,7 @@ void main() {
 
   test('Expanded flex actually drives layout', () {
     // Two Expanded children, flex 1 and 3, in a 16-wide row => 4 and 12 cols.
-    var binding = pump(const Row(children: [
+    var binding = pumpHosted(const Row(children: [
       Expanded(flex: 1, child: Text('a')),
       Expanded(flex: 3, child: Text('b')),
     ]));

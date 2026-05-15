@@ -1,16 +1,12 @@
 import 'package:flutterware_app/src/tui/buffer.dart';
-import 'package:flutterware_app/src/tui/geometry.dart';
 import 'package:flutterware_app/src/tui/painter.dart';
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
-TuiBinding pump(Widget widget) {
-  var binding = TuiBinding();
-  binding.attachRootWidget(widget);
-  binding.handleResize(CellSize(8, 12));
-  binding.drawFrame(Painter(CellBuffer(8, 12)));
-  return binding;
-}
+import '_harness.dart' as harness;
+
+TuiBinding pump(Widget widget) =>
+    harness.pump(widget, rows: 8, cols: 12).binding;
 
 void frame(TuiBinding binding) => binding.drawFrame(Painter(CellBuffer(8, 12)));
 

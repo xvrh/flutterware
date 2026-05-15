@@ -1,27 +1,11 @@
 import 'package:flutterware_app/src/tui/buffer.dart';
 import 'package:flutterware_app/src/tui/cell.dart';
-import 'package:flutterware_app/src/tui/geometry.dart';
 import 'package:flutterware_app/src/tui/painter.dart';
 import 'package:flutterware_app/src/tui/render/render.dart';
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
-List<String> dump(CellBuffer b) => [
-      for (var r = 0; r < b.rows; r++)
-        String.fromCharCodes([
-          for (var c = 0; c < b.cols; c++) b.get(r, c).rune,
-        ]),
-    ];
-
-({TuiBinding binding, CellBuffer buffer}) pump(Widget widget,
-    {int rows = 6, int cols = 12}) {
-  var binding = TuiBinding();
-  binding.attachRootWidget(widget);
-  binding.handleResize(CellSize(rows, cols));
-  var buffer = CellBuffer(rows, cols);
-  binding.drawFrame(Painter(buffer));
-  return (binding: binding, buffer: buffer);
-}
+import '_harness.dart';
 
 void main() {
   test('Text produces a RenderText carrying its fields', () {
