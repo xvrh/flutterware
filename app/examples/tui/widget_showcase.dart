@@ -342,38 +342,40 @@ class LayoutLabScene extends StatelessWidget {
         Text('  ${align.name}'),
         SizedBox(height: 1),
         Text('flex factors', style: TextStyle.bold),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              flex: flexA,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  fill: Cell(rune: 0x20, bg: Color.rgb(80, 180, 255)),
-                ),
-                child: Text(
-                  '$flexA',
-                  hAlign: HorizontalAlign.center,
-                  vAlign: VerticalAlign.center,
-                  style: TextStyle.bold,
-                ),
-              ),
-            ),
-            Expanded(
-              flex: flexB,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  fill: Cell(rune: 0x20, bg: Color.rgb(255, 120, 180)),
-                ),
-                child: Text(
-                  '$flexB',
-                  hAlign: HorizontalAlign.center,
-                  vAlign: VerticalAlign.center,
-                  style: TextStyle.bold,
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: flexA,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    fill: Cell(rune: 0x20, bg: Color.rgb(80, 180, 255)),
+                  ),
+                  child: Text(
+                    '$flexA',
+                    hAlign: HorizontalAlign.center,
+                    vAlign: VerticalAlign.center,
+                    style: TextStyle.bold,
+                  ),
                 ),
               ),
-            ),
-          ],
+              Expanded(
+                flex: flexB,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    fill: Cell(rune: 0x20, bg: Color.rgb(255, 120, 180)),
+                  ),
+                  child: Text(
+                    '$flexB',
+                    hAlign: HorizontalAlign.center,
+                    vAlign: VerticalAlign.center,
+                    style: TextStyle.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -535,7 +537,7 @@ class Footer extends StatelessWidget {
   }
 }
 
-/// Root of the showcase. Owns the animation clock and (later) input + scenes.
+/// Root of the showcase. Owns the animation clock, keyboard input, and scene dispatch.
 class ShowcaseApp extends StatefulWidget {
   const ShowcaseApp({super.key});
 
