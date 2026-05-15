@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'ansi.dart';
 import 'buffer.dart';
+import 'cell.dart';
 import 'cursor_query.dart';
 import 'input.dart';
 
@@ -77,6 +78,10 @@ class Terminal {
   int _cols = 0;
   late CellBuffer _front;
   late CellBuffer _back;
+
+  /// The most recent paint callback passed to [draw]. Replayed by
+  /// [printAbove] to redraw the region after it has been re-anchored.
+  void Function(CellBuffer buffer)? _lastPaint;
 
   bool _wasEcho = false;
   bool _wasLine = false;
@@ -234,6 +239,7 @@ class Terminal {
   /// caller's freshly-painted back buffer. The user's [paint] function
   /// receives a cleared back buffer.
   void draw(void Function(CellBuffer buffer) paint) {
+    _lastPaint = paint;
     _back.clear();
     paint(_back);
     final diff =
@@ -242,6 +248,76 @@ class Terminal {
       stdout.write(diff);
     }
     _front.copyFrom(_back);
+  }
+
+  /// Insert [height] rows of content into the terminal scrollback immediately
+  /// above the inline region, then redraw the region at its new anchor.
+  ///
+  /// [paint] receives a fresh [height]×cols [CellBuffer] addressed from
+  /// (0, 0). Content wider than the terminal is clipped; lines are not
+  /// wrapped. A non-positive [height] is a no-op.
+  ///
+  /// Only valid in inline mode. Throws [StateError] in full-screen mode,
+  /// where the alt-screen buffer has no scrollback.
+  void printAbove(int height, void Function(CellBuffer buffer) paint) {
+    if (_mode is! InlineMode) {
+      throw StateError('printAbove is only available in inline mode');
+    }
+    if (height <= 0) return;
+
+    final lines = CellBuffer(height, _cols);
+    paint(lines);
+
+    final out = StringBuffer();
+    // Write the new lines starting at the region's current top row. Each
+    // trailing newline either drifts the region down or, once the region is
+    // pinned at the bottom, scrolls a line into the terminal's scrollback.
+    out.write(Ansi.moveTo(_originRow, 0));
+    for (var r = 0; r < height; r++) {
+      out.write(encodeRow(lines, rowIndex: r));
+      out.write(Ansi.resetStyle); // so the erase below uses the default bg
+      out.write('\x1b[K'); // erase to end of line
+      out.write('\n');
+    }
+
+    _originRow = anchorRowAfterPrintAbove(
+      originRow: _originRow,
+      regionRows: _rows,
+      linesPrinted: height,
+      terminalLines: stdout.terminalLines,
+    );
+
+    // Wipe the now-stale region area, then redraw the region at the new
+    // anchor by replaying the last paint callback against a blank front.
+    out.write(Ansi.moveTo(_originRow, 0));
+    out.write('\x1b[J'); // erase from cursor to end of screen
+
+    _front = CellBuffer(_rows, _cols);
+    _back.clear();
+    (_lastPaint ?? (_) {})(_back);
+    out.write(encodeDiff(_front, _back,
+        originRow: _originRow, originCol: _originCol));
+    _front.copyFrom(_back);
+
+    stdout.write(out.toString());
+  }
+
+  /// Convenience over [printAbove] for plain text. [text] is split on '\n';
+  /// each line becomes one scrollback row painted with the given style.
+  ///
+  /// Only valid in inline mode. Throws [StateError] in full-screen mode.
+  void printTextAbove(
+    String text, {
+    Color fg = Color.defaultFg,
+    Color bg = Color.defaultBg,
+    int style = 0,
+  }) {
+    final textLines = text.split('\n');
+    printAbove(textLines.length, (buffer) {
+      for (var i = 0; i < textLines.length; i++) {
+        buffer.writeAt(i, 0, textLines[i], fg: fg, bg: bg, style: style);
+      }
+    });
   }
 
   void _restore() {
