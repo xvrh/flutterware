@@ -27,12 +27,20 @@ stdout. Fully headless: no window, no texture, no widgets.
 
 ## Key decisions
 
-- **Engine source:** the prebuilt `FlutterMacOS.framework` already in the Flutter
-  cache (`bin/cache/artifacts/engine/darwin-x64/FlutterMacOS.xcframework`). No Dart
-  SDK or engine build from source. The framework embeds a Dart VM and exports the
-  public C embedder API.
+- **Engine source:** the prebuilt `FlutterEmbedder.framework` engine artifact. No
+  Dart SDK or engine build from source. This framework embeds a Dart VM *and*
+  exports the public C embedder API symbols (`FlutterEngineRun`, …). Note: the
+  `FlutterMacOS.framework` shipped in the local cache is the high-level Obj-C
+  desktop framework and does **not** export the C embedder API — hence the separate
+  artifact. `FlutterEmbedder.framework` is not in the local cache by default; it is
+  downloaded once from Flutter's official artifact storage
+  (`storage.googleapis.com/flutter_infra_release/flutter/<engine-revision>/darwin-x64/FlutterEmbedder.framework.zip`,
+  ~31 MB) and cached, gitignored, under `embedder/.engine/`. The engine revision is
+  read from `<flutter>/bin/cache/engine.stamp`.
 - **Embedder API:** `flutter_embedder.h` — a single stable, versioned header copied
-  from the Flutter engine repo at the cache's pinned engine revision.
+  from the Flutter engine repo at the cache's pinned engine revision. (It is also
+  bundled inside `FlutterEmbedder.framework`; the vendored copy keeps the build
+  self-contained.)
 - **Compiler:** the Flutter cache's `frontend_server` snapshot, driven via
   `package:frontend_server_client`. `frontend_server` *is* `package:front_end`'s
   `IncrementalKernelGenerator` wrapped as a server — the same compiler `flutter run`
@@ -56,7 +64,7 @@ directory containing `kernel_blob.bin`**:
 | Unit | Language | Responsibility | Depends on |
 |---|---|---|---|
 | **Compiler** | Dart | `hello.dart` → `assets/kernel_blob.bin` | `frontend_server` snapshot, `frontend_server_client` |
-| **Host** | C | Loads `FlutterMacOS.framework`, runs the engine headless on the assets dir, echoes Dart `print()` to stdout | `flutter_embedder.h`, `FlutterMacOS.framework`, `icudtl.dat` |
+| **Host** | C | Links `FlutterEmbedder.framework`, runs the engine headless on the assets dir, echoes Dart `print()` to stdout | `flutter_embedder.h`, `FlutterEmbedder.framework`, `icudtl.dat` |
 
 Either unit can be tested or replaced independently of the other.
 
@@ -82,9 +90,10 @@ Either unit can be tested or replaced independently of the other.
   `icudtl.dat`, `log_message_callback` → writes to the host's stdout (Dart `print()`
   is routed through this callback).
 - Lifecycle: `FlutterEngineRun` → wait until the log callback observes the expected
-  line *or* a bounded timeout (~5 s) → `FlutterEngineShutdown`. Exit code 0 on match,
+  line *or* a bounded timeout (~10 s) → `FlutterEngineShutdown`. Exit code 0 on match,
   non-zero on timeout, giving a clear pass/fail signal.
-- Links the framework via `-F <cache>/darwin-x64 -framework FlutterMacOS`.
+- Links the framework via `-F <embedder>/.engine -framework FlutterEmbedder`, with
+  an install rpath pointing at the same directory.
 - No VM service in step 1.
 
 ## Layout
@@ -93,22 +102,28 @@ Either unit can be tested or replaced independently of the other.
 embedder/
   pubspec.yaml              # flutterware_embedder; added to root workspace list
   lib/compiler.dart         # frontend_server client wrapper
+  lib/src/flutter_cache.dart # locates Flutter SDK cache artifacts
   bin/compile.dart          # CLI: hello.dart -> assets/kernel_blob.bin
   example/hello.dart        # void main() => print('Hello, World!');
   native/
     flutter_embedder.h      # vendored, version-matched to the cached engine
     host.c
     CMakeLists.txt
-  tool/run.dart             # orchestrator: compile -> cmake build -> run host
+  tool/run.dart             # orchestrator: fetch engine -> compile -> build -> run
   test/pipeline_test.dart   # integration test
+  .engine/                  # gitignored: downloaded FlutterEmbedder.framework
   README.md                 # records the engine-revision matching constraint
 ```
 
-`tool/run.dart` is the single entry point: compile the kernel, configure and build
-the CMake host, run it, and surface its exit code.
+`tool/run.dart` is the single entry point: ensure `FlutterEmbedder.framework` is
+downloaded, compile the kernel, configure and build the CMake host, run it, and
+surface its exit code.
 
 ## Data flow
 
+0. `tool/run.dart` ensures `FlutterEmbedder.framework` is present under
+   `embedder/.engine/`, downloading it from Flutter's artifact storage (keyed by the
+   engine revision in `bin/cache/engine.stamp`) on first run.
 1. `tool/run.dart` invokes the compiler → `frontend_server` compiles
    `example/hello.dart` against the Flutter patched SDK → `build/assets/kernel_blob.bin`.
 2. `tool/run.dart` configures and builds the CMake host → `build/host`.
@@ -121,6 +136,8 @@ the CMake host, run it, and surface its exit code.
 
 - **Flutter SDK / cache artifacts not found:** the compiler and `tool/run.dart` fail
   fast with a message naming the missing path.
+- **`FlutterEmbedder.framework` download fails:** `tool/run.dart` reports the failed
+  URL / HTTP status and exits non-zero before attempting to build.
 - **Compilation failure:** `frontend_server` reports diagnostics; the compiler
   surfaces them and exits non-zero without producing `kernel_blob.bin`.
 - **Engine fails to start or `main()` never prints:** the host's bounded timeout

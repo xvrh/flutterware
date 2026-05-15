@@ -4,9 +4,9 @@
 
 **Goal:** Compile a hello-world Dart program to kernel with the Flutter `frontend_server` and run it headless inside a C host that embeds the prebuilt Flutter engine, surfacing the program's `print()` output on the host's stdout.
 
-**Architecture:** A new pub-workspace member `embedder/` with two units that meet at one interface — an `assets/` directory containing `kernel_blob.bin`. A Dart **compiler** drives the Flutter cache's `frontend_server` (via `package:frontend_server_client`) to produce that kernel. A C **host** links the cached `FlutterMacOS.framework`, runs the engine with the engine's software renderer in headless mode (no window), and echoes Dart `print()` — delivered through the embedder API's `log_message_callback` — to its own stdout. A `tool/run.dart` orchestrator chains compile → CMake build → run.
+**Architecture:** A new pub-workspace member `embedder/` with two units that meet at one interface — an `assets/` directory containing `kernel_blob.bin`. A Dart **compiler** drives the Flutter cache's `frontend_server` (via `package:frontend_server_client`) to produce that kernel. A C **host** links `FlutterEmbedder.framework` (the prebuilt engine artifact that exports the C embedder API), runs the engine with the engine's software renderer in headless mode (no window), and echoes Dart `print()` — delivered through the embedder API's `log_message_callback` — to its own stdout. A `tool/run.dart` orchestrator downloads the framework, then chains compile → CMake build → run.
 
-**Tech Stack:** Dart (`frontend_server_client`, `path`, `test`), C11, CMake, the prebuilt Flutter engine (`FlutterMacOS.framework`) and `flutter_embedder.h`.
+**Tech Stack:** Dart (`frontend_server_client`, `path`, `test`), C11, CMake, the prebuilt Flutter engine (`FlutterEmbedder.framework`) and `flutter_embedder.h`.
 
 **Reference spec:** `docs/superpowers/specs/2026-05-15-flutter-embedder-step1-design.md`
 
@@ -15,8 +15,12 @@
 - Flutter cache layout (relative to `<flutter>/bin/cache`):
   - `artifacts/engine/common/flutter_patched_sdk/platform_strong.dill`
   - `artifacts/engine/darwin-x64/icudtl.dat`
-  - `artifacts/engine/darwin-x64/FlutterMacOS.xcframework/macos-arm64_x86_64/FlutterMacOS.framework`
-- macOS host, CMake ≥ 3.15 on PATH.
+  - `engine.stamp` — the 40-char engine revision.
+- The C embedder API (`FlutterEngineRun`, …) is NOT exported by the cache's
+  `FlutterMacOS.framework`. It ships in `FlutterEmbedder.framework`, downloaded at
+  run time from `storage.googleapis.com/flutter_infra_release/flutter/<engine-revision>/darwin-x64/FlutterEmbedder.framework.zip`
+  (~31 MB) and cached, gitignored, under `embedder/.engine/`.
+- macOS host, CMake ≥ 3.15 and `curl`/`unzip` on PATH.
 
 ---
 
@@ -71,6 +75,7 @@ dev_dependencies:
 ```
 build/
 .dart_tool/
+.engine/
 ```
 
 - [ ] **Step 4: Create `embedder/example/hello.dart`**
@@ -119,13 +124,8 @@ void main() {
         reason: 'platform_strong.dill should exist at ${cache.platformDill}');
     expect(File(cache.icuData).existsSync(), isTrue,
         reason: 'icudtl.dat should exist at ${cache.icuData}');
-    expect(
-        Directory(cache.macOsFrameworkDir).existsSync(), isTrue,
-        reason: 'framework dir should exist at ${cache.macOsFrameworkDir}');
-    expect(
-        Directory('${cache.macOsFrameworkDir}/FlutterMacOS.framework')
-            .existsSync(),
-        isTrue);
+    expect(cache.engineRevision, matches(RegExp(r'^[0-9a-f]{40}$')),
+        reason: 'engine.stamp should hold a 40-char git revision');
   });
 }
 ```
@@ -179,9 +179,10 @@ class FlutterCache {
   /// ICU data the engine needs at startup.
   String get icuData => p.join(_engine, 'darwin-x64', 'icudtl.dat');
 
-  /// Directory containing `FlutterMacOS.framework` (the `-F` link path).
-  String get macOsFrameworkDir => p.join(_engine, 'darwin-x64',
-      'FlutterMacOS.xcframework', 'macos-arm64_x86_64');
+  /// The engine revision the cached artifacts were built at. Used to fetch the
+  /// matching `FlutterEmbedder.framework` from Flutter's artifact storage.
+  String get engineRevision =>
+      File(p.join(cacheDir, 'engine.stamp')).readAsStringSync().trim();
 }
 ```
 
@@ -516,35 +517,28 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 if(NOT FLUTTER_FRAMEWORK_DIR)
   message(FATAL_ERROR
-    "Pass -DFLUTTER_FRAMEWORK_DIR=<dir containing FlutterMacOS.framework>")
+    "Pass -DFLUTTER_FRAMEWORK_DIR=<dir containing FlutterEmbedder.framework>")
 endif()
 
 add_executable(host host.c)
 target_include_directories(host PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_options(host PRIVATE "-F${FLUTTER_FRAMEWORK_DIR}")
-target_link_libraries(host PRIVATE "-framework FlutterMacOS")
+target_link_libraries(host PRIVATE "-framework FlutterEmbedder")
 set_target_properties(host PROPERTIES
   BUILD_WITH_INSTALL_RPATH TRUE
   INSTALL_RPATH "${FLUTTER_FRAMEWORK_DIR}")
 ```
 
-- [ ] **Step 3: Verify the host compiles and links**
+> Note: the C embedder API (`FlutterEngineRun`, …) is exported by
+> `FlutterEmbedder.framework`, **not** by the `FlutterMacOS.framework` in the local
+> cache (that one is the high-level Obj-C desktop framework). `FlutterEmbedder.framework`
+> is downloaded by the Task 7 orchestrator into `embedder/.engine/`.
 
-Resolve the framework directory:
+- [ ] **Step 3: Commit**
 
-Run: `FW=$(dirname $(dirname $(which flutter)))/bin/cache/artifacts/engine/darwin-x64/FlutterMacOS.xcframework/macos-arm64_x86_64; ls "$FW/FlutterMacOS.framework"`
-Expected: lists the framework contents (confirms the path).
-
-Configure and build:
-
-Run:
-```bash
-cmake -S embedder/native -B embedder/build/native -DFLUTTER_FRAMEWORK_DIR="$FW"
-cmake --build embedder/build/native
-```
-Expected: builds `embedder/build/native/host` with no errors.
-
-- [ ] **Step 4: Commit**
+The C host cannot be built standalone here — it links `FlutterEmbedder.framework`,
+which the Task 7 orchestrator downloads. Compile + link + run are verified
+end-to-end when `tool/run.dart` runs (Tasks 7 and 8). Commit the source now:
 
 ```bash
 git add embedder/native/host.c embedder/native/CMakeLists.txt
@@ -569,8 +563,8 @@ import 'package:flutterware_embedder/compiler.dart';
 import 'package:flutterware_embedder/src/flutter_cache.dart';
 import 'package:path/path.dart' as p;
 
-/// Compiles example/hello.dart, builds the C host, runs it.
-/// Exits with the host's exit code.
+/// Downloads FlutterEmbedder.framework if needed, compiles example/hello.dart,
+/// builds the C host, runs it. Exits with the host's exit code.
 Future<void> main() async {
   // <embedder>/tool/run.dart -> <embedder>
   var packageRoot = p.dirname(p.dirname(p.fromUri(Platform.script)));
@@ -581,6 +575,9 @@ Future<void> main() async {
   var assetsDir = p.join(packageRoot, 'build', 'assets');
   var kernelBlob = p.join(assetsDir, 'kernel_blob.bin');
   var nativeBuildDir = p.join(packageRoot, 'build', 'native');
+  var engineDir = p.join(packageRoot, '.engine');
+
+  await _ensureEmbedderFramework(cache, engineDir);
 
   stdout.writeln('[run] compiling hello.dart -> kernel_blob.bin');
   await compileToKernel(
@@ -595,7 +592,7 @@ Future<void> main() async {
   await _run('cmake', [
     '-S', p.join(packageRoot, 'native'),
     '-B', nativeBuildDir,
-    '-DFLUTTER_FRAMEWORK_DIR=${cache.macOsFrameworkDir}',
+    '-DFLUTTER_FRAMEWORK_DIR=$engineDir',
   ]);
   await _run('cmake', ['--build', nativeBuildDir]);
 
@@ -608,10 +605,42 @@ Future<void> main() async {
   exit(await host.exitCode);
 }
 
+/// Ensures `FlutterEmbedder.framework` (the C embedder API, not part of the
+/// local Flutter cache) is present under [engineDir], downloading it from
+/// Flutter's artifact storage if it is missing or built for a different engine
+/// revision.
+Future<void> _ensureEmbedderFramework(
+    FlutterCache cache, String engineDir) async {
+  var revision = cache.engineRevision;
+  var frameworkDir = p.join(engineDir, 'FlutterEmbedder.framework');
+  var stamp = File(p.join(engineDir, 'engine.revision'));
+  if (Directory(frameworkDir).existsSync() &&
+      stamp.existsSync() &&
+      stamp.readAsStringSync().trim() == revision) {
+    return;
+  }
+
+  stdout.writeln('[run] downloading FlutterEmbedder.framework ($revision)');
+  if (Directory(frameworkDir).existsSync()) {
+    Directory(frameworkDir).deleteSync(recursive: true);
+  }
+  Directory(engineDir).createSync(recursive: true);
+
+  var url = 'https://storage.googleapis.com/flutter_infra_release/flutter/'
+      '$revision/darwin-x64/FlutterEmbedder.framework.zip';
+  var zip = p.join(engineDir, 'FlutterEmbedder.framework.zip');
+  await _run('curl', ['-fSL', url, '-o', zip]);
+  // The zip's root entries are the framework's contents, so extract straight
+  // into the `FlutterEmbedder.framework` directory.
+  await _run('unzip', ['-q', '-o', zip, '-d', frameworkDir]);
+  File(zip).deleteSync();
+  stamp.writeAsStringSync(revision);
+}
+
 Future<void> _run(String executable, List<String> args) async {
-  var result = await Process.start(executable, args,
+  var process = await Process.start(executable, args,
       mode: ProcessStartMode.inheritStdio);
-  var code = await result.exitCode;
+  var code = await process.exitCode;
   if (code != 0) {
     stderr.writeln('[run] `$executable ${args.join(' ')}` failed ($code)');
     exit(code);
@@ -746,4 +775,4 @@ git commit -m "Add embedder README"
 
 - **Spec coverage:** package scaffold + workspace member (Task 1); compiler unit via `frontend_server_client` (Tasks 3–4); `flutter_embedder.h` vendoring (Task 5); headless software-renderer C host with `log_message_callback` → stdout (Task 6); `assets/kernel_blob.bin` interface (Tasks 3, 6, 7); `tool/run.dart` orchestrator (Task 7); single integration test (Task 8); README recording the engine-revision constraint (Task 9). Cache path resolution (Task 2) is an implied dependency of the compiler and host.
 - **Deferred items** (window, textures, hot reload, VM service, non-macOS) are intentionally absent — out of scope per the spec.
-- **Type consistency:** `FlutterCache` (`platformDill`, `icuData`, `macOsFrameworkDir`, `flutterPatchedSdkDir`) and `compileToKernel({entrypoint, outputDill, packageConfig, cache})` are used identically across Tasks 2, 3, 4, 7. The host CLI contract `host <assets_dir> <icu_data_path>` matches between Task 6 and Task 7.
+- **Type consistency:** `FlutterCache` (`platformDill`, `icuData`, `engineRevision`, `flutterPatchedSdkDir`) and `compileToKernel({entrypoint, outputDill, packageConfig, cache})` are used identically across Tasks 2, 3, 4, 7. The host CLI contract `host <assets_dir> <icu_data_path>` matches between Task 6 and Task 7.
