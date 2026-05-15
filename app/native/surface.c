@@ -25,6 +25,10 @@ static IOSurfaceRef CreateSurface(int width, int height) {
   CFDictionarySetValue(props, kIOSurfaceBytesPerElement, e);
   CFDictionarySetValue(props, kIOSurfaceBytesPerRow, r);
   CFDictionarySetValue(props, kIOSurfacePixelFormat, f);
+  // The GUI process resolves these surfaces with IOSurfaceLookup(id); that
+  // only works for surfaces flagged global. Deprecated, but the companion of
+  // the by-ID sharing the design chose for step 3a.
+  CFDictionarySetValue(props, kIOSurfaceIsGlobal, kCFBooleanTrue);
   IOSurfaceRef surface = IOSurfaceCreate(props);
   CFRelease(w);
   CFRelease(h);

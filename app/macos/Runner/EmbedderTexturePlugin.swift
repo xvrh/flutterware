@@ -16,12 +16,15 @@ class EmbedderTexture: NSObject, FlutterTexture {
   }
 
   private static func wrap(_ surfaceIds: [UInt32]) -> [CVPixelBuffer]? {
+    // The Flutter engine composites the returned pixel buffer through a Metal
+    // texture cache, so the buffer must be flagged Metal-compatible.
+    let attrs: [CFString: Any] = [kCVPixelBufferMetalCompatibilityKey: true]
     var result: [CVPixelBuffer] = []
     for id in surfaceIds {
       guard let surface = IOSurfaceLookup(IOSurfaceID(id)) else { return nil }
       var pixelBuffer: Unmanaged<CVPixelBuffer>?
       let status = CVPixelBufferCreateWithIOSurface(
-        kCFAllocatorDefault, surface, nil, &pixelBuffer)
+        kCFAllocatorDefault, surface, attrs as CFDictionary, &pixelBuffer)
       guard status == kCVReturnSuccess, let pb = pixelBuffer else {
         return nil
       }
