@@ -284,6 +284,165 @@ class ChartsScene extends StatelessWidget {
   }
 }
 
+/// Scene 4: a live view of the layout engine — [MainAxisAlignment] cycling and
+/// morphing [Expanded] flex factors. No [Painted]; real widgets only.
+class LayoutLabScene extends StatelessWidget {
+  const LayoutLabScene({required this.time, super.key});
+
+  final double time;
+
+  // The six MainAxisAlignment values in order.
+  static const _alignments = [
+    MainAxisAlignment.start,
+    MainAxisAlignment.center,
+    MainAxisAlignment.end,
+    MainAxisAlignment.spaceBetween,
+    MainAxisAlignment.spaceAround,
+    MainAxisAlignment.spaceEvenly,
+  ];
+
+  // Four distinct box colors for the alignment demo row.
+  static const _boxColors = [
+    Color.rgb(255, 100, 100),
+    Color.rgb(100, 220, 100),
+    Color.rgb(100, 160, 255),
+    Color.rgb(255, 200, 80),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    var t = time;
+
+    // Cycle through alignments once every ~1.6 s.
+    var alignIndex = (t / 1.6).floor() % _alignments.length;
+    var align = _alignments[alignIndex];
+
+    // Fixed-size colored boxes for the alignment demo.
+    var boxes = [
+      for (var i = 0; i < _boxColors.length; i++)
+        SizedBox(
+          width: 8,
+          height: 3,
+          child: DecoratedBox(
+            decoration:
+                BoxDecoration(fill: Cell(rune: 0x20, bg: _boxColors[i])),
+          ),
+        ),
+    ];
+
+    // Morph flex factors: flexA 1..7, flexB = 8 - flexA so they always sum to 8.
+    var flexA = (1 + ((1 + math.sin(t)) * 3).round()).clamp(1, 7);
+    var flexB = 8 - flexA;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('mainAxisAlignment', style: TextStyle.bold),
+        Row(mainAxisAlignment: align, children: boxes),
+        Text('  ${align.name}'),
+        SizedBox(height: 1),
+        Text('flex factors', style: TextStyle.bold),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: flexA,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  fill: Cell(rune: 0x20, bg: Color.rgb(80, 180, 255)),
+                ),
+                child: Text(
+                  '$flexA',
+                  hAlign: HorizontalAlign.center,
+                  vAlign: VerticalAlign.center,
+                  style: TextStyle.bold,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: flexB,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  fill: Cell(rune: 0x20, bg: Color.rgb(255, 120, 180)),
+                ),
+                child: Text(
+                  '$flexB',
+                  hAlign: HorizontalAlign.center,
+                  vAlign: VerticalAlign.center,
+                  style: TextStyle.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Scene 5: a typography showcase — a gradient wordmark, a bobbing character
+/// wave, and a row of [TextStyle] samples.
+class TypeScene extends StatelessWidget {
+  const TypeScene({required this.time, super.key});
+
+  final double time;
+
+  @override
+  Widget build(BuildContext context) {
+    var t = time;
+    var wordmark = 'flutterware';
+
+    // 1. Gradient wordmark: one bold Text per character with hsv fg.
+    var wordmarkChars = <Widget>[
+      for (var i = 0; i < wordmark.length; i++)
+        Text(
+          wordmark[i],
+          fg: hsv((i / wordmark.length + t * 0.3) % 1.0, 1.0, 1.0),
+          style: TextStyle.bold,
+        ),
+    ];
+
+    // 2. Wave: each character bobs via a SizedBox height spacer above it.
+    var waveStr = '~ widget layer ~';
+    var waveWidgets = <Widget>[
+      for (var i = 0; i < waveStr.length; i++)
+        Column(
+          children: [
+            SizedBox(
+                height: (1 + math.sin(i * 0.5 + t * 3)).round().clamp(0, 2)),
+            Text(waveStr[i]),
+          ],
+        ),
+    ];
+
+    // 3. Style sampler.
+    var styleSampler = <Widget>[
+      Text('bold', style: TextStyle.bold),
+      Text('dim', style: TextStyle.dim),
+      Text('italic', style: TextStyle.italic),
+      Text('underline', style: TextStyle.underline),
+      Text('reverse', style: TextStyle.reverse),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: wordmarkChars),
+        SizedBox(height: 1),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: waveWidgets),
+        SizedBox(height: 1),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: styleSampler,
+        ),
+      ],
+    );
+  }
+}
+
 /// Root of the showcase. Owns the animation clock and (later) input + scenes.
 class ShowcaseApp extends StatefulWidget {
   const ShowcaseApp({super.key});
@@ -310,7 +469,9 @@ class _ShowcaseState extends State<ShowcaseApp> {
 
   @override
   Widget build(BuildContext context) {
-    return ChartsScene(time: _time);
+    return (_time ~/ 5) % 2 == 0
+        ? LayoutLabScene(time: _time)
+        : TypeScene(time: _time);
   }
 }
 
