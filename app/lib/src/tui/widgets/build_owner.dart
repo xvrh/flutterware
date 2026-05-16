@@ -77,4 +77,12 @@ class BuildOwner {
   void finalizeTree() {
     _inactiveElements._unmountAll();
   }
+
+  /// Deactivates [element] and its whole subtree, then unmounts them — running
+  /// every `State.dispose()` along the way. Used to tear a tree down on exit;
+  /// [element] must be a tree root (no parent).
+  void unmountAll(Element element) {
+    _inactiveElements.add(element);
+    finalizeTree();
+  }
 }

@@ -190,6 +190,23 @@ class TuiBinding {
   void handleResize(CellSize size) {
     renderView.configuration = size;
   }
+
+  /// Tears the binding down: unmounts the whole element tree — running every
+  /// `State.dispose()`, so timers, stream subscriptions, and other resources
+  /// held by [State] objects are released — and stops scheduling frames.
+  ///
+  /// Call this once, when [runApp] is exiting. Without it a [State] that
+  /// started a `Timer` or stream subscription keeps the Dart event loop alive,
+  /// so the process never terminates.
+  void dispose() {
+    var root = _rootElement;
+    if (root == null) {
+      return;
+    }
+    _rootElement = null;
+    buildOwner.onBuildScheduled = null;
+    buildOwner.unmountAll(root);
+  }
 }
 
 /// An [InheritedWidget] exposing the terminal context to the whole tree.
@@ -249,7 +266,15 @@ Future<void> runApp(Widget app) async {
           child: app,
         );
 
+    // Set once the app is exiting: frames must stop before the terminal is
+    // restored, otherwise late draws (from a pending microtask or a State's
+    // still-firing Timer) would scribble onto the recovered console.
+    var stopped = false;
+
     void frame() {
+      if (stopped) {
+        return;
+      }
       terminal.draw((buffer) {
         binding.handleResize(CellSize(buffer.rows, buffer.cols));
         binding.drawFrame(Painter(buffer));
@@ -258,7 +283,7 @@ Future<void> runApp(Widget app) async {
 
     var frameScheduled = false;
     void scheduleFrame() {
-      if (frameScheduled) {
+      if (stopped || frameScheduled) {
         return;
       }
       frameScheduled = true;
@@ -280,6 +305,11 @@ Future<void> runApp(Widget app) async {
     try {
       await exit.future;
     } finally {
+      // Stop frames, then tear the tree down so every State.dispose() runs —
+      // releasing Timers and stream subscriptions that would otherwise keep
+      // the event loop alive and the process from exiting.
+      stopped = true;
+      binding.dispose();
       await resizeSub.cancel();
     }
   });

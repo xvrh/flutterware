@@ -39,7 +39,39 @@ class CounterState extends State<Counter> {
   Widget build(BuildContext context) => Text('$value');
 }
 
+/// A widget whose [State] reports when it is disposed.
+class DisposeProbe extends StatefulWidget {
+  const DisposeProbe(this.onDispose, {super.key});
+
+  final void Function() onDispose;
+
+  @override
+  State<DisposeProbe> createState() => _DisposeProbeState();
+}
+
+class _DisposeProbeState extends State<DisposeProbe> {
+  @override
+  void dispose() => widget.onDispose();
+
+  @override
+  Widget build(BuildContext context) => const Text('probe');
+}
+
 void main() {
+  test('dispose() unmounts the tree, running every State.dispose()', () {
+    var disposed = false;
+    var binding = TuiBinding();
+    binding.attachRootWidget(DisposeProbe(() => disposed = true));
+    binding.handleResize(CellSize(1, 8));
+    binding.drawFrame(Painter(CellBuffer(1, 8)));
+    expect(disposed, isFalse, reason: 'still mounted');
+
+    binding.dispose();
+    expect(disposed, isTrue,
+        reason: 'tearing the binding down must dispose every State');
+    expect(binding.rootElement, isNull);
+  });
+
   test('drawFrame runs build -> layout -> paint end to end', () {
     var r = pump(const Text('hello'), rows: 1, cols: 8);
     expect(dump(r.buffer)[0], 'hello   ');
