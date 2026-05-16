@@ -15,7 +15,6 @@ class PtyProcessImpl implements PtyProcess {
   final LibcBindings _libc;
   final StreamController<Uint8List> _output;
   final Completer<int> _exitCode = Completer<int>();
-  late final ReceivePort _rp;
 
   PtyProcessImpl._(this._masterFd, this._pid, this._libc)
       : _output = StreamController<Uint8List>();
@@ -29,7 +28,39 @@ class PtyProcessImpl implements PtyProcess {
   }) async {
     final libc = LibcBindings();
 
-    // Build argv: [executable, ...arguments, nullptr]
+    // Open a PTY master. The child is spawned with posix_spawn, which does the
+    // fork+exec entirely inside libc — no Dart code runs in the child. That is
+    // deliberate: forkpty() returns into the caller in the child too, and
+    // running *any* Dart in a forked child of the multi-threaded Dart VM can
+    // deadlock if a GC/safepoint was in progress at fork() time.
+    final masterFd = libc.posixOpenpt(O_RDWR | O_NOCTTY);
+    if (masterFd < 0) {
+      throw PtyException('posix_openpt failed');
+    }
+    if (libc.grantpt(masterFd) != 0 || libc.unlockpt(masterFd) != 0) {
+      libc.close(masterFd);
+      throw PtyException('grantpt/unlockpt failed');
+    }
+    final slaveNamePtr = libc.ptsname(masterFd);
+    if (slaveNamePtr == nullptr) {
+      libc.close(masterFd);
+      throw PtyException('ptsname failed');
+    }
+    final slavePath = slaveNamePtr.toDartString();
+
+    // Set the initial window size. The slave's first open resets the PTY's
+    // winsize to 0x0, so the parent opens the slave once itself to absorb that
+    // reset, then sets the size. The fd is held open across posix_spawn (so the
+    // child's open is not the "first" one) and closed afterwards.
+    final slavePathPtr = slavePath.toNativeUtf8();
+    final parentSlaveFd = libc.openFile(slavePathPtr, O_RDWR | O_NOCTTY);
+    final ws = calloc<WinSize>()
+      ..ref.ws_col = cols ?? (stdout.hasTerminal ? stdout.terminalColumns : 80)
+      ..ref.ws_row = rows ?? (stdout.hasTerminal ? stdout.terminalLines : 24);
+    libc.ioctl(masterFd, TIOCSWINSZ, ws);
+    calloc.free(ws);
+
+    // argv: [executable, ...arguments, nullptr]
     final argv = calloc<Pointer<Utf8>>(arguments.length + 2);
     argv[0] = executable.toNativeUtf8();
     for (var i = 0; i < arguments.length; i++) {
@@ -37,74 +68,99 @@ class PtyProcessImpl implements PtyProcess {
     }
     argv[arguments.length + 1] = nullptr;
 
-    // Build winsize (use parent terminal size as default)
-    final ws = calloc<WinSize>()
-      ..ref.ws_col = cols ?? (stdout.hasTerminal ? stdout.terminalColumns : 80)
-      ..ref.ws_row = rows ?? (stdout.hasTerminal ? stdout.terminalLines : 24);
+    // envp: inherit the current process environment.
+    final env = Platform.environment;
+    final envp = calloc<Pointer<Utf8>>(env.length + 1);
+    var ei = 0;
+    env.forEach((k, v) {
+      envp[ei++] = '$k=$v'.toNativeUtf8();
+    });
+    envp[env.length] = nullptr;
 
-    final masterOut = calloc<Int32>();
+    // posix_spawn_file_actions_t / posix_spawnattr_t are opaque structs whose
+    // size differs by platform; a generously-sized zeroed buffer covers both.
+    final fileActions = calloc<Uint8>(1024);
+    final attr = calloc<Uint8>(1024);
     final exePtr = executable.toNativeUtf8();
     final cwdPtr =
         workingDirectory != null ? workingDirectory.toNativeUtf8() : nullptr;
+    final pidOut = calloc<Int32>();
 
-    final pid = libc.forkpty(masterOut, nullptr, nullptr, ws);
+    libc.faInit(fileActions.cast());
+    libc.attrInit(attr.cast());
+    libc.attrSetflags(attr.cast(), POSIX_SPAWN_SETSID);
 
-    if (pid < 0) {
-      _freeArgv(argv, arguments.length + 2);
-      calloc.free(ws);
-      calloc.free(masterOut);
-      calloc.free(exePtr);
-      if (cwdPtr != nullptr) calloc.free(cwdPtr);
-      throw PtyException('forkpty failed');
+    // The child opens the slave (without O_NOCTTY) as a fresh session leader,
+    // so the PTY becomes its controlling terminal, then mirrors it onto stdio.
+    libc.faAddopen(fileActions.cast(), 0, slavePathPtr, O_RDWR, 0);
+    libc.faAdddup2(fileActions.cast(), 0, 1);
+    libc.faAdddup2(fileActions.cast(), 0, 2);
+    // Don't leak the master fd into the child.
+    libc.faAddclose(fileActions.cast(), masterFd);
+    if (cwdPtr != nullptr) {
+      libc.faAddchdir(fileActions.cast(), cwdPtr);
     }
 
-    if (pid == 0) {
-      // ====== CHILD BRANCH ======
-      // Only async-signal-safe calls below.
-      if (cwdPtr != nullptr) {
-        final rc = libc.chdir(cwdPtr);
-        if (rc != 0) libc.exitProcess(127);
-      }
-      libc.execvp(exePtr, argv);
-      libc.exitProcess(127); // execvp failed
-      // Unreachable.
-    }
+    final rc = libc.posixSpawnp(
+      pidOut,
+      exePtr,
+      fileActions.cast(),
+      attr.cast(),
+      argv,
+      envp,
+    );
+    final pid = pidOut.value;
 
-    // ====== PARENT BRANCH ======
-    final masterFd = masterOut.value;
-    calloc.free(masterOut);
-    calloc.free(ws);
-    _freeArgv(argv, arguments.length + 2);
+    libc.faDestroy(fileActions.cast());
+    libc.attrDestroy(attr.cast());
+    if (parentSlaveFd >= 0) libc.close(parentSlaveFd);
+    calloc.free(fileActions);
+    calloc.free(attr);
+    calloc.free(pidOut);
     calloc.free(exePtr);
+    calloc.free(slavePathPtr);
     if (cwdPtr != nullptr) calloc.free(cwdPtr);
+    _freeStrArray(argv);
+    _freeStrArray(envp);
+
+    if (rc != 0) {
+      // posix_spawn could not exec the target (e.g. binary not found). Mirror
+      // the historical execvp-failure contract: exit code 127, no output.
+      libc.close(masterFd);
+      final impl = PtyProcessImpl._(masterFd, -1, libc);
+      impl._exitCode.complete(127);
+      unawaited(impl._output.close());
+      return impl;
+    }
 
     final impl = PtyProcessImpl._(masterFd, pid, libc);
     await impl._startReader();
     return impl;
   }
 
-  static void _freeArgv(Pointer<Pointer<Utf8>> argv, int count) {
-    for (var i = 0; i < count; i++) {
-      final p = argv[i];
-      if (p != nullptr) calloc.free(p);
+  static void _freeStrArray(Pointer<Pointer<Utf8>> arr) {
+    for (var i = 0;; i++) {
+      final p = arr[i];
+      if (p == nullptr) break;
+      calloc.free(p);
     }
-    calloc.free(argv);
+    calloc.free(arr);
   }
 
   Future<void> _startReader() async {
-    _rp = ReceivePort();
+    final rp = ReceivePort();
     await Isolate.spawn(
       _readerEntry,
-      _ReaderArgs(_masterFd, _pid, _rp.sendPort),
+      _ReaderArgs(_masterFd, _pid, rp.sendPort),
     );
-    _rp.listen((msg) {
+    rp.listen((msg) {
       if (msg is Uint8List) {
         _output.add(msg);
       } else if (msg is _ExitEvent) {
         if (!_exitCode.isCompleted) _exitCode.complete(msg.code);
         _output.close();
         _libc.close(_masterFd);
-        _rp.close();
+        rp.close();
       }
     });
   }
@@ -136,7 +192,7 @@ class PtyProcessImpl implements PtyProcess {
 
   @override
   void sendSignal(int signal) {
-    _libc.kill(_pid, signal);
+    if (_pid > 0) _libc.kill(_pid, signal);
   }
 }
 
