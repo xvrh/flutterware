@@ -63,4 +63,33 @@ void main() {
     manager.rootScope.debugAttachChild(skipped);
     expect(policy.next(a), isFalse); // only one traversable node
   });
+
+  test('directional traversal moves to the nearest node in a direction', () {
+    var manager = FocusManager();
+    var policy = DirectionalFocusTraversalPolicy();
+    var topLeft = _FixedNode(CellRect.fromTLWH(0, 0, 6, 3));
+    var topRight = _FixedNode(CellRect.fromTLWH(0, 20, 6, 3));
+    var bottomLeft = _FixedNode(CellRect.fromTLWH(10, 0, 6, 3));
+    for (var n in [topLeft, topRight, bottomLeft]) {
+      manager.rootScope.debugAttachChild(n);
+    }
+    topLeft.requestFocus();
+    manager.applyFocusChangesIfNeeded();
+
+    expect(policy.inDirection(topLeft, TraversalDirection.right), isTrue);
+    manager.applyFocusChangesIfNeeded();
+    expect(manager.primaryFocus, topRight);
+
+    expect(policy.inDirection(topLeft, TraversalDirection.down), isTrue);
+    manager.applyFocusChangesIfNeeded();
+    expect(manager.primaryFocus, bottomLeft);
+  });
+
+  test('directional traversal returns false when nothing lies that way', () {
+    var manager = FocusManager();
+    var policy = DirectionalFocusTraversalPolicy();
+    var only = _FixedNode(CellRect.fromTLWH(0, 0, 6, 3));
+    manager.rootScope.debugAttachChild(only);
+    expect(policy.inDirection(only, TraversalDirection.up), isFalse);
+  });
 }

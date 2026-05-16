@@ -63,3 +63,55 @@ class ReadingOrderTraversalPolicy extends FocusTraversalPolicy {
     return false;
   }
 }
+
+/// Arrow-key traversal: moves focus to the geometrically nearest focusable in
+/// the requested [TraversalDirection].
+class DirectionalFocusTraversalPolicy extends FocusTraversalPolicy {
+  @override
+  Iterable<FocusNode> sortDescendants(Iterable<FocusNode> descendants) =>
+      descendants.where((n) => n.rect != null);
+
+  @override
+  bool inDirection(FocusNode currentNode, TraversalDirection direction) {
+    var from = currentNode.rect;
+    if (from == null) return false;
+    var fromCenter = _center(from);
+
+    FocusNode? best;
+    var bestScore = double.infinity;
+    for (var node in _candidates(currentNode)) {
+      if (identical(node, currentNode)) continue;
+      var rect = node.rect!;
+      var toCenter = _center(rect);
+      var dRow = toCenter.$1 - fromCenter.$1;
+      var dCol = toCenter.$2 - fromCenter.$2;
+      var inDirection = switch (direction) {
+        TraversalDirection.up => dRow < 0,
+        TraversalDirection.down => dRow > 0,
+        TraversalDirection.left => dCol < 0,
+        TraversalDirection.right => dCol > 0,
+      };
+      if (!inDirection) continue;
+      // Distance, biased so motion along the travel axis dominates.
+      var primary = switch (direction) {
+        TraversalDirection.up || TraversalDirection.down => dRow.abs(),
+        TraversalDirection.left || TraversalDirection.right => dCol.abs(),
+      };
+      var secondary = switch (direction) {
+        TraversalDirection.up || TraversalDirection.down => dCol.abs(),
+        TraversalDirection.left || TraversalDirection.right => dRow.abs(),
+      };
+      var score = primary + secondary * 2.0;
+      if (score < bestScore) {
+        bestScore = score;
+        best = node;
+      }
+    }
+    if (best == null) return false;
+    best.requestFocus();
+    return true;
+  }
+
+  (double, double) _center(CellRect r) =>
+      (r.top + r.height / 2.0, r.left + r.width / 2.0);
+}
