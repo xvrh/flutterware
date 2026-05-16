@@ -80,7 +80,15 @@ class FocusNode {
   }
 
   /// The nearest enclosing scope — itself for a [FocusScopeNode].
-  FocusScopeNode get nearestScope => enclosingScope!;
+  ///
+  /// Must only be read on a node attached to the focus tree (every attached
+  /// node has the manager's root scope as an ancestor).
+  FocusScopeNode get nearestScope {
+    var scope = enclosingScope;
+    assert(scope != null,
+        'nearestScope read on a FocusNode with no enclosing scope.');
+    return scope!;
+  }
 
   /// This node's ancestors, nearest first.
   Iterable<FocusNode> get ancestors sync* {
@@ -167,7 +175,7 @@ class FocusNode {
 
   /// Detaches this node from the focus tree and drops its listeners.
   void dispose() {
-    if (_manager != null && _manager!.primaryFocus == this) {
+    if (_manager != null && identical(_manager!.primaryFocus, this)) {
       _manager!._markNextFocus(enclosingScope ?? _manager!.rootScope);
     }
     for (var child in List.of(_children)) {
