@@ -33,19 +33,49 @@ class FlexParentData extends BoxParentData {
 /// shared mechanism behind `Row` and `Column`.
 class RenderFlex extends RenderBox {
   RenderFlex({
-    required this.direction,
-    this.mainAxisAlignment = MainAxisAlignment.start,
-    this.crossAxisAlignment = CrossAxisAlignment.start,
-    this.mainAxisSize = MainAxisSize.max,
+    required Axis direction,
+    MainAxisAlignment mainAxisAlignment = MainAxisAlignment.start,
+    CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.start,
+    MainAxisSize mainAxisSize = MainAxisSize.max,
     List<RenderBox> children = const [],
-  }) {
+  })  : _direction = direction,
+        _mainAxisAlignment = mainAxisAlignment,
+        _crossAxisAlignment = crossAxisAlignment,
+        _mainAxisSize = mainAxisSize {
     addAll(children);
   }
 
-  Axis direction;
-  MainAxisAlignment mainAxisAlignment;
-  CrossAxisAlignment crossAxisAlignment;
-  MainAxisSize mainAxisSize;
+  Axis _direction;
+  Axis get direction => _direction;
+  set direction(Axis value) {
+    if (value == _direction) return;
+    _direction = value;
+    markNeedsLayout();
+  }
+
+  MainAxisAlignment _mainAxisAlignment;
+  MainAxisAlignment get mainAxisAlignment => _mainAxisAlignment;
+  set mainAxisAlignment(MainAxisAlignment value) {
+    if (value == _mainAxisAlignment) return;
+    _mainAxisAlignment = value;
+    markNeedsLayout();
+  }
+
+  CrossAxisAlignment _crossAxisAlignment;
+  CrossAxisAlignment get crossAxisAlignment => _crossAxisAlignment;
+  set crossAxisAlignment(CrossAxisAlignment value) {
+    if (value == _crossAxisAlignment) return;
+    _crossAxisAlignment = value;
+    markNeedsLayout();
+  }
+
+  MainAxisSize _mainAxisSize;
+  MainAxisSize get mainAxisSize => _mainAxisSize;
+  set mainAxisSize(MainAxisSize value) {
+    if (value == _mainAxisSize) return;
+    _mainAxisSize = value;
+    markNeedsLayout();
+  }
 
   final List<RenderBox> _children = [];
 
@@ -73,6 +103,32 @@ class RenderFlex extends RenderBox {
     _children.clear();
     for (var child in copy) {
       dropChild(child);
+    }
+  }
+
+  /// Inserts [child], placing it immediately after [after] (or first when
+  /// [after] is null). Adopts the child.
+  void insert(RenderBox child, {RenderBox? after}) {
+    _insertIntoList(child, after);
+    adoptChild(child);
+  }
+
+  /// Relocates an already-adopted [child] to immediately after [after] (or
+  /// first when [after] is null). Does not re-adopt.
+  void move(RenderBox child, {RenderBox? after}) {
+    assert(_children.contains(child), 'move() child must already be present.');
+    _children.remove(child);
+    _insertIntoList(child, after);
+    markNeedsLayout();
+  }
+
+  void _insertIntoList(RenderBox child, RenderBox? after) {
+    if (after == null) {
+      _children.insert(0, child);
+    } else {
+      var index = _children.indexOf(after);
+      assert(index != -1, '`after` is not a child of this RenderFlex.');
+      _children.insert(index + 1, child);
     }
   }
 

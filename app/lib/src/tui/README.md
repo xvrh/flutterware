@@ -6,8 +6,8 @@ declarative UI that renders to a character grid instead of pixels.
 The long-term goal mirrors Flutter's three-tree pipeline
 (Widget → Element → RenderObject), but the render and engine layers are
 terminal-shaped rather than Skia-shaped. **This package is currently at
-stage 3: engine, paint kit, and render tree.** There is no widget layer yet —
-see [the roadmap](../../../../docs/superpowers/tui-roadmap.md) for the staged
+stage 4: engine, paint kit, render tree, and widget layer.** See
+[the roadmap](../../../../docs/superpowers/tui-roadmap.md) for the staged
 plan.
 
 ## What's here
@@ -25,8 +25,9 @@ plan.
 | `painter.dart` | `Painter` — offset+clip drawing surface; `BorderChars`, text helpers |
 | `text_wrap.dart` | `wrapText` — pure word-wrapping |
 | `render/` | The render tree: `RenderObject`/`RenderBox`, `BoxConstraints`, `RenderFlex`/`RenderPadding`/`RenderText`/`RenderDecoratedBox`/`RenderConstrainedBox`, `RenderTuiView` |
+| `widgets/` | The widget layer: `Widget`/`Element`/`State`, `BuildOwner`, `InheritedWidget`, concrete widgets (`Text`, `Row`, `Column`, …), `TuiBinding`, and `runApp` |
 
-Examples live in `app/examples/tui/`.
+Examples live in `app/examples/tui/`. The richest is `widget_showcase.dart`, an animated five-scene showcase reel (plasma, starfield, charts, layout lab, typography) with keyboard navigation — run it with `cd app && dart run examples/tui/widget_showcase.dart`.
 
 ## Quick start
 
@@ -82,16 +83,70 @@ cells that changed, coalescing cursor moves and SGR (color/style) changes. This
 keeps redraws cheap and flicker-free even when only a few cells change between
 frames.
 
+## Widgets quick start
+
+```dart
+import 'dart:async';
+import 'package:flutterware_app/src/tui/tui.dart';
+
+class Counter extends StatefulWidget {
+  const Counter({super.key});
+  @override
+  State<Counter> createState() => _CounterState();
+}
+
+class _CounterState extends State<Counter> {
+  var _count = 0;
+  StreamSubscription<KeyEvent>? _keySub;
+  var _subscribed = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_subscribed) {
+      _subscribed = true;
+      _keySub = TerminalApp.of(context).keys.listen((event) {
+        if (event is CharKey && event.rune == 0x71 /* 'q' */) {
+          TerminalApp.of(context).exit();
+        } else {
+          setState(() => _count++);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _keySub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        Text('Count: $_count'),
+        Text("(press any key to increment, 'q' to quit)"),
+      ]);
+}
+
+Future<void> main() => runApp(const Counter());
+```
+
+`runApp` opens a full-screen terminal session, mounts the widget tree, and
+drives frames. Each call to `setState` schedules a microtask-coalesced rebuild.
+`TerminalApp.of(context)` gives any descendant access to the key stream, the
+current terminal size, and an `exit` hook.
+
 ## Current limitations
 
-Stage 3 is intentionally scoped. Not yet supported:
+Stage 4 is intentionally scoped. Not yet supported:
 
-- No widget layer yet (`Widget`/`Element`/`setState`) — stage 4.
 - Repaint is whole-tree: with no layer model, `markNeedsPaint` repaints
   everything. Re-layout *is* localized to relayout boundaries.
+- No GlobalKey, focus system, or animation/tickers — deferred to later stages.
 - No render object clips its children. A child larger than its slot (e.g. a
   `FlexFit.loose` child, or content overflowing a panel) will bleed; a parent
-  must opt into `Painter.clip` itself. A `RenderClipRect` is left for stage 4.
+  must opt into `Painter.clip` itself. A `RenderClipRect` is left for a later
+  stage.
 - No mouse input.
 - No wide-character / emoji width handling — every cell is one column.
 - Windows: compiles and runs, but signal-driven features (resize) are
