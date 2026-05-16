@@ -310,6 +310,10 @@ Future<void> runApp(Widget app) async {
 
     binding.attachRootWidget(wrap());
     binding.onFrameNeeded = scheduleFrame;
+    var keySub = terminal.keys.listen((event) {
+      if (stopped) return;
+      binding.focusManager.handleKeyEvent(event);
+    });
     frame();
 
     var resizeSub = terminal.resizes.listen((_) {
@@ -326,6 +330,7 @@ Future<void> runApp(Widget app) async {
       stopped = true;
       binding.dispose();
       await resizeSub.cancel();
+      await keySub.cancel();
     }
   });
 }
