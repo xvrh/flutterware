@@ -6,7 +6,7 @@ declarative UI that renders to a character grid instead of pixels.
 The long-term goal mirrors Flutter's three-tree pipeline
 (Widget → Element → RenderObject), but the render and engine layers are
 terminal-shaped rather than Skia-shaped. **This package is currently at
-stage 4: engine, paint kit, render tree, and widget layer.** See
+stage 4.5a: engine, paint kit, render tree, widget layer, and focus system.** See
 [the roadmap](../../../../docs/superpowers/tui-roadmap.md) for the staged
 plan.
 
@@ -26,6 +26,9 @@ plan.
 | `text_wrap.dart` | `wrapText` — pure word-wrapping |
 | `render/` | The render tree: `RenderObject`/`RenderBox`, `BoxConstraints`, `RenderFlex`/`RenderPadding`/`RenderText`/`RenderDecoratedBox`/`RenderConstrainedBox`, `RenderTuiView` |
 | `widgets/` | The widget layer: `Widget`/`Element`/`State`, `BuildOwner`, `InheritedWidget`, concrete widgets (`Text`, `Row`, `Column`, …), `TuiBinding`, and `runApp` |
+| `widgets/focus_manager.dart` | `FocusNode`, `FocusScopeNode`, `FocusManager`, `KeyEventResult` — the focus tree and key-event routing |
+| `widgets/focus_scope.dart` | `Focus` and `FocusScope` widgets — declarative wrappers around focus nodes |
+| `widgets/focus_traversal.dart` | `FocusTraversalPolicy`, `ReadingOrderTraversalPolicy`, `DirectionalFocusTraversalPolicy`, `FocusTraversalGroup` — Tab/Shift-Tab and arrow-key traversal |
 
 Examples live in `app/examples/tui/`. The richest is `widget_showcase.dart`, an animated five-scene showcase reel (plasma, starfield, charts, layout lab, typography) with keyboard navigation — run it with `cd app && dart run examples/tui/widget_showcase.dart`.
 
@@ -138,11 +141,14 @@ current terminal size, and an `exit` hook.
 
 ## Current limitations
 
-Stage 4 is intentionally scoped. Not yet supported:
+Stage 4.5a is intentionally scoped. Not yet supported:
 
 - Repaint is whole-tree: with no layer model, `markNeedsPaint` repaints
   everything. Re-layout *is* localized to relayout boundaries.
-- No GlobalKey, focus system, or animation/tickers — deferred to later stages.
+- No GlobalKey or animation/tickers — deferred to later stages.
+- The focus system (focus tree, traversal, key routing) is implemented as of
+  Stage 4.5a. The declarative `Actions`/`Intents`/`Shortcuts` key-binding layer
+  is deferred to Stage 4.5b.
 - No render object clips its children. A child larger than its slot (e.g. a
   `FlexFit.loose` child, or content overflowing a panel) will bleed; a parent
   must opt into `Painter.clip` itself. A `RenderClipRect` is left for a later
