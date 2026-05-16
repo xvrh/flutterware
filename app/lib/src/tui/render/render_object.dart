@@ -52,6 +52,24 @@ abstract class RenderObject {
   RenderObject? _parent;
   RenderObject? get parent => _parent;
 
+  /// This object's top-left offset relative to the render-tree root, in cells.
+  ///
+  /// Sums the [BoxParentData.offset] of this object and every ancestor. Valid
+  /// only after layout has run. Read-only — used by focus traversal to place
+  /// focusables on the cell grid; it does not affect layout or paint.
+  CellOffset get globalOffset {
+    var offset = CellOffset.zero;
+    RenderObject? node = this;
+    while (node != null) {
+      var pd = node.parentData;
+      if (pd is BoxParentData) {
+        offset = offset + pd.offset;
+      }
+      node = node._parent;
+    }
+    return offset;
+  }
+
   /// Data this object's parent attaches to it.
   ParentData? parentData;
 
