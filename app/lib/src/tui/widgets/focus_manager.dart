@@ -265,6 +265,30 @@ class FocusManager {
     }
   }
 
+  /// Routes [event] through the focus chain.
+  ///
+  /// Calls [FocusNode.onKeyEvent] on the primary focus, then each ancestor up
+  /// to [rootScope], stopping on [KeyEventResult.handled] or
+  /// [KeyEventResult.skipRemainingHandlers]. If the whole chain returns
+  /// [KeyEventResult.ignored], the built-in traversal fallback runs (see
+  /// [_handleTraversalKey]).
+  KeyEventResult handleKeyEvent(KeyEvent event) {
+    var chain = <FocusNode>[_primaryFocus, ..._primaryFocus.ancestors];
+    for (var node in chain) {
+      var callback = node.onKeyEvent;
+      if (callback == null) continue;
+      var result = callback(node, event);
+      if (result == KeyEventResult.handled ||
+          result == KeyEventResult.skipRemainingHandlers) {
+        return result;
+      }
+    }
+    return _handleTraversalKey(event);
+  }
+
+  // Replaced with real traversal in a later task.
+  KeyEventResult _handleTraversalKey(KeyEvent event) => KeyEventResult.ignored;
+
   Set<FocusNode> _chainOf(FocusNode node) {
     var chain = <FocusNode>{node};
     chain.addAll(node.ancestors);

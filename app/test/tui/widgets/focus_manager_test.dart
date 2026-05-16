@@ -57,4 +57,59 @@ void main() {
     manager.applyFocusChangesIfNeeded();
     expect(notified, 1);
   });
+
+  test('handleKeyEvent dispatches to the primary focus first', () {
+    var manager = FocusManager();
+    var node = FocusNode();
+    manager.rootScope.debugAttachChild(node);
+    node.requestFocus();
+    manager.applyFocusChangesIfNeeded();
+
+    KeyEvent? seen;
+    node.onKeyEvent = (n, e) {
+      seen = e;
+      return KeyEventResult.handled;
+    };
+    var event = CharKey(rune: 0x61, modifiers: const {});
+    var result = manager.handleKeyEvent(event);
+    expect(seen, event);
+    expect(result, KeyEventResult.handled);
+  });
+
+  test('handleKeyEvent bubbles to ancestors when ignored', () {
+    var manager = FocusManager();
+    var node = FocusNode();
+    manager.rootScope.debugAttachChild(node);
+    node.requestFocus();
+    manager.applyFocusChangesIfNeeded();
+
+    var order = <String>[];
+    node.onKeyEvent = (n, e) {
+      order.add('node');
+      return KeyEventResult.ignored;
+    };
+    manager.rootScope.onKeyEvent = (n, e) {
+      order.add('root');
+      return KeyEventResult.handled;
+    };
+    manager.handleKeyEvent(CharKey(rune: 0x61, modifiers: const {}));
+    expect(order, ['node', 'root']);
+  });
+
+  test('handleKeyEvent stops bubbling once handled', () {
+    var manager = FocusManager();
+    var node = FocusNode();
+    manager.rootScope.debugAttachChild(node);
+    node.requestFocus();
+    manager.applyFocusChangesIfNeeded();
+
+    var rootCalled = false;
+    node.onKeyEvent = (n, e) => KeyEventResult.handled;
+    manager.rootScope.onKeyEvent = (n, e) {
+      rootCalled = true;
+      return KeyEventResult.ignored;
+    };
+    manager.handleKeyEvent(CharKey(rune: 0x61, modifiers: const {}));
+    expect(rootCalled, isFalse);
+  });
 }
