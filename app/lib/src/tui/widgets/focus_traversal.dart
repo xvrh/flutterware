@@ -115,3 +115,36 @@ class DirectionalFocusTraversalPolicy extends FocusTraversalPolicy {
   (double, double) _center(CellRect r) =>
       (r.top + r.height / 2.0, r.left + r.width / 2.0);
 }
+
+/// Inherited marker carrying the active [FocusTraversalPolicy] down the tree.
+class _FocusTraversalMarker extends InheritedWidget {
+  const _FocusTraversalMarker({required this.policy, required super.child});
+
+  final FocusTraversalPolicy policy;
+
+  @override
+  bool updateShouldNotify(_FocusTraversalMarker oldWidget) =>
+      !identical(policy, oldWidget.policy);
+}
+
+/// Scopes a [FocusTraversalPolicy] to a subtree. The built-in Tab/arrow
+/// fallback in [FocusManager] uses the policy nearest the focused node.
+class FocusTraversalGroup extends StatelessWidget {
+  const FocusTraversalGroup({
+    super.key,
+    required this.policy,
+    required this.child,
+  });
+
+  final FocusTraversalPolicy policy;
+  final Widget child;
+
+  /// The nearest enclosing policy, or null when there is no group.
+  static FocusTraversalPolicy? maybeOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<_FocusTraversalMarker>()
+      ?.policy;
+
+  @override
+  Widget build(BuildContext context) =>
+      _FocusTraversalMarker(policy: policy, child: child);
+}

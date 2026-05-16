@@ -78,4 +78,6 @@ export 'widgets/widgets.dart'
         TraversalDirection,
         FocusTraversalPolicy,
         ReadingOrderTraversalPolicy,
-        DirectionalFocusTraversalPolicy;
+        DirectionalFocusTraversalPolicy,
+        FocusScope,
+        FocusTraversalGroup;

@@ -64,6 +64,74 @@ class Focus extends StatefulWidget {
   State<Focus> createState() => _FocusState();
 }
 
+/// A [Focus] that manages a [FocusScopeNode], grouping a focusable subtree.
+class FocusScope extends StatefulWidget {
+  const FocusScope({
+    super.key,
+    required this.child,
+    this.node,
+    this.autofocus = false,
+  });
+
+  final Widget child;
+
+  /// An externally-owned scope node to adopt. When null, one is created.
+  final FocusScopeNode? node;
+
+  final bool autofocus;
+
+  /// The nearest enclosing [FocusScopeNode].
+  static FocusScopeNode of(BuildContext context) =>
+      Focus.of(context).nearestScope;
+
+  @override
+  State<FocusScope> createState() => _FocusScopeState();
+}
+
+class _FocusScopeState extends State<FocusScope> {
+  late FocusScopeNode _node;
+  bool _createdNode = false;
+
+  @override
+  void initState() {
+    _node = widget.node ?? FocusScopeNode();
+    _createdNode = widget.node == null;
+    _node.context = context;
+    _node.addListener(_onNodeChange);
+  }
+
+  void _onNodeChange() => setState(() {});
+
+  @override
+  void didChangeDependencies() {
+    var parentNode = Focus.maybeOf(context);
+    if (parentNode != null && !identical(_node.parent, parentNode)) {
+      parentNode._reparent(_node);
+    }
+  }
+
+  @override
+  void dispose() {
+    _node.removeListener(_onNodeChange);
+    if (_createdNode) {
+      _node.dispose();
+    } else {
+      _node.context = null;
+      _node._removeFromParent();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _node.context = context;
+    return _FocusMarker(
+      node: _node,
+      hasFocus: _node.hasFocus,
+      child: widget.child,
+    );
+  }
+}
+
 class _FocusState extends State<Focus> {
   late FocusNode _node;
   bool _createdNode = false;

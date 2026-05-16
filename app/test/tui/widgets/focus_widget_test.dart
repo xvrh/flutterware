@@ -56,4 +56,28 @@ void main() {
     // An externally-owned node is still usable (not disposed by Focus).
     expect(() => external.addListener(() {}), returnsNormally);
   });
+
+  test('FocusScope attaches a scope node beneath the root scope', () {
+    var scopeNode = FocusScopeNode();
+    var leaf = FocusNode();
+    _pump(FocusScope(
+      node: scopeNode,
+      child: Focus(focusNode: leaf, child: SizedBox()),
+    ));
+    expect(leaf.enclosingScope, scopeNode);
+    expect(scopeNode.parent, isNotNull);
+  });
+
+  test('FocusTraversalGroup exposes its policy to descendants', () {
+    var policy = DirectionalFocusTraversalPolicy();
+    FocusTraversalPolicy? seen;
+    _pump(FocusTraversalGroup(
+      policy: policy,
+      child: Builder(builder: (context) {
+        seen = FocusTraversalGroup.maybeOf(context);
+        return SizedBox();
+      }),
+    ));
+    expect(seen, policy);
+  });
 }
