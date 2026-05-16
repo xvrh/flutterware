@@ -250,6 +250,17 @@ class Flexible extends ParentDataWidget<FlexParentData> {
   }
 }
 
+/// A widget whose [build] is supplied as a callback.
+class Builder extends StatelessWidget {
+  const Builder({super.key, required this.builder});
+
+  /// Called to produce this widget's child.
+  final Widget Function(BuildContext context) builder;
+
+  @override
+  Widget build(BuildContext context) => builder(context);
+}
+
 /// A [Flexible] whose child is forced to fill the space it is given.
 ///
 /// Equivalent to `Flexible(fit: FlexFit.tight, ...)`.
