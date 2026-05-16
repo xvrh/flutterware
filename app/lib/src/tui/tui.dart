@@ -67,4 +67,9 @@ export 'widgets/widgets.dart'
         Flexible,
         TuiBinding,
         TerminalApp,
-        runApp;
+        runApp,
+        KeyEventResult,
+        FocusOnKeyEventCallback,
+        FocusNode,
+        FocusScopeNode,
+        FocusManager;
