@@ -70,15 +70,12 @@ class FocusScope extends StatefulWidget {
     super.key,
     required this.child,
     this.node,
-    this.autofocus = false,
   });
 
   final Widget child;
 
   /// An externally-owned scope node to adopt. When null, one is created.
   final FocusScopeNode? node;
-
-  final bool autofocus;
 
   /// The nearest enclosing [FocusScopeNode].
   static FocusScopeNode of(BuildContext context) =>
