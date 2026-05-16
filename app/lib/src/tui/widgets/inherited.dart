@@ -131,30 +131,30 @@ abstract class ParentDataWidget<T extends ParentData> extends ProxyWidget {
 
 /// The [Element] for a [ParentDataWidget].
 ///
-/// After every mount and update it walks down to the descendant render
-/// objects and applies the widget's parent data to each.
+/// After every rebuild it walks down to the descendant render objects and
+/// applies the widget's parent data to each.
 class ParentDataElement<T extends ParentData> extends ProxyElement {
   ParentDataElement(ParentDataWidget<T> super.widget);
 
   @override
-  void mount(Element? parent, Object? newSlot) {
-    super.mount(parent, newSlot);
-    _applyParentData(widget as ParentDataWidget<T>);
-  }
-
-  @override
-  void notifyClients(ParentDataWidget<T> oldWidget) {
+  void performRebuild() {
+    // Apply parent data *after* the child has been (re)built. The base
+    // ComponentElement.performRebuild reconciles _child — when the child's
+    // widget changes type it is deactivated and re-inflated, so only now is
+    // _child (and its render object) the current one. Applying earlier — e.g.
+    // from notifyClients, which ProxyElement.update runs before the rebuild —
+    // would write to a render object the new child is about to replace,
+    // leaving the freshly inflated one with default parent data.
+    super.performRebuild();
     _applyParentData(widget as ParentDataWidget<T>);
   }
 
   /// Walks down to the descendant render-object elements and applies [w]'s
   /// parent data to each.
   ///
-  /// The actual apply is delegated to [Element._applyParentDataTo], a no-op on
-  /// the base [Element] that `RenderObjectElement` overrides (a later task) to
-  /// call [ParentDataWidget.applyParentData] on its render object. Until that
-  /// override lands the walk is a harmless no-op; this keeps the parent-data
-  /// element self-contained without a forward reference to `RenderObjectElement`.
+  /// The actual apply is delegated to [Element._applyParentDataTo], which
+  /// `RenderObjectElement` overrides to call [ParentDataWidget.applyParentData]
+  /// on its render object; on other elements it recurses into children.
   void _applyParentData(ParentDataWidget<T> w) {
     if (_child != null) {
       _child!._applyParentDataTo(w);

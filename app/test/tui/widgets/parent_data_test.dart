@@ -42,6 +42,36 @@ void main() {
     expect(onlyChildParentData(binding).fit, FlexFit.tight);
   });
 
+  test('changing the Expanded child to a different type still applies flex',
+      () {
+    // Regression: ParentDataElement applied its parent data from
+    // notifyClients, which runs before the element rebuilds its child. When
+    // the child changed type it was deactivated and re-inflated, so the
+    // brand-new render object never received the flex factor — it kept the
+    // default flex 0, which a RenderFlex then lays out with an unbounded main
+    // axis.
+    var binding =
+        pumpHosted(const Row(children: [Expanded(flex: 2, child: Text('x'))]));
+    expect(onlyChildParentData(binding).flex, 2);
+
+    rebuild(
+      binding,
+      const Row(children: [
+        Expanded(
+          flex: 2,
+          child: ConstrainedBox(
+              constraints: BoxConstraints.tightFor(width: 3, height: 1)),
+        ),
+      ]),
+    );
+
+    var child = (binding.renderView.child! as RenderFlex).children.single;
+    expect(child, isA<RenderConstrainedBox>(),
+        reason: 'the child render object should have been replaced');
+    expect((child.parentData! as FlexParentData).flex, 2,
+        reason: 'the freshly inflated render object must still get the flex');
+  });
+
   test('switching Expanded to Flexible changes the fit', () {
     var binding =
         pumpHosted(const Row(children: [Expanded(flex: 1, child: Text('x'))]));

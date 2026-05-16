@@ -46,7 +46,16 @@ class RenderPainted extends RenderBox {
 
   @override
   void performResize() {
-    size = constraints.biggest;
+    // Painted fills the space it is given. Guard against an unbounded axis:
+    // constraints.biggest would report ~1<<30 there, and the paint callback
+    // would then loop over a billion cells and hang. Collapse an unbounded
+    // axis to its minimum instead — a Painted with no bound renders nothing
+    // rather than freezing.
+    var c = constraints;
+    size = CellSize(
+      c.hasBoundedHeight ? c.maxHeight : c.minHeight,
+      c.hasBoundedWidth ? c.maxWidth : c.minWidth,
+    );
   }
 
   @override
