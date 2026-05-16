@@ -202,9 +202,72 @@ class FocusScopeNode extends FocusNode {
   FocusScopeNode get nearestScope => this;
 }
 
-/// Minimal stub — fully implemented in Task 3.
+/// Owns the focus tree root and the primary focus, applies pending focus
+/// changes at frame boundaries, and routes key events.
+///
+/// One [FocusManager] is owned by each [TuiBinding]. Focus changes requested
+/// via [FocusNode.requestFocus]/[FocusNode.unfocus] are recorded as pending
+/// and applied by [applyFocusChangesIfNeeded], which the binding calls at the
+/// top of every frame — before `buildScope`, so focus-driven `setState`s land
+/// in the same frame.
 class FocusManager {
+  FocusManager() {
+    rootScope._setManager(this);
+    _primaryFocus = rootScope;
+  }
+
+  /// The root of the focus tree. Every [Focus]/[FocusScope] node attaches
+  /// beneath it (directly or transitively).
   final FocusScopeNode rootScope = FocusScopeNode();
-  FocusNode? get primaryFocus => null;
-  void _markNextFocus(FocusNode node) {}
+
+  late FocusNode _primaryFocus;
+
+  /// The node that currently holds the primary focus.
+  FocusNode get primaryFocus => _primaryFocus;
+
+  FocusNode? _nextFocus;
+  bool _haveScheduledUpdate = false;
+
+  /// Invoked the first time a focus change is requested while none is pending.
+  /// The [TuiBinding] wires this to its frame scheduler.
+  void Function()? onFocusChange;
+
+  void _markNextFocus(FocusNode node) {
+    _nextFocus = node;
+    if (!_haveScheduledUpdate) {
+      _haveScheduledUpdate = true;
+      onFocusChange?.call();
+    }
+  }
+
+  /// Applies a pending focus change, if any. Called at the top of each frame.
+  void applyFocusChangesIfNeeded() {
+    if (!_haveScheduledUpdate) return;
+    _haveScheduledUpdate = false;
+    var next = _nextFocus ?? _primaryFocus;
+    _nextFocus = null;
+    if (identical(next, _primaryFocus)) return;
+
+    var oldChain = _chainOf(_primaryFocus);
+    var newChain = _chainOf(next);
+    _primaryFocus = next;
+
+    // Record the focused descendant on each enclosing scope.
+    var scope = next.enclosingScope;
+    if (scope != null) scope._focusedChild = next;
+
+    // Notify every node whose hasFocus flipped (the symmetric difference of
+    // the old and new focus chains).
+    for (var node in {...oldChain, ...newChain}) {
+      if (oldChain.contains(node) != newChain.contains(node)) {
+        node._notify();
+      }
+    }
+  }
+
+  Set<FocusNode> _chainOf(FocusNode node) {
+    var chain = <FocusNode>{node};
+    chain.addAll(node.ancestors);
+    return chain;
+  }
 }
