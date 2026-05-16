@@ -1,6 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/tui/tui.dart';
 
+/// A FocusNode with a fixed rect, so traversal works without a widget tree.
+class _RectNode extends FocusNode {
+  _RectNode(this.fixedRect);
+  final CellRect fixedRect;
+  @override
+  CellRect? get rect => fixedRect;
+}
+
 void main() {
   test('a fresh manager has rootScope as primary focus after apply', () {
     var manager = FocusManager();
@@ -111,5 +119,51 @@ void main() {
     };
     manager.handleKeyEvent(CharKey(rune: 0x61, modifiers: const {}));
     expect(rootCalled, isFalse);
+  });
+
+  test('unhandled Tab moves focus forward via the fallback', () {
+    var manager = FocusManager();
+    var a = _RectNode(CellRect.fromTLWH(0, 0, 4, 1));
+    var b = _RectNode(CellRect.fromTLWH(0, 10, 4, 1));
+    manager.rootScope.debugAttachChild(a);
+    manager.rootScope.debugAttachChild(b);
+    a.requestFocus();
+    manager.applyFocusChangesIfNeeded();
+
+    var result = manager.handleKeyEvent(
+        const SpecialKey(code: SpecialKeyCode.tab, modifiers: {}));
+    manager.applyFocusChangesIfNeeded();
+    expect(result, KeyEventResult.handled);
+    expect(manager.primaryFocus, b);
+  });
+
+  test('unhandled Shift-Tab moves focus backward', () {
+    var manager = FocusManager();
+    var a = _RectNode(CellRect.fromTLWH(0, 0, 4, 1));
+    var b = _RectNode(CellRect.fromTLWH(0, 10, 4, 1));
+    manager.rootScope.debugAttachChild(a);
+    manager.rootScope.debugAttachChild(b);
+    a.requestFocus();
+    manager.applyFocusChangesIfNeeded();
+
+    manager.handleKeyEvent(const SpecialKey(
+        code: SpecialKeyCode.tab, modifiers: {Modifier.shift}));
+    manager.applyFocusChangesIfNeeded();
+    expect(manager.primaryFocus, b); // wraps backward
+  });
+
+  test('unhandled arrow key moves focus directionally', () {
+    var manager = FocusManager();
+    var a = _RectNode(CellRect.fromTLWH(0, 0, 4, 3));
+    var b = _RectNode(CellRect.fromTLWH(0, 20, 4, 3));
+    manager.rootScope.debugAttachChild(a);
+    manager.rootScope.debugAttachChild(b);
+    a.requestFocus();
+    manager.applyFocusChangesIfNeeded();
+
+    manager.handleKeyEvent(
+        const SpecialKey(code: SpecialKeyCode.right, modifiers: {}));
+    manager.applyFocusChangesIfNeeded();
+    expect(manager.primaryFocus, b);
   });
 }

@@ -306,8 +306,51 @@ class FocusManager {
     return _handleTraversalKey(event);
   }
 
-  // Replaced with real traversal in a later task.
-  KeyEventResult _handleTraversalKey(KeyEvent event) => KeyEventResult.ignored;
+  /// Built-in fallback for unhandled Tab/Shift-Tab and arrow keys.
+  ///
+  /// This is the deliberate seam between Stage 4.5a and 4.5b: when the
+  /// declarative `Shortcuts`/`Actions` layer lands, this method is removed and
+  /// the same keys route through it instead.
+  KeyEventResult _handleTraversalKey(KeyEvent event) {
+    if (event is! SpecialKey) return KeyEventResult.ignored;
+    var policy = _policyFor(_primaryFocus);
+    var moved = false;
+    switch (event.code) {
+      case SpecialKeyCode.tab:
+        moved = event.modifiers.contains(Modifier.shift)
+            ? policy.previous(_primaryFocus)
+            : policy.next(_primaryFocus);
+      case SpecialKeyCode.up:
+        moved = _directional(policy, TraversalDirection.up);
+      case SpecialKeyCode.down:
+        moved = _directional(policy, TraversalDirection.down);
+      case SpecialKeyCode.left:
+        moved = _directional(policy, TraversalDirection.left);
+      case SpecialKeyCode.right:
+        moved = _directional(policy, TraversalDirection.right);
+      case _:
+        return KeyEventResult.ignored;
+    }
+    return moved ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  bool _directional(FocusTraversalPolicy policy, TraversalDirection dir) {
+    // Directional traversal always uses the directional policy, even when the
+    // ambient policy is reading-order.
+    var directional = policy is DirectionalFocusTraversalPolicy
+        ? policy
+        : DirectionalFocusTraversalPolicy();
+    return directional.inDirection(_primaryFocus, dir);
+  }
+
+  FocusTraversalPolicy _policyFor(FocusNode node) {
+    var context = node.context;
+    if (context != null) {
+      var policy = FocusTraversalGroup.maybeOf(context);
+      if (policy != null) return policy;
+    }
+    return defaultTraversalPolicy;
+  }
 
   Set<FocusNode> _chainOf(FocusNode node) {
     var chain = <FocusNode>{node};
