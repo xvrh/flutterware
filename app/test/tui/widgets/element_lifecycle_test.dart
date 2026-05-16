@@ -1,7 +1,7 @@
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
-import '_harness.dart';
+import 'harness.dart';
 
 /// Shared lifecycle-call log; reset in [setUp].
 var log = <String>[];

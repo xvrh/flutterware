@@ -3,7 +3,7 @@ import 'package:flutterware_app/src/tui/painter.dart';
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
-import '_harness.dart' as harness;
+import 'harness.dart' as harness;
 
 TuiBinding pump(Widget widget) =>
     harness.pump(widget, rows: 8, cols: 12).binding;

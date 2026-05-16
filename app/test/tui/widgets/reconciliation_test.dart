@@ -2,7 +2,7 @@ import 'package:flutterware_app/src/tui/render/render.dart';
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
-import '_harness.dart';
+import 'harness.dart';
 
 List<RenderText> texts(TuiBinding binding) =>
     (binding.renderView.child! as RenderFlex)

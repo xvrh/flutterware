@@ -4,7 +4,7 @@ import 'package:flutterware_app/src/tui/render/render.dart';
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
-import '_harness.dart' as harness;
+import 'harness.dart' as harness;
 
 /// Mounts [widget] in a binding and runs one frame; returns the binding.
 TuiBinding pump(Widget widget, {int rows = 4, int cols = 10}) =>

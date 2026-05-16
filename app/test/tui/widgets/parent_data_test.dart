@@ -5,7 +5,7 @@ import 'package:flutterware_app/src/tui/render/render.dart';
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
-import '_harness.dart';
+import 'harness.dart';
 
 /// The parent data of the [RenderFlex]'s single child.
 FlexParentData onlyChildParentData(TuiBinding binding) {

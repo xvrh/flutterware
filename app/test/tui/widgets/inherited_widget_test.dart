@@ -1,7 +1,7 @@
 import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 import 'package:test/test.dart';
 
-import '_harness.dart';
+import 'harness.dart';
 
 /// An inherited widget carrying an int, optionally suppressing notifications.
 class Model extends InheritedWidget {
