@@ -42,6 +42,21 @@ class FocusNode {
   /// used by traversal to compute this node's on-screen rectangle.
   BuildContext? context;
 
+  /// This node's on-screen rectangle, derived from the owning widget's render
+  /// object. Null when the node has no context or has not been laid out.
+  /// Valid only after layout — used by focus traversal.
+  CellRect? get rect {
+    var renderObject = context?.findRenderObject();
+    if (renderObject is! RenderBox) return null;
+    CellSize size;
+    try {
+      size = renderObject.size;
+    } catch (_) {
+      return null; // not laid out yet
+    }
+    return CellRect.fromOffsetSize(renderObject.globalOffset, size);
+  }
+
   /// When true, focus traversal skips this node.
   bool skipTraversal;
 
@@ -231,6 +246,11 @@ class FocusManager {
   /// Invoked the first time a focus change is requested while none is pending.
   /// The [TuiBinding] wires this to its frame scheduler.
   void Function()? onFocusChange;
+
+  /// The traversal policy used by the built-in Tab/arrow fallback when no
+  /// [FocusTraversalGroup] overrides it.
+  final FocusTraversalPolicy defaultTraversalPolicy =
+      ReadingOrderTraversalPolicy();
 
   void _markNextFocus(FocusNode node) {
     _nextFocus = node;

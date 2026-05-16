@@ -72,4 +72,7 @@ export 'widgets/widgets.dart'
         FocusOnKeyEventCallback,
         FocusNode,
         FocusScopeNode,
-        FocusManager;
+        FocusManager,
+        TraversalDirection,
+        FocusTraversalPolicy,
+        ReadingOrderTraversalPolicy;
