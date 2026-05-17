@@ -139,6 +139,9 @@ class TuiBinding {
   /// Flushes render-tree layout.
   final PipelineOwner pipelineOwner = PipelineOwner();
 
+  /// Owns the focus tree and routes key events.
+  final FocusManager focusManager = FocusManager();
+
   /// The render-tree root.
   late final RenderTuiView renderView;
 
@@ -159,10 +162,16 @@ class TuiBinding {
   /// the first painted output.
   void attachRootWidget(Widget rootWidget) {
     assert(_rootElement == null, 'attachRootWidget called twice.');
-    var root = RootWidget(renderView, child: rootWidget);
+    var wrapped = _FocusMarker(
+      node: focusManager.rootScope,
+      hasFocus: true, // the root scope always contains the primary focus
+      child: rootWidget,
+    );
+    var root = RootWidget(renderView, child: wrapped);
     _rootElement = root.createElement();
     renderView.prepareInitialFrame();
     buildOwner.onBuildScheduled = () => onFrameNeeded?.call();
+    focusManager.onFocusChange = () => onFrameNeeded?.call();
     buildOwner.buildScope(
         _rootElement!, () => _rootElement!.mountAsRoot(buildOwner));
   }
@@ -173,7 +182,12 @@ class TuiBinding {
   /// size without tearing down the element tree.
   void updateRootWidget(Widget rootWidget) {
     assert(_rootElement != null, 'attachRootWidget must run first.');
-    var root = RootWidget(renderView, child: rootWidget);
+    var wrapped = _FocusMarker(
+      node: focusManager.rootScope,
+      hasFocus: true,
+      child: rootWidget,
+    );
+    var root = RootWidget(renderView, child: wrapped);
     buildOwner.buildScope(_rootElement!, () => _rootElement!.update(root));
   }
 
@@ -181,6 +195,7 @@ class TuiBinding {
   /// layout and paint into [painter].
   void drawFrame(Painter painter) {
     assert(_rootElement != null, 'attachRootWidget must run first.');
+    focusManager.applyFocusChangesIfNeeded();
     buildOwner.buildScope(_rootElement!);
     buildOwner.finalizeTree();
     renderView.compositeFrame(painter);
@@ -295,6 +310,10 @@ Future<void> runApp(Widget app) async {
 
     binding.attachRootWidget(wrap());
     binding.onFrameNeeded = scheduleFrame;
+    var keySub = terminal.keys.listen((event) {
+      if (stopped) return;
+      binding.focusManager.handleKeyEvent(event);
+    });
     frame();
 
     var resizeSub = terminal.resizes.listen((_) {
@@ -311,6 +330,7 @@ Future<void> runApp(Widget app) async {
       stopped = true;
       binding.dispose();
       await resizeSub.cancel();
+      await keySub.cancel();
     }
   });
 }

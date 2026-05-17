@@ -28,6 +28,7 @@ could use a richer status/dashboard UI.
 | **2. Paint kit** | `CellRect`/`CellSize` geometry + procedural paint helpers (text, border, fill) | ✅ Done |
 | **3. Render tree** | `RenderObject`/`RenderBox`, `BoxConstraints`, `Row`/`Column`/`Padding` | ✅ Done |
 | **4. Widget layer** | `Widget`/`Element`, `StatelessWidget`/`StatefulWidget`, `setState` | ✅ Done |
+| **4.5a Focus** | Focus tree, `FocusManager`, `Focus`/`FocusScope`, traversal, key routing | ✅ Done |
 | **5. Integration** | Replace the flutterware CLI startup UX with a real TUI screen | ⬜ Not started |
 
 Each stage is independently useful: after stage 1 you have a working terminal
@@ -48,6 +49,8 @@ framework.
   [plan](plans/2026-05-15-tui-stage3-render-tree.md)
 - Stage 4 — [spec](specs/2026-05-15-tui-stage4-widget-layer-design.md) ·
   [plan](plans/2026-05-15-tui-stage4-widget-layer.md)
+- Stage 4.5a — [spec](specs/2026-05-16-tui-stage4.5a-focus-system-design.md) ·
+  [plan](plans/2026-05-16-tui-stage4.5a-focus-system.md)
 
 ## Key design decisions
 
@@ -105,7 +108,10 @@ These are accepted in earlier stages and should be revisited as later stages lan
 - No wide-character / emoji width handling — the `Text` widget arrived in
   stage 4, but wide-character support is deferred to a later stage. The
   `Cell.width` field is reserved for it.
-- No GlobalKey, focus system, or animation/tickers — deferred beyond stage 4.
+- No GlobalKey or animation/tickers — deferred beyond stage 4.
+- A focus system (focus tree, `FocusManager`, `Focus`/`FocusScope`, Tab/arrow
+  traversal, key routing) was added in Stage 4.5a. The declarative
+  `Actions`/`Intents`/`Shortcuts` key-binding layer is deferred to Stage 4.5b.
 - Repaint is whole-tree: with no layer model, `markNeedsPaint` repaints
   everything. Localized repaint is deferred to a later stage.
 - Windows: signal-driven features (resize via SIGWINCH) are Unix-only.

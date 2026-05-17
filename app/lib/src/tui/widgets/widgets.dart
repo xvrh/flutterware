@@ -20,3 +20,6 @@ part 'inherited.dart';
 part 'render_object_widget.dart';
 part 'basic.dart';
 part 'binding.dart';
+part 'focus_manager.dart';
+part 'focus_traversal.dart';
+part 'focus_scope.dart';
