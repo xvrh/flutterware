@@ -27,16 +27,18 @@ abstract class FocusTraversalPolicy {
 
   bool _move(FocusNode currentNode, {required bool forward}) {
     var ordered = _candidates(currentNode);
-    if (ordered.length < 2) return false;
+    if (ordered.isEmpty) return false;
     var index = ordered.indexOf(currentNode);
-    int nextIndex;
     if (index < 0) {
-      nextIndex = forward ? 0 : ordered.length - 1;
-    } else {
-      nextIndex = forward
-          ? (index + 1) % ordered.length
-          : (index - 1 + ordered.length) % ordered.length;
+      // currentNode is not itself traversable (e.g. it is a scope node):
+      // focus the first or last node unconditionally.
+      (forward ? ordered.first : ordered.last).requestFocus();
+      return true;
     }
+    if (ordered.length < 2) return false;
+    var nextIndex = forward
+        ? (index + 1) % ordered.length
+        : (index - 1 + ordered.length) % ordered.length;
     ordered[nextIndex].requestFocus();
     return true;
   }
@@ -148,3 +150,89 @@ class FocusTraversalGroup extends StatelessWidget {
   Widget build(BuildContext context) =>
       _FocusTraversalMarker(policy: policy, child: child);
 }
+
+/// Intent: move focus to the next node in traversal order.
+class NextFocusIntent extends Intent {
+  const NextFocusIntent();
+}
+
+/// Intent: move focus to the previous node in traversal order.
+class PreviousFocusIntent extends Intent {
+  const PreviousFocusIntent();
+}
+
+/// Intent: move focus in a direction (arrow keys).
+class DirectionalFocusIntent extends Intent {
+  const DirectionalFocusIntent(this.direction);
+  final TraversalDirection direction;
+}
+
+/// The traversal policy nearest [node], defaulting to reading order.
+///
+/// Reads the [FocusTraversalGroup] policy from [node]'s context when it has
+/// one; otherwise a fresh [ReadingOrderTraversalPolicy]. (Relocated from the
+/// Stage 4.5a `FocusManager._policyFor`.)
+FocusTraversalPolicy _policyFor(FocusNode node) {
+  var context = node.context;
+  if (context != null) {
+    var policy = FocusTraversalGroup.maybeOf(context);
+    if (policy != null) return policy;
+  }
+  return ReadingOrderTraversalPolicy();
+}
+
+/// Moves focus to the next traversable node.
+class NextFocusAction extends Action<NextFocusIntent> {
+  NextFocusAction(this.focusManager);
+  final FocusManager focusManager;
+
+  @override
+  Object? invoke(NextFocusIntent intent) {
+    var node = focusManager.primaryFocus;
+    _policyFor(node).next(node);
+    return null;
+  }
+}
+
+/// Moves focus to the previous traversable node.
+class PreviousFocusAction extends Action<PreviousFocusIntent> {
+  PreviousFocusAction(this.focusManager);
+  final FocusManager focusManager;
+
+  @override
+  Object? invoke(PreviousFocusIntent intent) {
+    var node = focusManager.primaryFocus;
+    _policyFor(node).previous(node);
+    return null;
+  }
+}
+
+/// Moves focus in [DirectionalFocusIntent.direction].
+///
+/// Directional traversal always uses a [DirectionalFocusTraversalPolicy], even
+/// when the ambient policy is reading-order. (Relocated from the Stage 4.5a
+/// `FocusManager._directional`.)
+class DirectionalFocusAction extends Action<DirectionalFocusIntent> {
+  DirectionalFocusAction(this.focusManager);
+  final FocusManager focusManager;
+
+  @override
+  Object? invoke(DirectionalFocusIntent intent) {
+    var node = focusManager.primaryFocus;
+    var policy = _policyFor(node);
+    var directional = policy is DirectionalFocusTraversalPolicy
+        ? policy
+        : DirectionalFocusTraversalPolicy();
+    directional.inDirection(node, intent.direction);
+    return null;
+  }
+}
+
+/// The default traversal action map for a root [ShortcutManager]'s
+/// `fallbackActions`.
+Map<Type, Action<Intent>> defaultTraversalActions(FocusManager focusManager) =>
+    {
+      NextFocusIntent: NextFocusAction(focusManager),
+      PreviousFocusIntent: PreviousFocusAction(focusManager),
+      DirectionalFocusIntent: DirectionalFocusAction(focusManager),
+    };

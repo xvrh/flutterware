@@ -142,6 +142,10 @@ class TuiBinding {
   /// Owns the focus tree and routes key events.
   final FocusManager focusManager = FocusManager();
 
+  /// The default key bindings (traversal, activate, dismiss), wired onto
+  /// [FocusManager.rootScope] by [attachRootWidget].
+  late final ShortcutManager rootShortcutManager;
+
   /// The render-tree root.
   late final RenderTuiView renderView;
 
@@ -172,6 +176,11 @@ class TuiBinding {
     renderView.prepareInitialFrame();
     buildOwner.onBuildScheduled = () => onFrameNeeded?.call();
     focusManager.onFocusChange = () => onFrameNeeded?.call();
+    rootShortcutManager = ShortcutManager(
+      shortcuts: defaultShortcuts(),
+      fallbackActions: defaultTraversalActions(focusManager),
+    );
+    focusManager.rootScope.onKeyEvent = rootShortcutManager.handleFocusKeyEvent;
     buildOwner.buildScope(
         _rootElement!, () => _rootElement!.mountAsRoot(buildOwner));
   }

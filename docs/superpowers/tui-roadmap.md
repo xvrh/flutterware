@@ -29,6 +29,7 @@ could use a richer status/dashboard UI.
 | **3. Render tree** | `RenderObject`/`RenderBox`, `BoxConstraints`, `Row`/`Column`/`Padding` | ✅ Done |
 | **4. Widget layer** | `Widget`/`Element`, `StatelessWidget`/`StatefulWidget`, `setState` | ✅ Done |
 | **4.5a Focus** | Focus tree, `FocusManager`, `Focus`/`FocusScope`, traversal, key routing | ✅ Done |
+| **4.5b Shortcuts** | `Actions`/`Intent`/`Action`, `Shortcuts`/`ShortcutManager`, default key bindings | ✅ Done |
 | **5. Integration** | Replace the flutterware CLI startup UX with a real TUI screen | ⬜ Not started |
 
 Each stage is independently useful: after stage 1 you have a working terminal
@@ -51,6 +52,8 @@ framework.
   [plan](plans/2026-05-15-tui-stage4-widget-layer.md)
 - Stage 4.5a — [spec](specs/2026-05-16-tui-stage4.5a-focus-system-design.md) ·
   [plan](plans/2026-05-16-tui-stage4.5a-focus-system.md)
+- Stage 4.5b — [spec](specs/2026-05-17-tui-stage4.5b-actions-shortcuts-design.md) ·
+  [plan](plans/2026-05-17-tui-stage4.5b-actions-shortcuts.md)
 
 ## Key design decisions
 
@@ -110,8 +113,9 @@ These are accepted in earlier stages and should be revisited as later stages lan
   `Cell.width` field is reserved for it.
 - No GlobalKey or animation/tickers — deferred beyond stage 4.
 - A focus system (focus tree, `FocusManager`, `Focus`/`FocusScope`, Tab/arrow
-  traversal, key routing) was added in Stage 4.5a. The declarative
-  `Actions`/`Intents`/`Shortcuts` key-binding layer is deferred to Stage 4.5b.
+  traversal, key routing) was added in Stage 4.5a, and the declarative
+  `Actions`/`Intents`/`Shortcuts` key-binding layer in Stage 4.5b. Traversal
+  and the Enter/Escape bindings are installed by default on `rootScope`.
 - Repaint is whole-tree: with no layer model, `markNeedsPaint` repaints
   everything. Localized repaint is deferred to a later stage.
 - Windows: signal-driven features (resize via SIGWINCH) are Unix-only.

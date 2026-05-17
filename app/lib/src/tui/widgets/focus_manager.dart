@@ -38,6 +38,9 @@ class FocusNode {
   /// The focus node this node is attached under, or null if detached.
   FocusNode? get parent => _parent;
 
+  /// The [FocusManager] this node is attached to, or null if detached.
+  FocusManager? get manager => _manager;
+
   /// The build context of the owning [Focus] widget. Set by [Focus]'s state;
   /// used by traversal to compute this node's on-screen rectangle.
   BuildContext? context;
@@ -247,11 +250,6 @@ class FocusManager {
   /// The [TuiBinding] wires this to its frame scheduler.
   void Function()? onFocusChange;
 
-  /// The traversal policy used by the built-in Tab/arrow fallback when no
-  /// [FocusTraversalGroup] overrides it.
-  final FocusTraversalPolicy defaultTraversalPolicy =
-      ReadingOrderTraversalPolicy();
-
   void _markNextFocus(FocusNode node) {
     _nextFocus = node;
     if (!_haveScheduledUpdate) {
@@ -289,9 +287,9 @@ class FocusManager {
   ///
   /// Calls [FocusNode.onKeyEvent] on the primary focus, then each ancestor up
   /// to [rootScope], stopping on [KeyEventResult.handled] or
-  /// [KeyEventResult.skipRemainingHandlers]. If the whole chain returns
-  /// [KeyEventResult.ignored], the built-in traversal fallback runs (see
-  /// [_handleTraversalKey]).
+  /// [KeyEventResult.skipRemainingHandlers]. The default key bindings
+  /// (traversal, activate, dismiss) live on `rootScope.onKeyEvent`, wired by
+  /// `attachRootWidget` — `rootScope` is the last node in every chain.
   KeyEventResult handleKeyEvent(KeyEvent event) {
     var chain = <FocusNode>[_primaryFocus, ..._primaryFocus.ancestors];
     for (var node in chain) {
@@ -303,53 +301,7 @@ class FocusManager {
         return result;
       }
     }
-    return _handleTraversalKey(event);
-  }
-
-  /// Built-in fallback for unhandled Tab/Shift-Tab and arrow keys.
-  ///
-  /// This is the deliberate seam between Stage 4.5a and 4.5b: when the
-  /// declarative `Shortcuts`/`Actions` layer lands, this method is removed and
-  /// the same keys route through it instead.
-  KeyEventResult _handleTraversalKey(KeyEvent event) {
-    if (event is! SpecialKey) return KeyEventResult.ignored;
-    var policy = _policyFor(_primaryFocus);
-    var moved = false;
-    switch (event.code) {
-      case SpecialKeyCode.tab:
-        moved = event.modifiers.contains(Modifier.shift)
-            ? policy.previous(_primaryFocus)
-            : policy.next(_primaryFocus);
-      case SpecialKeyCode.up:
-        moved = _directional(policy, TraversalDirection.up);
-      case SpecialKeyCode.down:
-        moved = _directional(policy, TraversalDirection.down);
-      case SpecialKeyCode.left:
-        moved = _directional(policy, TraversalDirection.left);
-      case SpecialKeyCode.right:
-        moved = _directional(policy, TraversalDirection.right);
-      case _:
-        return KeyEventResult.ignored;
-    }
-    return moved ? KeyEventResult.handled : KeyEventResult.ignored;
-  }
-
-  bool _directional(FocusTraversalPolicy policy, TraversalDirection dir) {
-    // Directional traversal always uses the directional policy, even when the
-    // ambient policy is reading-order.
-    var directional = policy is DirectionalFocusTraversalPolicy
-        ? policy
-        : DirectionalFocusTraversalPolicy();
-    return directional.inDirection(_primaryFocus, dir);
-  }
-
-  FocusTraversalPolicy _policyFor(FocusNode node) {
-    var context = node.context;
-    if (context != null) {
-      var policy = FocusTraversalGroup.maybeOf(context);
-      if (policy != null) return policy;
-    }
-    return defaultTraversalPolicy;
+    return KeyEventResult.ignored;
   }
 
   Set<FocusNode> _chainOf(FocusNode node) {
