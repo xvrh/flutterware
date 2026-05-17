@@ -31,7 +31,7 @@ void main() {
       }),
     ));
     expect(found, isA<_TaggedAction>());
-    expect((found as _TaggedAction).tag, 'a');
+    expect((found! as _TaggedAction).tag, 'a');
   });
 
   test('maybeFind is null for an unregistered intent type', () {
@@ -68,7 +68,7 @@ void main() {
         }),
       ),
     ));
-    expect((found as _TaggedAction).tag, 'outer-a');
+    expect((found! as _TaggedAction).tag, 'outer-a');
   });
 
   test('an inner Actions shadows an outer one for the same intent type', () {
@@ -83,6 +83,6 @@ void main() {
         }),
       ),
     ));
-    expect((found as _TaggedAction).tag, 'inner');
+    expect((found! as _TaggedAction).tag, 'inner');
   });
 }
