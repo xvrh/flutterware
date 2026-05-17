@@ -157,4 +157,60 @@ void main() {
     binding.focusManager.handleKeyEvent(xKey);
     expect(hits, ['inner']);
   });
+
+  test('default shortcuts route Tab through rootScope to move focus', () {
+    var first = FocusNode();
+    var second = FocusNode();
+    var binding = TuiBinding();
+    binding.attachRootWidget(Row(children: [
+      Focus(
+          focusNode: first,
+          autofocus: true,
+          child: SizedBox(width: 5, height: 3)),
+      Focus(focusNode: second, child: SizedBox(width: 5, height: 3)),
+    ]));
+    binding.handleResize(CellSize(10, 30));
+    binding.drawFrame(Painter(CellBuffer(10, 30)));
+    expect(binding.focusManager.primaryFocus, first);
+
+    binding.focusManager.handleKeyEvent(
+        const SpecialKey(code: SpecialKeyCode.tab, modifiers: {}));
+    binding.drawFrame(Painter(CellBuffer(10, 30)));
+    expect(binding.focusManager.primaryFocus, second);
+  });
+
+  test('Tab with nothing focused focuses the first node', () {
+    var only = FocusNode();
+    var binding = TuiBinding();
+    binding.attachRootWidget(
+      Focus(focusNode: only, child: SizedBox(width: 5, height: 3)),
+    );
+    binding.handleResize(CellSize(10, 30));
+    binding.drawFrame(Painter(CellBuffer(10, 30)));
+    expect(binding.focusManager.primaryFocus, binding.focusManager.rootScope);
+
+    binding.focusManager.handleKeyEvent(
+        const SpecialKey(code: SpecialKeyCode.tab, modifiers: {}));
+    binding.drawFrame(Painter(CellBuffer(10, 30)));
+    expect(binding.focusManager.primaryFocus, only);
+  });
+
+  test('Enter routes to an ActivateIntent action on the focused path', () {
+    var node = FocusNode();
+    var invoked = false;
+    var binding = TuiBinding();
+    binding.attachRootWidget(Actions(
+      actions: {ActivateIntent: _CallbackActivate(() => invoked = true)},
+      child: Focus(
+          focusNode: node,
+          autofocus: true,
+          child: SizedBox(width: 4, height: 2)),
+    ));
+    binding.handleResize(CellSize(8, 12));
+    binding.drawFrame(Painter(CellBuffer(8, 12)));
+
+    binding.focusManager.handleKeyEvent(
+        const SpecialKey(code: SpecialKeyCode.enter, modifiers: {}));
+    expect(invoked, isTrue);
+  });
 }

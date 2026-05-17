@@ -27,16 +27,18 @@ abstract class FocusTraversalPolicy {
 
   bool _move(FocusNode currentNode, {required bool forward}) {
     var ordered = _candidates(currentNode);
-    if (ordered.length < 2) return false;
+    if (ordered.isEmpty) return false;
     var index = ordered.indexOf(currentNode);
-    int nextIndex;
     if (index < 0) {
-      nextIndex = forward ? 0 : ordered.length - 1;
-    } else {
-      nextIndex = forward
-          ? (index + 1) % ordered.length
-          : (index - 1 + ordered.length) % ordered.length;
+      // currentNode is not itself traversable (e.g. it is a scope node):
+      // focus the first or last node unconditionally.
+      (forward ? ordered.first : ordered.last).requestFocus();
+      return true;
     }
+    if (ordered.length < 2) return false;
+    var nextIndex = forward
+        ? (index + 1) % ordered.length
+        : (index - 1 + ordered.length) % ordered.length;
     ordered[nextIndex].requestFocus();
     return true;
   }
