@@ -23,3 +23,4 @@ part 'binding.dart';
 part 'focus_manager.dart';
 part 'focus_traversal.dart';
 part 'focus_scope.dart';
+part 'actions.dart';

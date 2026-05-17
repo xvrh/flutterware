@@ -80,4 +80,9 @@ export 'widgets/widgets.dart'
         ReadingOrderTraversalPolicy,
         DirectionalFocusTraversalPolicy,
         FocusScope,
-        FocusTraversalGroup;
+        FocusTraversalGroup,
+        Intent,
+        Action,
+        Actions,
+        ActivateIntent,
+        DismissIntent;
