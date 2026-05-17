@@ -92,4 +92,54 @@ void main() {
     manager.rootScope.debugAttachChild(only);
     expect(policy.inDirection(only, TraversalDirection.up), isFalse);
   });
+
+  test('NextFocusAction moves focus to the following node', () {
+    var manager = FocusManager();
+    var a = _FixedNode(CellRect.fromTLWH(0, 0, 4, 1));
+    var b = _FixedNode(CellRect.fromTLWH(0, 10, 4, 1));
+    manager.rootScope.debugAttachChild(a);
+    manager.rootScope.debugAttachChild(b);
+    a.requestFocus();
+    manager.applyFocusChangesIfNeeded();
+
+    NextFocusAction(manager).invoke(const NextFocusIntent());
+    manager.applyFocusChangesIfNeeded();
+    expect(manager.primaryFocus, b);
+  });
+
+  test('PreviousFocusAction wraps to the last node', () {
+    var manager = FocusManager();
+    var a = _FixedNode(CellRect.fromTLWH(0, 0, 4, 1));
+    var b = _FixedNode(CellRect.fromTLWH(0, 10, 4, 1));
+    manager.rootScope.debugAttachChild(a);
+    manager.rootScope.debugAttachChild(b);
+    a.requestFocus();
+    manager.applyFocusChangesIfNeeded();
+
+    PreviousFocusAction(manager).invoke(const PreviousFocusIntent());
+    manager.applyFocusChangesIfNeeded();
+    expect(manager.primaryFocus, b);
+  });
+
+  test('DirectionalFocusAction moves focus in the given direction', () {
+    var manager = FocusManager();
+    var left = _FixedNode(CellRect.fromTLWH(0, 0, 6, 3));
+    var right = _FixedNode(CellRect.fromTLWH(0, 20, 6, 3));
+    manager.rootScope.debugAttachChild(left);
+    manager.rootScope.debugAttachChild(right);
+    left.requestFocus();
+    manager.applyFocusChangesIfNeeded();
+
+    DirectionalFocusAction(manager)
+        .invoke(const DirectionalFocusIntent(TraversalDirection.right));
+    manager.applyFocusChangesIfNeeded();
+    expect(manager.primaryFocus, right);
+  });
+
+  test('defaultTraversalActions maps each traversal intent type', () {
+    var actions = defaultTraversalActions(FocusManager());
+    expect(actions[NextFocusIntent], isA<NextFocusAction>());
+    expect(actions[PreviousFocusIntent], isA<PreviousFocusAction>());
+    expect(actions[DirectionalFocusIntent], isA<DirectionalFocusAction>());
+  });
 }

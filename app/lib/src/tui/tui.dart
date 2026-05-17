@@ -87,4 +87,11 @@ export 'widgets/widgets.dart'
         ActivateIntent,
         DismissIntent,
         ShortcutMap,
-        ShortcutManager;
+        ShortcutManager,
+        NextFocusIntent,
+        PreviousFocusIntent,
+        DirectionalFocusIntent,
+        NextFocusAction,
+        PreviousFocusAction,
+        DirectionalFocusAction,
+        defaultTraversalActions;
