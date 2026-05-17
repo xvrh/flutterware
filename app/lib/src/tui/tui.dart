@@ -85,4 +85,6 @@ export 'widgets/widgets.dart'
         Action,
         Actions,
         ActivateIntent,
-        DismissIntent;
+        DismissIntent,
+        ShortcutMap,
+        ShortcutManager;

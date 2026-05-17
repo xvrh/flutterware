@@ -38,6 +38,9 @@ class FocusNode {
   /// The focus node this node is attached under, or null if detached.
   FocusNode? get parent => _parent;
 
+  /// The [FocusManager] this node is attached to, or null if detached.
+  FocusManager? get manager => _manager;
+
   /// The build context of the owning [Focus] widget. Set by [Focus]'s state;
   /// used by traversal to compute this node's on-screen rectangle.
   BuildContext? context;
