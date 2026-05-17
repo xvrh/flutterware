@@ -107,18 +107,20 @@ void main() {
     expect(manager.primaryFocus, b);
   });
 
-  test('PreviousFocusAction wraps to the last node', () {
+  test('PreviousFocusAction moves to the preceding node', () {
     var manager = FocusManager();
     var a = _FixedNode(CellRect.fromTLWH(0, 0, 4, 1));
     var b = _FixedNode(CellRect.fromTLWH(0, 10, 4, 1));
+    var c = _FixedNode(CellRect.fromTLWH(0, 20, 4, 1));
     manager.rootScope.debugAttachChild(a);
     manager.rootScope.debugAttachChild(b);
-    a.requestFocus();
+    manager.rootScope.debugAttachChild(c);
+    b.requestFocus();
     manager.applyFocusChangesIfNeeded();
 
     PreviousFocusAction(manager).invoke(const PreviousFocusIntent());
     manager.applyFocusChangesIfNeeded();
-    expect(manager.primaryFocus, b);
+    expect(manager.primaryFocus, a);
   });
 
   test('DirectionalFocusAction moves focus in the given direction', () {
@@ -141,5 +143,31 @@ void main() {
     expect(actions[NextFocusIntent], isA<NextFocusAction>());
     expect(actions[PreviousFocusIntent], isA<PreviousFocusAction>());
     expect(actions[DirectionalFocusIntent], isA<DirectionalFocusAction>());
+  });
+
+  test('next from a scope with a single descendant focuses that descendant',
+      () {
+    var manager = FocusManager();
+    var policy = ReadingOrderTraversalPolicy();
+    var only = _FixedNode(CellRect.fromTLWH(0, 0, 4, 1));
+    manager.rootScope.debugAttachChild(only);
+    // primaryFocus is rootScope — a scope node, not itself a candidate.
+
+    expect(policy.next(manager.rootScope), isTrue);
+    manager.applyFocusChangesIfNeeded();
+    expect(manager.primaryFocus, only);
+  });
+
+  test('next from a lone candidate that is the current node does not move', () {
+    var manager = FocusManager();
+    var policy = ReadingOrderTraversalPolicy();
+    var only = _FixedNode(CellRect.fromTLWH(0, 0, 4, 1));
+    manager.rootScope.debugAttachChild(only);
+    only.requestFocus();
+    manager.applyFocusChangesIfNeeded();
+
+    expect(policy.next(only), isFalse);
+    manager.applyFocusChangesIfNeeded();
+    expect(manager.primaryFocus, only);
   });
 }
