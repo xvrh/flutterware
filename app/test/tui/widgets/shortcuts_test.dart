@@ -92,6 +92,12 @@ void main() {
         isA<PreviousFocusIntent>());
     expect(map[const SpecialKey(code: SpecialKeyCode.up, modifiers: {})],
         isA<DirectionalFocusIntent>());
+    expect(map[const SpecialKey(code: SpecialKeyCode.down, modifiers: {})],
+        isA<DirectionalFocusIntent>());
+    expect(map[const SpecialKey(code: SpecialKeyCode.left, modifiers: {})],
+        isA<DirectionalFocusIntent>());
+    expect(map[const SpecialKey(code: SpecialKeyCode.right, modifiers: {})],
+        isA<DirectionalFocusIntent>());
     expect(map[const SpecialKey(code: SpecialKeyCode.enter, modifiers: {})],
         isA<ActivateIntent>());
     expect(map[const SpecialKey(code: SpecialKeyCode.escape, modifiers: {})],

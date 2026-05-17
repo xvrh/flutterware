@@ -105,11 +105,11 @@ class _ShortcutsState extends State<Shortcuts> {
       );
 }
 
-/// The framework default key bindings, auto-installed on
-/// [FocusManager.rootScope] by `attachRootWidget`.
+/// The framework default key bindings.
 ///
 /// Tab/Shift-Tab and the arrow keys drive focus traversal; Enter and Escape
 /// map to [ActivateIntent]/[DismissIntent] (an app supplies the actions).
+/// `attachRootWidget` installs these on [FocusManager.rootScope].
 ShortcutMap defaultShortcuts() => {
       const SpecialKey(code: SpecialKeyCode.tab, modifiers: {}):
           const NextFocusIntent(),
