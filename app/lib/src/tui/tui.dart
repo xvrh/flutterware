@@ -94,4 +94,6 @@ export 'widgets/widgets.dart'
         NextFocusAction,
         PreviousFocusAction,
         DirectionalFocusAction,
-        defaultTraversalActions;
+        defaultTraversalActions,
+        Shortcuts,
+        defaultShortcuts;

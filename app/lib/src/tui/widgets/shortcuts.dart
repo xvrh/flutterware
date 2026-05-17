@@ -52,3 +52,79 @@ class ShortcutManager {
     return KeyEventResult.handled;
   }
 }
+
+/// Maps [KeyEvent]s to [Intent]s for a subtree.
+///
+/// Wraps [child] in a non-focusable, traversal-skipping [Focus] whose
+/// `onKeyEvent` is the [ShortcutManager]. Because that [Focus] joins the focus
+/// chain, a [Shortcuts] enclosing the focused subtree intercepts keys before
+/// the root defaults — giving scoped overrides.
+class Shortcuts extends StatefulWidget {
+  const Shortcuts({
+    super.key,
+    required this.shortcuts,
+    required this.child,
+    this.manager,
+  });
+
+  /// The key bindings for this subtree.
+  final ShortcutMap shortcuts;
+
+  /// An externally-owned manager to adopt. When null, one is created.
+  final ShortcutManager? manager;
+
+  final Widget child;
+
+  @override
+  State<Shortcuts> createState() => _ShortcutsState();
+}
+
+class _ShortcutsState extends State<Shortcuts> {
+  late ShortcutManager _manager;
+
+  @override
+  void initState() {
+    _manager = widget.manager ?? ShortcutManager();
+    _manager.shortcuts = widget.shortcuts;
+  }
+
+  @override
+  void didUpdateWidget(Shortcuts oldWidget) {
+    if (!identical(widget.manager, oldWidget.manager)) {
+      _manager = widget.manager ?? ShortcutManager();
+    }
+    _manager.shortcuts = widget.shortcuts;
+  }
+
+  @override
+  Widget build(BuildContext context) => Focus(
+        skipTraversal: true,
+        canRequestFocus: false,
+        onKeyEvent: _manager.handleFocusKeyEvent,
+        child: widget.child,
+      );
+}
+
+/// The framework default key bindings, auto-installed on
+/// [FocusManager.rootScope] by `attachRootWidget`.
+///
+/// Tab/Shift-Tab and the arrow keys drive focus traversal; Enter and Escape
+/// map to [ActivateIntent]/[DismissIntent] (an app supplies the actions).
+ShortcutMap defaultShortcuts() => {
+      const SpecialKey(code: SpecialKeyCode.tab, modifiers: {}):
+          const NextFocusIntent(),
+      const SpecialKey(code: SpecialKeyCode.tab, modifiers: {Modifier.shift}):
+          const PreviousFocusIntent(),
+      const SpecialKey(code: SpecialKeyCode.up, modifiers: {}):
+          const DirectionalFocusIntent(TraversalDirection.up),
+      const SpecialKey(code: SpecialKeyCode.down, modifiers: {}):
+          const DirectionalFocusIntent(TraversalDirection.down),
+      const SpecialKey(code: SpecialKeyCode.left, modifiers: {}):
+          const DirectionalFocusIntent(TraversalDirection.left),
+      const SpecialKey(code: SpecialKeyCode.right, modifiers: {}):
+          const DirectionalFocusIntent(TraversalDirection.right),
+      const SpecialKey(code: SpecialKeyCode.enter, modifiers: {}):
+          const ActivateIntent(),
+      const SpecialKey(code: SpecialKeyCode.escape, modifiers: {}):
+          const DismissIntent(),
+    };
