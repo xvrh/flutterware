@@ -60,6 +60,7 @@ Future<int> runUnderPty({
   required List<String> arguments,
   String? workingDirectory,
   bool printSummary = true,
+  IOSink? captureSink,
 }) async {
   // Snapshot parent terminal modes for restoration.
   final originalLineMode = stdin.hasTerminal ? stdin.lineMode : true;
@@ -86,7 +87,10 @@ Future<int> runUnderPty({
       workingDirectory: workingDirectory,
     );
 
-    tee = TeeSink(onBytes: stdout.add);
+    tee = TeeSink(onBytes: (chunk) {
+      stdout.add(chunk);
+      captureSink?.add(chunk);
+    });
 
     // PTY output → tee (stdout + capture).
     final outputDone = Completer<void>();
