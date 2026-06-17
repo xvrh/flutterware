@@ -5,18 +5,13 @@ part of 'render.dart';
 class RenderText extends RenderBox {
   RenderText(
     this._text, {
-    Color fg = Color.defaultFg,
-    Color bg = Color.defaultBg,
-    int style = 0,
-    HorizontalAlign hAlign = HorizontalAlign.left,
-    VerticalAlign vAlign = VerticalAlign.top,
-    bool wrap = true,
-  })  : _fg = fg,
-        _bg = bg,
-        _style = style,
-        _hAlign = hAlign,
-        _vAlign = vAlign,
-        _wrap = wrap;
+    this._fg = Color.defaultFg,
+    this._bg = Color.defaultBg,
+    this._style = 0,
+    this._hAlign = HorizontalAlign.left,
+    this._vAlign = VerticalAlign.top,
+    this._wrap = true,
+  });
 
   String _text;
   String get text => _text;

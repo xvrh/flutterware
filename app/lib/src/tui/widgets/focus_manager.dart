@@ -14,8 +14,8 @@ enum KeyEventResult {
 
 /// Signature for [FocusNode.onKeyEvent]: given the node and a key event,
 /// return whether the event was handled.
-typedef FocusOnKeyEventCallback = KeyEventResult Function(
-    FocusNode node, KeyEvent event);
+typedef FocusOnKeyEventCallback =
+    KeyEventResult Function(FocusNode node, KeyEvent event);
 
 /// A node in the focus tree.
 ///
@@ -28,8 +28,7 @@ typedef FocusOnKeyEventCallback = KeyEventResult Function(
 /// but is deliberately not `package:flutter/foundation`'s `ChangeNotifier`, so
 /// the TUI keeps its zero-pub-dependency rule.
 class FocusNode {
-  FocusNode({this.skipTraversal = false, bool canRequestFocus = true})
-      : _canRequestFocus = canRequestFocus;
+  FocusNode({this.skipTraversal = false, this._canRequestFocus = true});
 
   FocusNode? _parent;
   final List<FocusNode> _children = [];
@@ -103,8 +102,10 @@ class FocusNode {
   /// node has the manager's root scope as an ancestor).
   FocusScopeNode get nearestScope {
     var scope = enclosingScope;
-    assert(scope != null,
-        'nearestScope read on a FocusNode with no enclosing scope.');
+    assert(
+      scope != null,
+      'nearestScope read on a FocusNode with no enclosing scope.',
+    );
     return scope!;
   }
 

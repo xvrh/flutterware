@@ -12,15 +12,21 @@ extension NavigatorExtension on NavigatorState {
     final theme = Theme.of(context);
     return showGeneralDialog(
       context: context,
-      pageBuilder: (BuildContext buildContext, Animation<double> animation,
-          Animation<double> secondaryAnimation) {
-        final Widget pageChild = Builder(builder: builder);
-        return SafeArea(
-          child: Builder(builder: (BuildContext context) {
-            return Theme(data: theme, child: pageChild);
-          }),
-        );
-      },
+      pageBuilder:
+          (
+            BuildContext buildContext,
+            Animation<double> animation,
+            Animation<double> secondaryAnimation,
+          ) {
+            final Widget pageChild = Builder(builder: builder);
+            return SafeArea(
+              child: Builder(
+                builder: (BuildContext context) {
+                  return Theme(data: theme, child: pageChild);
+                },
+              ),
+            );
+          },
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       barrierColor: Colors.black54,
@@ -41,33 +47,31 @@ extension NavigatorExtension on NavigatorState {
     bool useRootNavigator = true,
   }) {
     assert(!barrierDismissible || barrierLabel != null);
-    return push<T>(_DialogRoute<T>(
-      pageBuilder: pageBuilder,
-      barrierDismissible: barrierDismissible,
-      barrierLabel: barrierLabel,
-      barrierColor: barrierColor,
-      transitionDuration: transitionDuration,
-      transitionBuilder: transitionBuilder,
-    ));
+    return push<T>(
+      _DialogRoute<T>(
+        pageBuilder: pageBuilder,
+        barrierDismissible: barrierDismissible,
+        barrierLabel: barrierLabel,
+        barrierColor: barrierColor,
+        transitionDuration: transitionDuration,
+        transitionBuilder: transitionBuilder,
+      ),
+    );
   }
 }
 
 class _DialogRoute<T> extends PopupRoute<T> {
   _DialogRoute({
-    required RoutePageBuilder pageBuilder,
-    bool barrierDismissible = true,
-    String? barrierLabel,
+    required this._pageBuilder,
+    this._barrierDismissible = true,
+    this._barrierLabel,
     Color? barrierColor,
     Duration? transitionDuration,
-    RouteTransitionsBuilder? transitionBuilder,
+    this._transitionBuilder,
     super.settings,
-  })  : _pageBuilder = pageBuilder,
-        _barrierDismissible = barrierDismissible,
-        _barrierLabel = barrierLabel,
-        _barrierColor = barrierColor ?? const Color(0x80000000),
-        _transitionDuration =
-            transitionDuration ?? const Duration(milliseconds: 200),
-        _transitionBuilder = transitionBuilder;
+  }) : _barrierColor = barrierColor ?? const Color(0x80000000),
+       _transitionDuration =
+           transitionDuration ?? const Duration(milliseconds: 200);
 
   final RoutePageBuilder _pageBuilder;
 
@@ -90,8 +94,11 @@ class _DialogRoute<T> extends PopupRoute<T> {
   final RouteTransitionsBuilder? _transitionBuilder;
 
   @override
-  Widget buildPage(BuildContext context, Animation<double> animation,
-      Animation<double> secondaryAnimation) {
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
@@ -100,31 +107,31 @@ class _DialogRoute<T> extends PopupRoute<T> {
   }
 
   @override
-  Widget buildTransitions(BuildContext context, Animation<double> animation,
-      Animation<double> secondaryAnimation, Widget child) {
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
     var transitionBuilder = _transitionBuilder;
     if (transitionBuilder == null) {
       return FadeTransition(
-          opacity: CurvedAnimation(
-            parent: animation,
-            curve: Curves.linear,
-          ),
-          child: child);
+        opacity: CurvedAnimation(parent: animation, curve: Curves.linear),
+        child: child,
+      );
     } // Some default transition
     return transitionBuilder(context, animation, secondaryAnimation, child);
   }
 }
 
 Widget _buildMaterialDialogTransitions(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child) {
+  BuildContext context,
+  Animation<double> animation,
+  Animation<double> secondaryAnimation,
+  Widget child,
+) {
   return FadeTransition(
-    opacity: CurvedAnimation(
-      parent: animation,
-      curve: Curves.easeOut,
-    ),
+    opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
     child: child,
   );
 }

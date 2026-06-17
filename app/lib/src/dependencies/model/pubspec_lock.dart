@@ -13,29 +13,32 @@ class PubspecLock {
     var results = <LockDependency>[];
     for (var package in packages.keys) {
       var packageInfo = packages[package] as YamlMap;
-      results.add(LockDependency(
-        package as String,
-        source: packageInfo['source'] as String,
-        version: packageInfo['version'] as String,
-        type: DependencyType.fromName(packageInfo['dependency'] as String),
-      ));
+      results.add(
+        LockDependency(
+          package as String,
+          source: packageInfo['source'] as String,
+          version: packageInfo['version'] as String,
+          type: DependencyType.fromName(packageInfo['dependency'] as String),
+        ),
+      );
     }
     return PubspecLock(results);
   }
 
-  static Future<PubspecLock> load(String packagePath) async {
-    var map =
-        loadYaml(File(p.join(packagePath, 'pubspec.lock')).readAsStringSync())
-            as YamlMap;
-    return PubspecLock.fromYaml(map);
+  static Future<PubspecLock?> load(String packagePath) async {
+    var pubspecLock = File(p.join(packagePath, 'pubspec.lock'));
+    if (pubspecLock.existsSync()) {
+      var map = loadYaml(pubspecLock.readAsStringSync()) as YamlMap;
+      return PubspecLock.fromYaml(map);
+    }
+    return null;
   }
 }
 
 enum DependencyType {
   transitive('transitive'),
   directMain('direct main'),
-  directDev('direct dev'),
-  ;
+  directDev('direct dev');
 
   final String name;
 
@@ -51,8 +54,12 @@ class LockDependency {
   final String version;
   final DependencyType type;
 
-  LockDependency(this.name,
-      {required this.source, required this.version, required this.type});
+  LockDependency(
+    this.name, {
+    required this.source,
+    required this.version,
+    required this.type,
+  });
 
   bool get isHosted => source == 'hosted';
 

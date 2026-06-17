@@ -33,15 +33,12 @@ class FlexParentData extends BoxParentData {
 /// shared mechanism behind `Row` and `Column`.
 class RenderFlex extends RenderBox {
   RenderFlex({
-    required Axis direction,
-    MainAxisAlignment mainAxisAlignment = MainAxisAlignment.start,
-    CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.start,
-    MainAxisSize mainAxisSize = MainAxisSize.max,
+    required this._direction,
+    this._mainAxisAlignment = MainAxisAlignment.start,
+    this._crossAxisAlignment = CrossAxisAlignment.start,
+    this._mainAxisSize = MainAxisSize.max,
     List<RenderBox> children = const [],
-  })  : _direction = direction,
-        _mainAxisAlignment = mainAxisAlignment,
-        _crossAxisAlignment = crossAxisAlignment,
-        _mainAxisSize = mainAxisSize {
+  }) {
     addAll(children);
   }
 
@@ -223,7 +220,11 @@ class RenderFlex extends RenderBox {
   }
 
   BoxConstraints _childConstraints(
-      int maxCross, bool stretch, int minMain, int maxMain) {
+    int maxCross,
+    bool stretch,
+    int minMain,
+    int maxMain,
+  ) {
     if (_isHorizontal) {
       return BoxConstraints(
         minWidth: minMain,
@@ -244,7 +245,8 @@ class RenderFlex extends RenderBox {
   void performLayout() {
     var maxMain = _isHorizontal ? constraints.maxWidth : constraints.maxHeight;
     var maxCross = _isHorizontal ? constraints.maxHeight : constraints.maxWidth;
-    var canStretch = crossAxisAlignment == CrossAxisAlignment.stretch &&
+    var canStretch =
+        crossAxisAlignment == CrossAxisAlignment.stretch &&
         maxCross < BoxConstraints.unbounded;
 
     // Pass 1: inflexible children.
@@ -317,8 +319,10 @@ class RenderFlex extends RenderBox {
         CrossAxisAlignment.center => (resolvedCross - childCross) ~/ 2,
         CrossAxisAlignment.stretch => 0,
       };
-      (child.parentData! as FlexParentData).offset =
-          _offsetFor(cursor, crossPos);
+      (child.parentData! as FlexParentData).offset = _offsetFor(
+        cursor,
+        crossPos,
+      );
       cursor += _mainOf(child.size) + gaps[i + 1];
     }
   }
@@ -331,11 +335,11 @@ class RenderFlex extends RenderBox {
       var flex = (child.parentData! as FlexParentData).flex;
       var extent = _isHorizontal
           ? (useMax
-              ? child.getMaxIntrinsicWidth(crossLimit)
-              : child.getMinIntrinsicWidth(crossLimit))
+                ? child.getMaxIntrinsicWidth(crossLimit)
+                : child.getMinIntrinsicWidth(crossLimit))
           : (useMax
-              ? child.getMaxIntrinsicHeight(crossLimit)
-              : child.getMinIntrinsicHeight(crossLimit));
+                ? child.getMaxIntrinsicHeight(crossLimit)
+                : child.getMinIntrinsicHeight(crossLimit));
       if (flex > 0) {
         totalFlex += flex;
         var fraction = (extent + flex - 1) ~/ flex; // ceil(extent / flex)
@@ -352,11 +356,11 @@ class RenderFlex extends RenderBox {
     for (var child in _children) {
       var extent = _isHorizontal
           ? (useMax
-              ? child.getMaxIntrinsicHeight(mainLimit)
-              : child.getMinIntrinsicHeight(mainLimit))
+                ? child.getMaxIntrinsicHeight(mainLimit)
+                : child.getMinIntrinsicHeight(mainLimit))
           : (useMax
-              ? child.getMaxIntrinsicWidth(mainLimit)
-              : child.getMinIntrinsicWidth(mainLimit));
+                ? child.getMaxIntrinsicWidth(mainLimit)
+                : child.getMinIntrinsicWidth(mainLimit));
       if (extent > result) result = extent;
     }
     return result;

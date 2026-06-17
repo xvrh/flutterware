@@ -19,7 +19,6 @@ class Project {
   final AppContext context;
   final Directory directory;
   final FlutterSdkPath flutterSdkPath;
-  final FlutterSdk _flutterSdk;
   late final tests = TestService(this);
   late final info = ProjectInfoService(this);
   late final icons = IconService(this);
@@ -29,8 +28,7 @@ class Project {
   final Uri? loggerUri;
 
   Project(this.context, String path, this.flutterSdkPath, {this.loggerUri})
-      : directory = Directory(path),
-        _flutterSdk = FlutterSdk(flutterSdkPath);
+    : directory = Directory(path);
 
   static Future<bool> isValid(String path) async {
     if (await FileSystemEntity.isDirectory(path)) {
@@ -45,7 +43,6 @@ class Project {
   ValueListenable<Snapshot<Pubspec>> get pubspec => info.pubspec;
 
   void dispose() {
-    _flutterSdk.dispose();
     tests.dispose();
     info.dispose();
     icons.dispose();

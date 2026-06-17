@@ -4,6 +4,88 @@ import 'package:flutter/material.dart';
 const _buttonBackground = Color(0xffeaeaea);
 const _textStyle = TextStyle(fontSize: 13, color: Colors.black87);
 
+/// An inline segmented control for the toolbar — all [items] visible at once,
+/// the selected one filled. Better than [ToolbarPicker] for a few options.
+class ToolbarSegmented<T> extends StatelessWidget {
+  final T value;
+  final void Function(T) onChanged;
+  final Map<T, Widget> items;
+  final Widget? title;
+
+  const ToolbarSegmented({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.items,
+    this.title,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (title != null) ...[
+          DefaultTextStyle.merge(style: _textStyle, child: title!),
+          const SizedBox(width: 6),
+        ],
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: _buttonBackground,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var entry in items.entries)
+                _Segment(
+                  selected: entry.key == value,
+                  onTap: () => onChanged(entry.key),
+                  child: entry.value,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Segment extends StatelessWidget {
+  final bool selected;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _Segment({
+    required this.selected,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : null,
+          borderRadius: BorderRadius.circular(4),
+          border: selected ? Border.all(color: const Color(0xffcfcfcf)) : null,
+        ),
+        child: DefaultTextStyle.merge(
+          style: TextStyle(
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? Colors.black87 : Colors.black54,
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
 class Toolbar extends StatelessWidget {
   static const height = 40.0;
 
@@ -27,7 +109,7 @@ class Toolbar extends StatelessWidget {
                 for (var child in children) ...[
                   child,
                   if (child != children.last) SizedBox(width: 7),
-                ]
+                ],
               ],
             ),
           ),
@@ -80,8 +162,8 @@ class ToolbarDropdown<T> extends StatelessWidget {
     required this.items,
     bool? showArrow,
     bool? highlight,
-  })  : showArrow = showArrow ?? true,
-        highlight = highlight ?? false;
+  }) : showArrow = showArrow ?? true,
+       highlight = highlight ?? false;
 
   @override
   Widget build(BuildContext context) {
@@ -95,10 +177,7 @@ class ToolbarDropdown<T> extends StatelessWidget {
         value: value,
         items: [
           for (var entry in items.entries)
-            DropdownMenuItem(
-              value: entry.key,
-              child: entry.value,
-            ),
+            DropdownMenuItem(value: entry.key, child: entry.value),
         ],
         onChanged: (v) => onChanged(v),
         icon: Icon(
@@ -147,17 +226,21 @@ class ToolbarPicker<T> extends StatelessWidget {
         width: double.maxFinite,
         child: ListView(
           shrinkWrap: true,
-          children: ListTile.divideTiles(context: context, tiles: [
-            for (var item in items.entries) _itemTile(context, item.key),
-          ]).toList(),
+          children: ListTile.divideTiles(
+            context: context,
+            tiles: [
+              for (var item in items.entries) _itemTile(context, item.key),
+            ],
+          ).toList(),
         ),
       ),
       actions: [
         TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: Text('CANCEL')),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          child: Text('CANCEL'),
+        ),
       ],
     );
   }
@@ -167,21 +250,17 @@ class ToolbarPicker<T> extends StatelessWidget {
     if (itemTiles != null) {
       tile = itemTiles![key];
       if (tile != null) {
-        tile = InkWell(
-          onTap: () => _onTap(context, key),
-          child: tile,
-        );
+        tile = InkWell(onTap: () => _onTap(context, key), child: tile);
       }
     }
-    tile ??= ListTile(
-      title: items[key],
-      onTap: () => _onTap(context, key),
-    );
+    tile ??= ListTile(title: items[key], onTap: () => _onTap(context, key));
 
-    tile = Row(children: [
-      Expanded(child: tile),
-      Icon(key == value ? Icons.check : null, color: Color(0xff0000ff)),
-    ]);
+    tile = Row(
+      children: [
+        Expanded(child: tile),
+        Icon(key == value ? Icons.check : null, color: Color(0xff0000ff)),
+      ],
+    );
 
     return tile;
   }
@@ -189,6 +268,81 @@ class ToolbarPicker<T> extends StatelessWidget {
   void _onTap(BuildContext context, T key) {
     onChanged(key);
     Navigator.pop(context);
+  }
+}
+
+/// A compact chip that opens an anchored popover menu under it — lighter than
+/// [ToolbarPicker]'s modal dialog, with all options still one tap away.
+class ToolbarPopover<T> extends StatelessWidget {
+  final Widget? title;
+  final T value;
+  final void Function(T) onChanged;
+  final Map<T, Widget> items;
+
+  const ToolbarPopover({
+    super.key,
+    this.title,
+    required this.value,
+    required this.onChanged,
+    required this.items,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (title != null) ...[
+          DefaultTextStyle.merge(style: _textStyle, child: title!),
+          const SizedBox(width: 6),
+        ],
+        MenuAnchor(
+          style: MenuStyle(
+            visualDensity: VisualDensity.compact,
+            backgroundColor: WidgetStateProperty.all(Colors.white),
+          ),
+          menuChildren: [
+            for (var entry in items.entries)
+              MenuItemButton(
+                leadingIcon: Icon(
+                  entry.key == value ? Icons.check : null,
+                  size: 16,
+                ),
+                onPressed: () => onChanged(entry.key),
+                child: DefaultTextStyle.merge(
+                  style: _textStyle,
+                  child: entry.value,
+                ),
+              ),
+          ],
+          builder: (context, controller, child) {
+            return InkWell(
+              onTap: () =>
+                  controller.isOpen ? controller.close() : controller.open(),
+              borderRadius: BorderRadius.circular(2),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: _buttonBackground,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    items[value] ?? const SizedBox.shrink(),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.arrow_drop_down, size: 18),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
   }
 }
 
@@ -223,8 +377,11 @@ class ToolbarCheckbox extends StatelessWidget {
 class ToolbarPanel extends StatefulWidget {
   final Widget button;
   final Widget panel;
-  final Widget Function(
-      {required VoidCallback onPressed, required Widget button})? buttonBuilder;
+  final Widget Function({
+    required VoidCallback onPressed,
+    required Widget button,
+  })?
+  buttonBuilder;
   final Offset panelOffset;
   final Alignment panelTargetAnchor;
   final Alignment panelFollowerAnchor;
@@ -264,10 +421,7 @@ class ToolbarPanelState extends State<ToolbarPanel> {
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
               onTap: hideMenu,
-              child: _Menu(
-                link: layerLink,
-                panelState: this,
-              ),
+              child: _Menu(link: layerLink, panelState: this),
             ),
           ),
         );
@@ -292,10 +446,7 @@ class ToolbarPanelState extends State<ToolbarPanel> {
     if (widget.buttonBuilder case var iconBuilder?) {
       return iconBuilder(onPressed: showMenu, button: child);
     } else {
-      return ElevatedButton(
-        onPressed: showMenu,
-        child: child,
-      );
+      return ElevatedButton(onPressed: showMenu, child: child);
     }
   }
 
@@ -310,10 +461,7 @@ class _Menu extends StatelessWidget {
   final LayerLink link;
   final ToolbarPanelState panelState;
 
-  const _Menu({
-    required this.link,
-    required this.panelState,
-  });
+  const _Menu({required this.link, required this.panelState});
 
   @override
   Widget build(BuildContext context) {
@@ -345,10 +493,7 @@ class _Menu extends StatelessWidget {
 
 class _ToolbarPanelProvider extends InheritedWidget {
   final ToolbarPanelState panel;
-  const _ToolbarPanelProvider({
-    required super.child,
-    required this.panel,
-  });
+  const _ToolbarPanelProvider({required super.child, required this.panel});
 
   @override
   bool updateShouldNotify(_ToolbarPanelProvider oldWidget) {

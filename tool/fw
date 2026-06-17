@@ -1,0 +1,339 @@
+#!/usr/bin/env bash
+#
+# tool/fw — project-local flutterware runner. Invoked via the bin/fw shim.
+#
+# Built-in commands: install, flutter, dart, doctor, help.
+# Anything else is forwarded to the GUI-installed binary at
+# .dart_tool/flutterware/bin/fw (errors if not present).
+#
+# Supported OSes: macOS, Linux.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+FVMRC="$PROJECT_ROOT/.fvmrc"
+# Visible (non-dotdir) parent — IntelliJ on macOS can't deal with SDKs under
+# ~/.cache/ (file watchers / Spotlight skip it, and macOS auto-stamps
+# com.apple.provenance on every file there).
+FLUTTER_CACHE="$HOME/flutterware/versions"
+FVM_DIR="$PROJECT_ROOT/.fvm"
+FLUTTER_SDK_LINK="$FVM_DIR/flutter_sdk"
+GUI_BINARY="$PROJECT_ROOT/.dart_tool/flutterware/bin/fw"
+
+die() {
+  echo "fw: $*" >&2
+  exit 1
+}
+
+require_supported_os() {
+  case "$(uname)" in
+    Darwin|Linux) ;;
+    *) die "unsupported OS: $(uname) (supported: Darwin, Linux)" ;;
+  esac
+}
+
+read_version() {
+  [ -f "$FVMRC" ] || die "$FVMRC not found"
+  # .fvmrc shape: {"flutter": "<version>"}
+  local v
+  v="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$FVMRC" | head -n1)"
+  [ -n "$v" ] || die "could not read flutter version from $FVMRC"
+  echo "$v"
+}
+
+current_link_target() {
+  if [ -L "$FLUTTER_SDK_LINK" ]; then
+    readlink "$FLUTTER_SDK_LINK"
+  else
+    echo ""
+  fi
+}
+
+link_sdk() {
+  # Idempotent symlink update. Caller has verified the target is valid.
+  local target="$1"
+  mkdir -p "$FVM_DIR"
+  ln -sfn "$target" "$FLUTTER_SDK_LINK"
+}
+
+ensure_ready() {
+  # Cheap operations (symlinking) happen automatically.
+  # Expensive operations (cloning Flutter) require explicit `fw install`.
+  local version target
+  version="$(read_version)"
+  target="$FLUTTER_CACHE/$version"
+  if [ ! -x "$target/bin/flutter" ]; then
+    die "Flutter $version not cached at $target. Run: fw install"
+  fi
+  if [ "$(current_link_target)" != "$target" ]; then
+    link_sdk "$target"
+  fi
+}
+
+# Script-level state for trap-based cleanup. The trap is registered at script
+# load time so it works regardless of which function is on the stack. Any
+# function that touches the cache should set these and clear them on success.
+INSTALL_LOCK_DIR=""
+INSTALL_TMP_DIR=""
+
+install_cleanup() {
+  # Best-effort cleanup. Safe to call multiple times; safe if vars are empty.
+  if [ -n "$INSTALL_TMP_DIR" ] && [ -d "$INSTALL_TMP_DIR" ]; then
+    rm -rf "$INSTALL_TMP_DIR"
+  fi
+  if [ -n "$INSTALL_LOCK_DIR" ] && [ -d "$INSTALL_LOCK_DIR" ]; then
+    rmdir "$INSTALL_LOCK_DIR" 2>/dev/null || true
+  fi
+}
+# Explicit signal traps so cleanup runs even when bash defers EXIT trap
+# behavior across versions. The INT/TERM handlers exit with the conventional
+# 128+signo codes after cleanup.
+trap install_cleanup EXIT
+trap 'install_cleanup; exit 130' INT
+trap 'install_cleanup; exit 143' TERM
+
+cmd_install() {
+  require_supported_os
+
+  # Suppress Flutter's first-run analytics prompt so install never blocks
+  # waiting for stdin. Users can opt back in via `fw flutter --enable-analytics`.
+  export FLUTTER_SUPPRESS_ANALYTICS=1
+
+  local version target
+  version="$(read_version)"
+  target="$FLUTTER_CACHE/$version"
+
+  mkdir -p "$FLUTTER_CACHE"
+
+  # Cross-runner mutex per version. mkdir is atomic on POSIX so the first
+  # caller wins, others spin on it. Different versions never block each other.
+  # We only promote $lock_dir to the cleanup-trap variable AFTER acquiring it,
+  # otherwise an interrupted waiter would rmdir the holder's still-active lock.
+  local lock_dir="$FLUTTER_CACHE/.lock-$version"
+  local waited=0
+  while ! mkdir "$lock_dir" 2>/dev/null; do
+    if [ $waited -ge 1800 ]; then
+      die "lock $lock_dir held for >30min; if no install is in progress, remove it manually"
+    fi
+    if [ $((waited % 30)) -eq 0 ]; then
+      echo "==> Waiting for concurrent install of Flutter $version (${waited}s)..."
+    fi
+    sleep 5
+    waited=$((waited + 5))
+  done
+  INSTALL_LOCK_DIR="$lock_dir"
+
+  # Holding the lock means no other process is installing this version. Sweep
+  # any orphan tempdirs left by past crashes. Glob is version-scoped so we
+  # never touch other versions' in-flight tempdirs.
+  rm -rf "$target".partial.*
+
+  # Recheck under the lock — another process may have finished while we waited.
+  if [ -x "$target/bin/flutter" ]; then
+    echo "==> Flutter $version already installed at $target"
+    link_sdk "$target"
+    echo "==> Linked $FLUTTER_SDK_LINK -> $target"
+    rmdir "$INSTALL_LOCK_DIR" 2>/dev/null || true
+    INSTALL_LOCK_DIR=""
+    return 0
+  fi
+
+  # Build the SDK in a tempdir; rename only when fully ready. A crash mid-way
+  # leaves $tmp behind (cleaned by trap or next-run sweep) but never publishes
+  # a partial $target.
+  INSTALL_TMP_DIR="${target}.partial.$$"
+
+  # Find an existing complete clone to reuse objects from. Flutter versions
+  # share ~all of their git history, so --reference-if-able + --dissociate
+  # turns the network fetch into a local copy. --dissociate means the new
+  # clone owns its objects, so the reference can be safely deleted later.
+  local reference_args=()
+  local d existing_clone=""
+  for d in "$FLUTTER_CACHE"/*/; do
+    d="${d%/}"
+    case "$(basename "$d")" in
+      *.partial.*|.lock-*) continue ;;
+    esac
+    if [ -d "$d/.git" ] && [ -x "$d/bin/flutter" ]; then
+      existing_clone="$d"
+      break
+    fi
+  done
+  if [ -n "$existing_clone" ]; then
+    echo "==> Reusing git objects from $existing_clone"
+    reference_args=(--reference-if-able "$existing_clone" --dissociate)
+  fi
+
+  echo "==> Cloning Flutter $version into $INSTALL_TMP_DIR"
+  # Full clone (no --depth). Flutter's `checkFlutterVersionFreshness` runs
+  # `git fetch --tags` every ~3 days; on a shallow clone that fetch deepens
+  # the history of every tag and effectively hangs (gigabytes of data).
+  # Official Flutter installs are full git checkouts for this reason.
+  # -c advice.detachedHead=false suppresses git's standard advisory when
+  # checking out a tag (Flutter pre-release versions are tags, not branches).
+  # `${arr[@]+"${arr[@]}"}` is the portable form for expanding a possibly-empty
+  # array under `set -u`; bash 3.2 (macOS default) errors on the bare form.
+  git -c advice.detachedHead=false clone \
+    ${reference_args[@]+"${reference_args[@]}"} -b "$version" \
+    https://github.com/flutter/flutter.git "$INSTALL_TMP_DIR"
+
+  if [ ! -x "$INSTALL_TMP_DIR/bin/flutter" ]; then
+    die "clone did not produce $INSTALL_TMP_DIR/bin/flutter"
+  fi
+
+  # Reconstruct a normal channel checkout. The clone landed in detached HEAD
+  # at a tag with no local branch and no upstream tracking. Flutter derives
+  # channel from `git symbolic-ref HEAD` and source from
+  # `git rev-parse @{upstream}` → `git ls-remote --get-url origin`. Without a
+  # local channel branch + upstream config, Flutter stamps `[user-branch]`
+  # and `unknown source` into bin/cache/flutter.version.json on first run,
+  # and IntelliJ's Flutter plugin chokes on the unusual state.
+  #
+  # Pre-release versions (X.Y.Z-N.M.pre) ship on the beta channel; plain
+  # X.Y.Z versions ship on stable. Master/main are not pinnable via .fvmrc.
+  local channel
+  case "$version" in
+    *.pre) channel="beta" ;;
+    *)     channel="stable" ;;
+  esac
+  # Create local branch at the tag commit (full clone already populated
+  # refs/remotes/origin/$channel pointing at the upstream tip, which we
+  # leave alone — the freshness check reads its commit date later).
+  git -C "$INSTALL_TMP_DIR" checkout -b "$channel" >/dev/null
+  git -C "$INSTALL_TMP_DIR" config "branch.$channel.remote" origin
+  git -C "$INSTALL_TMP_DIR" config "branch.$channel.merge" "refs/heads/$channel"
+
+  # Pre-populate the version-freshness stamp so first run doesn't trigger an
+  # unnecessary `git fetch --tags`. Flutter rechecks every 3 days; a missing
+  # or malformed stamp is handled gracefully by VersionCheckStamp.load.
+  mkdir -p "$INSTALL_TMP_DIR/bin/cache"
+  printf '{\n  "lastTimeVersionWasChecked": "%s"\n}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
+    > "$INSTALL_TMP_DIR/bin/cache/flutter_version_check.stamp"
+
+  echo "==> Bootstrapping Flutter (this downloads the embedded Dart SDK)"
+  "$INSTALL_TMP_DIR/bin/flutter" --version >/dev/null
+
+  # No flags: precache for all platforms currently enabled in `flutter config`.
+  # That naturally adjusts per host (e.g. iOS only on macOS).
+  echo "==> Precaching engine artifacts"
+  "$INSTALL_TMP_DIR/bin/flutter" precache
+
+  # Atomic publish. If $target somehow exists now (e.g. shared cache across
+  # machines on NFS), prefer their copy.
+  if [ -d "$target" ]; then
+    rm -rf "$INSTALL_TMP_DIR"
+  else
+    mv "$INSTALL_TMP_DIR" "$target"
+  fi
+  INSTALL_TMP_DIR=""
+
+  link_sdk "$target"
+  echo "==> Linked $FLUTTER_SDK_LINK -> $target"
+  rmdir "$INSTALL_LOCK_DIR" 2>/dev/null || true
+  INSTALL_LOCK_DIR=""
+  echo "==> Done. Flutter $version is ready."
+}
+
+cmd_flutter() {
+  ensure_ready
+  exec "$FLUTTER_SDK_LINK/bin/flutter" "$@"
+}
+
+cmd_dart() {
+  ensure_ready
+  exec "$FLUTTER_SDK_LINK/bin/dart" "$@"
+}
+
+cmd_doctor() {
+  echo "Project root:    $PROJECT_ROOT"
+  echo "Platform:        $(uname) $(uname -r)"
+  echo
+
+  if [ -f "$FVMRC" ]; then
+    local v
+    v="$(read_version)"
+    echo ".fvmrc:          $FVMRC"
+    echo "  flutter:       $v"
+  else
+    echo ".fvmrc:          MISSING ($FVMRC)"
+  fi
+  echo
+
+  echo "Flutter cache:   $FLUTTER_CACHE"
+  if [ -d "$FLUTTER_CACHE" ]; then
+    local versions
+    versions="$(ls -1 "$FLUTTER_CACHE" 2>/dev/null || true)"
+    if [ -n "$versions" ]; then
+      while IFS= read -r line; do
+        echo "  - $line"
+      done <<< "$versions"
+    else
+      echo "  (empty)"
+    fi
+  else
+    echo "  (does not exist)"
+  fi
+  echo
+
+  local link_target
+  link_target="$(current_link_target)"
+  if [ -n "$link_target" ]; then
+    echo "Flutter symlink: $FLUTTER_SDK_LINK -> $link_target"
+  else
+    echo "Flutter symlink: MISSING ($FLUTTER_SDK_LINK)"
+  fi
+  echo
+
+  if [ -x "$GUI_BINARY" ]; then
+    echo "GUI binary:      $GUI_BINARY (installed)"
+  else
+    echo "GUI binary:      $GUI_BINARY (not installed)"
+  fi
+}
+
+cmd_help() {
+  cat <<EOF
+Usage: fw <command> [args...]
+
+Built-in commands:
+  install       Install the Flutter version pinned in .fvmrc
+                (clones to $FLUTTER_CACHE/<version>, symlinks .fvm/flutter_sdk)
+  flutter ...   Run flutter from the project's pinned SDK
+  dart ...      Run dart from the project's pinned SDK
+  doctor        Show the current setup
+  help          Show this message
+
+Anything else is forwarded to the GUI-installed binary at:
+  $GUI_BINARY
+EOF
+}
+
+forward_to_binary() {
+  if [ -x "$GUI_BINARY" ]; then
+    exec "$GUI_BINARY" "$@"
+  fi
+  die "unknown command '$1' (and no GUI binary at $GUI_BINARY)"
+}
+
+main() {
+  if [ "$#" -eq 0 ]; then
+    cmd_help
+    exit 0
+  fi
+
+  local cmd="$1"
+  shift
+  case "$cmd" in
+    install)        cmd_install "$@" ;;
+    flutter)        cmd_flutter "$@" ;;
+    dart)           cmd_dart "$@" ;;
+    doctor)         cmd_doctor "$@" ;;
+    help|--help|-h) cmd_help ;;
+    *)              forward_to_binary "$cmd" "$@" ;;
+  esac
+}
+
+main "$@"

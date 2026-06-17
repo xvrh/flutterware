@@ -8,15 +8,7 @@ import 'io.dart' as io;
 import 'logger.dart';
 import 'platform.dart';
 
-enum TerminalColor {
-  red,
-  green,
-  blue,
-  cyan,
-  yellow,
-  magenta,
-  grey,
-}
+enum TerminalColor { red, green, blue, cyan, yellow, magenta, grey }
 
 /// A class that contains the context settings for command text output to the
 /// console.
@@ -26,18 +18,18 @@ class OutputPreferences {
     int? wrapColumn,
     bool? showColor,
     io.Stdio? stdio,
-  })  : _stdio = stdio,
-        wrapText = wrapText ?? stdio?.hasTerminal ?? false,
-        _overrideWrapColumn = wrapColumn,
-        showColor = showColor ?? false;
+  }) : _stdio = stdio,
+       wrapText = wrapText ?? stdio?.hasTerminal ?? false,
+       _overrideWrapColumn = wrapColumn,
+       showColor = showColor ?? false;
 
   /// A version of this class for use in tests.
-  OutputPreferences.test(
-      {this.wrapText = false,
-      int wrapColumn = kDefaultTerminalColumns,
-      this.showColor = false})
-      : _overrideWrapColumn = wrapColumn,
-        _stdio = null;
+  OutputPreferences.test({
+    this.wrapText = false,
+    int wrapColumn = kDefaultTerminalColumns,
+    this.showColor = false,
+  }) : _overrideWrapColumn = wrapColumn,
+       _stdio = null;
 
   final io.Stdio? _stdio;
 
@@ -157,13 +149,11 @@ abstract class Terminal {
 
 class AnsiTerminal implements Terminal {
   AnsiTerminal({
-    required io.Stdio stdio,
-    required Platform platform,
+    required this._stdio,
+    required this._platform,
     DateTime?
-        now, // Time used to determine preferredStyle. Defaults to 0001-01-01 00:00.
-  })  : _stdio = stdio,
-        _platform = platform,
-        _now = now ?? DateTime(1);
+    now, // Time used to determine preferredStyle. Defaults to 0001-01-01 00:00.
+  }) : _now = now ?? DateTime(1);
 
   final io.Stdio _stdio;
   final Platform _platform;
@@ -328,11 +318,14 @@ class AnsiTerminal implements Terminal {
     }
     var charactersToDisplay = acceptedCharacters;
     if (defaultChoiceIndex != null) {
-      assert(defaultChoiceIndex >= 0 &&
-          defaultChoiceIndex < acceptedCharacters.length);
+      assert(
+        defaultChoiceIndex >= 0 &&
+            defaultChoiceIndex < acceptedCharacters.length,
+      );
       charactersToDisplay = List<String>.of(charactersToDisplay);
-      charactersToDisplay[defaultChoiceIndex] =
-          bolden(charactersToDisplay[defaultChoiceIndex]);
+      charactersToDisplay[defaultChoiceIndex] = bolden(
+        charactersToDisplay[defaultChoiceIndex],
+      );
       acceptedCharacters.add('');
     }
     String? choice;
@@ -343,8 +336,10 @@ class AnsiTerminal implements Terminal {
       if (prompt != null) {
         logger.printStatus(prompt, emphasis: true, newline: false);
         if (displayAcceptedCharacters) {
-          logger.printStatus(' [${charactersToDisplay.join("|")}]',
-              newline: false);
+          logger.printStatus(
+            ' [${charactersToDisplay.join("|")}]',
+            newline: false,
+          );
         }
         // prompt ends with ': '
         logger.printStatus(': ', emphasis: true, newline: false);
@@ -387,7 +382,8 @@ class _TestTerminal implements Terminal {
     bool displayAcceptedCharacters = true,
   }) {
     throw UnsupportedError(
-        'promptForCharInput not supported in the test terminal.');
+      'promptForCharInput not supported in the test terminal.',
+    );
   }
 
   @override

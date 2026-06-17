@@ -4,10 +4,7 @@ import 'parameters.dart';
 class ParametersEditor extends StatelessWidget {
   final EditableParameters parameters;
 
-  const ParametersEditor(
-    this.parameters, {
-    super.key,
-  });
+  const ParametersEditor(this.parameters, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -61,9 +58,7 @@ class _KnobLine extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Colors.grey.shade300),
-        ),
+        border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -72,17 +67,11 @@ class _KnobLine extends StatelessWidget {
             width: 150,
             child: Text(
               name,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
           Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: editor,
-            ),
+            child: Align(alignment: Alignment.centerLeft, child: editor),
           ),
         ],
       ),
@@ -101,8 +90,9 @@ class _StringEditor extends StatefulWidget {
 
 class _StringEditorState extends State<_StringEditor> {
   final _globalKey = GlobalKey();
-  late final _textController =
-      TextEditingController(text: widget.parameter.value);
+  late final _textController = TextEditingController(
+    text: widget.parameter.value,
+  );
 
   @override
   void initState() {
@@ -199,7 +189,10 @@ class _PickerEditor<T> extends StatelessWidget {
       value: parameter.requiredValue,
       items: [
         for (var v in parameter.options.entries)
-          DropdownMenuItem(value: v.value, child: Text(v.key))
+          DropdownMenuItem(
+            value: v.value,
+            child: pickerOptionWidget(parameter, v.key, v.value),
+          ),
       ],
       onChanged: (v) {
         parameter.value = v;
@@ -235,22 +228,27 @@ class _DateTimeEditor extends StatelessWidget {
           onPressed: () async {
             var previousValue = value;
             var pickedDate = await showDatePicker(
-                context: context,
-                firstDate: DateTime(0),
-                lastDate: DateTime(2100),
-                initialDate: value);
+              context: context,
+              firstDate: DateTime(0),
+              lastDate: DateTime(2100),
+              initialDate: value,
+            );
             if (pickedDate != null) {
               var pickedTime = TimeOfDay(hour: 0, minute: 0);
               if (!parameter.dateOnly && context.mounted) {
-                pickedTime = await showTimePicker(
-                        context: context,
-                        initialTime: value != null
-                            ? TimeOfDay(hour: value.hour, minute: value.minute)
-                            : pickedTime) ??
+                pickedTime =
+                    await showTimePicker(
+                      context: context,
+                      initialTime: value != null
+                          ? TimeOfDay(hour: value.hour, minute: value.minute)
+                          : pickedTime,
+                    ) ??
                     pickedTime;
               }
               var newValue = parameter.value = pickedDate.copyWith(
-                  hour: pickedTime.hour, minute: pickedTime.minute);
+                hour: pickedTime.hour,
+                minute: pickedTime.minute,
+              );
 
               if (previousValue != null && previousValue.isUtc) {
                 switchUtc(true, newValue);

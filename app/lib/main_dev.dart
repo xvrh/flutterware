@@ -14,9 +14,7 @@ final _logger = Logger('main_dev');
 
 void main() async {
   setupDebugLogger();
-  var appContext = AppContext(
-    logger: LogClient.print(),
-  );
+  var appContext = AppContext(logger: LogClient.print());
   var flutterSdks = await FlutterSdkPath.findSdks();
   var flutterSdk = flutterSdks.first;
   _logger.info('Use SDK: ${flutterSdk.root}');

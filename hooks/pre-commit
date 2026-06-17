@@ -1,13 +1,4 @@
 #!/bin/bash
-# Pre-commit hook — formats staged Dart files so unformatted code never
-# reaches CI. Enabled per-clone via `core.hooksPath=hooks`; run once:
-#
-#   dart tool/install_hooks.dart
-#
-# Compiles tool/format_pre_commit.dart to an AOT binary the first time it
-# runs, and whenever its source or the relevant pubspec.lock entries change.
-# Every subsequent commit just execs the cached binary — no `pub get`, no
-# `dart run`, near-instant.
 
 set -e
 
@@ -48,7 +39,11 @@ if [ "$needs_build" = 1 ]; then
   fi
   echo "pre-commit: building $BIN..."
   mkdir -p build
-  dart compile exe "$SOURCE" -o "$BIN"
+  # Compile with the project's pinned Flutter SDK, not whatever `dart` is on
+  # PATH. The package's resolved language version (from the pinned beta SDK)
+  # can be higher than a globally-installed stable dart, which fails AOT
+  # compilation with "language version too high".
+  "$REPO_ROOT/tool/fw" dart compile exe "$SOURCE" -o "$BIN"
   echo "$CURRENT_LOCKHASH" > "$LOCKHASH"
 fi
 

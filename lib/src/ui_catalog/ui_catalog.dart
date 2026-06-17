@@ -51,6 +51,9 @@ class UICatalogStateProvider extends InheritedWidget {
 abstract class UICatalogState {
   static final empty = _EmptyUICatalogState();
 
+  /// App-wide chrome shown in the top bar (e.g. theme, locale). Controls here
+  /// persist across demos — declare them from the app shell (`appBuilder`).
+  /// For controls specific to one demo, use [parameters] (the bottom panel).
   TopBarState get topBar;
 
   Parameters get parameters;
@@ -62,7 +65,18 @@ abstract class UICatalogState {
 }
 
 abstract class TopBarState {
-  T picker<T>(String name, Map<String, T> options, T defaultValue);
+  /// A picker over [options] (label → value). [swatch]/[icon] render a colour
+  /// dot or glyph beside each option. [style] chooses how it renders — an
+  /// anchored [PickerStyle.popover] menu (default), an inline
+  /// [PickerStyle.segmented] control, or a modal [PickerStyle.dialog].
+  T picker<T>(
+    String name,
+    Map<String, T> options,
+    T defaultValue, {
+    Color Function(T value)? swatch,
+    IconData Function(T value)? icon,
+    PickerStyle style,
+  });
 }
 
 class _EmptyUICatalogState implements UICatalogState {
@@ -76,7 +90,13 @@ class _EmptyUICatalogState implements UICatalogState {
 class _EmptyTopBarState implements TopBarState {
   @override
   T picker<T>(
-      core.String name, core.Map<core.String, T> values, T defaultValue) {
+    core.String name,
+    core.Map<core.String, T> values,
+    T defaultValue, {
+    Color Function(T value)? swatch,
+    IconData Function(T value)? icon,
+    PickerStyle style = PickerStyle.popover,
+  }) {
     return defaultValue;
   }
 }

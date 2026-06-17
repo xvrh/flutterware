@@ -17,17 +17,18 @@ class Snapshot<T extends Object> {
   final bool isLoading;
 
   const Snapshot({this.data, this.error, bool? isLoading})
-      : isLoading = isLoading ?? (data == null && error == null);
+    : isLoading = isLoading ?? (data == null && error == null);
 
   bool get hasError => error != null;
   bool get hasData => data != null;
 
   T get requireData => data!;
 
-  R when<R>(
-      {required R Function(T) data,
-      required R Function(T?) loading,
-      required R Function(Object) error}) {
+  R when<R>({
+    required R Function(T) data,
+    required R Function(T?) loading,
+    required R Function(Object) error,
+  }) {
     var d = this.data;
     var e = this.error;
     if (d != null) {
@@ -52,13 +53,12 @@ class AsyncValue<T extends Object>
   bool _isDisposed = false;
 
   AsyncValue({
-    required Future<T> Function() loader,
+    required this._loader,
     bool? lazy,
     this.loadingMode,
     T? seed,
     this.debugName,
-  })  : _loader = loader,
-        lazy = lazy ?? true {
+  }) : lazy = lazy ?? true {
     if (seed != null) {
       _isInitialized = true;
       _setValue(Snapshot(data: seed));

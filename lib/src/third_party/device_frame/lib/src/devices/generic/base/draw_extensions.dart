@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 extension GenericDeviceFramePainterExtensions on Canvas {
   void drawDeviceBody({
-    required final paint,
+    required paint,
     required Rect bounds,
     required Color outerBodyColor,
     required Radius outerBodyRadius,
@@ -27,7 +27,7 @@ extension GenericDeviceFramePainterExtensions on Canvas {
   }
 
   void drawCamera({
-    required final paint,
+    required paint,
     required Offset center,
     required double radius,
     required double borderWidth,
@@ -35,16 +35,8 @@ extension GenericDeviceFramePainterExtensions on Canvas {
     required Color innerColor,
     required Color reflectColor,
   }) {
-    drawCircle(
-      center,
-      radius + borderWidth,
-      paint..color = borderColor,
-    );
-    drawCircle(
-      center,
-      radius,
-      paint..color = innerColor,
-    );
+    drawCircle(center, radius + borderWidth, paint..color = borderColor);
+    drawCircle(center, radius, paint..color = innerColor);
     drawCircle(
       center - Offset(0, radius * 0.25),
       radius / 3,
@@ -53,7 +45,7 @@ extension GenericDeviceFramePainterExtensions on Canvas {
   }
 
   void drawSideButtons({
-    required final paint,
+    required paint,
     required Rect bounds,
     required Color color,
     required double buttonWidth,
@@ -146,12 +138,7 @@ extension GenericDeviceFramePainterExtensions on Canvas {
             const Color(0xffC7BDD6),
             const Color(0xffC870A2),
           ],
-          [
-            0,
-            0.380208,
-            0.578125,
-            0.828125,
-          ],
+          [0, 0.380208, 0.578125, 0.828125],
         );
         break;
       case TargetPlatform.linux:
@@ -174,16 +161,10 @@ extension GenericDeviceFramePainterExtensions on Canvas {
             const Color(0xff1491F8).withValues(alpha: 1),
             const Color(0xff0043D8).withValues(alpha: 1),
           ],
-          [
-            0,
-            1,
-          ],
+          [0, 1],
         );
     }
-    drawRect(
-      bounds,
-      paint,
-    );
+    drawRect(bounds, paint);
   }
 
   /// Draws a desktop window bar, adapted to the given [platform].
@@ -207,73 +188,47 @@ extension GenericDeviceFramePainterExtensions on Canvas {
         const iconSize = Size(22, 22);
         const innerIconSize = Size(8, 8);
         // Cross
-        var iconBounds = bounds.centerRight -
-                Offset(
-                  iconSize.width * 1.5,
-                  iconSize.height * 0.5,
-                ) &
+        var iconBounds =
+            bounds.centerRight -
+                Offset(iconSize.width * 1.5, iconSize.height * 0.5) &
             iconSize;
-        var innerBounds = iconBounds.center -
+        var innerBounds =
+            iconBounds.center -
                 ui.Offset(
                   innerIconSize.height * 0.5,
                   innerIconSize.height * 0.5 + 1,
                 ) &
             innerIconSize;
         paint.color = const Color(0xFFE95420);
-        drawCircle(
-          iconBounds.center,
-          iconBounds.width * 0.5,
-          paint,
-        );
+        drawCircle(iconBounds.center, iconBounds.width * 0.5, paint);
         paint
           ..style = ui.PaintingStyle.stroke
           ..strokeWidth = 2
           ..color = const Color(0xFFFFFFFF);
-        drawLine(
-          innerBounds.topLeft,
-          innerBounds.bottomRight,
-          paint,
-        );
-        drawLine(
-          innerBounds.topRight,
-          innerBounds.bottomLeft,
-          paint,
-        );
+        drawLine(innerBounds.topLeft, innerBounds.bottomRight, paint);
+        drawLine(innerBounds.topRight, innerBounds.bottomLeft, paint);
         // Square
-        iconBounds = iconBounds.topLeft -
-                Offset(
-                  iconSize.width * 2,
-                  0,
-                ) &
-            iconSize;
-        innerBounds = iconBounds.center -
+        iconBounds =
+            iconBounds.topLeft - Offset(iconSize.width * 2, 0) & iconSize;
+        innerBounds =
+            iconBounds.center -
                 ui.Offset(
                   innerIconSize.height * 0.5,
                   innerIconSize.height * 0.5,
                 ) &
             innerIconSize;
-        drawRect(
-          innerBounds,
-          paint,
-        );
+        drawRect(innerBounds, paint);
         // bar
-        iconBounds = iconBounds.topLeft -
-                Offset(
-                  iconSize.width * 2,
-                  0,
-                ) &
-            iconSize;
-        innerBounds = iconBounds.center -
+        iconBounds =
+            iconBounds.topLeft - Offset(iconSize.width * 2, 0) & iconSize;
+        innerBounds =
+            iconBounds.center -
                 ui.Offset(
                   innerIconSize.height * 0.5,
                   innerIconSize.height * 0.5,
                 ) &
             innerIconSize;
-        drawLine(
-          innerBounds.bottomLeft,
-          innerBounds.bottomRight,
-          paint,
-        );
+        drawLine(innerBounds.bottomLeft, innerBounds.bottomRight, paint);
         break;
       case TargetPlatform.windows:
         drawRRect(
@@ -290,45 +245,20 @@ extension GenericDeviceFramePainterExtensions on Canvas {
           ..color = const Color(0xFFFFFFFF);
         const iconSize = Size(12, 12);
         // Cross
-        var iconBounds = bounds.centerRight -
-                Offset(
-                  iconSize.width * 2.5,
-                  iconSize.height * 0.5,
-                ) &
+        var iconBounds =
+            bounds.centerRight -
+                Offset(iconSize.width * 2.5, iconSize.height * 0.5) &
             iconSize;
-        drawLine(
-          iconBounds.topLeft,
-          iconBounds.bottomRight,
-          paint,
-        );
-        drawLine(
-          iconBounds.topRight,
-          iconBounds.bottomLeft,
-          paint,
-        );
+        drawLine(iconBounds.topLeft, iconBounds.bottomRight, paint);
+        drawLine(iconBounds.topRight, iconBounds.bottomLeft, paint);
         // Square
-        iconBounds = iconBounds.topLeft -
-                Offset(
-                  iconSize.width * 3,
-                  0,
-                ) &
-            iconSize;
-        drawRect(
-          iconBounds,
-          paint,
-        );
+        iconBounds =
+            iconBounds.topLeft - Offset(iconSize.width * 3, 0) & iconSize;
+        drawRect(iconBounds, paint);
         // bar
-        iconBounds = iconBounds.topLeft -
-                Offset(
-                  iconSize.width * 3,
-                  0,
-                ) &
-            iconSize;
-        drawLine(
-          iconBounds.centerLeft,
-          iconBounds.centerRight,
-          paint,
-        );
+        iconBounds =
+            iconBounds.topLeft - Offset(iconSize.width * 3, 0) & iconSize;
+        drawLine(iconBounds.centerLeft, iconBounds.centerRight, paint);
         break;
       case TargetPlatform.macOS:
         drawRRect(
@@ -349,24 +279,14 @@ extension GenericDeviceFramePainterExtensions on Canvas {
           paint..color = const Color(0xFFEE695E),
         );
         // Minimize
-        iconBounds = iconBounds.topRight +
-                Offset(
-                  iconOffset.dx,
-                  0,
-                ) &
-            iconSize;
+        iconBounds = iconBounds.topRight + Offset(iconOffset.dx, 0) & iconSize;
         drawCircle(
           iconBounds.center,
           iconBounds.width * 0.5,
           paint..color = const Color(0xFFF5BD4E),
         );
         // Maximize
-        iconBounds = iconBounds.topRight +
-                Offset(
-                  iconOffset.dx,
-                  0,
-                ) &
-            iconSize;
+        iconBounds = iconBounds.topRight + Offset(iconOffset.dx, 0) & iconSize;
         drawCircle(
           iconBounds.center,
           iconBounds.width * 0.5,
@@ -379,7 +299,7 @@ extension GenericDeviceFramePainterExtensions on Canvas {
   }
 
   void drawMonitorFoot({
-    required final paint,
+    required paint,
     required Rect bounds,
     required Color outerBodyColor,
     required Radius outerBodyRadius,
@@ -394,19 +314,13 @@ extension GenericDeviceFramePainterExtensions on Canvas {
   }) {
     // Left bar
     drawRect(
-      Offset(
-            bounds.center.dx - (footBarSpace / 2) - footBarWidth,
-            bounds.top,
-          ) &
+      Offset(bounds.center.dx - (footBarSpace / 2) - footBarWidth, bounds.top) &
           Size(footBarWidth, bounds.height - bottomHeight),
       paint..color = innerBodyColor,
     );
     // Right bar
     drawRect(
-      Offset(
-            bounds.center.dx + (footBarSpace / 2),
-            bounds.top,
-          ) &
+      Offset(bounds.center.dx + (footBarSpace / 2), bounds.top) &
           Size(footBarWidth, bounds.height - bottomHeight),
       paint..color = innerBodyColor,
     );
@@ -470,9 +384,4 @@ extension GenericDeviceFramePainterExtensions on Canvas {
   }
 }
 
-enum SideButtonSide {
-  top,
-  left,
-  right,
-  bottom,
-}
+enum SideButtonSide { top, left, right, bottom }

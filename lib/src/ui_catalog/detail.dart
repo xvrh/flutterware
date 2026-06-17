@@ -28,21 +28,29 @@ class DetailView extends StatefulWidget {
 
 class _DetailViewState extends State<DetailView> implements UICatalogState {
   final _deviceFrameKey = GlobalKey<__SingleDeviceWrapperState>();
-  final _topBarPickers = <String, PickerParameter>{};
   Key _appKey = UniqueKey();
   final _knobsPanelKey = GlobalKey();
-  bool _isDuringAppBuild = false;
 
   @override
   late final topBar = _TopBarAdapter(this);
 
   @override
   late final EditableParameters parameters = EditableParameters(
-      onRefresh: _onRefreshParameter, onAdded: _onAddedParameter);
+    onRefresh: _onRefreshParameter,
+    onAdded: _onAddedParameter,
+  );
 
-  T _topBarPicker<T>(String name, Map<String, T> options, T defaultValue) {
-    var pickers =
-        _isDuringAppBuild ? widget.appState.topBarPickers : _topBarPickers;
+  // Top-bar controls are app-level: they live on the app state so they persist
+  // across demos. (Per-demo controls go in [parameters] / the bottom panel.)
+  T _topBarPicker<T>(
+    String name,
+    Map<String, T> options,
+    T defaultValue, {
+    Color Function(T value)? swatch,
+    IconData Function(T value)? icon,
+    PickerStyle style = PickerStyle.popover,
+  }) {
+    var pickers = widget.appState.topBarPickers;
 
     var existingParameter = pickers[name];
     PickerParameter<T> parameter;
@@ -60,13 +68,47 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
 
     pickers[name] = parameter
       ..defaultValue = defaultValue
-      ..options = options;
+      ..options = options
+      ..swatch = swatch
+      ..icon = icon
+      ..style = style;
 
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
       setState(() {});
     });
 
     return parameter.value ?? parameter.defaultValue;
+  }
+
+  Widget _topBarControl(MapEntry<String, PickerParameter> entry) {
+    var picker = entry.value;
+    var value = picker.value ?? picker.defaultValue;
+    void onChanged(dynamic v) => setState(() => picker.value = v);
+    var title = Text(entry.key);
+    var items = {
+      for (var v in picker.options.entries)
+        v.value: pickerOptionWidget(picker, v.key, v.value),
+    };
+    return switch (picker.style) {
+      PickerStyle.segmented => ToolbarSegmented(
+        value: value,
+        onChanged: onChanged,
+        title: title,
+        items: items,
+      ),
+      PickerStyle.popover => ToolbarPopover(
+        value: value,
+        onChanged: onChanged,
+        title: title,
+        items: items,
+      ),
+      PickerStyle.dialog => ToolbarPicker(
+        value: value,
+        onChanged: onChanged,
+        title: title,
+        items: items,
+      ),
+    };
   }
 
   void _onRefreshParameter() {
@@ -89,20 +131,16 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
 
     Widget mainWidget;
     if (value is Widget) {
-      var result = Builder(builder: (context) {
-        _isDuringAppBuild = true;
-        var app = book.appBuilder(
-          context,
-          Material(
-            child: Center(
-              key: _appKey,
-              child: value,
+      var result = Builder(
+        builder: (context) {
+          return book.appBuilder(
+            context,
+            Material(
+              child: Center(key: _appKey, child: value),
             ),
-          ),
-        );
-        _isDuringAppBuild = false;
-        return app;
-      });
+          );
+        },
+      );
 
       if (device.isEnabled) {
         if (device.useMosaic) {
@@ -112,10 +150,7 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
             device: device.single.device,
             isFrameVisible: device.single.showFrame,
             orientation: device.single.orientation,
-            screen: _SingleDeviceWrapper(
-              key: _deviceFrameKey,
-              child: result,
-            ),
+            screen: _SingleDeviceWrapper(key: _deviceFrameKey, child: result),
           );
         }
       } else {
@@ -151,11 +186,13 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
                   onChanged: (v) {
                     setState(() {
                       widget.appState.setDeviceForEntry(
-                          widget.entry, device.copyWith(isEnabled: v));
+                        widget.entry,
+                        device.copyWith(isEnabled: v),
+                      );
                     });
                   },
                 ),
-              )
+              ),
             ],
           ),
           panel: DeviceChoicePanel(
@@ -167,20 +204,8 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
             },
           ),
         ),
-        for (var picker
-            in {...widget.appState.topBarPickers, ..._topBarPickers}.entries)
-          ToolbarPicker(
-            value: picker.value.value ?? picker.value.defaultValue,
-            onChanged: (v) {
-              setState(() {
-                picker.value.value = v;
-              });
-            },
-            title: Text(picker.key),
-            items: {
-              for (var v in picker.value.options.entries) v.value: Text(v.key)
-            },
-          ),
+        for (var picker in widget.appState.topBarPickers.entries)
+          _topBarControl(picker),
       ],
     );
     return Column(
@@ -205,7 +230,7 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
             height: 200,
             child: ParametersEditor(parameters, key: _knobsPanelKey),
           ),
-        ]
+        ],
       ],
     );
   }
@@ -217,8 +242,22 @@ class _TopBarAdapter implements TopBarState {
   _TopBarAdapter(this._state);
 
   @override
-  T picker<T>(String name, Map<String, T> options, T defaultValue) {
-    return _state._topBarPicker(name, options, defaultValue);
+  T picker<T>(
+    String name,
+    Map<String, T> options,
+    T defaultValue, {
+    Color Function(T value)? swatch,
+    IconData Function(T value)? icon,
+    PickerStyle style = PickerStyle.popover,
+  }) {
+    return _state._topBarPicker(
+      name,
+      options,
+      defaultValue,
+      swatch: swatch,
+      icon: icon,
+      style: style,
+    );
   }
 }
 
@@ -226,11 +265,7 @@ class Breadcrumb extends StatelessWidget {
   final TreeEntry entry;
   final void Function(TreeEntry) onSelect;
 
-  const Breadcrumb(
-    this.entry, {
-    super.key,
-    required this.onSelect,
-  });
+  const Breadcrumb(this.entry, {super.key, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
@@ -243,8 +278,8 @@ class Breadcrumb extends StatelessWidget {
             onTap: e == entry ? null : () => onSelect(e),
             child: Text(e.title),
           ),
-          if (e != entry.breadcrumb.last) Icon(Icons.arrow_right)
-        ]
+          if (e != entry.breadcrumb.last) Icon(Icons.arrow_right),
+        ],
       ],
     );
   }
@@ -254,10 +289,7 @@ class _Mosaic extends StatelessWidget {
   final Widget child;
   final MosaicDeviceChoice mosaic;
 
-  const _Mosaic({
-    required this.child,
-    required this.mosaic,
-  });
+  const _Mosaic({required this.child, required this.mosaic});
 
   @override
   Widget build(BuildContext context) {

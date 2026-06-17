@@ -28,8 +28,7 @@ class BoxDecoration {
 /// [RenderDecoratedBox] wrapping a [RenderPadding] so content clears the
 /// 1-cell border.
 class RenderDecoratedBox extends RenderBox with RenderBoxWithChild {
-  RenderDecoratedBox({required BoxDecoration decoration, RenderBox? child})
-      : _decoration = decoration {
+  RenderDecoratedBox({required this._decoration, RenderBox? child}) {
     this.child = child;
   }
 

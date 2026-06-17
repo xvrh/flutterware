@@ -17,25 +17,32 @@ class DependenciesService {
   final Project project;
   late final dependencies = AsyncValue<Dependencies>(loader: _load);
   late final pubScores = AsyncValue<PubScores>(loader: _loadPubScores);
-  late final packageImports =
-      AsyncValue<PackageImports>(loader: _loadPackageImports);
+  late final packageImports = AsyncValue<PackageImports>(
+    loader: _loadPackageImports,
+  );
 
   DependenciesService(this.project);
 
   Future<Dependencies> _load() async {
+    //TODO(xha): upgrade for workspace support
     var rootPubspec = await _readPubspec(project.absolutePath);
     var pubspecLock = await PubspecLock.load(project.absolutePath);
     var packageConfig = (await findPackageConfig(project.directory))!;
 
     var results = Dependencies(rootPubspec, <Dependency>[]);
     for (var package in packageConfig.packages) {
-      var pubspecLockDep =
-          pubspecLock.packages.firstWhereOrNull((e) => e.name == package.name);
+      var pubspecLockDep = pubspecLock?.packages.firstWhereOrNull(
+        (e) => e.name == package.name,
+      );
 
       var pubspec = await _readPubspec(package.root.toFilePath());
 
-      results._allPackages[package.name] =
-          Dependency(results, package, pubspec, pubspecLockDep);
+      results._allPackages[package.name] = Dependency(
+        results,
+        package,
+        pubspec,
+        pubspecLockDep,
+      );
     }
     results.computeDependants();
     return results;
@@ -53,15 +60,18 @@ class DependenciesService {
     var appPackageConfig = await findPackageConfig(appDirectory);
     if (appPackageConfig == null) {
       throw Exception(
-          'Cannot resolve [package_config] of ${appDirectory.path}');
+        'Cannot resolve [package_config] of ${appDirectory.path}',
+      );
     }
     var pubScorePackage = appPackageConfig['pub_scores'];
     if (pubScorePackage == null) {
       throw Exception('Cannot find package [pub_scores]');
     }
 
-    var dataPath =
-        p.join(pubScorePackage.root.toFilePath(), 'lib/data/all_packages.json');
+    var dataPath = p.join(
+      pubScorePackage.root.toFilePath(),
+      'lib/data/all_packages.json',
+    );
 
     return await compute<String, PubScores>((path) async {
       //TODO(xha): consider a lighter parsing as the file is big
@@ -73,9 +83,11 @@ class DependenciesService {
 
   Future<PackageImports> _loadPackageImports() async {
     return await compute<String, PackageImports>((path) async {
-      return PackageImports.gather(listFilesInDirectory(path)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart')));
+      return PackageImports.gather(
+        listFilesInDirectory(
+          path,
+        ).whereType<File>().where((f) => f.path.endsWith('.dart')),
+      );
     }, project.absolutePath);
   }
 
@@ -90,15 +102,13 @@ class Dependencies implements Disposable {
   final Map<String, Dependency> _allPackages;
 
   Dependencies(this.rootPubspec, List<Dependency> dependencies)
-      : _allPackages = {
-          for (var d in dependencies) d.name: d,
-        };
+    : _allPackages = {for (var d in dependencies) d.name: d};
 
   Dependency? operator [](String packageName) => _allPackages[packageName];
 
   Iterable<Dependency> get dependencies => _allPackages.values.where((e) {
-        return e.name != rootPubspec.name;
-      });
+    return e.name != rootPubspec.name;
+  });
 
   List<Dependency>? _directs;
   List<Dependency> get directs =>
@@ -116,7 +126,7 @@ class Dependencies implements Disposable {
     }
     for (var directDep in [
       ...rootPubspec.dependencies.keys,
-      ...rootPubspec.devDependencies.keys
+      ...rootPubspec.devDependencies.keys,
     ]) {
       _allPackages[directDep]?.dependants.add(rootPubspec.name);
     }
@@ -148,35 +158,31 @@ class Dependency implements Disposable {
   bool get isDirect => !isTransitive;
 
   Future<ClocReport> _loadCloc() async {
-    return compute<String, ClocReport>(
-      (path) async {
-        return countLinesOfCode(listFilesInDirectory(path));
-      },
-      package.root.toFilePath(),
-    );
+    return compute<String, ClocReport>((path) async {
+      return countLinesOfCode(listFilesInDirectory(path));
+    }, package.root.toFilePath());
   }
 
   Future<SizeReport> _loadSize() async {
-    return compute<String, SizeReport>(
-      (path) async {
-        var files = listFilesInDirectory(path);
-        var count = 0;
-        var size = 0;
-        for (var file in files) {
-          ++count;
-          size += file.lengthSync();
-        }
-        return SizeReport(fileCount: count, totalBytes: size);
-      },
-      package.root.toFilePath(),
-    );
+    return compute<String, SizeReport>((path) async {
+      var files = listFilesInDirectory(path);
+      var count = 0;
+      var size = 0;
+      for (var file in files) {
+        ++count;
+        size += file.lengthSync();
+      }
+      return SizeReport(fileCount: count, totalBytes: size);
+    }, package.root.toFilePath());
   }
 
   List<List<String>>? _dependencyPaths;
 
   List<List<String>> get dependencyPaths {
     _dependencyPaths = dependenciesGraph(
-        name, (e) => parent._allPackages[e]?.dependants ?? const {});
+      name,
+      (e) => parent._allPackages[e]?.dependants ?? const {},
+    );
     return _dependencyPaths!;
   }
 

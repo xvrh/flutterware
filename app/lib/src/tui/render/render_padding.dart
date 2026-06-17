@@ -2,8 +2,7 @@ part of 'render.dart';
 
 /// A single-child render object that insets its child by [padding].
 class RenderPadding extends RenderBox with RenderBoxWithChild {
-  RenderPadding({required EdgeInsets padding, RenderBox? child})
-      : _padding = padding {
+  RenderPadding({required this._padding, RenderBox? child}) {
     this.child = child;
   }
 
@@ -25,11 +24,11 @@ class RenderPadding extends RenderBox with RenderBoxWithChild {
       return;
     }
     c.layout(constraints.deflate(_padding), parentUsesSize: true);
-    (c.parentData! as BoxParentData).offset =
-        CellOffset(_padding.top, _padding.left);
-    size = constraints.constrain(
-      CellSize(c.size.rows + v, c.size.cols + h),
+    (c.parentData! as BoxParentData).offset = CellOffset(
+      _padding.top,
+      _padding.left,
     );
+    size = constraints.constrain(CellSize(c.size.rows + v, c.size.cols + h));
   }
 
   int _innerWidth(int width) {

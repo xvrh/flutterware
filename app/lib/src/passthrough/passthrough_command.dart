@@ -18,9 +18,11 @@ class PassthroughCommand extends Command<int> {
   PassthroughCommand() {
     argParser
       ..addOption('cwd', help: 'Working directory for the child process.')
-      ..addFlag('print-capture-summary',
-          defaultsTo: true,
-          help: 'After exit, print captured byte count + exit code to stderr.');
+      ..addFlag(
+        'print-capture-summary',
+        defaultsTo: true,
+        help: 'After exit, print captured byte count + exit code to stderr.',
+      );
   }
 
   @override
@@ -31,7 +33,8 @@ class PassthroughCommand extends Command<int> {
 
     if (rest.isEmpty) {
       stderr.writeln(
-          'Usage: passthrough run [options] -- <executable> [args...]');
+        'Usage: passthrough run [options] -- <executable> [args...]',
+      );
       return 64;
     }
 
@@ -41,7 +44,8 @@ class PassthroughCommand extends Command<int> {
     // Validate parent stdio.
     if (!stdin.hasTerminal || !stdout.hasTerminal) {
       stderr.writeln(
-          '[passthrough] warning: parent stdin/stdout is not a TTY, interactive features may not work');
+        '[passthrough] warning: parent stdin/stdout is not a TTY, interactive features may not work',
+      );
     }
 
     return await runUnderPty(
@@ -53,8 +57,6 @@ class PassthroughCommand extends Command<int> {
   }
 }
 
-/// Extracted as a top-level function so it can be unit-tested without
-/// constructing a CommandRunner.
 Future<int> runUnderPty({
   required String executable,
   required List<String> arguments,
@@ -87,10 +89,12 @@ Future<int> runUnderPty({
       workingDirectory: workingDirectory,
     );
 
-    tee = TeeSink(onBytes: (chunk) {
-      stdout.add(chunk);
-      captureSink?.add(chunk);
-    });
+    tee = TeeSink(
+      onBytes: (chunk) {
+        stdout.add(chunk);
+        captureSink?.add(chunk);
+      },
+    );
 
     // PTY output → tee (stdout + capture).
     final outputDone = Completer<void>();
@@ -116,15 +120,17 @@ Future<int> runUnderPty({
 
     // Signal forwarding.
     intSub = ProcessSignal.sigint.watch().listen((_) => pty.sendSignal(SIGINT));
-    termSub =
-        ProcessSignal.sigterm.watch().listen((_) => pty.sendSignal(SIGTERM));
+    termSub = ProcessSignal.sigterm.watch().listen(
+      (_) => pty.sendSignal(SIGTERM),
+    );
 
     final code = await pty.exitCode;
     await outputDone.future;
 
     if (printSummary) {
-      stderr
-          .writeln('[passthrough] captured ${tee.byteCount} bytes, exit $code');
+      stderr.writeln(
+        '[passthrough] captured ${tee.byteCount} bytes, exit $code',
+      );
     }
 
     return code;

@@ -5,9 +5,9 @@ part of 'render.dart';
 /// fixed-extent regions in stage 4.
 class RenderConstrainedBox extends RenderBox with RenderBoxWithChild {
   RenderConstrainedBox({
-    required BoxConstraints additionalConstraints,
+    required this._additionalConstraints,
     RenderBox? child,
-  }) : _additionalConstraints = additionalConstraints {
+  }) {
     this.child = child;
   }
 
