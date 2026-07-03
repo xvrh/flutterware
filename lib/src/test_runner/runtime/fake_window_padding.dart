@@ -3,10 +3,10 @@ import 'package:flutter/widgets.dart';
 
 class FakeWindowPadding implements ViewPadding {
   FakeWindowPadding(EdgeInsets? padding)
-      : bottom = padding?.bottom ?? 0,
-        left = padding?.left ?? 0,
-        right = padding?.right ?? 0,
-        top = padding?.top ?? 0;
+    : bottom = padding?.bottom ?? 0,
+      left = padding?.left ?? 0,
+      right = padding?.right ?? 0,
+      top = padding?.top ?? 0;
 
   @override
   final double bottom;

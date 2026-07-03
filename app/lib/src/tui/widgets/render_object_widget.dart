@@ -18,7 +18,9 @@ abstract class RenderObjectWidget extends Widget {
 
   /// Copies this widget's configuration onto an existing [renderObject].
   void updateRenderObject(
-      BuildContext context, covariant RenderObject renderObject) {}
+    BuildContext context,
+    covariant RenderObject renderObject,
+  ) {}
 
   /// Called when the element holding [renderObject] is unmounted, so the
   /// widget can release anything tied to it. The base does nothing.
@@ -92,7 +94,10 @@ abstract class RenderObjectElement extends Element {
     var oldSlot = _slot;
     super._updateSlot(newSlot);
     _ancestorRenderObjectElement?.moveRenderObjectChild(
-        _renderObject!, oldSlot, newSlot);
+      _renderObject!,
+      oldSlot,
+      newSlot,
+    );
   }
 
   @override
@@ -101,14 +106,18 @@ abstract class RenderObjectElement extends Element {
     _slot = newSlot;
     _ancestorRenderObjectElement = _findAncestorRenderObjectElement();
     _ancestorRenderObjectElement?.insertRenderObjectChild(
-        _renderObject!, newSlot);
+      _renderObject!,
+      newSlot,
+    );
   }
 
   @override
   void detachRenderObject() {
     if (_ancestorRenderObjectElement != null) {
-      _ancestorRenderObjectElement!
-          .removeRenderObjectChild(_renderObject!, _slot);
+      _ancestorRenderObjectElement!.removeRenderObjectChild(
+        _renderObject!,
+        _slot,
+      );
       _ancestorRenderObjectElement = null;
     }
     _slot = null;
@@ -125,17 +134,24 @@ abstract class RenderObjectElement extends Element {
 
   /// Inserts [child] into this element's render object at the given [slot].
   void insertRenderObjectChild(
-      covariant RenderObject child, covariant Object? slot);
+    covariant RenderObject child,
+    covariant Object? slot,
+  );
 
   /// Moves [child] within this element's render object from [oldSlot] to
   /// [newSlot]. [child] is guaranteed to already be a child of the render
   /// object.
-  void moveRenderObjectChild(covariant RenderObject child,
-      covariant Object? oldSlot, covariant Object? newSlot);
+  void moveRenderObjectChild(
+    covariant RenderObject child,
+    covariant Object? oldSlot,
+    covariant Object? newSlot,
+  );
 
   /// Removes [child] from this element's render object.
   void removeRenderObjectChild(
-      covariant RenderObject child, covariant Object? slot);
+    covariant RenderObject child,
+    covariant Object? slot,
+  );
 
   /// Reconciles an ordered list of child elements against a new list of
   /// widgets, returning the new child-element list.
@@ -258,8 +274,9 @@ abstract class RenderObjectElement extends Element {
     // We've scanned the whole list.
     assert(oldChildrenTop == oldChildrenBottom + 1);
     assert(newChildrenTop == newChildrenBottom + 1);
-    assert(newWidgets.length - newChildrenTop ==
-        oldChildren.length - oldChildrenTop);
+    assert(
+      newWidgets.length - newChildrenTop == oldChildren.length - oldChildrenTop,
+    );
     newChildrenBottom = newWidgets.length - 1;
     oldChildrenBottom = oldChildren.length - 1;
 
@@ -315,7 +332,10 @@ class LeafRenderObjectElement extends RenderObjectElement {
 
   @override
   void moveRenderObjectChild(
-      RenderObject child, Object? oldSlot, Object? newSlot) {
+    RenderObject child,
+    Object? oldSlot,
+    Object? newSlot,
+  ) {
     assert(false, 'A LeafRenderObjectElement has no children.');
   }
 
@@ -362,14 +382,20 @@ class SingleChildRenderObjectElement extends RenderObjectElement {
   void mount(Element? parent, Object? newSlot) {
     super.mount(parent, newSlot);
     _child = updateChild(
-        _child, (widget as SingleChildRenderObjectWidget).child, null);
+      _child,
+      (widget as SingleChildRenderObjectWidget).child,
+      null,
+    );
   }
 
   @override
   void update(SingleChildRenderObjectWidget newWidget) {
     super.update(newWidget);
     _child = updateChild(
-        _child, (widget as SingleChildRenderObjectWidget).child, null);
+      _child,
+      (widget as SingleChildRenderObjectWidget).child,
+      null,
+    );
   }
 
   @override
@@ -380,7 +406,10 @@ class SingleChildRenderObjectElement extends RenderObjectElement {
 
   @override
   void moveRenderObjectChild(
-      RenderObject child, Object? oldSlot, Object? newSlot) {
+    RenderObject child,
+    Object? oldSlot,
+    Object? newSlot,
+  ) {
     assert(false, 'A SingleChildRenderObjectElement never moves its child.');
   }
 
@@ -424,15 +453,22 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
 
   @override
   void insertRenderObjectChild(RenderObject child, Element? slot) {
-    (_renderObject! as RenderFlex)
-        .insert(child as RenderBox, after: slot?.renderObject as RenderBox?);
+    (_renderObject! as RenderFlex).insert(
+      child as RenderBox,
+      after: slot?.renderObject as RenderBox?,
+    );
   }
 
   @override
   void moveRenderObjectChild(
-      RenderObject child, Element? oldSlot, Element? newSlot) {
-    (_renderObject! as RenderFlex)
-        .move(child as RenderBox, after: newSlot?.renderObject as RenderBox?);
+    RenderObject child,
+    Element? oldSlot,
+    Element? newSlot,
+  ) {
+    (_renderObject! as RenderFlex).move(
+      child as RenderBox,
+      after: newSlot?.renderObject as RenderBox?,
+    );
   }
 
   @override

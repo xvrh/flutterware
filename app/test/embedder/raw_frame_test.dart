@@ -53,7 +53,9 @@ void main() {
 
   test('rejects a payload size mismatch', () {
     // Header declares 2x1 with rowBytes 8 (16 payload bytes); supply 4.
-    expect(() => decodeRawFrame(_rawFrame(2, 1, 8, [0, 0, 0, 0])),
-        throwsFormatException);
+    expect(
+      () => decodeRawFrame(_rawFrame(2, 1, 8, [0, 0, 0, 0])),
+      throwsFormatException,
+    );
   });
 }

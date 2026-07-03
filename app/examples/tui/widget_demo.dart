@@ -75,7 +75,7 @@ class _LeftPanelState extends State<LeftPanel> {
     if (!_subscribed) {
       _subscribed = true;
       _keySub = TerminalApp.of(context).keys.listen((event) {
-        if (event is CharKey && event.rune == 0x71 /* 'q' */) {
+        if (event is CharKey && event.rune == 0x71 /* 'q' */ ) {
           TerminalApp.of(context).exit();
         } else {
           setState(() => _counter++);
@@ -96,9 +96,9 @@ class _LeftPanelState extends State<LeftPanel> {
     var body = Text(
       _counter == 0
           ? 'The widget tree lays this panel out with BoxConstraints '
-              'and a Column. Press a key to mutate this text.'
+                'and a Column. Press a key to mutate this text.'
           : 'Updated $_counter time(s). Only the left panel '
-              'subtree rebuilt — the right panel is untouched.',
+                'subtree rebuilt — the right panel is untouched.',
     );
 
     return DecoratedBox(

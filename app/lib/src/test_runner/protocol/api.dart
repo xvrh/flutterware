@@ -10,16 +10,19 @@ class TestRunnerApi {
   late final ProjectHost _project;
   late final RunHost _runHost;
 
-  TestRunnerApi(StreamChannel<String> channel,
-      {required void Function() onClose})
-      : _connection = Connection(channel, modelSerializers) {
-    _connection.listen(onClose: () {
-      onClose();
+  TestRunnerApi(
+    StreamChannel<String> channel, {
+    required void Function() onClose,
+  }) : _connection = Connection(channel, modelSerializers) {
+    _connection.listen(
+      onClose: () {
+        onClose();
 
-      _listing.dispose();
-      _project.dispose();
-      _runHost.dispose();
-    });
+        _listing.dispose();
+        _project.dispose();
+        _runHost.dispose();
+      },
+    );
 
     _listing = ListingHost(_connection);
     _project = ProjectHost(_connection);

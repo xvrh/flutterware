@@ -52,7 +52,9 @@ class Daemon {
         }
       } else if (event is DaemonLogEvent) {
         _showMessage(
-            event.log, event.error ? MessageLevel.error : MessageLevel.info);
+          event.log,
+          event.error ? MessageLevel.error : MessageLevel.info,
+        );
       } else if (event is DaemonLogMessageEvent) {
         _showMessage(event.message, event.level);
       }
@@ -84,19 +86,25 @@ class Daemon {
     var testFiles = collectTestFiles(_project.directory);
     await _starter.writeEntryPoint(testFiles);
     var endOfReload = _protocol.onEvent
-        .where((e) =>
-            e is AppProgressEvent &&
-            e.appId == _appId &&
-            e.progressId == (fullRestart ? 'hot.restart' : 'hot.reload') &&
-            e.finished)
+        .where(
+          (e) =>
+              e is AppProgressEvent &&
+              e.appId == _appId &&
+              e.progressId == (fullRestart ? 'hot.restart' : 'hot.reload') &&
+              e.finished,
+        )
         .first;
     var endResult = await _protocol.sendCommand(
-        AppRestartCommand(appId: _appId, fullRestart: fullRestart));
+      AppRestartCommand(appId: _appId, fullRestart: fullRestart),
+    );
     await endOfReload;
     _isReloading.value = false;
     if (endResult.message.isNotEmpty) {
       _setProgressMessage(
-          endResult.message, endResult.code, Duration(seconds: 2));
+        endResult.message,
+        endResult.code,
+        Duration(seconds: 2),
+      );
     }
   }
 
@@ -121,37 +129,42 @@ class DaemonStarter {
   late final File _entryPoint;
 
   DaemonStarter(this.project, this.server, this.messageSink) {
-    _entryPoint = File(p.join(project.directory.path, 'build', 'flutterware',
-        '${id}_test_entry_point.dart'))
-      ..parent.createSync(recursive: true);
+    _entryPoint = File(
+      p.join(
+        project.directory.path,
+        'build',
+        'flutterware',
+        '${id}_test_entry_point.dart',
+      ),
+    )..parent.createSync(recursive: true);
   }
 
   Future<void> writeEntryPoint(List<TestFile> testFiles) async {
-    var code = entryPointCode(project, testFiles,
-        serverUri: server.socketUri!, loggerUri: project.loggerUri);
+    var code = entryPointCode(
+      project,
+      testFiles,
+      serverUri: server.socketUri!,
+      loggerUri: project.loggerUri,
+    );
     await _entryPoint.writeAsString(code);
   }
 
   Future<Daemon> start() async {
     await _buildBundle();
     await writeEntryPoint([]);
-    var process = await Process.start(
-        project.flutterSdkPath.flutter,
-        [
-          'run',
-          '--machine',
-          '--target',
-          p.relative(_entryPoint.path, from: project.directory.path),
-          '--device-id',
-          'flutter-tester'
-        ],
-        workingDirectory: project.directory.path);
+    var process = await Process.start(project.flutterSdkPath.flutter, [
+      'run',
+      '--machine',
+      '--target',
+      p.relative(_entryPoint.path, from: project.directory.path),
+      '--device-id',
+      'flutter-tester',
+    ], workingDirectory: project.directory.path);
     await project.context.resourceCleaner.killProcessOnNextLaunch(process.pid);
     var protocol = DaemonProtocol(
-        process.stdin,
-        process.stdout
-            .transform(Utf8Decoder())
-            .transform(const LineSplitter()));
+      process.stdin,
+      process.stdout.transform(Utf8Decoder()).transform(const LineSplitter()),
+    );
     process.stderr
         .transform(Utf8Decoder())
         .transform(const LineSplitter())
@@ -172,12 +185,16 @@ class DaemonStarter {
       ..writeAsStringSync('void main() {}');
 
     try {
-      var result = await Process.run(project.flutterSdkPath.flutter,
-          ['build', 'bundle', '--release', emptyFilePath],
-          workingDirectory: project.directory.path);
+      var result = await Process.run(project.flutterSdkPath.flutter, [
+        'build',
+        'bundle',
+        '--release',
+        emptyFilePath,
+      ], workingDirectory: project.directory.path);
       if (result.exitCode != 0) {
         throw Exception(
-            'Failed to build bundle in [${project.directory.path}] ${result.stderr}');
+          'Failed to build bundle in [${project.directory.path}] ${result.stderr}',
+        );
       }
     } finally {
       emptyFile.deleteSync();

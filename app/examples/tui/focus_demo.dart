@@ -17,29 +17,33 @@ class FocusPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Focus(
       autofocus: autofocus,
-      child: Builder(builder: (context) {
-        var focused = Focus.of(context).hasFocus;
-        var accent = focused ? Color.brightCyan : Color.brightBlack;
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            border: BoxBorder(
-              chars: focused ? BorderChars.double() : BorderChars.rounded(),
-              fg: accent,
+      child: Builder(
+        builder: (context) {
+          var focused = Focus.of(context).hasFocus;
+          var accent = focused ? Color.brightCyan : Color.brightBlack;
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              border: BoxBorder(
+                chars: focused ? BorderChars.double() : BorderChars.rounded(),
+                fg: accent,
+              ),
             ),
-          ),
-          child: Padding(
-            padding: EdgeInsets.all(1),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(label, fg: accent, style: TextStyle.bold),
-                Text('hasFocus: $focused',
-                    fg: focused ? Color.brightWhite : Color.brightBlack),
-              ],
+            child: Padding(
+              padding: EdgeInsets.all(1),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(label, fg: accent, style: TextStyle.bold),
+                  Text(
+                    'hasFocus: $focused',
+                    fg: focused ? Color.brightWhite : Color.brightBlack,
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
   }
 }
@@ -62,7 +66,7 @@ class _FocusDemoState extends State<FocusDemoApp> {
     _subscribed = true;
     var app = TerminalApp.of(context);
     _keySub = app.keys.listen((event) {
-      if (event is CharKey && event.rune == 0x71 /* q */) {
+      if (event is CharKey && event.rune == 0x71 /* q */ ) {
         app.exit();
       }
     });
@@ -74,16 +78,16 @@ class _FocusDemoState extends State<FocusDemoApp> {
   }
 
   Widget _row(List<Widget> panels) => Expanded(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < panels.length; i++) ...[
-              if (i > 0) SizedBox(width: 1),
-              Expanded(child: panels[i]),
-            ],
-          ],
-        ),
-      );
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < panels.length; i++) ...[
+          if (i > 0) SizedBox(width: 1),
+          Expanded(child: panels[i]),
+        ],
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {

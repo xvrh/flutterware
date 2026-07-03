@@ -45,8 +45,5 @@ class MessageType extends EnumClass {
   static MessageType valueOf(String name) => _$valueOf(name);
 }
 
-@SerializersFor([
-  Message,
-  MessageType,
-])
+@SerializersFor([Message, MessageType])
 final Serializers messageSerializers = _$messageSerializers;

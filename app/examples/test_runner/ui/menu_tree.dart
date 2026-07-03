@@ -33,18 +33,25 @@ class _MenuTreeExampleState extends State<MenuTreeExample> {
                 entries: [
                   MenuEntry('Onboarding'),
                   MenuEntry('Sign in'),
-                  MenuEntry('Sign up', children: [
-                    MenuEntry('Create account'),
-                    MenuEntry('Legal terms'),
-                    MenuEntry('Second level', children: [
-                      MenuEntry('Third level'),
-                    ]),
-                  ]),
-                  MenuEntry('Robot', children: [
-                    MenuEntry('Add'),
-                    MenuEntry('Delete'),
-                    MenuEntry('Setup wifi'),
-                  ]),
+                  MenuEntry(
+                    'Sign up',
+                    children: [
+                      MenuEntry('Create account'),
+                      MenuEntry('Legal terms'),
+                      MenuEntry(
+                        'Second level',
+                        children: [MenuEntry('Third level')],
+                      ),
+                    ],
+                  ),
+                  MenuEntry(
+                    'Robot',
+                    children: [
+                      MenuEntry('Add'),
+                      MenuEntry('Delete'),
+                      MenuEntry('Setup wifi'),
+                    ],
+                  ),
                 ],
               ),
             ),

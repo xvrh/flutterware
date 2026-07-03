@@ -10,7 +10,9 @@ import 'flutter_cache.dart';
 /// Flutter's artifact storage if it is missing or built for a different
 /// engine revision.
 Future<void> ensureEmbedderFramework(
-    FlutterCache cache, String engineDir) async {
+  FlutterCache cache,
+  String engineDir,
+) async {
   var revision = cache.engineRevision;
   var frameworkDir = p.join(engineDir, 'FlutterEmbedder.framework');
   var stamp = File(p.join(engineDir, 'engine.revision'));
@@ -20,14 +22,16 @@ Future<void> ensureEmbedderFramework(
     return;
   }
 
-  stdout
-      .writeln('[embedder] downloading FlutterEmbedder.framework ($revision)');
+  stdout.writeln(
+    '[embedder] downloading FlutterEmbedder.framework ($revision)',
+  );
   if (Directory(frameworkDir).existsSync()) {
     Directory(frameworkDir).deleteSync(recursive: true);
   }
   Directory(engineDir).createSync(recursive: true);
 
-  var url = 'https://storage.googleapis.com/flutter_infra_release/flutter/'
+  var url =
+      'https://storage.googleapis.com/flutter_infra_release/flutter/'
       '$revision/darwin-x64/FlutterEmbedder.framework.zip';
   var zip = p.join(engineDir, 'FlutterEmbedder.framework.zip');
   await _run('curl', ['-fSL', url, '-o', zip]);
@@ -72,8 +76,11 @@ Future<String> buildHost({
 }
 
 Future<void> _run(String executable, List<String> args) async {
-  var process = await Process.start(executable, args,
-      mode: ProcessStartMode.inheritStdio);
+  var process = await Process.start(
+    executable,
+    args,
+    mode: ProcessStartMode.inheritStdio,
+  );
   var code = await process.exitCode;
   if (code != 0) {
     throw ProcessException(executable, args, 'exited with $code', code);

@@ -45,8 +45,9 @@ extension WidgetTesterContextExtension on WidgetTester {
     var i = 0;
 
     String? screenshotPath = const String.fromEnvironment(
-        'screenshots-destination',
-        defaultValue: '');
+      'screenshots-destination',
+      defaultValue: '',
+    );
     if (screenshotPath.isEmpty) {
       screenshotPath = Platform.environment['SCREENSHOTS_DESTINATION'];
     }
@@ -56,16 +57,19 @@ extension WidgetTesterContextExtension on WidgetTester {
     }
 
     return RunContext(
-      RunArgs(['test'],
-          device: DeviceInfo.iPhoneX,
-          accessibility: AccessibilityConfig(),
-          locale: SerializableLocale('en'),
-          imageRatio: 1),
+      RunArgs(
+        ['test'],
+        device: DeviceInfo.iPhoneX,
+        accessibility: AccessibilityConfig(),
+        locale: SerializableLocale('en'),
+        imageRatio: 1,
+      ),
       addScreen: (screen) {
         var image = screen.imageBase64;
         if (image != null && screenshotDirectory != null) {
-          File(p.join(screenshotDirectory.path, '${++i}.png'))
-              .writeAsBytesSync(base64Decode(image));
+          File(
+            p.join(screenshotDirectory.path, '${++i}.png'),
+          ).writeAsBytesSync(base64Decode(image));
         }
       },
     );

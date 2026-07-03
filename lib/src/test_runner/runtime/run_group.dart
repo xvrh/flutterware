@@ -13,7 +13,10 @@ Future<List<LiveTest>> runGroup(Group builtGroup) async {
 }
 
 Stream<LiveTest> _runGroup(
-    Suite suiteConfig, Group group, List<Group> parents) async* {
+  Suite suiteConfig,
+  Group group,
+  List<Group> parents,
+) async* {
   parents.add(group);
   try {
     final skipGroup = group.metadata.skip;
@@ -30,7 +33,9 @@ Stream<LiveTest> _runGroup(
         } else if (!entry.metadata.skip) {
           final test = entry as Test;
           yield await _runLiveTest(
-              suiteConfig, test.load(suiteConfig, groups: parents));
+            suiteConfig,
+            test.load(suiteConfig, groups: parents),
+          );
         }
       }
     }

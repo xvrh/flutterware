@@ -78,8 +78,10 @@ abstract class State<T extends StatefulWidget> {
 
   /// Notifies the framework that internal state changed, scheduling a rebuild.
   void setState(void Function() fn) {
-    assert(_element != null,
-        'setState() called on an unmounted State ($runtimeType).');
+    assert(
+      _element != null,
+      'setState() called on an unmounted State ($runtimeType).',
+    );
     fn();
     _element!.markNeedsBuild();
   }

@@ -61,10 +61,10 @@ class CellRect {
   const CellRect.fromTLWH(this.top, this.left, this.width, this.height);
 
   CellRect.fromOffsetSize(CellOffset offset, CellSize size)
-      : top = offset.row,
-        left = offset.col,
-        width = size.cols,
-        height = size.rows;
+    : top = offset.row,
+      left = offset.col,
+      width = size.cols,
+      height = size.rows;
 
   int get bottom => top + height; // exclusive
   int get right => left + width; // exclusive

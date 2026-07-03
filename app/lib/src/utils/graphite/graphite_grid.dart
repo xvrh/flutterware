@@ -6,10 +6,7 @@ import 'graphite.dart';
 class GraphiteGrid extends StatefulWidget {
   final Matrix matrix;
 
-  GraphiteGrid({
-    required this.matrix,
-    super.key,
-  });
+  GraphiteGrid({required this.matrix, super.key});
   @override
   State<GraphiteGrid> createState() => _GraphiteGridState();
 }
@@ -18,12 +15,14 @@ class _GraphiteGridState extends State<GraphiteGrid> {
   List<MatrixNode?> getListFromMatrix(Matrix mtx) {
     return mtx.s.asMap().entries.fold([], (result, entry) {
       var y = entry.key, row = entry.value;
-      result.addAll(row.asMap().entries.map((cellEntry) {
-        var x = cellEntry.key, cell = cellEntry.value;
-        return cell == null
-            ? null
-            : MatrixNode.fromNodeOutput(x: x, y: y, nodeOutput: cell);
-      }));
+      result.addAll(
+        row.asMap().entries.map((cellEntry) {
+          var x = cellEntry.key, cell = cellEntry.value;
+          return cell == null
+              ? null
+              : MatrixNode.fromNodeOutput(x: x, y: y, nodeOutput: cell);
+        }),
+      );
       return result;
     });
   }
@@ -35,9 +34,11 @@ class _GraphiteGridState extends State<GraphiteGrid> {
     var height = widget.matrix.height();
     var data = getListFromMatrix(widget.matrix);
     return SizedBox(
-      width: (config.cellSize.width * width).toDouble() +
+      width:
+          (config.cellSize.width * width).toDouble() +
           ((width - 1) * config.cellPadding),
-      height: (config.cellSize.height * height).toDouble() +
+      height:
+          (config.cellSize.height * height).toDouble() +
           ((height - 1) * config.cellPadding),
       child: GridView.count(
         clipBehavior: Clip.none,

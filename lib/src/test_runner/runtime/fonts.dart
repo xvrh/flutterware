@@ -30,8 +30,9 @@ Future<void> loadFonts(Map<String, String> fonts) async {
     var fontFiles = Directory(font.value).listSync().whereType<File>().toList();
     fontFiles.sort((a, b) => a.path.compareTo(b.path));
     for (var file in fontFiles) {
-      var future =
-          file.readAsBytes().then((value) => value.buffer.asByteData());
+      var future = file.readAsBytes().then(
+        (value) => value.buffer.asByteData(),
+      );
       fontLoader.addFont(future);
     }
     await fontLoader.load();

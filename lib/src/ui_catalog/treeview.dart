@@ -40,14 +40,16 @@ class TreeViewState<T> extends State<TreeView<T>> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-        padding: const EdgeInsets.only(bottom: 20),
-        children: _flattenedEntries().toList());
+      padding: const EdgeInsets.only(bottom: 20),
+      children: _flattenedEntries().toList(),
+    );
   }
 
   void expandAll() {
     setState(() {
       _expanded.addAll(
-          widget.entries.where((e) => widget.adapter.children(e) != null));
+        widget.entries.where((e) => widget.adapter.children(e) != null),
+      );
     });
   }
 
@@ -61,11 +63,14 @@ class TreeViewState<T> extends State<TreeView<T>> {
     return _flatten(widget.entries, depth: 0);
   }
 
-  Iterable<_LineView> _flatten(Iterable<T> entries,
-      {required int depth}) sync* {
+  Iterable<_LineView> _flatten(
+    Iterable<T> entries, {
+    required int depth,
+  }) sync* {
     var selected = widget.selected;
-    var selectedAncestors =
-        selected != null ? widget.adapter.ancestors(selected) : [];
+    var selectedAncestors = selected != null
+        ? widget.adapter.ancestors(selected)
+        : [];
     for (var entry in entries) {
       var children = widget.adapter.children(entry);
       var isExpanded =

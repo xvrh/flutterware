@@ -74,63 +74,68 @@ class FocusCard extends StatelessWidget {
     return Focus(
       autofocus: autofocus,
       onKeyEvent: _onKey,
-      child: Builder(builder: (context) {
-        var focused = Focus.of(context).hasFocus;
-        var dim = Color.rgb(0x4a, 0x4a, 0x5a);
+      child: Builder(
+        builder: (context) {
+          var focused = Focus.of(context).hasFocus;
+          var dim = Color.rgb(0x4a, 0x4a, 0x5a);
 
-        var header = DecoratedBox(
-          decoration: BoxDecoration(
-            fill: Cell(rune: 0x20, bg: focused ? color : Color.rgb(38, 38, 50)),
-          ),
-          child: Text(
-            ' $label',
-            fg: focused ? Color.rgb(20, 20, 30) : dim,
-            style: TextStyle.bold,
-          ),
-        );
-
-        var body = Padding(
-          padding: EdgeInsets.all(1),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                '$count',
-                hAlign: HorizontalAlign.center,
-                style: TextStyle.bold,
-                fg: focused ? Color.brightWhite : dim,
+          var header = DecoratedBox(
+            decoration: BoxDecoration(
+              fill: Cell(
+                rune: 0x20,
+                bg: focused ? color : Color.rgb(38, 38, 50),
               ),
-              SizedBox(height: 1),
-              Text(
-                focused ? '+   -   space' : '',
-                hAlign: HorizontalAlign.center,
-                fg: color,
-              ),
-            ],
-          ),
-        );
+            ),
+            child: Text(
+              ' $label',
+              fg: focused ? Color.rgb(20, 20, 30) : dim,
+              style: TextStyle.bold,
+            ),
+          );
 
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            fill: Cell(
-              rune: 0x20,
-              bg: focused ? Color.rgb(26, 30, 44) : Color.rgb(18, 18, 26),
+          var body = Padding(
+            padding: EdgeInsets.all(1),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '$count',
+                  hAlign: HorizontalAlign.center,
+                  style: TextStyle.bold,
+                  fg: focused ? Color.brightWhite : dim,
+                ),
+                SizedBox(height: 1),
+                Text(
+                  focused ? '+   -   space' : '',
+                  hAlign: HorizontalAlign.center,
+                  fg: color,
+                ),
+              ],
             ),
-            border: BoxBorder(
-              chars: focused ? BorderChars.double() : BorderChars.rounded(),
-              fg: focused ? color : dim,
+          );
+
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              fill: Cell(
+                rune: 0x20,
+                bg: focused ? Color.rgb(26, 30, 44) : Color.rgb(18, 18, 26),
+              ),
+              border: BoxBorder(
+                chars: focused ? BorderChars.double() : BorderChars.rounded(),
+                fg: focused ? color : dim,
+              ),
             ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              header,
-              Expanded(child: body),
-            ],
-          ),
-        );
-      }),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                header,
+                Expanded(child: body),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -154,25 +159,25 @@ class _PlaygroundState extends State<PlaygroundApp> {
 
   /// One grid row of cards, each in an [Expanded] with gaps between.
   Widget _row(List<Widget> cards) => Expanded(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < cards.length; i++) ...[
-              if (i > 0) SizedBox(width: 2),
-              Expanded(child: cards[i]),
-            ],
-          ],
-        ),
-      );
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < cards.length; i++) ...[
+          if (i > 0) SizedBox(width: 2),
+          Expanded(child: cards[i]),
+        ],
+      ],
+    ),
+  );
 
   FocusCard _card(int index) => FocusCard(
-        label: _labels[index],
-        color: _palette[index],
-        count: _counts[index],
-        autofocus: index == 0,
-        onDelta: (d) => _delta(index, d),
-        onReset: () => _reset(index),
-      );
+    label: _labels[index],
+    color: _palette[index],
+    count: _counts[index],
+    autofocus: index == 0,
+    onDelta: (d) => _delta(index, d),
+    onReset: () => _reset(index),
+  );
 
   @override
   Widget build(BuildContext context) {

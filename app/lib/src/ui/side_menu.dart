@@ -155,9 +155,7 @@ class MenuLine extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: _expandIconWidth,
-                      child: Center(
-                        child: Icon(expandableIcon),
-                      ),
+                      child: Center(child: Icon(expandableIcon)),
                     ),
                     Expanded(child: child),
                   ],
@@ -203,9 +201,7 @@ class _CollapsibleMenuState extends State<CollapsibleMenu> {
       data: theme.copyWith(
         dividerColor: Colors.transparent,
         textTheme: theme.textTheme.copyWith(
-          titleMedium: TextStyle(
-            fontWeight: FontWeight.w700,
-          ),
+          titleMedium: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       child: ListTileTheme(

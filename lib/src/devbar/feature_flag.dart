@@ -7,34 +7,50 @@ class FeatureFlag<T> {
   final DevbarVariableDefinition<T> _definition;
 
   FeatureFlag(String name, T defaultValue, {String? description})
-      : _definition = DevbarVariableDefinition<T>(name,
-            defaultValue: defaultValue, description: description),
-        assert(T != dynamic && T != Null);
+    : _definition = DevbarVariableDefinition<T>(
+        name,
+        defaultValue: defaultValue,
+        description: description,
+      ),
+      assert(T != dynamic && T != Null);
 
   FeatureFlag._(this._definition) : assert(T != dynamic && T != Null);
 
-  static FeatureFlag<T> picker<T>(String name, T defaultValue,
-      {String? description,
-      required Map<T, String> options,
-      T? Function(Object)? fromJson}) {
+  static FeatureFlag<T> picker<T>(
+    String name,
+    T defaultValue, {
+    String? description,
+    required Map<T, String> options,
+    T? Function(Object)? fromJson,
+  }) {
     return FeatureFlag<T>._(
-      DevbarPickerVariableDefinition<T>(name,
-          description: description,
-          options: options,
-          fromJson: fromJson,
-          defaultValue: defaultValue),
+      DevbarPickerVariableDefinition<T>(
+        name,
+        description: description,
+        options: options,
+        fromJson: fromJson,
+        defaultValue: defaultValue,
+      ),
     );
   }
 
-  static FeatureFlag<T> slider<T extends num>(String name, T defaultValue,
-      {required T min, required T max, required T step, String? description}) {
+  static FeatureFlag<T> slider<T extends num>(
+    String name,
+    T defaultValue, {
+    required T min,
+    required T max,
+    required T step,
+    String? description,
+  }) {
     return FeatureFlag<T>._(
-      DevbarSliderVariableDefinition<T>(name,
-          description: description,
-          min: min,
-          max: max,
-          step: step,
-          defaultValue: defaultValue),
+      DevbarSliderVariableDefinition<T>(
+        name,
+        description: description,
+        min: min,
+        max: max,
+        step: step,
+        defaultValue: defaultValue,
+      ),
     );
   }
 
@@ -43,8 +59,9 @@ class FeatureFlag<T> {
   T get _defaultValue => _definition.defaultValue;
 
   DevbarVariable<T> _addVariable(
-          VariablesPlugin service, FeatureFlagValue<T>? value) =>
-      service.add<T>(_definition, flagValue: value);
+    VariablesPlugin service,
+    FeatureFlagValue<T>? value,
+  ) => service.add<T>(_definition, flagValue: value);
 
   FeatureFlagValue<T> withValue(T newValue) =>
       FeatureFlagValue<T>(this, newValue);
@@ -156,8 +173,8 @@ class _FlagToVariableState extends State<_FlagToVariable> {
 
   @override
   Widget build(BuildContext context) {
-    var parentFlags =
-        context.dependOnInheritedWidgetOfExactType<FeatureFlags>()!;
+    var parentFlags = context
+        .dependOnInheritedWidgetOfExactType<FeatureFlags>()!;
 
     var alreadyRegistered = {..._flagValues};
     for (var flag in parentFlags.values.values) {
@@ -192,8 +209,11 @@ class _FlagToVariableState extends State<_FlagToVariable> {
       });
     });
 
-    _flagValues[flag] = FlagRegistration(flagValue,
-        variable: variable, variableSubscription: variableSubscription);
+    _flagValues[flag] = FlagRegistration(
+      flagValue,
+      variable: variable,
+      variableSubscription: variableSubscription,
+    );
   }
 
   void _unregister(FlagRegistration registration) {

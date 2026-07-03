@@ -35,8 +35,9 @@ String dartIdentifier(String input) {
     input = input.replaceAll(replace.key, replace.value);
   }
 
-  input =
-      input.words.map((e) => e.withoutDiacritics.toLowerCase()).toLowerCamel();
+  input = input.words
+      .map((e) => e.withoutDiacritics.toLowerCase())
+      .toLowerCamel();
 
   if (input.startsWith(_digitRegex)) {
     return '\$$input';

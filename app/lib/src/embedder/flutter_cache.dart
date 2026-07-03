@@ -18,8 +18,9 @@ class FlutterCache {
     var cache = p.dirname(p.dirname(p.dirname(dart)));
     if (!Directory(p.join(cache, 'artifacts', 'engine')).existsSync()) {
       throw StateError(
-          'Could not locate the Flutter cache from "$dart". Run this tool '
-          'with the Dart SDK bundled in your Flutter checkout.');
+        'Could not locate the Flutter cache from "$dart". Run this tool '
+        'with the Dart SDK bundled in your Flutter checkout.',
+      );
     }
     return FlutterCache(cache);
   }

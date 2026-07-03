@@ -39,7 +39,10 @@ class GraphBasic {
   }
 
   Set<String> traverseVertically(
-      NodeInput node, Set<String> branchSet, Set<String> totalSet) {
+    NodeInput node,
+    Set<String> branchSet,
+    Set<String> totalSet,
+  ) {
     if (branchSet.contains(node.id)) {
       throw Exception('duplicate incomes for node id ${node.id}');
     }
@@ -118,9 +121,11 @@ class GraphBasic {
   List<NodeInput> getOutcomesArray(String itemId) {
     var outcomes = this.outcomes(itemId);
     if (outcomes.isEmpty) return [];
-    return outcomes.map((String id) {
-      return node(id);
-    }).toList(growable: true);
+    return outcomes
+        .map((String id) {
+          return node(id);
+        })
+        .toList(growable: true);
   }
 
   List<NodeInput> list = [];

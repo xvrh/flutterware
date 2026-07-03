@@ -23,14 +23,16 @@ class FlutterRunProcess {
     required String device,
     required FlutterSdkPath flutterSdk,
   }) async {
-    var process = await Process.start(flutterSdk.flutter,
-        ['run', '--machine', '--target', target, '--device-id', device],
-        workingDirectory: directory.path, environment: {});
+    var process = await Process.start(
+      flutterSdk.flutter,
+      ['run', '--machine', '--target', target, '--device-id', device],
+      workingDirectory: directory.path,
+      environment: {},
+    );
     var protocol = DaemonProtocol(
-        process.stdin,
-        process.stdout
-            .transform(Utf8Decoder())
-            .transform(const LineSplitter()));
+      process.stdin,
+      process.stdout.transform(Utf8Decoder()).transform(const LineSplitter()),
+    );
     process.stderr
         .transform(Utf8Decoder())
         .transform(const LineSplitter())
@@ -55,8 +57,9 @@ class FlutterRunProcess {
       onEvent.whereType<AppProgressEvent>();
 
   Future<void> reload({required bool fullRestart}) async {
-    await _protocol
-        .sendCommand(AppRestartCommand(appId: appId, fullRestart: fullRestart));
+    await _protocol.sendCommand(
+      AppRestartCommand(appId: appId, fullRestart: fullRestart),
+    );
   }
 
   Future<void> stop() async {

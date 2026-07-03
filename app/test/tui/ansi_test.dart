@@ -76,7 +76,8 @@ void main() {
 
     test('combined', () {
       final s = Ansi.sgrStyle(
-          TextStyle.bold | TextStyle.underline | TextStyle.reverse);
+        TextStyle.bold | TextStyle.underline | TextStyle.reverse,
+      );
       expect(s, containsAll(['1', '4', '7']));
       expect(s.length, 3);
     });

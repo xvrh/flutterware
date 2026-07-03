@@ -16,8 +16,10 @@ class InstallCommand extends Command<int> {
     argParser
       ..addOption('sdk', help: 'Path to the existing shared Flutter SDK.')
       ..addOption('project', help: 'Path to the project root.')
-      ..addOption('wrap-exe',
-          help: 'Path to the compiled wrap executable to bake into shims.');
+      ..addOption(
+        'wrap-exe',
+        help: 'Path to the compiled wrap executable to bake into shims.',
+      );
   }
 
   @override

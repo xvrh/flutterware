@@ -14,9 +14,10 @@ Future<void> main(List<String> args) async {
   // This is a pub workspace: package_config.json lives at the repo root.
   // Platform.script -> <repo>/app/tool/embedder/compile.dart, so go up four dirs.
   var packageConfig = p.join(
-      p.dirname(p.dirname(p.dirname(p.dirname(Platform.script.toFilePath())))),
-      '.dart_tool',
-      'package_config.json');
+    p.dirname(p.dirname(p.dirname(p.dirname(Platform.script.toFilePath())))),
+    '.dart_tool',
+    'package_config.json',
+  );
 
   var dill = await compileToKernel(
     entrypoint: entrypoint,

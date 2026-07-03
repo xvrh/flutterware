@@ -32,8 +32,10 @@ Future<File> compileToKernel({
       throw StateError('frontend_server produced no kernel output.');
     }
     if (result.errorCount > 0) {
-      throw StateError('Compilation failed:\n'
-          '${result.compilerOutputLines.join('\n')}');
+      throw StateError(
+        'Compilation failed:\n'
+        '${result.compilerOutputLines.join('\n')}',
+      );
     }
     client.accept();
     return File(result.dillOutput!);

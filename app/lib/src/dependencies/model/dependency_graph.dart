@@ -1,6 +1,8 @@
 List<List<String>> dependenciesGraph(
-    String package, Set<String> Function(String) getDependantPackages,
-    {Set<String>? visited}) {
+  String package,
+  Set<String> Function(String) getDependantPackages, {
+  Set<String>? visited,
+}) {
   if (visited != null && visited.contains(package)) {
     return [];
   }
@@ -8,14 +10,17 @@ List<List<String>> dependenciesGraph(
   var dependants = getDependantPackages(package);
   if (dependants.isEmpty) {
     return [
-      [package]
+      [package],
     ];
   }
 
   var lists = <List<String>>[];
   for (var dependant in dependants) {
-    var subPaths = dependenciesGraph(dependant, getDependantPackages,
-        visited: {package, ...?visited});
+    var subPaths = dependenciesGraph(
+      dependant,
+      getDependantPackages,
+      visited: {package, ...?visited},
+    );
     for (var subPath in subPaths) {
       lists.add([...subPath, package]);
     }

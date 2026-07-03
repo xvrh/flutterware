@@ -19,7 +19,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     iPadLandscape,
     iPadPortrait,
     iPadPro12Landscape,
-    iPadPro12Portrait
+    iPadPro12Portrait,
   ];
 
   static final iPhoneX = DeviceInfo(
@@ -29,10 +29,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     height: 812,
     pixelRatio: 3,
     platform: DevicePlatform.iOS,
-    safeArea: Rectangle(
-      top: 44,
-      bottom: 34,
-    ),
+    safeArea: Rectangle(top: 44, bottom: 34),
   );
 
   static final iPhone11ProMax = DeviceInfo(
@@ -42,10 +39,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     height: 896,
     pixelRatio: 3,
     platform: DevicePlatform.iOS,
-    safeArea: Rectangle(
-      top: 44,
-      bottom: 34,
-    ),
+    safeArea: Rectangle(top: 44, bottom: 34),
   );
 
   static final iPhoneSE = DeviceInfo(
@@ -55,10 +49,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     height: 568,
     pixelRatio: 2,
     platform: DevicePlatform.iOS,
-    safeArea: Rectangle(
-      top: 20,
-      bottom: 0,
-    ),
+    safeArea: Rectangle(top: 20, bottom: 0),
   );
 
   static final motoG5 = DeviceInfo(
@@ -68,10 +59,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     width: 360,
     height: 592,
     pixelRatio: 3,
-    safeArea: Rectangle(
-      top: 24,
-      bottom: 0,
-    ),
+    safeArea: Rectangle(top: 24, bottom: 0),
   );
 
   static final androidSmall = DeviceInfo(
@@ -81,10 +69,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     height: 569,
     pixelRatio: 2,
     platform: DevicePlatform.android,
-    safeArea: Rectangle(
-      top: 24,
-      bottom: 0,
-    ),
+    safeArea: Rectangle(top: 24, bottom: 0),
   );
 
   static final androidMedium = DeviceInfo(
@@ -94,10 +79,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     height: 731,
     pixelRatio: 2,
     platform: DevicePlatform.android,
-    safeArea: Rectangle(
-      top: 24,
-      bottom: 0,
-    ),
+    safeArea: Rectangle(top: 24, bottom: 0),
   );
 
   static final androidLarge = DeviceInfo(
@@ -107,10 +89,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     height: 1280,
     pixelRatio: 3,
     platform: DevicePlatform.android,
-    safeArea: Rectangle(
-      top: 24,
-      bottom: 0,
-    ),
+    safeArea: Rectangle(top: 24, bottom: 0),
   );
 
   static final iPadLandscape = DeviceInfo(
@@ -120,10 +99,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     height: 768,
     pixelRatio: 2,
     platform: DevicePlatform.iOS,
-    safeArea: Rectangle(
-      top: 20,
-      bottom: 0,
-    ),
+    safeArea: Rectangle(top: 20, bottom: 0),
   );
 
   static final iPadPortrait = DeviceInfo(
@@ -133,10 +109,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     height: 1024,
     pixelRatio: 2,
     platform: DevicePlatform.iOS,
-    safeArea: Rectangle(
-      top: 20,
-      bottom: 0,
-    ),
+    safeArea: Rectangle(top: 20, bottom: 0),
   );
 
   static final iPadPro12Portrait = DeviceInfo(
@@ -146,10 +119,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     height: 1366,
     pixelRatio: 2,
     platform: DevicePlatform.iOS,
-    safeArea: Rectangle(
-      top: 24,
-      bottom: 20,
-    ),
+    safeArea: Rectangle(top: 24, bottom: 20),
   );
 
   static final iPadPro12Landscape = DeviceInfo(
@@ -159,10 +129,7 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     height: 1024,
     pixelRatio: 2,
     platform: DevicePlatform.iOS,
-    safeArea: Rectangle(
-      top: 24,
-      bottom: 20,
-    ),
+    safeArea: Rectangle(top: 24, bottom: 20),
   );
 
   DeviceInfo._();
@@ -177,15 +144,16 @@ abstract class DeviceInfo implements Built<DeviceInfo, DeviceInfoBuilder> {
     required double height,
     required double pixelRatio,
     required Rectangle safeArea,
-  }) =>
-      DeviceInfo._builder((b) => b
-        ..id = id
-        ..name = name
-        ..platform = platform
-        ..width = width
-        ..height = height
-        ..pixelRatio = pixelRatio
-        ..safeArea.replace(safeArea));
+  }) => DeviceInfo._builder(
+    (b) => b
+      ..id = id
+      ..name = name
+      ..platform = platform
+      ..width = width
+      ..height = height
+      ..pixelRatio = pixelRatio
+      ..safeArea.replace(safeArea),
+  );
 
   String get id;
   String get name;

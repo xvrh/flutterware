@@ -32,7 +32,7 @@ void main() {
     var graphs = dependenciesGraph('A', (e) => packages[e] ?? {});
     expect(graphs, [
       ['B', 'A'],
-      ['B', 'D', 'C', 'A']
+      ['B', 'D', 'C', 'A'],
     ]);
   });
 }

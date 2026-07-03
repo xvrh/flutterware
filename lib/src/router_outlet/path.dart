@@ -1,6 +1,7 @@
 import 'dart:core' as core;
 import 'dart:core';
 import 'package:collection/collection.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 class PagePath {
@@ -12,16 +13,20 @@ class PagePath {
   final Map<String, String> queryParameters;
   final Map<String, dynamic> extra;
 
-  PagePath._(this._segments,
-      {required this.isAbsolute,
-      Map<String, String>? queryParameters,
-      Map<String, dynamic>? extra})
-      : assert(_segments.every((s) => s.isNotEmpty)),
-        queryParameters = queryParameters ?? const {},
-        extra = extra ?? const {};
+  PagePath._(
+    this._segments, {
+    required this.isAbsolute,
+    Map<String, String>? queryParameters,
+    Map<String, dynamic>? extra,
+  }) : assert(_segments.every((s) => s.isNotEmpty)),
+       queryParameters = queryParameters ?? const {},
+       extra = extra ?? const {};
 
-  factory PagePath(String path,
-      {bool? isAbsolute, Map<String, dynamic>? extra}) {
+  factory PagePath(
+    String path, {
+    bool? isAbsolute,
+    Map<String, dynamic>? extra,
+  }) {
     path = path.trim();
     var pathAndQuery = path.split('?');
     path = pathAndQuery.first;
@@ -41,8 +46,12 @@ class PagePath {
       queryParameters = Uri(query: query).queryParameters;
     }
 
-    return PagePath._(segments,
-        isAbsolute: isAbsolute, queryParameters: queryParameters, extra: extra);
+    return PagePath._(
+      segments,
+      isAbsolute: isAbsolute,
+      queryParameters: queryParameters,
+      extra: extra,
+    );
   }
 
   MatchedPath? matches(PathPattern pattern) {
@@ -69,8 +78,11 @@ class PagePath {
 
   PagePath subPath(PagePath subPath, {Map<String, dynamic>? extra}) {
     assert(!subPath.isAbsolute);
-    return PagePath(p.url.join(toPath(), subPath.toPath()),
-        isAbsolute: isAbsolute, extra: extra);
+    return PagePath(
+      p.url.join(toPath(), subPath.toPath()),
+      isAbsolute: isAbsolute,
+      extra: extra,
+    );
   }
 
   String toPath() {
@@ -154,8 +166,8 @@ class MatchedPath {
     required this.args,
     required this.queryParameters,
     required this.extra,
-  })  : assert(matched.isAbsolute),
-        assert(full.isAbsolute);
+  }) : assert(matched.isAbsolute),
+       assert(full.isAbsolute);
 
   String operator [](String key) {
     return args[key] ?? '';
@@ -163,7 +175,11 @@ class MatchedPath {
 
   core.int int(String key) => core.int.parse(this[key]);
 
-  PagePath go(String url, {Map<String, dynamic>? extra}) {
+  /// Resolves [url] (relative to [matched] unless absolute) to an absolute
+  /// [PagePath]. Pure: does not navigate — pass the result to a `UrlSource`
+  /// (or use `context.go`) to actually change the URL.
+  @useResult
+  PagePath resolve(String url, {Map<String, dynamic>? extra}) {
     PagePath newPath;
     if (url.startsWith('/')) {
       newPath = PagePath(url, extra: extra);
@@ -202,23 +218,30 @@ class MatchedPath {
 
     var matchedSegments = <String>[];
     var parameters = {...args};
-    for (var segmentIndex = 0;
-        segmentIndex < pattern._segments.length;
-        segmentIndex++) {
+    for (
+      var segmentIndex = 0;
+      segmentIndex < pattern._segments.length;
+      segmentIndex++
+    ) {
       var patternSegment = pattern._segments[segmentIndex];
       var actualSegment = remainingSegments[segmentIndex];
 
-      var matcher = RegExp(r'^' +
-          patternSegment.replaceAll(_findParameters,
-              r"((?:[\w'\.\-~!\$&\(\)\*\+,;=:@]|%[0-9a-fA-F]{2})+)") +
-          r'$');
+      var matcher = RegExp(
+        r'^' +
+            patternSegment.replaceAll(
+              _findParameters,
+              r"((?:[\w'\.\-~!\$&\(\)\*\+,;=:@]|%[0-9a-fA-F]{2})+)",
+            ) +
+            r'$',
+      );
       var match = matcher.firstMatch(actualSegment);
       if (match == null) {
         return null;
       }
       matchedSegments.add(actualSegment);
-      var parameterNames =
-          _findParameters.allMatches(patternSegment).map((m) => m.group(1)!);
+      var parameterNames = _findParameters
+          .allMatches(patternSegment)
+          .map((m) => m.group(1)!);
       var i = 0;
       for (var parameterName in parameterNames) {
         parameters[parameterName] = Uri.decodeComponent(match.group(i + 1)!);
@@ -227,17 +250,21 @@ class MatchedPath {
     }
 
     return MatchedPath._(
-        full: full,
-        current: PagePath._(matchedSegments, isAbsolute: false),
-        matched: PagePath._([...matched._segments, ...matchedSegments],
-            isAbsolute: true),
-        pattern: pattern,
-        remaining: PagePath._(
-            remainingSegments.skip(pattern._segments.length).toList(),
-            isAbsolute: false),
-        args: parameters,
-        queryParameters: queryParameters,
-        extra: extra);
+      full: full,
+      current: PagePath._(matchedSegments, isAbsolute: false),
+      matched: PagePath._([
+        ...matched._segments,
+        ...matchedSegments,
+      ], isAbsolute: true),
+      pattern: pattern,
+      remaining: PagePath._(
+        remainingSegments.skip(pattern._segments.length).toList(),
+        isAbsolute: false,
+      ),
+      args: parameters,
+      queryParameters: queryParameters,
+      extra: extra,
+    );
   }
 
   @override
@@ -255,8 +282,14 @@ class MatchedPath {
       const MapEquality().equals(other.args, args);
 
   @override
-  core.int get hashCode => Object.hash(pattern, full, matched, current,
-      remaining, const MapEquality().hash(args));
+  core.int get hashCode => Object.hash(
+    pattern,
+    full,
+    matched,
+    current,
+    remaining,
+    const MapEquality().hash(args),
+  );
 
   core.int? selectedIndex(Iterable<String> urls) {
     var i = 0;

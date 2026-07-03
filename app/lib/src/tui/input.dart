@@ -40,7 +40,7 @@ sealed class KeyEvent {
 class CharKey extends KeyEvent {
   final int rune;
   const CharKey({required this.rune, required Set<Modifier> modifiers})
-      : super(modifiers);
+    : super(modifiers);
 
   @override
   bool operator ==(Object other) =>
@@ -58,7 +58,7 @@ class CharKey extends KeyEvent {
 class SpecialKey extends KeyEvent {
   final SpecialKeyCode code;
   const SpecialKey({required this.code, required Set<Modifier> modifiers})
-      : super(modifiers);
+    : super(modifiers);
 
   @override
   bool operator ==(Object other) =>
@@ -140,10 +140,10 @@ KeyEvent? _consume(Queue<int> bytes, {required bool streamClosed}) {
       return const SpecialKey(code: SpecialKeyCode.escape, modifiers: {});
     }
     final second = bytes.elementAt(1);
-    if (second == 0x5b /* [ */) {
+    if (second == 0x5b /* [ */ ) {
       return _consumeCsi(bytes, streamClosed: streamClosed);
     }
-    if (second == 0x4f /* O */) {
+    if (second == 0x4f /* O */ ) {
       return _consumeSs3(bytes, streamClosed: streamClosed);
     }
     // Anything else after ESC: treat ESC as standalone for stage 1.
@@ -216,8 +216,9 @@ KeyEvent? _consumeCsi(Queue<int> bytes, {required bool streamClosed}) {
   // and finally one final byte (0x40–0x7e).
   final paramBytes = <int>[];
   var idx = 0;
-  while (
-      idx < snapshot.length && snapshot[idx] >= 0x30 && snapshot[idx] <= 0x3f) {
+  while (idx < snapshot.length &&
+      snapshot[idx] >= 0x30 &&
+      snapshot[idx] <= 0x3f) {
     paramBytes.add(snapshot[idx]);
     idx++;
   }
@@ -255,7 +256,7 @@ KeyEvent _interpretCsi(List<int> paramBytes, int finalByte) {
     if (b >= 0x30 && b <= 0x39) {
       cur = cur * 10 + (b - 0x30);
       any = true;
-    } else if (b == 0x3b /* ; */) {
+    } else if (b == 0x3b /* ; */ ) {
       params.add(any ? cur : 0);
       cur = 0;
       any = false;

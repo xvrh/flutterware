@@ -32,17 +32,12 @@ class _AboutMenuItemState extends State<AboutMenuItem> {
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 15),
         child: Row(
           children: [
-            Icon(
-              Icons.info_outline,
-              size: 15,
-            ),
+            Icon(Icons.info_outline, size: 15),
             const SizedBox(width: 5),
             FutureBuilder<PackageInfo>(
               future: _packageInfo,
               builder: (context, snapshot) {
-                return Text(
-                  'Flutterware v${snapshot.data?.version ?? ''}',
-                );
+                return Text('Flutterware v${snapshot.data?.version ?? ''}');
               },
             ),
           ],
@@ -65,16 +60,11 @@ class AboutScreen extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 15),
         child: Row(
           children: [
-            Icon(
-              Icons.arrow_back_outlined,
-              size: 18,
-            ),
+            Icon(Icons.arrow_back_outlined, size: 18),
             const SizedBox(width: 5),
             Text(
               'Back to project',
-              style: const TextStyle(
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -92,31 +82,19 @@ class AboutScreen extends StatelessWidget {
               initiallyExpanded: true,
               title: Text('About'),
               children: [
-                MenuLink(
-                  url: 'what',
-                  title: Text('What is it?'),
-                ),
-                MenuLink(
-                  url: 'features',
-                  title: Text('Features'),
-                ),
-                MenuLink(
-                  url: 'changelog',
-                  title: Text('Changelog'),
-                ),
+                MenuLink(url: 'what', title: Text('What is it?')),
+                MenuLink(url: 'features', title: Text('Features')),
+                MenuLink(url: 'changelog', title: Text('Changelog')),
               ],
             ),
           ],
         ),
         Expanded(
-          child: RouterOutlet(
-            {
-              'what': (route) => AboutPage(),
-              'features': (route) => FeatureTourPage(),
-              'changelog': (route) => ChangeLogPage(),
-            },
-            onNotFound: (_) => 'what',
-          ),
+          child: RouterOutlet({
+            'what': (route) => AboutPage(),
+            'features': (route) => FeatureTourPage(),
+            'changelog': (route) => ChangeLogPage(),
+          }, onNotFound: (_) => 'what'),
         ),
       ],
     );

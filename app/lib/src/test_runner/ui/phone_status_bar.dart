@@ -27,9 +27,7 @@ class PhoneStatusBar extends StatelessWidget {
       textDirection: TextDirection.ltr,
       child: Stack(
         children: [
-          Positioned.fill(
-            child: child,
-          ),
+          Positioned.fill(child: child),
           bar,
         ],
       ),
@@ -52,10 +50,11 @@ class _StatusBar extends StatelessWidget {
 
     return DefaultTextStyle.merge(
       style: TextStyle(
-          color: topColor,
-          fontFamily: defaultTargetPlatform == TargetPlatform.iOS
-              ? '.SF Pro Display'
-              : 'Roboto'),
+        color: topColor,
+        fontFamily: defaultTargetPlatform == TargetPlatform.iOS
+            ? '.SF Pro Display'
+            : 'Roboto',
+      ),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -84,17 +83,29 @@ class _StatusBar extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SvgPicture.string(_networkSvg,
-                        colorFilter:
-                            ui.ColorFilter.mode(topColor, BlendMode.srcIn)),
+                    SvgPicture.string(
+                      _networkSvg,
+                      colorFilter: ui.ColorFilter.mode(
+                        topColor,
+                        BlendMode.srcIn,
+                      ),
+                    ),
                     const SizedBox(width: 5),
-                    SvgPicture.string(_wifiSvg,
-                        colorFilter:
-                            ui.ColorFilter.mode(topColor, BlendMode.srcIn)),
+                    SvgPicture.string(
+                      _wifiSvg,
+                      colorFilter: ui.ColorFilter.mode(
+                        topColor,
+                        BlendMode.srcIn,
+                      ),
+                    ),
                     const SizedBox(width: 5),
-                    SvgPicture.string(_batterySvg,
-                        colorFilter:
-                            ui.ColorFilter.mode(topColor, BlendMode.srcIn)),
+                    SvgPicture.string(
+                      _batterySvg,
+                      colorFilter: ui.ColorFilter.mode(
+                        topColor,
+                        BlendMode.srcIn,
+                      ),
+                    ),
                   ],
                 ),
               ),

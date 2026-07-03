@@ -24,10 +24,7 @@ class AppThemeDemo extends StatelessWidget {
                     bottom: 0,
                     right: 0,
                     left: 0,
-                    child: Container(
-                      color: AppColors.tabDivider,
-                      height: 1,
-                    ),
+                    child: Container(color: AppColors.tabDivider, height: 1),
                   ),
                   const TabBar(
                     tabs: [
@@ -40,13 +37,7 @@ class AppThemeDemo extends StatelessWidget {
               ),
             ),
           ),
-          body: TabBarView(
-            children: [
-              _Tab1(),
-              _Tab2(),
-              _Tab3(),
-            ],
-          ),
+          body: TabBarView(children: [_Tab1(), _Tab2(), _Tab3()]),
         ),
       ),
     );
@@ -89,31 +80,19 @@ class _Tab1State extends State<_Tab1> {
           runSpacing: 20,
           children: [
             Text('Text'),
-            ElevatedButton(
-              onPressed: () {},
-              child: Text('Normal button'),
-            ),
+            ElevatedButton(onPressed: () {}, child: Text('Normal button')),
             ElevatedButton.icon(
               onPressed: () {},
               icon: Icon(Icons.access_alarm),
               label: Text('Icon button'),
             ),
-            ElevatedButton(
-              onPressed: null,
-              child: Text('Disabled button'),
-            ),
-            OutlinedButton(
-              onPressed: () {},
-              child: Text('Secondary button'),
-            ),
+            ElevatedButton(onPressed: null, child: Text('Disabled button')),
+            OutlinedButton(onPressed: () {}, child: Text('Secondary button')),
             OutlinedButton(
               onPressed: null,
               child: Text('Secondary disabled button'),
             ),
-            TextButton(
-              onPressed: () {},
-              child: Text('Normal button'),
-            ),
+            TextButton(onPressed: () {}, child: Text('Normal button')),
             IconButton(onPressed: () {}, icon: Icon(Icons.refresh)),
             PopupMenuButton(
               itemBuilder: (context) => [
@@ -129,17 +108,15 @@ class _Tab1State extends State<_Tab1> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'A menu',
-                    style: theme.textTheme.titleMedium,
-                  ),
+                  Text('A menu', style: theme.textTheme.titleMedium),
                   Icon(Icons.expand_more),
                 ],
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.stateError),
+                backgroundColor: AppColors.stateError,
+              ),
               onPressed: () {},
               child: Text('Danger button'),
             ),
@@ -167,10 +144,7 @@ class _Tab1State extends State<_Tab1> {
             ),
             SizedBox(
               width: 100,
-              child: TextField(
-                controller: _disabledText,
-                enabled: false,
-              ),
+              child: TextField(controller: _disabledText, enabled: false),
             ),
             Checkbox(
               value: _checkbox1,
@@ -180,14 +154,8 @@ class _Tab1State extends State<_Tab1> {
                 });
               },
             ),
-            Checkbox(
-              value: true,
-              onChanged: null,
-            ),
-            Checkbox(
-              value: false,
-              onChanged: (_) {},
-            ),
+            Checkbox(value: true, onChanged: null),
+            Checkbox(value: false, onChanged: (_) {}),
             CircularProgressIndicator(),
             Switch(
               value: _switch1,
@@ -268,22 +236,22 @@ class _Tab2 extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'A card',
-                  style: Theme.of(context).textTheme.titleLarge,
+                Text('A card', style: Theme.of(context).textTheme.titleLarge),
+                DataTable(
+                  columns: [
+                    DataColumn(label: Text('First')),
+                    DataColumn(label: Text('Second')),
+                  ],
+                  rows: [
+                    for (var i = 0; i < 3; i++)
+                      DataRow(
+                        cells: [
+                          DataCell(Text('1 + $i')),
+                          DataCell(Text('2 + $i')),
+                        ],
+                      ),
+                  ],
                 ),
-                DataTable(columns: [
-                  DataColumn(label: Text('First')),
-                  DataColumn(label: Text('Second'))
-                ], rows: [
-                  for (var i = 0; i < 3; i++)
-                    DataRow(
-                      cells: [
-                        DataCell(Text('1 + $i')),
-                        DataCell(Text('2 + $i')),
-                      ],
-                    ),
-                ]),
               ],
             ),
           ),
@@ -307,10 +275,7 @@ class _Tab3 extends StatelessWidget {
                 isSelected: true,
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.home,
-                      size: 18,
-                    ),
+                    Icon(Icons.home, size: 18),
                     const SizedBox(width: 10),
                     Text('flutterware_example'),
                   ],
@@ -324,18 +289,9 @@ class _Tab3 extends StatelessWidget {
                 child: Text('Icons'),
               ),
             ),
-            CollapsibleMenu(
-              title: Text('Pub dependencies'),
-              children: [],
-            ),
-            CollapsibleMenu(
-              title: Text('App tests'),
-              children: [],
-            ),
-            CollapsibleMenu(
-              title: Text('Icons'),
-              children: [],
-            ),
+            CollapsibleMenu(title: Text('Pub dependencies'), children: []),
+            CollapsibleMenu(title: Text('App tests'), children: []),
+            CollapsibleMenu(title: Text('Icons'), children: []),
           ],
         ),
         const SizedBox(width: 20),
@@ -346,20 +302,13 @@ class _Tab3 extends StatelessWidget {
               isSelected: false,
               child: Row(
                 children: [
-                  Icon(
-                    Icons.home,
-                    size: 18,
-                  ),
+                  Icon(Icons.home, size: 18),
                   const SizedBox(width: 10),
                   Text('flutterware_example'),
                 ],
               ),
             ),
-            MenuLine(
-              onTap: () {},
-              isSelected: true,
-              child: Text('Icons'),
-            ),
+            MenuLine(onTap: () {}, isSelected: true, child: Text('Icons')),
           ],
         ),
         const SizedBox(width: 20),
@@ -375,10 +324,7 @@ class _Tab3 extends StatelessWidget {
                       minimumSize: Size(0, 30),
                     ),
                     onPressed: () {},
-                    icon: Icon(
-                      Icons.play_arrow,
-                      size: 12,
-                    ),
+                    icon: Icon(Icons.play_arrow, size: 12),
                     label: Text('Start test runner'),
                   ),
                 ),
@@ -430,8 +376,9 @@ class _Tab3 extends StatelessWidget {
                   onTap: () {},
                   isSelected: false,
                   indent: 2,
-                  child:
-                      Text('Onboarding should work correctly with all widgets'),
+                  child: Text(
+                    'Onboarding should work correctly with all widgets',
+                  ),
                 ),
                 MenuLine(
                   onTap: () {},

@@ -7,7 +7,11 @@ void main() {
       // Region top at row 5, height 4, terminal 40 rows: plenty of room.
       expect(
         anchorRowAfterPrintAbove(
-            originRow: 5, regionRows: 4, linesPrinted: 3, terminalLines: 40),
+          originRow: 5,
+          regionRows: 4,
+          linesPrinted: 3,
+          terminalLines: 40,
+        ),
         8,
       );
     });
@@ -16,7 +20,11 @@ void main() {
       // maxOrigin = 40 - 4 = 36. originRow 35 + 10 lines would be 45.
       expect(
         anchorRowAfterPrintAbove(
-            originRow: 35, regionRows: 4, linesPrinted: 10, terminalLines: 40),
+          originRow: 35,
+          regionRows: 4,
+          linesPrinted: 10,
+          terminalLines: 40,
+        ),
         36,
       );
     });
@@ -24,7 +32,11 @@ void main() {
     test('already pinned region stays pinned', () {
       expect(
         anchorRowAfterPrintAbove(
-            originRow: 36, regionRows: 4, linesPrinted: 5, terminalLines: 40),
+          originRow: 36,
+          regionRows: 4,
+          linesPrinted: 5,
+          terminalLines: 40,
+        ),
         36,
       );
     });
@@ -32,7 +44,11 @@ void main() {
     test('zero lines printed leaves the anchor unchanged', () {
       expect(
         anchorRowAfterPrintAbove(
-            originRow: 12, regionRows: 4, linesPrinted: 0, terminalLines: 40),
+          originRow: 12,
+          regionRows: 4,
+          linesPrinted: 0,
+          terminalLines: 40,
+        ),
         12,
       );
     });
@@ -41,7 +57,11 @@ void main() {
       // maxOrigin = 3 - 5 = -2; result must clamp up to 0.
       expect(
         anchorRowAfterPrintAbove(
-            originRow: 0, regionRows: 5, linesPrinted: 2, terminalLines: 3),
+          originRow: 0,
+          regionRows: 5,
+          linesPrinted: 2,
+          terminalLines: 3,
+        ),
         0,
       );
     });

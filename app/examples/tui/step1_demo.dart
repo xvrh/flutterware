@@ -53,8 +53,14 @@ Future<void> _showcase(Terminal terminal) async {
     terminal.draw((b) {
       final w = terminal.cols;
       final h = terminal.rows;
-      _drawBorder(b, 0, 0, h, w,
-          title: ' flutterware TUI engine — feature showcase ');
+      _drawBorder(
+        b,
+        0,
+        0,
+        h,
+        w,
+        title: ' flutterware TUI engine — feature showcase ',
+      );
 
       var row = 2;
 
@@ -109,10 +115,20 @@ Future<void> _showcase(Terminal terminal) async {
       // Colored + styled combinations in one row.
       b.writeAt(row, 3, 'Combo:', style: TextStyle.bold);
       b.writeAt(row, 13, 'red+bold', fg: Color.red, style: TextStyle.bold);
-      b.writeAt(row, 24, 'green+underline',
-          fg: Color.brightGreen, style: TextStyle.underline);
-      b.writeAt(row, 42, ' white-on-blue ',
-          fg: Color.brightWhite, bg: Color.blue);
+      b.writeAt(
+        row,
+        24,
+        'green+underline',
+        fg: Color.brightGreen,
+        style: TextStyle.underline,
+      );
+      b.writeAt(
+        row,
+        42,
+        ' white-on-blue ',
+        fg: Color.brightWhite,
+        bg: Color.blue,
+      );
       row += 2;
 
       // Live stats — only these cells change between timer ticks, which
@@ -124,11 +140,10 @@ Future<void> _showcase(Terminal terminal) async {
       b.writeAt(row, 34, '$frames', fg: Color.brightCyan);
       b.writeAt(row, 46, 'Spinner:', style: TextStyle.bold);
       b.set(
-          row,
-          55,
-          Cell(
-              rune: _spinner[frames % _spinner.length],
-              fg: Color.brightYellow));
+        row,
+        55,
+        Cell(rune: _spinner[frames % _spinner.length], fg: Color.brightYellow),
+      );
       row += 2;
 
       // Scrolling log of recent key events.
@@ -138,22 +153,28 @@ Future<void> _showcase(Terminal terminal) async {
         b.writeAt(row + i, 5, recentKeys[i], fg: Color.brightBlack);
       }
 
-      b.writeAt(h - 2, 3, 'Press keys to test input · q to quit',
-          style: TextStyle.dim);
+      b.writeAt(
+        h - 2,
+        3,
+        'Press keys to test input · q to quit',
+        style: TextStyle.dim,
+      );
     });
   }
 
   repaint();
   final resizeSub = terminal.resizes.listen((_) => repaint());
   // Drive repaints on a timer so the uptime/frames/spinner update live.
-  final ticker =
-      Timer.periodic(const Duration(milliseconds: 250), (_) => repaint());
+  final ticker = Timer.periodic(
+    const Duration(milliseconds: 250),
+    (_) => repaint(),
+  );
 
   try {
     await for (final event in terminal.keys) {
       recentKeys.insert(0, _describe(event));
       if (recentKeys.length > 6) recentKeys.removeLast();
-      if (event is CharKey && event.rune == 0x71 /* 'q' */) break;
+      if (event is CharKey && event.rune == 0x71 /* 'q' */ ) break;
       if (event is CharKey &&
           event.rune == 0x63 /* 'c' */ &&
           event.modifiers.contains(Modifier.ctrl)) {
@@ -167,8 +188,14 @@ Future<void> _showcase(Terminal terminal) async {
   }
 }
 
-void _drawBorder(CellBuffer b, int row, int col, int rows, int cols,
-    {String? title}) {
+void _drawBorder(
+  CellBuffer b,
+  int row,
+  int col,
+  int rows,
+  int cols, {
+  String? title,
+}) {
   const tl = 0x250C, tr = 0x2510, bl = 0x2514, br = 0x2518;
   const h = 0x2500, v = 0x2502;
   b.set(row, col, const Cell(rune: tl));

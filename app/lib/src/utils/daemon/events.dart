@@ -68,8 +68,13 @@ class AppStartEvent implements Event {
   final bool supportsRestart;
   final String launchMode;
 
-  AppStartEvent(this.appId, this.deviceId, this.directory, this.supportsRestart,
-      this.launchMode);
+  AppStartEvent(
+    this.appId,
+    this.deviceId,
+    this.directory,
+    this.supportsRestart,
+    this.launchMode,
+  );
 
   factory AppStartEvent.fromJson(Map<String, dynamic> json) =>
       _$AppStartEventFromJson(json);
@@ -97,7 +102,12 @@ class AppProgressEvent implements Event {
   final bool finished;
 
   AppProgressEvent(
-      this.appId, this.id, this.progressId, this.message, this.finished);
+    this.appId,
+    this.id,
+    this.progressId,
+    this.message,
+    this.finished,
+  );
 
   factory AppProgressEvent.fromJson(Map<String, dynamic> json) =>
       _$AppProgressEventFromJson(json);

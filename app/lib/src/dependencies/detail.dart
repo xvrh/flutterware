@@ -20,9 +20,9 @@ import 'utils.dart';
 class MyCustomScrollBehavior extends MaterialScrollBehavior {
   @override
   Set<PointerDeviceKind> get dragDevices => {
-        PointerDeviceKind.touch,
-        PointerDeviceKind.mouse,
-      };
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+  };
 }
 
 class DependencyDetailScreen extends StatelessWidget {
@@ -84,7 +84,9 @@ class _DetailScreen extends StatelessWidget {
               children: [
                 BreadcrumbEntry.overview,
                 BreadcrumbEntry(
-                    title: Text('Dependencies'), url: '/project/dependencies')
+                  title: Text('Dependencies'),
+                  url: '/project/dependencies',
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -132,10 +134,7 @@ class _DetailScreen extends StatelessWidget {
                 Tab(text: 'Changelog', height: 35),
               ],
             ),
-            Container(
-              color: AppColors.tabDivider,
-              height: 1,
-            ),
+            Container(color: AppColors.tabDivider, height: 1),
             Expanded(
               child: TabBarView(
                 children: [
@@ -156,7 +155,7 @@ class _DetailScreen extends StatelessWidget {
                   Text('Back to list'),
                 ],
               ),
-            )
+            ),
           ],
         ),
       ),
@@ -183,10 +182,12 @@ class _InfoTabState extends State<_InfoTab> {
     var github = scores?.github;
     var pubInfo = scores?.pub;
 
-    var transitivePaths =
-        dependency.dependencyPaths.sortedBy((e) => e.join('-'));
-    var transitivePathsToShow =
-        _showAllTransitivePath ? transitivePaths : transitivePaths.take(4);
+    var transitivePaths = dependency.dependencyPaths.sortedBy(
+      (e) => e.join('-'),
+    );
+    var transitivePathsToShow = _showAllTransitivePath
+        ? transitivePaths
+        : transitivePaths.take(4);
     var hiddenPathsLength =
         transitivePaths.length - transitivePathsToShow.length;
 
@@ -309,12 +310,16 @@ class _InfoTabState extends State<_InfoTab> {
                     if (data != null) {
                       var numberFormat = NumberFormat.decimalPattern('en_US');
 
-                      return Text(data.languages.entries
-                          .sortedBy<num>((e) => e.value.lines)
-                          .reversed
-                          .map((e) =>
-                              '${numberFormat.format(e.value.lines)} (${e.key.name})')
-                          .join(', '));
+                      return Text(
+                        data.languages.entries
+                            .sortedBy<num>((e) => e.value.lines)
+                            .reversed
+                            .map(
+                              (e) =>
+                                  '${numberFormat.format(e.value.lines)} (${e.key.name})',
+                            )
+                            .join(', '),
+                      );
                     } else {
                       return Text('');
                     }
@@ -328,8 +333,10 @@ class _InfoTabState extends State<_InfoTab> {
                   builder: (context, snapshot, child) {
                     var data = snapshot.data;
                     if (data != null) {
-                      return Text('${getSizeAsMB(data.totalBytes)}, '
-                          '${data.fileCount} file${data.fileCount > 1 ? 's' : ''}');
+                      return Text(
+                        '${getSizeAsMB(data.totalBytes)}, '
+                        '${data.fileCount} file${data.fileCount > 1 ? 's' : ''}',
+                      );
                     } else {
                       return Text('');
                     }
@@ -348,10 +355,7 @@ class _InfoRow extends StatelessWidget {
   final Widget label;
   final Widget value;
 
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -367,10 +371,7 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: value,
-            ),
+            child: Align(alignment: Alignment.centerLeft, child: value),
           ),
         ],
       ),
@@ -402,7 +403,8 @@ class _FilePageState extends State<_FilePage> {
   Future<String> _loadChangelog() async {
     //TODO(xha): find several files (.md, .txt etc...).
     var file = File(
-        p.join(widget.dependency.package.root.toFilePath(), widget.fileName));
+      p.join(widget.dependency.package.root.toFilePath(), widget.fileName),
+    );
     return file.readAsString();
   }
 
@@ -415,7 +417,9 @@ class _FilePageState extends State<_FilePage> {
           future: _changelog,
           builder: (context, snapshot) {
             return Markdown(
-                controller: _scrollController, data: snapshot.data ?? '');
+              controller: _scrollController,
+              data: snapshot.data ?? '',
+            );
           },
         ),
       ),
@@ -462,7 +466,7 @@ class _ImportListDialog extends StatelessWidget {
             Navigator.pop(context);
           },
           child: Text('OK'),
-        )
+        ),
       ],
     );
   }

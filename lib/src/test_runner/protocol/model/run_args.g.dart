@@ -15,31 +15,46 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
   final String wireName = 'RunArgs';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, RunArgs object,
-      {FullType specifiedType = FullType.unspecified}) {
+  Iterable<Object?> serialize(
+    Serializers serializers,
+    RunArgs object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'id',
       serializers.serialize(object.id, specifiedType: const FullType(int)),
       'testName',
-      serializers.serialize(object.testName,
-          specifiedType: const FullType(BuiltList, [FullType(String)])),
+      serializers.serialize(
+        object.testName,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      ),
       'device',
-      serializers.serialize(object.device,
-          specifiedType: const FullType(DeviceInfo)),
+      serializers.serialize(
+        object.device,
+        specifiedType: const FullType(DeviceInfo),
+      ),
       'accessibility',
-      serializers.serialize(object.accessibility,
-          specifiedType: const FullType(AccessibilityConfig)),
+      serializers.serialize(
+        object.accessibility,
+        specifiedType: const FullType(AccessibilityConfig),
+      ),
       'imageRatio',
-      serializers.serialize(object.imageRatio,
-          specifiedType: const FullType(double)),
+      serializers.serialize(
+        object.imageRatio,
+        specifiedType: const FullType(double),
+      ),
     ];
     Object? value;
     value = object.locale;
     if (value != null) {
       result
         ..add('locale')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(SerializableLocale)));
+        ..add(
+          serializers.serialize(
+            value,
+            specifiedType: const FullType(SerializableLocale),
+          ),
+        );
     }
     value = object.platformBrightness;
     if (value != null) {
@@ -51,8 +66,11 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
   }
 
   @override
-  RunArgs deserialize(Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+  RunArgs deserialize(
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = RunArgsBuilder();
 
     final iterator = serialized.iterator;
@@ -62,35 +80,61 @@ class _$RunArgsSerializer implements StructuredSerializer<RunArgs> {
       final Object? value = iterator.current;
       switch (key) {
         case 'id':
-          result.id = serializers.deserialize(value,
-              specifiedType: const FullType(int))! as int;
+          result.id =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(int),
+                  )!
+                  as int;
           break;
         case 'testName':
-          result.testName.replace(serializers.deserialize(value,
-                  specifiedType: const FullType(BuiltList, [FullType(String)]))!
-              as BuiltList<Object?>);
+          result.testName.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(BuiltList, [FullType(String)]),
+                )!
+                as BuiltList<Object?>,
+          );
           break;
         case 'device':
-          result.device.replace(serializers.deserialize(value,
-              specifiedType: const FullType(DeviceInfo))! as DeviceInfo);
+          result.device.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(DeviceInfo),
+                )!
+                as DeviceInfo,
+          );
           break;
         case 'accessibility':
-          result.accessibility.replace(serializers.deserialize(value,
-                  specifiedType: const FullType(AccessibilityConfig))!
-              as AccessibilityConfig);
+          result.accessibility.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(AccessibilityConfig),
+                )!
+                as AccessibilityConfig,
+          );
           break;
         case 'imageRatio':
-          result.imageRatio = serializers.deserialize(value,
-              specifiedType: const FullType(double))! as double;
+          result.imageRatio =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(double),
+                  )!
+                  as double;
           break;
         case 'locale':
-          result.locale.replace(serializers.deserialize(value,
-                  specifiedType: const FullType(SerializableLocale))!
-              as SerializableLocale);
+          result.locale.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(SerializableLocale),
+                )!
+                as SerializableLocale,
+          );
           break;
         case 'platformBrightness':
-          result.platformBrightness = serializers.deserialize(value,
-              specifiedType: const FullType(int)) as int?;
+          result.platformBrightness =
+              serializers.deserialize(value, specifiedType: const FullType(int))
+                  as int?;
           break;
       }
     }
@@ -118,20 +162,23 @@ class _$RunArgs extends RunArgs {
   factory _$RunArgs([void Function(RunArgsBuilder)? updates]) =>
       (RunArgsBuilder()..update(updates))._build();
 
-  _$RunArgs._(
-      {required this.id,
-      required this.testName,
-      required this.device,
-      required this.accessibility,
-      required this.imageRatio,
-      this.locale,
-      this.platformBrightness})
-      : super._() {
+  _$RunArgs._({
+    required this.id,
+    required this.testName,
+    required this.device,
+    required this.accessibility,
+    required this.imageRatio,
+    this.locale,
+    this.platformBrightness,
+  }) : super._() {
     BuiltValueNullFieldError.checkNotNull(id, r'RunArgs', 'id');
     BuiltValueNullFieldError.checkNotNull(testName, r'RunArgs', 'testName');
     BuiltValueNullFieldError.checkNotNull(device, r'RunArgs', 'device');
     BuiltValueNullFieldError.checkNotNull(
-        accessibility, r'RunArgs', 'accessibility');
+      accessibility,
+      r'RunArgs',
+      'accessibility',
+    );
     BuiltValueNullFieldError.checkNotNull(imageRatio, r'RunArgs', 'imageRatio');
   }
 
@@ -253,16 +300,21 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
   _$RunArgs _build() {
     _$RunArgs _$result;
     try {
-      _$result = _$v ??
+      _$result =
+          _$v ??
           _$RunArgs._(
-              id: BuiltValueNullFieldError.checkNotNull(id, r'RunArgs', 'id'),
-              testName: testName.build(),
-              device: device.build(),
-              accessibility: accessibility.build(),
-              imageRatio: BuiltValueNullFieldError.checkNotNull(
-                  imageRatio, r'RunArgs', 'imageRatio'),
-              locale: _locale?.build(),
-              platformBrightness: platformBrightness);
+            id: BuiltValueNullFieldError.checkNotNull(id, r'RunArgs', 'id'),
+            testName: testName.build(),
+            device: device.build(),
+            accessibility: accessibility.build(),
+            imageRatio: BuiltValueNullFieldError.checkNotNull(
+              imageRatio,
+              r'RunArgs',
+              'imageRatio',
+            ),
+            locale: _locale?.build(),
+            platformBrightness: platformBrightness,
+          );
     } catch (_) {
       late String _$failedField;
       try {
@@ -277,7 +329,10 @@ class RunArgsBuilder implements Builder<RunArgs, RunArgsBuilder> {
         _locale?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            r'RunArgs', _$failedField, e.toString());
+          r'RunArgs',
+          _$failedField,
+          e.toString(),
+        );
       }
       rethrow;
     }

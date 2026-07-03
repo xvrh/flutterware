@@ -14,16 +14,18 @@ class NetworkList extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.max,
       children: <Widget>[
-        Row(children: [
-          SizedBox(width: 15),
-          Text('Options:'),
-          TextButton(
-            onPressed: () {
-              service.clear();
-            },
-            child: Text('Clear'),
-          ),
-        ]),
+        Row(
+          children: [
+            SizedBox(width: 15),
+            Text('Options:'),
+            TextButton(
+              onPressed: () {
+                service.clear();
+              },
+              child: Text('Clear'),
+            ),
+          ],
+        ),
         Expanded(
           child: AutoScroller<List<NetworkRequest>>(
             stream: service.requests,
@@ -57,10 +59,9 @@ class RequestTile extends StatelessWidget {
 
     return ListTile(
       dense: true,
-      title: Text('${request.httpMethod.toUpperCase()} ${[
-        if (request.apiName != null) request.apiName,
-        request.path
-      ].join('/')}'),
+      title: Text(
+        '${request.httpMethod.toUpperCase()} ${[if (request.apiName != null) request.apiName, request.path].join('/')}',
+      ),
       leading: Text(request.errorResponse != null ? 'FAIL' : 'OK'),
       subtitle: request.parameters.isNotEmpty ? Text(_parametersText) : null,
       trailing: request.watch.isRunning
@@ -121,7 +122,7 @@ class RequestDialog extends StatelessWidget {
             Navigator.pop(context);
           },
           child: Text('OK'),
-        )
+        ),
       ],
     );
   }
@@ -134,25 +135,27 @@ class _RequestTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(children: [
-      ListTile(
-        dense: true,
-        title: Text(request.httpMethod.toUpperCase()),
-        subtitle: Text(request.path),
-      ),
-      if (request.parameters.isNotEmpty)
+    return ListView(
+      children: [
         ListTile(
           dense: true,
-          title: Text('Parameters:'),
-          subtitle: JsonViewer(request.parameters),
+          title: Text(request.httpMethod.toUpperCase()),
+          subtitle: Text(request.path),
         ),
-      if (request.requestBody != null)
-        ListTile(
-          dense: true,
-          title: Text('body:'),
-          subtitle: JsonViewer(request.requestBody),
-        ),
-    ]);
+        if (request.parameters.isNotEmpty)
+          ListTile(
+            dense: true,
+            title: Text('Parameters:'),
+            subtitle: JsonViewer(request.parameters),
+          ),
+        if (request.requestBody != null)
+          ListTile(
+            dense: true,
+            title: Text('body:'),
+            subtitle: JsonViewer(request.requestBody),
+          ),
+      ],
+    );
   }
 }
 
@@ -178,12 +181,14 @@ class _ErrorTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(children: [
-      ListTile(
-        dense: true,
-        title: Text('${response.reason} (${response.code})'),
-        subtitle: Text(response.message),
-      ),
-    ]);
+    return ListView(
+      children: [
+        ListTile(
+          dense: true,
+          title: Text('${response.reason} (${response.code})'),
+          subtitle: Text(response.message),
+        ),
+      ],
+    );
   }
 }

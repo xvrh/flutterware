@@ -15,44 +15,54 @@ class _$RunResultSerializer implements StructuredSerializer<RunResult> {
   final String wireName = 'RunResult';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, RunResult object,
-      {FullType specifiedType = FullType.unspecified}) {
+  Iterable<Object?> serialize(
+    Serializers serializers,
+    RunResult object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[];
     Object? value;
     value = object.error;
     if (value != null) {
       result
         ..add('error')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(String)),
+        );
     }
     value = object.errorType;
     if (value != null) {
       result
         ..add('errorType')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(String)),
+        );
     }
     value = object.stackTrace;
     if (value != null) {
       result
         ..add('stackTrace')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(String)),
+        );
     }
     value = object.duration;
     if (value != null) {
       result
         ..add('duration')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(Duration)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(Duration)),
+        );
     }
     return result;
   }
 
   @override
-  RunResult deserialize(Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+  RunResult deserialize(
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = RunResultBuilder();
 
     final iterator = serialized.iterator;
@@ -62,20 +72,36 @@ class _$RunResultSerializer implements StructuredSerializer<RunResult> {
       final Object? value = iterator.current;
       switch (key) {
         case 'error':
-          result.error = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+          result.error =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )
+                  as String?;
           break;
         case 'errorType':
-          result.errorType = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+          result.errorType =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )
+                  as String?;
           break;
         case 'stackTrace':
-          result.stackTrace = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+          result.stackTrace =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )
+                  as String?;
           break;
         case 'duration':
-          result.duration = serializers.deserialize(value,
-              specifiedType: const FullType(Duration)) as Duration?;
+          result.duration =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(Duration),
+                  )
+                  as Duration?;
           break;
       }
     }
@@ -98,7 +124,7 @@ class _$RunResult extends RunResult {
       (RunResultBuilder()..update(updates))._build();
 
   _$RunResult._({this.error, this.errorType, this.stackTrace, this.duration})
-      : super._();
+    : super._();
 
   @override
   RunResult rebuild(void Function(RunResultBuilder) updates) =>
@@ -187,12 +213,14 @@ class RunResultBuilder implements Builder<RunResult, RunResultBuilder> {
   RunResult build() => _build();
 
   _$RunResult _build() {
-    final _$result = _$v ??
+    final _$result =
+        _$v ??
         _$RunResult._(
-            error: error,
-            errorType: errorType,
-            stackTrace: stackTrace,
-            duration: duration);
+          error: error,
+          errorType: errorType,
+          stackTrace: stackTrace,
+          duration: duration,
+        );
     replace(_$result);
     return _$result;
   }

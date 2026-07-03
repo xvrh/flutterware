@@ -18,28 +18,35 @@ class _$SerializableLocaleSerializer
 
   @override
   Iterable<Object?> serialize(
-      Serializers serializers, SerializableLocale object,
-      {FullType specifiedType = FullType.unspecified}) {
+    Serializers serializers,
+    SerializableLocale object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'language',
-      serializers.serialize(object.language,
-          specifiedType: const FullType(String)),
+      serializers.serialize(
+        object.language,
+        specifiedType: const FullType(String),
+      ),
     ];
     Object? value;
     value = object.country;
     if (value != null) {
       result
         ..add('country')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(String)),
+        );
     }
     return result;
   }
 
   @override
   SerializableLocale deserialize(
-      Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = SerializableLocaleBuilder();
 
     final iterator = serialized.iterator;
@@ -49,12 +56,20 @@ class _$SerializableLocaleSerializer
       final Object? value = iterator.current;
       switch (key) {
         case 'language':
-          result.language = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.language =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'country':
-          result.country = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+          result.country =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )
+                  as String?;
           break;
       }
     }
@@ -69,19 +84,22 @@ class _$SerializableLocale extends SerializableLocale {
   @override
   final String? country;
 
-  factory _$SerializableLocale(
-          [void Function(SerializableLocaleBuilder)? updates]) =>
-      (SerializableLocaleBuilder()..update(updates))._build();
+  factory _$SerializableLocale([
+    void Function(SerializableLocaleBuilder)? updates,
+  ]) => (SerializableLocaleBuilder()..update(updates))._build();
 
   _$SerializableLocale._({required this.language, this.country}) : super._() {
     BuiltValueNullFieldError.checkNotNull(
-        language, r'SerializableLocale', 'language');
+      language,
+      r'SerializableLocale',
+      'language',
+    );
   }
 
   @override
   SerializableLocale rebuild(
-          void Function(SerializableLocaleBuilder) updates) =>
-      (toBuilder()..update(updates)).build();
+    void Function(SerializableLocaleBuilder) updates,
+  ) => (toBuilder()..update(updates)).build();
 
   @override
   SerializableLocaleBuilder toBuilder() =>
@@ -152,11 +170,16 @@ class SerializableLocaleBuilder
   SerializableLocale build() => _build();
 
   _$SerializableLocale _build() {
-    final _$result = _$v ??
+    final _$result =
+        _$v ??
         _$SerializableLocale._(
-            language: BuiltValueNullFieldError.checkNotNull(
-                language, r'SerializableLocale', 'language'),
-            country: country);
+          language: BuiltValueNullFieldError.checkNotNull(
+            language,
+            r'SerializableLocale',
+            'language',
+          ),
+          country: country,
+        );
     replace(_$result);
     return _$result;
   }

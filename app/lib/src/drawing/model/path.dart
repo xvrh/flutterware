@@ -85,9 +85,7 @@ class DrawingPath with ChangeNotifier implements DrawingEntry {
   }
 
   PathBuilder toPath() {
-    var builder = PathBuilder([
-      for (var entry in _entries) entry.toRuntime(),
-    ]);
+    var builder = PathBuilder([for (var entry in _entries) entry.toRuntime()]);
     return builder;
   }
 
@@ -118,9 +116,7 @@ class PaintPreview {
   }
 
   String toCodeComment() {
-    return PropertyBag('preview', {
-      'stroke': stroke.value,
-    }).toString();
+    return PropertyBag('preview', {'stroke': stroke.value}).toString();
   }
 
   void dispose() {
@@ -143,8 +139,8 @@ class MoveToEntry with ChangeNotifier implements PathEntry {
     var arguments = invocation.argumentList.arguments;
 
     return MoveToEntry()
-      .._x = expressionToDouble(arguments[0])
-      .._y = expressionToDouble(arguments[1]);
+      .._x = expressionToDouble(arguments[0].argumentExpression)
+      .._y = expressionToDouble(arguments[1].argumentExpression);
   }
 
   double get x => _x;
@@ -180,8 +176,8 @@ class LineToEntry with ChangeNotifier implements PathEntry {
     var arguments = invocation.argumentList.arguments;
 
     return LineToEntry()
-      .._x = expressionToDouble(arguments[0])
-      .._y = expressionToDouble(arguments[1]);
+      .._x = expressionToDouble(arguments[0].argumentExpression)
+      .._y = expressionToDouble(arguments[1].argumentExpression);
   }
 
   double get x => _x;

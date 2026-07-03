@@ -73,58 +73,80 @@ Future<void> _demo(Terminal terminal) async {
       final drifting = origin < pin;
       final spin = String.fromCharCode(_spinner[frames % _spinner.length]);
 
-      _drawBorder(b, terminal.rows, w,
-          title: ' print_above · scrolling mechanism $spin ');
+      _drawBorder(
+        b,
+        terminal.rows,
+        w,
+        title: ' print_above · scrolling mechanism $spin ',
+      );
 
       // Row 1 — current phase.
       b.writeAt(1, 2, 'PHASE', style: TextStyle.bold);
       if (drifting) {
-        b.writeAt(1, 8, 'DRIFTING',
-            fg: Color.brightYellow, style: TextStyle.bold);
-        b.writeAt(1, 17,
-            '— ${pin - origin} row(s) of headroom; next line moves the region down',
-            style: TextStyle.dim);
+        b.writeAt(
+          1,
+          8,
+          'DRIFTING',
+          fg: Color.brightYellow,
+          style: TextStyle.bold,
+        );
+        b.writeAt(
+          1,
+          17,
+          '— ${pin - origin} row(s) of headroom; next line moves the region down',
+          style: TextStyle.dim,
+        );
       } else {
         b.writeAt(1, 8, 'PINNED', fg: Color.brightGreen, style: TextStyle.bold);
-        b.writeAt(1, 15,
-            '— region on the last row; next line scrolls into scrollback',
-            style: TextStyle.dim);
+        b.writeAt(
+          1,
+          15,
+          '— region on the last row; next line scrolls into scrollback',
+          style: TextStyle.dim,
+        );
       }
 
       // Row 2 — viewport gauge: a horizontal stand-in for the vertical
       // screen. Left edge = screen row 0, right edge = the last screen row.
-      _drawGauge(b, 2, w,
-          origin: origin,
-          regionRows: terminal.rows,
-          screenHeight: screenHeight(),
-          scrolledOff: scrolledOff);
+      _drawGauge(
+        b,
+        2,
+        w,
+        origin: origin,
+        regionRows: terminal.rows,
+        screenHeight: screenHeight(),
+        scrolledOff: scrolledOff,
+      );
 
       // Row 3 — the last action.
       b.writeAt(3, 2, 'last: $lastNote', style: TextStyle.dim);
 
       // Row 4/5 — the mechanism's numbers.
       b.writeAt(
-          4,
-          2,
-          'anchor _originRow = ${origin.toString().padLeft(3)}     '
-          'screen height = ${screenHeight()}     '
-          'region rows = ${terminal.rows}',
-          fg: Color.brightCyan);
+        4,
+        2,
+        'anchor _originRow = ${origin.toString().padLeft(3)}     '
+        'screen height = ${screenHeight()}     '
+        'region rows = ${terminal.rows}',
+        fg: Color.brightCyan,
+      );
       b.writeAt(
-          5,
-          2,
-          'pin point (height - region rows) = $pin     '
-          'next printAbove ${drifting ? "drifts the region" : "scrolls the screen"}',
-          fg: Color.brightCyan);
+        5,
+        2,
+        'pin point (height - region rows) = $pin     '
+        'next printAbove ${drifting ? "drifts the region" : "scrolls the screen"}',
+        fg: Color.brightCyan,
+      );
 
       // Row 6 — running counts. Every emitted line is either still visible
       // above the region or has scrolled off into scrollback.
       b.writeAt(
-          6,
-          2,
-          'emitted = $emitted      on-screen above = ${emitted - scrolledOff}'
-          '      in scrollback = $scrolledOff',
-          style: TextStyle.bold);
+        6,
+        2,
+        'emitted = $emitted      on-screen above = ${emitted - scrolledOff}'
+        '      in scrollback = $scrolledOff',
+        style: TextStyle.bold,
+      );
 
       // Row 7 — controls.
       final controls =
@@ -156,10 +178,20 @@ Future<void> _demo(Terminal terminal) async {
     lastNote = '#$emitted ${pinned ? "SCROLL" : "DRIFT"} — $detail';
 
     terminal.printAbove(1, (b) {
-      b.writeAt(0, 0, '#${emitted.toString().padLeft(3)}',
-          fg: Color.brightBlack);
-      b.writeAt(0, 5, tag,
-          fg: Color.black, bg: tagColor, style: TextStyle.bold);
+      b.writeAt(
+        0,
+        0,
+        '#${emitted.toString().padLeft(3)}',
+        fg: Color.brightBlack,
+      );
+      b.writeAt(
+        0,
+        5,
+        tag,
+        fg: Color.black,
+        bg: tagColor,
+        style: TextStyle.bold,
+      );
       b.writeAt(0, 14, 'printAbove(1)  →  $detail');
     });
     repaint();
@@ -168,8 +200,10 @@ Future<void> _demo(Terminal terminal) async {
   repaint();
   final resizeSub = terminal.resizes.listen((_) => repaint());
   // A gentle ticker keeps the spinner alive while idle.
-  final spinTicker =
-      Timer.periodic(const Duration(milliseconds: 120), (_) => repaint());
+  final spinTicker = Timer.periodic(
+    const Duration(milliseconds: 120),
+    (_) => repaint(),
+  );
   Timer? autoTicker;
 
   void setAuto(bool on) {
@@ -230,11 +264,14 @@ void _drawGauge(
   b.set(row, trackStart - 1, const Cell(rune: 0x5B /* [ */));
   b.set(row, trackEnd, const Cell(rune: 0x5D /* ] */));
 
-  final regStart =
-      (origin * trackLen / screenHeight).floor().clamp(0, trackLen - 1);
-  var regEnd = ((origin + regionRows) * trackLen / screenHeight)
-      .ceil()
-      .clamp(1, trackLen);
+  final regStart = (origin * trackLen / screenHeight).floor().clamp(
+    0,
+    trackLen - 1,
+  );
+  var regEnd = ((origin + regionRows) * trackLen / screenHeight).ceil().clamp(
+    1,
+    trackLen,
+  );
   if (regEnd <= regStart) regEnd = regStart + 1;
 
   for (var i = 0; i < trackLen; i++) {

@@ -10,10 +10,12 @@ abstract class RunResult implements Built<RunResult, RunResultBuilder> {
   factory RunResult._fromBuilder([void Function(RunResultBuilder) updates]) =
       _$RunResult;
   factory RunResult.error(Object error, StackTrace? stackTrace) =>
-      RunResult._fromBuilder((b) => b
-        ..error = '$error'
-        ..errorType = '${error.runtimeType}'
-        ..stackTrace = '$stackTrace');
+      RunResult._fromBuilder(
+        (b) => b
+          ..error = '$error'
+          ..errorType = '${error.runtimeType}'
+          ..stackTrace = '$stackTrace',
+      );
 
   factory RunResult.success() => RunResult._fromBuilder();
 

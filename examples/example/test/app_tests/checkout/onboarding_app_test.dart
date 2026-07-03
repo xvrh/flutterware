@@ -28,11 +28,7 @@ class _OnboardingNotAutoTest extends AppTest {
           body: Container(
             color: Colors.blue,
             child: Center(
-              child: Icon(
-                Icons.ac_unit,
-                size: 300,
-                color: Colors.white,
-              ),
+              child: Icon(Icons.ac_unit, size: 300, color: Colors.white),
             ),
           ),
         ),

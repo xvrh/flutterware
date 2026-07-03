@@ -6,7 +6,8 @@ import '../protocol/models.dart';
 import 'run_context.dart';
 
 Future<void> Function(WidgetTester) withTestValues(
-    Future<void> Function(WidgetTester) body) {
+  Future<void> Function(WidgetTester) body,
+) {
   return (tester) async {
     var runContext = tester.runContext;
     var args = runContext.args;
@@ -15,8 +16,10 @@ Future<void> Function(WidgetTester) withTestValues(
     var platformDispatcher = binding.platformDispatcher;
 
     var pixelRatio = device.pixelRatio;
-    tester.view.physicalSize =
-        Size(device.width * pixelRatio, device.height * pixelRatio);
+    tester.view.physicalSize = Size(
+      device.width * pixelRatio,
+      device.height * pixelRatio,
+    );
     tester.view.devicePixelRatio = pixelRatio;
     tester.view.padding = FakeViewPadding(
       left: device.safeArea.left * pixelRatio,
@@ -36,7 +39,7 @@ Future<void> Function(WidgetTester) withTestValues(
     var locale = args.locale;
     if (locale != null) {
       platformDispatcher.localesTestValue = [
-        Locale(locale.language, locale.country)
+        Locale(locale.language, locale.country),
       ];
     }
     debugDefaultTargetPlatformOverride = device.platform.toTargetPlatform();

@@ -7,7 +7,7 @@ part of 'protocol.dart';
 // **************************************************************************
 
 Map<String, dynamic> _$MethodToJson(Method instance) => <String, dynamic>{
-      'method': instance.method,
-      'id': instance.id,
-      'params': instance.params,
-    };
+  'method': instance.method,
+  'id': instance.id,
+  'params': instance.params,
+};

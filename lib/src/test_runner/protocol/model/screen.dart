@@ -28,10 +28,12 @@ abstract class ImageFile implements Built<ImageFile, ImageFileBuilder> {
       _$ImageFile;
 
   factory ImageFile(String path, int width, int height) =>
-      ImageFile._fromBuilder((b) => b
-        ..path = path
-        ..width = width
-        ..height = height);
+      ImageFile._fromBuilder(
+        (b) => b
+          ..path = path
+          ..width = width
+          ..height = height,
+      );
 
   String get path;
   int get width;
@@ -44,9 +46,11 @@ abstract class Screen implements Built<Screen, ScreenBuilder> {
   Screen._();
   factory Screen._builder([void Function(ScreenBuilder) updates]) = _$Screen;
 
-  factory Screen(String id, String name) => Screen._builder((b) => b
-    ..id = id
-    ..name = name);
+  factory Screen(String id, String name) => Screen._builder(
+    (b) => b
+      ..id = id
+      ..name = name,
+  );
 
   String get id;
   BuiltList<TextInfo> get texts;
@@ -71,12 +75,13 @@ abstract class TextInfo implements Built<TextInfo, TextInfoBuilder> {
     required String rawTranslation,
     required String text,
     required Rectangle globalRectangle,
-  }) =>
-      TextInfo._fromBuilder((b) => b
-        ..translationKey = translationKey
-        ..rawTranslation = rawTranslation
-        ..text = text
-        ..globalRectangle.replace(globalRectangle));
+  }) => TextInfo._fromBuilder(
+    (b) => b
+      ..translationKey = translationKey
+      ..rawTranslation = rawTranslation
+      ..text = text
+      ..globalRectangle.replace(globalRectangle),
+  );
 
   String get translationKey;
   String get rawTranslation;

@@ -43,7 +43,7 @@ class IconPlatform {
   final List<Glob> locations;
 
   IconPlatform(this.name, List<String> locations)
-      : locations = locations.map(Glob.new).toList();
+    : locations = locations.map(Glob.new).toList();
 
   @override
   String toString() => name;
@@ -78,21 +78,27 @@ class AppIcons {
     return biggest;
   }
 
-  static Future<AppIcon?> findSampleIcon(String directory,
-      {required int size}) async {
+  static Future<AppIcon?> findSampleIcon(
+    String directory, {
+    required int size,
+  }) async {
     for (var platform in IconPlatform.values) {
       var files = await platform.allFiles(directory);
       files = files.sortedBy<num>((e) => e.lengthSync()).toList();
       if (files.isNotEmpty) {
         return compute<_LoadRequest, AppIcon?>(
-            _loadIcon, _LoadRequest(files.last, size));
+          _loadIcon,
+          _LoadRequest(files.last, size),
+        );
       }
     }
     return null;
   }
 
-  static Future<AppIcons> loadIcons(String directory,
-      {required int size}) async {
+  static Future<AppIcons> loadIcons(
+    String directory, {
+    required int size,
+  }) async {
     var results = <IconPlatform, List<AppIcon>>{};
 
     var pool = Pool(max(2, Platform.numberOfProcessors - 1));
@@ -101,19 +107,21 @@ class AppIcons {
       var files = await platform.allFiles(directory);
       var icons = results[platform] = [];
       for (var file in files) {
-        unawaited(pool.withResource(() async {
-          AppIcon? icon;
-          if (kDebugMode) {
-            // "compute" function is not parallelized in debug mode, so it is
-            // too slow.
-            icon = _loadIcon(_LoadRequest(file, size));
-          } else {
-            icon = await compute(_loadIcon, _LoadRequest(file, size));
-          }
-          if (icon != null) {
-            icons.add(icon);
-          }
-        }));
+        unawaited(
+          pool.withResource(() async {
+            AppIcon? icon;
+            if (kDebugMode) {
+              // "compute" function is not parallelized in debug mode, so it is
+              // too slow.
+              icon = _loadIcon(_LoadRequest(file, size));
+            } else {
+              icon = await compute(_loadIcon, _LoadRequest(file, size));
+            }
+            if (icon != null) {
+              icons.add(icon);
+            }
+          }),
+        );
       }
     }
     await pool.close();
@@ -131,8 +139,12 @@ class AppIcons {
       var originalImage =
           decodeImage(data) ?? (throw Exception('Fail to load image'));
       originalImage = originalImage.convert(numChannels: 4);
-      var preview = copyResize(originalImage,
-          width: size, height: size, interpolation: Interpolation.linear);
+      var preview = copyResize(
+        originalImage,
+        width: size,
+        height: size,
+        interpolation: Interpolation.linear,
+      );
 
       return AppIcon(
         ByteData.view(preview.getBytes().buffer),
@@ -147,8 +159,10 @@ class AppIcons {
     }
   }
 
-  Future<void> changeIcon(Uint8List bytes,
-      {required List<IconPlatform> platforms}) async {
+  Future<void> changeIcon(
+    Uint8List bytes, {
+    required List<IconPlatform> platforms,
+  }) async {
     await compute((_) {
       var encoders = {'.png': encodePng, '.ico': encodeIco};
       var image = decodeImage(bytes)!.convert(numChannels: 4);

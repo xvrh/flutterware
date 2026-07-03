@@ -63,13 +63,15 @@ class DevbarHttpClient extends BaseClient {
         }
         // Recreate the response since the body was read
         response = StreamedResponse(
-            ByteStream.fromBytes(responseBytes), response.statusCode,
-            contentLength: response.contentLength,
-            request: response.request,
-            headers: response.headers,
-            isRedirect: response.isRedirect,
-            persistentConnection: response.persistentConnection,
-            reasonPhrase: response.reasonPhrase);
+          ByteStream.fromBytes(responseBytes),
+          response.statusCode,
+          contentLength: response.contentLength,
+          request: response.request,
+          headers: response.headers,
+          isRedirect: response.isRedirect,
+          persistentConnection: response.persistentConnection,
+          reasonPhrase: response.reasonPhrase,
+        );
       }
 
       for (var devbar in _instances) {
@@ -101,8 +103,11 @@ class DevbarHttpClient extends BaseClient {
   }
 }
 
-String _ellipsisCenter(String input,
-    {required int maxLength, String ellipsis = '..'}) {
+String _ellipsisCenter(
+  String input, {
+  required int maxLength,
+  String ellipsis = '..',
+}) {
   if (ellipsis.length > maxLength) {
     throw Exception('Ellipsis is longer than max length');
   }

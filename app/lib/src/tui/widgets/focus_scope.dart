@@ -66,11 +66,7 @@ class Focus extends StatefulWidget {
 
 /// A [Focus] that manages a [FocusScopeNode], grouping a focusable subtree.
 class FocusScope extends StatefulWidget {
-  const FocusScope({
-    super.key,
-    required this.child,
-    this.node,
-  });
+  const FocusScope({super.key, required this.child, this.node});
 
   final Widget child;
 

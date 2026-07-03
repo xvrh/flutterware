@@ -6,11 +6,7 @@ class GraphiteEdges extends StatefulWidget {
   final Widget child;
   final Matrix matrix;
 
-  const GraphiteEdges({
-    super.key,
-    required this.child,
-    required this.matrix,
-  });
+  const GraphiteEdges({super.key, required this.child, required this.matrix});
 
   @override
   State<GraphiteEdges> createState() => _GraphiteEdgesState();
@@ -26,18 +22,16 @@ class _GraphiteEdgesState extends State<GraphiteEdges> {
         children: <Widget>[
           SizedBox(
             width: (config.cellSize.width * widget.matrix.width()).toDouble(),
-            height:
-                (config.cellSize.height * widget.matrix.height()).toDouble(),
-            child: Builder(builder: (ctx) {
-              return CustomPaint(
-                size: Size.infinite,
-                painter: LinesPainter(
-                  ctx,
-                  config,
-                  widget.matrix.normalize(),
-                ),
-              );
-            }),
+            height: (config.cellSize.height * widget.matrix.height())
+                .toDouble(),
+            child: Builder(
+              builder: (ctx) {
+                return CustomPaint(
+                  size: Size.infinite,
+                  painter: LinesPainter(ctx, config, widget.matrix.normalize()),
+                );
+              },
+            ),
           ),
           widget.child,
         ],

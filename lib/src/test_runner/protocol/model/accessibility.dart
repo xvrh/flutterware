@@ -11,28 +11,30 @@ abstract class AccessibilityConfig
   static final defaultValue = AccessibilityConfig();
 
   AccessibilityConfig._();
-  factory AccessibilityConfig._fromBuilder(
-          [void Function(AccessibilityConfigBuilder) updates]) =
-      _$AccessibilityConfig;
+  factory AccessibilityConfig._fromBuilder([
+    void Function(AccessibilityConfigBuilder) updates,
+  ]) = _$AccessibilityConfig;
 
-  factory AccessibilityConfig(
-          {double? textScale,
-          bool? boldText,
-          bool? accessibleNavigation,
-          bool? disableAnimations,
-          bool? highContrast,
-          bool? invertColors,
-          bool? reduceMotion,
-          bool? onOffSwitchLabels}) =>
-      AccessibilityConfig._fromBuilder((b) => b
-        ..textScale = textScale ?? 1.0
-        ..boldText = boldText ?? false
-        ..accessibleNavigation = accessibleNavigation ?? false
-        ..disableAnimations = disableAnimations ?? false
-        ..highContrast = highContrast ?? false
-        ..invertColors = invertColors ?? false
-        ..reduceMotion = reduceMotion ?? false
-        ..onOffSwitchLabels = onOffSwitchLabels ?? false);
+  factory AccessibilityConfig({
+    double? textScale,
+    bool? boldText,
+    bool? accessibleNavigation,
+    bool? disableAnimations,
+    bool? highContrast,
+    bool? invertColors,
+    bool? reduceMotion,
+    bool? onOffSwitchLabels,
+  }) => AccessibilityConfig._fromBuilder(
+    (b) => b
+      ..textScale = textScale ?? 1.0
+      ..boldText = boldText ?? false
+      ..accessibleNavigation = accessibleNavigation ?? false
+      ..disableAnimations = disableAnimations ?? false
+      ..highContrast = highContrast ?? false
+      ..invertColors = invertColors ?? false
+      ..reduceMotion = reduceMotion ?? false
+      ..onOffSwitchLabels = onOffSwitchLabels ?? false,
+  );
 
   double get textScale;
   bool get boldText;

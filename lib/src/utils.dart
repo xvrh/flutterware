@@ -64,8 +64,10 @@ String wrapText(
   final result = <String>[];
   for (final line in splitText) {
     var trimmedText = line.trimLeft();
-    final leadingWhitespace =
-        line.substring(0, line.length - trimmedText.length);
+    final leadingWhitespace = line.substring(
+      0,
+      line.length - trimmedText.length,
+    );
     List<String> notIndented;
     if (hangingIndent != 0) {
       // When we have a hanging indent, we want to wrap the first line at one
@@ -79,12 +81,14 @@ String wrapText(
       notIndented = <String>[firstLineWrap.removeAt(0)];
       trimmedText = trimmedText.substring(notIndented[0].length).trimLeft();
       if (trimmedText.isNotEmpty) {
-        notIndented.addAll(_wrapTextAsLines(
-          trimmedText,
-          columnWidth:
-              columnWidth - leadingWhitespace.length - indent - hangingIndent,
-          shouldWrap: shouldWrap,
-        ));
+        notIndented.addAll(
+          _wrapTextAsLines(
+            trimmedText,
+            columnWidth:
+                columnWidth - leadingWhitespace.length - indent - hangingIndent,
+            shouldWrap: shouldWrap,
+          ),
+        );
       }
     } else {
       notIndented = _wrapTextAsLines(
@@ -95,8 +99,8 @@ String wrapText(
     }
     String? hangingIndentString;
     final indentString = ' ' * indent;
-    result.addAll(notIndented.map<String>(
-      (line) {
+    result.addAll(
+      notIndented.map<String>((line) {
         // Don't return any lines with just whitespace on them.
         if (line.isEmpty) {
           return '';
@@ -105,13 +109,15 @@ String wrapText(
             '$indentString${hangingIndentString ?? ''}$leadingWhitespace';
         if (truncatedIndent.length > columnWidth - kMinColumnWidth) {
           truncatedIndent = truncatedIndent.substring(
-              0, math.max(columnWidth - kMinColumnWidth, 0));
+            0,
+            math.max(columnWidth - kMinColumnWidth, 0),
+          );
         }
         final result = '$truncatedIndent$line';
         hangingIndentString ??= ' ' * hangingIndent!;
         return result;
-      },
-    ));
+      }),
+    );
   }
   return result.join('\n');
 }

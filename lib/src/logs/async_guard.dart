@@ -78,16 +78,15 @@ import 'dart:async';
 /// [onError] must have type `FutureOr<T> Function(Object error)` or
 /// `FutureOr<T> Function(Object error, StackTrace stackTrace)` otherwise an
 /// [ArgumentError] will be thrown synchronously.
-Future<T> asyncGuard<T>(
-  Future<T> Function() fn, {
-  Function? onError,
-}) {
+Future<T> asyncGuard<T>(Future<T> Function() fn, {Function? onError}) {
   if (onError != null &&
       onError is! _UnaryOnError<T> &&
       onError is! _BinaryOnError<T>) {
-    throw ArgumentError('onError must be a unary function accepting an Object, '
-        'or a binary function accepting an Object and '
-        'StackTrace. onError must return a T');
+    throw ArgumentError(
+      'onError must be a unary function accepting an Object, '
+      'or a binary function accepting an Object and '
+      'StackTrace. onError must return a T',
+    );
   }
   final completer = Completer<T>();
 
@@ -106,26 +105,29 @@ Future<T> asyncGuard<T>(
     }
   }
 
-  runZonedGuarded<void>(() async {
-    try {
-      final result = await fn();
-      if (!completer.isCompleted) {
-        completer.complete(result);
+  runZonedGuarded<void>(
+    () async {
+      try {
+        final result = await fn();
+        if (!completer.isCompleted) {
+          completer.complete(result);
+        }
+        // This catches all exceptions so that they can be propagated to the
+        // caller-supplied error handling or the completer.
+      } catch (e, s) {
+        // ignore: avoid_catches_without_on_clauses, forwards to Future
+        handleError(e, s);
       }
-      // This catches all exceptions so that they can be propagated to the
-      // caller-supplied error handling or the completer.
-    } catch (e, s) {
-      // ignore: avoid_catches_without_on_clauses, forwards to Future
+    },
+    (Object e, StackTrace s) {
+      // ignore: deprecated_member_use
       handleError(e, s);
-    }
-  }, (Object e, StackTrace s) {
-    // ignore: deprecated_member_use
-    handleError(e, s);
-  });
+    },
+  );
 
   return completer.future;
 }
 
 typedef _UnaryOnError<T> = FutureOr<T> Function(Object error);
-typedef _BinaryOnError<T> = FutureOr<T> Function(
-    Object error, StackTrace stackTrace);
+typedef _BinaryOnError<T> =
+    FutureOr<T> Function(Object error, StackTrace stackTrace);

@@ -27,15 +27,17 @@ Future<void> main() async {
     if (sdks.isNotEmpty) flutterSdkRoot = sdks.first.root;
   }
 
-  runApp(MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: (_appRootDefine.isEmpty || flutterSdkRoot.isEmpty)
-        ? const _MissingDefines()
-        : EmbedderHarnessScreen(
-            appPackageRoot: _appRootDefine,
-            flutterSdkRoot: flutterSdkRoot,
-          ),
-  ));
+  runApp(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: (_appRootDefine.isEmpty || flutterSdkRoot.isEmpty)
+          ? const _MissingDefines()
+          : EmbedderHarnessScreen(
+              appPackageRoot: _appRootDefine,
+              flutterSdkRoot: flutterSdkRoot,
+            ),
+    ),
+  );
 }
 
 class _MissingDefines extends StatelessWidget {

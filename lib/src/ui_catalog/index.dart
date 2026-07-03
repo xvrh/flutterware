@@ -40,7 +40,7 @@ class IndexView extends StatelessWidget {
                 onSelect(child);
               },
               formFactor: formFactorPicker?.call(child.path) ?? FormFactor.all,
-            )
+            ),
         ],
       ),
       for (var folder in folders)
@@ -53,15 +53,13 @@ class IndexView extends StatelessWidget {
             isRoot: false,
             formFactorPicker: formFactorPicker,
           ),
-        )
+        ),
     ];
 
     if (isRoot) {
       return FittedWidget(
         minimumSize: Size(600, 100),
-        child: ListView(
-          children: widgets,
-        ),
+        child: ListView(children: widgets),
       );
     } else {
       return Column(
@@ -91,9 +89,7 @@ class _IndexPreview extends StatelessWidget {
     var value = this.value;
     Widget mainWidget;
     if (value is Widget) {
-      var widget = Center(
-        child: value,
-      );
+      var widget = Center(child: value);
       mainWidget = DeviceFrame(
         device: switch (formFactor) {
           FormFactor.mobile => Devices.android.smallPhone,
@@ -200,36 +196,37 @@ class FittedWidget extends StatelessWidget {
   final Widget child;
   final Size minimumSize;
 
-  const FittedWidget(
-      {super.key, required this.child, required this.minimumSize});
+  const FittedWidget({
+    super.key,
+    required this.child,
+    required this.minimumSize,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      var size = constraints.biggest;
-      var widthRatio = size.width / minimumSize.width;
-      var heightRatio = size.height / minimumSize.height;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        var size = constraints.biggest;
+        var widthRatio = size.width / minimumSize.width;
+        var heightRatio = size.height / minimumSize.height;
 
-      var width = size.width;
-      var height = size.height;
+        var width = size.width;
+        var height = size.height;
 
-      if (min(widthRatio, heightRatio) < 1) {
-        if (widthRatio < heightRatio) {
-          width = minimumSize.width;
-          height = size.height / widthRatio;
-        } else {
-          height = minimumSize.height;
-          width = size.width / heightRatio;
+        if (min(widthRatio, heightRatio) < 1) {
+          if (widthRatio < heightRatio) {
+            width = minimumSize.width;
+            height = size.height / widthRatio;
+          } else {
+            height = minimumSize.height;
+            width = size.width / heightRatio;
+          }
         }
-      }
 
-      return FittedBox(
-        child: SizedBox(
-          width: width,
-          height: height,
-          child: child,
-        ),
-      );
-    });
+        return FittedBox(
+          child: SizedBox(width: width, height: height, child: child),
+        );
+      },
+    );
   }
 }

@@ -5,10 +5,7 @@ void main() {
   test('globalOffset sums offsets down through a Padding', () {
     var binding = TuiBinding();
     binding.attachRootWidget(
-      Padding(
-        padding: EdgeInsets.all(2),
-        child: SizedBox(width: 3, height: 1),
-      ),
+      Padding(padding: EdgeInsets.all(2), child: SizedBox(width: 3, height: 1)),
     );
     binding.handleResize(CellSize(10, 10));
     binding.drawFrame(Painter(CellBuffer(10, 10)));

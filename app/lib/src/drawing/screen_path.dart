@@ -99,10 +99,7 @@ class _SidePanel extends StatelessWidget {
       color: Colors.white,
       child: ListView(
         children: [
-          for (var entry in path.entries)
-            ListTile(
-              title: Text(entry.toCode()),
-            )
+          for (var entry in path.entries) ListTile(title: Text(entry.toCode())),
         ],
       ),
     );
@@ -133,12 +130,14 @@ class _Painter extends CustomPainter {
     var dash = CircularIntervalList<double>([10.0, 5]);
     void drawDashLine(Offset start, Offset end) {
       canvas.drawPath(
-          dashPath(
-              Path()
-                ..moveTo(start.dx, start.dy)
-                ..lineTo(end.dx, end.dy),
-              dashArray: dash),
-          referencePaint);
+        dashPath(
+          Path()
+            ..moveTo(start.dx, start.dy)
+            ..lineTo(end.dx, end.dy),
+          dashArray: dash,
+        ),
+        referencePaint,
+      );
     }
 
     drawDashLine(zeroOffset, Offset(size.width, zeroOffset.dy));

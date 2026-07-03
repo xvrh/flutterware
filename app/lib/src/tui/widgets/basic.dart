@@ -39,14 +39,14 @@ class Text extends LeafRenderObjectWidget {
 
   @override
   RenderText createRenderObject(BuildContext context) => RenderText(
-        text,
-        fg: fg,
-        bg: bg,
-        style: style,
-        hAlign: hAlign,
-        vAlign: vAlign,
-        wrap: wrap,
-      );
+    text,
+    fg: fg,
+    bg: bg,
+    style: style,
+    hAlign: hAlign,
+    vAlign: vAlign,
+    wrap: wrap,
+  );
 
   @override
   void updateRenderObject(BuildContext context, RenderText renderObject) {
@@ -82,11 +82,7 @@ class Padding extends SingleChildRenderObjectWidget {
 ///
 /// Use [SizedBox] for the common case of fixing a width and/or height.
 class ConstrainedBox extends SingleChildRenderObjectWidget {
-  const ConstrainedBox({
-    super.key,
-    required this.constraints,
-    super.child,
-  });
+  const ConstrainedBox({super.key, required this.constraints, super.child});
 
   /// The additional constraints applied to the child.
   final BoxConstraints constraints;
@@ -97,7 +93,9 @@ class ConstrainedBox extends SingleChildRenderObjectWidget {
 
   @override
   void updateRenderObject(
-      BuildContext context, RenderConstrainedBox renderObject) {
+    BuildContext context,
+    RenderConstrainedBox renderObject,
+  ) {
     renderObject.additionalConstraints = constraints;
   }
 }
@@ -120,9 +118,9 @@ class SizedBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ConstrainedBox(
-        constraints: BoxConstraints.tightFor(width: width, height: height),
-        child: child,
-      );
+    constraints: BoxConstraints.tightFor(width: width, height: height),
+    child: child,
+  );
 }
 
 /// A single-child widget that paints a [BoxDecoration] (fill or border) behind
@@ -131,11 +129,7 @@ class SizedBox extends StatelessWidget {
 /// The decoration does not affect layout. To add padding inside a border, wrap
 /// a [Padding] inside the [DecoratedBox].
 class DecoratedBox extends SingleChildRenderObjectWidget {
-  const DecoratedBox({
-    super.key,
-    required this.decoration,
-    super.child,
-  });
+  const DecoratedBox({super.key, required this.decoration, super.child});
 
   /// The decoration painted behind [child].
   final BoxDecoration decoration;
@@ -146,7 +140,9 @@ class DecoratedBox extends SingleChildRenderObjectWidget {
 
   @override
   void updateRenderObject(
-      BuildContext context, RenderDecoratedBox renderObject) {
+    BuildContext context,
+    RenderDecoratedBox renderObject,
+  ) {
     renderObject.decoration = decoration;
   }
 }
@@ -180,11 +176,11 @@ class Flex extends MultiChildRenderObjectWidget {
 
   @override
   RenderFlex createRenderObject(BuildContext context) => RenderFlex(
-        direction: direction,
-        mainAxisAlignment: mainAxisAlignment,
-        crossAxisAlignment: crossAxisAlignment,
-        mainAxisSize: mainAxisSize,
-      );
+    direction: direction,
+    mainAxisAlignment: mainAxisAlignment,
+    crossAxisAlignment: crossAxisAlignment,
+    mainAxisSize: mainAxisSize,
+  );
 
   @override
   void updateRenderObject(BuildContext context, RenderFlex renderObject) {
@@ -265,9 +261,6 @@ class Builder extends StatelessWidget {
 ///
 /// Equivalent to `Flexible(fit: FlexFit.tight, ...)`.
 class Expanded extends Flexible {
-  const Expanded({
-    super.key,
-    super.flex,
-    required super.child,
-  }) : super(fit: FlexFit.tight);
+  const Expanded({super.key, super.flex, required super.child})
+    : super(fit: FlexFit.tight);
 }

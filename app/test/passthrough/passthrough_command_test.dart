@@ -23,15 +23,17 @@ String _resolveDart() {
 void main() {
   final dart = _resolveDart();
 
-  test('runUnderPty returns 127 for nonexistent executable without throwing',
-      () async {
-    final code = await runUnderPty(
-      executable: '/no/such/binary_xyz_for_test',
-      arguments: const [],
-      printSummary: false,
-    );
-    expect(code, equals(127));
-  });
+  test(
+    'runUnderPty returns 127 for nonexistent executable without throwing',
+    () async {
+      final code = await runUnderPty(
+        executable: '/no/such/binary_xyz_for_test',
+        arguments: const [],
+        printSummary: false,
+      );
+      expect(code, equals(127));
+    },
+  );
 
   test('runUnderPty returns 0 for /usr/bin/true', () async {
     final code = await runUnderPty(
@@ -42,10 +44,10 @@ void main() {
     expect(code, equals(0));
   });
 
-  test('CLI: echo hello via bin/passthrough.dart', () async {
-    final result = await Process.run(
-      dart,
-      [
+  test(
+    'CLI: echo hello via bin/passthrough.dart',
+    () async {
+      final result = await Process.run(dart, [
         'run',
         'bin/passthrough.dart',
         'run',
@@ -53,25 +55,31 @@ void main() {
         '--',
         '/bin/echo',
         'integration-ok',
-      ],
-    );
-    expect(result.exitCode, equals(0));
-    expect(result.stdout.toString(), contains('integration-ok'));
-  }, timeout: const Timeout(Duration(minutes: 2)));
+      ]);
+      expect(result.exitCode, equals(0));
+      expect(result.stdout.toString(), contains('integration-ok'));
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
-  test('CLI: missing -- separator yields usage error 64', () async {
-    final result = await Process.run(
-      dart,
-      ['run', 'bin/passthrough.dart', 'run'],
-    );
-    expect(result.exitCode, equals(64));
-    expect(result.stderr.toString(), contains('Usage:'));
-  }, timeout: const Timeout(Duration(minutes: 2)));
+  test(
+    'CLI: missing -- separator yields usage error 64',
+    () async {
+      final result = await Process.run(dart, [
+        'run',
+        'bin/passthrough.dart',
+        'run',
+      ]);
+      expect(result.exitCode, equals(64));
+      expect(result.stderr.toString(), contains('Usage:'));
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
-  test('CLI: exit-code passthrough for `bash -c "exit 42"`', () async {
-    final result = await Process.run(
-      dart,
-      [
+  test(
+    'CLI: exit-code passthrough for `bash -c "exit 42"`',
+    () async {
+      final result = await Process.run(dart, [
         'run',
         'bin/passthrough.dart',
         'run',
@@ -80,8 +88,9 @@ void main() {
         '/bin/bash',
         '-c',
         'exit 42',
-      ],
-    );
-    expect(result.exitCode, equals(42));
-  }, timeout: const Timeout(Duration(minutes: 2)));
+      ]);
+      expect(result.exitCode, equals(42));
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 }

@@ -67,8 +67,11 @@ void main() {
     expect(disposed, isFalse, reason: 'still mounted');
 
     binding.dispose();
-    expect(disposed, isTrue,
-        reason: 'tearing the binding down must dispose every State');
+    expect(
+      disposed,
+      isTrue,
+      reason: 'tearing the binding down must dispose every State',
+    );
     expect(binding.rootElement, isNull);
   });
 
@@ -80,20 +83,22 @@ void main() {
     expect((r.binding.renderView.child! as RenderText).size, CellSize(1, 8));
   });
 
-  test('a setState-driven counter shows the new value after a second frame',
-      () {
-    var r = pump(const Counter(), rows: 1, cols: 4);
-    expect(dump(r.buffer)[0], '0   ');
+  test(
+    'a setState-driven counter shows the new value after a second frame',
+    () {
+      var r = pump(const Counter(), rows: 1, cols: 4);
+      expect(dump(r.buffer)[0], '0   ');
 
-    Counter.last!.bump();
-    var second = reframe(r.binding, 1, 4);
-    expect(dump(second)[0], '1   ');
+      Counter.last!.bump();
+      var second = reframe(r.binding, 1, 4);
+      expect(dump(second)[0], '1   ');
 
-    Counter.last!.bump();
-    Counter.last!.bump();
-    var third = reframe(r.binding, 1, 4);
-    expect(dump(third)[0], '3   ');
-  });
+      Counter.last!.bump();
+      Counter.last!.bump();
+      var third = reframe(r.binding, 1, 4);
+      expect(dump(third)[0], '3   ');
+    },
+  );
 
   test('handleResize changes configuration and the next frame re-lays out', () {
     var r = pump(const Text('x'), rows: 1, cols: 1);

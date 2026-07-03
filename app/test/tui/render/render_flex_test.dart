@@ -50,10 +50,7 @@ void main() {
 
     test('MainAxisSize.max fills the available main extent', () {
       var a = _FixedBox(CellSize(1, 3));
-      var row = RenderFlex(
-        direction: Axis.horizontal,
-        children: [a],
-      );
+      var row = RenderFlex(direction: Axis.horizontal, children: [a]);
       row.layout(BoxConstraints.tight(CellSize(4, 20)));
       expect(row.size, CellSize(4, 20));
     });
@@ -154,8 +151,10 @@ void main() {
     test('a single flex child fills the free space', () {
       var fixed = _FixedBox(CellSize(1, 4));
       var flexible = _FixedBox(CellSize(1, 1));
-      var row =
-          RenderFlex(direction: Axis.horizontal, children: [fixed, flexible]);
+      var row = RenderFlex(
+        direction: Axis.horizontal,
+        children: [fixed, flexible],
+      );
       row.setFlex(flexible, 1, fit: FlexFit.tight);
       row.layout(BoxConstraints.tight(CellSize(1, 20)));
       expect(flexible.size.cols, 16); // 20 - 4
@@ -175,8 +174,10 @@ void main() {
     test('a loose flex child may stay smaller than its allotment', () {
       var fixed = _FixedBox(CellSize(1, 4));
       var flexible = _FixedBox(CellSize(1, 1));
-      var row =
-          RenderFlex(direction: Axis.horizontal, children: [fixed, flexible]);
+      var row = RenderFlex(
+        direction: Axis.horizontal,
+        children: [fixed, flexible],
+      );
       // Default fit is FlexFit.loose — do not pass fit:.
       row.setFlex(flexible, 1);
       row.layout(BoxConstraints.tight(CellSize(1, 20)));

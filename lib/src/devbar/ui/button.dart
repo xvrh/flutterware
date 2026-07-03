@@ -26,8 +26,10 @@ class _AddDevbarButtonState extends State<AddDevbarButton> {
     super.initState();
 
     var devbar = DevbarState.of(context);
-    _buttonHandle =
-        devbar.ui.addButton(widget.button, position: widget.position);
+    _buttonHandle = devbar.ui.addButton(
+      widget.button,
+      position: widget.position,
+    );
   }
 
   @override
@@ -48,8 +50,12 @@ class DevbarIcon extends StatelessWidget {
   final IconData icon;
   final Color? color;
 
-  const DevbarIcon(
-      {super.key, required this.onTap, required this.icon, this.color});
+  const DevbarIcon({
+    super.key,
+    required this.onTap,
+    required this.icon,
+    this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -57,10 +63,7 @@ class DevbarIcon extends StatelessWidget {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: onTap,
-        child: _Icon(
-          icon: icon,
-          color: color,
-        ),
+        child: _Icon(icon: icon, color: color),
       ),
     );
   }
@@ -80,14 +83,12 @@ class _Icon extends StatelessWidget {
       decoration: BoxDecoration(
         color: (color ?? Colors.black54).withValues(alpha: 0.1),
         shape: BoxShape.circle,
-        border:
-            Border.all(color: Colors.white.withValues(alpha: 0.5), width: 3),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.5),
+          width: 3,
+        ),
       ),
-      child: Icon(
-        icon,
-        color: color ?? Colors.black54,
-        size: 26,
-      ),
+      child: Icon(icon, color: color ?? Colors.black54, size: 26),
     );
   }
 }
@@ -187,7 +188,7 @@ class _DevbarDropdownButtonState<T> extends State<DevbarDropdown<T>> {
                         ),
                       ),
                       Divider(),
-                    ]
+                    ],
                   ],
                 ),
               ),

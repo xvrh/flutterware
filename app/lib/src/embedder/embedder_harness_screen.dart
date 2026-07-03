@@ -50,8 +50,12 @@ class _EmbedderHarnessScreenState extends State<EmbedderHarnessScreen> {
     _engine.resize(width, height, dpr);
   }
 
-  void _sendPointer(PointerPhase phase, Offset local, double dpr,
-      {int buttons = 0}) {
+  void _sendPointer(
+    PointerPhase phase,
+    Offset local,
+    double dpr, {
+    int buttons = 0,
+  }) {
     _engine.sendPointer(
       phaseKind: phase,
       x: local.dx * dpr,
@@ -84,8 +88,10 @@ class _EmbedderHarnessScreenState extends State<EmbedderHarnessScreen> {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Text('Embedder error:\n${_engine.errorMessage}',
-                      style: const TextStyle(color: Colors.red)),
+                  child: Text(
+                    'Embedder error:\n${_engine.errorMessage}',
+                    style: const TextStyle(color: Colors.red),
+                  ),
                 ),
               );
             case EmbeddedEnginePhase.running:
@@ -100,8 +106,8 @@ class _EmbedderHarnessScreenState extends State<EmbedderHarnessScreen> {
                       var kind = event is KeyDownEvent
                           ? KeyEventKind.down
                           : event is KeyRepeatEvent
-                              ? KeyEventKind.repeat
-                              : KeyEventKind.up;
+                          ? KeyEventKind.repeat
+                          : KeyEventKind.up;
                       _engine.sendKey(
                         kind: kind,
                         physicalKey: event.physicalKey.usbHidUsage,
@@ -112,14 +118,24 @@ class _EmbedderHarnessScreenState extends State<EmbedderHarnessScreen> {
                     child: Listener(
                       onPointerDown: (e) {
                         _focusNode.requestFocus();
-                        _sendPointer(PointerPhase.down, e.localPosition, dpr,
-                            buttons: 1);
+                        _sendPointer(
+                          PointerPhase.down,
+                          e.localPosition,
+                          dpr,
+                          buttons: 1,
+                        );
                       },
                       onPointerMove: (e) => _sendPointer(
-                          PointerPhase.move, e.localPosition, dpr,
-                          buttons: 1),
+                        PointerPhase.move,
+                        e.localPosition,
+                        dpr,
+                        buttons: 1,
+                      ),
                       onPointerHover: (e) => _sendPointer(
-                          PointerPhase.hover, e.localPosition, dpr),
+                        PointerPhase.hover,
+                        e.localPosition,
+                        dpr,
+                      ),
                       onPointerUp: (e) =>
                           _sendPointer(PointerPhase.up, e.localPosition, dpr),
                       child: SizedBox.expand(

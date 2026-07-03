@@ -22,15 +22,16 @@ abstract class RunArgs implements Built<RunArgs, RunArgsBuilder> {
     required SerializableLocale? locale,
     required double imageRatio,
     int? platformBrightness,
-  }) =>
-      RunArgs._builder((b) => b
-        ..id = _runId++
-        ..testName.replace(testName)
-        ..device.replace(device)
-        ..accessibility.replace(accessibility)
-        ..imageRatio = imageRatio
-        ..locale = locale?.toBuilder()
-        ..platformBrightness = platformBrightness);
+  }) => RunArgs._builder(
+    (b) => b
+      ..id = _runId++
+      ..testName.replace(testName)
+      ..device.replace(device)
+      ..accessibility.replace(accessibility)
+      ..imageRatio = imageRatio
+      ..locale = locale?.toBuilder()
+      ..platformBrightness = platformBrightness,
+  );
 
   int get id;
   BuiltList<String> get testName;

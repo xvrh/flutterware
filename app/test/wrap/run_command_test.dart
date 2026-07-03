@@ -28,10 +28,10 @@ void main() {
   });
   tearDown(() => project.deleteSync(recursive: true));
 
-  test('interesting run is captured into a session dir with meta', () async {
-    final result = await Process.run(
-      dart,
-      [
+  test(
+    'interesting run is captured into a session dir with meta',
+    () async {
+      final result = await Process.run(dart, [
         'run',
         wrapScript,
         'run',
@@ -42,32 +42,30 @@ void main() {
         '--',
         'run',
         'captured-payload',
-      ],
-      workingDirectory: project.path,
-    );
-    expect(result.exitCode, 0);
-    final sessions = Directory(
-      p.join(project.path, '.flutterware', 'sessions'),
-    );
-    expect(sessions.existsSync(), isTrue);
-    final dirs = sessions.listSync().whereType<Directory>().toList();
-    expect(dirs, hasLength(1));
-    final out = File(p.join(dirs.single.path, 'output.log')).readAsStringSync();
-    expect(out, contains('captured-payload'));
-    expect(out, contains('--dart-define=FW_MARKER='));
-    expect(
-      File(p.join(dirs.single.path, 'meta.json')).existsSync(),
-      isTrue,
-    );
-  }, timeout: const Timeout(Duration(minutes: 2)));
+      ], workingDirectory: project.path);
+      expect(result.exitCode, 0);
+      final sessions = Directory(
+        p.join(project.path, '.flutterware', 'sessions'),
+      );
+      expect(sessions.existsSync(), isTrue);
+      final dirs = sessions.listSync().whereType<Directory>().toList();
+      expect(dirs, hasLength(1));
+      final out = File(
+        p.join(dirs.single.path, 'output.log'),
+      ).readAsStringSync();
+      expect(out, contains('captured-payload'));
+      expect(out, contains('--dart-define=FW_MARKER='));
+      expect(File(p.join(dirs.single.path, 'meta.json')).existsSync(), isTrue);
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
-  test('degrades to a plain run when not inside a flutterware project',
-      () async {
-    final outside = Directory.systemTemp.createTempSync('wrap_outside');
-    addTearDown(() => outside.deleteSync(recursive: true));
-    final result = await Process.run(
-      dart,
-      [
+  test(
+    'degrades to a plain run when not inside a flutterware project',
+    () async {
+      final outside = Directory.systemTemp.createTempSync('wrap_outside');
+      addTearDown(() => outside.deleteSync(recursive: true));
+      final result = await Process.run(dart, [
         'run',
         wrapScript,
         'run',
@@ -78,20 +76,19 @@ void main() {
         '--',
         'run',
         'still-runs',
-      ],
-      workingDirectory: outside.path,
-    );
-    expect(result.exitCode, 0);
-    expect(result.stdout.toString(), contains('still-runs'));
-  }, timeout: const Timeout(Duration(minutes: 2)));
+      ], workingDirectory: outside.path);
+      expect(result.exitCode, 0);
+      expect(result.stdout.toString(), contains('still-runs'));
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
-  test('degrade with an unrunnable real binary exits non-zero, no crash',
-      () async {
-    final outside = Directory.systemTemp.createTempSync('wrap_badbin');
-    addTearDown(() => outside.deleteSync(recursive: true));
-    final result = await Process.run(
-      dart,
-      [
+  test(
+    'degrade with an unrunnable real binary exits non-zero, no crash',
+    () async {
+      final outside = Directory.systemTemp.createTempSync('wrap_badbin');
+      addTearDown(() => outside.deleteSync(recursive: true));
+      final result = await Process.run(dart, [
         'run',
         wrapScript,
         'run',
@@ -101,10 +98,10 @@ void main() {
         'flutter',
         '--',
         'run',
-      ],
-      workingDirectory: outside.path,
-    );
-    expect(result.exitCode, isNot(0));
-    expect(result.exitCode, isNot(255));
-  }, timeout: const Timeout(Duration(minutes: 2)));
+      ], workingDirectory: outside.path);
+      expect(result.exitCode, isNot(0));
+      expect(result.exitCode, isNot(255));
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 }

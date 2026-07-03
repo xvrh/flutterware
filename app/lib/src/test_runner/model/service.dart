@@ -38,8 +38,9 @@ class TestService {
   final _state = ValueNotifier<DaemonState>(DaemonState$Stopped());
 
   // TODO(xha): load config from config file
-  final _watchConfig =
-      ValueNotifier<WatchConfig>(WatchConfig(WatchConfig.defaultFolders));
+  final _watchConfig = ValueNotifier<WatchConfig>(
+    WatchConfig(WatchConfig.defaultFolders),
+  );
   final _server = Server();
   StreamSubscription? _fileWatcherSubscription;
   final _messageController = StreamController<DaemonMessage>.broadcast();
@@ -63,8 +64,11 @@ class TestService {
 
     _state.value = DaemonState$Starting('');
 
-    var daemonStarter =
-        DaemonStarter(project, _server, _messageController.sink);
+    var daemonStarter = DaemonStarter(
+      project,
+      _server,
+      _messageController.sink,
+    );
     try {
       var daemon = await daemonStarter.start();
       _state.value = DaemonState$Connected(daemon);
@@ -90,15 +94,16 @@ class TestService {
     _fileWatcherSubscription?.cancel();
     var config = _watchConfig.value;
 
-    _fileWatcherSubscription = StreamGroup.merge([
-      for (var config in config.folders)
-        DirectoryWatcher(p.join(project.directory.path, config)).events,
-    ]).throttleTime(Duration(seconds: 1)).listen((e) {
-      var stateValue = _state.value;
-      if (stateValue is DaemonState$Connected) {
-        stateValue.daemon.reload(fullRestart: false);
-      }
-    });
+    _fileWatcherSubscription =
+        StreamGroup.merge([
+          for (var config in config.folders)
+            DirectoryWatcher(p.join(project.directory.path, config)).events,
+        ]).throttleTime(Duration(seconds: 1)).listen((e) {
+          var stateValue = _state.value;
+          if (stateValue is DaemonState$Connected) {
+            stateValue.daemon.reload(fullRestart: false);
+          }
+        });
   }
 
   void _disposeWatcher() {
@@ -116,11 +121,13 @@ class TestService {
 
   Future<void> addExample() async {
     var file = File(
-        p.join(project.absolutePath, defaultTestLocation, 'example_test.dart'));
+      p.join(project.absolutePath, defaultTestLocation, 'example_test.dart'),
+    );
     file.createSync(recursive: true);
 
-    var exampleContent =
-        await File('../test_app/example_test.dart').readAsString();
+    var exampleContent = await File(
+      '../test_app/example_test.dart',
+    ).readAsString();
 
     await file.writeAsString(exampleContent, flush: true);
 

@@ -6,11 +6,7 @@ class AutoScroller<T> extends StatefulWidget {
   final ValueStream<T> stream;
   final Widget Function(BuildContext, ScrollController, T) builder;
 
-  const AutoScroller({
-    super.key,
-    required this.stream,
-    required this.builder,
-  });
+  const AutoScroller({super.key, required this.stream, required this.builder});
 
   @override
   State<AutoScroller<T>> createState() => _AutoScrollerState<T>();
@@ -29,9 +25,10 @@ class _AutoScrollerState<T> extends State<AutoScroller<T>> {
       Timer(Duration(milliseconds: 100), () {
         if (mounted && _scrollController.hasClients) {
           _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: Duration(milliseconds: 100),
-              curve: Curves.easeInOut);
+            _scrollController.position.maxScrollExtent,
+            duration: Duration(milliseconds: 100),
+            curve: Curves.easeInOut,
+          );
         }
       });
     });

@@ -10,11 +10,12 @@ List<TestFile> collectTestFiles(Directory projectRoot) {
   var testFolder = Directory(p.join(projectRoot.path, defaultTestLocation));
   var files = <TestFile>[];
   if (testFolder.existsSync()) {
-    for (var file in testFolder
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((f) => f.path.endsWith('_test.dart'))
-        .sortedByCompare((e) => e.path, compareNatural)) {
+    for (var file
+        in testFolder
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((f) => f.path.endsWith('_test.dart'))
+            .sortedByCompare((e) => e.path, compareNatural)) {
       // TODO(xha): check for main function?
       files.add(TestFile(projectRoot, file));
     }
@@ -33,9 +34,14 @@ class TestFile {
       .replaceAll(r'\', '/');
 }
 
-String entryPointCode(Project project, List<TestFile> files,
-    {required Uri serverUri, required Uri? loggerUri}) {
-  var code = StringBuffer()..writeln('''
+String entryPointCode(
+  Project project,
+  List<TestFile> files, {
+  required Uri serverUri,
+  required Uri? loggerUri,
+}) {
+  var code = StringBuffer()
+    ..writeln('''
 // GENERATED-CODE: Flutterware - Test runner feature
 import 'package:flutterware/src/test_runner_daemon.dart';
 ''');
@@ -49,7 +55,8 @@ import 'package:flutterware/src/test_runner_daemon.dart';
   index = 0;
   for (var file in files) {
     code.writeln(
-        "'${p.relative(file.relativePath, from: defaultTestLocation)}': i$index.main,");
+      "'${p.relative(file.relativePath, from: defaultTestLocation)}': i$index.main,",
+    );
     ++index;
   }
   code.writeln('''

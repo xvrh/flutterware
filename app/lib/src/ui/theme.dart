@@ -14,19 +14,15 @@ ThemeData get appTheme {
 }
 
 ThemeData _buildAppTheme() {
-  var base = ThemeData(
-    useMaterial3: true,
-    colorSchemeSeed: AppColors.primary,
-  );
+  var base = ThemeData(useMaterial3: true, colorSchemeSeed: AppColors.primary);
 
   var inputBorder = OutlineInputBorder(
     borderRadius: BorderRadius.circular(8),
-    borderSide: BorderSide(
-      color: Color(0xffe0e0e0),
-    ),
+    borderSide: BorderSide(color: Color(0xffe0e0e0)),
   );
-  var textTheme =
-      base.textTheme.apply(displayColor: AppColors.foregroundPrimary);
+  var textTheme = base.textTheme.apply(
+    displayColor: AppColors.foregroundPrimary,
+  );
 
   base = base.copyWith(
     textTheme: textTheme.copyWith(
@@ -45,14 +41,14 @@ ThemeData _buildAppTheme() {
       labelColor: AppColors.primary,
       indicatorSize: TabBarIndicatorSize.label,
       unselectedLabelColor: AppColors.foregroundSecondary,
-      labelStyle:
-          base.textTheme.titleMedium!.copyWith(fontWeight: FontWeight.w500),
-      unselectedLabelStyle:
-          base.textTheme.titleMedium!.copyWith(fontWeight: FontWeight.w500),
+      labelStyle: base.textTheme.titleMedium!.copyWith(
+        fontWeight: FontWeight.w500,
+      ),
+      unselectedLabelStyle: base.textTheme.titleMedium!.copyWith(
+        fontWeight: FontWeight.w500,
+      ),
       indicator: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.primary, width: 3),
-        ),
+        border: Border(bottom: BorderSide(color: AppColors.primary, width: 3)),
       ),
     ),
     popupMenuTheme: base.popupMenuTheme.copyWith(

@@ -18,10 +18,7 @@ class WarningBox extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.all(15),
-              child: Icon(
-                Icons.warning_amber,
-                color: foreground,
-              ),
+              child: Icon(Icons.warning_amber, color: foreground),
             ),
             Expanded(
               child: MarkdownBody(
@@ -30,9 +27,7 @@ class WarningBox extends StatelessWidget {
                   p: const TextStyle(color: foreground),
                 ),
                 extensionSet: ExtensionSet.commonMark,
-                inlineSyntaxes: [
-                  LineBreakSyntax(),
-                ],
+                inlineSyntaxes: [LineBreakSyntax()],
                 onTapLink: (text, href, title) {},
               ),
             ),

@@ -25,10 +25,7 @@ class FigmaImage extends StatelessWidget {
         } else if (snapshot.hasError) {
           return _ImageError(figmaService, snapshot.error!);
         } else {
-          return Image(
-            image: snapshot.requireData,
-            fit: BoxFit.fitWidth,
-          );
+          return Image(image: snapshot.requireData, fit: BoxFit.fitWidth);
         }
       },
     );
@@ -52,8 +49,9 @@ class _ImageError extends StatelessWidget {
           TextButton(
             onPressed: () {
               showDialog(
-                  context: context,
-                  builder: (context) => _ErrorDialog(exception.toString()));
+                context: context,
+                builder: (context) => _ErrorDialog(exception.toString()),
+              );
             },
             child: Text('Show full error'),
           ),

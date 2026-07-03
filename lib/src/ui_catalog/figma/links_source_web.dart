@@ -9,10 +9,13 @@ class FigmaDownloaderWeb extends FigmaDownloader {
   }
 
   @override
-  Future<ImageProvider<Object>> readFigmaScreenshot(FigmaLink url,
-      {FigmaCredentials? credentials}) async {
+  Future<ImageProvider<Object>> readFigmaScreenshot(
+    FigmaLink url, {
+    FigmaCredentials? credentials,
+  }) async {
     return NetworkImage(
-        'https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/No-Image-Placeholder.svg/1665px-No-Image-Placeholder.svg.png');
+      'https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/No-Image-Placeholder.svg/1665px-No-Image-Placeholder.svg.png',
+    );
   }
 }
 

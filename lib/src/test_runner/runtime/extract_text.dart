@@ -2,8 +2,11 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart' show MatchFinder;
 import '../protocol/models.dart';
 
-TextInfo textInfoFromElement(String translationKey, Element element,
-    {required String rawTranslation}) {
+TextInfo textInfoFromElement(
+  String translationKey,
+  Element element, {
+  required String rawTranslation,
+}) {
   var box = element.renderObject! as RenderBox;
   var topLeft = box.localToGlobal(Offset.zero);
   var bottomRight = box.localToGlobal(box.size.bottomRight(Offset.zero));
@@ -13,16 +16,22 @@ TextInfo textInfoFromElement(String translationKey, Element element,
   var text = textFromElement(element)!;
 
   return TextInfo(
-          text: text,
-          translationKey: translationKey,
-          rawTranslation: rawTranslation,
-          globalRectangle: Rectangle.fromLTRB(
-              topLeft.dx, topLeft.dy, bottomRight.dx, bottomRight.dy))
-      .rebuild((b) => b
-        ..color = style.color?.toARGB32()
-        ..fontSize = style.fontSize
-        ..fontFamily = style.fontFamily
-        ..fontWeight = style.fontWeight?.value);
+    text: text,
+    translationKey: translationKey,
+    rawTranslation: rawTranslation,
+    globalRectangle: Rectangle.fromLTRB(
+      topLeft.dx,
+      topLeft.dy,
+      bottomRight.dx,
+      bottomRight.dy,
+    ),
+  ).rebuild(
+    (b) => b
+      ..color = style.color?.toARGB32()
+      ..fontSize = style.fontSize
+      ..fontFamily = style.fontFamily
+      ..fontWeight = style.fontWeight?.value,
+  );
 }
 
 String? textFromElement(Element candidate) {

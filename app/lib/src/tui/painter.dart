@@ -32,44 +32,44 @@ class BorderChars {
   });
 
   const BorderChars.single()
-      : topLeft = '┌',
-        topRight = '┐',
-        bottomLeft = '└',
-        bottomRight = '┘',
-        horizontal = '─',
-        vertical = '│';
+    : topLeft = '┌',
+      topRight = '┐',
+      bottomLeft = '└',
+      bottomRight = '┘',
+      horizontal = '─',
+      vertical = '│';
 
   const BorderChars.double()
-      : topLeft = '╔',
-        topRight = '╗',
-        bottomLeft = '╚',
-        bottomRight = '╝',
-        horizontal = '═',
-        vertical = '║';
+    : topLeft = '╔',
+      topRight = '╗',
+      bottomLeft = '╚',
+      bottomRight = '╝',
+      horizontal = '═',
+      vertical = '║';
 
   const BorderChars.rounded()
-      : topLeft = '╭',
-        topRight = '╮',
-        bottomLeft = '╰',
-        bottomRight = '╯',
-        horizontal = '─',
-        vertical = '│';
+    : topLeft = '╭',
+      topRight = '╮',
+      bottomLeft = '╰',
+      bottomRight = '╯',
+      horizontal = '─',
+      vertical = '│';
 
   const BorderChars.thick()
-      : topLeft = '┏',
-        topRight = '┓',
-        bottomLeft = '┗',
-        bottomRight = '┛',
-        horizontal = '━',
-        vertical = '┃';
+    : topLeft = '┏',
+      topRight = '┓',
+      bottomLeft = '┗',
+      bottomRight = '┛',
+      horizontal = '━',
+      vertical = '┃';
 
   const BorderChars.ascii()
-      : topLeft = '+',
-        topRight = '+',
-        bottomLeft = '+',
-        bottomRight = '+',
-        horizontal = '-',
-        vertical = '|';
+    : topLeft = '+',
+      topRight = '+',
+      bottomLeft = '+',
+      bottomRight = '+',
+      horizontal = '-',
+      vertical = '|';
 }
 
 /// A drawing surface over a [CellBuffer], carrying a translation [_origin] and
@@ -85,9 +85,9 @@ class Painter {
 
   /// A painter over the whole [buffer]: identity offset, clip = full buffer.
   Painter(CellBuffer buffer)
-      : _buffer = buffer,
-        _origin = CellOffset.zero,
-        _clip = CellRect.fromTLWH(0, 0, buffer.cols, buffer.rows);
+    : _buffer = buffer,
+      _origin = CellOffset.zero,
+      _clip = CellRect.fromTLWH(0, 0, buffer.cols, buffer.rows);
 
   Painter._(this._buffer, this._origin, this._clip);
 

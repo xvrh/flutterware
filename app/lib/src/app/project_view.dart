@@ -32,9 +32,7 @@ class ProjectView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SideMenu(
-          bottom: [
-            AboutMenuItem(),
-          ],
+          bottom: [AboutMenuItem()],
           children: [
             SingleLineGroup(
               child: MenuLink(
@@ -77,10 +75,7 @@ class ProjectView extends StatelessWidget {
                   url: paths.dependencies,
                   title: Text('Pub dependencies'),
                 ),
-                MenuLink(
-                  url: paths.icon,
-                  title: Text('Launcher icon'),
-                ),
+                MenuLink(url: paths.icon, title: Text('Launcher icon')),
               ],
             ),
             TestMenu(project),
@@ -89,17 +84,14 @@ class ProjectView extends StatelessWidget {
           ],
         ),
         Expanded(
-          child: RouterOutlet(
-            {
-              paths.home: (route) => OverviewScreen(project),
-              paths.dependencies: (route) => DependenciesScreen(project),
-              paths.tests: (route) => TestRunnerScreen(project),
-              paths.uiCatalog: (route) => UICatalogScreen(project),
-              paths.icon: (route) => IconScreen(project),
-              paths.drawing: (route) => DrawingScreen(project),
-            },
-            onNotFound: (_) => paths.home,
-          ),
+          child: RouterOutlet({
+            paths.home: (route) => OverviewScreen(project),
+            paths.dependencies: (route) => DependenciesScreen(project),
+            paths.tests: (route) => TestRunnerScreen(project),
+            paths.uiCatalog: (route) => UICatalogScreen(project),
+            paths.icon: (route) => IconScreen(project),
+            paths.drawing: (route) => DrawingScreen(project),
+          }, onNotFound: (_) => paths.home),
         ),
       ],
     );

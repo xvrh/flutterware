@@ -118,14 +118,17 @@ class Terminal {
     _installSignalHandlers();
     await _enter();
     try {
-      await runZonedGuarded(() async {
-        await body(this);
-      }, (error, stack) {
-        _restore();
-        stderr.writeln('Unhandled error in Terminal.run: $error');
-        stderr.writeln(stack);
-        exitCode = 1;
-      });
+      await runZonedGuarded(
+        () async {
+          await body(this);
+        },
+        (error, stack) {
+          _restore();
+          stderr.writeln('Unhandled error in Terminal.run: $error');
+          stderr.writeln(stack);
+          exitCode = 1;
+        },
+      );
     } finally {
       _restore();
     }
@@ -195,7 +198,9 @@ class Terminal {
     // SIGWINCH — Unix only.
     try {
       _subs.add(ProcessSignal.sigwinch.watch().listen((_) => _onResize()));
-    } catch (_) {/* not supported on this platform */}
+    } catch (_) {
+      /* not supported on this platform */
+    }
   }
 
   void _onResize() {
@@ -247,8 +252,12 @@ class Terminal {
     _lastPaint = paint;
     _back.clear();
     paint(_back);
-    final diff =
-        encodeDiff(_front, _back, originRow: _originRow, originCol: _originCol);
+    final diff = encodeDiff(
+      _front,
+      _back,
+      originRow: _originRow,
+      originCol: _originCol,
+    );
     if (diff.isNotEmpty) {
       stdout.write(diff);
     }
@@ -300,8 +309,9 @@ class Terminal {
     _front = CellBuffer(_rows, _cols);
     _back.clear();
     _lastPaint?.call(_back);
-    out.write(encodeDiff(_front, _back,
-        originRow: _originRow, originCol: _originCol));
+    out.write(
+      encodeDiff(_front, _back, originRow: _originRow, originCol: _originCol),
+    );
     _front.copyFrom(_back);
 
     stdout.write(out.toString());
@@ -354,7 +364,9 @@ class Terminal {
         stdout.write(Ansi.showCursor);
         stdout.write(Ansi.exitAltScreen);
       }
-    } catch (_) {/* stdout may already be closed */}
+    } catch (_) {
+      /* stdout may already be closed */
+    }
 
     try {
       stdin.echoMode = _wasEcho;

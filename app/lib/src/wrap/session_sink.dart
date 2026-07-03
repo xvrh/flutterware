@@ -15,7 +15,7 @@ class SessionSink {
   final Directory dir;
 
   SessionSink(Directory flutterwareDir, String sessionId)
-      : dir = Directory(p.join(flutterwareDir.path, 'sessions', sessionId)) {
+    : dir = Directory(p.join(flutterwareDir.path, 'sessions', sessionId)) {
     dir.createSync(recursive: true);
   }
 
@@ -24,7 +24,8 @@ class SessionSink {
 
   /// Writes the session metadata as pretty-printed JSON.
   void writeMeta(Map<String, Object?> meta) {
-    File(p.join(dir.path, 'meta.json'))
-        .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(meta));
+    File(
+      p.join(dir.path, 'meta.json'),
+    ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(meta));
   }
 }

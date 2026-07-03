@@ -49,8 +49,10 @@ class _SceneBodyState extends State<_SceneBody>
               child: Container(width: 120, height: 120, color: Colors.white),
             ),
             const SizedBox(height: 32),
-            Text('Taps: $_taps',
-                style: const TextStyle(color: Colors.white, fontSize: 32)),
+            Text(
+              'Taps: $_taps',
+              style: const TextStyle(color: Colors.white, fontSize: 32),
+            ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => setState(() => _taps++),

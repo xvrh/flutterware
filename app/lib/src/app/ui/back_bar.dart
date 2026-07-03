@@ -15,10 +15,7 @@ class BackBar extends StatelessWidget {
         onPressed: () {
           context.router.go(url);
         },
-        icon: Icon(
-          Icons.chevron_left,
-          color: Colors.black54,
-        ),
+        icon: Icon(Icons.chevron_left, color: Colors.black54),
         label: Text(text),
       ),
     );

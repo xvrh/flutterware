@@ -27,7 +27,8 @@ class AppIconImageProvider extends ImageProvider<Object> {
 
   Future<ui.Codec> _loadAsync(Object key) async {
     var buffer = await ui.ImmutableBuffer.fromUint8List(
-        image.preview.buffer.asUint8List());
+      image.preview.buffer.asUint8List(),
+    );
     final descriptor = ui.ImageDescriptor.raw(
       buffer,
       width: image.previewWidth,

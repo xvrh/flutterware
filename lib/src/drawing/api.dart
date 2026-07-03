@@ -133,7 +133,8 @@ class ArcToPoint implements PathCommand {
   }
 
   @override
-  String toString() => 'ArcToPoint($x, $y, radius: $radius, '
+  String toString() =>
+      'ArcToPoint($x, $y, radius: $radius, '
       'rotation: $rotation, '
       'largeArc: $largeArc, clockwise:$clockwise)';
 }
@@ -165,7 +166,8 @@ class RelativeArcToPoint implements PathCommand {
   }
 
   @override
-  String toString() => 'RelativeArcToPoint($x, $y, radius: $radius, '
+  String toString() =>
+      'RelativeArcToPoint($x, $y, radius: $radius, '
       'rotation: $rotation, '
       'largeArc: $largeArc, clockwise:$clockwise)';
 }

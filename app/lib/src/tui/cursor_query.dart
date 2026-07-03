@@ -77,7 +77,7 @@ Future<CursorPositionResult> queryCursorPosition({
         }
         switch (state) {
           case 0:
-            if (byte == 0x1b /* ESC */) {
+            if (byte == 0x1b /* ESC */ ) {
               pending.add(byte);
               state = 1;
             } else {
@@ -85,7 +85,7 @@ Future<CursorPositionResult> queryCursorPosition({
             }
             break;
           case 1:
-            if (byte == 0x5b /* [ */) {
+            if (byte == 0x5b /* [ */ ) {
               pending.add(byte);
               state = 2;
             } else {
@@ -105,7 +105,7 @@ Future<CursorPositionResult> queryCursorPosition({
             if (byte >= 0x30 && byte <= 0x39) {
               pending.add(byte);
               row = row * 10 + (byte - 0x30);
-            } else if (byte == 0x3b /* ; */) {
+            } else if (byte == 0x3b /* ; */ ) {
               pending.add(byte);
               state = 4;
             } else {
@@ -125,13 +125,15 @@ Future<CursorPositionResult> queryCursorPosition({
             if (byte >= 0x30 && byte <= 0x39) {
               pending.add(byte);
               col = col * 10 + (byte - 0x30);
-            } else if (byte == 0x52 /* R */) {
+            } else if (byte == 0x52 /* R */ ) {
               // Response complete.
-              completer.complete(CursorPositionResult(
-                row: row - 1,
-                col: col - 1,
-                leftoverBytes: List.unmodifiable(leftover),
-              ));
+              completer.complete(
+                CursorPositionResult(
+                  row: row - 1,
+                  col: col - 1,
+                  leftoverBytes: List.unmodifiable(leftover),
+                ),
+              );
             } else {
               rollback(byte);
             }
@@ -151,11 +153,13 @@ Future<CursorPositionResult> queryCursorPosition({
           leftover.addAll(pending);
           pending.clear();
         }
-        completer.complete(CursorPositionResult(
-          row: fallbackRow,
-          col: 0,
-          leftoverBytes: List.unmodifiable(leftover),
-        ));
+        completer.complete(
+          CursorPositionResult(
+            row: fallbackRow,
+            col: 0,
+            leftoverBytes: List.unmodifiable(leftover),
+          ),
+        );
       }
     },
   );

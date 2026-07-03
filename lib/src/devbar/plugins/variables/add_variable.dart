@@ -5,21 +5,29 @@ import '../../devbar.dart';
 import 'plugin.dart';
 
 class AddDevbarVariable {
-  static Widget text(
-          {required String name,
-          required Widget Function(BuildContext, String) builder,
-          String? defaultValue,
-          Key? key}) =>
-      _TextWidget(
-          name: name, builder: builder, defaultValue: defaultValue, key: key);
+  static Widget text({
+    required String name,
+    required Widget Function(BuildContext, String) builder,
+    String? defaultValue,
+    Key? key,
+  }) => _TextWidget(
+    name: name,
+    builder: builder,
+    defaultValue: defaultValue,
+    key: key,
+  );
 
-  static Widget checkbox(
-          {required String name,
-          required Widget Function(BuildContext, bool) builder,
-          bool? defaultValue,
-          Key? key}) =>
-      _BoolWidget(
-          name: name, builder: builder, defaultValue: defaultValue, key: key);
+  static Widget checkbox({
+    required String name,
+    required Widget Function(BuildContext, bool) builder,
+    bool? defaultValue,
+    Key? key,
+  }) => _BoolWidget(
+    name: name,
+    builder: builder,
+    defaultValue: defaultValue,
+    key: key,
+  );
 
   static Widget slider<T extends num>({
     required String name,
@@ -29,36 +37,39 @@ class AddDevbarVariable {
     required T min,
     required T max,
     required T step,
-  }) =>
-      _NumWidget<T>(
-          name: name,
-          builder: builder,
-          defaultValue: defaultValue,
-          key: key,
-          min: min,
-          max: max,
-          step: step);
+  }) => _NumWidget<T>(
+    name: name,
+    builder: builder,
+    defaultValue: defaultValue,
+    key: key,
+    min: min,
+    max: max,
+    step: step,
+  );
 
-  static Widget picker<T extends Object>(
-          {required String name,
-          String? description,
-          required Widget Function(BuildContext, T) builder,
-          required Map<T, String> options,
-          required T defaultValue,
-          T? Function(Object)? fromJson,
-          Key? key}) =>
-      _PickerWidget<T>(
-          name: name,
-          description: description,
-          builder: builder,
-          options: options,
-          defaultValue: defaultValue,
-          fromJson: fromJson,
-          key: key);
+  static Widget picker<T extends Object>({
+    required String name,
+    String? description,
+    required Widget Function(BuildContext, T) builder,
+    required Map<T, String> options,
+    required T defaultValue,
+    T? Function(Object)? fromJson,
+    Key? key,
+  }) => _PickerWidget<T>(
+    name: name,
+    description: description,
+    builder: builder,
+    options: options,
+    defaultValue: defaultValue,
+    fromJson: fromJson,
+    key: key,
+  );
 
   static Widget group2<T1, T2>(
-      DevbarVariableDefinition<T1> v1, DevbarVariableDefinition<T2> v2,
-      {required Widget Function(BuildContext, T1, T2) builder}) {
+    DevbarVariableDefinition<T1> v1,
+    DevbarVariableDefinition<T2> v2, {
+    required Widget Function(BuildContext, T1, T2) builder,
+  }) {
     return _AddDevbarVariables(
       variables: [v1, v2],
       builder: (context, values) =>
@@ -66,9 +77,12 @@ class AddDevbarVariable {
     );
   }
 
-  static Widget group3<T1, T2, T3>(DevbarVariableDefinition<T1> v1,
-      DevbarVariableDefinition<T2> v2, DevbarVariableDefinition<T3> v3,
-      {required Widget Function(BuildContext, T1, T2, T3) builder}) {
+  static Widget group3<T1, T2, T3>(
+    DevbarVariableDefinition<T1> v1,
+    DevbarVariableDefinition<T2> v2,
+    DevbarVariableDefinition<T3> v3, {
+    required Widget Function(BuildContext, T1, T2, T3) builder,
+  }) {
     return _AddDevbarVariables(
       variables: [v1, v2, v3],
       builder: (context, values) =>
@@ -77,51 +91,65 @@ class AddDevbarVariable {
   }
 
   static Widget group4<T1, T2, T3, T4>(
-      DevbarVariableDefinition<T1> v1,
-      DevbarVariableDefinition<T2> v2,
-      DevbarVariableDefinition<T3> v3,
-      DevbarVariableDefinition<T4> v4,
-      {required Widget Function(BuildContext, T1, T2, T3, T4) builder}) {
+    DevbarVariableDefinition<T1> v1,
+    DevbarVariableDefinition<T2> v2,
+    DevbarVariableDefinition<T3> v3,
+    DevbarVariableDefinition<T4> v4, {
+    required Widget Function(BuildContext, T1, T2, T3, T4) builder,
+  }) {
     return _AddDevbarVariables(
       variables: [v1, v2, v3, v4],
-      builder: (context, values) => builder(context, values[0] as T1,
-          values[1] as T2, values[2] as T3, values[3] as T4),
+      builder: (context, values) => builder(
+        context,
+        values[0] as T1,
+        values[1] as T2,
+        values[2] as T3,
+        values[3] as T4,
+      ),
     );
   }
 
   static Widget group5<T1, T2, T3, T4, T5>(
-      DevbarVariableDefinition<T1> v1,
-      DevbarVariableDefinition<T2> v2,
-      DevbarVariableDefinition<T3> v3,
-      DevbarVariableDefinition<T4> v4,
-      DevbarVariableDefinition<T5> v5,
-      {required Widget Function(BuildContext, T1, T2, T3, T4, T5) builder}) {
+    DevbarVariableDefinition<T1> v1,
+    DevbarVariableDefinition<T2> v2,
+    DevbarVariableDefinition<T3> v3,
+    DevbarVariableDefinition<T4> v4,
+    DevbarVariableDefinition<T5> v5, {
+    required Widget Function(BuildContext, T1, T2, T3, T4, T5) builder,
+  }) {
     return _AddDevbarVariables(
       variables: [v1, v2, v3, v4, v5],
-      builder: (context, values) => builder(context, values[0] as T1,
-          values[1] as T2, values[2] as T3, values[3] as T4, values[4] as T5),
+      builder: (context, values) => builder(
+        context,
+        values[0] as T1,
+        values[1] as T2,
+        values[2] as T3,
+        values[3] as T4,
+        values[4] as T5,
+      ),
     );
   }
 
   static Widget group6<T1, T2, T3, T4, T5, T6>(
-      DevbarVariableDefinition<T1> v1,
-      DevbarVariableDefinition<T2> v2,
-      DevbarVariableDefinition<T3> v3,
-      DevbarVariableDefinition<T4> v4,
-      DevbarVariableDefinition<T5> v5,
-      DevbarVariableDefinition<T6> v6,
-      {required Widget Function(BuildContext, T1, T2, T3, T4, T5, T6)
-          builder}) {
+    DevbarVariableDefinition<T1> v1,
+    DevbarVariableDefinition<T2> v2,
+    DevbarVariableDefinition<T3> v3,
+    DevbarVariableDefinition<T4> v4,
+    DevbarVariableDefinition<T5> v5,
+    DevbarVariableDefinition<T6> v6, {
+    required Widget Function(BuildContext, T1, T2, T3, T4, T5, T6) builder,
+  }) {
     return _AddDevbarVariables(
       variables: [v1, v2, v3, v4, v5, v6],
       builder: (context, values) => builder(
-          context,
-          values[0] as T1,
-          values[1] as T2,
-          values[2] as T3,
-          values[3] as T4,
-          values[4] as T5,
-          values[5] as T6),
+        context,
+        values[0] as T1,
+        values[1] as T2,
+        values[2] as T3,
+        values[3] as T4,
+        values[4] as T5,
+        values[5] as T6,
+      ),
     );
   }
 }
@@ -156,10 +184,12 @@ class __PickerWidgetState<T> extends State<_PickerWidget<T>> {
     super.initState();
 
     var devbar = DevbarState.of(context);
-    _variable = devbar.variables.picker(widget.name,
-        defaultValue: widget.defaultValue,
-        options: widget.options,
-        fromJson: widget.fromJson);
+    _variable = devbar.variables.picker(
+      widget.name,
+      defaultValue: widget.defaultValue,
+      options: widget.options,
+      fromJson: widget.fromJson,
+    );
   }
 
   @override
@@ -204,8 +234,10 @@ class __TextWidgetState extends State<_TextWidget> {
     super.initState();
 
     var devbar = DevbarState.of(context);
-    _variable = devbar.variables
-        .text(widget.name, defaultValue: widget.defaultValue ?? '');
+    _variable = devbar.variables.text(
+      widget.name,
+      defaultValue: widget.defaultValue ?? '',
+    );
   }
 
   @override
@@ -231,11 +263,12 @@ class _BoolWidget extends StatefulWidget {
   final bool? defaultValue;
   final Widget Function(BuildContext, bool) builder;
 
-  const _BoolWidget(
-      {super.key,
-      required this.name,
-      this.defaultValue,
-      required this.builder});
+  const _BoolWidget({
+    super.key,
+    required this.name,
+    this.defaultValue,
+    required this.builder,
+  });
 
   @override
   State<_BoolWidget> createState() => __BoolWidgetState();
@@ -249,8 +282,10 @@ class __BoolWidgetState extends State<_BoolWidget> {
     super.initState();
 
     var devbar = DevbarState.of(context);
-    _variable = devbar.variables
-        .checkbox(widget.name, defaultValue: widget.defaultValue ?? false);
+    _variable = devbar.variables.checkbox(
+      widget.name,
+      defaultValue: widget.defaultValue ?? false,
+    );
   }
 
   @override
@@ -301,11 +336,13 @@ class __NumWidgetState<T extends num> extends State<_NumWidget<T>> {
     super.initState();
 
     var devbar = DevbarState.of(context);
-    _variable = devbar.variables.slider<T>(widget.name,
-        defaultValue: widget.defaultValue,
-        min: widget.min,
-        max: widget.max,
-        step: widget.step);
+    _variable = devbar.variables.slider<T>(
+      widget.name,
+      defaultValue: widget.defaultValue,
+      min: widget.min,
+      max: widget.max,
+      step: widget.step,
+    );
   }
 
   @override
@@ -326,17 +363,14 @@ class __NumWidgetState<T extends num> extends State<_NumWidget<T>> {
   }
 }
 
-typedef DevbarVariableCreator = DevbarVariable Function(
-    VariablesPlugin, DevbarVariableDefinition);
+typedef DevbarVariableCreator =
+    DevbarVariable Function(VariablesPlugin, DevbarVariableDefinition);
 
 class _AddDevbarVariables extends StatefulWidget {
   final List<DevbarVariableDefinition> variables;
   final Widget Function(BuildContext, List) builder;
 
-  _AddDevbarVariables({
-    required this.variables,
-    required this.builder,
-  });
+  _AddDevbarVariables({required this.variables, required this.builder});
   @override
   State<_AddDevbarVariables> createState() => _AddDevbarVariablesState();
 }

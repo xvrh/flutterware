@@ -31,11 +31,10 @@ Future<PtyProcess> spawnPty(
   String? workingDirectory,
   int? cols,
   int? rows,
-}) =>
-    PtyProcessImpl.spawn(
-      executable,
-      arguments,
-      workingDirectory: workingDirectory,
-      cols: cols,
-      rows: rows,
-    );
+}) => PtyProcessImpl.spawn(
+  executable,
+  arguments,
+  workingDirectory: workingDirectory,
+  cols: cols,
+  rows: rows,
+);

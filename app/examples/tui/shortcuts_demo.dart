@@ -61,29 +61,33 @@ class _CounterPanelState extends State<CounterPanel> {
       actions: {ActivateIntent: _CallbackActivate(_increment)},
       child: Focus(
         autofocus: widget.autofocus,
-        child: Builder(builder: (context) {
-          var focused = Focus.of(context).hasFocus;
-          var accent = focused ? Color.brightCyan : Color.brightBlack;
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              border: BoxBorder(
-                chars: focused ? BorderChars.double() : BorderChars.rounded(),
-                fg: accent,
+        child: Builder(
+          builder: (context) {
+            var focused = Focus.of(context).hasFocus;
+            var accent = focused ? Color.brightCyan : Color.brightBlack;
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                border: BoxBorder(
+                  chars: focused ? BorderChars.double() : BorderChars.rounded(),
+                  fg: accent,
+                ),
               ),
-            ),
-            child: Padding(
-              padding: EdgeInsets.all(1),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(widget.label, fg: accent, style: TextStyle.bold),
-                  Text('count: $_count',
-                      fg: focused ? Color.brightWhite : Color.brightBlack),
-                ],
+              child: Padding(
+                padding: EdgeInsets.all(1),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(widget.label, fg: accent, style: TextStyle.bold),
+                    Text(
+                      'count: $_count',
+                      fg: focused ? Color.brightWhite : Color.brightBlack,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        }),
+            );
+          },
+        ),
       ),
     );
     var activateKey = widget.activateKey;
@@ -115,7 +119,7 @@ class _ShortcutsDemoState extends State<ShortcutsDemoApp> {
     _subscribed = true;
     var app = TerminalApp.of(context);
     _keySub = app.keys.listen((event) {
-      if (event is CharKey && event.rune == 0x71 /* q */) {
+      if (event is CharKey && event.rune == 0x71 /* q */ ) {
         app.exit();
       }
     });
@@ -127,16 +131,16 @@ class _ShortcutsDemoState extends State<ShortcutsDemoApp> {
   }
 
   Widget _row(List<Widget> panels) => Expanded(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < panels.length; i++) ...[
-              if (i > 0) SizedBox(width: 1),
-              Expanded(child: panels[i]),
-            ],
-          ],
-        ),
-      );
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < panels.length; i++) ...[
+          if (i > 0) SizedBox(width: 1),
+          Expanded(child: panels[i]),
+        ],
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {

@@ -40,12 +40,7 @@ class _DeviceFramePanel extends StatefulWidget {
 class _DeviceFramePanelState extends State<_DeviceFramePanel> {
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      children: [
-        _devicePreview(),
-        _targetPlatform(),
-      ],
-    );
+    return ListView(children: [_devicePreview(), _targetPlatform()]);
   }
 
   Widget _devicePreview() {
@@ -55,7 +50,8 @@ class _DeviceFramePanelState extends State<_DeviceFramePanel> {
         return ListTile(
           title: Text('Enable frame'),
           subtitle: Text(
-              'Approximate how the app looks and performs on another device.'),
+            'Approximate how the app looks and performs on another device.',
+          ),
           trailing: Switch.adaptive(
             value: showFrame,
             onChanged: (enabled) {

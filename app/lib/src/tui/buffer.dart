@@ -8,7 +8,7 @@ class CellBuffer {
   final List<Cell> _cells;
 
   CellBuffer(this.rows, this.cols)
-      : _cells = List<Cell>.filled(rows * cols, Cell.empty, growable: false);
+    : _cells = List<Cell>.filled(rows * cols, Cell.empty, growable: false);
 
   bool inBounds(int row, int col) =>
       row >= 0 && row < rows && col >= 0 && col < cols;
@@ -63,7 +63,8 @@ class CellBuffer {
   void copyFrom(CellBuffer other) {
     if (other.rows != rows || other.cols != cols) {
       throw ArgumentError(
-          'size mismatch: $rows×$cols vs ${other.rows}×${other.cols}');
+        'size mismatch: $rows×$cols vs ${other.rows}×${other.cols}',
+      );
     }
     for (var i = 0; i < _cells.length; i++) {
       _cells[i] = other._cells[i];

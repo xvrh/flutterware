@@ -32,15 +32,11 @@ class _RouterDelegate extends RouterDelegate<Object>
     implements RouteInformationParser<Object> {
   @override
   Widget build(BuildContext context) {
-    var page = MaterialPage(
-      child: _Home(),
-    );
+    var page = MaterialPage(child: _Home());
     return Navigator(
       requestFocus: false,
       key: navigatorKey,
-      pages: [
-        page,
-      ],
+      pages: [page],
       onDidRemovePage: (page) {
         notifyListeners();
       },
@@ -58,13 +54,16 @@ class _RouterDelegate extends RouterDelegate<Object>
 
   @override
   Future<Object> parseRouteInformation(
-      RouteInformation routeInformation) async {
+    RouteInformation routeInformation,
+  ) async {
     return Object();
   }
 
   @override
   Future<Object> parseRouteInformationWithDependencies(
-      RouteInformation routeInformation, BuildContext context) {
+    RouteInformation routeInformation,
+    BuildContext context,
+  ) {
     return parseRouteInformation(routeInformation);
   }
 
@@ -82,10 +81,7 @@ class _Home extends StatelessWidget {
     var devbar = DevbarState.of(context);
     return _SubTabs(
       devbar.ui.tabs,
-      leading: IconButton(
-        icon: Icon(Icons.close),
-        onPressed: devbar.ui.close,
-      ),
+      leading: IconButton(icon: Icon(Icons.close), onPressed: devbar.ui.close),
     );
   }
 }
@@ -112,7 +108,7 @@ class _SubTabs extends StatelessWidget {
                     switch (t) {
                       DevbarTabWithContent() => t.tab,
                       DevbarTabWithSubTabs() => Tab(text: t.title),
-                    }
+                    },
                 ],
                 isScrollable: true,
               ),
@@ -123,7 +119,7 @@ class _SubTabs extends StatelessWidget {
                   switch (t) {
                     DevbarTabWithContent() => t.content,
                     DevbarTabWithSubTabs() => _SubTabs(t.tabs),
-                  }
+                  },
               ],
             ),
           ),
@@ -148,10 +144,12 @@ class DevbarAppWrapper extends StatelessWidget {
       builder: (context, openState) {
         var appWidget = _withWrappers(devbar, child);
 
-        appWidget = Stack(children: [
-          appWidget,
-          Positioned.fill(child: ButtonsOverlay()),
-        ]);
+        appWidget = Stack(
+          children: [
+            appWidget,
+            Positioned.fill(child: ButtonsOverlay()),
+          ],
+        );
 
         var mediaQuery = MediaQuery.of(context);
         Widget screen = Container(
@@ -164,10 +162,7 @@ class DevbarAppWrapper extends StatelessWidget {
         screen = _AnimatedScreenWrapper(
           key: _containerKey,
           openState: openState,
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: screen,
-          ),
+          child: FittedBox(fit: BoxFit.contain, child: screen),
         );
 
         return screen;
@@ -195,8 +190,11 @@ class _AnimatedScreenWrapper extends StatelessWidget {
   final _duration = const Duration(milliseconds: 300);
   final _curve = Curves.easeInOut;
 
-  const _AnimatedScreenWrapper(
-      {super.key, this.openState, required this.child});
+  const _AnimatedScreenWrapper({
+    super.key,
+    this.openState,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -227,10 +225,7 @@ class _AnimatedScreenWrapper extends StatelessWidget {
               : EdgeInsets.zero,
           child: clipped,
         ),
-        if (openState != null)
-          Positioned.fill(
-            child: _PreviewTools(),
-          ),
+        if (openState != null) Positioned.fill(child: _PreviewTools()),
       ],
     );
 
@@ -289,12 +284,10 @@ class _ToolButton extends StatelessWidget {
         width: 35,
         height: 35,
         decoration: BoxDecoration(
-            shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.9)),
-        child: Icon(
-          icon,
-          color: Colors.black,
-          size: 30,
+          shape: BoxShape.circle,
+          color: Colors.white.withValues(alpha: 0.9),
         ),
+        child: Icon(icon, color: Colors.black, size: 30),
       ),
     );
   }

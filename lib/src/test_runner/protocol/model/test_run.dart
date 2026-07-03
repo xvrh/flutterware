@@ -15,9 +15,11 @@ abstract class TestRun implements Built<TestRun, TestRunBuilder> {
   TestRun._();
   factory TestRun._builder([void Function(TestRunBuilder) updates]) = _$TestRun;
 
-  factory TestRun(TestReference test, RunArgs args) => TestRun._builder((b) => b
-    ..test.replace(test)
-    ..args.replace(args));
+  factory TestRun(TestReference test, RunArgs args) => TestRun._builder(
+    (b) => b
+      ..test.replace(test)
+      ..args.replace(args),
+  );
 
   TestReference get test;
   RunArgs get args;

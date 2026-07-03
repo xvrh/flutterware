@@ -24,8 +24,8 @@ class Devbar extends StatefulWidget {
     required this.plugins,
     List<FeatureFlagValue>? flags,
     bool? overlayVisible,
-  })  : flags = flags ?? const [],
-        overlayVisible = overlayVisible ?? true;
+  }) : flags = flags ?? const [],
+       overlayVisible = overlayVisible ?? true;
 
   @override
   DevbarState createState() => DevbarState();
@@ -100,19 +100,13 @@ class DevbarState extends State<Devbar> {
                   ),
                 ),
                 DevbarAppWrapper(
-                  child: KeyedSubtree(
-                    key: _appKey,
-                    child: widget.child,
-                  ),
+                  child: KeyedSubtree(key: _appKey, child: widget.child),
                 ),
                 Positioned.fill(child: OverlayDialog()),
                 Visibility(
                   visible: widget.overlayVisible,
                   child: AddDevbarButton(
-                    button: DevbarIcon(
-                      onTap: ui.open,
-                      icon: Icons.bug_report,
-                    ),
+                    button: DevbarIcon(onTap: ui.open, icon: Icons.bug_report),
                   ),
                 ),
                 ToastsOverlay(),
@@ -135,8 +129,8 @@ class DevbarState extends State<Devbar> {
   }
 }
 
-typedef DevbarPluginFactory = FutureOr<DevbarPlugin> Function(
-    DevbarState state);
+typedef DevbarPluginFactory =
+    FutureOr<DevbarPlugin> Function(DevbarState state);
 
 abstract class DevbarPlugin {
   void dispose();

@@ -51,9 +51,9 @@ class CustomPopupMenuButton<T> extends StatefulWidget {
     this.iconConstraints,
     this.position = PopupMenuPosition.over,
   }) : assert(
-          !(child != null && icon != null),
-          'You can only pass [child] or [icon], not both.',
-        );
+         !(child != null && icon != null),
+         'You can only pass [child] or [icon], not both.',
+       );
 
   /// Called when the button is pressed to create the items to show in the menu.
   final PopupMenuItemBuilder<T> itemBuilder;
@@ -212,14 +212,16 @@ class CustomPopupMenuButtonState<T> extends State<CustomPopupMenuButton<T>> {
       case PopupMenuPosition.under:
         offset =
             Offset(0.0, button.size.height - (widget.padding.vertical / 2)) +
-                widget.offset;
+            widget.offset;
         break;
     }
     final RelativeRect position = RelativeRect.fromRect(
       Rect.fromPoints(
         button.localToGlobal(offset, ancestor: overlay),
-        button.localToGlobal(button.size.bottomRight(Offset.zero) + offset,
-            ancestor: overlay),
+        button.localToGlobal(
+          button.size.bottomRight(Offset.zero) + offset,
+          ancestor: overlay,
+        ),
       ),
       Offset.zero & overlay.size,
     );
@@ -249,7 +251,8 @@ class CustomPopupMenuButtonState<T> extends State<CustomPopupMenuButton<T>> {
   }
 
   bool get _canRequestFocus {
-    final NavigationMode mode = MediaQuery.maybeOf(context)?.navigationMode ??
+    final NavigationMode mode =
+        MediaQuery.maybeOf(context)?.navigationMode ??
         NavigationMode.traditional;
     switch (mode) {
       case NavigationMode.traditional:
@@ -262,7 +265,8 @@ class CustomPopupMenuButtonState<T> extends State<CustomPopupMenuButton<T>> {
   @override
   Widget build(BuildContext context) {
     final IconThemeData iconTheme = IconTheme.of(context);
-    final bool enableFeedback = widget.enableFeedback ??
+    final bool enableFeedback =
+        widget.enableFeedback ??
         PopupMenuTheme.of(context).enableFeedback ??
         true;
 

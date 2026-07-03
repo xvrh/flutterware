@@ -132,12 +132,18 @@ abstract class AppTest {
     await _screenshotIfNeeded(screenshot);
   }
 
-  Future<void> dragUntilVisible(dynamic target, dynamic scrollview,
-      {Offset? moveStep}) async {
+  Future<void> dragUntilVisible(
+    dynamic target,
+    dynamic scrollview, {
+    Offset? moveStep,
+  }) async {
     var finder = targetToFinder(target, skipOffStage: false);
     var scrollFinder = targetToFinder(scrollview);
     await tester.dragUntilVisible(
-        finder, scrollFinder, moveStep ?? Offset(0, -100));
+      finder,
+      scrollFinder,
+      moveStep ?? Offset(0, -100),
+    );
     await pumpAndSettle();
   }
 

@@ -36,9 +36,9 @@ class UICatalog extends StatefulWidget {
     String? figmaLinksPath,
     this.formFactor,
   }) : figmaConfig = FigmaUserConfig(
-          apiToken: figmaApiToken,
-          linksPath: figmaLinksPath,
-        );
+         apiToken: figmaApiToken,
+         linksPath: figmaLinksPath,
+       );
 
   @override
   State<UICatalog> createState() => UICatalogAppState();
@@ -106,8 +106,9 @@ class UICatalogAppState extends State<UICatalog> {
     var entries = _mapToEntries(allCatalog);
     TreeEntry? selected;
     if (_selected case var selectedPath?) {
-      selected =
-          _flatEntries(entries).firstWhereOrNull((e) => e.path == selectedPath);
+      selected = _flatEntries(
+        entries,
+      ).firstWhereOrNull((e) => e.path == selectedPath);
     } else {
       selected = TreeEntry(null, MapEntry('', allCatalog));
     }
@@ -133,8 +134,9 @@ class UICatalogAppState extends State<UICatalog> {
                 },
               ),
               Expanded(
-                child:
-                    selected == null ? SizedBox() : _detailOrListing(selected),
+                child: selected == null
+                    ? SizedBox()
+                    : _detailOrListing(selected),
               ),
             ],
           ),
@@ -163,22 +165,20 @@ class UICatalogAppState extends State<UICatalog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.only(
-                left: 20,
-                top: 10,
-              ),
+              padding: const EdgeInsets.only(left: 20, top: 10),
               child: entry.isRoot
                   ? Text(
                       widget.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     )
-                  : Breadcrumb(entry, onSelect: (e) {
-                      setState(() {
-                        _selected = e.path;
-                      });
-                    }),
+                  : Breadcrumb(
+                      entry,
+                      onSelect: (e) {
+                        setState(() {
+                          _selected = e.path;
+                        });
+                      },
+                    ),
             ),
             Expanded(
               child: IndexView(
@@ -197,12 +197,11 @@ class UICatalogAppState extends State<UICatalog> {
       );
       return UICatalogStateProvider(
         state: UICatalogState.empty,
-        child: Builder(builder: (context) {
-          return widget.appBuilder(
-            context,
-            scaffold,
-          );
-        }),
+        child: Builder(
+          builder: (context) {
+            return widget.appBuilder(context, scaffold);
+          },
+        ),
       );
     }
   }
@@ -251,14 +250,15 @@ class _MenuState extends State<Menu> {
     );
     if (_search case var search?) {
       results = SearchResults(
-          query: search,
-          entries: widget.entries,
-          onSelected: widget.onSelect,
-          selected: widget.selected,
-          adapter: adapter,
-          breadcrumbBuilder: (e) {
-            return _SearchBreadcrumb(e);
-          });
+        query: search,
+        entries: widget.entries,
+        onSelected: widget.onSelect,
+        selected: widget.selected,
+        adapter: adapter,
+        breadcrumbBuilder: (e) {
+          return _SearchBreadcrumb(e);
+        },
+      );
     } else {
       results = TreeView<TreeEntry>(
         key: _treeView,
@@ -273,9 +273,7 @@ class _MenuState extends State<Menu> {
       width: 300,
       decoration: BoxDecoration(
         color: _menuBackground,
-        border: Border(
-          right: BorderSide(color: Color(0xffe4e5e8), width: 1),
-        ),
+        border: Border(right: BorderSide(color: Color(0xffe4e5e8), width: 1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -291,9 +289,7 @@ class _MenuState extends State<Menu> {
                     },
                     child: Text(
                       widget.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -315,9 +311,7 @@ class _MenuState extends State<Menu> {
               });
             },
           ),
-          Expanded(
-            child: results,
-          ),
+          Expanded(child: results),
         ],
       ),
     );
@@ -328,26 +322,19 @@ class _SettingsButton extends StatelessWidget {
   final void Function() onExpandAll;
   final void Function() onCollapseAll;
 
-  const _SettingsButton(
-      {required this.onExpandAll, required this.onCollapseAll});
+  const _SettingsButton({
+    required this.onExpandAll,
+    required this.onCollapseAll,
+  });
 
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton(
-      icon: Icon(
-        Icons.settings_outlined,
-        color: Colors.black38,
-      ),
+      icon: Icon(Icons.settings_outlined, color: Colors.black38),
       iconSize: 15,
       itemBuilder: (c) => [
-        PopupMenuItem(
-          onTap: onExpandAll,
-          child: Text('Expand all'),
-        ),
-        PopupMenuItem(
-          onTap: onCollapseAll,
-          child: Text('Collapse all'),
-        ),
+        PopupMenuItem(onTap: onExpandAll, child: Text('Expand all')),
+        PopupMenuItem(onTap: onCollapseAll, child: Text('Collapse all')),
       ],
     );
   }
@@ -403,9 +390,7 @@ class _SearchFieldState extends State<_SearchField> {
                   ),
                 )
               : null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
           contentPadding: EdgeInsets.zero,
           isDense: true,
         ),
@@ -438,16 +423,9 @@ class _SearchBreadcrumb extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         for (var e in breadcrumb) ...[
-          Text(
-            e.title,
-            style: const TextStyle(fontSize: 12),
-          ),
-          if (e != breadcrumb.last)
-            Icon(
-              Icons.arrow_right,
-              size: 10,
-            )
-        ]
+          Text(e.title, style: const TextStyle(fontSize: 12)),
+          if (e != breadcrumb.last) Icon(Icons.arrow_right, size: 10),
+        ],
       ],
     );
   }
@@ -458,7 +436,7 @@ class TreeEntry {
   final MapEntry<String, dynamic> entry;
   late final List<TreeEntry> breadcrumb = <TreeEntry>[
     ...?parent?.breadcrumb,
-    this
+    this,
   ];
 
   TreeEntry(this.parent, this.entry);

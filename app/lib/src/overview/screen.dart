@@ -23,22 +23,13 @@ class OverviewScreen extends StatelessWidget {
       primary: false,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
       children: [
-        Text(
-          'FLUTTER APP',
-          style: theme.textTheme.bodySmall,
-        ),
+        Text('FLUTTER APP', style: theme.textTheme.bodySmall),
         _ProjectInfoCard(project),
         const SizedBox(height: 30),
-        Text(
-          'METRICS',
-          style: theme.textTheme.bodySmall,
-        ),
+        Text('METRICS', style: theme.textTheme.bodySmall),
         MetricsCard(project),
         const SizedBox(height: 30),
-        Text(
-          'TOOLS',
-          style: theme.textTheme.bodySmall,
-        ),
+        Text('TOOLS', style: theme.textTheme.bodySmall),
         _ToolsCard(),
       ],
     );
@@ -60,9 +51,7 @@ class _ProjectInfoCard extends StatelessWidget {
           children: [
             _Icon(project),
             const SizedBox(width: 15),
-            Expanded(
-              child: _data(),
-            )
+            Expanded(child: _data()),
           ],
         ),
       ),
@@ -100,8 +89,9 @@ class _ProjectInfoCard extends StatelessWidget {
                 if (versionString != null)
                   Container(
                     decoration: BoxDecoration(
-                        color: Colors.black12,
-                        borderRadius: BorderRadius.circular(10)),
+                      color: Colors.black12,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     padding: const EdgeInsets.symmetric(horizontal: 5),
                     child: Text(
                       'v$versionString',
@@ -121,10 +111,7 @@ class _ProjectInfoCard extends StatelessWidget {
             onTap: () => launchUrl(Uri.file(project.absolutePath)),
             child: Text(
               p.normalize(project.absolutePath),
-              style: const TextStyle(
-                color: Colors.black45,
-                fontSize: 12,
-              ),
+              style: const TextStyle(color: Colors.black45, fontSize: 12),
             ),
           ),
         ),
@@ -136,20 +123,14 @@ class _ProjectInfoCard extends StatelessWidget {
               color: AppColors.primary,
               borderRadius: BorderRadius.circular(8),
             ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 5,
-              vertical: 2,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
             child: ValueListenableBuilder<Snapshot<List<FlutterPlatform>>>(
               valueListenable: project.info.platforms,
               builder: (context, snapshot, child) {
                 return Text(
                   snapshot.data?.map((p) => p.name.toUpperCase()).join(' | ') ??
                       '',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
                 );
               },
             ),
@@ -207,9 +188,13 @@ class _ToolsCard extends StatelessWidget {
           children: [
             _Link('Launcher icon update', '/project/${paths.icon}'),
             _Link(
-                'Pub dependencies overview', '/project/${paths.dependencies}'),
-            _Link('Hot-reloadable, visual test runner',
-                '/project/${paths.tests}/home'),
+              'Pub dependencies overview',
+              '/project/${paths.dependencies}',
+            ),
+            _Link(
+              'Hot-reloadable, visual test runner',
+              '/project/${paths.tests}/home',
+            ),
             Text('• Widgets preview: build UI in isolation (WIP)'),
             Text('• Assets management (WIP)'),
             Text('• Path & drawing (WIP)'),

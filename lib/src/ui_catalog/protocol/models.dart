@@ -7,7 +7,7 @@ part 'models.g.dart';
 abstract class ScreenConfiguration
     implements Built<ScreenConfiguration, ScreenConfigurationBuilder> {
   ScreenConfiguration._();
-  factory ScreenConfiguration(
-          [void Function(ScreenConfigurationBuilder) updates]) =
-      _$ScreenConfiguration;
+  factory ScreenConfiguration([
+    void Function(ScreenConfigurationBuilder) updates,
+  ]) = _$ScreenConfiguration;
 }

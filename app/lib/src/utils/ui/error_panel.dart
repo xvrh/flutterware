@@ -15,10 +15,7 @@ class ErrorPanel extends StatelessWidget {
         children: <Widget>[
           Padding(
             padding: const EdgeInsets.all(10.0),
-            child: Icon(
-              Icons.error,
-              size: 40,
-            ),
+            child: Icon(Icons.error, size: 40),
           ),
           Padding(
             padding: const EdgeInsets.all(8.0),

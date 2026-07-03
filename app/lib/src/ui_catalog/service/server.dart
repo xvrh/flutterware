@@ -13,18 +13,24 @@ class Server {
 
   Server(this._server, this._udpDiscovery);
 
-  static Future<Server> start(
-      {required void Function(Connection) onRemove,
-      required void Function(Connection) onAdd}) async {
-    var server =
-        await shelf.serve(shelf.webSocketHandler((WebSocketChannel channel, _) {
-      late Connection connection;
-      connection = Connection(channel.cast<String>(), modelSerializers)
-        ..listen(onClose: () {
-          onRemove(connection);
-        });
-      onAdd(connection);
-    }), InternetAddress.anyIPv4, 0);
+  static Future<Server> start({
+    required void Function(Connection) onRemove,
+    required void Function(Connection) onAdd,
+  }) async {
+    var server = await shelf.serve(
+      shelf.webSocketHandler((WebSocketChannel channel, _) {
+        late Connection connection;
+        connection = Connection(channel.cast<String>(), modelSerializers)
+          ..listen(
+            onClose: () {
+              onRemove(connection);
+            },
+          );
+        onAdd(connection);
+      }),
+      InternetAddress.anyIPv4,
+      0,
+    );
 
     var udpDiscovery = await UdpDiscovery.start();
 

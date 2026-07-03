@@ -43,22 +43,20 @@ Future<void> main() async {
   var socketFile = File(socketPath);
   if (socketFile.existsSync()) socketFile.deleteSync();
   var server = await ServerSocket.bind(
-      InternetAddress(socketPath, type: InternetAddressType.unix), 0);
+    InternetAddress(socketPath, type: InternetAddressType.unix),
+    0,
+  );
 
   stdout.writeln('[run] spawning guest');
-  var guest = await Process.start(
-    hostPath,
-    [
-      assetsDir,
-      cache.icuData,
-      socketPath,
-      '800',
-      '600',
-      '--capture-raw',
-      rawFrame
-    ],
-    mode: ProcessStartMode.inheritStdio,
-  );
+  var guest = await Process.start(hostPath, [
+    assetsDir,
+    cache.icuData,
+    socketPath,
+    '800',
+    '600',
+    '--capture-raw',
+    rawFrame,
+  ], mode: ProcessStartMode.inheritStdio);
 
   var conn = await server.first;
   var reader = FrameReader();

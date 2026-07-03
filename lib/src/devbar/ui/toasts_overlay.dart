@@ -13,13 +13,12 @@ class ToastsOverlay extends StatelessWidget {
       child: ValueStreamBuilder<List<ToastHolder>>(
         stream: service.toasts,
         builder: (context, snapshot) {
-          return Stack(children: [
-            for (var toast in snapshot)
-              Align(
-                alignment: toast.alignment,
-                child: toast.content,
-              ),
-          ]);
+          return Stack(
+            children: [
+              for (var toast in snapshot)
+                Align(alignment: toast.alignment, child: toast.content),
+            ],
+          );
         },
       ),
     );
@@ -30,13 +29,13 @@ class Toast extends StatelessWidget {
   final Widget child;
   final Color backgroundColor, textColor;
 
-  Toast(
-      {super.key,
-      required this.child,
-      Color? backgroundColor,
-      Color? textColor})
-      : backgroundColor = backgroundColor ?? Colors.grey,
-        textColor = textColor ?? Colors.white;
+  Toast({
+    super.key,
+    required this.child,
+    Color? backgroundColor,
+    Color? textColor,
+  }) : backgroundColor = backgroundColor ?? Colors.grey,
+       textColor = textColor ?? Colors.white;
 
   @override
   Widget build(BuildContext context) {

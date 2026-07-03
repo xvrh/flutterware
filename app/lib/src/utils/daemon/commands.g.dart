@@ -17,10 +17,7 @@ Map<String, dynamic> _$AppRestartCommandToJson(AppRestartCommand instance) =>
     };
 
 AppRestartResult _$AppRestartResultFromJson(Map<String, dynamic> json) =>
-    AppRestartResult(
-      json['code'] as int,
-      json['message'] as String,
-    );
+    AppRestartResult(json['code'] as int, json['message'] as String);
 
 Map<String, dynamic> _$AppStopCommandToJson(AppStopCommand instance) =>
     <String, dynamic>{

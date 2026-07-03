@@ -44,7 +44,7 @@ class BundleParameters {
     bool Function(String)? translationPredicate,
     required this.projectPackageName,
   }) : translationPredicate =
-            translationPredicate ?? _defaultTranslationPredicate;
+           translationPredicate ?? _defaultTranslationPredicate;
 
   static bool _defaultTranslationPredicate(String key) =>
       key.endsWith('.json') && key.contains('translations');

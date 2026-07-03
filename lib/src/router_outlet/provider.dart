@@ -11,8 +11,8 @@ class MatchedPathProvider extends InheritedWidget {
   });
 
   static MatchedPath of(BuildContext context) {
-    final result =
-        context.dependOnInheritedWidgetOfExactType<MatchedPathProvider>()!;
+    final result = context
+        .dependOnInheritedWidgetOfExactType<MatchedPathProvider>()!;
     return result.path;
   }
 

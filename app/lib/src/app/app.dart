@@ -20,13 +20,10 @@ class SingleProjectApp extends StatelessWidget {
           title: 'Flutterware',
           theme: appTheme,
           home: Scaffold(
-            body: RouterOutlet(
-              {
-                'project': (_) => ProjectView(project),
-                'about': (_) => AboutScreen(),
-              },
-              onNotFound: (_) => 'project',
-            ),
+            body: RouterOutlet({
+              'project': (_) => ProjectView(project),
+              'about': (_) => AboutScreen(),
+            }, onNotFound: (_) => 'project'),
           ),
           initialRoute: '/',
           debugShowCheckedModeBanner: false,

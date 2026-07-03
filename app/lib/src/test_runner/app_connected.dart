@@ -10,26 +10,20 @@ class TestRunView extends StatelessWidget {
   final TestRunnerApi client;
   final Widget? reloadToolbar;
 
-  const TestRunView(
-    this.client, {
-    super.key,
-    this.reloadToolbar,
-  });
+  const TestRunView(this.client, {super.key, this.reloadToolbar});
 
   @override
   Widget build(BuildContext context) {
     return ToolBarScope(
-      child: RouterOutlet(
-        {
-          ':testId': (args) {
-            return RunView(
-              client,
-              BuiltList(TreePath.fromEncoded(args['testId']).nodes),
-              reloadToolbar: reloadToolbar,
-            );
-          },
+      child: RouterOutlet({
+        ':testId': (args) {
+          return RunView(
+            client,
+            BuiltList(TreePath.fromEncoded(args['testId']).nodes),
+            reloadToolbar: reloadToolbar,
+          );
         },
-      ),
+      }),
     );
   }
 }

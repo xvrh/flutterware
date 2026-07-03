@@ -22,9 +22,9 @@ enum MessageType {
   final int tag;
 
   static MessageType fromTag(int tag) => values.firstWhere(
-        (t) => t.tag == tag,
-        orElse: () => throw FormatException('Unknown message tag: $tag'),
-      );
+    (t) => t.tag == tag,
+    orElse: () => throw FormatException('Unknown message tag: $tag'),
+  );
 }
 
 /// Pointer phases; the index order matches `FlutterPointerPhase` in
@@ -277,12 +277,16 @@ class FrameReader {
     var data = _buffer.toBytes();
     var offset = 0;
     while (data.length - offset >= 4) {
-      var len = ByteData.sublistView(data, offset, offset + 4)
-          .getUint32(0, Endian.little);
+      var len = ByteData.sublistView(
+        data,
+        offset,
+        offset + 4,
+      ).getUint32(0, Endian.little);
       if (data.length - offset - 4 < len) break;
       var bodyStart = offset + 4;
       yield decodeMessageBody(
-          Uint8List.sublistView(data, bodyStart, bodyStart + len));
+        Uint8List.sublistView(data, bodyStart, bodyStart + len),
+      );
       offset = bodyStart + len;
     }
     _buffer.clear();

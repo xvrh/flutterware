@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../service.dart';
 
 Future<void> showFigmaSettingsDialog(
-    BuildContext context, FigmaService service) async {
+  BuildContext context,
+  FigmaService service,
+) async {
   await showDialog(
     context: context,
     builder: (context) => FigmaSettingDialog(service),
@@ -40,9 +42,7 @@ class _FigmaSettingDialogState extends State<FigmaSettingDialog> {
           child: ListTile(
             title: TextFormField(
               controller: _personalTokenController,
-              decoration: InputDecoration(
-                labelText: 'Personal token',
-              ),
+              decoration: InputDecoration(labelText: 'Personal token'),
             ),
           ),
         ),
@@ -79,7 +79,7 @@ class _FigmaSettingDialogState extends State<FigmaSettingDialog> {
               child: Text('OK'),
             ),
           ],
-        )
+        ),
       ],
     );
   }

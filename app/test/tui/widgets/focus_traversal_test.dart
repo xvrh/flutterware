@@ -132,8 +132,9 @@ void main() {
     left.requestFocus();
     manager.applyFocusChangesIfNeeded();
 
-    DirectionalFocusAction(manager)
-        .invoke(const DirectionalFocusIntent(TraversalDirection.right));
+    DirectionalFocusAction(
+      manager,
+    ).invoke(const DirectionalFocusIntent(TraversalDirection.right));
     manager.applyFocusChangesIfNeeded();
     expect(manager.primaryFocus, right);
   });
@@ -145,18 +146,20 @@ void main() {
     expect(actions[DirectionalFocusIntent], isA<DirectionalFocusAction>());
   });
 
-  test('next from a scope with a single descendant focuses that descendant',
-      () {
-    var manager = FocusManager();
-    var policy = ReadingOrderTraversalPolicy();
-    var only = _FixedNode(CellRect.fromTLWH(0, 0, 4, 1));
-    manager.rootScope.debugAttachChild(only);
-    // primaryFocus is rootScope — a scope node, not itself a candidate.
+  test(
+    'next from a scope with a single descendant focuses that descendant',
+    () {
+      var manager = FocusManager();
+      var policy = ReadingOrderTraversalPolicy();
+      var only = _FixedNode(CellRect.fromTLWH(0, 0, 4, 1));
+      manager.rootScope.debugAttachChild(only);
+      // primaryFocus is rootScope — a scope node, not itself a candidate.
 
-    expect(policy.next(manager.rootScope), isTrue);
-    manager.applyFocusChangesIfNeeded();
-    expect(manager.primaryFocus, only);
-  });
+      expect(policy.next(manager.rootScope), isTrue);
+      manager.applyFocusChangesIfNeeded();
+      expect(manager.primaryFocus, only);
+    },
+  );
 
   test('next from a lone candidate that is the current node does not move', () {
     var manager = FocusManager();

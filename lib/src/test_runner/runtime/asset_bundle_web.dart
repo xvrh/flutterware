@@ -18,24 +18,37 @@ class WebAssetBundle extends CachingAssetBundle implements TestBundle {
       specification: ZoneSpecification(
         scheduleMicrotask:
             (Zone self, ZoneDelegate parent, Zone zone, void Function() f) {
-          Zone.root.scheduleMicrotask(f);
-        },
-        createTimer: (Zone self, ZoneDelegate parent, Zone zone,
-            Duration duration, void Function() f) {
-          return Zone.root.createTimer(duration, f);
-        },
-        createPeriodicTimer: (Zone self, ZoneDelegate parent, Zone zone,
-            Duration period, void Function(Timer timer) f) {
-          return Zone.root.createPeriodicTimer(period, f);
-        },
+              Zone.root.scheduleMicrotask(f);
+            },
+        createTimer:
+            (
+              Zone self,
+              ZoneDelegate parent,
+              Zone zone,
+              Duration duration,
+              void Function() f,
+            ) {
+              return Zone.root.createTimer(duration, f);
+            },
+        createPeriodicTimer:
+            (
+              Zone self,
+              ZoneDelegate parent,
+              Zone zone,
+              Duration period,
+              void Function(Timer timer) f,
+            ) {
+              return Zone.root.createPeriodicTimer(period, f);
+            },
       ),
     );
 
     var manifestData = await rootBundle.load(_assetManifestKey);
     var webBundle = WebAssetBundle._(bundleParams, manifestData, realAsyncZone);
 
-    var manifestMap = jsonDecode(utf8.decode(manifestData.buffer.asUint8List()))
-        as Map<String, dynamic>;
+    var manifestMap =
+        jsonDecode(utf8.decode(manifestData.buffer.asUint8List()))
+            as Map<String, dynamic>;
     var loadFutures = <Future>[];
     for (var entry in manifestMap.entries) {
       var key = entry.key;

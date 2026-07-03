@@ -22,10 +22,14 @@ void main() {
     });
 
     test('SpecialKey value equality with modifier set', () {
-      const a =
-          SpecialKey(code: SpecialKeyCode.left, modifiers: {Modifier.shift});
-      const b =
-          SpecialKey(code: SpecialKeyCode.left, modifiers: {Modifier.shift});
+      const a = SpecialKey(
+        code: SpecialKeyCode.left,
+        modifiers: {Modifier.shift},
+      );
+      const b = SpecialKey(
+        code: SpecialKeyCode.left,
+        modifiers: {Modifier.shift},
+      );
       expect(a, equals(b));
     });
 
@@ -44,7 +48,7 @@ void main() {
 
     test('ASCII printable becomes CharKey', () async {
       final events = await parse([
-        [0x41, 0x42]
+        [0x41, 0x42],
       ]); // 'A', 'B'
       expect(events, [
         const CharKey(rune: 0x41, modifiers: {}),
@@ -54,7 +58,7 @@ void main() {
 
     test('ctrl-A through ctrl-Z become CharKey with ctrl modifier', () async {
       final events = await parse([
-        [0x01, 0x03, 0x1a]
+        [0x01, 0x03, 0x1a],
       ]); // ctrl-A, ctrl-C, ctrl-Z
       expect(events.length, 3);
       expect(events[0], CharKey(rune: 0x61, modifiers: {Modifier.ctrl})); // 'a'
@@ -64,7 +68,7 @@ void main() {
 
     test('enter, tab, backspace', () async {
       final events = await parse([
-        [0x0d, 0x09, 0x7f]
+        [0x0d, 0x09, 0x7f],
       ]);
       expect(events, [
         const SpecialKey(code: SpecialKeyCode.enter, modifiers: {}),
@@ -75,7 +79,7 @@ void main() {
 
     test('newline (LF) is also enter', () async {
       final events = await parse([
-        [0x0a]
+        [0x0a],
       ]);
       expect(events, [
         const SpecialKey(code: SpecialKeyCode.enter, modifiers: {}),
@@ -100,7 +104,7 @@ void main() {
 
     test('SS3 arrows (ESC O A)', () async {
       final events = await parse([
-        [0x1b, 0x4f, 0x41]
+        [0x1b, 0x4f, 0x41],
       ]); // ESC O A
       expect(events, [
         const SpecialKey(code: SpecialKeyCode.up, modifiers: {}),
@@ -109,7 +113,7 @@ void main() {
 
     test('CSI with modifier (ctrl-up = ESC [1;5A)', () async {
       final events = await parse([
-        [0x1b, 0x5b, 0x31, 0x3b, 0x35, 0x41]
+        [0x1b, 0x5b, 0x31, 0x3b, 0x35, 0x41],
       ]);
       expect(events, [
         const SpecialKey(code: SpecialKeyCode.up, modifiers: {Modifier.ctrl}),
@@ -118,7 +122,7 @@ void main() {
 
     test('CSI shift-arrow (ESC [1;2A)', () async {
       final events = await parse([
-        [0x1b, 0x5b, 0x31, 0x3b, 0x32, 0x41]
+        [0x1b, 0x5b, 0x31, 0x3b, 0x32, 0x41],
       ]);
       expect(events, [
         const SpecialKey(code: SpecialKeyCode.up, modifiers: {Modifier.shift}),
@@ -143,7 +147,7 @@ void main() {
     test('bare escape (no follow-up bytes) emits escape', () async {
       // A single chunk containing ONLY ESC, followed by stream end.
       final events = await parse([
-        [0x1b]
+        [0x1b],
       ]);
       expect(events, [
         const SpecialKey(code: SpecialKeyCode.escape, modifiers: {}),
@@ -153,28 +157,24 @@ void main() {
     test('UTF-8 multi-byte rune', () async {
       // U+00E9 (é) in UTF-8 = C3 A9
       final events = await parse([
-        [0xc3, 0xa9]
+        [0xc3, 0xa9],
       ]);
-      expect(events, [
-        const CharKey(rune: 0x00e9, modifiers: {}),
-      ]);
+      expect(events, [const CharKey(rune: 0x00e9, modifiers: {})]);
     });
 
     test('UTF-8 split across chunks', () async {
       final events = await parse([
         [0xc3],
-        [0xa9]
+        [0xa9],
       ]);
-      expect(events, [
-        const CharKey(rune: 0x00e9, modifiers: {}),
-      ]);
+      expect(events, [const CharKey(rune: 0x00e9, modifiers: {})]);
     });
 
     test('CSI split across chunks', () async {
       final events = await parse([
         [0x1b],
         [0x5b],
-        [0x41]
+        [0x41],
       ]);
       expect(events, [
         const SpecialKey(code: SpecialKeyCode.up, modifiers: {}),
@@ -185,23 +185,23 @@ void main() {
       // Only ESC and O delivered; stream then closes. Implementation must drain
       // both bytes and emit escape — NOT escape + CharKey('O').
       final events = await parse([
-        [0x1b, 0x4f]
+        [0x1b, 0x4f],
       ]);
       expect(events, [
         const SpecialKey(code: SpecialKeyCode.escape, modifiers: {}),
       ]);
     });
 
-    test('incomplete UTF-8 at stream close yields replacement character',
-        () async {
-      // A 2-byte UTF-8 leading byte arrives but the second byte never does.
-      // Stream closes. Implementation must emit U+FFFD.
-      final events = await parse([
-        [0xc3]
-      ]);
-      expect(events, [
-        const CharKey(rune: 0xFFFD, modifiers: {}),
-      ]);
-    });
+    test(
+      'incomplete UTF-8 at stream close yields replacement character',
+      () async {
+        // A 2-byte UTF-8 leading byte arrives but the second byte never does.
+        // Stream closes. Implementation must emit U+FFFD.
+        final events = await parse([
+          [0xc3],
+        ]);
+        expect(events, [const CharKey(rune: 0xFFFD, modifiers: {})]);
+      },
+    );
   });
 }

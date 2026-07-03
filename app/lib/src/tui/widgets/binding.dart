@@ -109,7 +109,10 @@ class RootElement extends RenderObjectElement {
 
   @override
   void moveRenderObjectChild(
-      RenderObject child, Object? oldSlot, Object? newSlot) {
+    RenderObject child,
+    Object? oldSlot,
+    Object? newSlot,
+  ) {
     assert(false, 'The RootElement never moves its child.');
   }
 
@@ -182,7 +185,9 @@ class TuiBinding {
     );
     focusManager.rootScope.onKeyEvent = rootShortcutManager.handleFocusKeyEvent;
     buildOwner.buildScope(
-        _rootElement!, () => _rootElement!.mountAsRoot(buildOwner));
+      _rootElement!,
+      () => _rootElement!.mountAsRoot(buildOwner),
+    );
   }
 
   /// Reconciles the root against a new application [rootWidget].
@@ -280,15 +285,15 @@ Future<void> runApp(Widget app) async {
     var exit = Completer<void>();
 
     TerminalApp wrap() => TerminalApp(
-          keys: terminal.keys,
-          size: CellSize(terminal.rows, terminal.cols),
-          exit: () {
-            if (!exit.isCompleted) {
-              exit.complete();
-            }
-          },
-          child: app,
-        );
+      keys: terminal.keys,
+      size: CellSize(terminal.rows, terminal.cols),
+      exit: () {
+        if (!exit.isCompleted) {
+          exit.complete();
+        }
+      },
+      child: app,
+    );
 
     // Set once the app is exiting: frames must stop before the terminal is
     // restored, otherwise late draws (from a pending microtask or a State's

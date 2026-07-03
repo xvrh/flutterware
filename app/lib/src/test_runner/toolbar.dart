@@ -94,7 +94,7 @@ class _RunToolbarState extends State<RunToolbar> {
               items: {
                 for (var language
                     in widget.supportedLocales ?? const <SerializableLocale>[])
-                  language: Text(language.displayString)
+                  language: Text(language.displayString),
               },
             ),
             ToolbarDropdown<DeviceInfo>(
@@ -106,18 +106,15 @@ class _RunToolbarState extends State<RunToolbar> {
                 _onChanged();
               },
               items: {
-                for (var value in DeviceInfo.devices) value: Text(value.name)
+                for (var value in DeviceInfo.devices) value: Text(value.name),
               },
             ),
             ToolbarPanel(
               button: Row(
                 children: [
-                  Icon(
-                    Icons.text_fields,
-                    color: Colors.black54,
-                  ),
+                  Icon(Icons.text_fields, color: Colors.black54),
                   const SizedBox(width: 5),
-                  Text(_describeAccessibility(_accessibility))
+                  Text(_describeAccessibility(_accessibility)),
                 ],
               ),
               panel: _AccessibilityPanel(
@@ -130,26 +127,24 @@ class _RunToolbarState extends State<RunToolbar> {
                 },
               ),
             ),
-            Expanded(
-              child: const SizedBox(),
-            ),
+            Expanded(child: const SizedBox()),
             ...?widget.trailingActions,
             // User preferences?
           ],
         ),
-        Expanded(
-          child: widget.child,
-        ),
+        Expanded(child: widget.child),
       ],
     );
   }
 
   void _onChanged() {
-    widget.onChanged(ToolbarParameters(
-      locale: _language,
-      device: _device,
-      accessibility: _accessibility,
-    ));
+    widget.onChanged(
+      ToolbarParameters(
+        locale: _language,
+        device: _device,
+        accessibility: _accessibility,
+      ),
+    );
   }
 }
 
@@ -198,10 +193,7 @@ class _AccessibilityPanelState extends State<_AccessibilityPanel> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              height: 40,
-              child: _title(),
-            ),
+            SizedBox(height: 40, child: _title()),
             _scaleEditor(),
             _boldEditor(),
             _highContrastEditor(),
@@ -262,7 +254,8 @@ class _AccessibilityPanelState extends State<_AccessibilityPanel> {
                 onPressed: () {
                   setState(() {
                     _value = _value.rebuild(
-                        (b) => b.textScale = max(0.1, _value.textScale - 0.1));
+                      (b) => b.textScale = max(0.1, _value.textScale - 0.1),
+                    );
                   });
                 },
                 child: Text('-'),
@@ -275,7 +268,8 @@ class _AccessibilityPanelState extends State<_AccessibilityPanel> {
                 onPressed: () {
                   setState(() {
                     _value = _value.rebuild(
-                        (b) => b.textScale = min(3, _value.textScale + 0.1));
+                      (b) => b.textScale = min(3, _value.textScale + 0.1),
+                    );
                   });
                 },
                 child: Text('+'),
@@ -344,8 +338,9 @@ class _AccessibilityPanelState extends State<_AccessibilityPanel> {
         elevation: WidgetStateProperty.all(0),
         shape: WidgetStateProperty.all(
           RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(3),
-              side: BorderSide(color: _buttonBorderColor)),
+            borderRadius: BorderRadius.circular(3),
+            side: BorderSide(color: _buttonBorderColor),
+          ),
         ),
         backgroundColor: WidgetStateProperty.all(_buttonBackground),
         foregroundColor: WidgetStateProperty.all(Colors.black87),

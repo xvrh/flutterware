@@ -79,7 +79,9 @@ String timeAgo(DateTime? date, {DateTime? clock, bool? allowFromNow}) {
     result = messages.years(years.round());
   }
 
-  return [prefix, result, suffix]
-      .where((str) => str.isNotEmpty)
-      .join(messages.wordSeparator());
+  return [
+    prefix,
+    result,
+    suffix,
+  ].where((str) => str.isNotEmpty).join(messages.wordSeparator());
 }

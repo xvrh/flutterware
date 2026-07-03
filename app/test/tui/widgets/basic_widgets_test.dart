@@ -9,10 +9,14 @@ import 'harness.dart';
 
 void main() {
   test('Text produces a RenderText carrying its fields', () {
-    var r = pump(const Text('hi',
+    var r = pump(
+      const Text(
+        'hi',
         fg: Color.brightWhite,
         style: TextStyle.bold,
-        hAlign: HorizontalAlign.center));
+        hAlign: HorizontalAlign.center,
+      ),
+    );
     var ro = r.binding.renderView.child! as RenderText;
     expect(ro.text, 'hi');
     expect(ro.fg, Color.brightWhite);
@@ -28,15 +32,22 @@ void main() {
     expect(dump(r.buffer)[1][1], 'h');
   });
 
-  test('ConstrainedBox produces a RenderConstrainedBox with its constraints',
-      () {
-    var r = pump(const ConstrainedBox(
-        constraints: BoxConstraints.tightFor(width: 3, height: 2),
-        child: Text('x')));
-    var ro = r.binding.renderView.child! as RenderConstrainedBox;
-    expect(
-        ro.additionalConstraints, BoxConstraints.tightFor(width: 3, height: 2));
-  });
+  test(
+    'ConstrainedBox produces a RenderConstrainedBox with its constraints',
+    () {
+      var r = pump(
+        const ConstrainedBox(
+          constraints: BoxConstraints.tightFor(width: 3, height: 2),
+          child: Text('x'),
+        ),
+      );
+      var ro = r.binding.renderView.child! as RenderConstrainedBox;
+      expect(
+        ro.additionalConstraints,
+        BoxConstraints.tightFor(width: 3, height: 2),
+      );
+    },
+  );
 
   test('SizedBox builds a ConstrainedBox with tight constraints', () {
     var r = pump(const SizedBox(width: 4, height: 2, child: Text('x')));
@@ -80,8 +91,11 @@ void main() {
   });
 
   test('a small painted tree reads back the expected cells', () {
-    var r = pump(const Padding(padding: EdgeInsets.all(1), child: Text('hi')),
-        rows: 3, cols: 6);
+    var r = pump(
+      const Padding(padding: EdgeInsets.all(1), child: Text('hi')),
+      rows: 3,
+      cols: 6,
+    );
     var rowsOut = dump(r.buffer);
     expect(rowsOut[0], '      ');
     expect(rowsOut[1].startsWith(' hi'), isTrue);

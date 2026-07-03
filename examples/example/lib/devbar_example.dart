@@ -17,14 +17,17 @@ final _logger = Logger('devbar_example');
 
 final superCoolFeature = FeatureFlag('superCoolFeature', false);
 final otherFeature = FeatureFlag('otherFeature', false);
-final numFeature =
-    FeatureFlag.slider('numFeature', 0, min: 0, max: 10, step: 1);
+final numFeature = FeatureFlag.slider(
+  'numFeature',
+  0,
+  min: 0,
+  max: 10,
+  step: 1,
+);
 final pickerFeature = FeatureFlag.picker<ApiEnvironment>(
   'pickerFeature',
   ApiEnvironment.prod,
-  options: {
-    for (var entry in ApiEnvironment.values) entry: entry.name,
-  },
+  options: {for (var entry in ApiEnvironment.values) entry: entry.name},
 );
 
 void main() {
@@ -34,10 +37,7 @@ void main() {
 class _EntryPoint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MyDevBar(
-      availableUsers: ['John', 'Jane', 'Jack'],
-      child: MyApp(),
-    );
+    return MyDevBar(availableUsers: ['John', 'Jane', 'Jack'], child: MyApp());
   }
 }
 
@@ -45,11 +45,7 @@ class MyDevBar extends StatelessWidget {
   final Widget child;
   final List<String> availableUsers;
 
-  MyDevBar({
-    super.key,
-    required this.child,
-    required this.availableUsers,
-  });
+  MyDevBar({super.key, required this.child, required this.availableUsers});
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +56,9 @@ class MyDevBar extends StatelessWidget {
         LogAnalyticsPlugin.init(),
         VariablesPlugin.init(
           filePath: () async => p.join(
-              (await getApplicationSupportDirectory()).path, 'variables.json'),
+            (await getApplicationSupportDirectory()).path,
+            'variables.json',
+          ),
         ),
         InfoPlugin.new,
         StoragePlugin.new,
@@ -111,9 +109,7 @@ class _MyAppState extends State<MyApp> {
         'Environment',
         defaultValue: ApiEnvironment.prod,
         fromJson: ApiEnvironment.fromJson,
-        options: {
-          for (var entry in ApiEnvironment.values) entry: entry.name,
-        },
+        options: {for (var entry in ApiEnvironment.values) entry: entry.name},
       );
     }
   }
@@ -124,106 +120,102 @@ class _MyAppState extends State<MyApp> {
     Widget widget = MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        appBar: AppBar(
-          title: Text('My app'),
+        appBar: AppBar(title: Text('My app')),
+        body: Builder(
+          builder: (context) {
+            return ListView(
+              children: [
+                TextFormField(
+                  controller: _userController,
+                  decoration: InputDecoration(labelText: 'User'),
+                ),
+                Divider(),
+                ElevatedButton(
+                  onPressed: () {
+                    context.devbar?.analytics.log('Open popup event');
+
+                    showDialog(
+                      context: context,
+                      builder: (context) => _MyPopup(),
+                    );
+                  },
+                  child: Text('Open popup'),
+                ),
+                Divider(),
+                ElevatedButton(
+                  onPressed: () {
+                    context.devbar?.analytics.log('Add network event');
+
+                    var id = _networkId++;
+                    context.devbar?.network.request(
+                      id,
+                      method: 'GET',
+                      path: 'https://www.google.com',
+                    );
+                    context.devbar?.network.response(
+                      id,
+                      body: {'hello': 'world'},
+                    );
+                  },
+                  child: Text('Add Network'),
+                ),
+                Divider(),
+                ElevatedButton(
+                  onPressed: () {
+                    _logger.info('One Log');
+                  },
+                  child: Text('Add log'),
+                ),
+                Divider(),
+                ElevatedButton(
+                  onPressed: () {
+                    context.devbar?.ui.open();
+                  },
+                  child: Text('Open devbar'),
+                ),
+                Divider(),
+                Text(
+                  'Super cool feature: ${superCoolFeature.dependsOnValue(context)}',
+                ),
+                Divider(),
+                Text('Other feature: ${otherFeature.dependsOnValue(context)}'),
+                Divider(),
+                Text('Num feature: ${numFeature.dependsOnValue(context)}'),
+                Divider(),
+                Text(
+                  'Picker feature: ${pickerFeature.dependsOnValue(context)}',
+                ),
+                Divider(),
+                StreamBuilder<ApiEnvironment>(
+                  stream: _environmentVariable?.value,
+                  initialData: _environmentVariable?.currentValue,
+                  builder: (context, snapshot) {
+                    return Text('Environment: ${snapshot.data}');
+                  },
+                ),
+                Divider(),
+                AddDevbarVariable.text(
+                  name: 'MyTextVar',
+                  builder: (context, value) {
+                    return Text('MyTextVar: $value');
+                  },
+                ),
+                Divider(),
+                AddDevbarVariable.picker<ApiEnvironment>(
+                  name: 'Secondary environment',
+                  defaultValue: ApiEnvironment.prod,
+                  fromJson: ApiEnvironment.fromJson,
+                  options: {
+                    for (var entry in ApiEnvironment.values) entry: entry.name,
+                  },
+                  builder: (context, value) {
+                    return Text('2nd environment: $value');
+                  },
+                ),
+              ],
+            );
+          },
         ),
-        body: Builder(builder: (context) {
-          return ListView(
-            children: [
-              TextFormField(
-                controller: _userController,
-                decoration: InputDecoration(labelText: 'User'),
-              ),
-              Divider(),
-              ElevatedButton(
-                onPressed: () {
-                  context.devbar?.analytics.log('Open popup event');
-
-                  showDialog(
-                      context: context, builder: (context) => _MyPopup());
-                },
-                child: Text('Open popup'),
-              ),
-              Divider(),
-              ElevatedButton(
-                onPressed: () {
-                  context.devbar?.analytics.log('Add network event');
-
-                  var id = _networkId++;
-                  context.devbar?.network.request(
-                    id,
-                    method: 'GET',
-                    path: 'https://www.google.com',
-                  );
-                  context.devbar?.network.response(
-                    id,
-                    body: {'hello': 'world'},
-                  );
-                },
-                child: Text('Add Network'),
-              ),
-              Divider(),
-              ElevatedButton(
-                onPressed: () {
-                  _logger.info('One Log');
-                },
-                child: Text('Add log'),
-              ),
-              Divider(),
-              ElevatedButton(
-                onPressed: () {
-                  context.devbar?.ui.open();
-                },
-                child: Text('Open devbar'),
-              ),
-              Divider(),
-              Text(
-                'Super cool feature: ${superCoolFeature.dependsOnValue(context)}',
-              ),
-              Divider(),
-              Text(
-                'Other feature: ${otherFeature.dependsOnValue(context)}',
-              ),
-              Divider(),
-              Text(
-                'Num feature: ${numFeature.dependsOnValue(context)}',
-              ),
-              Divider(),
-              Text(
-                'Picker feature: ${pickerFeature.dependsOnValue(context)}',
-              ),
-              Divider(),
-              StreamBuilder<ApiEnvironment>(
-                stream: _environmentVariable?.value,
-                initialData: _environmentVariable?.currentValue,
-                builder: (context, snapshot) {
-                  return Text(
-                    'Environment: ${snapshot.data}',
-                  );
-                },
-              ),
-              Divider(),
-              AddDevbarVariable.text(
-                name: 'MyTextVar',
-                builder: (context, value) {
-                  return Text('MyTextVar: $value');
-                },
-              ),
-              Divider(),
-              AddDevbarVariable.picker<ApiEnvironment>(
-                name: 'Secondary environment',
-                defaultValue: ApiEnvironment.prod,
-                fromJson: ApiEnvironment.fromJson,
-                options: {
-                  for (var entry in ApiEnvironment.values) entry: entry.name,
-                },
-                builder: (context, value) {
-                  return Text('2nd environment: $value');
-                },
-              ),
-            ],
-          );
-        }),
       ),
     );
 
@@ -240,10 +232,7 @@ class _MyAppState extends State<MyApp> {
             },
             values: {
               for (var entry in availableUsers)
-                entry: Text(
-                  entry,
-                  textAlign: TextAlign.right,
-                ),
+                entry: Text(entry, textAlign: TextAlign.right),
             },
           ),
           child: widget,

@@ -22,9 +22,12 @@ void main() async {
     if (e.data.dartify() == onConnectedMessage) {
       onMessageSubscription.cancel();
       var channel = createWebChannel(iframe.contentWindow!);
-      var client = TestRunnerApi(channel, onClose: () {
-        subject.close();
-      });
+      var client = TestRunnerApi(
+        channel,
+        onClose: () {
+          subject.close();
+        },
+      );
       subject.add([client]);
     }
   });
@@ -66,15 +69,10 @@ class _App extends StatelessWidget {
       builder: (context, snapshot) {
         var clients = snapshot.requireData;
         if (clients.isEmpty) {
-          return Center(
-            child: Text('Loading...'),
-          );
+          return Center(child: Text('Loading...'));
         } else {
           var client = clients.last;
-          return TestRunView(
-            key: ValueKey(client),
-            client,
-          );
+          return TestRunView(key: ValueKey(client), client);
         }
       },
     );

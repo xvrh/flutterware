@@ -23,14 +23,16 @@ class TraverseQueue {
       }
       var incomes = incomeId == null ? <String>[] : <String>[incomeId];
       var renderIncomes = incomeId == null ? <String>[] : <String>[incomeId];
-      s.add(NodeOutput(
-        id: itm.id,
-        next: itm.next,
-        passedIncomes: incomes,
-        renderIncomes: renderIncomes,
-        childrenOnMatrix: 0,
-        isAnchor: false,
-      ));
+      s.add(
+        NodeOutput(
+          id: itm.id,
+          next: itm.next,
+          passedIncomes: incomes,
+          renderIncomes: renderIncomes,
+          childrenOnMatrix: 0,
+          isAnchor: false,
+        ),
+      );
     }
   }
 

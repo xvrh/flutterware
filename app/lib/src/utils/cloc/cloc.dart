@@ -7,8 +7,10 @@ export 'lang.dart' show Lang;
 
 typedef ExclusionPredicate = bool Function(Lang, List<String>);
 
-ClocReport countLinesOfCode(Iterable<File> files,
-    {ExclusionPredicate? exclude}) {
+ClocReport countLinesOfCode(
+  Iterable<File> files, {
+  ExclusionPredicate? exclude,
+}) {
   var results = <ResultByFile>[];
   for (var file in files) {
     var lang = Lang.fromFileName(file.path);
@@ -29,20 +31,22 @@ ClocReport countLinesOfCode(Iterable<File> files,
   var resultsByLang = computeResultByLang(results);
 
   return ClocReport(
-      ClocResult(
-          files: resultsByLang.map((r) => r.files).sum,
-          lines: resultsByLang.map((r) => r.lines).sum,
-          comments: resultsByLang.map((r) => r.comments).sum,
-          blanks: resultsByLang.map((r) => r.blanks).sum),
-      {
-        for (var l in resultsByLang)
-          l.lang: ClocResult(
-            files: l.files,
-            lines: l.lines,
-            comments: l.comments,
-            blanks: l.blanks,
-          ),
-      });
+    ClocResult(
+      files: resultsByLang.map((r) => r.files).sum,
+      lines: resultsByLang.map((r) => r.lines).sum,
+      comments: resultsByLang.map((r) => r.comments).sum,
+      blanks: resultsByLang.map((r) => r.blanks).sum,
+    ),
+    {
+      for (var l in resultsByLang)
+        l.lang: ClocResult(
+          files: l.files,
+          lines: l.lines,
+          comments: l.comments,
+          blanks: l.blanks,
+        ),
+    },
+  );
 }
 
 class ClocReport {
@@ -65,22 +69,25 @@ class ClocResult {
   final int comments;
   final int blanks;
 
-  ClocResult(
-      {required this.files,
-      required this.lines,
-      required this.comments,
-      required this.blanks});
+  ClocResult({
+    required this.files,
+    required this.lines,
+    required this.comments,
+    required this.blanks,
+  });
 
   ClocResult operator +(ClocResult other) {
     return ClocResult(
-        files: files + other.files,
-        lines: lines + other.lines,
-        blanks: blanks + other.blanks,
-        comments: comments + other.comments);
+      files: files + other.files,
+      lines: lines + other.lines,
+      blanks: blanks + other.blanks,
+      comments: comments + other.comments,
+    );
   }
 
   @override
-  String toString() => 'ClocResult(files: $files, lines: $lines, '
+  String toString() =>
+      'ClocResult(files: $files, lines: $lines, '
       'comments: $comments, blanks: $blanks';
 }
 

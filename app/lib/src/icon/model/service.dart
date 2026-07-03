@@ -11,14 +11,17 @@ class IconService {
 
   IconService(this.project) {
     _icons = AsyncValue(
-        loader: () =>
-            AppIcons.loadIcons(project.directory.path, size: previewSize),
-        lazy: true);
+      loader: () =>
+          AppIcons.loadIcons(project.directory.path, size: previewSize),
+      lazy: true,
+    );
   }
 
   Future<SampleIcon> _loadIcon() async {
-    var file = await AppIcons.findSampleIcon(project.directory.path,
-        size: previewSize);
+    var file = await AppIcons.findSampleIcon(
+      project.directory.path,
+      size: previewSize,
+    );
     return SampleIcon(file);
   }
 

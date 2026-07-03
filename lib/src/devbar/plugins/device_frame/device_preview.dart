@@ -41,10 +41,7 @@ class DevicePreview extends StatelessWidget {
               child: Container(
                 color: Color(0xffdfdfdf),
                 child: Center(
-                  child: DeviceFrame(
-                    device: device,
-                    screen: child,
-                  ),
+                  child: DeviceFrame(device: device, screen: child),
                 ),
               ),
             );

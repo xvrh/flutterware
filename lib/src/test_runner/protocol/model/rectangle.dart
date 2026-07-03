@@ -10,8 +10,12 @@ abstract class Rectangle implements Built<Rectangle, RectangleBuilder> {
   factory Rectangle._builder([void Function(RectangleBuilder) updates]) =
       _$Rectangle;
 
-  factory Rectangle(
-      {double? left, double? top, double? right, double? bottom}) {
+  factory Rectangle({
+    double? left,
+    double? top,
+    double? right,
+    double? bottom,
+  }) {
     return Rectangle._builder(
       (b) => b
         ..left = left ?? 0
@@ -22,21 +26,33 @@ abstract class Rectangle implements Built<Rectangle, RectangleBuilder> {
   }
 
   factory Rectangle.fromLTRB(
-      double left, double top, double right, double bottom) {
-    return Rectangle._builder((b) => b
-      ..left = left
-      ..top = top
-      ..right = right
-      ..bottom = bottom);
+    double left,
+    double top,
+    double right,
+    double bottom,
+  ) {
+    return Rectangle._builder(
+      (b) => b
+        ..left = left
+        ..top = top
+        ..right = right
+        ..bottom = bottom,
+    );
   }
 
   factory Rectangle.fromTLWH(
-      double top, double left, double width, double height) {
-    return Rectangle._builder((b) => b
-      ..left = left
-      ..top = top
-      ..right = left + width
-      ..bottom = top + height);
+    double top,
+    double left,
+    double width,
+    double height,
+  ) {
+    return Rectangle._builder(
+      (b) => b
+        ..left = left
+        ..top = top
+        ..right = left + width
+        ..bottom = top + height,
+    );
   }
 
   double get left;

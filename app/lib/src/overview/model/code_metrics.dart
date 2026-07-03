@@ -11,16 +11,10 @@ CodeMetrics codeMetricsOf(String directory) {
 
   //TODO(xha): read more folders but respect .gitignore file to prevent going into build folders
   return CodeMetrics(
-      lib: dartCodeForGlobs(['lib/**']),
-      tests: dartCodeForGlobs([
-        'test/**',
-        'integration_test/**',
-        'test_*/**',
-      ]),
-      other: dartCodeForGlobs([
-        'tool/**',
-        'bin/**',
-      ]));
+    lib: dartCodeForGlobs(['lib/**']),
+    tests: dartCodeForGlobs(['test/**', 'integration_test/**', 'test_*/**']),
+    other: dartCodeForGlobs(['tool/**', 'bin/**']),
+  );
 }
 
 Iterable<File> _listFiles(String root, List<String> globs) sync* {

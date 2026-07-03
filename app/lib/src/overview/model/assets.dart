@@ -41,7 +41,10 @@ void _addFile(Set<String> allFiles, String root, String path) {
     for (var variant in _variants) {
       var fileName = p.basename(path);
       _addFileIfExist(
-          allFiles, root, p.join(p.dirname(path), variant, fileName));
+        allFiles,
+        root,
+        p.join(p.dirname(path), variant, fileName),
+      );
     }
   }
 }

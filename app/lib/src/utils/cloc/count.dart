@@ -51,7 +51,11 @@ ResultByFile computeLines(List<String> lines, Lang lang) {
 }
 
 int _handleLine(
-    String line, Lang lang, int idxMultiComment, ResultByFile result) {
+  String line,
+  Lang lang,
+  int idxMultiComment,
+  ResultByFile result,
+) {
   // Ignore full line?
   var rmMatches = lang.rmMatches;
   if (rmMatches != null && rmMatches.hasMatch(line)) {
@@ -136,8 +140,10 @@ int _handleLine(
       if (!insideString) {
         var idxStart = line.indexOf(lang.cmtMultiStarts[idxMultiComment]);
         if (idxStart != -1) {
-          var idxEnd =
-              line.indexOf(lang.cmtMultiEnds[idxMultiComment], idxStart);
+          var idxEnd = line.indexOf(
+            lang.cmtMultiEnds[idxMultiComment],
+            idxStart,
+          );
           if (idxEnd != -1) {
             var after = line
                 .substring(idxEnd + lang.cmtMultiEnds[idxMultiComment].length)

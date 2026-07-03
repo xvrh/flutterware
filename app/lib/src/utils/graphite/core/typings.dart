@@ -1,39 +1,17 @@
-enum NodeType {
-  unknown,
-  rootSimple,
-  rootSplit,
-  simple,
-  split,
-  join,
-  splitJoin,
-}
+enum NodeType { unknown, rootSimple, rootSplit, simple, split, join, splitJoin }
 
-enum AnchorOrientation {
-  none,
-  topLeft,
-  topRight,
-  bottomLeft,
-  bottomRight,
-}
+enum AnchorOrientation { none, topLeft, topRight, bottomLeft, bottomRight }
 
 enum AnchorMargin { none, start, end }
 
 class NodeInput {
-  NodeInput({
-    required this.id,
-    required this.next,
-  });
+  NodeInput({required this.id, required this.next});
 
   final String id;
   final List<String> next;
 }
 
-enum AnchorType {
-  unknown,
-  join,
-  split,
-  loop,
-}
+enum AnchorType { unknown, join, split, loop }
 
 class MatrixNode extends NodeOutput {
   MatrixNode({
@@ -51,8 +29,11 @@ class MatrixNode extends NodeOutput {
     super.renderIncomes,
     super.childrenOnMatrix,
   });
-  static MatrixNode fromNodeOutput(
-      {required int x, required int y, required NodeOutput nodeOutput}) {
+  static MatrixNode fromNodeOutput({
+    required int x,
+    required int y,
+    required NodeOutput nodeOutput,
+  }) {
     return MatrixNode(
       x: x,
       y: y,

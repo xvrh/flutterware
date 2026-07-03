@@ -59,7 +59,9 @@ class RenderTuiView extends RenderObject {
   /// [adoptChild], it re-marks the view for layout under the tight constraint.
   void prepareInitialFrame() {
     assert(
-        attached, 'RenderTuiView must be attached to a PipelineOwner first.');
+      attached,
+      'RenderTuiView must be attached to a PipelineOwner first.',
+    );
     _relayoutBoundary = this;
     _needsLayout = true;
     owner!._nodesNeedingLayout.add(this);
@@ -73,7 +75,9 @@ class RenderTuiView extends RenderObject {
   /// Flushes any pending layout and paints the whole tree into [painter].
   void compositeFrame(Painter painter) {
     assert(
-        attached, 'RenderTuiView must be attached to a PipelineOwner first.');
+      attached,
+      'RenderTuiView must be attached to a PipelineOwner first.',
+    );
     owner!.flushLayout();
     _child?.paint(painter);
     owner!.clearNeedsPaint();

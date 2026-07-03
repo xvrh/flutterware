@@ -14,14 +14,16 @@ class RouterOutlet extends StatefulWidget {
   const RouterOutlet(this.routes, {super.key, this.onNotFound});
 
   static Widget root({required Widget child}) {
-    return Builder(builder: (context) {
-      var source = RouterRoot.maybeSourceOf(context);
-      if (source == null) {
-        return RouterRootAuto(child: child);
-      } else {
-        return child;
-      }
-    });
+    return Builder(
+      builder: (context) {
+        var source = RouterRoot.maybeSourceOf(context);
+        if (source == null) {
+          return RouterRootAuto(child: child);
+        } else {
+          return child;
+        }
+      },
+    );
   }
 
   @override
@@ -75,19 +77,31 @@ class _RouterOutletState extends State<RouterOutlet> {
             tracker.addSubMatch(matched);
             _lastMatched = matched;
           }
-          return MatchedPathProvider(path: matched, child: widget);
+          // Key the subtree by the matched segments so a change in a path
+          // argument (`detail/15` -> `detail/14`) tears down the old State
+          // instead of silently reusing it. Query parameters and extra don't
+          // affect the key.
+          return MatchedPathProvider(
+            path: matched,
+            child: KeyedSubtree(
+              key: ValueKey(matched.matched.toString()),
+              child: widget,
+            ),
+          );
         }
       }
     } on Exception catch (e, stackTrace) {
       debugPrint(
-          'Fail to build widget for route $parentPath:\n$e\n$stackTrace');
+        'Fail to build widget for route $parentPath:\n$e\n$stackTrace',
+      );
       error = e;
     }
     tracker.removeSubMatch(_lastMatched);
     _lastMatched = null;
 
-    var redirect =
-        widget.onNotFound?.call(OnNotFoundEvent(parentPath, error: error));
+    var redirect = widget.onNotFound?.call(
+      OnNotFoundEvent(parentPath, error: error),
+    );
     if (redirect != null) {
       context.go(redirect);
     } else {

@@ -10,16 +10,16 @@ class EdgeInsets {
   const EdgeInsets.fromLTRB(this.left, this.top, this.right, this.bottom);
 
   const EdgeInsets.all(int value)
-      : left = value,
-        top = value,
-        right = value,
-        bottom = value;
+    : left = value,
+      top = value,
+      right = value,
+      bottom = value;
 
   const EdgeInsets.symmetric({int horizontal = 0, int vertical = 0})
-      : left = horizontal,
-        right = horizontal,
-        top = vertical,
-        bottom = vertical;
+    : left = horizontal,
+      right = horizontal,
+      top = vertical,
+      bottom = vertical;
 
   const EdgeInsets.only({
     this.left = 0,
@@ -70,24 +70,24 @@ class BoxConstraints {
 
   /// Requires exactly [size].
   BoxConstraints.tight(CellSize size)
-      : minWidth = size.cols,
-        maxWidth = size.cols,
-        minHeight = size.rows,
-        maxHeight = size.rows;
+    : minWidth = size.cols,
+      maxWidth = size.cols,
+      minHeight = size.rows,
+      maxHeight = size.rows;
 
   /// Tight on the axes given a value; unbounded on the others.
   const BoxConstraints.tightFor({int? width, int? height})
-      : minWidth = width ?? 0,
-        maxWidth = width ?? unbounded,
-        minHeight = height ?? 0,
-        maxHeight = height ?? unbounded;
+    : minWidth = width ?? 0,
+      maxWidth = width ?? unbounded,
+      minHeight = height ?? 0,
+      maxHeight = height ?? unbounded;
 
   /// Allows any size up to [size].
   BoxConstraints.loose(CellSize size)
-      : minWidth = 0,
-        maxWidth = size.cols,
-        minHeight = 0,
-        maxHeight = size.rows;
+    : minWidth = 0,
+      maxWidth = size.cols,
+      minHeight = 0,
+      maxHeight = size.rows;
 
   bool get hasBoundedWidth => maxWidth < unbounded;
   bool get hasBoundedHeight => maxHeight < unbounded;
@@ -132,19 +132,19 @@ class BoxConstraints {
 
   /// Drops the minimums to zero.
   BoxConstraints loosen() => BoxConstraints(
-        minWidth: 0,
-        maxWidth: maxWidth,
-        minHeight: 0,
-        maxHeight: maxHeight,
-      );
+    minWidth: 0,
+    maxWidth: maxWidth,
+    minHeight: 0,
+    maxHeight: maxHeight,
+  );
 
   /// Clamps every bound into [parent]'s range.
   BoxConstraints enforce(BoxConstraints parent) => BoxConstraints(
-        minWidth: minWidth.clamp(parent.minWidth, parent.maxWidth),
-        maxWidth: maxWidth.clamp(parent.minWidth, parent.maxWidth),
-        minHeight: minHeight.clamp(parent.minHeight, parent.maxHeight),
-        maxHeight: maxHeight.clamp(parent.minHeight, parent.maxHeight),
-      );
+    minWidth: minWidth.clamp(parent.minWidth, parent.maxWidth),
+    maxWidth: maxWidth.clamp(parent.minWidth, parent.maxWidth),
+    minHeight: minHeight.clamp(parent.minHeight, parent.maxHeight),
+    maxHeight: maxHeight.clamp(parent.minHeight, parent.maxHeight),
+  );
 
   @override
   bool operator ==(Object other) =>

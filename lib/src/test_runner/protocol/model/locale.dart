@@ -9,13 +9,15 @@ abstract class SerializableLocale
       _$serializableLocaleSerializer;
 
   SerializableLocale._();
-  factory SerializableLocale._fromBuilder(
-          [void Function(SerializableLocaleBuilder) updates]) =
-      _$SerializableLocale;
+  factory SerializableLocale._fromBuilder([
+    void Function(SerializableLocaleBuilder) updates,
+  ]) = _$SerializableLocale;
   factory SerializableLocale(String language, [String? country]) =>
-      SerializableLocale._fromBuilder((b) => b
-        ..language = language
-        ..country = country);
+      SerializableLocale._fromBuilder(
+        (b) => b
+          ..language = language
+          ..country = country,
+      );
 
   String get language;
   String? get country;

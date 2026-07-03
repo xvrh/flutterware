@@ -6,14 +6,16 @@ class ListingHost {
   final Channel _channel;
   final allTests =
       BehaviorSubject<BuiltMap<BuiltList<String>, TestReference>>.seeded(
-          BuiltMap());
+        BuiltMap(),
+      );
 
   ListingHost(Connection connection)
-      : _channel = connection.createChannel('Listing');
+    : _channel = connection.createChannel('Listing');
 
   void list() async {
-    var result =
-        (await _channel.sendRequest<BuiltList>('list')).cast<TestReference>();
+    var result = (await _channel.sendRequest<BuiltList>(
+      'list',
+    )).cast<TestReference>();
 
     var oldMap = allTests.value;
     var newTests = oldMap.rebuild((b) {
@@ -21,8 +23,9 @@ class ListingHost {
       for (var newEntry in result) {
         var oldEntry = oldMap[newEntry.name];
         if (oldEntry != null) {
-          b[newEntry.name] =
-              oldEntry.rebuild((b) => b..description = newEntry.description);
+          b[newEntry.name] = oldEntry.rebuild(
+            (b) => b..description = newEntry.description,
+          );
         } else {
           b[newEntry.name] = newEntry;
         }

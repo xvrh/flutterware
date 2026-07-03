@@ -4,10 +4,12 @@
 
 import 'package:flutterware_app/src/tui/tui.dart';
 
-const _leftLorem = 'The render tree lays this panel out with BoxConstraints '
+const _leftLorem =
+    'The render tree lays this panel out with BoxConstraints '
     'and a RenderFlex column. Press a key to mutate this text.';
 
-const _rightLorem = 'This panel is a relayout boundary: when the left panel '
+const _rightLorem =
+    'This panel is a relayout boundary: when the left panel '
     'updates, only its subtree is laid out again. Both panels share one '
     'RenderFlex row, sized by flex factors (left 1, right 2).';
 
@@ -95,9 +97,10 @@ Future<void> main() async {
     var resizeSub = terminal.resizes.listen((_) => render());
     try {
       await for (final event in terminal.keys) {
-        if (event is CharKey && event.rune == 0x71 /* 'q' */) break;
+        if (event is CharKey && event.rune == 0x71 /* 'q' */ ) break;
         _counter++;
-        _leftBody.text = 'Updated $_counter time(s). Only the left panel '
+        _leftBody.text =
+            'Updated $_counter time(s). Only the left panel '
             'subtree was laid out again — the right panel is untouched.';
         render();
       }

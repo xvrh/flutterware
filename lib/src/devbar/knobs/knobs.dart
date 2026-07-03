@@ -18,8 +18,10 @@ class AddDevbarKnobs extends StatefulWidget {
 }
 
 class _AddDevbarKnobsState extends State<AddDevbarKnobs> {
-  late final _knobs =
-      EditableParameters(onRefresh: _refresh, onAdded: _refresh);
+  late final _knobs = EditableParameters(
+    onRefresh: _refresh,
+    onAdded: _refresh,
+  );
 
   void _refresh() {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
@@ -38,9 +40,7 @@ class _AddDevbarKnobsState extends State<AddDevbarKnobs> {
           onTap: () {
             showBottomSheet(
               context: widget.context ?? context,
-              builder: (context) => _BottomSheet(
-                parameters: _knobs,
-              ),
+              builder: (context) => _BottomSheet(parameters: _knobs),
             );
           },
           icon: Icons.settings,
@@ -85,9 +85,7 @@ class _BottomSheet extends StatelessWidget {
               ),
             ],
           ),
-          Expanded(
-            child: ParametersEditor(parameters),
-          ),
+          Expanded(child: ParametersEditor(parameters)),
         ],
       ),
     );

@@ -17,16 +17,20 @@ class ButtonsOverlay extends StatelessWidget {
             stream: api.ui.buttons,
             builder: (context, snapshot) {
               var buttons = snapshot;
-              var tops = buttons
-                  .where((b) => b.position == DevbarButtonPosition.topRight);
-              var bottoms = buttons
-                  .where((b) => b.position == DevbarButtonPosition.bottomRight);
+              var tops = buttons.where(
+                (b) => b.position == DevbarButtonPosition.topRight,
+              );
+              var bottoms = buttons.where(
+                (b) => b.position == DevbarButtonPosition.bottomRight,
+              );
 
               return SafeArea(
-                child: Stack(children: [
-                  Positioned(top: 0, right: -10, child: _Buttons(tops)),
-                  Positioned(bottom: 0, right: -10, child: _Buttons(bottoms)),
-                ]),
+                child: Stack(
+                  children: [
+                    Positioned(top: 0, right: -10, child: _Buttons(tops)),
+                    Positioned(bottom: 0, right: -10, child: _Buttons(bottoms)),
+                  ],
+                ),
               );
             },
           ),

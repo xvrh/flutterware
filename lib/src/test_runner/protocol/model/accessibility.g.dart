@@ -14,40 +14,58 @@ class _$AccessibilityConfigSerializer
   @override
   final Iterable<Type> types = const [
     AccessibilityConfig,
-    _$AccessibilityConfig
+    _$AccessibilityConfig,
   ];
   @override
   final String wireName = 'AccessibilityConfig';
 
   @override
   Iterable<Object?> serialize(
-      Serializers serializers, AccessibilityConfig object,
-      {FullType specifiedType = FullType.unspecified}) {
+    Serializers serializers,
+    AccessibilityConfig object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'textScale',
-      serializers.serialize(object.textScale,
-          specifiedType: const FullType(double)),
+      serializers.serialize(
+        object.textScale,
+        specifiedType: const FullType(double),
+      ),
       'boldText',
-      serializers.serialize(object.boldText,
-          specifiedType: const FullType(bool)),
+      serializers.serialize(
+        object.boldText,
+        specifiedType: const FullType(bool),
+      ),
       'accessibleNavigation',
-      serializers.serialize(object.accessibleNavigation,
-          specifiedType: const FullType(bool)),
+      serializers.serialize(
+        object.accessibleNavigation,
+        specifiedType: const FullType(bool),
+      ),
       'disableAnimations',
-      serializers.serialize(object.disableAnimations,
-          specifiedType: const FullType(bool)),
+      serializers.serialize(
+        object.disableAnimations,
+        specifiedType: const FullType(bool),
+      ),
       'highContrast',
-      serializers.serialize(object.highContrast,
-          specifiedType: const FullType(bool)),
+      serializers.serialize(
+        object.highContrast,
+        specifiedType: const FullType(bool),
+      ),
       'invertColors',
-      serializers.serialize(object.invertColors,
-          specifiedType: const FullType(bool)),
+      serializers.serialize(
+        object.invertColors,
+        specifiedType: const FullType(bool),
+      ),
       'reduceMotion',
-      serializers.serialize(object.reduceMotion,
-          specifiedType: const FullType(bool)),
+      serializers.serialize(
+        object.reduceMotion,
+        specifiedType: const FullType(bool),
+      ),
       'onOffSwitchLabels',
-      serializers.serialize(object.onOffSwitchLabels,
-          specifiedType: const FullType(bool)),
+      serializers.serialize(
+        object.onOffSwitchLabels,
+        specifiedType: const FullType(bool),
+      ),
     ];
 
     return result;
@@ -55,8 +73,10 @@ class _$AccessibilityConfigSerializer
 
   @override
   AccessibilityConfig deserialize(
-      Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = AccessibilityConfigBuilder();
 
     final iterator = serialized.iterator;
@@ -66,36 +86,68 @@ class _$AccessibilityConfigSerializer
       final Object? value = iterator.current;
       switch (key) {
         case 'textScale':
-          result.textScale = serializers.deserialize(value,
-              specifiedType: const FullType(double))! as double;
+          result.textScale =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(double),
+                  )!
+                  as double;
           break;
         case 'boldText':
-          result.boldText = serializers.deserialize(value,
-              specifiedType: const FullType(bool))! as bool;
+          result.boldText =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(bool),
+                  )!
+                  as bool;
           break;
         case 'accessibleNavigation':
-          result.accessibleNavigation = serializers.deserialize(value,
-              specifiedType: const FullType(bool))! as bool;
+          result.accessibleNavigation =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(bool),
+                  )!
+                  as bool;
           break;
         case 'disableAnimations':
-          result.disableAnimations = serializers.deserialize(value,
-              specifiedType: const FullType(bool))! as bool;
+          result.disableAnimations =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(bool),
+                  )!
+                  as bool;
           break;
         case 'highContrast':
-          result.highContrast = serializers.deserialize(value,
-              specifiedType: const FullType(bool))! as bool;
+          result.highContrast =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(bool),
+                  )!
+                  as bool;
           break;
         case 'invertColors':
-          result.invertColors = serializers.deserialize(value,
-              specifiedType: const FullType(bool))! as bool;
+          result.invertColors =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(bool),
+                  )!
+                  as bool;
           break;
         case 'reduceMotion':
-          result.reduceMotion = serializers.deserialize(value,
-              specifiedType: const FullType(bool))! as bool;
+          result.reduceMotion =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(bool),
+                  )!
+                  as bool;
           break;
         case 'onOffSwitchLabels':
-          result.onOffSwitchLabels = serializers.deserialize(value,
-              specifiedType: const FullType(bool))! as bool;
+          result.onOffSwitchLabels =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(bool),
+                  )!
+                  as bool;
           break;
       }
     }
@@ -122,42 +174,66 @@ class _$AccessibilityConfig extends AccessibilityConfig {
   @override
   final bool onOffSwitchLabels;
 
-  factory _$AccessibilityConfig(
-          [void Function(AccessibilityConfigBuilder)? updates]) =>
-      (AccessibilityConfigBuilder()..update(updates))._build();
+  factory _$AccessibilityConfig([
+    void Function(AccessibilityConfigBuilder)? updates,
+  ]) => (AccessibilityConfigBuilder()..update(updates))._build();
 
-  _$AccessibilityConfig._(
-      {required this.textScale,
-      required this.boldText,
-      required this.accessibleNavigation,
-      required this.disableAnimations,
-      required this.highContrast,
-      required this.invertColors,
-      required this.reduceMotion,
-      required this.onOffSwitchLabels})
-      : super._() {
+  _$AccessibilityConfig._({
+    required this.textScale,
+    required this.boldText,
+    required this.accessibleNavigation,
+    required this.disableAnimations,
+    required this.highContrast,
+    required this.invertColors,
+    required this.reduceMotion,
+    required this.onOffSwitchLabels,
+  }) : super._() {
     BuiltValueNullFieldError.checkNotNull(
-        textScale, r'AccessibilityConfig', 'textScale');
+      textScale,
+      r'AccessibilityConfig',
+      'textScale',
+    );
     BuiltValueNullFieldError.checkNotNull(
-        boldText, r'AccessibilityConfig', 'boldText');
+      boldText,
+      r'AccessibilityConfig',
+      'boldText',
+    );
     BuiltValueNullFieldError.checkNotNull(
-        accessibleNavigation, r'AccessibilityConfig', 'accessibleNavigation');
+      accessibleNavigation,
+      r'AccessibilityConfig',
+      'accessibleNavigation',
+    );
     BuiltValueNullFieldError.checkNotNull(
-        disableAnimations, r'AccessibilityConfig', 'disableAnimations');
+      disableAnimations,
+      r'AccessibilityConfig',
+      'disableAnimations',
+    );
     BuiltValueNullFieldError.checkNotNull(
-        highContrast, r'AccessibilityConfig', 'highContrast');
+      highContrast,
+      r'AccessibilityConfig',
+      'highContrast',
+    );
     BuiltValueNullFieldError.checkNotNull(
-        invertColors, r'AccessibilityConfig', 'invertColors');
+      invertColors,
+      r'AccessibilityConfig',
+      'invertColors',
+    );
     BuiltValueNullFieldError.checkNotNull(
-        reduceMotion, r'AccessibilityConfig', 'reduceMotion');
+      reduceMotion,
+      r'AccessibilityConfig',
+      'reduceMotion',
+    );
     BuiltValueNullFieldError.checkNotNull(
-        onOffSwitchLabels, r'AccessibilityConfig', 'onOffSwitchLabels');
+      onOffSwitchLabels,
+      r'AccessibilityConfig',
+      'onOffSwitchLabels',
+    );
   }
 
   @override
   AccessibilityConfig rebuild(
-          void Function(AccessibilityConfigBuilder) updates) =>
-      (toBuilder()..update(updates)).build();
+    void Function(AccessibilityConfigBuilder) updates,
+  ) => (toBuilder()..update(updates)).build();
 
   @override
   AccessibilityConfigBuilder toBuilder() =>
@@ -279,23 +355,50 @@ class AccessibilityConfigBuilder
   AccessibilityConfig build() => _build();
 
   _$AccessibilityConfig _build() {
-    final _$result = _$v ??
+    final _$result =
+        _$v ??
         _$AccessibilityConfig._(
-            textScale: BuiltValueNullFieldError.checkNotNull(
-                textScale, r'AccessibilityConfig', 'textScale'),
-            boldText: BuiltValueNullFieldError.checkNotNull(
-                boldText, r'AccessibilityConfig', 'boldText'),
-            accessibleNavigation: BuiltValueNullFieldError.checkNotNull(
-                accessibleNavigation, r'AccessibilityConfig', 'accessibleNavigation'),
-            disableAnimations: BuiltValueNullFieldError.checkNotNull(
-                disableAnimations, r'AccessibilityConfig', 'disableAnimations'),
-            highContrast: BuiltValueNullFieldError.checkNotNull(
-                highContrast, r'AccessibilityConfig', 'highContrast'),
-            invertColors: BuiltValueNullFieldError.checkNotNull(
-                invertColors, r'AccessibilityConfig', 'invertColors'),
-            reduceMotion: BuiltValueNullFieldError.checkNotNull(
-                reduceMotion, r'AccessibilityConfig', 'reduceMotion'),
-            onOffSwitchLabels: BuiltValueNullFieldError.checkNotNull(onOffSwitchLabels, r'AccessibilityConfig', 'onOffSwitchLabels'));
+          textScale: BuiltValueNullFieldError.checkNotNull(
+            textScale,
+            r'AccessibilityConfig',
+            'textScale',
+          ),
+          boldText: BuiltValueNullFieldError.checkNotNull(
+            boldText,
+            r'AccessibilityConfig',
+            'boldText',
+          ),
+          accessibleNavigation: BuiltValueNullFieldError.checkNotNull(
+            accessibleNavigation,
+            r'AccessibilityConfig',
+            'accessibleNavigation',
+          ),
+          disableAnimations: BuiltValueNullFieldError.checkNotNull(
+            disableAnimations,
+            r'AccessibilityConfig',
+            'disableAnimations',
+          ),
+          highContrast: BuiltValueNullFieldError.checkNotNull(
+            highContrast,
+            r'AccessibilityConfig',
+            'highContrast',
+          ),
+          invertColors: BuiltValueNullFieldError.checkNotNull(
+            invertColors,
+            r'AccessibilityConfig',
+            'invertColors',
+          ),
+          reduceMotion: BuiltValueNullFieldError.checkNotNull(
+            reduceMotion,
+            r'AccessibilityConfig',
+            'reduceMotion',
+          ),
+          onOffSwitchLabels: BuiltValueNullFieldError.checkNotNull(
+            onOffSwitchLabels,
+            r'AccessibilityConfig',
+            'onOffSwitchLabels',
+          ),
+        );
     replace(_$result);
     return _$result;
   }

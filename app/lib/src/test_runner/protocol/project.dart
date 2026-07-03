@@ -6,7 +6,7 @@ class ProjectHost {
   final _onReloadedController = StreamController<void>.broadcast();
 
   ProjectHost(Connection connection)
-      : _channel = connection.createChannel('Project') {
+    : _channel = connection.createChannel('Project') {
     _channel.registerMethod('onReloaded', _onReloaded);
   }
 

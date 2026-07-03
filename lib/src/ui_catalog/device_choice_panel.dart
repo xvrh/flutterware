@@ -62,10 +62,7 @@ class MosaicDeviceChoice {
   final Set<DeviceInfo> devices;
   final Set<Orientation> orientations;
 
-  MosaicDeviceChoice({
-    required this.devices,
-    required this.orientations,
-  });
+  MosaicDeviceChoice({required this.devices, required this.orientations});
 
   MosaicDeviceChoice copyWith({
     Set<DeviceInfo>? devices,
@@ -95,7 +92,10 @@ class DeviceChoicePanel extends StatefulWidget {
 class _DeviceChoicePanelState extends State<DeviceChoicePanel>
     with TickerProviderStateMixin {
   late final _tabController = TabController(
-      length: 2, vsync: this, initialIndex: widget.choice.useMosaic ? 1 : 0);
+    length: 2,
+    vsync: this,
+    initialIndex: widget.choice.useMosaic ? 1 : 0,
+  );
 
   @override
   void initState() {
@@ -104,7 +104,8 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
     _tabController.addListener(() {
       setState(() {
         widget.onChanged(
-            widget.choice.copyWith(useMosaic: _tabController.index == 1));
+          widget.choice.copyWith(useMosaic: _tabController.index == 1),
+        );
       });
     });
   }
@@ -117,10 +118,13 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
       padding: const EdgeInsets.symmetric(vertical: 15),
       child: Scaffold(
         appBar: AppBar(
-          title: TabBar(controller: _tabController, tabs: [
-            Tab(icon: Icon(Icons.phone_android)),
-            Tab(icon: Icon(Icons.grid_view))
-          ]),
+          title: TabBar(
+            controller: _tabController,
+            tabs: [
+              Tab(icon: Icon(Icons.phone_android)),
+              Tab(icon: Icon(Icons.grid_view)),
+            ],
+          ),
         ),
         body: TabBarView(
           controller: _tabController,
@@ -128,14 +132,19 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
             RadioGroup<DeviceInfo>(
               groupValue: widget.choice.single.device,
               onChanged: (device) {
-                widget.onChanged(widget.choice.copyWith(
-                    single: widget.choice.single.copyWith(device: device)));
+                widget.onChanged(
+                  widget.choice.copyWith(
+                    single: widget.choice.single.copyWith(device: device),
+                  ),
+                );
               },
               child: ListView(
                 children: [
                   Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
                     child: SegmentedButton<Orientation>(
                       segments: [
                         ButtonSegment(
@@ -149,24 +158,30 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
                       ],
                       selected: {widget.choice.single.orientation},
                       onSelectionChanged: (v) {
-                        widget.onChanged(widget.choice.copyWith(
-                            single: widget.choice.single
-                                .copyWith(orientation: v.first)));
+                        widget.onChanged(
+                          widget.choice.copyWith(
+                            single: widget.choice.single.copyWith(
+                              orientation: v.first,
+                            ),
+                          ),
+                        );
                       },
                     ),
                   ),
                   Divider(),
                   for (var device in widget.choice.availableDevices.entries)
                     _DeviceTile(
-                      leading: Radio<DeviceInfo>(
-                        value: device.key,
-                      ),
+                      leading: Radio<DeviceInfo>(value: device.key),
                       title: device.value,
                       device: device.key,
                       onTap: () {
-                        widget.onChanged(widget.choice.copyWith(
-                            single: widget.choice.single
-                                .copyWith(device: device.key)));
+                        widget.onChanged(
+                          widget.choice.copyWith(
+                            single: widget.choice.single.copyWith(
+                              device: device.key,
+                            ),
+                          ),
+                        );
                         ToolbarPanel.of(context).hideMenu();
                       },
                     ),
@@ -194,9 +209,13 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
                     ],
                     selected: widget.choice.mosaic.orientations,
                     onSelectionChanged: (v) {
-                      widget.onChanged(widget.choice.copyWith(
-                          mosaic:
-                              widget.choice.mosaic.copyWith(orientations: v)));
+                      widget.onChanged(
+                        widget.choice.copyWith(
+                          mosaic: widget.choice.mosaic.copyWith(
+                            orientations: v,
+                          ),
+                        ),
+                      );
                     },
                   ),
                 ),
@@ -204,24 +223,29 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
                 ListTile(
                   title: Text('All'),
                   leading: Checkbox(
-                    value: widget.choice.mosaic.devices.length ==
+                    value:
+                        widget.choice.mosaic.devices.length ==
                             widget.choice.availableDevices.length
                         ? true
                         : widget.choice.mosaic.devices.isEmpty
-                            ? false
-                            : null,
+                        ? false
+                        : null,
                     tristate: true,
                     onChanged: (v) {
                       Set<DeviceInfo> newDevices;
                       if (widget.choice.mosaic.devices.isNotEmpty) {
                         newDevices = {};
                       } else {
-                        newDevices =
-                            widget.choice.availableDevices.keys.toSet();
+                        newDevices = widget.choice.availableDevices.keys
+                            .toSet();
                       }
-                      widget.onChanged(widget.choice.copyWith(
-                          mosaic: widget.choice.mosaic
-                              .copyWith(devices: newDevices)));
+                      widget.onChanged(
+                        widget.choice.copyWith(
+                          mosaic: widget.choice.mosaic.copyWith(
+                            devices: newDevices,
+                          ),
+                        ),
+                      );
                     },
                   ),
                 ),
@@ -238,9 +262,13 @@ class _DeviceChoicePanelState extends State<DeviceChoicePanel>
                         } else {
                           newList.remove(device.key);
                         }
-                        widget.onChanged(widget.choice.copyWith(
-                            mosaic: widget.choice.mosaic
-                                .copyWith(devices: newList)));
+                        widget.onChanged(
+                          widget.choice.copyWith(
+                            mosaic: widget.choice.mosaic.copyWith(
+                              devices: newList,
+                            ),
+                          ),
+                        );
                       },
                     ),
                   ),
@@ -265,8 +293,12 @@ class _DeviceTile extends StatelessWidget {
   final Widget? leading;
   final void Function()? onTap;
 
-  const _DeviceTile(
-      {required this.device, this.leading, required this.title, this.onTap});
+  const _DeviceTile({
+    required this.device,
+    this.leading,
+    required this.title,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -276,7 +308,8 @@ class _DeviceTile extends StatelessWidget {
       leading: leading,
       title: Text(title),
       subtitle: Text(
-          '(${device.screenSize.width.round()}x${device.screenSize.height.round()}, ${device.pixelRatio}x)'),
+        '(${device.screenSize.width.round()}x${device.screenSize.height.round()}, ${device.pixelRatio}x)',
+      ),
       trailing: Icon(
         device.identifier.platform == TargetPlatform.iOS
             ? Icons.apple

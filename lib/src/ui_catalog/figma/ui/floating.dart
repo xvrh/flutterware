@@ -54,11 +54,7 @@ class FloatPosition {
     required this.opacity,
   });
 
-  FloatPosition copyWith({
-    Offset? offset,
-    double? width,
-    double? opacity,
-  }) {
+  FloatPosition copyWith({Offset? offset, double? width, double? opacity}) {
     return FloatPosition(
       offset: offset ?? this.offset,
       width: width ?? this.width,
@@ -96,9 +92,10 @@ class _FloatingPreview extends StatelessWidget {
           children: [
             Container(
               decoration: BoxDecoration(
-                  color: Colors.greenAccent.withValues(alpha: 0.9),
-                  border: Border.all(color: figmaBorderColor, width: 1),
-                  borderRadius: BorderRadius.circular(4)),
+                color: Colors.greenAccent.withValues(alpha: 0.9),
+                border: Border.all(color: figmaBorderColor, width: 1),
+                borderRadius: BorderRadius.circular(4),
+              ),
               child: Row(
                 children: [
                   _IconButton(
@@ -140,23 +137,16 @@ class _FloatingPreview extends StatelessWidget {
   Widget _dragHandle(Widget child) {
     return Listener(
       onPointerMove: (v) {
-        onMove(position.copyWith(
-          offset: position.offset + v.delta,
-        ));
+        onMove(position.copyWith(offset: position.offset + v.delta));
       },
-      child: MouseRegion(
-        cursor: SystemMouseCursors.grab,
-        child: child,
-      ),
+      child: MouseRegion(cursor: SystemMouseCursors.grab, child: child),
     );
   }
 
   Widget _scaleHandle() {
     return Listener(
       onPointerMove: (v) {
-        onMove(position.copyWith(
-          width: max(position.width + v.delta.dx, 100),
-        ));
+        onMove(position.copyWith(width: max(position.width + v.delta.dx, 100)));
       },
       child: MouseRegion(
         cursor: SystemMouseCursors.resizeRight,
@@ -177,21 +167,18 @@ class _OpacityButton extends StatelessWidget {
     return ToolbarPanel(
       button: Icon(Icons.opacity),
       panelFollowerAnchor: Alignment.topCenter,
-      buttonBuilder: (
-          {required VoidCallback onPressed, required Widget button}) {
-        return _IconButton(
-          button,
-          onPressed: onPressed,
-          tooltip: 'Opacity',
-        );
-      },
+      buttonBuilder:
+          ({required VoidCallback onPressed, required Widget button}) {
+            return _IconButton(
+              button,
+              onPressed: onPressed,
+              tooltip: 'Opacity',
+            );
+          },
       panel: SizedBox(
         width: 200,
         height: 40,
-        child: Slider(
-          value: value,
-          onChanged: onChanged,
-        ),
+        child: Slider(value: value, onChanged: onChanged),
       ),
     );
   }

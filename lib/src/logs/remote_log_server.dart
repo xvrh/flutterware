@@ -71,10 +71,13 @@ class RemoteLogServer {
         break;
       case PrintType.error:
         var stackTrace = command.stackTrace;
-        logger.printError(command.message,
-            stackTrace:
-                stackTrace != null ? StackTrace.fromString(stackTrace) : null,
-            wrap: command.wrap);
+        logger.printError(
+          command.message,
+          stackTrace: stackTrace != null
+              ? StackTrace.fromString(stackTrace)
+              : null,
+          wrap: command.wrap,
+        );
         break;
     }
   }
@@ -113,22 +116,25 @@ class PrintLog {
   PrintLog(this.type, this.message, {this.wrap}) : stackTrace = null;
 
   PrintLog.error(this.message, {this.stackTrace, this.wrap})
-      : type = PrintType.error;
+    : type = PrintType.error;
 
   PrintLog._(this.type, this.message, {this.stackTrace, this.wrap});
 
   factory PrintLog.fromJson(Map<String, dynamic> json) {
     return PrintLog._(
-        PrintType.values[json['type'] as int], json['message'] as String,
-        stackTrace: json['stackTrace'] as String?, wrap: json['wrap'] as bool?);
+      PrintType.values[json['type'] as int],
+      json['message'] as String,
+      stackTrace: json['stackTrace'] as String?,
+      wrap: json['wrap'] as bool?,
+    );
   }
 
   Map<String, dynamic> toJson() => {
-        'type': type.index,
-        'message': message,
-        'stackTrace': stackTrace,
-        'wrap': wrap,
-      };
+    'type': type.index,
+    'message': message,
+    'stackTrace': stackTrace,
+    'wrap': wrap,
+  };
 }
 
 class PrintBox {
@@ -141,10 +147,7 @@ class PrintBox {
     return PrintBox(json['message'] as String, json['title'] as String?);
   }
 
-  Map<String, dynamic> toJson() => {
-        'message': message,
-        'title': title,
-      };
+  Map<String, dynamic> toJson() => {'message': message, 'title': title};
 }
 
 class StartProgress {
@@ -157,10 +160,7 @@ class StartProgress {
     return StartProgress(json['id'] as int, json['message'] as String);
   }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'message': message,
-      };
+  Map<String, dynamic> toJson() => {'id': id, 'message': message};
 }
 
 class StopProgress {
@@ -172,7 +172,5 @@ class StopProgress {
     return StopProgress(json['id'] as int);
   }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-      };
+  Map<String, dynamic> toJson() => {'id': id};
 }

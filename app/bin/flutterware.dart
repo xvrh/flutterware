@@ -26,8 +26,9 @@ class _Context {
   });
 
   Future<String> flutterwareVersion() async {
-    var pubspecContent =
-        await File(p.join(appToolPath, 'pubspec.yaml')).readAsString();
+    var pubspecContent = await File(
+      p.join(appToolPath, 'pubspec.yaml'),
+    ).readAsString();
     var pubspec = Pubspec.parse(pubspecContent);
     return pubspec.version.toString().split('+').first;
   }
@@ -37,8 +38,10 @@ void main(List<String> args) async {
   var dartExecutable = Platform.environment[dartExecutableEnvironmentKey]!;
   var flutterSdk = _FlutterSdk.tryFind(dartExecutable);
   if (flutterSdk == null) {
-    throw Exception('Flutter command not found. '
-        'Make sure you are using the dart command from a Flutter SDK (instead of a standalone Dart SDK).\nSearched ${Platform.resolvedExecutable}');
+    throw Exception(
+      'Flutter command not found. '
+      'Make sure you are using the dart command from a Flutter SDK (instead of a standalone Dart SDK).\nSearched ${Platform.resolvedExecutable}',
+    );
   }
 
   var loggerUrl = Platform.environment[remoteLoggerServerUrlKey]!;
@@ -55,11 +58,14 @@ void main(List<String> args) async {
 
   await runZoned(
     () async {
-      var commandRunner = CommandRunner(
-          'flutterware', 'Collection of tools for Flutter development.')
-        ..addCommand(_AppCommand(context))
-        ..argParser.addFlag('verbose', abbr: 'v', help: 'increase logging')
-        ..argParser.addFlag(forceCompileOption, hide: true);
+      var commandRunner =
+          CommandRunner(
+              'flutterware',
+              'Collection of tools for Flutter development.',
+            )
+            ..addCommand(_AppCommand(context))
+            ..argParser.addFlag('verbose', abbr: 'v', help: 'increase logging')
+            ..argParser.addFlag(forceCompileOption, hide: true);
       var argResults = commandRunner.parse(args);
       if (argResults.command == null &&
           (argResults.arguments.isEmpty ||
@@ -96,45 +102,51 @@ class _AppCommand extends Command {
 
   @override
   void run() async {
-    var projectPubspec = Pubspec.parse(await File(
-            p.join(context.projectDirectory.absolute.path, 'pubspec.yaml'))
-        .readAsString());
+    var projectPubspec = Pubspec.parse(
+      await File(
+        p.join(context.projectDirectory.absolute.path, 'pubspec.yaml'),
+      ).readAsString(),
+    );
 
     context.logClient.printBox('''
 Project: ${projectPubspec.name} (${context.projectDirectory.absolute.path})
 Flutter SDK: ${context.flutterSdk.root}
 ''', title: 'Flutterware ${await context.flutterwareVersion()}');
 
-    var exeFile = File(p.join(
-        context.appToolPath, _exePathForPlatform(logger: context.logClient)));
+    var exeFile = File(
+      p.join(
+        context.appToolPath,
+        _exePathForPlatform(logger: context.logClient),
+      ),
+    );
 
     context.logClient.printTrace(
-        'Compile GUI (exe: ${exeFile.existsSync()}, option: ${argResults!.arguments})');
+      'Compile GUI (exe: ${exeFile.existsSync()}, option: ${argResults!.arguments})',
+    );
     if (!exeFile.existsSync() ||
         (argResults!.arguments.contains('--$forceCompileOption'))) {
-      var buildProgress =
-          context.logClient.startProgress('Building Flutterware GUI');
-
-      var buildProcess = await Process.start(
-        context.flutterSdk.flutter,
-        [
-          'build',
-          Platform.operatingSystem,
-          '--release',
-        ],
-        workingDirectory: context.appToolPath,
+      var buildProgress = context.logClient.startProgress(
+        'Building Flutterware GUI',
       );
 
-      await for (var line in buildProcess.stdout
-          .transform(Utf8Decoder())
-          .transform(LineSplitter())) {
+      var buildProcess = await Process.start(context.flutterSdk.flutter, [
+        'build',
+        Platform.operatingSystem,
+        '--release',
+      ], workingDirectory: context.appToolPath);
+
+      await for (var line
+          in buildProcess.stdout
+              .transform(Utf8Decoder())
+              .transform(LineSplitter())) {
         context.logClient.printStatus(line);
       }
       buildProgress.stop();
       var buildExitCode = await buildProcess.exitCode;
       if (buildExitCode != 0) {
         context.logClient.printError(
-            'Failed to build GUI ($buildExitCode): ${await utf8.decodeStream(buildProcess.stderr)}');
+          'Failed to build GUI ($buildExitCode): ${await utf8.decodeStream(buildProcess.stderr)}',
+        );
         return;
       }
     }

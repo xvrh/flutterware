@@ -48,46 +48,50 @@ void main() {
       await input.close();
     });
 
-    test('non-response bytes before the response are forwarded as leftover',
-        () async {
-      // The user typed 'A' before the response arrived.
-      final input = StreamController<List<int>>();
-      final future = queryCursorPosition(
-        bytes: input.stream,
-        write: (_) {},
-        fallbackRow: -1,
-      );
+    test(
+      'non-response bytes before the response are forwarded as leftover',
+      () async {
+        // The user typed 'A' before the response arrived.
+        final input = StreamController<List<int>>();
+        final future = queryCursorPosition(
+          bytes: input.stream,
+          write: (_) {},
+          fallbackRow: -1,
+        );
 
-      input.add([0x41]); // 'A'
-      input.add('\x1b[3;7R'.codeUnits);
+        input.add([0x41]); // 'A'
+        input.add('\x1b[3;7R'.codeUnits);
 
-      final result = await future;
-      expect(result.row, 2);
-      expect(result.col, 6);
-      expect(result.leftoverBytes, [0x41]);
-      await input.close();
-    });
+        final result = await future;
+        expect(result.row, 2);
+        expect(result.col, 6);
+        expect(result.leftoverBytes, [0x41]);
+        await input.close();
+      },
+    );
 
-    test('non-response bytes after the response are forwarded as leftover',
-        () async {
-      // The user typed 'B' right after the response.
-      final input = StreamController<List<int>>();
-      final future = queryCursorPosition(
-        bytes: input.stream,
-        write: (_) {},
-        fallbackRow: -1,
-      );
+    test(
+      'non-response bytes after the response are forwarded as leftover',
+      () async {
+        // The user typed 'B' right after the response.
+        final input = StreamController<List<int>>();
+        final future = queryCursorPosition(
+          bytes: input.stream,
+          write: (_) {},
+          fallbackRow: -1,
+        );
 
-      input.add('\x1b[3;7R'.codeUnits);
-      input.add([0x42]); // 'B' — arrives in the same async tick
+        input.add('\x1b[3;7R'.codeUnits);
+        input.add([0x42]); // 'B' — arrives in the same async tick
 
-      final result = await future;
-      expect(result.row, 2);
-      // 'B' arrived in a separate chunk after the helper had completed; it is
-      // NOT captured in leftoverBytes (the helper has already resolved).
-      expect(result.leftoverBytes, isEmpty);
-      await input.close();
-    });
+        final result = await future;
+        expect(result.row, 2);
+        // 'B' arrived in a separate chunk after the helper had completed; it is
+        // NOT captured in leftoverBytes (the helper has already resolved).
+        expect(result.leftoverBytes, isEmpty);
+        await input.close();
+      },
+    );
 
     test('interleaved escape-prefixed non-response bytes survive', () async {
       // An up-arrow key '\x1b[A' interleaves: ESC, [, A. The parser must
@@ -102,7 +106,8 @@ void main() {
       );
 
       input.add(
-          '\x1b[A'.codeUnits); // arrow up — must NOT be consumed as response
+        '\x1b[A'.codeUnits,
+      ); // arrow up — must NOT be consumed as response
       input.add('\x1b[10;20R'.codeUnits); // real response
 
       final result = await future;
@@ -126,45 +131,49 @@ void main() {
       await input.close();
     });
 
-    test('timeout forwards any bytes received before timeout as leftover',
-        () async {
-      final input = StreamController<List<int>>();
-      final future = queryCursorPosition(
-        bytes: input.stream,
-        write: (_) {},
-        fallbackRow: 42,
-        timeout: const Duration(milliseconds: 50),
-      );
+    test(
+      'timeout forwards any bytes received before timeout as leftover',
+      () async {
+        final input = StreamController<List<int>>();
+        final future = queryCursorPosition(
+          bytes: input.stream,
+          write: (_) {},
+          fallbackRow: 42,
+          timeout: const Duration(milliseconds: 50),
+        );
 
-      input.add([0x58, 0x59]); // 'X', 'Y' — random non-response bytes
-      // No response ever comes.
+        input.add([0x58, 0x59]); // 'X', 'Y' — random non-response bytes
+        // No response ever comes.
 
-      final result = await future;
-      expect(result.row, 42);
-      expect(result.leftoverBytes, [0x58, 0x59]);
-      await input.close();
-    });
+        final result = await future;
+        expect(result.row, 42);
+        expect(result.leftoverBytes, [0x58, 0x59]);
+        await input.close();
+      },
+    );
 
-    test('timeout with mid-sequence pending bytes forwards them as leftover',
-        () async {
-      // The terminal started sending what looked like a response but never
-      // completed it. The bytes ESC [ 1 are "tentatively consumed" by the
-      // parser; on timeout they must be forwarded as leftover, not dropped.
-      final input = StreamController<List<int>>();
-      final future = queryCursorPosition(
-        bytes: input.stream,
-        write: (_) {},
-        fallbackRow: 7,
-        timeout: const Duration(milliseconds: 50),
-      );
+    test(
+      'timeout with mid-sequence pending bytes forwards them as leftover',
+      () async {
+        // The terminal started sending what looked like a response but never
+        // completed it. The bytes ESC [ 1 are "tentatively consumed" by the
+        // parser; on timeout they must be forwarded as leftover, not dropped.
+        final input = StreamController<List<int>>();
+        final future = queryCursorPosition(
+          bytes: input.stream,
+          write: (_) {},
+          fallbackRow: 7,
+          timeout: const Duration(milliseconds: 50),
+        );
 
-      input.add([0x1b, 0x5b, 0x31]); // ESC [ 1 — partial response
-      // No further bytes; timeout fires.
+        input.add([0x1b, 0x5b, 0x31]); // ESC [ 1 — partial response
+        // No further bytes; timeout fires.
 
-      final result = await future;
-      expect(result.row, 7);
-      expect(result.leftoverBytes, [0x1b, 0x5b, 0x31]);
-      await input.close();
-    });
+        final result = await future;
+        expect(result.row, 7);
+        expect(result.leftoverBytes, [0x1b, 0x5b, 0x31]);
+        await input.close();
+      },
+    );
   });
 }

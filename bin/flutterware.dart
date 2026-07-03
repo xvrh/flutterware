@@ -18,8 +18,9 @@ void main(List<String> arguments) async {
 
   var remoteLogger = await RemoteLogServer.start(logger);
 
-  var pubPackage =
-      await Isolate.resolvePackageUri(Uri.parse('package:flutterware/lib'));
+  var pubPackage = await Isolate.resolvePackageUri(
+    Uri.parse('package:flutterware/lib'),
+  );
   var packageRoot = pubPackage!.resolve('..').toFilePath();
   var sourceAppPath = p.join(packageRoot, 'app');
   if (!File(p.join(packageRoot, 'pubspec.yaml')).existsSync() ||
@@ -29,14 +30,18 @@ void main(List<String> arguments) async {
   }
 
   logger.printTrace(
-      'Platform.resolvedExecutable: ${Platform.resolvedExecutable}');
+    'Platform.resolvedExecutable: ${Platform.resolvedExecutable}',
+  );
   logger.printTrace('Platform.script: ${Platform.script}');
   logger.printTrace('Flutterware Package: $pubPackage');
   logger.printTrace('PackageRoot: $packageRoot');
   logger.printTrace('App: $sourceAppPath');
 
-  var copiedSourcePath =
-      p.join(_userHomePath(), '.flutterware', _hash(packageRoot));
+  var copiedSourcePath = p.join(
+    _userHomePath(),
+    '.flutterware',
+    _hash(packageRoot),
+  );
   var appPath = p.join(copiedSourcePath, 'app');
 
   var compiledCliPath = 'build/compiled_cli${Platform.isWindows ? '.exe' : ''}';
@@ -44,8 +49,9 @@ void main(List<String> arguments) async {
   //TODO(xha): we should detect if any file has changed and re-compile as needed.
   if (!compiledCliFile.existsSync() ||
       arguments.contains('--$forceCompileOption')) {
-    var buildCliProgress =
-        logger.startProgress('Building Flutterware executable');
+    var buildCliProgress = logger.startProgress(
+      'Building Flutterware executable',
+    );
 
     await _copyDirectory(packageRoot, copiedSourcePath);
 
@@ -56,18 +62,24 @@ void main(List<String> arguments) async {
       // Don't care if the file doesn't exist
     }
 
-    var pubGetResult = await Process.run(
-        Platform.resolvedExecutable, ['pub', 'get'],
-        workingDirectory: appPath);
+    var pubGetResult = await Process.run(Platform.resolvedExecutable, [
+      'pub',
+      'get',
+    ], workingDirectory: appPath);
     if (pubGetResult.exitCode != 0) {
       throw Exception('Pub get failed ${pubGetResult.stderr}');
     }
-    var compiledResult = await Process.run(Platform.resolvedExecutable,
-        ['compile', 'exe', '-o', compiledCliPath, 'bin/flutterware.dart'],
-        workingDirectory: appPath);
+    var compiledResult = await Process.run(Platform.resolvedExecutable, [
+      'compile',
+      'exe',
+      '-o',
+      compiledCliPath,
+      'bin/flutterware.dart',
+    ], workingDirectory: appPath);
     if (compiledResult.exitCode != 0) {
       throw Exception(
-          'Failed to compile flutterware CLI ${compiledResult.stderr}');
+        'Failed to compile flutterware CLI ${compiledResult.stderr}',
+      );
     }
     buildCliProgress.stop();
   }
@@ -95,9 +107,11 @@ void main(List<String> arguments) async {
   logger.printTrace('Process exited ($code)');
 
   if (code > 0) {
-    logger.printError('CLI terminated with error ($code).\n'
-        'Stdout: ${await utf8.decodeStream(process.stdout)}\n'
-        'Stderr: ${await utf8.decodeStream(process.stderr)}');
+    logger.printError(
+      'CLI terminated with error ($code).\n'
+      'Stdout: ${await utf8.decodeStream(process.stdout)}\n'
+      'Stderr: ${await utf8.decodeStream(process.stderr)}',
+    );
   }
   exit(code);
 }
@@ -115,7 +129,8 @@ Logger _createLogger({required bool isVerbose}) {
       ? WindowsStdoutLogger(
           terminal: terminal,
           stdio: stdio,
-          outputPreferences: outputPreferences)
+          outputPreferences: outputPreferences,
+        )
       : StdoutLogger(
           terminal: terminal,
           stdio: stdio,

@@ -2,15 +2,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/tui/tui.dart';
 
 void main() {
-  test('a node parented under a scope reports that scope as enclosingScope',
-      () {
-    var scope = FocusScopeNode();
-    var node = FocusNode();
-    scope.debugAttachChild(node);
-    expect(node.enclosingScope, scope);
-    expect(node.nearestScope, scope);
-    expect(scope.nearestScope, scope);
-  });
+  test(
+    'a node parented under a scope reports that scope as enclosingScope',
+    () {
+      var scope = FocusScopeNode();
+      var node = FocusNode();
+      scope.debugAttachChild(node);
+      expect(node.enclosingScope, scope);
+      expect(node.nearestScope, scope);
+      expect(scope.nearestScope, scope);
+    },
+  );
 
   test('descendants yields the whole subtree', () {
     var scope = FocusScopeNode();

@@ -10,8 +10,11 @@ class LogAnalyticsPlugin implements DevbarPlugin {
   final events = ValueStream<List<AnalyticEvent>>([]);
 
   LogAnalyticsPlugin(this.devbar) {
-    devbar.ui.addTab(Tab(text: 'Analytics'), AnalyticsList(this),
-        hierarchy: ['Logs']);
+    devbar.ui.addTab(
+      Tab(text: 'Analytics'),
+      AnalyticsList(this),
+      hierarchy: ['Logs'],
+    );
   }
 
   static LogAnalyticsPlugin Function(DevbarState) init() {

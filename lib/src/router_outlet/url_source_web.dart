@@ -15,15 +15,16 @@ class UrlSourceWeb implements UrlSource {
     setUrlStrategy(null);
 
     html.window.addEventListener(
-        'hashchange',
-        () {
-          var path = _getHash();
-          // Path with extra should not be replaced with the event triggered
-          // by the change in the hash
-          if (!path.equalsWithoutExtra(_current)) {
-            go(path);
-          }
-        }.toJS);
+      'hashchange',
+      () {
+        var path = _getHash();
+        // Path with extra should not be replaced with the event triggered
+        // by the change in the hash
+        if (!path.equalsWithoutExtra(_current)) {
+          go(path);
+        }
+      }.toJS,
+    );
 
     _current = _getHash();
   }

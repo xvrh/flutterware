@@ -12,17 +12,18 @@ import 'package:flutterware_app/src/tui/widgets/widgets.dart';
 
 /// Reads [b] back as one string per row.
 List<String> dump(CellBuffer b) => [
-      for (var r = 0; r < b.rows; r++)
-        String.fromCharCodes([
-          for (var c = 0; c < b.cols; c++) b.get(r, c).rune,
-        ]),
-    ];
+  for (var r = 0; r < b.rows; r++)
+    String.fromCharCodes([for (var c = 0; c < b.cols; c++) b.get(r, c).rune]),
+];
 
 /// Mounts [widget] directly in a fresh binding sized [rows]×[cols], runs one
 /// frame, and returns the painted buffer alongside the binding for further
 /// frames.
-({TuiBinding binding, CellBuffer buffer}) pump(Widget widget,
-    {int rows = 6, int cols = 12}) {
+({TuiBinding binding, CellBuffer buffer}) pump(
+  Widget widget, {
+  int rows = 6,
+  int cols = 12,
+}) {
   var binding = TuiBinding();
   binding.attachRootWidget(widget);
   binding.handleResize(CellSize(rows, cols));

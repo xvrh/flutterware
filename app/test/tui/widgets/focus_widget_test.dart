@@ -26,8 +26,9 @@ void main() {
 
   test('autofocus focuses the node on first frame', () {
     var node = FocusNode();
-    var binding =
-        _pump(Focus(focusNode: node, autofocus: true, child: SizedBox()));
+    var binding = _pump(
+      Focus(focusNode: node, autofocus: true, child: SizedBox()),
+    );
     expect(binding.focusManager.primaryFocus, node);
     expect(node.hasPrimaryFocus, isTrue);
   });
@@ -35,13 +36,17 @@ void main() {
   test('a descendant reading Focus.of rebuilds when hasFocus flips', () {
     var node = FocusNode();
     var builds = <bool>[];
-    var binding = _pump(Focus(
-      focusNode: node,
-      child: Builder(builder: (context) {
-        builds.add(Focus.of(context).hasFocus);
-        return SizedBox();
-      }),
-    ));
+    var binding = _pump(
+      Focus(
+        focusNode: node,
+        child: Builder(
+          builder: (context) {
+            builds.add(Focus.of(context).hasFocus);
+            return SizedBox();
+          },
+        ),
+      ),
+    );
     expect(builds.last, isFalse);
 
     node.requestFocus();
@@ -60,10 +65,12 @@ void main() {
   test('FocusScope attaches a scope node beneath the root scope', () {
     var scopeNode = FocusScopeNode();
     var leaf = FocusNode();
-    _pump(FocusScope(
-      node: scopeNode,
-      child: Focus(focusNode: leaf, child: SizedBox()),
-    ));
+    _pump(
+      FocusScope(
+        node: scopeNode,
+        child: Focus(focusNode: leaf, child: SizedBox()),
+      ),
+    );
     expect(leaf.enclosingScope, scopeNode);
     expect(scopeNode.parent, isNotNull);
   });
@@ -71,13 +78,17 @@ void main() {
   test('FocusTraversalGroup exposes its policy to descendants', () {
     var policy = DirectionalFocusTraversalPolicy();
     FocusTraversalPolicy? seen;
-    _pump(FocusTraversalGroup(
-      policy: policy,
-      child: Builder(builder: (context) {
-        seen = FocusTraversalGroup.maybeOf(context);
-        return SizedBox();
-      }),
-    ));
+    _pump(
+      FocusTraversalGroup(
+        policy: policy,
+        child: Builder(
+          builder: (context) {
+            seen = FocusTraversalGroup.maybeOf(context);
+            return SizedBox();
+          },
+        ),
+      ),
+    );
     expect(seen, policy);
   });
 }

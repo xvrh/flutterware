@@ -22,16 +22,19 @@ class UiService {
 
   UiService(this.service);
 
-  Future<T?> showOverlayDialog<T>(
-      {required WidgetBuilder builder, bool? barrierDismissible}) async {
+  Future<T?> showOverlayDialog<T>({
+    required WidgetBuilder builder,
+    bool? barrierDismissible,
+  }) async {
     barrierDismissible ??= true;
 
     overlayVisible.add(overlayVisible.value + 1);
     var overlayState = overlayNavigatorKey.currentState!;
     var result = await overlayState.showDialog<T>(
-        context: overlayState.context,
-        builder: builder,
-        barrierDismissible: barrierDismissible);
+      context: overlayState.context,
+      builder: builder,
+      barrierDismissible: barrierDismissible,
+    );
     overlayVisible.add(overlayVisible.value - 1);
     return result;
   }
@@ -55,8 +58,10 @@ class UiService {
     openState.add(OpenState(scale: _scale));
   }
 
-  DevbarButtonHandle addButton(Widget widget,
-      {DevbarButtonPosition? position}) {
+  DevbarButtonHandle addButton(
+    Widget widget, {
+    DevbarButtonPosition? position,
+  }) {
     var button = DevbarButtonHandle(this, widget: widget, position: position);
     buttons.add(buttons.value..add(button));
     return button;
@@ -171,9 +176,11 @@ class DevbarButtonHandle {
   Widget widget;
   final DevbarButtonPosition position;
 
-  DevbarButtonHandle(this.service,
-      {required this.widget, DevbarButtonPosition? position})
-      : position = position ?? DevbarButtonPosition.topRight;
+  DevbarButtonHandle(
+    this.service, {
+    required this.widget,
+    DevbarButtonPosition? position,
+  }) : position = position ?? DevbarButtonPosition.topRight;
 
   Stream<void> get refreshStream => _refreshController.stream;
 
@@ -193,7 +200,7 @@ class ToastHolder {
   final Alignment alignment;
 
   ToastHolder(this.content, {Alignment? alignment})
-      : alignment = alignment ?? Alignment.bottomCenter;
+    : alignment = alignment ?? Alignment.bottomCenter;
 }
 
 sealed class DevbarTab {}

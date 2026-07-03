@@ -5,11 +5,7 @@ class Breadcrumb extends StatelessWidget {
   final List<Widget> children;
   final VoidCallback? onBack;
 
-  const Breadcrumb({
-    super.key,
-    required this.children,
-    this.onBack,
-  });
+  const Breadcrumb({super.key, required this.children, this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +39,8 @@ class Breadcrumb extends StatelessWidget {
                   color: AppColors.breadcrumbLink,
                   size: 18,
                 ),
-              )
-          ]
+              ),
+          ],
         ],
       ),
     );
@@ -52,17 +48,15 @@ class Breadcrumb extends StatelessWidget {
 }
 
 class BreadcrumbEntry extends StatelessWidget {
-  static final overview =
-      BreadcrumbEntry(title: Text('Project overview'), url: '/project/home');
+  static final overview = BreadcrumbEntry(
+    title: Text('Project overview'),
+    url: '/project/home',
+  );
 
   final Widget title;
   final String url;
 
-  const BreadcrumbEntry({
-    super.key,
-    required this.title,
-    required this.url,
-  });
+  const BreadcrumbEntry({super.key, required this.title, required this.url});
 
   @override
   Widget build(BuildContext context) {

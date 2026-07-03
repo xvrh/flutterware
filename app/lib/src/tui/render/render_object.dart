@@ -154,8 +154,10 @@ abstract class RenderObject {
     }
     if (_relayoutBoundary != this) {
       _needsLayout = true;
-      assert(_parent != null,
-          'A non-root render object must have a parent to bubble layout to.');
+      assert(
+        _parent != null,
+        'A non-root render object must have a parent to bubble layout to.',
+      );
       _parent!.markNeedsLayout();
     } else {
       _needsLayout = true;

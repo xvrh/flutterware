@@ -16,28 +16,36 @@ class _$TestReferenceSerializer implements StructuredSerializer<TestReference> {
   final String wireName = 'TestReference';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, TestReference object,
-      {FullType specifiedType = FullType.unspecified}) {
+  Iterable<Object?> serialize(
+    Serializers serializers,
+    TestReference object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'name',
-      serializers.serialize(object.name,
-          specifiedType: const FullType(BuiltList, [FullType(String)])),
+      serializers.serialize(
+        object.name,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      ),
     ];
     Object? value;
     value = object.description;
     if (value != null) {
       result
         ..add('description')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(String)),
+        );
     }
     return result;
   }
 
   @override
   TestReference deserialize(
-      Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = TestReferenceBuilder();
 
     final iterator = serialized.iterator;
@@ -47,13 +55,21 @@ class _$TestReferenceSerializer implements StructuredSerializer<TestReference> {
       final Object? value = iterator.current;
       switch (key) {
         case 'name':
-          result.name.replace(serializers.deserialize(value,
-                  specifiedType: const FullType(BuiltList, [FullType(String)]))!
-              as BuiltList<Object?>);
+          result.name.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(BuiltList, [FullType(String)]),
+                )!
+                as BuiltList<Object?>,
+          );
           break;
         case 'description':
-          result.description = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+          result.description =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )
+                  as String?;
           break;
       }
     }
@@ -149,7 +165,8 @@ class TestReferenceBuilder
   _$TestReference _build() {
     _$TestReference _$result;
     try {
-      _$result = _$v ??
+      _$result =
+          _$v ??
           _$TestReference._(name: name.build(), description: description);
     } catch (_) {
       late String _$failedField;
@@ -158,7 +175,10 @@ class TestReferenceBuilder
         name.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            r'TestReference', _$failedField, e.toString());
+          r'TestReference',
+          _$failedField,
+          e.toString(),
+        );
       }
       rethrow;
     }

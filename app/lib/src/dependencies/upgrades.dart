@@ -5,9 +5,6 @@ class DependenciesUpgradeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.red,
-      child: Text('Upgrades'),
-    );
+    return Container(color: Colors.red, child: Text('Upgrades'));
   }
 }

@@ -16,10 +16,11 @@ class Server {
   Uri? get socketUri {
     if (_isStarted) {
       return Uri(
-          scheme: 'ws',
-          host: Platform.isWindows ? 'localhost' : _server.address.host,
-          port: _server.port,
-          path: 'socket');
+        scheme: 'ws',
+        host: Platform.isWindows ? 'localhost' : _server.address.host,
+        port: _server.port,
+        path: 'socket',
+      );
     }
     return null;
   }
@@ -42,14 +43,18 @@ class Server {
 
   FutureOr<Response> _socketHandler(Request request) {
     return webSocketHandler(
-        (WebSocketChannel channel, _) => _onConnect(request, channel))(request);
+      (WebSocketChannel channel, _) => _onConnect(request, channel),
+    )(request);
   }
 
   void _onConnect(Request request, WebSocketChannel channel) async {
     late TestRunnerApi client;
-    client = TestRunnerApi(channel.cast<String>(), onClose: () {
-      _clients.add(_clients.value..remove(client));
-    });
+    client = TestRunnerApi(
+      channel.cast<String>(),
+      onClose: () {
+        _clients.add(_clients.value..remove(client));
+      },
+    );
 
     _clients.add(_clients.value..add(client));
   }

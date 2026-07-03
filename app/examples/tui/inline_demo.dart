@@ -43,8 +43,14 @@ Future<void> _statusPanel(Terminal terminal) async {
     frames++;
     terminal.draw((b) {
       final w = terminal.cols;
-      _drawBorder(b, 0, 0, terminal.rows, w,
-          title: ' flutterware · inline status ');
+      _drawBorder(
+        b,
+        0,
+        0,
+        terminal.rows,
+        w,
+        title: ' flutterware · inline status ',
+      );
 
       final elapsed = DateTime.now().difference(start);
       // Progress cycles 0..100 over ~8s so the bar visibly animates.
@@ -53,11 +59,10 @@ Future<void> _statusPanel(Terminal terminal) async {
 
       // Row 1: spinner + phase label + progress bar + percentage.
       b.set(
-          1,
-          2,
-          Cell(
-              rune: _spinner[frames % _spinner.length],
-              fg: Color.brightYellow));
+        1,
+        2,
+        Cell(rune: _spinner[frames % _spinner.length], fg: Color.brightYellow),
+      );
       b.writeAt(1, 4, label.padRight(15), style: TextStyle.bold, fg: color);
       final barStart = 20;
       final barEnd = w - 7;
@@ -76,8 +81,12 @@ Future<void> _statusPanel(Terminal terminal) async {
 
       // Row 2: elapsed time + most recent key.
       b.writeAt(2, 2, 'Elapsed ${_fmtDuration(elapsed)}', fg: Color.brightCyan);
-      b.writeAt(2, 20, '· last key: $lastKey ($keyCount)',
-          style: TextStyle.dim);
+      b.writeAt(
+        2,
+        20,
+        '· last key: $lastKey ($keyCount)',
+        style: TextStyle.dim,
+      );
 
       // Row 3: quit hint.
       b.writeAt(3, 2, 'press q to quit', style: TextStyle.dim);
@@ -86,14 +95,16 @@ Future<void> _statusPanel(Terminal terminal) async {
 
   repaint();
   final resizeSub = terminal.resizes.listen((_) => repaint());
-  final ticker =
-      Timer.periodic(const Duration(milliseconds: 100), (_) => repaint());
+  final ticker = Timer.periodic(
+    const Duration(milliseconds: 100),
+    (_) => repaint(),
+  );
 
   try {
     await for (final event in terminal.keys) {
       keyCount++;
       lastKey = _describe(event);
-      if (event is CharKey && event.rune == 0x71 /* 'q' */) break;
+      if (event is CharKey && event.rune == 0x71 /* 'q' */ ) break;
       if (event is CharKey &&
           event.rune == 0x63 /* 'c' */ &&
           event.modifiers.contains(Modifier.ctrl)) {
@@ -116,8 +127,14 @@ Future<void> _statusPanel(Terminal terminal) async {
   return ('Resolving deps', Color.brightCyan);
 }
 
-void _drawBorder(CellBuffer b, int row, int col, int rows, int cols,
-    {String? title}) {
+void _drawBorder(
+  CellBuffer b,
+  int row,
+  int col,
+  int rows,
+  int cols, {
+  String? title,
+}) {
   const tl = 0x250C, tr = 0x2510, bl = 0x2514, br = 0x2518;
   const h = 0x2500, v = 0x2502;
   b.set(row, col, const Cell(rune: tl));

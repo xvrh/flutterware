@@ -22,14 +22,19 @@ class UICatalogService {
   Server? _server;
 
   UICatalogService(this.project)
-      : _entryPointPath = p.join('build', 'flutterware',
-            'ui_book_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(99999)}.dart');
+    : _entryPointPath = p.join(
+        'build',
+        'flutterware',
+        'ui_book_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(99999)}.dart',
+      );
 
   Stream<PreviewDevice?> get mainDevice => _devices.map((e) => e.firstOrNull);
 
   void start() async {
     _server = await Server.start(
-        onAdd: _onAddConnection, onRemove: _onRemoveConnection);
+      onAdd: _onAddConnection,
+      onRemove: _onRemoveConnection,
+    );
 
     _refreshMainFiles();
     _logger.info('Path: $_entryPointPath');
@@ -101,10 +106,11 @@ void main() {
   List<String> _listMains() {
     var files = <String>[];
     // TODO: only list files that are in non-excluded directories? (use gitignore?)
-    for (var file in project.directory
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((e) => e.path.endsWith(_mainSuffix))) {
+    for (var file
+        in project.directory
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((e) => e.path.endsWith(_mainSuffix))) {
       // TODO: check that there is a main() function
       files.add(p.relative(file.path, from: project.directory.path));
     }
@@ -114,9 +120,12 @@ void main() {
   }
 
   String _createSampleFile() {
-    var sampleContent = File(p.join(project.context.appToolDirectory.path,
-            'lib/src/ui_book/service/ui_book_sample.dart'))
-        .readAsStringSync();
+    var sampleContent = File(
+      p.join(
+        project.context.appToolDirectory.path,
+        'lib/src/ui_book/service/ui_book_sample.dart',
+      ),
+    ).readAsStringSync();
     var sample = File(p.join(project.directory.path, 'examples/ui_book.dart'))
       ..createSync(recursive: true)
       ..writeAsStringSync(sampleContent);
@@ -142,10 +151,12 @@ class PreviewDevice {
   }
 
   void start(String entrypoint) async {
-    var process = _process = await FlutterRunProcess.start(project.directory,
-        target: entrypoint,
-        device: 'flutter-tester',
-        flutterSdk: project.flutterSdkPath);
+    var process = _process = await FlutterRunProcess.start(
+      project.directory,
+      target: entrypoint,
+      device: 'flutter-tester',
+      flutterSdk: project.flutterSdkPath,
+    );
     process.onLog.listen((event) {
       _logger.info('Log ${event.log}');
     });

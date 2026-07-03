@@ -32,10 +32,7 @@ class IconScreen extends StatelessWidget {
           primary: false,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           children: [
-            Breadcrumb(children: [
-              BreadcrumbEntry.overview,
-              Text('Tools'),
-            ]),
+            Breadcrumb(children: [BreadcrumbEntry.overview, Text('Tools')]),
             Row(
               children: [
                 Expanded(
@@ -51,15 +48,16 @@ class IconScreen extends StatelessWidget {
                     label: Text('Change icon'),
                   ),
                 PopupMenuButton(
-                    itemBuilder: (context) => [
-                          PopupMenuItem(
-                            child: Text('Reload icons'),
-                            onTap: () {
-                              project.icons.icons.refresh();
-                              project.icons.sample.refresh();
-                            },
-                          ),
-                        ]),
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      child: Text('Reload icons'),
+                      onTap: () {
+                        project.icons.icons.refresh();
+                        project.icons.sample.refresh();
+                      },
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 20),
@@ -80,8 +78,9 @@ class IconScreen extends StatelessWidget {
 
   void _changeIcon(BuildContext context, AppIcons icons) async {
     await showDialog(
-        context: context,
-        builder: (context) => _ChangeIconDialog(project, icons));
+      context: context,
+      builder: (context) => _ChangeIconDialog(project, icons),
+    );
   }
 
   Iterable<Widget> _icons(BuildContext context, AppIcons icons) sync* {
@@ -92,16 +91,10 @@ class IconScreen extends StatelessWidget {
 
       var files = entry.value.sortedByCompare((e) => e.path, compareNatural);
 
-      yield Text(
-        ' ${entry.key.name}',
-        style: theme.textTheme.bodyMedium,
-      );
+      yield Text(' ${entry.key.name}', style: theme.textTheme.bodyMedium);
       yield const SizedBox(height: 5);
       var table = Table(
-        columnWidths: {
-          0: FixedColumnWidth(80),
-          1: FixedColumnWidth(100),
-        },
+        columnWidths: {0: FixedColumnWidth(80), 1: FixedColumnWidth(100)},
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         children: [
           for (var icon in files)
@@ -115,9 +108,7 @@ class IconScreen extends StatelessWidget {
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.black26),
                     ),
-                    child: Image(
-                      image: AppIconImageProvider(icon),
-                    ),
+                    child: Image(image: AppIconImageProvider(icon)),
                   ),
                 ),
                 Text(
@@ -193,23 +184,26 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
-                  'Recommended size: ${biggest.originalWidth}x${biggest.originalHeight}'),
+                'Recommended size: ${biggest.originalWidth}x${biggest.originalHeight}',
+              ),
             ),
             for (var platform in widget.icons.icons.keys)
               Row(
                 children: [
                   Switch(
-                      value: _platformSwitches[platform]!,
-                      onChanged: (v) {
-                        setState(() {
-                          _platformSwitches[platform] = v;
-                        });
-                      }),
+                    value: _platformSwitches[platform]!,
+                    onChanged: (v) {
+                      setState(() {
+                        _platformSwitches[platform] = v;
+                      });
+                    },
+                  ),
                   Text(platform.name),
                 ],
               ),
             WarningBox(
-              message: 'This feature is limited and experimental.  \n'
+              message:
+                  'This feature is limited and experimental.  \n'
                   'If you have suggestions to improve it, [open issues on Github](https://github.com/xvrh/flutterware)',
             ),
           ],
@@ -231,13 +225,11 @@ class __ChangeIconDialogState extends State<_ChangeIconDialog> {
   }
 
   void _pick() async {
-    var imagesGroup = XTypeGroup(
-      label: 'images',
-      extensions: ['png'],
-    );
+    var imagesGroup = XTypeGroup(label: 'images', extensions: ['png']);
     var result = await openFile(
-        acceptedTypeGroups: [imagesGroup],
-        initialDirectory: widget.project.absolutePath);
+      acceptedTypeGroups: [imagesGroup],
+      initialDirectory: widget.project.absolutePath,
+    );
     if (result != null) {
       var bytes = await result.readAsBytes();
       setState(() {

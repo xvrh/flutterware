@@ -8,10 +8,7 @@ import 'floating.dart';
 import 'image.dart';
 
 final _radius = Radius.circular(10);
-final _borderRadius = BorderRadius.only(
-  topLeft: _radius,
-  bottomLeft: _radius,
-);
+final _borderRadius = BorderRadius.only(topLeft: _radius, bottomLeft: _radius);
 
 class FigmaPreviewer extends StatefulWidget {
   final FigmaService service;
@@ -47,27 +44,31 @@ class _FigmaPreviewerState extends State<FigmaPreviewer> {
   @override
   Widget build(BuildContext context) {
     var child = DragTarget<FigmaLink>(
-      builder: (context, List<FigmaLink?> candidateData,
-          List<dynamic> rejectedData) {
-        return FloatingStack(
-          widget.service,
-          floatingLinks: _floatingLinks,
-          onRemove: (v) {
-            setState(() {
-              _floatingLinks.remove(v);
-            });
+      builder:
+          (
+            context,
+            List<FigmaLink?> candidateData,
+            List<dynamic> rejectedData,
+          ) {
+            return FloatingStack(
+              widget.service,
+              floatingLinks: _floatingLinks,
+              onRemove: (v) {
+                setState(() {
+                  _floatingLinks.remove(v);
+                });
+              },
+              onMove: (link, position) {
+                setState(() {
+                  _floatingLinks[link] = position;
+                });
+              },
+              child: widget.child,
+            );
           },
-          onMove: (link, position) {
-            setState(() {
-              _floatingLinks[link] = position;
-            });
-          },
-          child: widget.child,
-        );
-      },
       onAcceptWithDetails: (d) {
-        var localOffset =
-            (context.findRenderObject()! as RenderBox).globalToLocal(d.offset);
+        var localOffset = (context.findRenderObject()! as RenderBox)
+            .globalToLocal(d.offset);
         setState(() {
           _floatingLinks[d.data] = FloatPosition(
             offset: localOffset + Offset(10, -15),
@@ -119,66 +120,66 @@ class _FigmaPreviewerState extends State<FigmaPreviewer> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(child: child),
-          _dragHandle(SizedBox(
-            width: _width,
-            child: Container(
-              decoration: BoxDecoration(
-                color: figmaBackgroundColor,
-                border: Border(
-                  left: borderSide,
-                  bottom: borderSide,
+          _dragHandle(
+            SizedBox(
+              width: _width,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: figmaBackgroundColor,
+                  border: Border(left: borderSide, bottom: borderSide),
+                  borderRadius: _borderRadius,
                 ),
-                borderRadius: _borderRadius,
-              ),
-              clipBehavior: Clip.antiAliasWithSaveLayer,
-              child: Column(
-                children: [
-                  header,
-                  Expanded(
-                    child: ListView(
-                      children: [
-                        for (var link in widget.figmaLinks)
-                          _DockedPreview(
-                            link,
-                            this,
-                            isFloating: _floatingLinks.containsKey(link),
-                            onSettings: () => widget.onLinkSettings(link),
-                            onToggleFloat: () {
-                              setState(() {
-                                if (_floatingLinks.containsKey(link)) {
-                                  _floatingLinks.remove(link);
-                                } else {
-                                  _floatingLinks[link] = FloatPosition(
+                clipBehavior: Clip.antiAliasWithSaveLayer,
+                child: Column(
+                  children: [
+                    header,
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          for (var link in widget.figmaLinks)
+                            _DockedPreview(
+                              link,
+                              this,
+                              isFloating: _floatingLinks.containsKey(link),
+                              onSettings: () => widget.onLinkSettings(link),
+                              onToggleFloat: () {
+                                setState(() {
+                                  if (_floatingLinks.containsKey(link)) {
+                                    _floatingLinks.remove(link);
+                                  } else {
+                                    _floatingLinks[link] = FloatPosition(
                                       offset: Offset.zero,
                                       width: widget.floatDefaultWidth(),
-                                      opacity: 0.5);
-                                }
-                              });
-                            },
+                                      opacity: 0.5,
+                                    );
+                                  }
+                                });
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                    widget.clipboardButton,
+                    Row(
+                      children: [
+                        if (widget.onAddLink case var onAddLink?)
+                          AddLinkButton(
+                            onSubmit: onAddLink,
+                            clipboardWatcher:
+                                widget.service.clipboardWatcher.proposedLink,
                           ),
+                        Expanded(child: const SizedBox()),
+                        IconButton(
+                          onPressed: widget.onOpenSettings,
+                          icon: Icon(Icons.settings),
+                        ),
                       ],
                     ),
-                  ),
-                  widget.clipboardButton,
-                  Row(
-                    children: [
-                      if (widget.onAddLink case var onAddLink?)
-                        AddLinkButton(
-                          onSubmit: onAddLink,
-                          clipboardWatcher:
-                              widget.service.clipboardWatcher.proposedLink,
-                        ),
-                      Expanded(child: const SizedBox()),
-                      IconButton(
-                        onPressed: widget.onOpenSettings,
-                        icon: Icon(Icons.settings),
-                      ),
-                    ],
-                  )
-                ],
+                  ],
+                ),
               ),
             ),
-          )),
+          ),
         ],
       );
     }
@@ -210,7 +211,7 @@ class _FigmaPreviewerState extends State<FigmaPreviewer> {
               ),
             ),
           ),
-        )
+        ),
       ],
     );
   }
@@ -318,8 +319,9 @@ class _DockedPreview extends StatelessWidget {
                 Icons.open_with,
                 onPressed: onToggleFloat,
                 color: isFloating ? Colors.greenAccent : null,
-                tooltip:
-                    isFloating ? 'Remove floating preview' : 'Floating mode',
+                tooltip: isFloating
+                    ? 'Remove floating preview'
+                    : 'Floating mode',
               ),
               _IconButton(
                 Icons.settings,
@@ -335,19 +337,10 @@ class _DockedPreview extends StatelessWidget {
       data: link,
       feedback: SizedBox(
         width: 200,
-        child: Opacity(
-          opacity: 0.5,
-          child: widget,
-        ),
+        child: Opacity(opacity: 0.5, child: widget),
       ),
-      childWhenDragging: Opacity(
-        opacity: 0.5,
-        child: widget,
-      ),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.grab,
-        child: widget,
-      ),
+      childWhenDragging: Opacity(opacity: 0.5, child: widget),
+      child: MouseRegion(cursor: SystemMouseCursors.grab, child: widget),
     );
   }
 }
@@ -358,8 +351,12 @@ class _IconButton extends StatelessWidget {
   final String? tooltip;
   final Color? color;
 
-  const _IconButton(this.icon,
-      {required this.onPressed, this.tooltip, this.color});
+  const _IconButton(
+    this.icon, {
+    required this.onPressed,
+    this.tooltip,
+    this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -368,11 +365,7 @@ class _IconButton extends StatelessWidget {
       onPressed: onPressed,
       constraints: BoxConstraints(),
       padding: EdgeInsets.all(4),
-      icon: Icon(
-        icon,
-        size: 14,
-        color: color,
-      ),
+      icon: Icon(icon, size: 14, color: color),
     );
   }
 }

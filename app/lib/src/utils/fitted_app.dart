@@ -46,11 +46,7 @@ class _FittedAppState extends State<FittedApp> with WidgetsBindingObserver {
     }
 
     return FittedBox(
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: widget.child,
-      ),
+      child: SizedBox(width: width, height: height, child: widget.child),
     );
   }
 

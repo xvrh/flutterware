@@ -56,8 +56,7 @@ String renderShim({
   required String realBinary,
   required String kind,
   required String wrapExe,
-}) =>
-    _shimTemplate
-        .replaceAll('@REAL@', realBinary)
-        .replaceAll('@KIND@', kind)
-        .replaceAll('@WRAP_EXE@', wrapExe);
+}) => _shimTemplate
+    .replaceAll('@REAL@', realBinary)
+    .replaceAll('@KIND@', kind)
+    .replaceAll('@WRAP_EXE@', wrapExe);

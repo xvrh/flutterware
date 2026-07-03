@@ -4,11 +4,13 @@
 
 import 'package:flutterware_app/src/tui/tui.dart';
 
-const _lorem = 'The paint kit draws borders, fills, lines and word-wrapped '
+const _lorem =
+    'The paint kit draws borders, fills, lines and word-wrapped '
     'text into a shared cell buffer. Every helper routes through one clipped '
     'write path, so a panel can never bleed past its own rectangle.';
 
-const _overflow = 'This sentence is deliberately much wider and taller than '
+const _overflow =
+    'This sentence is deliberately much wider and taller than '
     'the panel that contains it, to prove the clip holds. ';
 
 void _paint(CellBuffer buffer) {
@@ -60,7 +62,7 @@ Future<void> main() async {
     var resizeSub = terminal.resizes.listen((_) => terminal.draw(_paint));
     try {
       await for (final event in terminal.keys) {
-        if (event is CharKey && event.rune == 0x71 /* 'q' */) break;
+        if (event is CharKey && event.rune == 0x71 /* 'q' */ ) break;
       }
     } finally {
       await resizeSub.cancel();

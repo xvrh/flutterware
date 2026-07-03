@@ -137,10 +137,7 @@ class _DetailDialog extends StatelessWidget {
               title: SelectableText(record.message),
               subtitle: Text(record.time.toString()),
             ),
-            ListTile(
-              title: Text('Logger:'),
-              subtitle: Text(record.loggerName),
-            ),
+            ListTile(title: Text('Logger:'), subtitle: Text(record.loggerName)),
             if (record.error != null)
               ListTile(
                 title: Text('Error:'),

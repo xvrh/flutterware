@@ -16,8 +16,10 @@ class FigmaDownloaderIO implements FigmaDownloader {
   FigmaDownloaderIO(this.cache);
 
   @override
-  Future<ImageProvider> readFigmaScreenshot(FigmaLink url,
-      {FigmaCredentials? credentials}) async {
+  Future<ImageProvider> readFigmaScreenshot(
+    FigmaLink url, {
+    FigmaCredentials? credentials,
+  }) async {
     if (credentials == null) {
       throw FigmaCredentialsRequiredException();
     }
@@ -36,24 +38,28 @@ class FigmaDownloaderIO implements FigmaDownloader {
     cache.remove(link);
   }
 
-  Future<Uint8List> _download(FigmaId id,
-      {required FigmaCredentials credentials}) async {
+  Future<Uint8List> _download(
+    FigmaId id, {
+    required FigmaCredentials credentials,
+  }) async {
     var basePath = Uri(
-        scheme: 'https',
-        host: 'api.figma.com',
-        path: 'v1/images/${id.fileId}',
-        queryParameters: {
-          'ids': id.nodeId,
-          'scale': '1',
-        }).toString();
+      scheme: 'https',
+      host: 'api.figma.com',
+      path: 'v1/images/${id.fileId}',
+      queryParameters: {'ids': id.nodeId, 'scale': '1'},
+    ).toString();
 
-    var json = await read(Uri.parse(basePath), headers: {
-      'X-Figma-Token': credentials.token,
-      'Accept': 'application/json',
-    });
+    var json = await read(
+      Uri.parse(basePath),
+      headers: {
+        'X-Figma-Token': credentials.token,
+        'Accept': 'application/json',
+      },
+    );
 
-    var images = (jsonDecode(json) as Map<String, dynamic>)['images']
-        as Map<String, dynamic>;
+    var images =
+        (jsonDecode(json) as Map<String, dynamic>)['images']
+            as Map<String, dynamic>;
     var myImage = images[id.nodeId.replaceAll('-', ':')]! as String;
 
     var bytes = await readBytes(Uri.parse(myImage));

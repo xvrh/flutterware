@@ -4,8 +4,12 @@ String capitalize(String word) {
   return replaceAt(word, 0, transformer: (s) => s.toUpperCase());
 }
 
-String replaceAt(String input, int startIndex,
-    {int? endIndex, required String Function(String) transformer}) {
+String replaceAt(
+  String input,
+  int startIndex, {
+  int? endIndex,
+  required String Function(String) transformer,
+}) {
   endIndex ??= startIndex + 1;
 
   if (startIndex < 0) throw RangeError.value(startIndex);

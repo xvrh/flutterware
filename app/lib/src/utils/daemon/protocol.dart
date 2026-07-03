@@ -29,27 +29,30 @@ class DaemonProtocol {
   int _commandId = 0;
 
   DaemonProtocol(this.write, this.read) {
-    _subscription = read.listen((event) {
-      _logger.finer('Daemon: $event');
-      var object = tryReadLine(event);
-      if (object != null) {
-        var decodedEvent = tryReadEvent(object);
-        if (decodedEvent != null) {
-          _eventController.add(decodedEvent);
-        } else {
-          var id = object['id'] as int?;
-          if (id != null) {
-            var result = object['result'];
-            var inflight = _inFlightCommands.remove(id);
-            if (inflight != null) {
-              inflight.complete(result);
+    _subscription = read.listen(
+      (event) {
+        _logger.finer('Daemon: $event');
+        var object = tryReadLine(event);
+        if (object != null) {
+          var decodedEvent = tryReadEvent(object);
+          if (decodedEvent != null) {
+            _eventController.add(decodedEvent);
+          } else {
+            var id = object['id'] as int?;
+            if (id != null) {
+              var result = object['result'];
+              var inflight = _inFlightCommands.remove(id);
+              if (inflight != null) {
+                inflight.complete(result);
+              }
             }
           }
         }
-      }
-    }, onDone: () {
-      _eventController.close();
-    });
+      },
+      onDone: () {
+        _eventController.close();
+      },
+    );
   }
 
   static Map<String, dynamic>? tryReadLine(String line) {

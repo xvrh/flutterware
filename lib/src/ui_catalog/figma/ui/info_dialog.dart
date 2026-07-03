@@ -4,11 +4,16 @@ import '../../app.dart';
 import '../link.dart';
 import '../service.dart';
 
-Future<void> showFigmaLinkDialog(BuildContext context, FigmaService service,
-    TreeEntry entry, FigmaLink link) async {
+Future<void> showFigmaLinkDialog(
+  BuildContext context,
+  FigmaService service,
+  TreeEntry entry,
+  FigmaLink link,
+) async {
   await showDialog(
-      context: context,
-      builder: (context) => FigmaLinkInfoDialog(service, entry, link));
+    context: context,
+    builder: (context) => FigmaLinkInfoDialog(service, entry, link),
+  );
 }
 
 class FigmaLinkInfoDialog extends StatelessWidget {
@@ -30,7 +35,8 @@ class FigmaLinkInfoDialog extends StatelessWidget {
             ListTile(
               onTap: () async {
                 await Clipboard.setData(
-                    ClipboardData(text: link.uri.toString()));
+                  ClipboardData(text: link.uri.toString()),
+                );
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

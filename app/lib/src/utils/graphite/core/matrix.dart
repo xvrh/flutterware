@@ -1,18 +1,12 @@
 import 'typings.dart';
 
 class FindNodeResult {
-  FindNodeResult({
-    required this.coords,
-    required this.item,
-  });
+  FindNodeResult({required this.coords, required this.item});
   List<int> coords;
   NodeOutput item;
 }
 
-enum MatrixOrientation {
-  horizontal,
-  vertical,
-}
+enum MatrixOrientation { horizontal, vertical }
 
 String fillWithSpaces(String str, int l) {
   while (str.length < l) {
@@ -22,9 +16,7 @@ String fillWithSpaces(String str, int l) {
 }
 
 class Matrix {
-  Matrix()
-      : s = [],
-        orientation = MatrixOrientation.horizontal;
+  Matrix() : s = [], orientation = MatrixOrientation.horizontal;
 
   int width() {
     return s.fold(0, (w, row) => row.length > w ? row.length : w);
@@ -164,8 +156,11 @@ class Matrix {
         var x = columnEntry.key;
         var item = columnEntry.value;
         if (item != null) {
-          acc[item.id] =
-              MatrixNode.fromNodeOutput(x: x, y: y, nodeOutput: item);
+          acc[item.id] = MatrixNode.fromNodeOutput(
+            x: x,
+            y: y,
+            nodeOutput: item,
+          );
         }
       });
     });

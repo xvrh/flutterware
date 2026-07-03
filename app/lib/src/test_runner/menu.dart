@@ -16,10 +16,7 @@ class TestMenu extends StatelessWidget {
     return CollapsibleMenu(
       title: Text('Tests'),
       children: [
-        MenuLink(
-          url: 'tests/home',
-          title: Text('Introduction'),
-        ),
+        MenuLink(url: 'tests/home', title: Text('Introduction')),
         DaemonToolbar(project),
         _listing(),
       ],

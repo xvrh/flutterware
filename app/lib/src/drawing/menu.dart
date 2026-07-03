@@ -26,10 +26,7 @@ class DrawingMenu extends StatelessWidget {
             textStyle: const TextStyle(fontSize: 12),
             minimumSize: Size(0, 30),
           ),
-          icon: Icon(
-            Icons.add,
-            size: 12,
-          ),
+          icon: Icon(Icons.add, size: 12),
           label: Text('New file'),
         ),
       ],
@@ -58,9 +55,7 @@ class __ListingMenuState extends State<_ListingMenu> {
     return ValueListenableBuilder<Iterable<DrawingFile>>(
       valueListenable: widget.project.drawing.files,
       builder: (context, files, child) {
-        return Column(
-          children: _lines(files).toList(),
-        );
+        return Column(children: _lines(files).toList());
       },
     );
   }
@@ -76,19 +71,16 @@ class __ListingMenuState extends State<_ListingMenu> {
         expanded: isExpanded,
         child: Row(
           children: [
-            Text(p
-                .basename(file.filePath)
-                .removeSuffix(DrawingFile.fileExtension)),
+            Text(
+              p.basename(file.filePath).removeSuffix(DrawingFile.fileExtension),
+            ),
             const SizedBox(width: 5),
             Expanded(
               child: Text(
                 p.dirname(file.filePath),
                 overflow: TextOverflow.fade,
                 softWrap: false,
-                style: const TextStyle(
-                  color: Colors.black38,
-                  height: 0.9,
-                ),
+                style: const TextStyle(color: Colors.black38, height: 0.9),
               ),
             ),
           ],
@@ -109,7 +101,9 @@ class __ListingMenuState extends State<_ListingMenu> {
   }
 
   Iterable<Widget> _selectedEntries(
-      DrawingFile file, List<DrawingEntry> entries) sync* {
+    DrawingFile file,
+    List<DrawingEntry> entries,
+  ) sync* {
     for (var entry in entries) {
       var url = _urlForEntry(file, entry);
       yield MenuLine(
@@ -127,10 +121,7 @@ class __ListingMenuState extends State<_ListingMenu> {
                 entry.typeName,
                 overflow: TextOverflow.fade,
                 softWrap: false,
-                style: const TextStyle(
-                  color: Colors.black38,
-                  height: 0.9,
-                ),
+                style: const TextStyle(color: Colors.black38, height: 0.9),
               ),
             ),
           ],

@@ -20,13 +20,15 @@ void main() {
   });
 
   test('round-trips SurfacesAllocated', () {
-    var msg = roundTrip(const SurfacesAllocatedMessage(
-      generation: 7,
-      width: 800,
-      height: 600,
-      rowBytes: 3200,
-      surfaceIds: [11, 22, 33],
-    ));
+    var msg = roundTrip(
+      const SurfacesAllocatedMessage(
+        generation: 7,
+        width: 800,
+        height: 600,
+        rowBytes: 3200,
+        surfaceIds: [11, 22, 33],
+      ),
+    );
     expect(msg.generation, 7);
     expect(msg.width, 800);
     expect(msg.height, 600);
@@ -35,8 +37,13 @@ void main() {
   });
 
   test('round-trips FrameReady with a large frameId', () {
-    var msg = roundTrip(const FrameReadyMessage(
-        ringIndex: 2, frameId: 0x100000001, generation: 5));
+    var msg = roundTrip(
+      const FrameReadyMessage(
+        ringIndex: 2,
+        frameId: 0x100000001,
+        generation: 5,
+      ),
+    );
     expect(msg.ringIndex, 2);
     expect(msg.frameId, 0x100000001);
     expect(msg.generation, 5);
@@ -49,22 +56,25 @@ void main() {
 
   test('round-trips Resize', () {
     var msg = roundTrip(
-        const ResizeMessage(width: 1024, height: 768, pixelRatio: 2.0));
+      const ResizeMessage(width: 1024, height: 768, pixelRatio: 2.0),
+    );
     expect(msg.width, 1024);
     expect(msg.height, 768);
     expect(msg.pixelRatio, 2.0);
   });
 
   test('round-trips PointerEvent', () {
-    var msg = roundTrip(const PointerEventMessage(
-      phase: PointerPhase.down,
-      x: 12.5,
-      y: 64.25,
-      buttons: 1,
-      scrollDeltaX: 0.0,
-      scrollDeltaY: -3.5,
-      timestampMicros: 123456,
-    ));
+    var msg = roundTrip(
+      const PointerEventMessage(
+        phase: PointerPhase.down,
+        x: 12.5,
+        y: 64.25,
+        buttons: 1,
+        scrollDeltaX: 0.0,
+        scrollDeltaY: -3.5,
+        timestampMicros: 123456,
+      ),
+    );
     expect(msg.phase, PointerPhase.down);
     expect(msg.x, 12.5);
     expect(msg.y, 64.25);
@@ -74,13 +84,15 @@ void main() {
   });
 
   test('round-trips KeyEvent', () {
-    var msg = roundTrip(const KeyEventMessage(
-      kind: KeyEventKind.down,
-      physicalKey: 0x00070004,
-      logicalKey: 0x00000061,
-      modifiers: 0,
-      timestampMicros: 999,
-    ));
+    var msg = roundTrip(
+      const KeyEventMessage(
+        kind: KeyEventKind.down,
+        physicalKey: 0x00070004,
+        logicalKey: 0x00000061,
+        modifiers: 0,
+        timestampMicros: 999,
+      ),
+    );
     expect(msg.kind, KeyEventKind.down);
     expect(msg.physicalKey, 0x00070004);
     expect(msg.logicalKey, 0x00000061);
@@ -90,8 +102,11 @@ void main() {
   test('FrameReader splits two concatenated frames', () {
     var bytes = BytesBuilder()
       ..add(encodeMessage(const ReadyMessage()))
-      ..add(encodeMessage(
-          const FrameReadyMessage(ringIndex: 0, frameId: 1, generation: 0)));
+      ..add(
+        encodeMessage(
+          const FrameReadyMessage(ringIndex: 0, frameId: 1, generation: 0),
+        ),
+      );
     var decoded = FrameReader().addBytes(bytes.toBytes()).toList();
     expect(decoded, hasLength(2));
     expect(decoded[0], isA<ReadyMessage>());
@@ -100,7 +115,8 @@ void main() {
 
   test('FrameReader reassembles a frame delivered byte by byte', () {
     var frame = encodeMessage(
-        const FrameReadyMessage(ringIndex: 1, frameId: 9, generation: 0));
+      const FrameReadyMessage(ringIndex: 1, frameId: 9, generation: 0),
+    );
     var reader = FrameReader();
     var decoded = <EmbedderMessage>[];
     for (var b in frame) {
@@ -111,7 +127,9 @@ void main() {
   });
 
   test('decodeMessageBody rejects an unknown type tag', () {
-    expect(() => decodeMessageBody(Uint8List.fromList([0xFF])),
-        throwsFormatException);
+    expect(
+      () => decodeMessageBody(Uint8List.fromList([0xFF])),
+      throwsFormatException,
+    );
   });
 }

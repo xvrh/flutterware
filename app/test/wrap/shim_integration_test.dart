@@ -14,24 +14,30 @@ void main() {
     // A "real binary" double that records it was called and echoes argv.
     realMarker = File(p.join(tmp.path, 'real.called'));
     final fakeReal = File(p.join(tmp.path, 'fake_real'))
-      ..writeAsStringSync('#!/usr/bin/env bash\necho "real:'
-          r'$*'
-          '" >>"${realMarker.path}"\n');
+      ..writeAsStringSync(
+        '#!/usr/bin/env bash\necho "real:'
+        r'$*'
+        '" >>"${realMarker.path}"\n',
+      );
     Process.runSync('chmod', ['+x', fakeReal.path]);
     // A "wrap exe" double — note it must accept the `run ... -- ...` argv.
     wrapMarker = File(p.join(tmp.path, 'wrap.called'));
     final fakeWrap = File(p.join(tmp.path, 'fake_wrap'))
-      ..writeAsStringSync('#!/usr/bin/env bash\necho "wrap:'
-          r'$*'
-          '" >>"${wrapMarker.path}"\n');
+      ..writeAsStringSync(
+        '#!/usr/bin/env bash\necho "wrap:'
+        r'$*'
+        '" >>"${wrapMarker.path}"\n',
+      );
     Process.runSync('chmod', ['+x', fakeWrap.path]);
 
     shim = File(p.join(tmp.path, 'flutter'))
-      ..writeAsStringSync(renderShim(
-        realBinary: fakeReal.path,
-        kind: 'flutter',
-        wrapExe: fakeWrap.path,
-      ));
+      ..writeAsStringSync(
+        renderShim(
+          realBinary: fakeReal.path,
+          kind: 'flutter',
+          wrapExe: fakeWrap.path,
+        ),
+      );
     Process.runSync('chmod', ['+x', shim.path]);
   });
   tearDown(() => tmp.deleteSync(recursive: true));
@@ -70,11 +76,13 @@ void main() {
     final proj = Directory(p.join(tmp.path, 'proj3'))..createSync();
     File(p.join(proj.path, 'flutter_version')).writeAsStringSync('3.44.0\n');
     // Re-render the shim pointing at a non-existent wrap exe.
-    shim.writeAsStringSync(renderShim(
-      realBinary: File(p.join(tmp.path, 'fake_real')).path,
-      kind: 'flutter',
-      wrapExe: '/no/such/wrap_exe',
-    ));
+    shim.writeAsStringSync(
+      renderShim(
+        realBinary: File(p.join(tmp.path, 'fake_real')).path,
+        kind: 'flutter',
+        wrapExe: '/no/such/wrap_exe',
+      ),
+    );
     Process.runSync('chmod', ['+x', shim.path]);
     invoke(['run'], cwd: proj);
     expect(realMarker.existsSync(), isTrue);

@@ -22,11 +22,15 @@ class ArrowPath {
     double tipAngle = math.pi * 0.2,
     bool isDoubleSided = false,
     bool isAdjusted = true,
-  }) =>
-      _make(path, tipLength, tipAngle, isDoubleSided, isAdjusted);
+  }) => _make(path, tipLength, tipAngle, isDoubleSided, isAdjusted);
 
-  static Path _make(Path path, double tipLength, double tipAngle,
-      bool isDoubleSided, bool isAdjusted) {
+  static Path _make(
+    Path path,
+    double tipLength,
+    double tipAngle,
+    bool isDoubleSided,
+    bool isAdjusted,
+  ) {
     PathMetric lastPathMetric;
     PathMetric? firstPathMetric;
     Offset tipVector;
@@ -44,8 +48,9 @@ class ArrowPath {
     final originalPosition = tan!.position;
 
     if (isAdjusted && lastPathMetric.length > 10) {
-      var tanBefore =
-          lastPathMetric.getTangentForOffset(lastPathMetric.length - 5)!;
+      var tanBefore = lastPathMetric.getTangentForOffset(
+        lastPathMetric.length - 5,
+      )!;
       adjustmentAngle = _getAngleBetweenVectors(tan.vector, tanBefore.vector);
     }
 
@@ -61,8 +66,10 @@ class ArrowPath {
       tan = firstPathMetric!.getTangentForOffset(0);
       if (isAdjusted && firstPathMetric.length > 10) {
         var tanBefore = firstPathMetric.getTangentForOffset(5)!;
-        adjustmentAngle =
-            _getAngleBetweenVectors(tan!.vector, tanBefore.vector);
+        adjustmentAngle = _getAngleBetweenVectors(
+          tan!.vector,
+          tanBefore.vector,
+        );
       }
 
       tipVector =
@@ -82,16 +89,18 @@ class ArrowPath {
   }
 
   static Offset _rotateVector(Offset vector, double angle) => Offset(
-        math.cos(angle) * vector.dx - math.sin(angle) * vector.dy,
-        math.sin(angle) * vector.dx + math.cos(angle) * vector.dy,
-      );
+    math.cos(angle) * vector.dx - math.sin(angle) * vector.dy,
+    math.sin(angle) * vector.dx + math.cos(angle) * vector.dy,
+  );
 
   static double _getVectorsDotProduct(Offset vector1, Offset vector2) =>
       vector1.dx * vector2.dx + vector1.dy * vector2.dy;
 
   // Clamp to avoid rounding issues when the 2 vectors are equal.
   static double _getAngleBetweenVectors(Offset vector1, Offset vector2) =>
-      math.acos((_getVectorsDotProduct(vector1, vector2) /
-              (vector1.distance * vector2.distance))
-          .clamp(-1.0, 1.0));
+      math.acos(
+        (_getVectorsDotProduct(vector1, vector2) /
+                (vector1.distance * vector2.distance))
+            .clamp(-1.0, 1.0),
+      );
 }

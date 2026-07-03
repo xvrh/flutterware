@@ -21,7 +21,9 @@ class AppDevbar extends StatelessWidget {
         LogNetworkPlugin.init(),
         VariablesPlugin.init(
           filePath: () async => p.join(
-              (await getApplicationSupportDirectory()).path, 'variables.json'),
+            (await getApplicationSupportDirectory()).path,
+            'variables.json',
+          ),
         ),
         DeviceFramePlugin.init(),
       ],

@@ -35,11 +35,10 @@ class ZoomButtons extends StatelessWidget {
     return TextButton(
       onPressed: onPressed,
       style: TextButton.styleFrom(
-          foregroundColor: Colors.black45, minimumSize: Size.zero),
-      child: Icon(
-        icon,
-        size: 20,
+        foregroundColor: Colors.black45,
+        minimumSize: Size.zero,
       ),
+      child: Icon(icon, size: 20),
     );
   }
 }

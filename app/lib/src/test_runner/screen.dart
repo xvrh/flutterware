@@ -44,10 +44,7 @@ class _TestRunnerScreenState extends State<TestRunnerScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            event.message,
-            style: TextStyle(color: foreground),
-          ),
+          content: Text(event.message, style: TextStyle(color: foreground)),
           backgroundColor: background,
         ),
       );
@@ -56,13 +53,10 @@ class _TestRunnerScreenState extends State<TestRunnerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return RouterOutlet(
-      {
-        'home': (r) => HelpScreen(),
-        'run': (r) => _RunScreen(widget.project),
-      },
-      onNotFound: (r) => 'home',
-    );
+    return RouterOutlet({
+      'home': (r) => HelpScreen(),
+      'run': (r) => _RunScreen(widget.project),
+    }, onNotFound: (r) => 'home');
   }
 
   @override
@@ -86,8 +80,10 @@ class _RunScreen extends StatelessWidget {
         var clients = snapshot.requireData;
         if (clients.isNotEmpty) {
           var client = clients.last;
-          return TestRunView(client,
-              reloadToolbar: SmallDaemonToolbar(project));
+          return TestRunView(
+            client,
+            reloadToolbar: SmallDaemonToolbar(project),
+          );
         }
         return Center(child: CircularProgressIndicator());
       },

@@ -20,11 +20,9 @@ DevicePlatform _$vlOf(String name) {
   }
 }
 
-final BuiltSet<DevicePlatform> _$vls =
-    BuiltSet<DevicePlatform>(const <DevicePlatform>[
-  _$android,
-  _$ios,
-]);
+final BuiltSet<DevicePlatform> _$vls = BuiltSet<DevicePlatform>(
+  const <DevicePlatform>[_$android, _$ios],
+);
 
 Serializer<DeviceInfo> _$deviceInfoSerializer = _$DeviceInfoSerializer();
 Serializer<DevicePlatform> _$devicePlatformSerializer =
@@ -37,36 +35,52 @@ class _$DeviceInfoSerializer implements StructuredSerializer<DeviceInfo> {
   final String wireName = 'DeviceInfo';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, DeviceInfo object,
-      {FullType specifiedType = FullType.unspecified}) {
+  Iterable<Object?> serialize(
+    Serializers serializers,
+    DeviceInfo object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'id',
       serializers.serialize(object.id, specifiedType: const FullType(String)),
       'name',
       serializers.serialize(object.name, specifiedType: const FullType(String)),
       'platform',
-      serializers.serialize(object.platform,
-          specifiedType: const FullType(DevicePlatform)),
+      serializers.serialize(
+        object.platform,
+        specifiedType: const FullType(DevicePlatform),
+      ),
       'width',
-      serializers.serialize(object.width,
-          specifiedType: const FullType(double)),
+      serializers.serialize(
+        object.width,
+        specifiedType: const FullType(double),
+      ),
       'height',
-      serializers.serialize(object.height,
-          specifiedType: const FullType(double)),
+      serializers.serialize(
+        object.height,
+        specifiedType: const FullType(double),
+      ),
       'pixelRatio',
-      serializers.serialize(object.pixelRatio,
-          specifiedType: const FullType(double)),
+      serializers.serialize(
+        object.pixelRatio,
+        specifiedType: const FullType(double),
+      ),
       'safeArea',
-      serializers.serialize(object.safeArea,
-          specifiedType: const FullType(Rectangle)),
+      serializers.serialize(
+        object.safeArea,
+        specifiedType: const FullType(Rectangle),
+      ),
     ];
 
     return result;
   }
 
   @override
-  DeviceInfo deserialize(Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+  DeviceInfo deserialize(
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = DeviceInfoBuilder();
 
     final iterator = serialized.iterator;
@@ -76,32 +90,61 @@ class _$DeviceInfoSerializer implements StructuredSerializer<DeviceInfo> {
       final Object? value = iterator.current;
       switch (key) {
         case 'id':
-          result.id = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.id =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'name':
-          result.name = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.name =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'platform':
-          result.platform = serializers.deserialize(value,
-              specifiedType: const FullType(DevicePlatform))! as DevicePlatform;
+          result.platform =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(DevicePlatform),
+                  )!
+                  as DevicePlatform;
           break;
         case 'width':
-          result.width = serializers.deserialize(value,
-              specifiedType: const FullType(double))! as double;
+          result.width =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(double),
+                  )!
+                  as double;
           break;
         case 'height':
-          result.height = serializers.deserialize(value,
-              specifiedType: const FullType(double))! as double;
+          result.height =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(double),
+                  )!
+                  as double;
           break;
         case 'pixelRatio':
-          result.pixelRatio = serializers.deserialize(value,
-              specifiedType: const FullType(double))! as double;
+          result.pixelRatio =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(double),
+                  )!
+                  as double;
           break;
         case 'safeArea':
-          result.safeArea.replace(serializers.deserialize(value,
-              specifiedType: const FullType(Rectangle))! as Rectangle);
+          result.safeArea.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(Rectangle),
+                )!
+                as Rectangle,
+          );
           break;
       }
     }
@@ -118,14 +161,18 @@ class _$DevicePlatformSerializer
   final String wireName = 'DevicePlatform';
 
   @override
-  Object serialize(Serializers serializers, DevicePlatform object,
-          {FullType specifiedType = FullType.unspecified}) =>
-      object.name;
+  Object serialize(
+    Serializers serializers,
+    DevicePlatform object, {
+    FullType specifiedType = FullType.unspecified,
+  }) => object.name;
 
   @override
-  DevicePlatform deserialize(Serializers serializers, Object serialized,
-          {FullType specifiedType = FullType.unspecified}) =>
-      DevicePlatform.valueOf(serialized as String);
+  DevicePlatform deserialize(
+    Serializers serializers,
+    Object serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) => DevicePlatform.valueOf(serialized as String);
 }
 
 class _$DeviceInfo extends DeviceInfo {
@@ -147,22 +194,25 @@ class _$DeviceInfo extends DeviceInfo {
   factory _$DeviceInfo([void Function(DeviceInfoBuilder)? updates]) =>
       (DeviceInfoBuilder()..update(updates))._build();
 
-  _$DeviceInfo._(
-      {required this.id,
-      required this.name,
-      required this.platform,
-      required this.width,
-      required this.height,
-      required this.pixelRatio,
-      required this.safeArea})
-      : super._() {
+  _$DeviceInfo._({
+    required this.id,
+    required this.name,
+    required this.platform,
+    required this.width,
+    required this.height,
+    required this.pixelRatio,
+    required this.safeArea,
+  }) : super._() {
     BuiltValueNullFieldError.checkNotNull(id, r'DeviceInfo', 'id');
     BuiltValueNullFieldError.checkNotNull(name, r'DeviceInfo', 'name');
     BuiltValueNullFieldError.checkNotNull(platform, r'DeviceInfo', 'platform');
     BuiltValueNullFieldError.checkNotNull(width, r'DeviceInfo', 'width');
     BuiltValueNullFieldError.checkNotNull(height, r'DeviceInfo', 'height');
     BuiltValueNullFieldError.checkNotNull(
-        pixelRatio, r'DeviceInfo', 'pixelRatio');
+      pixelRatio,
+      r'DeviceInfo',
+      'pixelRatio',
+    );
     BuiltValueNullFieldError.checkNotNull(safeArea, r'DeviceInfo', 'safeArea');
   }
 
@@ -279,21 +329,37 @@ class DeviceInfoBuilder implements Builder<DeviceInfo, DeviceInfoBuilder> {
   _$DeviceInfo _build() {
     _$DeviceInfo _$result;
     try {
-      _$result = _$v ??
+      _$result =
+          _$v ??
           _$DeviceInfo._(
-              id: BuiltValueNullFieldError.checkNotNull(
-                  id, r'DeviceInfo', 'id'),
-              name: BuiltValueNullFieldError.checkNotNull(
-                  name, r'DeviceInfo', 'name'),
-              platform: BuiltValueNullFieldError.checkNotNull(
-                  platform, r'DeviceInfo', 'platform'),
-              width: BuiltValueNullFieldError.checkNotNull(
-                  width, r'DeviceInfo', 'width'),
-              height: BuiltValueNullFieldError.checkNotNull(
-                  height, r'DeviceInfo', 'height'),
-              pixelRatio: BuiltValueNullFieldError.checkNotNull(
-                  pixelRatio, r'DeviceInfo', 'pixelRatio'),
-              safeArea: safeArea.build());
+            id: BuiltValueNullFieldError.checkNotNull(id, r'DeviceInfo', 'id'),
+            name: BuiltValueNullFieldError.checkNotNull(
+              name,
+              r'DeviceInfo',
+              'name',
+            ),
+            platform: BuiltValueNullFieldError.checkNotNull(
+              platform,
+              r'DeviceInfo',
+              'platform',
+            ),
+            width: BuiltValueNullFieldError.checkNotNull(
+              width,
+              r'DeviceInfo',
+              'width',
+            ),
+            height: BuiltValueNullFieldError.checkNotNull(
+              height,
+              r'DeviceInfo',
+              'height',
+            ),
+            pixelRatio: BuiltValueNullFieldError.checkNotNull(
+              pixelRatio,
+              r'DeviceInfo',
+              'pixelRatio',
+            ),
+            safeArea: safeArea.build(),
+          );
     } catch (_) {
       late String _$failedField;
       try {
@@ -301,7 +367,10 @@ class DeviceInfoBuilder implements Builder<DeviceInfo, DeviceInfoBuilder> {
         safeArea.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            r'DeviceInfo', _$failedField, e.toString());
+          r'DeviceInfo',
+          _$failedField,
+          e.toString(),
+        );
       }
       rethrow;
     }

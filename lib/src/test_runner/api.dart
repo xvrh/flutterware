@@ -27,7 +27,9 @@ export 'runtime/widget_tester_screenshot.dart'
 /// });
 /// ```
 @isTest
-void testApp(String description,
-    Future<void> Function(flutter_test.WidgetTester tester) body) {
+void testApp(
+  String description,
+  Future<void> Function(flutter_test.WidgetTester tester) body,
+) {
   flutter_test.testWidgets(description, withTestValues(body));
 }

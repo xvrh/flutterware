@@ -59,7 +59,9 @@ void main() {
       fallbackActions: {_PingIntent: _PingAction()},
     );
     var result = sm.handleFocusKeyEvent(
-        fm.manager.rootScope, const CharKey(rune: 0x7a /* z */, modifiers: {}));
+      fm.manager.rootScope,
+      const CharKey(rune: 0x7a /* z */, modifiers: {}),
+    );
     expect(result, KeyEventResult.ignored);
   });
 
@@ -84,47 +86,69 @@ void main() {
 
   test('defaultShortcuts binds Tab, arrows, Enter, and Escape', () {
     var map = defaultShortcuts();
-    expect(map[const SpecialKey(code: SpecialKeyCode.tab, modifiers: {})],
-        isA<NextFocusIntent>());
     expect(
-        map[const SpecialKey(
-            code: SpecialKeyCode.tab, modifiers: {Modifier.shift})],
-        isA<PreviousFocusIntent>());
-    expect(map[const SpecialKey(code: SpecialKeyCode.up, modifiers: {})],
-        isA<DirectionalFocusIntent>());
-    expect(map[const SpecialKey(code: SpecialKeyCode.down, modifiers: {})],
-        isA<DirectionalFocusIntent>());
-    expect(map[const SpecialKey(code: SpecialKeyCode.left, modifiers: {})],
-        isA<DirectionalFocusIntent>());
-    expect(map[const SpecialKey(code: SpecialKeyCode.right, modifiers: {})],
-        isA<DirectionalFocusIntent>());
-    expect(map[const SpecialKey(code: SpecialKeyCode.enter, modifiers: {})],
-        isA<ActivateIntent>());
-    expect(map[const SpecialKey(code: SpecialKeyCode.escape, modifiers: {})],
-        isA<DismissIntent>());
+      map[const SpecialKey(code: SpecialKeyCode.tab, modifiers: {})],
+      isA<NextFocusIntent>(),
+    );
+    expect(
+      map[const SpecialKey(
+        code: SpecialKeyCode.tab,
+        modifiers: {Modifier.shift},
+      )],
+      isA<PreviousFocusIntent>(),
+    );
+    expect(
+      map[const SpecialKey(code: SpecialKeyCode.up, modifiers: {})],
+      isA<DirectionalFocusIntent>(),
+    );
+    expect(
+      map[const SpecialKey(code: SpecialKeyCode.down, modifiers: {})],
+      isA<DirectionalFocusIntent>(),
+    );
+    expect(
+      map[const SpecialKey(code: SpecialKeyCode.left, modifiers: {})],
+      isA<DirectionalFocusIntent>(),
+    );
+    expect(
+      map[const SpecialKey(code: SpecialKeyCode.right, modifiers: {})],
+      isA<DirectionalFocusIntent>(),
+    );
+    expect(
+      map[const SpecialKey(code: SpecialKeyCode.enter, modifiers: {})],
+      isA<ActivateIntent>(),
+    );
+    expect(
+      map[const SpecialKey(code: SpecialKeyCode.escape, modifiers: {})],
+      isA<DismissIntent>(),
+    );
   });
 
   test('a Shortcuts widget intercepts a key for its focused subtree', () {
     var node = FocusNode();
     var invoked = false;
     var binding = TuiBinding();
-    binding.attachRootWidget(Shortcuts(
-      shortcuts: {
-        const CharKey(rune: 0x78 /* x */, modifiers: {}): const ActivateIntent()
-      },
-      child: Actions(
-        actions: {ActivateIntent: _CallbackActivate(() => invoked = true)},
-        child: Focus(
+    binding.attachRootWidget(
+      Shortcuts(
+        shortcuts: {
+          const CharKey(rune: 0x78 /* x */, modifiers: {}):
+              const ActivateIntent(),
+        },
+        child: Actions(
+          actions: {ActivateIntent: _CallbackActivate(() => invoked = true)},
+          child: Focus(
             focusNode: node,
             autofocus: true,
-            child: SizedBox(width: 4, height: 2)),
+            child: SizedBox(width: 4, height: 2),
+          ),
+        ),
       ),
-    ));
+    );
     binding.handleResize(CellSize(8, 12));
     binding.drawFrame(Painter(CellBuffer(8, 12)));
 
-    binding.focusManager
-        .handleKeyEvent(const CharKey(rune: 0x78, modifiers: {}));
+    binding.focusManager.handleKeyEvent(
+      const CharKey(rune: 0x78, modifiers: {}),
+    );
     expect(invoked, isTrue);
   });
 
@@ -133,24 +157,27 @@ void main() {
     var hits = <String>[];
     var binding = TuiBinding();
     const xKey = CharKey(rune: 0x78 /* x */, modifiers: {});
-    binding.attachRootWidget(Shortcuts(
-      shortcuts: {xKey: const ActivateIntent()},
-      child: Actions(
-        actions: {ActivateIntent: _CallbackActivate(() => hits.add('outer'))},
-        child: Shortcuts(
-          shortcuts: {xKey: const ActivateIntent()},
-          child: Actions(
-            actions: {
-              ActivateIntent: _CallbackActivate(() => hits.add('inner'))
-            },
-            child: Focus(
+    binding.attachRootWidget(
+      Shortcuts(
+        shortcuts: {xKey: const ActivateIntent()},
+        child: Actions(
+          actions: {ActivateIntent: _CallbackActivate(() => hits.add('outer'))},
+          child: Shortcuts(
+            shortcuts: {xKey: const ActivateIntent()},
+            child: Actions(
+              actions: {
+                ActivateIntent: _CallbackActivate(() => hits.add('inner')),
+              },
+              child: Focus(
                 focusNode: node,
                 autofocus: true,
-                child: SizedBox(width: 4, height: 2)),
+                child: SizedBox(width: 4, height: 2),
+              ),
+            ),
           ),
         ),
       ),
-    ));
+    );
     binding.handleResize(CellSize(8, 12));
     binding.drawFrame(Painter(CellBuffer(8, 12)));
 
@@ -162,19 +189,25 @@ void main() {
     var first = FocusNode();
     var second = FocusNode();
     var binding = TuiBinding();
-    binding.attachRootWidget(Row(children: [
-      Focus(
-          focusNode: first,
-          autofocus: true,
-          child: SizedBox(width: 5, height: 3)),
-      Focus(focusNode: second, child: SizedBox(width: 5, height: 3)),
-    ]));
+    binding.attachRootWidget(
+      Row(
+        children: [
+          Focus(
+            focusNode: first,
+            autofocus: true,
+            child: SizedBox(width: 5, height: 3),
+          ),
+          Focus(focusNode: second, child: SizedBox(width: 5, height: 3)),
+        ],
+      ),
+    );
     binding.handleResize(CellSize(10, 30));
     binding.drawFrame(Painter(CellBuffer(10, 30)));
     expect(binding.focusManager.primaryFocus, first);
 
     binding.focusManager.handleKeyEvent(
-        const SpecialKey(code: SpecialKeyCode.tab, modifiers: {}));
+      const SpecialKey(code: SpecialKeyCode.tab, modifiers: {}),
+    );
     binding.drawFrame(Painter(CellBuffer(10, 30)));
     expect(binding.focusManager.primaryFocus, second);
   });
@@ -190,7 +223,8 @@ void main() {
     expect(binding.focusManager.primaryFocus, binding.focusManager.rootScope);
 
     binding.focusManager.handleKeyEvent(
-        const SpecialKey(code: SpecialKeyCode.tab, modifiers: {}));
+      const SpecialKey(code: SpecialKeyCode.tab, modifiers: {}),
+    );
     binding.drawFrame(Painter(CellBuffer(10, 30)));
     expect(binding.focusManager.primaryFocus, only);
   });
@@ -199,18 +233,22 @@ void main() {
     var node = FocusNode();
     var invoked = false;
     var binding = TuiBinding();
-    binding.attachRootWidget(Actions(
-      actions: {ActivateIntent: _CallbackActivate(() => invoked = true)},
-      child: Focus(
+    binding.attachRootWidget(
+      Actions(
+        actions: {ActivateIntent: _CallbackActivate(() => invoked = true)},
+        child: Focus(
           focusNode: node,
           autofocus: true,
-          child: SizedBox(width: 4, height: 2)),
-    ));
+          child: SizedBox(width: 4, height: 2),
+        ),
+      ),
+    );
     binding.handleResize(CellSize(8, 12));
     binding.drawFrame(Painter(CellBuffer(8, 12)));
 
     binding.focusManager.handleKeyEvent(
-        const SpecialKey(code: SpecialKeyCode.enter, modifiers: {}));
+      const SpecialKey(code: SpecialKeyCode.enter, modifiers: {}),
+    );
     expect(invoked, isTrue);
   });
 }

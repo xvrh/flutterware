@@ -37,13 +37,8 @@ class StoragePanel extends StatelessWidget {
     return DefaultTabController(
       length: tabs.length,
       child: Scaffold(
-        appBar: TabBar(
-          tabs: tabs,
-          isScrollable: true,
-        ),
-        body: TabBarView(
-          children: tabsContent,
-        ),
+        appBar: TabBar(tabs: tabs, isScrollable: true),
+        body: TabBarView(children: tabsContent),
       ),
     );
   }

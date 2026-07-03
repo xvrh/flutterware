@@ -23,10 +23,7 @@ class MyScreenToAnimate extends StatelessWidget {
         AnimatableWidget('TextField2', TextField()),
         AnimatableWidget(
           'Button',
-          ElevatedButton(
-            onPressed: () {},
-            child: Text('The button'),
-          ),
+          ElevatedButton(onPressed: () {}, child: Text('The button')),
         ),
       ],
     );
@@ -48,8 +45,11 @@ class TimelineGenerated extends StatelessWidget {
   final AnimationController controller;
   final MyScreenToAnimate child;
 
-  const TimelineGenerated(
-      {super.key, required this.child, required this.controller});
+  const TimelineGenerated({
+    super.key,
+    required this.child,
+    required this.controller,
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -51,19 +51,17 @@ class EmbeddedEngine extends ChangeNotifier {
       var socketFile = File(socketPath);
       if (socketFile.existsSync()) socketFile.deleteSync();
       _server = await ServerSocket.bind(
-          InternetAddress(socketPath, type: InternetAddressType.unix), 0);
-
-      _guest = await Process.start(
-        build.hostPath,
-        [
-          build.assetsDir,
-          build.icuData,
-          socketPath,
-          '$width',
-          '$height',
-        ],
-        mode: ProcessStartMode.normal,
+        InternetAddress(socketPath, type: InternetAddressType.unix),
+        0,
       );
+
+      _guest = await Process.start(build.hostPath, [
+        build.assetsDir,
+        build.icuData,
+        socketPath,
+        '$width',
+        '$height',
+      ], mode: ProcessStartMode.normal);
       _guest!.stdout.transform(const SystemEncoding().decoder).listen((line) {
         debugPrint('[guest] $line');
       });
@@ -87,12 +85,11 @@ class EmbeddedEngine extends ChangeNotifier {
   }
 
   Future<({String hostPath, String assetsDir, String icuData})>
-      _runBuild() async {
-    var result = await Process.run(
-      _dartExecutable,
-      ['run', p.join('tool', 'embedder', 'build_guest.dart')],
-      workingDirectory: appPackageRoot,
-    );
+  _runBuild() async {
+    var result = await Process.run(_dartExecutable, [
+      'run',
+      p.join('tool', 'embedder', 'build_guest.dart'),
+    ], workingDirectory: appPackageRoot);
     if (result.exitCode != 0) {
       throw StateError('build_guest.dart failed:\n${result.stderr}');
     }
@@ -195,15 +192,17 @@ class EmbeddedEngine extends ChangeNotifier {
     double scrollDeltaX = 0,
     double scrollDeltaY = 0,
   }) {
-    _send(PointerEventMessage(
-      phase: phaseKind,
-      x: x,
-      y: y,
-      buttons: buttons,
-      scrollDeltaX: scrollDeltaX,
-      scrollDeltaY: scrollDeltaY,
-      timestampMicros: DateTime.now().microsecondsSinceEpoch,
-    ));
+    _send(
+      PointerEventMessage(
+        phase: phaseKind,
+        x: x,
+        y: y,
+        buttons: buttons,
+        scrollDeltaX: scrollDeltaX,
+        scrollDeltaY: scrollDeltaY,
+        timestampMicros: DateTime.now().microsecondsSinceEpoch,
+      ),
+    );
   }
 
   void sendKey({
@@ -211,13 +210,15 @@ class EmbeddedEngine extends ChangeNotifier {
     required int physicalKey,
     required int logicalKey,
   }) {
-    _send(KeyEventMessage(
-      kind: kind,
-      physicalKey: physicalKey,
-      logicalKey: logicalKey,
-      modifiers: 0,
-      timestampMicros: DateTime.now().microsecondsSinceEpoch,
-    ));
+    _send(
+      KeyEventMessage(
+        kind: kind,
+        physicalKey: physicalKey,
+        logicalKey: logicalKey,
+        modifiers: 0,
+        timestampMicros: DateTime.now().microsecondsSinceEpoch,
+      ),
+    );
   }
 
   @override
@@ -227,8 +228,11 @@ class EmbeddedEngine extends ChangeNotifier {
       _conn!.add(encodeMessage(const ShutdownMessage()));
     }
     if (textureId != null) {
-      unawaited(_channel.invokeMethod(
-          'disposeTexture', {'textureId': textureId}).catchError((_) {}));
+      unawaited(
+        _channel
+            .invokeMethod('disposeTexture', {'textureId': textureId})
+            .catchError((_) {}),
+      );
     }
     unawaited(_conn?.close());
     unawaited(_server?.close());

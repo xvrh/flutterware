@@ -18,10 +18,7 @@ class _MyScreenToAnimateState extends State<MyScreenToAnimate>
         timeline.textField1(TextField()),
         timeline.textField2(TextField()),
         timeline.button(
-          ElevatedButton(
-            onPressed: () {},
-            child: Text('The button'),
-          ),
+          ElevatedButton(onPressed: () {}, child: Text('The button')),
         ),
       ],
     );

@@ -108,10 +108,7 @@ class Lang {
     }
   }
 
-  Lang.noSingle(
-    this.name,
-    this.extensions,
-  );
+  Lang.noSingle(this.name, this.extensions);
 
   void withMulti(String cmtMultiStart, String cmtMultiEnd) {
     cmtMultiStarts.add(cmtMultiStart);

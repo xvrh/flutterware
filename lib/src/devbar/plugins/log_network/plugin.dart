@@ -12,8 +12,11 @@ class LogNetworkPlugin implements DevbarPlugin {
   final DevbarState devbar;
 
   LogNetworkPlugin(this.devbar) {
-    devbar.ui
-        .addTab(Tab(text: 'Network'), NetworkList(this), hierarchy: ['Logs']);
+    devbar.ui.addTab(
+      Tab(text: 'Network'),
+      NetworkList(this),
+      hierarchy: ['Logs'],
+    );
   }
 
   static LogNetworkPlugin Function(DevbarState) init() {
@@ -32,12 +35,14 @@ class LogNetworkPlugin implements DevbarPlugin {
     required String path,
     Map<String, String?>? parameters,
   }) {
-    var request = NetworkRequest(id,
-        apiName: apiName,
-        requestBody: body,
-        httpMethod: method,
-        path: path,
-        parameters: parameters ?? {});
+    var request = NetworkRequest(
+      id,
+      apiName: apiName,
+      requestBody: body,
+      httpMethod: method,
+      path: path,
+      parameters: parameters ?? {},
+    );
 
     var requestList = requests.value..add(request);
 
@@ -65,7 +70,10 @@ class LogNetworkPlugin implements DevbarPlugin {
       request.watch.stop();
 
       request.errorResponse = ErrorResponse(
-          code: code ?? 400, reason: reason ?? '', message: message ?? '');
+        code: code ?? 400,
+        reason: reason ?? '',
+        message: message ?? '',
+      );
 
       requests.add(requests.value);
     }
@@ -102,8 +110,11 @@ class ErrorResponse {
   final int code;
   final String reason, message;
 
-  ErrorResponse(
-      {required this.code, required this.reason, required this.message});
+  ErrorResponse({
+    required this.code,
+    required this.reason,
+    required this.message,
+  });
 }
 
 /// Extension to add `context.network` shortcut.

@@ -23,17 +23,15 @@ MessageType _$valueOf(String name) {
   }
 }
 
-final BuiltSet<MessageType> _$values =
-    BuiltSet<MessageType>(const <MessageType>[
-  _$request,
-  _$response,
-  _$error,
-]);
+final BuiltSet<MessageType> _$values = BuiltSet<MessageType>(
+  const <MessageType>[_$request, _$response, _$error],
+);
 
-Serializers _$messageSerializers = (Serializers().toBuilder()
-      ..add(Message.serializer)
-      ..add(MessageType.serializer))
-    .build();
+Serializers _$messageSerializers =
+    (Serializers().toBuilder()
+          ..add(Message.serializer)
+          ..add(MessageType.serializer))
+        .build();
 Serializer<Message> _$messageSerializer = _$MessageSerializer();
 Serializer<MessageType> _$messageTypeSerializer = _$MessageTypeSerializer();
 
@@ -44,45 +42,61 @@ class _$MessageSerializer implements StructuredSerializer<Message> {
   final String wireName = 'Message';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, Message object,
-      {FullType specifiedType = FullType.unspecified}) {
+  Iterable<Object?> serialize(
+    Serializers serializers,
+    Message object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'type',
-      serializers.serialize(object.type,
-          specifiedType: const FullType(MessageType)),
+      serializers.serialize(
+        object.type,
+        specifiedType: const FullType(MessageType),
+      ),
       'id',
       serializers.serialize(object.id, specifiedType: const FullType(int)),
       'channel',
-      serializers.serialize(object.channel,
-          specifiedType: const FullType(String)),
+      serializers.serialize(
+        object.channel,
+        specifiedType: const FullType(String),
+      ),
       'method',
-      serializers.serialize(object.method,
-          specifiedType: const FullType(String)),
+      serializers.serialize(
+        object.method,
+        specifiedType: const FullType(String),
+      ),
       'serializedParameter1',
-      serializers.serialize(object.serializedParameter1,
-          specifiedType: const FullType(String)),
+      serializers.serialize(
+        object.serializedParameter1,
+        specifiedType: const FullType(String),
+      ),
     ];
     Object? value;
     value = object.serializedParameter2;
     if (value != null) {
       result
         ..add('serializedParameter2')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(String)),
+        );
     }
     value = object.serializedParameter3;
     if (value != null) {
       result
         ..add('serializedParameter3')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(String)),
+        );
     }
     return result;
   }
 
   @override
-  Message deserialize(Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+  Message deserialize(
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = MessageBuilder();
 
     final iterator = serialized.iterator;
@@ -92,32 +106,60 @@ class _$MessageSerializer implements StructuredSerializer<Message> {
       final Object? value = iterator.current;
       switch (key) {
         case 'type':
-          result.type = serializers.deserialize(value,
-              specifiedType: const FullType(MessageType))! as MessageType;
+          result.type =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(MessageType),
+                  )!
+                  as MessageType;
           break;
         case 'id':
-          result.id = serializers.deserialize(value,
-              specifiedType: const FullType(int))! as int;
+          result.id =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(int),
+                  )!
+                  as int;
           break;
         case 'channel':
-          result.channel = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.channel =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'method':
-          result.method = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.method =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'serializedParameter1':
-          result.serializedParameter1 = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.serializedParameter1 =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'serializedParameter2':
-          result.serializedParameter2 = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+          result.serializedParameter2 =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )
+                  as String?;
           break;
         case 'serializedParameter3':
-          result.serializedParameter3 = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+          result.serializedParameter3 =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )
+                  as String?;
           break;
       }
     }
@@ -133,14 +175,18 @@ class _$MessageTypeSerializer implements PrimitiveSerializer<MessageType> {
   final String wireName = 'MessageType';
 
   @override
-  Object serialize(Serializers serializers, MessageType object,
-          {FullType specifiedType = FullType.unspecified}) =>
-      object.name;
+  Object serialize(
+    Serializers serializers,
+    MessageType object, {
+    FullType specifiedType = FullType.unspecified,
+  }) => object.name;
 
   @override
-  MessageType deserialize(Serializers serializers, Object serialized,
-          {FullType specifiedType = FullType.unspecified}) =>
-      MessageType.valueOf(serialized as String);
+  MessageType deserialize(
+    Serializers serializers,
+    Object serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) => MessageType.valueOf(serialized as String);
 }
 
 class _$Message extends Message {
@@ -162,21 +208,24 @@ class _$Message extends Message {
   factory _$Message([void Function(MessageBuilder)? updates]) =>
       (MessageBuilder()..update(updates))._build();
 
-  _$Message._(
-      {required this.type,
-      required this.id,
-      required this.channel,
-      required this.method,
-      required this.serializedParameter1,
-      this.serializedParameter2,
-      this.serializedParameter3})
-      : super._() {
+  _$Message._({
+    required this.type,
+    required this.id,
+    required this.channel,
+    required this.method,
+    required this.serializedParameter1,
+    this.serializedParameter2,
+    this.serializedParameter3,
+  }) : super._() {
     BuiltValueNullFieldError.checkNotNull(type, r'Message', 'type');
     BuiltValueNullFieldError.checkNotNull(id, r'Message', 'id');
     BuiltValueNullFieldError.checkNotNull(channel, r'Message', 'channel');
     BuiltValueNullFieldError.checkNotNull(method, r'Message', 'method');
     BuiltValueNullFieldError.checkNotNull(
-        serializedParameter1, r'Message', 'serializedParameter1');
+      serializedParameter1,
+      r'Message',
+      'serializedParameter1',
+    );
   }
 
   @override
@@ -293,19 +342,29 @@ class MessageBuilder implements Builder<Message, MessageBuilder> {
   Message build() => _build();
 
   _$Message _build() {
-    final _$result = _$v ??
+    final _$result =
+        _$v ??
         _$Message._(
-            type:
-                BuiltValueNullFieldError.checkNotNull(type, r'Message', 'type'),
-            id: BuiltValueNullFieldError.checkNotNull(id, r'Message', 'id'),
-            channel: BuiltValueNullFieldError.checkNotNull(
-                channel, r'Message', 'channel'),
-            method: BuiltValueNullFieldError.checkNotNull(
-                method, r'Message', 'method'),
-            serializedParameter1: BuiltValueNullFieldError.checkNotNull(
-                serializedParameter1, r'Message', 'serializedParameter1'),
-            serializedParameter2: serializedParameter2,
-            serializedParameter3: serializedParameter3);
+          type: BuiltValueNullFieldError.checkNotNull(type, r'Message', 'type'),
+          id: BuiltValueNullFieldError.checkNotNull(id, r'Message', 'id'),
+          channel: BuiltValueNullFieldError.checkNotNull(
+            channel,
+            r'Message',
+            'channel',
+          ),
+          method: BuiltValueNullFieldError.checkNotNull(
+            method,
+            r'Message',
+            'method',
+          ),
+          serializedParameter1: BuiltValueNullFieldError.checkNotNull(
+            serializedParameter1,
+            r'Message',
+            'serializedParameter1',
+          ),
+          serializedParameter2: serializedParameter2,
+          serializedParameter3: serializedParameter3,
+        );
     replace(_$result);
     return _$result;
   }

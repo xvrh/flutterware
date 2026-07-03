@@ -32,10 +32,7 @@ class _FigmaServiceInitializerState extends State<FigmaServiceInitializer> {
       future: _future,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return SizedBox(
-            height: 300,
-            child: ErrorWidget(snapshot.error!),
-          );
+          return SizedBox(height: 300, child: ErrorWidget(snapshot.error!));
         } else if (snapshot.connectionState != ConnectionState.done) {
           return Center(child: CircularProgressIndicator());
         } else {

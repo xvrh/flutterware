@@ -5,28 +5,34 @@ import 'package:test/test.dart';
 import 'harness.dart';
 
 List<RenderText> texts(TuiBinding binding) =>
-    (binding.renderView.child! as RenderFlex)
-        .children
+    (binding.renderView.child! as RenderFlex).children
         .cast<RenderText>()
         .toList();
 
 void main() {
   test('keyed reorder reuses the same RenderText instances', () {
-    var binding = pumpHosted(const Column(children: [
-      Text('a', key: ValueKey('a')),
-      Text('b', key: ValueKey('b')),
-      Text('c', key: ValueKey('c')),
-    ]));
+    var binding = pumpHosted(
+      const Column(
+        children: [
+          Text('a', key: ValueKey('a')),
+          Text('b', key: ValueKey('b')),
+          Text('c', key: ValueKey('c')),
+        ],
+      ),
+    );
     var before = {for (var t in texts(binding)) t.text: t};
     expect(before.keys.toList(), ['a', 'b', 'c']);
 
     rebuild(
-        binding,
-        const Column(children: [
+      binding,
+      const Column(
+        children: [
           Text('c', key: ValueKey('c')),
           Text('a', key: ValueKey('a')),
           Text('b', key: ValueKey('b')),
-        ]));
+        ],
+      ),
+    );
 
     var after = texts(binding);
     expect(after.map((t) => t.text).toList(), ['c', 'a', 'b']);
@@ -37,19 +43,26 @@ void main() {
   });
 
   test('mid-list insert keeps the surrounding keyed children', () {
-    var binding = pumpHosted(const Column(children: [
-      Text('a', key: ValueKey('a')),
-      Text('c', key: ValueKey('c')),
-    ]));
+    var binding = pumpHosted(
+      const Column(
+        children: [
+          Text('a', key: ValueKey('a')),
+          Text('c', key: ValueKey('c')),
+        ],
+      ),
+    );
     var before = {for (var t in texts(binding)) t.text: t};
 
     rebuild(
-        binding,
-        const Column(children: [
+      binding,
+      const Column(
+        children: [
           Text('a', key: ValueKey('a')),
           Text('b', key: ValueKey('b')),
           Text('c', key: ValueKey('c')),
-        ]));
+        ],
+      ),
+    );
 
     var after = texts(binding);
     expect(after.map((t) => t.text).toList(), ['a', 'b', 'c']);
@@ -60,19 +73,26 @@ void main() {
   });
 
   test('removal drops the render object and keeps the others', () {
-    var binding = pumpHosted(const Column(children: [
-      Text('a', key: ValueKey('a')),
-      Text('b', key: ValueKey('b')),
-      Text('c', key: ValueKey('c')),
-    ]));
+    var binding = pumpHosted(
+      const Column(
+        children: [
+          Text('a', key: ValueKey('a')),
+          Text('b', key: ValueKey('b')),
+          Text('c', key: ValueKey('c')),
+        ],
+      ),
+    );
     var before = {for (var t in texts(binding)) t.text: t};
 
     rebuild(
-        binding,
-        const Column(children: [
+      binding,
+      const Column(
+        children: [
           Text('a', key: ValueKey('a')),
           Text('c', key: ValueKey('c')),
-        ]));
+        ],
+      ),
+    );
 
     var after = texts(binding);
     expect(after.map((t) => t.text).toList(), ['a', 'c']);
@@ -81,23 +101,30 @@ void main() {
     expect(after.contains(before['b']), isFalse);
   });
 
-  test('a type change tears down the old render object and inflates a new one',
-      () {
-    var binding = pumpHosted(const Column(children: [Text('only')]));
-    var oldChild = (binding.renderView.child! as RenderFlex).children.single;
-    expect(oldChild, isA<RenderText>());
+  test(
+    'a type change tears down the old render object and inflates a new one',
+    () {
+      var binding = pumpHosted(const Column(children: [Text('only')]));
+      var oldChild = (binding.renderView.child! as RenderFlex).children.single;
+      expect(oldChild, isA<RenderText>());
 
-    rebuild(
+      rebuild(
         binding,
-        const Column(children: [
-          ConstrainedBox(
-              constraints: BoxConstraints.tightFor(width: 2), child: Text('x'))
-        ]));
+        const Column(
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints.tightFor(width: 2),
+              child: Text('x'),
+            ),
+          ],
+        ),
+      );
 
-    var newChild = (binding.renderView.child! as RenderFlex).children.single;
-    expect(newChild, isA<RenderConstrainedBox>());
-    expect(identical(oldChild, newChild), isFalse);
-  });
+      var newChild = (binding.renderView.child! as RenderFlex).children.single;
+      expect(newChild, isA<RenderConstrainedBox>());
+      expect(identical(oldChild, newChild), isFalse);
+    },
+  );
 
   test('keyless same-type children update in place', () {
     var binding = pumpHosted(const Column(children: [Text('a'), Text('b')]));

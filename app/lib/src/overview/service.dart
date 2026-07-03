@@ -45,9 +45,9 @@ class ProjectInfoService {
   Future<List<FlutterPlatform>> _loadPlatforms() async {
     var result = <FlutterPlatform>[];
     for (var platform in FlutterPlatform.values) {
-      var exists =
-          await Directory(p.join(project.absolutePath, platform.folder))
-              .exists();
+      var exists = await Directory(
+        p.join(project.absolutePath, platform.folder),
+      ).exists();
       if (exists) {
         result.add(platform);
       }
@@ -61,7 +61,9 @@ class ProjectInfoService {
 
   Future<AssetsReport> _loadAssetsMetrics() async {
     return compute<String, AssetsReport>(
-        createAssetReport, project.absolutePath);
+      createAssetReport,
+      project.absolutePath,
+    );
   }
 
   void dispose() {
@@ -79,8 +81,7 @@ enum FlutterPlatform {
   macOS('macOS', folder: 'macos'),
   windows('Windows', folder: 'windows'),
   linux('Linux', folder: 'linux'),
-  web('Web', folder: 'web'),
-  ;
+  web('Web', folder: 'web');
 
   final String name;
   final String folder;

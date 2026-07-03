@@ -79,7 +79,8 @@ String encodeDiff(
 }) {
   if (front.rows != back.rows || front.cols != back.cols) {
     throw ArgumentError(
-        'size mismatch: ${front.rows}×${front.cols} vs ${back.rows}×${back.cols}');
+      'size mismatch: ${front.rows}×${front.cols} vs ${back.rows}×${back.cols}',
+    );
   }
 
   final buf = StringBuffer();

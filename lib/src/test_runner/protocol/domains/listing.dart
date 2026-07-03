@@ -7,7 +7,7 @@ class ListingClient {
   final Iterable<TestReference> Function() list;
 
   ListingClient(Connection connection, {required this.list})
-      : channel = connection.createChannel('Listing') {
+    : channel = connection.createChannel('Listing') {
     channel.registerMethod('list', _list);
   }
 

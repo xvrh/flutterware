@@ -5,11 +5,9 @@ import 'package:flutterware_app/src/tui/render/render.dart';
 import 'package:test/test.dart';
 
 List<String> dump(CellBuffer b) => [
-      for (var r = 0; r < b.rows; r++)
-        String.fromCharCodes([
-          for (var c = 0; c < b.cols; c++) b.get(r, c).rune,
-        ]),
-    ];
+  for (var r = 0; r < b.rows; r++)
+    String.fromCharCodes([for (var c = 0; c < b.cols; c++) b.get(r, c).rune]),
+];
 
 /// A leaf box that sizes itself to a fixed natural size, clamped to its
 /// constraints, and counts how many times it was laid out.
@@ -75,8 +73,10 @@ void main() {
       var leftText = RenderText('left');
       var rightCountingBox = _CountingBox(CellSize(1, 5));
       var left = RenderPadding(padding: EdgeInsets.all(1), child: leftText);
-      var right =
-          RenderPadding(padding: EdgeInsets.all(1), child: rightCountingBox);
+      var right = RenderPadding(
+        padding: EdgeInsets.all(1),
+        child: rightCountingBox,
+      );
       var row = RenderFlex(
         direction: Axis.horizontal,
         crossAxisAlignment: CrossAxisAlignment.stretch,

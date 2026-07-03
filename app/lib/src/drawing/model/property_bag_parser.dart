@@ -78,14 +78,14 @@ class PropertyBagGrammarDefinition extends GrammarDefinition {
       ref1(token, '{') & ref0(members).optional() & ref1(token, '}');
   Parser pair() => ref0(identifier) & ref1(token, '=') & ref0(value);
   Parser value() => [
-        ref0(stringToken),
-        ref0(numberToken),
-        ref0(object),
-        ref0(array),
-        ref0(trueToken),
-        ref0(falseToken),
-        ref0(nullToken),
-      ].toChoiceParser(failureJoiner: selectFarthestJoined);
+    ref0(stringToken),
+    ref0(numberToken),
+    ref0(object),
+    ref0(array),
+    ref0(trueToken),
+    ref0(falseToken),
+    ref0(nullToken),
+  ].toChoiceParser(failureJoiner: selectFarthestJoined);
   Parser identifier() => ref0(identifierStart) & ref0(identifierPart).star();
   Parser identifierStart() => ref0(identifierStartNoDollar) | char(r'$');
   Parser identifierStartNoDollar() => ref0(letter) | char('_');
@@ -106,10 +106,9 @@ class PropertyBagGrammarDefinition extends GrammarDefinition {
       char('-').optional() &
       char('0').or(digit().plus()) &
       char('.').seq(digit().plus()).optional() &
-      pattern('eE')
-          .seq(pattern('-+').optional())
-          .seq(digit().plus())
-          .optional();
+      pattern(
+        'eE',
+      ).seq(pattern('-+').optional()).seq(digit().plus()).optional();
   Parser stringPrimitive() =>
       char('"') & ref0(characterPrimitive).star() & char('"');
 }
@@ -122,27 +121,27 @@ const Map<String, String> jsonEscapeChars = {
   'f': '\f',
   'n': '\n',
   'r': '\r',
-  't': '\t'
+  't': '\t',
 };
 
 class PropertyBagParserDefinition extends PropertyBagGrammarDefinition {
   @override
   Parser bag() => super.bag().cast<List>().map((e) {
-        final result = <String, dynamic>{};
-        if (e[1] != null) {
-          for (final element in e[1] as List) {
-            var entry = (element as SeparatedList).elements[0]
-                as MapEntry<String, dynamic>;
-            var value = entry.value;
-            if (value is SeparatedList) {
-              value = value.elements;
-            }
-            result[entry.key] = value;
-          }
+    final result = <String, dynamic>{};
+    if (e[1] != null) {
+      for (final element in e[1] as List) {
+        var entry =
+            (element as SeparatedList).elements[0] as MapEntry<String, dynamic>;
+        var value = entry.value;
+        if (value is SeparatedList) {
+          value = value.elements;
         }
+        result[entry.key] = value;
+      }
+    }
 
-        return PropertyBag(e[0] as String, result);
-      });
+    return PropertyBag(e[0] as String, result);
+  });
 
   @override
   Parser name() => super.name().cast<List>().map((e) => e[1] as String);
@@ -185,15 +184,13 @@ class PropertyBagParserDefinition extends PropertyBagGrammarDefinition {
       super.numberToken().map((each) => num.parse(each as String));
 
   @override
-  Parser stringPrimitive() => super
-      .stringPrimitive()
-      .cast<List>()
-      .map((each) => (each[1] as List).join());
+  Parser stringPrimitive() => super.stringPrimitive().cast<List>().map(
+    (each) => (each[1] as List).join(),
+  );
   @override
-  Parser characterEscape() => super
-      .characterEscape()
-      .cast<List>()
-      .map((each) => jsonEscapeChars[each[1] as String]);
+  Parser characterEscape() => super.characterEscape().cast<List>().map(
+    (each) => jsonEscapeChars[each[1] as String],
+  );
   @override
   Parser characterUnicode() =>
       super.characterUnicode().cast<List>().map((each) {

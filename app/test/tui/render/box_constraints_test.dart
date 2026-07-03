@@ -27,8 +27,12 @@ void main() {
     });
 
     test('constrainWidth/Height clamp into the range', () {
-      var c =
-          BoxConstraints(minWidth: 3, maxWidth: 8, minHeight: 2, maxHeight: 5);
+      var c = BoxConstraints(
+        minWidth: 3,
+        maxWidth: 8,
+        minHeight: 2,
+        maxHeight: 5,
+      );
       expect(c.constrainWidth(1), 3);
       expect(c.constrainWidth(6), 6);
       expect(c.constrainWidth(20), 8);
@@ -37,8 +41,12 @@ void main() {
     });
 
     test('deflate shrinks max and clamps min at zero', () {
-      var c =
-          BoxConstraints(minWidth: 1, maxWidth: 10, minHeight: 1, maxHeight: 6);
+      var c = BoxConstraints(
+        minWidth: 1,
+        maxWidth: 10,
+        minHeight: 1,
+        maxHeight: 6,
+      );
       var d = c.deflate(EdgeInsets.all(2));
       expect(d.maxWidth, 6); // 10 - 4
       expect(d.maxHeight, 2); // 6 - 4
@@ -55,8 +63,12 @@ void main() {
 
     test('enforce clamps into the parent range', () {
       var child = BoxConstraints.tight(CellSize(20, 20));
-      var parent =
-          BoxConstraints(minWidth: 0, maxWidth: 5, minHeight: 0, maxHeight: 5);
+      var parent = BoxConstraints(
+        minWidth: 0,
+        maxWidth: 5,
+        minHeight: 0,
+        maxHeight: 5,
+      );
       var e = child.enforce(parent);
       expect(e.maxWidth, 5);
       expect(e.maxHeight, 5);
@@ -73,8 +85,12 @@ void main() {
     });
 
     test('biggest and smallest', () {
-      var c =
-          BoxConstraints(minWidth: 2, maxWidth: 9, minHeight: 1, maxHeight: 7);
+      var c = BoxConstraints(
+        minWidth: 2,
+        maxWidth: 9,
+        minHeight: 1,
+        maxHeight: 7,
+      );
       expect(c.biggest, CellSize(7, 9));
       expect(c.smallest, CellSize(1, 2));
     });
@@ -83,8 +99,12 @@ void main() {
       // Insets of 3 on each side → horizontal/vertical total is 6, which
       // exceeds maxWidth 4 and maxHeight 4. Both maxes must be pinned to the
       // resulting min (0) rather than going negative.
-      var c =
-          BoxConstraints(minWidth: 0, maxWidth: 4, minHeight: 0, maxHeight: 4);
+      var c = BoxConstraints(
+        minWidth: 0,
+        maxWidth: 4,
+        minHeight: 0,
+        maxHeight: 4,
+      );
       var d = c.deflate(EdgeInsets.all(3));
       expect(d.minWidth, 0);
       expect(d.maxWidth, 0); // pinned to minWidth — never below it
@@ -98,7 +118,11 @@ void main() {
     test('enforce clamps a too-small child up to the parent minimum', () {
       var child = BoxConstraints.loose(CellSize(1, 1));
       var parent = BoxConstraints(
-          minWidth: 5, maxWidth: 10, minHeight: 5, maxHeight: 10);
+        minWidth: 5,
+        maxWidth: 10,
+        minHeight: 5,
+        maxHeight: 10,
+      );
       var e = child.enforce(parent);
       expect(e.minWidth, 5);
       expect(e.minHeight, 5);
@@ -108,10 +132,14 @@ void main() {
     });
 
     test('equality is structural', () {
-      expect(BoxConstraints.tight(CellSize(2, 2)),
-          BoxConstraints.tight(CellSize(2, 2)));
-      expect(BoxConstraints.tight(CellSize(2, 2)),
-          isNot(BoxConstraints.tight(CellSize(2, 3))));
+      expect(
+        BoxConstraints.tight(CellSize(2, 2)),
+        BoxConstraints.tight(CellSize(2, 2)),
+      );
+      expect(
+        BoxConstraints.tight(CellSize(2, 2)),
+        isNot(BoxConstraints.tight(CellSize(2, 3))),
+      );
     });
   });
 

@@ -9,11 +9,7 @@ class LoadingPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: _LoadingView(
-        message: message,
-      ),
-    );
+    return Center(child: _LoadingView(message: message));
   }
 }
 
@@ -32,11 +28,8 @@ class _LoadingView extends StatelessWidget {
         if (message != null && message.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 20.0),
-            child: Text(
-              message,
-              textAlign: TextAlign.center,
-            ),
-          )
+            child: Text(message, textAlign: TextAlign.center),
+          ),
       ],
     );
   }
@@ -55,44 +48,40 @@ class _LoadingDialog extends StatelessWidget {
     if (onCancel == null) {
       return SimpleDialog(
         contentPadding: EdgeInsets.symmetric(vertical: 60),
-        children: [
-          Center(child: content),
-        ],
+        children: [Center(child: content)],
       );
     } else {
       return AlertDialog(
         content: content,
-        actions: [
-          TextButton(
-            onPressed: onCancel,
-            child: Text('Cancel'),
-          )
-        ],
+        actions: [TextButton(onPressed: onCancel, child: Text('Cancel'))],
       );
     }
   }
 }
 
-OverlayEntry showLoading(BuildContext context,
-    {String? message, VoidCallback? onCancel}) {
+OverlayEntry showLoading(
+  BuildContext context, {
+  String? message,
+  VoidCallback? onCancel,
+}) {
   return _showLoading(
     context,
-    _LoadingDialog(
-      message: 'Loading...',
-      onCancel: onCancel,
-    ),
+    _LoadingDialog(message: 'Loading...', onCancel: onCancel),
   );
 }
 
 OverlayEntry showLoadingWithMessages(
-    BuildContext context, Stream<String> messages,
-    {VoidCallback? onCancel}) {
+  BuildContext context,
+  Stream<String> messages, {
+  VoidCallback? onCancel,
+}) {
   return _showLoading(
     context,
     StreamBuilder<String>(
       stream: messages,
-      initialData:
-          messages is ValueStream<String> ? messages.valueOrNull : null,
+      initialData: messages is ValueStream<String>
+          ? messages.valueOrNull
+          : null,
       builder: (context, snapshot) {
         var data = snapshot.data;
         String message;
@@ -102,23 +91,22 @@ OverlayEntry showLoadingWithMessages(
           message = data;
         }
 
-        return _LoadingDialog(
-          message: message,
-          onCancel: onCancel,
-        );
+        return _LoadingDialog(message: message, onCancel: onCancel);
       },
     ),
   );
 }
 
 OverlayEntry _showLoading(BuildContext context, Widget content) {
-  var entry = OverlayEntry(builder: (context) {
-    return Container(
-      alignment: Alignment.center,
-      color: Colors.black12,
-      child: content,
-    );
-  });
+  var entry = OverlayEntry(
+    builder: (context) {
+      return Container(
+        alignment: Alignment.center,
+        color: Colors.black12,
+        child: content,
+      );
+    },
+  );
   Overlay.of(context).insert(entry);
 
   return entry;
@@ -132,9 +120,7 @@ class LoadingDialogOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var dialog = SimpleDialog(
-      children: [
-        Center(child: _LoadingView(message: message)),
-      ],
+      children: [Center(child: _LoadingView(message: message))],
     );
 
     return Container(

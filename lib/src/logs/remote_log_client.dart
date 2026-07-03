@@ -71,9 +71,9 @@ class RemoteLogClient implements LogClient {
   @override
   void printError(String message, {StackTrace? stackTrace, bool? wrap}) {
     _send(
-        RemoteLogServer.printLogPath,
-        PrintLog.error(message,
-            stackTrace: stackTrace?.toString(), wrap: wrap));
+      RemoteLogServer.printLogPath,
+      PrintLog.error(message, stackTrace: stackTrace?.toString(), wrap: wrap),
+    );
   }
 
   @override
@@ -115,13 +115,16 @@ class RemoteLogClient implements LogClient {
     var client = HttpClient();
     try {
       var request = await client.openUrl(
-          'post', uri.replace(path: p.url.join(uri.path, path)));
+        'post',
+        uri.replace(path: p.url.join(uri.path, path)),
+      );
       request.headers.add('content-type', 'application/json');
       request.add(utf8.encode(jsonEncode(message)));
       var response = await request.close();
       if (response.statusCode >= 400) {
         throw Exception(
-            'RemoteLog error (${response.statusCode} ${response.reasonPhrase}');
+          'RemoteLog error (${response.statusCode} ${response.reasonPhrase}',
+        );
       }
       await response.drain();
     } catch (e) {

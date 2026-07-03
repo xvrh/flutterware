@@ -106,7 +106,8 @@ class PlasmaScene extends StatelessWidget {
   final double time;
 
   Color _pixel(int px, int py, double t) {
-    var v = math.sin(px / 8 + t) +
+    var v =
+        math.sin(px / 8 + t) +
         math.sin(py / 6 + t * 1.3) +
         math.sin((px + py) / 10 + t * 0.7);
     var n = (v + 3) / 6; // normalize -3..3 → 0..1
@@ -121,8 +122,10 @@ class PlasmaScene extends StatelessWidget {
         for (var col = 0; col < size.cols; col++) {
           var top = _pixel(col, row * 2, t);
           var bottom = _pixel(col, row * 2 + 1, t);
-          painter.fillRect(CellRect.fromTLWH(row, col, 1, 1),
-              Cell(rune: 0x2580, fg: top, bg: bottom));
+          painter.fillRect(
+            CellRect.fromTLWH(row, col, 1, 1),
+            Cell(rune: 0x2580, fg: top, bg: bottom),
+          );
         }
       }
     });
@@ -138,12 +141,13 @@ class StarfieldScene extends StatelessWidget {
   static final List<({double x, double y, double z})> _stars = () {
     var rng = math.Random(42);
     return List.generate(
-        140,
-        (_) => (
-              x: rng.nextDouble() * 2 - 1,
-              y: rng.nextDouble() * 2 - 1,
-              z: rng.nextDouble(),
-            ));
+      140,
+      (_) => (
+        x: rng.nextDouble() * 2 - 1,
+        y: rng.nextDouble() * 2 - 1,
+        z: rng.nextDouble(),
+      ),
+    );
   }();
 
   @override
@@ -166,8 +170,10 @@ class StarfieldScene extends StatelessWidget {
         var c = lerpColor(black, Color.rgb(255, 255, 255), b);
         var top = syPix.isEven ? c : black;
         var bottom = syPix.isEven ? black : c;
-        painter.fillRect(CellRect.fromTLWH(cellRow, sx, 1, 1),
-            Cell(rune: 0x2580, fg: top, bg: bottom));
+        painter.fillRect(
+          CellRect.fromTLWH(cellRow, sx, 1, 1),
+          Cell(rune: 0x2580, fg: top, bg: bottom),
+        );
       }
     });
   }
@@ -194,10 +200,11 @@ class ChartsScene extends StatelessWidget {
     // --- Left panel: custom-paint area chart ---
     var leftBody = Painted((painter, size) {
       for (var x = 0; x < size.cols; x++) {
-        var f = (0.5 +
-                0.3 * math.sin(x * 0.3 + t * 2) +
-                0.15 * math.sin(x * 0.7 - t))
-            .clamp(0.0, 1.0);
+        var f =
+            (0.5 +
+                    0.3 * math.sin(x * 0.3 + t * 2) +
+                    0.15 * math.sin(x * 0.7 - t))
+                .clamp(0.0, 1.0);
         // Total filled height in pixels (rows * 1 pixel per row here).
         var filledPixels = f * size.rows;
         var fullRows = filledPixels.floor();
@@ -209,9 +216,14 @@ class ChartsScene extends StatelessWidget {
           var heightFrac = (row + 1) / size.rows;
           // Green at the bottom, cyan at the top.
           var cellColor = lerpColor(
-              Color.rgb(0, 200, 80), Color.rgb(0, 220, 220), heightFrac);
-          painter.fillRect(CellRect.fromTLWH(cellRow, x, 1, 1),
-              Cell(rune: 0x2588, fg: cellColor, bg: Color.rgb(0, 0, 0)));
+            Color.rgb(0, 200, 80),
+            Color.rgb(0, 220, 220),
+            heightFrac,
+          );
+          painter.fillRect(
+            CellRect.fromTLWH(cellRow, x, 1, 1),
+            Cell(rune: 0x2588, fg: cellColor, bg: Color.rgb(0, 0, 0)),
+          );
         }
 
         // Crest cell with eighth-block precision.
@@ -219,11 +231,16 @@ class ChartsScene extends StatelessWidget {
           var cellRow = size.rows - 1 - fullRows;
           var heightFrac = (fullRows + crestFrac) / size.rows;
           var crestColor = lerpColor(
-              Color.rgb(0, 200, 80), Color.rgb(0, 220, 220), heightFrac);
+            Color.rgb(0, 200, 80),
+            Color.rgb(0, 220, 220),
+            heightFrac,
+          );
           var rune = eighthBlock(crestFrac);
           // Eighth-block runes grow upward: rune is rendered as fg on bg.
-          painter.fillRect(CellRect.fromTLWH(cellRow, x, 1, 1),
-              Cell(rune: rune, fg: crestColor, bg: Color.rgb(0, 0, 0)));
+          painter.fillRect(
+            CellRect.fromTLWH(cellRow, x, 1, 1),
+            Cell(rune: rune, fg: crestColor, bg: Color.rgb(0, 0, 0)),
+          );
         }
       }
     });
@@ -333,8 +350,9 @@ class LayoutLabScene extends StatelessWidget {
           width: 8,
           height: 3,
           child: DecoratedBox(
-            decoration:
-                BoxDecoration(fill: Cell(rune: 0x20, bg: _boxColors[i])),
+            decoration: BoxDecoration(
+              fill: Cell(rune: 0x20, bg: _boxColors[i]),
+            ),
           ),
         ),
     ];
@@ -420,7 +438,8 @@ class TypeScene extends StatelessWidget {
         Column(
           children: [
             SizedBox(
-                height: (1 + math.sin(i * 0.5 + t * 3)).round().clamp(0, 2)),
+              height: (1 + math.sin(i * 0.5 + t * 3)).round().clamp(0, 2),
+            ),
             Text(waveStr[i]),
           ],
         ),
@@ -440,8 +459,9 @@ class TypeScene extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: wordmarkChars),
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: wordmarkChars,
+        ),
         SizedBox(height: 1),
         Row(mainAxisAlignment: MainAxisAlignment.center, children: waveWidgets),
         SizedBox(height: 1),
@@ -474,11 +494,13 @@ class Header extends StatelessWidget {
     for (var i = 0; i < _sceneNames.length; i++) {
       if (i > 0) tabs.add(SizedBox(width: 2));
       var isActive = i == scene;
-      tabs.add(Text(
-        '${i + 1} ${_sceneNames[i]}',
-        fg: isActive ? Color.brightWhite : Color.brightBlack,
-        style: isActive ? TextStyle.bold : 0,
-      ));
+      tabs.add(
+        Text(
+          '${i + 1} ${_sceneNames[i]}',
+          fg: isActive ? Color.brightWhite : Color.brightBlack,
+          style: isActive ? TextStyle.bold : 0,
+        ),
+      );
     }
 
     // Row 3: animated 1-cell-tall gradient bar.
@@ -582,11 +604,11 @@ class _ShowcaseState extends State<ShowcaseApp> {
     _keySub = app.keys.listen((event) {
       if (event is CharKey) {
         var r = event.rune;
-        if (r == 0x71 /* q */) {
+        if (r == 0x71 /* q */ ) {
           app.exit();
-        } else if (r == 0x20 /* space */) {
+        } else if (r == 0x20 /* space */ ) {
           setState(() => _paused = !_paused);
-        } else if (r >= 0x31 && r <= 0x35 /* '1'..'5' */) {
+        } else if (r >= 0x31 && r <= 0x35 /* '1'..'5' */ ) {
           setState(() => _scene = r - 0x31);
         }
       } else if (event is SpecialKey) {

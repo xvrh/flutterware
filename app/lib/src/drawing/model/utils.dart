@@ -26,7 +26,8 @@ double expressionToDouble(Expression expression) {
     value = expression.value!.toDouble();
   } else {
     throw UnsupportedError(
-        'Expression is not a valid double literal (${expression.runtimeType})');
+      'Expression is not a valid double literal (${expression.runtimeType})',
+    );
   }
   return value * multiplicator;
 }

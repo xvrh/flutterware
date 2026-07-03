@@ -15,34 +15,52 @@ class _$TestRunSerializer implements StructuredSerializer<TestRun> {
   final String wireName = 'TestRun';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, TestRun object,
-      {FullType specifiedType = FullType.unspecified}) {
+  Iterable<Object?> serialize(
+    Serializers serializers,
+    TestRun object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'test',
-      serializers.serialize(object.test,
-          specifiedType: const FullType(TestReference)),
+      serializers.serialize(
+        object.test,
+        specifiedType: const FullType(TestReference),
+      ),
       'args',
-      serializers.serialize(object.args,
-          specifiedType: const FullType(RunArgs)),
+      serializers.serialize(
+        object.args,
+        specifiedType: const FullType(RunArgs),
+      ),
       'screens',
-      serializers.serialize(object.screens,
-          specifiedType:
-              const FullType(BuiltMap, [FullType(String), FullType(Screen)])),
+      serializers.serialize(
+        object.screens,
+        specifiedType: const FullType(BuiltMap, [
+          FullType(String),
+          FullType(Screen),
+        ]),
+      ),
     ];
     Object? value;
     value = object.result;
     if (value != null) {
       result
         ..add('result')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(RunResult)));
+        ..add(
+          serializers.serialize(
+            value,
+            specifiedType: const FullType(RunResult),
+          ),
+        );
     }
     return result;
   }
 
   @override
-  TestRun deserialize(Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+  TestRun deserialize(
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = TestRunBuilder();
 
     final iterator = serialized.iterator;
@@ -52,21 +70,42 @@ class _$TestRunSerializer implements StructuredSerializer<TestRun> {
       final Object? value = iterator.current;
       switch (key) {
         case 'test':
-          result.test.replace(serializers.deserialize(value,
-              specifiedType: const FullType(TestReference))! as TestReference);
+          result.test.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(TestReference),
+                )!
+                as TestReference,
+          );
           break;
         case 'args':
-          result.args.replace(serializers.deserialize(value,
-              specifiedType: const FullType(RunArgs))! as RunArgs);
+          result.args.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(RunArgs),
+                )!
+                as RunArgs,
+          );
           break;
         case 'screens':
-          result.screens.replace(serializers.deserialize(value,
-              specifiedType: const FullType(
-                  BuiltMap, [FullType(String), FullType(Screen)]))!);
+          result.screens.replace(
+            serializers.deserialize(
+              value,
+              specifiedType: const FullType(BuiltMap, [
+                FullType(String),
+                FullType(Screen),
+              ]),
+            )!,
+          );
           break;
         case 'result':
-          result.result.replace(serializers.deserialize(value,
-              specifiedType: const FullType(RunResult))! as RunResult);
+          result.result.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(RunResult),
+                )!
+                as RunResult,
+          );
           break;
       }
     }
@@ -88,12 +127,12 @@ class _$TestRun extends TestRun {
   factory _$TestRun([void Function(TestRunBuilder)? updates]) =>
       (TestRunBuilder()..update(updates))._build();
 
-  _$TestRun._(
-      {required this.test,
-      required this.args,
-      required this.screens,
-      this.result})
-      : super._() {
+  _$TestRun._({
+    required this.test,
+    required this.args,
+    required this.screens,
+    this.result,
+  }) : super._() {
     BuiltValueNullFieldError.checkNotNull(test, r'TestRun', 'test');
     BuiltValueNullFieldError.checkNotNull(args, r'TestRun', 'args');
     BuiltValueNullFieldError.checkNotNull(screens, r'TestRun', 'screens');
@@ -189,12 +228,14 @@ class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
   _$TestRun _build() {
     _$TestRun _$result;
     try {
-      _$result = _$v ??
+      _$result =
+          _$v ??
           _$TestRun._(
-              test: test.build(),
-              args: args.build(),
-              screens: screens.build(),
-              result: _result?.build());
+            test: test.build(),
+            args: args.build(),
+            screens: screens.build(),
+            result: _result?.build(),
+          );
     } catch (_) {
       late String _$failedField;
       try {
@@ -208,7 +249,10 @@ class TestRunBuilder implements Builder<TestRun, TestRunBuilder> {
         _result?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            r'TestRun', _$failedField, e.toString());
+          r'TestRun',
+          _$failedField,
+          e.toString(),
+        );
       }
       rethrow;
     }

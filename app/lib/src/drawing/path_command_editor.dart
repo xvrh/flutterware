@@ -38,10 +38,7 @@ class LineToEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PointHandle(
-      x: entry.x + offset.dx,
-      y: entry.y + offset.dy,
-    );
+    return PointHandle(x: entry.x + offset.dx, y: entry.y + offset.dy);
   }
 }
 
@@ -53,9 +50,6 @@ class MoveToEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PointHandle(
-      x: entry.x + offset.dx,
-      y: entry.y + offset.dy,
-    );
+    return PointHandle(x: entry.x + offset.dx, y: entry.y + offset.dy);
   }
 }

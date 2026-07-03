@@ -18,7 +18,8 @@ void main() async {
 
   if (projectPath == null || flutterSdkPath == null) {
     throw Exception(
-        'This entry point need to be run with some Platform.environment parameters. Use main_dev.dart for development.');
+      'This entry point need to be run with some Platform.environment parameters. Use main_dev.dart for development.',
+    );
   }
 
   var remoteLoggerUrl = Platform.environment[remoteLoggerUrlKey];
@@ -44,12 +45,10 @@ void main() async {
     ..onRecord.listen(appContext.logger.printLogRecord);
   await appContext.resourceCleaner.initialize();
 
-  runApp(
-    SingleProjectApp(project),
-  );
+  runApp(SingleProjectApp(project));
 
   appContext.logger.printBox(
-      '''
+    '''
 Discover the features:
 - Test runner with hot-reload
 - Pub dependencies manager
@@ -58,6 +57,7 @@ Discover the features:
 
 Contribute your ideas: https://github.com/xvrh/flutterware
 '''
-          .trim(),
-      title: 'Flutterware GUI is ready');
+        .trim(),
+    title: 'Flutterware GUI is ready',
+  );
 }

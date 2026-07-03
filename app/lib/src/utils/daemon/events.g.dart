@@ -7,25 +7,19 @@ part of 'events.dart';
 // **************************************************************************
 
 DaemonConnectedEvent _$DaemonConnectedEventFromJson(
-        Map<String, dynamic> json) =>
-    DaemonConnectedEvent(
-      json['version'] as String,
-      json['pid'] as int,
-    );
+  Map<String, dynamic> json,
+) => DaemonConnectedEvent(json['version'] as String, json['pid'] as int);
 
 DaemonLogEvent _$DaemonLogEventFromJson(Map<String, dynamic> json) =>
-    DaemonLogEvent(
-      json['log'] as String,
-      error: json['error'] as bool?,
-    );
+    DaemonLogEvent(json['log'] as String, error: json['error'] as bool?);
 
 DaemonLogMessageEvent _$DaemonLogMessageEventFromJson(
-        Map<String, dynamic> json) =>
-    DaemonLogMessageEvent(
-      $enumDecode(_$MessageLevelEnumMap, json['level']),
-      json['message'] as String,
-      json['stackTrace'] as String?,
-    );
+  Map<String, dynamic> json,
+) => DaemonLogMessageEvent(
+  $enumDecode(_$MessageLevelEnumMap, json['level']),
+  json['message'] as String,
+  json['stackTrace'] as String?,
+);
 
 const _$MessageLevelEnumMap = {
   MessageLevel.info: 'info',
@@ -60,6 +54,4 @@ AppProgressEvent _$AppProgressEventFromJson(Map<String, dynamic> json) =>
     );
 
 AppStartedEvent _$AppStartedEventFromJson(Map<String, dynamic> json) =>
-    AppStartedEvent(
-      json['appId'] as String,
-    );
+    AppStartedEvent(json['appId'] as String);

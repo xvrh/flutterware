@@ -47,18 +47,23 @@ extension WidgetTesterScreenshotExtension on WidgetTester {
     }
 
     var widgetsApp =
-        widgetList(find.byWidgetPredicate((widget) => widget is WidgetsApp))
-            .firstOrNull as WidgetsApp?;
+        widgetList(
+              find.byWidgetPredicate((widget) => widget is WidgetsApp),
+            ).firstOrNull
+            as WidgetsApp?;
     var screen = Screen(screenId, name ?? '').rebuild((s) {
       s
         ..splitName = context.currentSplitName
         ..topBrightness = brightnessAt(Offset(0, 10))?.index
-        ..bottomBrightness =
-            brightnessAt(Offset(0, runContext.args.device.height - 5))?.index;
+        ..bottomBrightness = brightnessAt(
+          Offset(0, runContext.args.device.height - 5),
+        )?.index;
       if (widgetsApp != null) {
-        s.supportedLocales.replace(widgetsApp.supportedLocales
-            .map((l) => SerializableLocale(l.languageCode, l.countryCode))
-            .toList());
+        s.supportedLocales.replace(
+          widgetsApp.supportedLocales
+              .map((l) => SerializableLocale(l.languageCode, l.countryCode))
+              .toList(),
+        );
       }
     });
 
@@ -68,8 +73,9 @@ extension WidgetTesterScreenshotExtension on WidgetTester {
       Uint8List? pixels;
       if (context.args.imageRatio > 0) {
         var image = await _toImage(renderView, context.args);
-        var byteData =
-            (await image.toByteData(format: ui.ImageByteFormat.png))!;
+        var byteData = (await image.toByteData(
+          format: ui.ImageByteFormat.png,
+        ))!;
         pixels = byteData.buffer.asUint8List();
       }
       var newScreen = NewScreen((b) {
@@ -78,11 +84,14 @@ extension WidgetTesterScreenshotExtension on WidgetTester {
           ..imageBase64 = pixels != null ? base64Encode(pixels) : null
           ..parent = parentId;
         if (parentRectangle != null) {
-          b.parentRectangle.replace(Rectangle.fromLTRB(
+          b.parentRectangle.replace(
+            Rectangle.fromLTRB(
               parentRectangle.left,
               parentRectangle.top,
               parentRectangle.right,
-              parentRectangle.bottom));
+              parentRectangle.bottom,
+            ),
+          );
         }
       });
 
@@ -95,6 +104,8 @@ Future<ui.Image> _toImage(RenderView renderView, RunArgs args) {
   assert(!renderView.debugNeedsPaint);
   final layer = renderView.debugLayer! as OffsetLayer;
   var bounds = renderView.paintBounds;
-  return layer.toImage(bounds,
-      pixelRatio: 1 / args.device.pixelRatio * args.imageRatio);
+  return layer.toImage(
+    bounds,
+    pixelRatio: 1 / args.device.pixelRatio * args.imageRatio,
+  );
 }

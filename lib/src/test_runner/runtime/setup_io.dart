@@ -7,10 +7,7 @@ import 'setup.dart' show BundleParameters;
 
 Future<TestBundle> createBundle(BundleParameters params) async {
   await _buildBundle(params);
-  return IOAssetBundle(
-    'build/flutter_assets',
-    bundleParams: params,
-  );
+  return IOAssetBundle('build/flutter_assets', bundleParams: params);
 }
 
 StreamChannel<String> createChannel(Uri serverUri) {
@@ -27,8 +24,12 @@ Future<void> _buildBundle(BundleParameters params) async {
     ..writeAsStringSync('void main() {}');
 
   try {
-    var result = await Process.run(params.flutterBinPath,
-        ['build', 'bundle', '--release', emptyFile.path]);
+    var result = await Process.run(params.flutterBinPath, [
+      'build',
+      'bundle',
+      '--release',
+      emptyFile.path,
+    ]);
     if (result.exitCode != 0) {
       throw Exception('Failed to build bundle ${result.stderr}');
     }

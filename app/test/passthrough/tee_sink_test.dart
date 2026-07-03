@@ -5,9 +5,7 @@ import 'package:test/test.dart';
 void main() {
   test('TeeSink writes to both stdout sink and capture buffer', () {
     final written = <int>[];
-    final sink = TeeSink(
-      onBytes: written.addAll,
-    );
+    final sink = TeeSink(onBytes: written.addAll);
 
     sink.add(Uint8List.fromList([1, 2, 3]));
     sink.add(Uint8List.fromList([4, 5]));

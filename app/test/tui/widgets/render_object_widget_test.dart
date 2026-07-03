@@ -34,19 +34,21 @@ class AppState extends State<App> {
 }
 
 void main() {
-  test('Column of Texts yields a RenderFlex with RenderText children in order',
-      () {
-    App.body = const Column(children: [Text('a'), Text('b')]);
-    var binding = pump(const App());
+  test(
+    'Column of Texts yields a RenderFlex with RenderText children in order',
+    () {
+      App.body = const Column(children: [Text('a'), Text('b')]);
+      var binding = pump(const App());
 
-    var flex = binding.renderView.child;
-    expect(flex, isA<RenderFlex>());
-    var children = (flex! as RenderFlex).children;
-    expect(children.length, 2);
-    expect(children.every((c) => c is RenderText), isTrue);
-    expect((children[0] as RenderText).text, 'a');
-    expect((children[1] as RenderText).text, 'b');
-  });
+      var flex = binding.renderView.child;
+      expect(flex, isA<RenderFlex>());
+      var children = (flex! as RenderFlex).children;
+      expect(children.length, 2);
+      expect(children.every((c) => c is RenderText), isTrue);
+      expect((children[0] as RenderText).text, 'a');
+      expect((children[1] as RenderText).text, 'b');
+    },
+  );
 
   test('rebuild with a changed first child reuses the same RenderText', () {
     App.body = const Column(children: [Text('a'), Text('b')]);
@@ -66,26 +68,38 @@ void main() {
   });
 
   test('createRenderObject builds the configured render object type', () {
-    var binding =
-        pump(const Padding(padding: EdgeInsets.all(1), child: Text('hi')));
+    var binding = pump(
+      const Padding(padding: EdgeInsets.all(1), child: Text('hi')),
+    );
     expect(binding.renderView.child, isA<RenderPadding>());
     expect(
-        (binding.renderView.child! as RenderPadding).child, isA<RenderText>());
+      (binding.renderView.child! as RenderPadding).child,
+      isA<RenderText>(),
+    );
   });
 
   test('replacing a single child with a different widget type re-splices', () {
     App.body = const Padding(padding: EdgeInsets.all(0), child: Text('x'));
     var binding = pump(const App());
     expect(
-        (binding.renderView.child! as RenderPadding).child, isA<RenderText>());
+      (binding.renderView.child! as RenderPadding).child,
+      isA<RenderText>(),
+    );
 
-    App.last!.rebuildWith(const Padding(
+    App.last!.rebuildWith(
+      const Padding(
         padding: EdgeInsets.all(0),
         child: ConstrainedBox(
-            constraints: BoxConstraints.tightFor(width: 1), child: Text('y'))));
+          constraints: BoxConstraints.tightFor(width: 1),
+          child: Text('y'),
+        ),
+      ),
+    );
     binding.drawFrame(Painter(CellBuffer(4, 10)));
 
-    expect((binding.renderView.child! as RenderPadding).child,
-        isA<RenderConstrainedBox>());
+    expect(
+      (binding.renderView.child! as RenderPadding).child,
+      isA<RenderConstrainedBox>(),
+    );
   });
 }

@@ -64,13 +64,19 @@ void main() {
   test('canUpdate matches type and key (sanity)', () {
     expect(Widget.canUpdate(const Probe('a'), const Probe('b')), isTrue);
     expect(
-        Widget.canUpdate(const Probe('a', key: ValueKey('k')),
-            const Probe('b', key: ValueKey('k'))),
-        isTrue);
+      Widget.canUpdate(
+        const Probe('a', key: ValueKey('k')),
+        const Probe('b', key: ValueKey('k')),
+      ),
+      isTrue,
+    );
     expect(
-        Widget.canUpdate(const Probe('a', key: ValueKey('k')),
-            const Probe('b', key: ValueKey('j'))),
-        isFalse);
+      Widget.canUpdate(
+        const Probe('a', key: ValueKey('k')),
+        const Probe('b', key: ValueKey('j')),
+      ),
+      isFalse,
+    );
   });
 
   test('mount runs initState -> didChangeDependencies -> build in order', () {
@@ -110,9 +116,15 @@ void main() {
 
     rebuild(binding, const Probe('b'));
     // initState did not re-run, so lastState is unchanged.
-    expect(identical(first, Probe.lastState), isTrue,
-        reason: 'a same-type update reuses the element and its State');
-    expect(first.widget.label, 'b',
-        reason: 'the reused State sees the new widget');
+    expect(
+      identical(first, Probe.lastState),
+      isTrue,
+      reason: 'a same-type update reuses the element and its State',
+    );
+    expect(
+      first.widget.label,
+      'b',
+      reason: 'the reused State sees the new widget',
+    );
   });
 }

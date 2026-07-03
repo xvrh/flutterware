@@ -18,7 +18,7 @@ class RunView extends StatefulWidget {
   final Widget? reloadToolbar;
 
   RunView(this.client, this.testName, {this.reloadToolbar})
-      : super(key: Key(testName.join('-')));
+    : super(key: Key(testName.join('-')));
 
   @override
   State<RunView> createState() => _RunViewState();
@@ -125,11 +125,9 @@ class _RunViewState extends State<RunView> {
                 child: SizedBox(
                   width: 12,
                   height: 12,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-              )
+              ),
           ],
           trailingActions: [if (result != null) ResultIcon(result)],
           child: contentWidget,
@@ -156,18 +154,12 @@ class ResultIcon extends StatelessWidget {
     if (result.success) {
       return Tooltip(
         message: '${result.duration}',
-        child: Icon(
-          Icons.check,
-          color: Colors.green,
-        ),
+        child: Icon(Icons.check, color: Colors.green),
       );
     } else {
       return Tooltip(
         message: '${result.error}',
-        child: Icon(
-          Icons.error_outline,
-          color: Colors.red,
-        ),
+        child: Icon(Icons.error_outline, color: Colors.red),
       );
     }
   }
@@ -226,7 +218,9 @@ class _FlowMasterState extends State<_FlowMaster> {
             value: _scale,
             onScale: (v) {
               widget.parent._interactionController.value = widget
-                  .parent._interactionController.value
+                  .parent
+                  ._interactionController
+                  .value
                   .scaledByDouble(v, v, v, 1.0);
             },
           ),
@@ -282,12 +276,15 @@ class __FlowGraphState extends State<_FlowGraph> {
   void _fillInput() {
     var screens = widget.run.screens;
     _inputs = screens.values
-        .map((s) => NodeInput(
+        .map(
+          (s) => NodeInput(
             id: s.id,
             next: s.next.map((n) {
               var target = screens[n.to]!;
               return target.id;
-            }).toList()))
+            }).toList(),
+          ),
+        )
         .toList();
   }
 
@@ -303,8 +300,10 @@ class __FlowGraphState extends State<_FlowGraph> {
 
     return DirectGraph(
       list: inputs,
-      cellSize: Size(widget.run.args.device.width * widget.run.args.imageRatio,
-          widget.run.args.device.height * widget.run.args.imageRatio),
+      cellSize: Size(
+        widget.run.args.device.width * widget.run.args.imageRatio,
+        widget.run.args.device.height * widget.run.args.imageRatio,
+      ),
       cellPadding: 90.0,
       contactEdgesDistance: 0,
       tipLength: 20,
@@ -337,11 +336,7 @@ class __FlowGraphState extends State<_FlowGraph> {
               var screen = widget.run.screens[node.id]!;
               context.go('detail/${screen.id}');
             },
-            child: _ScreenView(
-              widget.run,
-              screen,
-              key: Key(node.id),
-            ),
+            child: _ScreenView(widget.run, screen, key: Key(node.id)),
           ),
         );
       },

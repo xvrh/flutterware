@@ -16,8 +16,11 @@ class LoggerPlugin implements DevbarPlugin {
   String? _search;
 
   LoggerPlugin(this._devbar) {
-    _devbar.ui
-        .addTab(Tab(text: 'Logger'), LoggerList(this), hierarchy: ['Logs']);
+    _devbar.ui.addTab(
+      Tab(text: 'Logger'),
+      LoggerList(this),
+      hierarchy: ['Logs'],
+    );
 
     _subscription = Logger.root.onRecord.listen((e) {
       _allLogs.add(e);

@@ -61,11 +61,7 @@ class _MenuTreeState extends State<MenuTree> {
       var children = entry.children;
       var isLeaf = children == null || children.isEmpty;
       var newPath = [...path, entry.text];
-      _allLines.add(_Line(
-        TreePath(newPath),
-        isLeaf: isLeaf,
-        entry: entry,
-      ));
+      _allLines.add(_Line(TreePath(newPath), isLeaf: isLeaf, entry: entry));
       if (children != null) {
         _fill(children, newPath);
       }
@@ -133,11 +129,7 @@ class _Line {
   final bool isLeaf;
   final MenuEntry entry;
 
-  _Line(
-    this.path, {
-    required this.isLeaf,
-    required this.entry,
-  });
+  _Line(this.path, {required this.isLeaf, required this.entry});
 
   int get depth => path.nodes.length - 1;
 
@@ -152,7 +144,8 @@ class TreePath {
 
   factory TreePath.fromEncoded(String path) {
     return TreePath(
-        path.split('/').map((n) => Uri.decodeComponent(n)).toList());
+      path.split('/').map((n) => Uri.decodeComponent(n)).toList(),
+    );
   }
 
   bool get isRoot => nodes.length == 1;

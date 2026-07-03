@@ -58,11 +58,9 @@ void _writeShim({
   required String kind,
   required String wrapExe,
 }) {
-  file.writeAsStringSync(renderShim(
-    realBinary: realBinary,
-    kind: kind,
-    wrapExe: wrapExe,
-  ));
+  file.writeAsStringSync(
+    renderShim(realBinary: realBinary, kind: kind, wrapExe: wrapExe),
+  );
   // chmod +x.
   Process.runSync('chmod', ['+x', file.path]);
 }

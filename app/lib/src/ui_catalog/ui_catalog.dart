@@ -12,23 +12,25 @@ class UICatalogScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<NetworkInterface>>(
-        future: NetworkInterface.list(),
-        builder: (context, snapshot) {
-          var interfaces = StringBuffer();
-          for (var interface in snapshot.data ?? <NetworkInterface>[]) {
-            interfaces.writeln(
-                '${interface.name} ${interface.addresses} ${interface.index}');
-          }
+      future: NetworkInterface.list(),
+      builder: (context, snapshot) {
+        var interfaces = StringBuffer();
+        for (var interface in snapshot.data ?? <NetworkInterface>[]) {
+          interfaces.writeln(
+            '${interface.name} ${interface.addresses} ${interface.index}',
+          );
+        }
 
-          return Center(
-            child: Column(
-              children: [
-                ElevatedButton(
-                    onPressed: () {
-                      project.uiCatalog.start();
-                    },
-                    child: Text('Start')),
-                Text('''
+        return Center(
+          child: Column(
+            children: [
+              ElevatedButton(
+                onPressed: () {
+                  project.uiCatalog.start();
+                },
+                child: Text('Start'),
+              ),
+              Text('''
 UIBook
 
 Steps:
@@ -43,10 +45,11 @@ Steps:
         - Create new device
         $interfaces
 '''),
-              ],
-            ),
-          );
-        });
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -57,10 +60,7 @@ class UICatalogMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: MenuLink(
-        url: paths.uiCatalog,
-        title: Text('UI Catalog'),
-      ),
+      child: MenuLink(url: paths.uiCatalog, title: Text('UI Catalog')),
     );
   }
 }

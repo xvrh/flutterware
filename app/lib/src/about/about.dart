@@ -14,10 +14,7 @@ class AboutPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            ' ABOUT',
-            style: theme.textTheme.bodySmall,
-          ),
+          Text(' ABOUT', style: theme.textTheme.bodySmall),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(15),

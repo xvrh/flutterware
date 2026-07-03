@@ -19,11 +19,9 @@ class Stdio {
   /// Tests can provide overrides to use instead of the stdout and stderr from
   /// dart:io.
   @visibleForTesting
-  Stdio.test({
-    required io.Stdout stdout,
-    required io.IOSink stderr,
-  })  : _stdoutOverride = stdout,
-        _stderrOverride = stderr;
+  Stdio.test({required io.Stdout stdout, required io.IOSink stderr})
+    : _stdoutOverride = stdout,
+      _stderrOverride = stderr;
 
   io.Stdout? _stdoutOverride;
   io.IOSink? _stderrOverride;
@@ -154,15 +152,18 @@ class Stdio {
     String message, {
     void Function(String, dynamic, StackTrace)? fallback,
   }) {
-    asyncGuard<void>(() async {
-      sink.write(message);
-    }, onError: (Object error, StackTrace stackTrace) {
-      if (fallback == null) {
-        print(message);
-      } else {
-        fallback(message, error, stackTrace);
-      }
-    });
+    asyncGuard<void>(
+      () async {
+        sink.write(message);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (fallback == null) {
+          print(message);
+        } else {
+          fallback(message, error, stackTrace);
+        }
+      },
+    );
   }
 
   /// Adds [stream] to [stdout].

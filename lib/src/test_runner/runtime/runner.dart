@@ -43,11 +43,12 @@ class Runner {
   final Future<TestBundle> Function() _bundleFactory;
   late final TestBundle _bundle;
 
-  Runner(this.connectionFactory,
-      {required this.mainFunctions,
-      required Future<TestBundle> Function() bundle,
-      this.onConnected})
-      : _bundleFactory = bundle {
+  Runner(
+    this.connectionFactory, {
+    required this.mainFunctions,
+    required Future<TestBundle> Function() bundle,
+    this.onConnected,
+  }) : _bundleFactory = bundle {
     FlutterError.onError = (error) {
       _logger.severe('FLUTTER ERROR: $error');
     };
@@ -82,23 +83,31 @@ class Runner {
     _logger.info('Start connecting to server');
     var channel = connectionFactory();
     var connection = Connection(channel, modelSerializers);
-    connection.listen(onClose: () {
-      _project = null;
-      _runClient = null;
-      _logger.warning('Connection to server closed');
-      Timer(const Duration(milliseconds: 1000), _startConnection);
-    });
+    connection.listen(
+      onClose: () {
+        _project = null;
+        _runClient = null;
+        _logger.warning('Connection to server closed');
+        Timer(const Duration(milliseconds: 1000), _startConnection);
+      },
+    );
     _onConnected(connection);
   }
 
   void _onConnected(Connection connection) {
     _project = ProjectClient(connection);
-    ListingClient(connection, list: () {
-      var allMains = mainFunctions();
-      return listTests(allMains);
-    });
-    _runClient =
-        RunClient(connection, create: _createRun, execute: _executeRun);
+    ListingClient(
+      connection,
+      list: () {
+        var allMains = mainFunctions();
+        return listTests(allMains);
+      },
+    );
+    _runClient = RunClient(
+      connection,
+      create: _createRun,
+      execute: _executeRun,
+    );
 
     _logger.warning('Connected to server');
     onConnected?.call();
@@ -142,14 +151,17 @@ class Runner {
         } catch (e) {
           // errorDetails.toString() itself can throw an error
           _logger.severe('Test error');
-          error =
-              FlutterErrorDetails(exception: Exception('No detail provided'));
+          error = FlutterErrorDetails(
+            exception: Exception('No detail provided'),
+          );
         }
       };
 
       var runClient = _runClient!;
-      var runContext = RunContext(args,
-          addScreen: (screen) => runClient.addScreen(args, screen));
+      var runContext = RunContext(
+        args,
+        addScreen: (screen) => runClient.addScreen(args, screen),
+      );
       await runZonedGuarded(
         () async => await runGroup(test),
         zoneValues: {#runContext: runContext},

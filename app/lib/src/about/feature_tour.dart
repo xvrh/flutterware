@@ -15,9 +15,9 @@ class _FeatureTourPageState extends State<FeatureTourPage> {
   @override
   Widget build(BuildContext context) {
     return Markdown(
-        extensionSet: ExtensionSet.gitHubWeb,
-        controller: _scrollController,
-        data: '''
+      extensionSet: ExtensionSet.gitHubWeb,
+      controller: _scrollController,
+      data: '''
 ## Features
 
 ### Dependencies overview
@@ -36,7 +36,8 @@ A list of all the pub dependencies of a project with some information about each
  - Run Widget Test in a visual environment with screenshots of each step
  - Configure screen size to common phone format
  - See the app in every supported language
-''');
+''',
+    );
   }
 
   @override

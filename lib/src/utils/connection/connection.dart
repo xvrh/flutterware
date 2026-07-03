@@ -18,17 +18,21 @@ class Connection {
   Connection(this.channel, this.parameterSerializers);
 
   void listen({required void Function() onClose}) {
-    _subscription = channel.stream.listen(_onMessage, onDone: () {
-      for (var channel in _channels) {
-        channel.close();
-      }
+    _subscription = channel.stream.listen(
+      _onMessage,
+      onDone: () {
+        for (var channel in _channels) {
+          channel.close();
+        }
 
-      onClose();
-    }, onError: (e) {
-      _logger.warning('Connection error', e);
-      close();
-      onClose();
-    });
+        onClose();
+      },
+      onError: (e) {
+        _logger.warning('Connection error', e);
+        close();
+        onClose();
+      },
+    );
   }
 
   void close() {
@@ -42,9 +46,10 @@ class Connection {
     var message = Message.decode(serializedMessage);
 
     try {
-      var channel = _channels.firstWhere((d) => d.name == message.channel,
-          orElse: () =>
-              throw Exception('Channel ${message.channel} not found'));
+      var channel = _channels.firstWhere(
+        (d) => d.name == message.channel,
+        orElse: () => throw Exception('Channel ${message.channel} not found'),
+      );
       await channel._onMessage(message);
     } catch (e, stackTrace) {
       if (message.type == MessageType.request) {
@@ -79,34 +84,45 @@ class Connection {
     return parameterSerializers.deserialize(jsonDecode(encodeParameter));
   }
 
-  Message _createRequest(String channel, String method,
-      [parameter1, parameter2, parameter3]) {
-    return Message((b) => b
-      ..channel = channel
-      ..method = method
-      ..id = ++_messageId
-      ..type = MessageType.request
-      ..serializedParameter1 = _serializeParameter(parameter1)
-      ..serializedParameter2 = _serializeParameter(parameter2)
-      ..serializedParameter3 = _serializeParameter(parameter3));
+  Message _createRequest(
+    String channel,
+    String method, [
+    parameter1,
+    parameter2,
+    parameter3,
+  ]) {
+    return Message(
+      (b) => b
+        ..channel = channel
+        ..method = method
+        ..id = ++_messageId
+        ..type = MessageType.request
+        ..serializedParameter1 = _serializeParameter(parameter1)
+        ..serializedParameter2 = _serializeParameter(parameter2)
+        ..serializedParameter3 = _serializeParameter(parameter3),
+    );
   }
 
   Message _createResponse(Message request, parameter) {
-    return Message((b) => b
-      ..channel = request.channel
-      ..method = request.method
-      ..id = request.id
-      ..type = MessageType.response
-      ..serializedParameter1 = _serializeParameter(parameter));
+    return Message(
+      (b) => b
+        ..channel = request.channel
+        ..method = request.method
+        ..id = request.id
+        ..type = MessageType.response
+        ..serializedParameter1 = _serializeParameter(parameter),
+    );
   }
 
   Message _createError(Message request, exception) {
-    return Message((b) => b
-      ..channel = request.channel
-      ..method = request.method
-      ..id = request.id
-      ..type = MessageType.error
-      ..serializedParameter1 = _serializeParameter(exception.toString()));
+    return Message(
+      (b) => b
+        ..channel = request.channel
+        ..method = request.method
+        ..id = request.id
+        ..type = MessageType.error
+        ..serializedParameter1 = _serializeParameter(exception.toString()),
+    );
   }
 }
 
@@ -137,10 +153,19 @@ class Channel {
     }
   }
 
-  Future<T> sendRequest<T>(String methodName,
-      [parameter1, parameter2, parameter3]) {
+  Future<T> sendRequest<T>(
+    String methodName, [
+    parameter1,
+    parameter2,
+    parameter3,
+  ]) {
     var message = connection._createRequest(
-        name, methodName, parameter1, parameter2, parameter3);
+      name,
+      methodName,
+      parameter1,
+      parameter2,
+      parameter3,
+    );
     var completer = Completer();
     _pendingRequests[message] = completer;
     connection.sendMessage(message);
@@ -179,8 +204,9 @@ class Channel {
 
       connection.sendMessage(connection._createResponse(message, response));
     } else {
-      var request =
-          _pendingRequests.keys.firstWhereOrNull((m) => m.id == message.id);
+      var request = _pendingRequests.keys.firstWhereOrNull(
+        (m) => m.id == message.id,
+      );
 
       var completer = _pendingRequests.remove(request)!;
 

@@ -17,7 +17,7 @@ class PtyProcessImpl implements PtyProcess {
   final Completer<int> _exitCode = Completer<int>();
 
   PtyProcessImpl._(this._masterFd, this._pid, this._libc)
-      : _output = StreamController<Uint8List>();
+    : _output = StreamController<Uint8List>();
 
   static Future<PtyProcessImpl> spawn(
     String executable,
@@ -82,8 +82,9 @@ class PtyProcessImpl implements PtyProcess {
     final fileActions = calloc<Uint8>(1024);
     final attr = calloc<Uint8>(1024);
     final exePtr = executable.toNativeUtf8();
-    final cwdPtr =
-        workingDirectory != null ? workingDirectory.toNativeUtf8() : nullptr;
+    final cwdPtr = workingDirectory != null
+        ? workingDirectory.toNativeUtf8()
+        : nullptr;
     final pidOut = calloc<Int32>();
 
     libc.faInit(fileActions.cast());
@@ -139,7 +140,7 @@ class PtyProcessImpl implements PtyProcess {
   }
 
   static void _freeStrArray(Pointer<Pointer<Utf8>> arr) {
-    for (var i = 0;; i++) {
+    for (var i = 0; ; i++) {
       final p = arr[i];
       if (p == nullptr) break;
       calloc.free(p);

@@ -27,9 +27,7 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: const MyHomePage(title: 'Flutter Demo Home Page'),
-      localizationsDelegates: [
-        ...GlobalMaterialLocalizations.delegates,
-      ],
+      localizationsDelegates: [...GlobalMaterialLocalizations.delegates],
       supportedLocales: [
         Locale('en'),
         Locale('fr'),
@@ -61,15 +59,15 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-      ),
+      appBar: AppBar(title: Text(widget.title)),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         children: [
-          Text('FW_MARKER: $_fwMarker',
-              key: const Key('fw-marker'),
-              style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            'FW_MARKER: $_fwMarker',
+            key: const Key('fw-marker'),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
           Text('Language: ${Localizations.localeOf(context).languageCode}'),
           Text(MaterialLocalizations.of(context).alertDialogLabel),
           Text(MaterialLocalizations.of(context).invalidTimeLabel),

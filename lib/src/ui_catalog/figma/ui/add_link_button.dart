@@ -74,10 +74,7 @@ class __AddPanelState extends State<_AddPanel> {
                   ),
                 ),
                 const SizedBox(width: 5),
-                FilledButton(
-                  onPressed: _submit,
-                  child: Text('OK'),
-                ),
+                FilledButton(onPressed: _submit, child: Text('OK')),
               ],
             ),
             ValueStreamBuilder(

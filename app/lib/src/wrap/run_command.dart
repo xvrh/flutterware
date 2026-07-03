@@ -43,8 +43,11 @@ class RunCommand extends Command<int> {
       if (ctx == null) return _degrade(real, original);
 
       final token = newSessionId();
-      final injected =
-          injectDartDefine(original, key: 'FW_MARKER', value: token);
+      final injected = injectDartDefine(
+        original,
+        key: 'FW_MARKER',
+        value: token,
+      );
 
       final flutterwareDir = Directory('${ctx.projectRoot.path}/.flutterware');
       final sink = SessionSink(flutterwareDir, token);

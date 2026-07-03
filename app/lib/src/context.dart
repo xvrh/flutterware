@@ -12,11 +12,13 @@ class AppContext {
     ResourceCleanerService? resourceCleaner,
     required this.logger,
     Directory? appToolDirectory,
-  })  : resourceCleaner = resourceCleaner ?? ResourceCleanerService(),
-        appToolDirectory = appToolDirectory ?? Directory.current;
+  }) : resourceCleaner = resourceCleaner ?? ResourceCleanerService(),
+       appToolDirectory = appToolDirectory ?? Directory.current;
 
-  AppContext copyWith(
-      {ResourceCleanerService? resourceCleaner, LogClient? logger}) {
+  AppContext copyWith({
+    ResourceCleanerService? resourceCleaner,
+    LogClient? logger,
+  }) {
     return AppContext(
       resourceCleaner: resourceCleaner ?? this.resourceCleaner,
       logger: logger ?? this.logger,

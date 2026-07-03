@@ -39,9 +39,7 @@ class MetricsCard extends StatelessWidget {
                     return Text(
                       '${data.directs.length} direct${data.directs.length > 1 ? 's' : ''}, '
                       '${data.transitives.length} transitive${data.transitives.length > 1 ? 's' : ''}',
-                      style: const TextStyle(
-                        color: AppColors.link,
-                      ),
+                      style: const TextStyle(color: AppColors.link),
                     );
                   },
                 ),
@@ -74,13 +72,14 @@ class MetricsCard extends StatelessWidget {
                       'tests': data.tests,
                       'other': data.other,
                     }.entries)
-                      '${folder.key}: ${describe(folder.value)}'
+                      '${folder.key}: ${describe(folder.value)}',
                   ].join('\n');
 
                   return Tooltip(
                     message: description,
-                    child:
-                        Text('${numberFormat.format(data.sum.lines)} (Dart)'),
+                    child: Text(
+                      '${numberFormat.format(data.sum.lines)} (Dart)',
+                    ),
                   );
                 },
               ),
@@ -96,8 +95,9 @@ class MetricsCard extends StatelessWidget {
                   }
 
                   return Text(
-                      '${data.fileCount} file${data.fileCount > 1 ? 's' : ''}, '
-                      '${getSizeAsMB(data.totalBytes)}');
+                    '${data.fileCount} file${data.fileCount > 1 ? 's' : ''}, '
+                    '${getSizeAsMB(data.totalBytes)}',
+                  );
                 },
               ),
             ),
@@ -112,10 +112,7 @@ class _InfoRow extends StatelessWidget {
   final Widget label;
   final Widget value;
 
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -129,10 +126,7 @@ class _InfoRow extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: value,
-          ),
+          child: Align(alignment: Alignment.centerLeft, child: value),
         ),
       ],
     );

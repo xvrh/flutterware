@@ -7,16 +7,16 @@ part of 'models.dart';
 // **************************************************************************
 
 class _$ScreenConfiguration extends ScreenConfiguration {
-  factory _$ScreenConfiguration(
-          [void Function(ScreenConfigurationBuilder)? updates]) =>
-      (ScreenConfigurationBuilder()..update(updates))._build();
+  factory _$ScreenConfiguration([
+    void Function(ScreenConfigurationBuilder)? updates,
+  ]) => (ScreenConfigurationBuilder()..update(updates))._build();
 
   _$ScreenConfiguration._() : super._();
 
   @override
   ScreenConfiguration rebuild(
-          void Function(ScreenConfigurationBuilder) updates) =>
-      (toBuilder()..update(updates)).build();
+    void Function(ScreenConfigurationBuilder) updates,
+  ) => (toBuilder()..update(updates)).build();
 
   @override
   ScreenConfigurationBuilder toBuilder() =>

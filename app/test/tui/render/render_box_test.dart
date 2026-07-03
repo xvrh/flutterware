@@ -104,8 +104,7 @@ void main() {
       expect(mid.layoutCount, 1); // mid untouched — leaf is its own boundary
     });
 
-    test(
-        'a box receiving non-tight constraints bubbles dirty to its parent '
+    test('a box receiving non-tight constraints bubbles dirty to its parent '
         'boundary', () {
       // mid is laid out with loose (non-tight) constraints and passes them to
       // leaf, so leaf is NOT its own boundary — its boundary is mid. Dirtying

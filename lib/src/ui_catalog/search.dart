@@ -36,16 +36,19 @@ class SearchResultsState<T> extends State<SearchResults<T>> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-        padding: const EdgeInsets.only(bottom: 20),
-        children: _flattenedEntries().toList());
+      padding: const EdgeInsets.only(bottom: 20),
+      children: _flattenedEntries().toList(),
+    );
   }
 
   Iterable<_LineView> _flattenedEntries() {
     return _flatten(widget.entries, depth: 0);
   }
 
-  Iterable<_LineView> _flatten(Iterable<T> entries,
-      {required int depth}) sync* {
+  Iterable<_LineView> _flatten(
+    Iterable<T> entries, {
+    required int depth,
+  }) sync* {
     var selected = widget.selected;
     for (var entry in entries) {
       var children = widget.adapter.children(entry);

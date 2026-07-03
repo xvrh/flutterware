@@ -22,8 +22,9 @@ class DrawingService {
     var initialFiles = await _listAllFiles();
     _files.value = initialFiles;
 
-    _watcherSubscription =
-        DirectoryWatcher(project.directory.path).events.listen(_onFileChange);
+    _watcherSubscription = DirectoryWatcher(
+      project.directory.path,
+    ).events.listen(_onFileChange);
   }
 
   void _onFileChange(WatchEvent event) async {
@@ -37,8 +38,9 @@ class DrawingService {
       } else if (event.type == ChangeType.MODIFY) {
         var drawingFile = await _tryReadFile(File(event.path));
         if (drawingFile != null) {
-          var existingFile = _files.value
-              .firstWhereOrNull((e) => e.filePath == drawingFile.filePath);
+          var existingFile = _files.value.firstWhereOrNull(
+            (e) => e.filePath == drawingFile.filePath,
+          );
           if (existingFile != null &&
               existingFile.toCode() != drawingFile.toCode()) {
             var newFiles = _files.value.toList();
@@ -50,10 +52,13 @@ class DrawingService {
           }
         }
       } else if (event.type == ChangeType.REMOVE) {
-        var filePath = p.relative(File(event.path).absolute.path,
-            from: project.absolutePath);
-        var existingFile =
-            _files.value.firstWhereOrNull((e) => e.filePath == filePath);
+        var filePath = p.relative(
+          File(event.path).absolute.path,
+          from: project.absolutePath,
+        );
+        var existingFile = _files.value.firstWhereOrNull(
+          (e) => e.filePath == filePath,
+        );
         if (existingFile != null) {
           var newFiles = _files.value.toList()..remove(existingFile);
           _files.value = newFiles;
@@ -77,10 +82,11 @@ class DrawingService {
       var basedir = p.basename(dir.path);
       if (dir is Directory &&
           !const ['.dart_tool', 'build', 'out'].contains(basedir)) {
-        await for (var file in dir
-            .list(recursive: true)
-            .whereType<File>()
-            .where((f) => f.path.endsWith(DrawingFile.fileExtension))) {
+        await for (var file
+            in dir
+                .list(recursive: true)
+                .whereType<File>()
+                .where((f) => f.path.endsWith(DrawingFile.fileExtension))) {
           await tryAdd(file);
         }
       } else if (dir is File && dir.path.endsWith(DrawingFile.fileExtension)) {
@@ -94,8 +100,10 @@ class DrawingService {
     var content = await file.readAsString();
     if (content.contains(DrawingFile.fileTag)) {
       try {
-        var filePath =
-            p.relative(file.absolute.path, from: project.absolutePath);
+        var filePath = p.relative(
+          file.absolute.path,
+          from: project.absolutePath,
+        );
         return DrawingFile.parse(filePath, content);
       } catch (e, s) {
         _logger.warning('Failed to load file ${file.path}', e, s);

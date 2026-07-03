@@ -19,48 +19,66 @@ class _$NewScreenSerializer implements StructuredSerializer<NewScreen> {
   final String wireName = 'NewScreen';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, NewScreen object,
-      {FullType specifiedType = FullType.unspecified}) {
+  Iterable<Object?> serialize(
+    Serializers serializers,
+    NewScreen object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'screen',
-      serializers.serialize(object.screen,
-          specifiedType: const FullType(Screen)),
+      serializers.serialize(
+        object.screen,
+        specifiedType: const FullType(Screen),
+      ),
     ];
     Object? value;
     value = object.parent;
     if (value != null) {
       result
         ..add('parent')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(String)),
+        );
     }
     value = object.parentRectangle;
     if (value != null) {
       result
         ..add('parentRectangle')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(Rectangle)));
+        ..add(
+          serializers.serialize(
+            value,
+            specifiedType: const FullType(Rectangle),
+          ),
+        );
     }
     value = object.imageBase64;
     if (value != null) {
       result
         ..add('imageBase64')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(String)),
+        );
     }
     value = object.imageFile;
     if (value != null) {
       result
         ..add('imageFile')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(ImageFile)));
+        ..add(
+          serializers.serialize(
+            value,
+            specifiedType: const FullType(ImageFile),
+          ),
+        );
     }
     return result;
   }
 
   @override
-  NewScreen deserialize(Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+  NewScreen deserialize(
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = NewScreenBuilder();
 
     final iterator = serialized.iterator;
@@ -70,24 +88,47 @@ class _$NewScreenSerializer implements StructuredSerializer<NewScreen> {
       final Object? value = iterator.current;
       switch (key) {
         case 'screen':
-          result.screen.replace(serializers.deserialize(value,
-              specifiedType: const FullType(Screen))! as Screen);
+          result.screen.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(Screen),
+                )!
+                as Screen,
+          );
           break;
         case 'parent':
-          result.parent = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+          result.parent =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )
+                  as String?;
           break;
         case 'parentRectangle':
-          result.parentRectangle.replace(serializers.deserialize(value,
-              specifiedType: const FullType(Rectangle))! as Rectangle);
+          result.parentRectangle.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(Rectangle),
+                )!
+                as Rectangle,
+          );
           break;
         case 'imageBase64':
-          result.imageBase64 = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+          result.imageBase64 =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )
+                  as String?;
           break;
         case 'imageFile':
-          result.imageFile.replace(serializers.deserialize(value,
-              specifiedType: const FullType(ImageFile))! as ImageFile);
+          result.imageFile.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(ImageFile),
+                )!
+                as ImageFile,
+          );
           break;
       }
     }
@@ -103,8 +144,11 @@ class _$ImageFileSerializer implements StructuredSerializer<ImageFile> {
   final String wireName = 'ImageFile';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, ImageFile object,
-      {FullType specifiedType = FullType.unspecified}) {
+  Iterable<Object?> serialize(
+    Serializers serializers,
+    ImageFile object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'path',
       serializers.serialize(object.path, specifiedType: const FullType(String)),
@@ -118,8 +162,11 @@ class _$ImageFileSerializer implements StructuredSerializer<ImageFile> {
   }
 
   @override
-  ImageFile deserialize(Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+  ImageFile deserialize(
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = ImageFileBuilder();
 
     final iterator = serialized.iterator;
@@ -129,16 +176,28 @@ class _$ImageFileSerializer implements StructuredSerializer<ImageFile> {
       final Object? value = iterator.current;
       switch (key) {
         case 'path':
-          result.path = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.path =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'width':
-          result.width = serializers.deserialize(value,
-              specifiedType: const FullType(int))! as int;
+          result.width =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(int),
+                  )!
+                  as int;
           break;
         case 'height':
-          result.height = serializers.deserialize(value,
-              specifiedType: const FullType(int))! as int;
+          result.height =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(int),
+                  )!
+                  as int;
           break;
       }
     }
@@ -154,17 +213,24 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
   final String wireName = 'Screen';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, Screen object,
-      {FullType specifiedType = FullType.unspecified}) {
+  Iterable<Object?> serialize(
+    Serializers serializers,
+    Screen object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'id',
       serializers.serialize(object.id, specifiedType: const FullType(String)),
       'texts',
-      serializers.serialize(object.texts,
-          specifiedType: const FullType(BuiltList, [FullType(TextInfo)])),
+      serializers.serialize(
+        object.texts,
+        specifiedType: const FullType(BuiltList, [FullType(TextInfo)]),
+      ),
       'next',
-      serializers.serialize(object.next,
-          specifiedType: const FullType(BuiltList, [FullType(ScreenLink)])),
+      serializers.serialize(
+        object.next,
+        specifiedType: const FullType(BuiltList, [FullType(ScreenLink)]),
+      ),
       'name',
       serializers.serialize(object.name, specifiedType: const FullType(String)),
     ];
@@ -173,22 +239,31 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
     if (value != null) {
       result
         ..add('splitName')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(String)),
+        );
     }
     value = object.imageBytes;
     if (value != null) {
       result
         ..add('imageBytes')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(Uint8List)));
+        ..add(
+          serializers.serialize(
+            value,
+            specifiedType: const FullType(Uint8List),
+          ),
+        );
     }
     value = object.imageFile;
     if (value != null) {
       result
         ..add('imageFile')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(ImageFile)));
+        ..add(
+          serializers.serialize(
+            value,
+            specifiedType: const FullType(ImageFile),
+          ),
+        );
     }
     value = object.topBrightness;
     if (value != null) {
@@ -206,16 +281,24 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
     if (value != null) {
       result
         ..add('supportedLocales')
-        ..add(serializers.serialize(value,
-            specifiedType:
-                const FullType(BuiltList, [FullType(SerializableLocale)])));
+        ..add(
+          serializers.serialize(
+            value,
+            specifiedType: const FullType(BuiltList, [
+              FullType(SerializableLocale),
+            ]),
+          ),
+        );
     }
     return result;
   }
 
   @override
-  Screen deserialize(Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+  Screen deserialize(
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = ScreenBuilder();
 
     final iterator = serialized.iterator;
@@ -225,50 +308,88 @@ class _$ScreenSerializer implements StructuredSerializer<Screen> {
       final Object? value = iterator.current;
       switch (key) {
         case 'id':
-          result.id = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.id =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'texts':
-          result.texts.replace(serializers.deserialize(value,
-                  specifiedType:
-                      const FullType(BuiltList, [FullType(TextInfo)]))!
-              as BuiltList<Object?>);
+          result.texts.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(BuiltList, [
+                    FullType(TextInfo),
+                  ]),
+                )!
+                as BuiltList<Object?>,
+          );
           break;
         case 'next':
-          result.next.replace(serializers.deserialize(value,
-                  specifiedType:
-                      const FullType(BuiltList, [FullType(ScreenLink)]))!
-              as BuiltList<Object?>);
+          result.next.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(BuiltList, [
+                    FullType(ScreenLink),
+                  ]),
+                )!
+                as BuiltList<Object?>,
+          );
           break;
         case 'splitName':
-          result.splitName = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+          result.splitName =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )
+                  as String?;
           break;
         case 'name':
-          result.name = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.name =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'imageBytes':
-          result.imageBytes = serializers.deserialize(value,
-              specifiedType: const FullType(Uint8List)) as Uint8List?;
+          result.imageBytes =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(Uint8List),
+                  )
+                  as Uint8List?;
           break;
         case 'imageFile':
-          result.imageFile.replace(serializers.deserialize(value,
-              specifiedType: const FullType(ImageFile))! as ImageFile);
+          result.imageFile.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(ImageFile),
+                )!
+                as ImageFile,
+          );
           break;
         case 'topBrightness':
-          result.topBrightness = serializers.deserialize(value,
-              specifiedType: const FullType(int)) as int?;
+          result.topBrightness =
+              serializers.deserialize(value, specifiedType: const FullType(int))
+                  as int?;
           break;
         case 'bottomBrightness':
-          result.bottomBrightness = serializers.deserialize(value,
-              specifiedType: const FullType(int)) as int?;
+          result.bottomBrightness =
+              serializers.deserialize(value, specifiedType: const FullType(int))
+                  as int?;
           break;
         case 'supportedLocales':
-          result.supportedLocales.replace(serializers.deserialize(value,
-                  specifiedType: const FullType(
-                      BuiltList, [FullType(SerializableLocale)]))!
-              as BuiltList<Object?>);
+          result.supportedLocales.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(BuiltList, [
+                    FullType(SerializableLocale),
+                  ]),
+                )!
+                as BuiltList<Object?>,
+          );
           break;
       }
     }
@@ -284,35 +405,46 @@ class _$TextInfoSerializer implements StructuredSerializer<TextInfo> {
   final String wireName = 'TextInfo';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, TextInfo object,
-      {FullType specifiedType = FullType.unspecified}) {
+  Iterable<Object?> serialize(
+    Serializers serializers,
+    TextInfo object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'translationKey',
-      serializers.serialize(object.translationKey,
-          specifiedType: const FullType(String)),
+      serializers.serialize(
+        object.translationKey,
+        specifiedType: const FullType(String),
+      ),
       'rawTranslation',
-      serializers.serialize(object.rawTranslation,
-          specifiedType: const FullType(String)),
+      serializers.serialize(
+        object.rawTranslation,
+        specifiedType: const FullType(String),
+      ),
       'text',
       serializers.serialize(object.text, specifiedType: const FullType(String)),
       'globalRectangle',
-      serializers.serialize(object.globalRectangle,
-          specifiedType: const FullType(Rectangle)),
+      serializers.serialize(
+        object.globalRectangle,
+        specifiedType: const FullType(Rectangle),
+      ),
     ];
     Object? value;
     value = object.fontFamily;
     if (value != null) {
       result
         ..add('fontFamily')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(String)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(String)),
+        );
     }
     value = object.fontSize;
     if (value != null) {
       result
         ..add('fontSize')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(double)));
+        ..add(
+          serializers.serialize(value, specifiedType: const FullType(double)),
+        );
     }
     value = object.color;
     if (value != null) {
@@ -330,8 +462,11 @@ class _$TextInfoSerializer implements StructuredSerializer<TextInfo> {
   }
 
   @override
-  TextInfo deserialize(Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+  TextInfo deserialize(
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = TextInfoBuilder();
 
     final iterator = serialized.iterator;
@@ -341,36 +476,63 @@ class _$TextInfoSerializer implements StructuredSerializer<TextInfo> {
       final Object? value = iterator.current;
       switch (key) {
         case 'translationKey':
-          result.translationKey = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.translationKey =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'rawTranslation':
-          result.rawTranslation = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.rawTranslation =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'text':
-          result.text = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.text =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'globalRectangle':
-          result.globalRectangle.replace(serializers.deserialize(value,
-              specifiedType: const FullType(Rectangle))! as Rectangle);
+          result.globalRectangle.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(Rectangle),
+                )!
+                as Rectangle,
+          );
           break;
         case 'fontFamily':
-          result.fontFamily = serializers.deserialize(value,
-              specifiedType: const FullType(String)) as String?;
+          result.fontFamily =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )
+                  as String?;
           break;
         case 'fontSize':
-          result.fontSize = serializers.deserialize(value,
-              specifiedType: const FullType(double)) as double?;
+          result.fontSize =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(double),
+                  )
+                  as double?;
           break;
         case 'color':
-          result.color = serializers.deserialize(value,
-              specifiedType: const FullType(int)) as int?;
+          result.color =
+              serializers.deserialize(value, specifiedType: const FullType(int))
+                  as int?;
           break;
         case 'fontWeight':
-          result.fontWeight = serializers.deserialize(value,
-              specifiedType: const FullType(int)) as int?;
+          result.fontWeight =
+              serializers.deserialize(value, specifiedType: const FullType(int))
+                  as int?;
           break;
       }
     }
@@ -386,8 +548,11 @@ class _$ScreenLinkSerializer implements StructuredSerializer<ScreenLink> {
   final String wireName = 'ScreenLink';
 
   @override
-  Iterable<Object?> serialize(Serializers serializers, ScreenLink object,
-      {FullType specifiedType = FullType.unspecified}) {
+  Iterable<Object?> serialize(
+    Serializers serializers,
+    ScreenLink object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = <Object?>[
       'to',
       serializers.serialize(object.to, specifiedType: const FullType(String)),
@@ -397,15 +562,22 @@ class _$ScreenLinkSerializer implements StructuredSerializer<ScreenLink> {
     if (value != null) {
       result
         ..add('tapRect')
-        ..add(serializers.serialize(value,
-            specifiedType: const FullType(Rectangle)));
+        ..add(
+          serializers.serialize(
+            value,
+            specifiedType: const FullType(Rectangle),
+          ),
+        );
     }
     return result;
   }
 
   @override
-  ScreenLink deserialize(Serializers serializers, Iterable<Object?> serialized,
-      {FullType specifiedType = FullType.unspecified}) {
+  ScreenLink deserialize(
+    Serializers serializers,
+    Iterable<Object?> serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
     final result = ScreenLinkBuilder();
 
     final iterator = serialized.iterator;
@@ -415,12 +587,21 @@ class _$ScreenLinkSerializer implements StructuredSerializer<ScreenLink> {
       final Object? value = iterator.current;
       switch (key) {
         case 'to':
-          result.to = serializers.deserialize(value,
-              specifiedType: const FullType(String))! as String;
+          result.to =
+              serializers.deserialize(
+                    value,
+                    specifiedType: const FullType(String),
+                  )!
+                  as String;
           break;
         case 'tapRect':
-          result.tapRect.replace(serializers.deserialize(value,
-              specifiedType: const FullType(Rectangle))! as Rectangle);
+          result.tapRect.replace(
+            serializers.deserialize(
+                  value,
+                  specifiedType: const FullType(Rectangle),
+                )!
+                as Rectangle,
+          );
           break;
       }
     }
@@ -444,13 +625,13 @@ class _$NewScreen extends NewScreen {
   factory _$NewScreen([void Function(NewScreenBuilder)? updates]) =>
       (NewScreenBuilder()..update(updates))._build();
 
-  _$NewScreen._(
-      {required this.screen,
-      this.parent,
-      this.parentRectangle,
-      this.imageBase64,
-      this.imageFile})
-      : super._() {
+  _$NewScreen._({
+    required this.screen,
+    this.parent,
+    this.parentRectangle,
+    this.imageBase64,
+    this.imageFile,
+  }) : super._() {
     BuiltValueNullFieldError.checkNotNull(screen, r'NewScreen', 'screen');
   }
 
@@ -553,13 +734,15 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
   _$NewScreen _build() {
     _$NewScreen _$result;
     try {
-      _$result = _$v ??
+      _$result =
+          _$v ??
           _$NewScreen._(
-              screen: screen.build(),
-              parent: parent,
-              parentRectangle: _parentRectangle?.build(),
-              imageBase64: imageBase64,
-              imageFile: _imageFile?.build());
+            screen: screen.build(),
+            parent: parent,
+            parentRectangle: _parentRectangle?.build(),
+            imageBase64: imageBase64,
+            imageFile: _imageFile?.build(),
+          );
     } catch (_) {
       late String _$failedField;
       try {
@@ -573,7 +756,10 @@ class NewScreenBuilder implements Builder<NewScreen, NewScreenBuilder> {
         _imageFile?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            r'NewScreen', _$failedField, e.toString());
+          r'NewScreen',
+          _$failedField,
+          e.toString(),
+        );
       }
       rethrow;
     }
@@ -594,7 +780,7 @@ class _$ImageFile extends ImageFile {
       (ImageFileBuilder()..update(updates))._build();
 
   _$ImageFile._({required this.path, required this.width, required this.height})
-      : super._() {
+    : super._() {
     BuiltValueNullFieldError.checkNotNull(path, r'ImageFile', 'path');
     BuiltValueNullFieldError.checkNotNull(width, r'ImageFile', 'width');
     BuiltValueNullFieldError.checkNotNull(height, r'ImageFile', 'height');
@@ -679,14 +865,25 @@ class ImageFileBuilder implements Builder<ImageFile, ImageFileBuilder> {
   ImageFile build() => _build();
 
   _$ImageFile _build() {
-    final _$result = _$v ??
+    final _$result =
+        _$v ??
         _$ImageFile._(
-            path: BuiltValueNullFieldError.checkNotNull(
-                path, r'ImageFile', 'path'),
-            width: BuiltValueNullFieldError.checkNotNull(
-                width, r'ImageFile', 'width'),
-            height: BuiltValueNullFieldError.checkNotNull(
-                height, r'ImageFile', 'height'));
+          path: BuiltValueNullFieldError.checkNotNull(
+            path,
+            r'ImageFile',
+            'path',
+          ),
+          width: BuiltValueNullFieldError.checkNotNull(
+            width,
+            r'ImageFile',
+            'width',
+          ),
+          height: BuiltValueNullFieldError.checkNotNull(
+            height,
+            r'ImageFile',
+            'height',
+          ),
+        );
     replace(_$result);
     return _$result;
   }
@@ -717,18 +914,18 @@ class _$Screen extends Screen {
   factory _$Screen([void Function(ScreenBuilder)? updates]) =>
       (ScreenBuilder()..update(updates))._build();
 
-  _$Screen._(
-      {required this.id,
-      required this.texts,
-      required this.next,
-      this.splitName,
-      required this.name,
-      this.imageBytes,
-      this.imageFile,
-      this.topBrightness,
-      this.bottomBrightness,
-      this.supportedLocales})
-      : super._() {
+  _$Screen._({
+    required this.id,
+    required this.texts,
+    required this.next,
+    this.splitName,
+    required this.name,
+    this.imageBytes,
+    this.imageFile,
+    this.topBrightness,
+    this.bottomBrightness,
+    this.supportedLocales,
+  }) : super._() {
     BuiltValueNullFieldError.checkNotNull(id, r'Screen', 'id');
     BuiltValueNullFieldError.checkNotNull(texts, r'Screen', 'texts');
     BuiltValueNullFieldError.checkNotNull(next, r'Screen', 'next');
@@ -877,19 +1074,24 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
   _$Screen _build() {
     _$Screen _$result;
     try {
-      _$result = _$v ??
+      _$result =
+          _$v ??
           _$Screen._(
-              id: BuiltValueNullFieldError.checkNotNull(id, r'Screen', 'id'),
-              texts: texts.build(),
-              next: next.build(),
-              splitName: splitName,
-              name: BuiltValueNullFieldError.checkNotNull(
-                  name, r'Screen', 'name'),
-              imageBytes: imageBytes,
-              imageFile: _imageFile?.build(),
-              topBrightness: topBrightness,
-              bottomBrightness: bottomBrightness,
-              supportedLocales: _supportedLocales?.build());
+            id: BuiltValueNullFieldError.checkNotNull(id, r'Screen', 'id'),
+            texts: texts.build(),
+            next: next.build(),
+            splitName: splitName,
+            name: BuiltValueNullFieldError.checkNotNull(
+              name,
+              r'Screen',
+              'name',
+            ),
+            imageBytes: imageBytes,
+            imageFile: _imageFile?.build(),
+            topBrightness: topBrightness,
+            bottomBrightness: bottomBrightness,
+            supportedLocales: _supportedLocales?.build(),
+          );
     } catch (_) {
       late String _$failedField;
       try {
@@ -905,7 +1107,10 @@ class ScreenBuilder implements Builder<Screen, ScreenBuilder> {
         _supportedLocales?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            r'Screen', _$failedField, e.toString());
+          r'Screen',
+          _$failedField,
+          e.toString(),
+        );
       }
       rethrow;
     }
@@ -935,23 +1140,32 @@ class _$TextInfo extends TextInfo {
   factory _$TextInfo([void Function(TextInfoBuilder)? updates]) =>
       (TextInfoBuilder()..update(updates))._build();
 
-  _$TextInfo._(
-      {required this.translationKey,
-      required this.rawTranslation,
-      required this.text,
-      required this.globalRectangle,
-      this.fontFamily,
-      this.fontSize,
-      this.color,
-      this.fontWeight})
-      : super._() {
+  _$TextInfo._({
+    required this.translationKey,
+    required this.rawTranslation,
+    required this.text,
+    required this.globalRectangle,
+    this.fontFamily,
+    this.fontSize,
+    this.color,
+    this.fontWeight,
+  }) : super._() {
     BuiltValueNullFieldError.checkNotNull(
-        translationKey, r'TextInfo', 'translationKey');
+      translationKey,
+      r'TextInfo',
+      'translationKey',
+    );
     BuiltValueNullFieldError.checkNotNull(
-        rawTranslation, r'TextInfo', 'rawTranslation');
+      rawTranslation,
+      r'TextInfo',
+      'rawTranslation',
+    );
     BuiltValueNullFieldError.checkNotNull(text, r'TextInfo', 'text');
     BuiltValueNullFieldError.checkNotNull(
-        globalRectangle, r'TextInfo', 'globalRectangle');
+      globalRectangle,
+      r'TextInfo',
+      'globalRectangle',
+    );
   }
 
   @override
@@ -1079,19 +1293,30 @@ class TextInfoBuilder implements Builder<TextInfo, TextInfoBuilder> {
   _$TextInfo _build() {
     _$TextInfo _$result;
     try {
-      _$result = _$v ??
+      _$result =
+          _$v ??
           _$TextInfo._(
-              translationKey: BuiltValueNullFieldError.checkNotNull(
-                  translationKey, r'TextInfo', 'translationKey'),
-              rawTranslation: BuiltValueNullFieldError.checkNotNull(
-                  rawTranslation, r'TextInfo', 'rawTranslation'),
-              text: BuiltValueNullFieldError.checkNotNull(
-                  text, r'TextInfo', 'text'),
-              globalRectangle: globalRectangle.build(),
-              fontFamily: fontFamily,
-              fontSize: fontSize,
-              color: color,
-              fontWeight: fontWeight);
+            translationKey: BuiltValueNullFieldError.checkNotNull(
+              translationKey,
+              r'TextInfo',
+              'translationKey',
+            ),
+            rawTranslation: BuiltValueNullFieldError.checkNotNull(
+              rawTranslation,
+              r'TextInfo',
+              'rawTranslation',
+            ),
+            text: BuiltValueNullFieldError.checkNotNull(
+              text,
+              r'TextInfo',
+              'text',
+            ),
+            globalRectangle: globalRectangle.build(),
+            fontFamily: fontFamily,
+            fontSize: fontSize,
+            color: color,
+            fontWeight: fontWeight,
+          );
     } catch (_) {
       late String _$failedField;
       try {
@@ -1099,7 +1324,10 @@ class TextInfoBuilder implements Builder<TextInfo, TextInfoBuilder> {
         globalRectangle.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            r'TextInfo', _$failedField, e.toString());
+          r'TextInfo',
+          _$failedField,
+          e.toString(),
+        );
       }
       rethrow;
     }
@@ -1192,11 +1420,12 @@ class ScreenLinkBuilder implements Builder<ScreenLink, ScreenLinkBuilder> {
   _$ScreenLink _build() {
     _$ScreenLink _$result;
     try {
-      _$result = _$v ??
+      _$result =
+          _$v ??
           _$ScreenLink._(
-              to: BuiltValueNullFieldError.checkNotNull(
-                  to, r'ScreenLink', 'to'),
-              tapRect: _tapRect?.build());
+            to: BuiltValueNullFieldError.checkNotNull(to, r'ScreenLink', 'to'),
+            tapRect: _tapRect?.build(),
+          );
     } catch (_) {
       late String _$failedField;
       try {
@@ -1204,7 +1433,10 @@ class ScreenLinkBuilder implements Builder<ScreenLink, ScreenLinkBuilder> {
         _tapRect?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
-            r'ScreenLink', _$failedField, e.toString());
+          r'ScreenLink',
+          _$failedField,
+          e.toString(),
+        );
       }
       rethrow;
     }

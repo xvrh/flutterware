@@ -6,11 +6,9 @@ import 'package:test/test.dart';
 
 /// Renders a buffer to a list of strings, one per row, for easy assertions.
 List<String> dump(CellBuffer b) => [
-      for (var r = 0; r < b.rows; r++)
-        String.fromCharCodes([
-          for (var c = 0; c < b.cols; c++) b.get(r, c).rune,
-        ]),
-    ];
+  for (var r = 0; r < b.rows; r++)
+    String.fromCharCodes([for (var c = 0; c < b.cols; c++) b.get(r, c).rune]),
+];
 
 void main() {
   var star = Cell(rune: 0x2a); // '*'
@@ -116,28 +114,25 @@ void main() {
   group('Painter.drawBorder', () {
     test('draws an ascii box around the rect', () {
       var b = CellBuffer(3, 4);
-      Painter(b).drawBorder(
-        CellRect.fromTLWH(0, 0, 4, 3),
-        chars: BorderChars.ascii(),
-      );
+      Painter(
+        b,
+      ).drawBorder(CellRect.fromTLWH(0, 0, 4, 3), chars: BorderChars.ascii());
       expect(dump(b), ['+--+', '|  |', '+--+']);
     });
 
     test('leaves the interior untouched', () {
       var b = CellBuffer(3, 3);
-      Painter(b).drawBorder(
-        CellRect.fromTLWH(0, 0, 3, 3),
-        chars: BorderChars.ascii(),
-      );
+      Painter(
+        b,
+      ).drawBorder(CellRect.fromTLWH(0, 0, 3, 3), chars: BorderChars.ascii());
       expect(b.get(1, 1).rune, 0x20); // still blank
     });
 
     test('a 1-wide rect does not crash and draws vertical edges', () {
       var b = CellBuffer(4, 1);
-      Painter(b).drawBorder(
-        CellRect.fromTLWH(0, 0, 1, 4),
-        chars: BorderChars.ascii(),
-      );
+      Painter(
+        b,
+      ).drawBorder(CellRect.fromTLWH(0, 0, 1, 4), chars: BorderChars.ascii());
       // Middle rows are vertical edges; no exception thrown.
       expect(b.get(1, 0).rune, '|'.runes.first);
       expect(b.get(2, 0).rune, '|'.runes.first);
@@ -145,10 +140,9 @@ void main() {
 
     test('a 1-tall rect does not crash and draws horizontal edges', () {
       var b = CellBuffer(1, 4);
-      Painter(b).drawBorder(
-        CellRect.fromTLWH(0, 0, 4, 1),
-        chars: BorderChars.ascii(),
-      );
+      Painter(
+        b,
+      ).drawBorder(CellRect.fromTLWH(0, 0, 4, 1), chars: BorderChars.ascii());
       // No exception; the middle cells are horizontal edges.
       expect(b.get(0, 1).rune, '-'.runes.first);
       expect(b.get(0, 2).rune, '-'.runes.first);
@@ -156,16 +150,17 @@ void main() {
 
     test('an empty rect draws nothing', () {
       var b = CellBuffer(3, 3);
-      Painter(b).drawBorder(
-        CellRect.fromTLWH(0, 0, 0, 0),
-        chars: BorderChars.ascii(),
-      );
+      Painter(
+        b,
+      ).drawBorder(CellRect.fromTLWH(0, 0, 0, 0), chars: BorderChars.ascii());
       expect(dump(b), ['   ', '   ', '   ']);
     });
 
     test('respects the clip', () {
       var b = CellBuffer(4, 4);
-      Painter(b).clip(CellRect.fromTLWH(0, 0, 4, 2)).drawBorder(
+      Painter(b)
+          .clip(CellRect.fromTLWH(0, 0, 4, 2))
+          .drawBorder(
             CellRect.fromTLWH(0, 0, 4, 4),
             chars: BorderChars.ascii(),
           );
@@ -224,10 +219,7 @@ void main() {
 
     test('wraps long text across rows', () {
       var b = CellBuffer(2, 7);
-      Painter(b).drawText(
-        CellRect.fromTLWH(0, 0, 7, 2),
-        'one two three',
-      );
+      Painter(b).drawText(CellRect.fromTLWH(0, 0, 7, 2), 'one two three');
       expect(dump(b), ['one two', 'three  ']);
     });
 
@@ -242,11 +234,9 @@ void main() {
 
     test('unwrapped long line is clipped at the rect right edge', () {
       var b = CellBuffer(1, 8);
-      Painter(b).drawText(
-        CellRect.fromTLWH(0, 0, 4, 1),
-        'abcdefgh',
-        wrap: false,
-      );
+      Painter(
+        b,
+      ).drawText(CellRect.fromTLWH(0, 0, 4, 1), 'abcdefgh', wrap: false);
       expect(dump(b), ['abcd    ']);
     });
 
@@ -260,7 +250,9 @@ void main() {
       var b = CellBuffer(1, 8);
       // 'ab' right-aligned in an 8-wide rect lands on cols 6 and 7.
       // The clip cuts off col 7, so only 'a' (col 6) survives.
-      Painter(b).clip(CellRect.fromTLWH(0, 0, 7, 1)).drawText(
+      Painter(b)
+          .clip(CellRect.fromTLWH(0, 0, 7, 1))
+          .drawText(
             CellRect.fromTLWH(0, 0, 8, 1),
             'ab',
             hAlign: HorizontalAlign.right,

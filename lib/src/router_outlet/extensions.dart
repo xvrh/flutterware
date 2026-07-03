@@ -18,13 +18,11 @@ class RouterReference {
   RouterReference(this.context);
 
   Map<String, String> get allArgs {
-    return {
-      for (var subMatch in _subMatches) ...subMatch.args,
-    };
+    return {for (var subMatch in _subMatches) ...subMatch.args};
   }
 
   void go(String url, {Map<String, dynamic>? extra}) {
-    var newPath = path.go(url, extra: extra);
+    var newPath = path.resolve(url, extra: extra);
     urlSource.go(newPath);
   }
 

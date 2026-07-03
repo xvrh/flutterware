@@ -16,10 +16,8 @@ class AnalyticsList extends StatelessWidget {
       builder: (context, controller, logs) => ListView.separated(
         padding: const EdgeInsets.only(bottom: 50),
         controller: controller,
-        separatorBuilder: (context, index) => Container(
-          height: 1,
-          color: Colors.white.withValues(alpha: 0.2),
-        ),
+        separatorBuilder: (context, index) =>
+            Container(height: 1, color: Colors.white.withValues(alpha: 0.2)),
         itemCount: logs.length,
         itemBuilder: (context, index) {
           return EventTile(logs[index]);
@@ -42,13 +40,12 @@ class EventTile extends StatelessWidget {
       dense: true,
       leading: Icon(Icons.info),
       title: Text(event.name),
-      subtitle:
-          event.parameters != null ? Text(event.parameters.toString()) : null,
+      subtitle: event.parameters != null
+          ? Text(event.parameters.toString())
+          : null,
       trailing: Text(timeAgo(event.time)),
       onTap: () {
-        devbar.ui.showOverlayDialog(
-          builder: (context) => _DetailDialog(event),
-        );
+        devbar.ui.showOverlayDialog(builder: (context) => _DetailDialog(event));
       },
     );
   }

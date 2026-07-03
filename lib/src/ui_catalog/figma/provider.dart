@@ -6,8 +6,11 @@ class FigmaProvider extends StatefulWidget {
   final FigmaUserConfig userConfig;
   final Widget child;
 
-  const FigmaProvider(
-      {super.key, required this.userConfig, required this.child});
+  const FigmaProvider({
+    super.key,
+    required this.userConfig,
+    required this.child,
+  });
 
   @override
   State<FigmaProvider> createState() => FigmaProviderState();

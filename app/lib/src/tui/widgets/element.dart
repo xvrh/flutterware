@@ -20,8 +20,9 @@ abstract class BuildContext {
   /// The optional [aspect] tags the dependency; [InheritedElement] subclasses
   /// may use it to rebuild only dependents whose aspect changed. Returns null
   /// when there is no such ancestor.
-  T? dependOnInheritedWidgetOfExactType<T extends InheritedWidget>(
-      {Object? aspect});
+  T? dependOnInheritedWidgetOfExactType<T extends InheritedWidget>({
+    Object? aspect,
+  });
 
   /// Returns the nearest ancestor [InheritedWidget] of type [T] without
   /// registering a dependency.
@@ -357,8 +358,9 @@ abstract class Element implements BuildContext {
   // --- BuildContext / InheritedWidget ---
 
   @override
-  T? dependOnInheritedWidgetOfExactType<T extends InheritedWidget>(
-      {Object? aspect}) {
+  T? dependOnInheritedWidgetOfExactType<T extends InheritedWidget>({
+    Object? aspect,
+  }) {
     var ancestor = _inheritedElements?[T];
     if (ancestor == null) {
       return null;
@@ -452,8 +454,8 @@ class StatelessElement extends ComponentElement {
 /// An [Element] for a [StatefulWidget]; owns the widget's [State].
 class StatefulElement extends ComponentElement {
   StatefulElement(StatefulWidget widget)
-      : _state = widget.createState(),
-        super(widget) {
+    : _state = widget.createState(),
+      super(widget) {
     assert(_state._element == null);
     _state._element = this;
     assert(_state._widget == null);

@@ -1,5 +1,8 @@
-String ellipsisCenter(String input,
-    {required int maxLength, String ellipsis = '..'}) {
+String ellipsisCenter(
+  String input, {
+  required int maxLength,
+  String ellipsis = '..',
+}) {
   if (ellipsis.length > maxLength) {
     throw Exception('Ellipsis is longer than max length');
   }

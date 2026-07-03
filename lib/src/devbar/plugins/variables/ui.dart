@@ -14,11 +14,13 @@ class VariablesPanel extends StatelessWidget {
       initialData: plugin.currentVariables,
       builder: (context, snapshot) {
         return ListView(
-          children: ListTile.divideTiles(tiles: [
-            for (var variable in snapshot.requireData)
-              _VariableEditor(variable),
-          ], context: context)
-              .toList(),
+          children: ListTile.divideTiles(
+            tiles: [
+              for (var variable in snapshot.requireData)
+                _VariableEditor(variable),
+            ],
+            context: context,
+          ).toList(),
         );
       },
     );
@@ -35,9 +37,7 @@ class _VariableEditor extends StatelessWidget {
     return ContextMenuRegion(
       contextMenuBuilder: (context, offset) {
         return AdaptiveTextSelectionToolbar.buttonItems(
-          anchors: TextSelectionToolbarAnchors(
-            primaryAnchor: offset,
-          ),
+          anchors: TextSelectionToolbarAnchors(primaryAnchor: offset),
           buttonItems: <ContextMenuButtonItem>[
             ContextMenuButtonItem(
               onPressed: () {
@@ -169,8 +169,8 @@ class _SliderEditor extends StatelessWidget {
           value: variable.currentValue.toDouble(),
           min: definition.min.toDouble(),
           max: definition.max.toDouble(),
-          divisions:
-              ((definition.max - definition.min) / definition.step).toInt(),
+          divisions: ((definition.max - definition.min) / definition.step)
+              .toInt(),
           onChanged: (v) {
             var currentValue = (v / definition.step).round() * definition.step;
             if (definition.isInt) {

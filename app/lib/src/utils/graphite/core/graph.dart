@@ -16,7 +16,10 @@ class Graph extends GraphMatrix {
   }
 
   void handleSplitJoinNode(
-      NodeOutput item, State state, TraverseQueue levelQueue) {
+    NodeOutput item,
+    State state,
+    TraverseQueue levelQueue,
+  ) {
     var queue = state.queue, mtx = state.mtx;
     if (joinHasUnresolvedIncomes(item)) {
       queue.push(item);
@@ -44,14 +47,18 @@ class Graph extends GraphMatrix {
   }
 
   void handleSimpleNode(
-      NodeOutput item, State state, TraverseQueue levelQueue) {
+    NodeOutput item,
+    State state,
+    TraverseQueue levelQueue,
+  ) {
     var queue = state.queue;
     var isInserted = processOrSkipNodeOnMatrix(item, state);
     if (isInserted) {
       queue.add(
-          incomeId: item.id,
-          bufferQueue: levelQueue,
-          items: getOutcomesArray(item.id));
+        incomeId: item.id,
+        bufferQueue: levelQueue,
+        items: getOutcomesArray(item.id),
+      );
     }
   }
 

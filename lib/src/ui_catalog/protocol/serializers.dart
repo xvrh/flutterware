@@ -3,7 +3,5 @@ import 'models.dart';
 
 part 'serializers.g.dart';
 
-@SerializersFor([
-  ScreenConfiguration,
-])
+@SerializersFor([ScreenConfiguration])
 final Serializers modelSerializers = _$modelSerializers;

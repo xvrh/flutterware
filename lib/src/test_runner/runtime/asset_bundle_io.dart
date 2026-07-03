@@ -10,17 +10,18 @@ void mockFlutterAssets(AssetBundle delegate) {
   /// Navigation related actions (pop, push, replace) broadcasts these actions via
   /// platform messages.
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(SystemChannels.navigation,
-          (MethodCall methodCall) async {
-    return null;
-  });
+      .setMockMethodCallHandler(SystemChannels.navigation, (
+        MethodCall methodCall,
+      ) async {
+        return null;
+      });
 
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMessageHandler('flutter/assets', (ByteData? message) async {
-    assert(message != null);
-    var key = utf8.decode(message!.buffer.asUint8List());
-    return delegate.load(key);
-  });
+        assert(message != null);
+        var key = utf8.decode(message!.buffer.asUint8List());
+        return delegate.load(key);
+      });
 }
 
 class IOAssetBundle extends CachingAssetBundle implements TestBundle {

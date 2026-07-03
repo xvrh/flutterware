@@ -37,8 +37,10 @@ void main() {
   });
 
   test('workingDirectory: /tmp makes pwd report /tmp', () async {
-    final pty =
-        await spawnPty('/bin/bash', ['-c', 'pwd'], workingDirectory: '/tmp');
+    final pty = await spawnPty('/bin/bash', [
+      '-c',
+      'pwd',
+    ], workingDirectory: '/tmp');
     final bytes = <int>[];
     await pty.output.listen(bytes.addAll).asFuture<void>();
     final out = utf8.decode(bytes);
@@ -48,20 +50,20 @@ void main() {
   });
 
   test('child sees stdout as a TTY', () async {
-    final pty = await spawnPty(
-      '/bin/bash',
-      ['-c', '[ -t 1 ] && echo IS_TTY || echo NOT_TTY'],
-    );
+    final pty = await spawnPty('/bin/bash', [
+      '-c',
+      '[ -t 1 ] && echo IS_TTY || echo NOT_TTY',
+    ]);
     final bytes = <int>[];
     await pty.output.listen(bytes.addAll).asFuture<void>();
     expect(utf8.decode(bytes), contains('IS_TTY'));
   });
 
   test('ANSI color codes are not stripped', () async {
-    final pty = await spawnPty(
-      '/bin/bash',
-      ['-c', r"printf '\033[31mred\033[0m\n'"],
-    );
+    final pty = await spawnPty('/bin/bash', [
+      '-c',
+      r"printf '\033[31mred\033[0m\n'",
+    ]);
     final bytes = <int>[];
     await pty.output.listen(bytes.addAll).asFuture<void>();
     // ESC [ 31 m  =  0x1b 0x5b 0x33 0x31 0x6d
@@ -80,31 +82,29 @@ void main() {
     expect(utf8.decode(bytes), contains('123'));
   });
 
-  test('resize() updates window size mid-run', () async {
-    // Spawn a script that prints size on SIGWINCH then exits.
-    final pty = await spawnPty(
-      '/bin/bash',
-      [
-        '-c',
-        'trap "stty size; exit 0" WINCH; sleep 5 & wait',
-      ],
-      cols: 80,
-      rows: 24,
-    );
-    // Give bash a moment to install the trap.
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    pty.resize(150, 50);
+  test(
+    'resize() updates window size mid-run',
+    () async {
+      // Spawn a script that prints size on SIGWINCH then exits.
+      final pty = await spawnPty(
+        '/bin/bash',
+        ['-c', 'trap "stty size; exit 0" WINCH; sleep 5 & wait'],
+        cols: 80,
+        rows: 24,
+      );
+      // Give bash a moment to install the trap.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      pty.resize(150, 50);
 
-    final bytes = <int>[];
-    await pty.output.listen(bytes.addAll).asFuture<void>();
-    expect(utf8.decode(bytes), contains('150'));
-  }, timeout: const Timeout(Duration(seconds: 10)));
+      final bytes = <int>[];
+      await pty.output.listen(bytes.addAll).asFuture<void>();
+      expect(utf8.decode(bytes), contains('150'));
+    },
+    timeout: const Timeout(Duration(seconds: 10)),
+  );
 
   test('writeInput forwards bytes to child stdin', () async {
-    final pty = await spawnPty(
-      '/bin/bash',
-      ['-c', r'read x; echo got=$x'],
-    );
+    final pty = await spawnPty('/bin/bash', ['-c', r'read x; echo got=$x']);
     // Give bash a moment to reach the `read` call.
     await Future<void>.delayed(const Duration(milliseconds: 100));
     pty.writeInput(utf8.encode('hello\n'));
@@ -115,10 +115,10 @@ void main() {
   });
 
   test('1000 lines from child are all received in order', () async {
-    final pty = await spawnPty(
-      '/bin/bash',
-      ['-c', r'for i in $(seq 1 1000); do echo line$i; done'],
-    );
+    final pty = await spawnPty('/bin/bash', [
+      '-c',
+      r'for i in $(seq 1 1000); do echo line$i; done',
+    ]);
     final bytes = <int>[];
     await pty.output.listen(bytes.addAll).asFuture<void>();
     final text = utf8.decode(bytes);

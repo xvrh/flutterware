@@ -15,10 +15,13 @@ class VariablesPlugin implements DevbarPlugin {
   final Map<String, dynamic> overrides;
   final VariablesStore store;
 
-  VariablesPlugin._(this.devbar,
-      {Map<String, dynamic>? overrides, VariablesStore? store, String? title})
-      : overrides = overrides ?? {},
-        store = store ?? InMemoryVariablesStore() {
+  VariablesPlugin._(
+    this.devbar, {
+    Map<String, dynamic>? overrides,
+    VariablesStore? store,
+    String? title,
+  }) : overrides = overrides ?? {},
+       store = store ?? InMemoryVariablesStore() {
     devbar.ui.addTab(Tab(text: title ?? 'Settings'), VariablesPanel(this));
   }
 
@@ -37,37 +40,61 @@ class VariablesPlugin implements DevbarPlugin {
           store = await FileVariableStore.load(File(await filePath()));
         }
       }
-      return VariablesPlugin._(devbar,
-          overrides: values, store: store, title: title);
+      return VariablesPlugin._(
+        devbar,
+        overrides: values,
+        store: store,
+        title: title,
+      );
     };
   }
 
-  DevbarVariable<bool> checkbox(String key,
-      {String? description, bool defaultValue = false}) {
-    return add(DevbarVariableDefinition<bool>(key,
-        defaultValue: defaultValue, description: description));
+  DevbarVariable<bool> checkbox(
+    String key, {
+    String? description,
+    bool defaultValue = false,
+  }) {
+    return add(
+      DevbarVariableDefinition<bool>(
+        key,
+        defaultValue: defaultValue,
+        description: description,
+      ),
+    );
   }
 
-  DevbarVariable<String> text(String key,
-      {String? description, String defaultValue = ''}) {
-    return add(DevbarVariableDefinition(key,
-        defaultValue: defaultValue, description: description));
+  DevbarVariable<String> text(
+    String key, {
+    String? description,
+    String defaultValue = '',
+  }) {
+    return add(
+      DevbarVariableDefinition(
+        key,
+        defaultValue: defaultValue,
+        description: description,
+      ),
+    );
   }
 
-  DevbarVariable<T> slider<T extends num>(String key,
-      {String? description,
-      required T defaultValue,
-      required T min,
-      required T max,
-      required T step}) {
-    return add(DevbarSliderVariableDefinition<T>(
-      key,
-      defaultValue: defaultValue,
-      description: description,
-      min: min,
-      max: max,
-      step: step,
-    ));
+  DevbarVariable<T> slider<T extends num>(
+    String key, {
+    String? description,
+    required T defaultValue,
+    required T min,
+    required T max,
+    required T step,
+  }) {
+    return add(
+      DevbarSliderVariableDefinition<T>(
+        key,
+        defaultValue: defaultValue,
+        description: description,
+        min: min,
+        max: max,
+        step: step,
+      ),
+    );
   }
 
   DevbarVariable<T> picker<T>(
@@ -77,15 +104,21 @@ class VariablesPlugin implements DevbarPlugin {
     required Map<T, String> options,
     T? Function(Object)? fromJson,
   }) {
-    return add(DevbarPickerVariableDefinition<T>(key,
+    return add(
+      DevbarPickerVariableDefinition<T>(
+        key,
         defaultValue: defaultValue,
         description: description,
         fromJson: fromJson,
-        options: options));
+        options: options,
+      ),
+    );
   }
 
-  DevbarVariable<T> add<T>(DevbarVariableDefinition<T> definition,
-      {FeatureFlagValue<T>? flagValue}) {
+  DevbarVariable<T> add<T>(
+    DevbarVariableDefinition<T> definition, {
+    FeatureFlagValue<T>? flagValue,
+  }) {
     var variable = DevbarVariable<T>(this, definition, flagValue: flagValue);
     _variables.add([..._variables.value, variable]);
     return variable;
@@ -158,7 +191,8 @@ class DevbarVariable<T> {
     if (value == null) return null;
     if (value is! T) {
       throw Exception(
-          'Devbar initial value for ${definition.key} is not of type $T');
+        'Devbar initial value for ${definition.key} is not of type $T',
+      );
     }
     return value;
   }
@@ -192,34 +226,54 @@ class DevbarVariable<T> {
     required Map<T, String> options,
     T? Function(Object)? fromJson,
   }) {
-    return DevbarPickerVariableDefinition<T>(key,
-        defaultValue: defaultValue, description: description, options: options);
+    return DevbarPickerVariableDefinition<T>(
+      key,
+      defaultValue: defaultValue,
+      description: description,
+      options: options,
+    );
   }
 
-  static DevbarVariableDefinition<String> text(String key,
-      {String? description, String defaultValue = ''}) {
-    return DevbarVariableDefinition<String>(key,
-        defaultValue: defaultValue, description: description);
+  static DevbarVariableDefinition<String> text(
+    String key, {
+    String? description,
+    String defaultValue = '',
+  }) {
+    return DevbarVariableDefinition<String>(
+      key,
+      defaultValue: defaultValue,
+      description: description,
+    );
   }
 
-  static DevbarVariableDefinition<bool> checkbox(String key,
-      {String? description, bool defaultValue = false}) {
-    return DevbarVariableDefinition<bool>(key,
-        defaultValue: defaultValue, description: description);
+  static DevbarVariableDefinition<bool> checkbox(
+    String key, {
+    String? description,
+    bool defaultValue = false,
+  }) {
+    return DevbarVariableDefinition<bool>(
+      key,
+      defaultValue: defaultValue,
+      description: description,
+    );
   }
 
-  static DevbarVariableDefinition<T> slider<T extends num>(String key,
-      {String? description,
-      required T defaultValue,
-      required T min,
-      required T max,
-      required T step}) {
-    return DevbarSliderVariableDefinition<T>(key,
-        defaultValue: defaultValue,
-        description: description,
-        min: min,
-        max: max,
-        step: step);
+  static DevbarVariableDefinition<T> slider<T extends num>(
+    String key, {
+    String? description,
+    required T defaultValue,
+    required T min,
+    required T max,
+    required T step,
+  }) {
+    return DevbarSliderVariableDefinition<T>(
+      key,
+      defaultValue: defaultValue,
+      description: description,
+      min: min,
+      max: max,
+      step: step,
+    );
   }
 }
 
@@ -229,8 +283,12 @@ class DevbarVariableDefinition<T> {
   final T defaultValue;
   final T? Function(Object)? fromJson;
 
-  DevbarVariableDefinition(this.key,
-      {required this.description, required this.defaultValue, this.fromJson});
+  DevbarVariableDefinition(
+    this.key, {
+    required this.description,
+    required this.defaultValue,
+    this.fromJson,
+  });
 
   DevbarVariable<T> addVariable(VariablesPlugin plugin) => plugin.add<T>(this);
 }

@@ -46,10 +46,12 @@ class FigmaService {
     FigmaLinksSource linksSource;
     if (!kIsWeb) {
       client = FigmaDownloaderIO(FigmaCache(Directory('.figma/cache')));
-      personalSettingsStorage =
-          PersonalSettingsStorageIO(File('.figma/personal_settings.json'));
-      linksSource =
-          FigmaLinksSourceIO(File(config.linksPath ?? 'figma_links.json'));
+      personalSettingsStorage = PersonalSettingsStorageIO(
+        File('.figma/personal_settings.json'),
+      );
+      linksSource = FigmaLinksSourceIO(
+        File(config.linksPath ?? 'figma_links.json'),
+      );
 
       initialSettings = await personalSettingsStorage.read();
     } else {
@@ -73,7 +75,7 @@ class FigmaService {
     var links = _links.links[path];
     return [
       ...?links,
-      ..._allLinksFromCode.map((l) => FigmaLink(l, isFromCode: true))
+      ..._allLinksFromCode.map((l) => FigmaLink(l, isFromCode: true)),
     ];
   }
 
@@ -112,8 +114,10 @@ class FigmaService {
   }
 
   Future<ImageProvider> imageProviderFor(FigmaLink link) {
-    return _images[link.uri] ??= downloader.readFigmaScreenshot(link,
-        credentials: personalSettings.credentials ?? _userConfigCredentials);
+    return _images[link.uri] ??= downloader.readFigmaScreenshot(
+      link,
+      credentials: personalSettings.credentials ?? _userConfigCredentials,
+    );
   }
 
   FigmaCredentials? get _userConfigCredentials {
@@ -205,8 +209,10 @@ class FigmaService {
 }
 
 abstract class FigmaDownloader {
-  Future<ImageProvider> readFigmaScreenshot(FigmaLink url,
-      {FigmaCredentials? credentials});
+  Future<ImageProvider> readFigmaScreenshot(
+    FigmaLink url, {
+    FigmaCredentials? credentials,
+  });
   void clearCacheForLink(FigmaLink link);
   void clearCache() {}
 }
@@ -223,8 +229,11 @@ class FigmaLinks {
   FigmaLinks(this.links);
 
   factory FigmaLinks.fromJson(Map<String, Object?> json) {
-    return FigmaLinks(json.cast<String, List>().map(
-        (k, v) => MapEntry(k, v.map((e) => FigmaLink.fromJson(e)).toList())));
+    return FigmaLinks(
+      json.cast<String, List>().map(
+        (k, v) => MapEntry(k, v.map((e) => FigmaLink.fromJson(e)).toList()),
+      ),
+    );
   }
 
   Map<String, Object?> toJson() => links;

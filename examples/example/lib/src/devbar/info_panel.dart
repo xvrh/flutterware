@@ -36,13 +36,8 @@ class InfoPanel extends StatelessWidget {
     return DefaultTabController(
       length: tabs.length,
       child: Scaffold(
-        appBar: TabBar(
-          tabs: tabs,
-          isScrollable: true,
-        ),
-        body: TabBarView(
-          children: tabsContent,
-        ),
+        appBar: TabBar(tabs: tabs, isScrollable: true),
+        body: TabBarView(children: tabsContent),
       ),
     );
   }
@@ -105,10 +100,7 @@ class _PackageInfoList extends StatelessWidget {
   }
 
   Widget _row(String label, String value) {
-    return ListTile(
-      title: Text(label),
-      subtitle: Text(value),
-    );
+    return ListTile(title: Text(label), subtitle: Text(value));
   }
 }
 
@@ -131,10 +123,7 @@ class _GenericInfoList extends StatelessWidget {
   }
 
   Widget _row(String label, String? value) {
-    return ListTile(
-      title: Text(label),
-      subtitle: Text(value ?? ''),
-    );
+    return ListTile(title: Text(label), subtitle: Text(value ?? ''));
   }
 }
 

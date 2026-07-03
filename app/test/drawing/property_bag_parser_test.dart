@@ -25,10 +25,11 @@ void main() {
     var result = parser.parse(code);
     expect(result is Success, true);
     expect(
-        result.value,
-        PropertyBag('theName', {
-          'x': [1, 2, 3]
-        }));
+      result.value,
+      PropertyBag('theName', {
+        'x': [1, 2, 3],
+      }),
+    );
     expect(result.value.toString(), code);
   });
 
@@ -37,10 +38,11 @@ void main() {
     var result = parser.parse(code);
     expect(result is Success, true);
     expect(
-        result.value,
-        PropertyBag('theName', {
-          'x': {'xx': 2}
-        }));
+      result.value,
+      PropertyBag('theName', {
+        'x': {'xx': 2},
+      }),
+    );
     expect(result.value.toString(), code);
   });
 }

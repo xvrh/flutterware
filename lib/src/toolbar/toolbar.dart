@@ -8,19 +8,16 @@ class Toolbar extends StatelessWidget {
   final List<Widget> items;
   final Widget child;
 
-  const Toolbar(
-      {super.key,
-      ToolbarPosition? position,
-      required this.child,
-      required this.items})
-      : position = position ?? ToolbarPosition.top;
+  const Toolbar({
+    super.key,
+    ToolbarPosition? position,
+    required this.child,
+    required this.items,
+  }) : position = position ?? ToolbarPosition.top;
 
   @override
   Widget build(BuildContext context) {
-    var toolbar = _Toolbar(
-      position: position,
-      children: items,
-    );
+    var toolbar = _Toolbar(position: position, children: items);
     var child = this.child;
     child = MediaQuery.removePadding(
       context: context,
@@ -73,7 +70,7 @@ class _Toolbar extends StatelessWidget {
                       for (var child in children) ...[
                         child,
                         if (child != children.last) SizedBox(width: 7),
-                      ]
+                      ],
                     ],
                   ),
                 ),
@@ -129,8 +126,8 @@ class ToolbarDropdown<T extends Object> extends StatelessWidget {
     required this.items,
     bool? showArrow,
     bool? highlight,
-  })  : showArrow = showArrow ?? true,
-        highlight = highlight ?? false;
+  }) : showArrow = showArrow ?? true,
+       highlight = highlight ?? false;
 
   @override
   Widget build(BuildContext context) {
@@ -144,10 +141,7 @@ class ToolbarDropdown<T extends Object> extends StatelessWidget {
         value: value,
         items: [
           for (var entry in items.entries)
-            DropdownMenuItem(
-              value: entry.key,
-              child: entry.value,
-            ),
+            DropdownMenuItem(value: entry.key, child: entry.value),
         ],
         onChanged: (v) => onChanged(v!),
         icon: Icon(
@@ -196,17 +190,21 @@ class ToolbarPicker<T> extends StatelessWidget {
         width: double.maxFinite,
         child: ListView(
           shrinkWrap: true,
-          children: ListTile.divideTiles(context: context, tiles: [
-            for (var item in items.entries) _itemTile(context, item.key),
-          ]).toList(),
+          children: ListTile.divideTiles(
+            context: context,
+            tiles: [
+              for (var item in items.entries) _itemTile(context, item.key),
+            ],
+          ).toList(),
         ),
       ),
       actions: [
         TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: Text('CANCEL')),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          child: Text('CANCEL'),
+        ),
       ],
     );
   }
@@ -216,21 +214,17 @@ class ToolbarPicker<T> extends StatelessWidget {
     if (itemTiles != null) {
       tile = itemTiles![key];
       if (tile != null) {
-        tile = InkWell(
-          onTap: () => _onTap(context, key),
-          child: tile,
-        );
+        tile = InkWell(onTap: () => _onTap(context, key), child: tile);
       }
     }
-    tile ??= ListTile(
-      title: items[key],
-      onTap: () => _onTap(context, key),
-    );
+    tile ??= ListTile(title: items[key], onTap: () => _onTap(context, key));
 
-    tile = Row(children: [
-      Expanded(child: tile),
-      Icon(key == value ? Icons.check : null, color: Color(0xff0000ff)),
-    ]);
+    tile = Row(
+      children: [
+        Expanded(child: tile),
+        Icon(key == value ? Icons.check : null, color: Color(0xff0000ff)),
+      ],
+    );
 
     return tile;
   }

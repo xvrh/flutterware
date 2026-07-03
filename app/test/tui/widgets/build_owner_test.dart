@@ -160,8 +160,11 @@ void main() {
     // The first frame built once and the in-build setState re-dirtied the
     // element; that re-entrant request must be honoured within the same pass
     // (BuildOwner.buildScope re-sorts and revisits dirty elements).
-    expect(Reentrant.builds, greaterThanOrEqualTo(2),
-        reason: 'the re-entrant markNeedsBuild was honoured, not dropped');
+    expect(
+      Reentrant.builds,
+      greaterThanOrEqualTo(2),
+      reason: 'the re-entrant markNeedsBuild was honoured, not dropped',
+    );
 
     // A further frame is stable: the element is clean and does not rebuild.
     var settled = Reentrant.builds;

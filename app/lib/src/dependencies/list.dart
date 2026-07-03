@@ -94,9 +94,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
           primary: false,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           children: [
-            Breadcrumb(children: [
-              BreadcrumbEntry.overview,
-            ]),
+            Breadcrumb(children: [BreadcrumbEntry.overview]),
             Row(
               children: [
                 Expanded(
@@ -137,12 +135,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
   Widget _card(Dependencies dependencies) {
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          _header(),
-          _table(dependencies),
-        ],
-      ),
+      child: Column(children: [_header(), _table(dependencies)]),
     );
   }
 
@@ -232,12 +225,14 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
     }
     if (_searchController.text.isNotEmpty) {
       var query = _searchController.text.toLowerCase();
-      filteredDependencies = dependencies.dependencies
-          .where((e) => e.name.toLowerCase().contains(query));
+      filteredDependencies = dependencies.dependencies.where(
+        (e) => e.name.toLowerCase().contains(query),
+      );
     }
 
     return SizedBox(
-      height: _DependencyListScreen._rowHeight * filteredDependencies.length +
+      height:
+          _DependencyListScreen._rowHeight * filteredDependencies.length +
           _DependencyListScreen._headingHeight,
       child: CustomScrollView(
         scrollDirection: Axis.horizontal,
@@ -247,7 +242,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
             hasScrollBody: false,
             fillOverscroll: true,
             child: _data(dependencies, filteredDependencies),
-          )
+          ),
         ],
       ),
     );
@@ -264,7 +259,9 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
         }
 
         var sortedDependencies = list.sortedByCompare<Comparable>(
-            (p) => sort(p, pubScores), comparator);
+          (p) => sort(p, pubScores),
+          comparator,
+        );
 
         return DataTable(
           dataRowMinHeight: _DependencyListScreen._rowHeight,
@@ -287,9 +284,11 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                 },
                 cells: [
                   DataCell(Text(dependency.name)),
-                  DataCell(dependency.isTransitive
-                      ? _DependencyTransitiveBadge(dependency)
-                      : _DependencyDirectBadge(project, dependency)),
+                  DataCell(
+                    dependency.isTransitive
+                        ? _DependencyTransitiveBadge(dependency)
+                        : _DependencyDirectBadge(project, dependency),
+                  ),
                   DataCell(_VersionCell(dependency)),
                   DataCell(_PubCell(dependency, pubScores.data)),
                   DataCell(_GithubCell(dependency, pubScores.data)),
@@ -302,15 +301,17 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
   }
 
   static Comparable _selectPackageName(
-          Dependency d, Snapshot<PubScores> scores) =>
-      d.name;
+    Dependency d,
+    Snapshot<PubScores> scores,
+  ) => d.name;
 
   static Comparable _selectPubScore(Dependency d, Snapshot<PubScores> scores) =>
       scores.data?[d.name]?.pub.popularity ?? 0;
 
   static Comparable _selectGithubScore(
-          Dependency d, Snapshot<PubScores> scores) =>
-      scores.data?[d.name]?.github?.starCount ?? 0;
+    Dependency d,
+    Snapshot<PubScores> scores,
+  ) => scores.data?[d.name]?.github?.starCount ?? 0;
 
   void _onSort(int columnIndex, bool ascending) {
     setState(() {
@@ -373,10 +374,8 @@ class _GithubCell extends StatelessWidget {
     return InkWell(
       onTap: () => openGithub(github),
       child: Tooltip(
-        message: '${[
-          '$starCount star${starCount > 1 ? 's' : ''}',
-          '$forkCount fork${forkCount > 1 ? 's' : ''}',
-        ].join(', ')}\n${github.slug}',
+        message:
+            '${['$starCount star${starCount > 1 ? 's' : ''}', '$forkCount fork${forkCount > 1 ? 's' : ''}'].join(', ')}\n${github.slug}',
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -410,10 +409,7 @@ class _DependencyTransitiveBadge extends StatelessWidget {
             .take(3)
             .map((l) => l.join(' > '))
             .join('\n'),
-        child: Text(
-          'Transitive',
-          style: const TextStyle(fontSize: 12),
-        ),
+        child: Text('Transitive', style: const TextStyle(fontSize: 12)),
       ),
     );
   }
@@ -447,10 +443,7 @@ class _DependencyDirectBadge extends StatelessWidget {
             message: tooltip,
             child: Text(
               'Direct',
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xff618a3d),
-              ),
+              style: const TextStyle(fontSize: 12, color: Color(0xff618a3d)),
             ),
           );
         },
@@ -468,9 +461,7 @@ class _VersionCell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       dependency.pubspec.version?.toString() ?? '',
-      style: const TextStyle(
-        color: AppColors.blackSecondary,
-      ),
+      style: const TextStyle(color: AppColors.blackSecondary),
     );
 
     //TODO(xha): run a dart pub outdated in the background and when ready, display

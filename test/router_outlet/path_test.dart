@@ -69,10 +69,11 @@ void main() {
     expect(matched1, matched2);
     expect(matched1.hashCode, matched2.hashCode);
     expect(
-        [
-          path.rootMatch.matchesRemaining(PathPattern('users/:id'))!
-        ].contains(path.rootMatch.matchesRemaining(PathPattern('users/:id'))!),
-        isTrue);
+      [
+        path.rootMatch.matchesRemaining(PathPattern('users/:id'))!,
+      ].contains(path.rootMatch.matchesRemaining(PathPattern('users/:id'))!),
+      isTrue,
+    );
   });
 
   test('MatchedPath class 3', () {
@@ -98,53 +99,53 @@ void main() {
     expect(matched.args, {'name': 'àab machin'});
   });
 
-  test('MatchedPath.go 1', () {
+  test('MatchedPath.resolve 1', () {
     var path = PagePath('/users');
 
     var matched = path.rootMatch.matchesRemaining(PathPattern('users'))!;
 
-    var newPath = matched.go('url');
+    var newPath = matched.resolve('url');
     expect(newPath.toString(), '/users/url');
 
-    var newPath2 = matched.go('/url');
+    var newPath2 = matched.resolve('/url');
     expect(newPath2.toString(), '/url');
   });
 
-  test('MatchedPath.go 2', () {
+  test('MatchedPath.resolve 2', () {
     var path = PagePath('/users/1/profile');
     var matched = path.rootMatch.matchesRemaining(PathPattern('users'))!;
 
-    var newPath = matched.go('url');
+    var newPath = matched.resolve('url');
     expect(newPath.toString(), '/users/url');
 
-    var newPath2 = matched.go('/url');
+    var newPath2 = matched.resolve('/url');
     expect(newPath2.toString(), '/url');
   });
 
-  test('MatchedPath.go 3', () {
+  test('MatchedPath.resolve 3', () {
     var path = PagePath('/users/1/profile');
     var matched = path.rootMatch
         .matchesRemaining(PathPattern('users'))!
         .matchesRemaining(PathPattern(':id'))!;
 
-    var newPath = matched.go('url');
+    var newPath = matched.resolve('url');
     expect(newPath.toString(), '/users/1/url');
 
-    var newPath2 = matched.go('/url');
+    var newPath2 = matched.resolve('/url');
     expect(newPath2.toString(), '/url');
   });
 
-  test('MatchedPath.go up', () {
+  test('MatchedPath.resolve up', () {
     var path = PagePath('/users/1/profile');
     var matched = path.rootMatch
         .matchesRemaining(PathPattern('users'))!
         .matchesRemaining(PathPattern(':id'))!;
 
-    expect(matched.go('..').toString(), '/users');
-    expect(matched.go('../2').toString(), '/users/2');
-    expect(matched.go('../2/profile').toString(), '/users/2/profile');
-    expect(matched.go('../../home').toString(), '/home');
-    expect(matched.go('../../../home').toString(), '/../home');
+    expect(matched.resolve('..').toString(), '/users');
+    expect(matched.resolve('../2').toString(), '/users/2');
+    expect(matched.resolve('../2/profile').toString(), '/users/2/profile');
+    expect(matched.resolve('../../home').toString(), '/home');
+    expect(matched.resolve('../../../home').toString(), '/../home');
   });
 
   test('MatchedPath.isSelected 1', () {
@@ -178,17 +179,24 @@ void main() {
   test('MatchedPath.isSelected 3', () {
     var path = PagePath('/home/profile/1');
     var rootMatch = path.rootMatch;
-    var profileMatch =
-        path.rootMatch.matchesRemaining(PathPattern('home/profile'))!;
+    var profileMatch = path.rootMatch.matchesRemaining(
+      PathPattern('home/profile'),
+    )!;
 
     expect(rootMatch.isSelectedType('home'), RouteSelectedType.descendant);
     expect(rootMatch.isSelectedType('users'), null);
     expect(
-        rootMatch.isSelectedType('home/profile'), RouteSelectedType.descendant);
-    expect(rootMatch.isSelectedType('/home/profile/'),
-        RouteSelectedType.descendant);
-    expect(rootMatch.isSelectedType('/home/profile'),
-        RouteSelectedType.descendant);
+      rootMatch.isSelectedType('home/profile'),
+      RouteSelectedType.descendant,
+    );
+    expect(
+      rootMatch.isSelectedType('/home/profile/'),
+      RouteSelectedType.descendant,
+    );
+    expect(
+      rootMatch.isSelectedType('/home/profile'),
+      RouteSelectedType.descendant,
+    );
     expect(profileMatch.isSelectedType(''), RouteSelectedType.descendant);
     expect(profileMatch.isSelectedType('1'), RouteSelectedType.self);
     expect(profileMatch.isSelectedType('1/'), RouteSelectedType.self);
@@ -202,14 +210,18 @@ void main() {
   });
 
   test('Query parameters in PagePath', () {
-    expect(PagePath('some/url?query=true&param=false').queryParameters,
-        {'query': 'true', 'param': 'false'});
+    expect(PagePath('some/url?query=true&param=false').queryParameters, {
+      'query': 'true',
+      'param': 'false',
+    });
     expect(PagePath('some/url?').queryParameters, {});
     expect(PagePath('some/url').queryParameters, {});
     expect(PagePath('some/url?a').queryParameters, {'a': ''});
     expect(PagePath('some/url?a').toString(), 'some/url?a');
-    expect(PagePath('some/url?query=true&param=false').toString(),
-        'some/url?query=true&param=false');
+    expect(
+      PagePath('some/url?query=true&param=false').toString(),
+      'some/url?query=true&param=false',
+    );
   });
 
   test('MatchedPath decode query parameters parameters', () {
@@ -222,41 +234,41 @@ void main() {
     expect(matched.current.toString(), 'users/machin');
   });
 
-  test('MatchedPath.go 3 with query parameters', () {
+  test('MatchedPath.resolve 3 with query parameters', () {
     var path = PagePath('/users/1/profile?auto');
     var matched = path.rootMatch
         .matchesRemaining(PathPattern('users'))!
         .matchesRemaining(PathPattern(':id'))!;
 
-    var newPath = matched.go('url');
+    var newPath = matched.resolve('url');
     expect(newPath.toString(), '/users/1/url');
 
-    var newPath2 = matched.go('/url');
+    var newPath2 = matched.resolve('/url');
     expect(newPath2.toString(), '/url');
   });
 
-  test('MatchedPath.go 3 with extra parameters', () {
+  test('MatchedPath.resolve 3 with extra parameters', () {
     var path = PagePath('/users/1/profile?auto');
     var matched = path.rootMatch
         .matchesRemaining(PathPattern('users'))!
         .matchesRemaining(PathPattern(':id'))!;
 
-    var newPath = matched.go('url', extra: {'one': 1});
+    var newPath = matched.resolve('url', extra: {'one': 1});
     expect(newPath.extra, {'one': 1});
 
-    var newPath2 = matched.go('/url');
+    var newPath2 = matched.resolve('/url');
     expect(newPath2.extra, {});
   });
 
   test('Navigate with extra parameters', () {
     var matched = PagePath.root.rootMatch;
 
-    var newPath = matched.go('/', extra: {'one': 1});
+    var newPath = matched.resolve('/', extra: {'one': 1});
     expect(newPath.extra, {'one': 1});
     expect(newPath.isAbsolute, true);
     expect(newPath.toPath(), '/');
 
-    var newPath2 = matched.go('/url');
+    var newPath2 = matched.resolve('/url');
     expect(newPath2.extra, {});
   });
 }

@@ -6,11 +6,9 @@ import 'package:flutterware_app/src/tui/render/render.dart';
 import 'package:test/test.dart';
 
 List<String> dump(CellBuffer b) => [
-      for (var r = 0; r < b.rows; r++)
-        String.fromCharCodes([
-          for (var c = 0; c < b.cols; c++) b.get(r, c).rune,
-        ]),
-    ];
+  for (var r = 0; r < b.rows; r++)
+    String.fromCharCodes([for (var c = 0; c < b.cols; c++) b.get(r, c).rune]),
+];
 
 class _FixedBox extends RenderBox {
   _FixedBox(this.natural);
@@ -55,8 +53,9 @@ void main() {
     test('paints the border around the box perimeter', () {
       var child = _FixedBox(CellSize(3, 5));
       var box = RenderDecoratedBox(
-        decoration:
-            BoxDecoration(border: BoxBorder(chars: BorderChars.ascii())),
+        decoration: BoxDecoration(
+          border: BoxBorder(chars: BorderChars.ascii()),
+        ),
         child: child,
       );
       box.layout(BoxConstraints.tight(CellSize(3, 5)));

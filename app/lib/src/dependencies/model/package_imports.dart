@@ -14,9 +14,10 @@ class PackageImports {
     var results = <String, List<File>>{};
     for (var file in dartFiles) {
       var result = parseString(
-          content: file.readAsStringSync(),
-          path: file.path,
-          throwIfDiagnostics: false);
+        content: file.readAsStringSync(),
+        path: file.path,
+        throwIfDiagnostics: false,
+      );
       if (result.errors.isEmpty) {
         for (var directive in result.unit.directives) {
           if (directive is NamespaceDirective) {

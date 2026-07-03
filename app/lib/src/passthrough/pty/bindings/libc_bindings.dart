@@ -69,8 +69,8 @@ typedef _CloseDart = int Function(int);
 // stack, not in registers — so we MUST mark the trailing arg with VarArgs or
 // the kernel reads garbage. Linux x86_64 happens to work either way, but this
 // is the portably correct declaration.
-typedef _IoctlNative = Int32 Function(
-    Int32, IntPtr, VarArgs<(Pointer<WinSize>,)>);
+typedef _IoctlNative =
+    Int32 Function(Int32, IntPtr, VarArgs<(Pointer<WinSize>,)>);
 typedef _IoctlDart = int Function(int, int, Pointer<WinSize>);
 
 typedef _IntFromIntNative = Int32 Function(Int32);
@@ -85,23 +85,32 @@ typedef _PtsnameNative = Pointer<Utf8> Function(Int32);
 typedef _PtsnameDart = Pointer<Utf8> Function(int);
 
 // posix_spawnp(pid*, file, file_actions*, attrp*, argv[], envp[])
-typedef _SpawnNative = Int32 Function(
-    Pointer<Int32>,
-    Pointer<Utf8>,
-    Pointer<Void>,
-    Pointer<Void>,
-    Pointer<Pointer<Utf8>>,
-    Pointer<Pointer<Utf8>>);
-typedef _SpawnDart = int Function(Pointer<Int32>, Pointer<Utf8>, Pointer<Void>,
-    Pointer<Void>, Pointer<Pointer<Utf8>>, Pointer<Pointer<Utf8>>);
+typedef _SpawnNative =
+    Int32 Function(
+      Pointer<Int32>,
+      Pointer<Utf8>,
+      Pointer<Void>,
+      Pointer<Void>,
+      Pointer<Pointer<Utf8>>,
+      Pointer<Pointer<Utf8>>,
+    );
+typedef _SpawnDart =
+    int Function(
+      Pointer<Int32>,
+      Pointer<Utf8>,
+      Pointer<Void>,
+      Pointer<Void>,
+      Pointer<Pointer<Utf8>>,
+      Pointer<Pointer<Utf8>>,
+    );
 
 typedef _OpaqueInitNative = Int32 Function(Pointer<Void>);
 typedef _OpaqueInitDart = int Function(Pointer<Void>);
 
-typedef _FaAddopenNative = Int32 Function(
-    Pointer<Void>, Int32, Pointer<Utf8>, Int32, Uint32);
-typedef _FaAddopenDart = int Function(
-    Pointer<Void>, int, Pointer<Utf8>, int, int);
+typedef _FaAddopenNative =
+    Int32 Function(Pointer<Void>, Int32, Pointer<Utf8>, Int32, Uint32);
+typedef _FaAddopenDart =
+    int Function(Pointer<Void>, int, Pointer<Utf8>, int, int);
 
 typedef _FaAddupNative = Int32 Function(Pointer<Void>, Int32, Int32);
 typedef _FaAddupDart = int Function(Pointer<Void>, int, int);
@@ -130,7 +139,8 @@ class LibcBindings {
       _libc = DynamicLibrary.open('libc.so.6');
     } else {
       throw UnsupportedError(
-          'Passthrough PTY only supports macOS and Linux (got ${Platform.operatingSystem})');
+        'Passthrough PTY only supports macOS and Linux (got ${Platform.operatingSystem})',
+      );
     }
 
     waitpid = _libc.lookupFunction<_WaitpidNative, _WaitpidDart>('waitpid');
@@ -141,34 +151,47 @@ class LibcBindings {
     openFile = _libc.lookupFunction<_OpenNative, _OpenDart>('open');
     ioctl = _libc.lookupFunction<_IoctlNative, _IoctlDart>('ioctl');
 
-    posixOpenpt = _libc
-        .lookupFunction<_IntFromIntNative, _IntFromIntDart>('posix_openpt');
-    grantpt =
-        _libc.lookupFunction<_IntFromIntNative, _IntFromIntDart>('grantpt');
-    unlockpt =
-        _libc.lookupFunction<_IntFromIntNative, _IntFromIntDart>('unlockpt');
+    posixOpenpt = _libc.lookupFunction<_IntFromIntNative, _IntFromIntDart>(
+      'posix_openpt',
+    );
+    grantpt = _libc.lookupFunction<_IntFromIntNative, _IntFromIntDart>(
+      'grantpt',
+    );
+    unlockpt = _libc.lookupFunction<_IntFromIntNative, _IntFromIntDart>(
+      'unlockpt',
+    );
     ptsname = _libc.lookupFunction<_PtsnameNative, _PtsnameDart>('ptsname');
 
-    posixSpawnp =
-        _libc.lookupFunction<_SpawnNative, _SpawnDart>('posix_spawnp');
+    posixSpawnp = _libc.lookupFunction<_SpawnNative, _SpawnDart>(
+      'posix_spawnp',
+    );
     faInit = _libc.lookupFunction<_OpaqueInitNative, _OpaqueInitDart>(
-        'posix_spawn_file_actions_init');
+      'posix_spawn_file_actions_init',
+    );
     faDestroy = _libc.lookupFunction<_OpaqueInitNative, _OpaqueInitDart>(
-        'posix_spawn_file_actions_destroy');
+      'posix_spawn_file_actions_destroy',
+    );
     faAddopen = _libc.lookupFunction<_FaAddopenNative, _FaAddopenDart>(
-        'posix_spawn_file_actions_addopen');
+      'posix_spawn_file_actions_addopen',
+    );
     faAdddup2 = _libc.lookupFunction<_FaAddupNative, _FaAddupDart>(
-        'posix_spawn_file_actions_adddup2');
+      'posix_spawn_file_actions_adddup2',
+    );
     faAddclose = _libc.lookupFunction<_FaAddcloseNative, _FaAddcloseDart>(
-        'posix_spawn_file_actions_addclose');
+      'posix_spawn_file_actions_addclose',
+    );
     faAddchdir = _libc.lookupFunction<_FaAddchdirNative, _FaAddchdirDart>(
-        'posix_spawn_file_actions_addchdir_np');
+      'posix_spawn_file_actions_addchdir_np',
+    );
     attrInit = _libc.lookupFunction<_OpaqueInitNative, _OpaqueInitDart>(
-        'posix_spawnattr_init');
+      'posix_spawnattr_init',
+    );
     attrDestroy = _libc.lookupFunction<_OpaqueInitNative, _OpaqueInitDart>(
-        'posix_spawnattr_destroy');
+      'posix_spawnattr_destroy',
+    );
     attrSetflags = _libc.lookupFunction<_AttrSetflagsNative, _AttrSetflagsDart>(
-        'posix_spawnattr_setflags');
+      'posix_spawnattr_setflags',
+    );
     getpid = _libc.lookupFunction<_GetpidNative, _GetpidDart>('getpid');
   }
 

@@ -56,8 +56,9 @@ class _TestListingViewState extends State<TestListingView> {
           selected: selectedPath,
           entries: _menu(tests),
           onSelected: (path) {
-            context
-                .go('${paths.tests}/run/${Uri.encodeComponent(path.encoded)}');
+            context.go(
+              '${paths.tests}/run/${Uri.encodeComponent(path.encoded)}',
+            );
           },
           extraDepth: 1,
         );
@@ -117,10 +118,7 @@ class _EmptyList extends StatelessWidget {
         textStyle: const TextStyle(fontSize: 12),
         minimumSize: Size(0, 30),
       ),
-      icon: Icon(
-        Icons.add,
-        size: 12,
-      ),
+      icon: Icon(Icons.add, size: 12),
       label: Text('Add an example'),
     );
   }
