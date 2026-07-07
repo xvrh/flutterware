@@ -44,14 +44,21 @@ class UrlSourceWeb implements UrlSource {
   PagePath get current => _current;
 
   @override
-  void go(PagePath path) {
+  void go(PagePath path, {bool replace = false}) {
     assert(path.isAbsolute);
 
     // Change in the extra should trigger an onChange
     if (!path.equalsWithExtra(current)) {
       _current = path;
       _onChangeController.add(path);
-      html.window.location.hash = path.toString();
+      if (replace) {
+        // replaceState overwrites the current entry and — unlike assigning
+        // location.hash — does not fire `hashchange`. We already notified
+        // in-app listeners above, so no external event is needed.
+        html.window.history.replaceState(null, '', '#${path.toString()}');
+      } else {
+        html.window.location.hash = path.toString();
+      }
     }
   }
 

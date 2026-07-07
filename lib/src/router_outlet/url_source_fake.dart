@@ -17,9 +17,11 @@ class UrlSourceFake implements UrlSource {
   PagePath get current => _current;
 
   @override
-  void go(PagePath path) {
+  void go(PagePath path, {bool replace = false}) {
     assert(path.isAbsolute);
 
+    // No history stack to distinguish push from replace here; both just move
+    // the current path and notify.
     if (path != _current) {
       _current = path;
       _onChangeController.add(path);

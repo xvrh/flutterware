@@ -3,8 +3,8 @@ import 'provider.dart';
 import 'router_root.dart';
 
 extension UrlRouterExtension on BuildContext {
-  void go(String url, {Map<String, dynamic>? extra}) =>
-      router.go(url, extra: extra);
+  void go(String url, {Map<String, dynamic>? extra, bool replace = false}) =>
+      router.go(url, extra: extra, replace: replace);
 
   RouterReference get router => RouterReference(this);
 }
@@ -21,9 +21,9 @@ class RouterReference {
     return {for (var subMatch in _subMatches) ...subMatch.args};
   }
 
-  void go(String url, {Map<String, dynamic>? extra}) {
+  void go(String url, {Map<String, dynamic>? extra, bool replace = false}) {
     var newPath = path.resolve(url, extra: extra);
-    urlSource.go(newPath);
+    urlSource.go(newPath, replace: replace);
   }
 
   bool isSelected(String url) {
