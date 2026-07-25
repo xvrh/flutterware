@@ -25,6 +25,9 @@ class FlutterCache {
     return FlutterCache(cache);
   }
 
+  /// The Flutter checkout root — `<flutter>`, the parent of `bin/cache`.
+  String get flutterRoot => p.dirname(p.dirname(cacheDir));
+
   String get _engine => p.join(cacheDir, 'artifacts', 'engine');
 
   /// The Flutter patched SDK directory, used as `--sdk-root` for the compiler.
