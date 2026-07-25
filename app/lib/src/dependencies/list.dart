@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:pub_scores/pub_scores.dart';
 import '../app/ui/breadcrumb.dart';
 import '../project.dart';
+import '../ui/theme.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
 import 'detail.dart';
@@ -82,7 +83,6 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     return ValueListenableBuilder<Snapshot<Dependencies>>(
       valueListenable: project.dependencies.dependencies,
       builder: (context, snapshot, child) {
@@ -92,16 +92,16 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
         return ListView(
           key: PageStorageKey('dependencies_vertical'),
           primary: false,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: FwSpacing.xxl,
+            vertical: FwSpacing.lg,
+          ),
           children: [
             Breadcrumb(children: [BreadcrumbEntry.overview]),
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    'Dependencies',
-                    style: theme.textTheme.headlineMedium,
-                  ),
+                  child: Text('Dependencies', style: context.type.pageTitle),
                 ),
                 PopupMenuButton(
                   elevation: 2,
@@ -116,7 +116,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const Gap(FwSpacing.lg),
             if (data != null)
               _card(data)
             else if (error != null)
@@ -140,14 +140,18 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
   }
 
   Widget _header() {
+    var colors = context.colors;
     return Container(
-      color: AppColors.tableHeader,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: colors.tableHeader,
+        border: Border(bottom: BorderSide(color: colors.line)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
       child: Row(
         children: [
           Container(
             width: 300,
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(FwSpacing.md),
             child: _searchField(),
           ),
           Expanded(child: SizedBox()),
@@ -159,15 +163,17 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
             },
             child: Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: Colors.black12,
+                borderRadius: BorderRadius.circular(context.radii.radiusLarge),
+                color: colors.panel,
+                border: Border.all(color: colors.line),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.filter_list, size: 15),
-                  Text('Show all', style: TextStyle(fontSize: 12)),
+                  Icon(Icons.filter_list, size: 15, color: colors.mut),
+                  const Gap(FwSpacing.xs),
+                  Text('Show all', style: context.type.caption),
                   Checkbox(
                     value: _withTransitive,
                     onChanged: (v) {
@@ -270,11 +276,11 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
           sortColumnIndex: _sortIndex,
           sortAscending: _sortAscending,
           columns: [
-            DataColumn(label: Text('Package'), onSort: _onSort),
-            DataColumn(label: Text('Type')),
-            DataColumn(label: Text('Version')),
-            DataColumn(label: Text('Pub'), onSort: _onSort),
-            DataColumn(label: Text('GitHub'), onSort: _onSort),
+            DataColumn(label: Text('PACKAGE'), onSort: _onSort),
+            DataColumn(label: Text('TYPE')),
+            DataColumn(label: Text('VERSION')),
+            DataColumn(label: Text('PUB'), onSort: _onSort),
+            DataColumn(label: Text('GITHUB'), onSort: _onSort),
           ],
           rows: [
             for (var dependency in sortedDependencies)
@@ -283,7 +289,9 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                   context.router.go('packages/${dependency.name}');
                 },
                 cells: [
-                  DataCell(Text(dependency.name)),
+                  DataCell(
+                    Text(dependency.name, style: context.type.bodyStrong),
+                  ),
                   DataCell(
                     dependency.isTransitive
                         ? _DependencyTransitiveBadge(dependency)
@@ -347,10 +355,7 @@ class _PubCell extends StatelessWidget {
       onTap: () => openPub(dependency),
       child: Tooltip(
         message: message.join(' / '),
-        child: Text(
-          popularityString,
-          style: const TextStyle(color: AppColors.blackSecondary),
-        ),
+        child: Text(popularityString, style: context.type.bodyMuted),
       ),
     );
   }
@@ -379,11 +384,9 @@ class _GithubCell extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              '$starCount',
-              style: const TextStyle(color: AppColors.blackSecondary),
-            ),
-            Icon(Icons.star_outline, size: 15, color: AppColors.blackSecondary),
+            Text('$starCount', style: context.type.bodyMuted),
+            const Gap(FwSpacing.xxs),
+            Icon(Icons.star_outline, size: 15, color: context.colors.mut),
           ],
         ),
       ),
@@ -398,18 +401,23 @@ class _DependencyTransitiveBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var colors = context.colors;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.md,
+        vertical: FwSpacing.xxs,
+      ),
       decoration: BoxDecoration(
-        color: Colors.black12,
-        borderRadius: BorderRadius.circular(10),
+        color: colors.panel2,
+        border: Border.all(color: colors.line),
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
       ),
       child: Tooltip(
         message: dependency.dependencyPaths
             .take(3)
             .map((l) => l.join(' > '))
             .join('\n'),
-        child: Text('Transitive', style: const TextStyle(fontSize: 12)),
+        child: Text('Transitive', style: context.type.micro),
       ),
     );
   }
@@ -423,11 +431,16 @@ class _DependencyDirectBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var colors = context.colors;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.md,
+        vertical: FwSpacing.xxs,
+      ),
       decoration: BoxDecoration(
-        color: Color(0xfff2f8eb),
-        borderRadius: BorderRadius.circular(10),
+        color: colors.statusFill(colors.grn),
+        border: Border.all(color: colors.statusBorder(colors.grn)),
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
       ),
       child: ValueListenableBuilder<Snapshot<PackageImports>>(
         valueListenable: project.dependencies.packageImports,
@@ -443,7 +456,7 @@ class _DependencyDirectBadge extends StatelessWidget {
             message: tooltip,
             child: Text(
               'Direct',
-              style: const TextStyle(fontSize: 12, color: Color(0xff618a3d)),
+              style: context.type.micro.copyWith(color: colors.grn),
             ),
           );
         },
@@ -461,7 +474,7 @@ class _VersionCell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       dependency.pubspec.version?.toString() ?? '',
-      style: const TextStyle(color: AppColors.blackSecondary),
+      style: context.type.bodyMuted,
     );
 
     //TODO(xha): run a dart pub outdated in the background and when ready, display
