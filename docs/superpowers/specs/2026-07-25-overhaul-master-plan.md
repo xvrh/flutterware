@@ -129,10 +129,26 @@ share one substrate is what **spike S1** decides.
 
 ### M1 — The shell
 
-Worktree switcher (open / close a worktree, releasing watchers and memory — the
-demand-driven execution model from the 2026-05-18 doc). Plugin host. `Plugin`
-base class with the decision-2 uniform contract as pure data. Native panels
-only. `tool/flutterware.dart` manifest emitter. Design tokens from `admin_ui`.
+**Chrome settled 2026-07-26** by prototype (`app/lib/main_shell_dev.dart`):
+
+- The macOS titlebar is reclaimed — `titlebarAppearsTransparent`,
+  `titleVisibility = .hidden`, `.fullSizeContentView`,
+  `isMovableByWindowBackground`. The traffic lights stay **real**; band content
+  insets 78pt past them. Verified: the band still drags the window, content
+  drags do not, and band controls are clickable.
+- **A tab per *open* worktree** in that band, each closable. Closing releases
+  that worktree's panel subscription.
+- **A switcher popover** (`+`) listing the full `git worktree list`, split
+  OPEN / NOT OPEN, so unopened worktrees are reachable without spending a tab.
+  This is what keeps the tab strip bounded.
+- **Plugins in a vertical sidebar**, not horizontal. Rejected an all-horizontal
+  layout on evidence: 8 plugins already fill the width, and status degrades from
+  `3 failing` / `stack down` to bare dots — a horizontal strip cannot carry the
+  status the plugin contract specifies, and user plugins would overflow it.
+
+Then: plugin host; `Plugin` base class with the decision-2 uniform contract as
+pure data; native panels only; `tool/flutterware.dart` manifest emitter; design
+tokens (**done**, S2).
 
 Port **two boring existing screens** as plugins — dependencies, themes, or the
 icon editor. Boring is the point: they prove `PluginHost` cheaply, before the
@@ -215,7 +231,13 @@ model, or shell assumptions, stop and extract a smaller token set by hand.
    test binding. Largest API gap in the `LiveWidgetController` route. *(new,
    raised by S1)*
 4. Where the per-worktree "close and release" boundary sits for native plugins
-   whose sources run in the daemon (decision 5).
+   whose sources run in the daemon (decision 5). Sharpened by the M1 chrome
+   prototype: the switcher shows badges for **unopened** worktrees
+   (`2 failing`, `PR open`), so "not open" cannot mean "not observed". That is
+   the 2026-05-18 doc's two-level split — status subscription vs panel
+   subscription — and closing a tab must release only the latter. Still to
+   decide: are unopened badges computed eagerly, lazily when the popover opens,
+   or not at all?
 5. Manifest schema — the text projection's shape is the part with no prior art.
 6. Whether termui can host the manifest renderer, or whether the CLI stays
    plain structured output (decision 8).
