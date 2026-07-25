@@ -1,5 +1,6 @@
 import 'package:flutterware/plugins.dart';
 
+import '../project.dart';
 import '../shell/worktree.dart';
 import 'native_plugin.dart';
 import 'plugin_host.dart';
@@ -36,13 +37,18 @@ class PluginRegistry {
   /// Resolves a whole manifest into live plugins for one worktree, in declared
   /// order — the order is the project's, so the sidebar reflects the config
   /// file rather than registration order.
-  List<NativePlugin> resolve(PluginManifest manifest, Worktree worktree) => [
+  List<NativePlugin> resolve(
+    PluginManifest manifest,
+    Worktree worktree,
+    Project project,
+  ) => [
     for (var declaration in manifest.plugins)
       create(
         PluginHost(
           id: declaration.id,
           label: declaration.label,
           worktree: worktree,
+          project: project,
           config: declaration.config,
         ),
       ),

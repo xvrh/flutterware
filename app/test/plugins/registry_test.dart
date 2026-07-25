@@ -3,14 +3,27 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/logs/remote_log_client.dart';
+import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/plugins/native_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/plugins/registry.dart';
 import 'package:flutterware_app/src/plugins/worktree_session.dart';
+import 'package:flutterware_app/src/project.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
+import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 
 const _worktree = Worktree(path: '/tmp/wt', branch: 'feature/x');
+
+// Project's services are `late final`, so building one costs nothing until a
+// plugin touches them — cheap enough for a unit test.
+Project _project() => Project(
+  AppContext(logger: LogClient.print()),
+  _worktree.path,
+  FlutterSdkPath('/tmp/flutter'),
+);
 
 class _Fake extends NativePlugin {
   _Fake(super.host, {this.status = Status.none, this.teardown = const []});
@@ -48,13 +61,21 @@ void main() {
   group('registry', () {
     test('resolves declarations in the config file order', () {
       var registry = PluginRegistry({'a.one': _Fake.new, 'a.two': _Fake.new});
-      var plugins = registry.resolve(_manifest(['a.two', 'a.one']), _worktree);
+      var plugins = registry.resolve(
+        _manifest(['a.two', 'a.one']),
+        _worktree,
+        _project(),
+      );
       expect(plugins.map((p) => p.id), ['a.two', 'a.one']);
     });
 
     test('surfaces an unknown id instead of dropping it', () {
       var registry = PluginRegistry({'a.one': _Fake.new});
-      var plugins = registry.resolve(_manifest(['a.one', 'ghost']), _worktree);
+      var plugins = registry.resolve(
+        _manifest(['a.one', 'ghost']),
+        _worktree,
+        _project(),
+      );
 
       expect(plugins, hasLength(2));
       var ghost = plugins.last;
@@ -80,6 +101,7 @@ void main() {
           ),
         ]),
         _worktree,
+        _project(),
       );
 
       expect(seen!.string('compose'), 'dev.yml');
@@ -104,6 +126,7 @@ void main() {
         worktree: _worktree,
         manifest: _manifest(['a.one', 'a.two']),
         registry: registry,
+        project: _project(),
       );
       var plugins = session.plugins.cast<_Fake>();
 
@@ -228,4 +251,4 @@ void main() {
 }
 
 PluginHost _host(String id) =>
-    PluginHost(id: id, label: id, worktree: _worktree);
+    PluginHost(id: id, label: id, worktree: _worktree, project: _project());

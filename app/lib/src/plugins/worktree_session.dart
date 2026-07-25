@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutterware/plugins.dart';
 
+import '../project.dart';
 import '../shell/worktree.dart';
 import 'native_plugin.dart';
 import 'registry.dart';
@@ -25,9 +26,10 @@ class WorktreeSession extends ChangeNotifier {
     required Worktree worktree,
     required PluginManifest manifest,
     required PluginRegistry registry,
+    required Project project,
   }) => WorktreeSession(
     worktree: worktree,
-    plugins: registry.resolve(manifest, worktree),
+    plugins: registry.resolve(manifest, worktree, project),
   );
 
   final Worktree worktree;

@@ -1,3 +1,4 @@
+import '../project.dart';
 import '../shell/worktree.dart';
 
 /// The handle a native plugin is constructed with: who it is, how the project
@@ -10,6 +11,7 @@ class PluginHost {
     required this.id,
     required this.label,
     required this.worktree,
+    required this.project,
     this.config = const {},
   });
 
@@ -20,6 +22,11 @@ class PluginHost {
   final String label;
 
   final Worktree worktree;
+
+  /// The services for this worktree's checkout — tests, dependencies, icons,
+  /// the UI catalog. One [Project] per open worktree; it is disposed when the
+  /// worktree closes.
+  final Project project;
 
   /// Whatever `tool/flutterware.dart` passed for this instance. Already decoded
   /// from the manifest; plugins are responsible for validating their own keys.
