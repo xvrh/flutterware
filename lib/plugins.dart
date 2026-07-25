@@ -1,0 +1,18 @@
+/// The flutterware plugin contract.
+///
+/// Pure Dart on purpose — **nothing here may import `package:flutter`**. A
+/// project's `tool/flutterware.dart` runs under a plain `dart run`, and every
+/// type below has to survive the trip to a CLI, a file projection or an agent,
+/// not just to the GUI.
+library;
+
+export 'src/plugins/action.dart';
+export 'src/plugins/badge.dart';
+export 'src/plugins/guard.dart';
+export 'src/plugins/manifest.dart';
+export 'src/plugins/plugin.dart';
+export 'src/plugins/report.dart';
+export 'src/plugins/status.dart';
+export 'src/plugins/teardown.dart';
+export 'src/plugins/tone.dart';
+export 'src/plugins/view.dart';
