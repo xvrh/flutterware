@@ -8,14 +8,8 @@ import 'package:flutterware/plugins.dart';
 /// behaviour.
 void main() => Flutterware.configure(
   (fw) => fw
-    ..use(_Native('flutterware.ui_catalog', label: 'UI catalog'))
-    ..use(_Native('flutterware.tests', label: 'Tests'))
-    ..use(_Native('flutterware.dependencies', label: 'Dependencies'))
-    ..use(_Native('flutterware.launcher_icon', label: 'Launcher icon')),
+    ..use(Dependencies())
+    ..use(UiCatalog())
+    ..use(TestRunner())
+    ..use(LauncherIcon()),
 );
-
-// Placeholder until the first-party plugin classes land; they will be imported
-// from package:flutterware and used directly (`fw.use(UiCatalog())`).
-class _Native extends Plugin {
-  _Native(super.id, {super.label});
-}
