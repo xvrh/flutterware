@@ -11,7 +11,8 @@ decisions survive but whose API shape does not.
 **Context:** master plan § "Where to pick up → A".
 **Evidence:** `2026-07-26-widget-previews-integration-findings.md` (what
 `@Preview` is, and the measurements), `2026-07-26-s3-hot-switch-findings.md`
-(the compile loop this feeds).
+(the compile loop this feeds), `2026-07-27-generated-wrapper-spike-findings.md`
+(the render path, built and measured — it corrected four things below).
 
 ## Verified against SDK source
 
@@ -20,7 +21,7 @@ real API, not against a reading of the docs:
 
 | claim | line | status |
 |---|---|---|
-| `Preview` is subclassable outside its library | 72 — `base class Preview` | **yes**, provided the subtype is `base`/`final`/`sealed`; `final class Demo` satisfies it |
+| `Preview` is subclassable outside its library | 72 — `base class Preview` | **yes**, provided the subtype is `base`/`final`/`sealed` — and it must be `base`, see below |
 | `transform()` is the extension hook | 188 — `@mustCallSuper Preview transform()` | yes |
 | `toBuilder()` / `build()` exist and are public | 192, 320 | yes |
 | `MultiPreview` enumerates statically | 250 — `List<Preview> get previews` | **no** — a runtime getter returning arbitrary Dart (see *Identity*) |
@@ -140,7 +141,9 @@ enum FormFactor {
   final Size? size;
 }
 
-final class Demo extends Preview {
+// `base`, not `final`: `final` would forbid a project writing
+// `Tablet extends Demo`, which is what `previewAnnotations` exists to support.
+base class Demo extends Preview {
   const Demo({
     this.formFactor,          // null → the project-level default fills the gap
     this.id,
@@ -388,14 +391,22 @@ without any resolution.
 
 ## Render order, in the guest
 
-Semantics are never interpreted statically. The generated per-entry wrapper emits
-the annotation's source text and evaluates it:
+**Built and measured** — `2026-07-27-generated-wrapper-spike-findings.md`.
 
-1. `const Demo(...).transform()` → a real `Preview`.
-2. `preview.size` → configure the view / `MediaQuery`.
-3. `preview.wrapper` → wrap.
-4. `preview.theme` / `brightness` / `localizations` → apply as axis defaults.
-5. build the widget from the annotated function.
+Semantics are never interpreted statically. The generated per-entry wrapper emits
+the annotation's source text and evaluates it. **Two values, not one:**
+
+```dart
+const fwDemo = Demo(name: 'Long text', wrapper: catalogShell, size: kWideSize);
+```
+
+1. `fwDemo` → the annotation: `id`, `figma`, `formFactor`.
+2. `fwDemo.transform()` → a real `Preview`, which **drops all three** —
+   `toBuilder().build()` returns a plain `Preview`, so the wrapper must keep both.
+3. `preview.size` → configure the view / `MediaQuery`.
+4. `preview.wrapper` → wrap.
+5. `preview.theme` / `brightness` / `localizations` → apply as axis defaults.
+6. build the widget from the annotated declaration.
 
 All before the first frame, and costing only the entry's compile — which
 rendering requires regardless. `size` is nullable, so a **project-level fallback
@@ -403,10 +414,24 @@ default** applies when the annotation is silent; Flutter's previewer has its own
 fallback, and the two never conflict because ours only fills a gap.
 
 **Mechanism note.** The annotation is written in the demo file's import scope, so
-generated code must see `Demo`, `FormFactor`, and any project-local wrapper.
-Cleanest route: a small **per-entry wrapper file** carrying that demo file's
-imports verbatim, imported by the accumulating entrypoint under a fresh prefix —
-which preserves the fresh-prefix rule S3 established.
+generated code must see `Demo`, `FormFactor`, and any project-local wrapper. A
+small **per-entry wrapper file** carries that demo file's imports verbatim, with
+**relative imports re-relativised** to the wrapper's own location — demo files
+live outside `lib/` and have no `package:` URI, so `../utils/test_app.dart` must
+become `../../demo/src/utils/test_app.dart` or the wrapper does not compile.
+
+The accumulating entrypoint imports one wrapper per entry ever visited. **This
+makes S3's fresh-prefix rule structural rather than a rule to enforce**: every
+switch imports a *new file* under a *new prefix*, so a prefix is never rebound
+and the trap is unreachable by construction. The entrypoint selects the live
+entry through a **getter**, never a top-level `final`.
+
+Two operational constraints the spike hit:
+
+- **Ids must be project-relative.** An absolute path makes the committed
+  generated file machine-specific, so the no-diff CI check fails for everyone.
+- **The generator must not own the directory holding the entrypoint.** Clearing
+  its output directory takes the live entrypoint with it.
 
 ## Axes, knobs, and degradation
 
