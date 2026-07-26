@@ -34,7 +34,7 @@ class _Fake extends NativePlugin {
       PluginReport(id: host.id, label: host.label, guards: guards);
 
   @override
-  Widget buildPanel(BuildContext context) => const SizedBox();
+  Widget buildPanel(BuildContext context, String? childId) => const SizedBox();
 
   @override
   void dispose() {

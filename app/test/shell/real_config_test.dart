@@ -68,8 +68,18 @@ void main() {
     // The laziness rule: constructing the plugin and reading its report must
     // not have started any work.
     expect(workspace.isRealised('.'), isFalse);
-    expect(dependencies.report.status.message, '—');
-    expect(dependencies.report.view.toText(), contains('not computed'));
+    var report = dependencies.report;
+    // The parent counts packages rather than summing their dependency counts,
+    // which would double-count everything shared between them.
+    expect(report.status.message, '3 packages');
+    expect(report.children.map((c) => c.id), ['.', 'app', 'examples/example']);
+    expect(report.children.map((c) => c.label), [
+      'root',
+      'app',
+      'examples/example',
+    ]);
+    expect(report.children.every((c) => c.status.message == '—'), isTrue);
+    expect(report.view.toText(), contains('not computed'));
 
     workspace.dispose();
   });

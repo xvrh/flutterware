@@ -1,4 +1,5 @@
 import 'action.dart';
+import 'child.dart';
 import 'status_badge.dart';
 import 'guard.dart';
 import 'status.dart';
@@ -21,6 +22,7 @@ class PluginReport {
     this.actions = const [],
     this.teardown = const [],
     this.guards = const [],
+    this.children = const [],
     this.view = PluginView.empty,
   });
 
@@ -31,6 +33,10 @@ class PluginReport {
   final List<PluginAction> actions;
   final List<TeardownStep> teardown;
   final List<Guard> guards;
+
+  /// Sub-entries — one per package for a package-scoped plugin. The sidebar
+  /// collapses to [status] and expands to these.
+  final List<PluginChild> children;
 
   /// What the panel is currently showing.
   final PluginView view;
@@ -43,6 +49,7 @@ class PluginReport {
     if (actions.isNotEmpty) 'actions': [for (var a in actions) a.toJson()],
     if (teardown.isNotEmpty) 'teardown': [for (var t in teardown) t.toJson()],
     if (guards.isNotEmpty) 'guards': [for (var g in guards) g.toJson()],
+    if (children.isNotEmpty) 'children': [for (var c in children) c.toJson()],
     if (!view.isEmpty) 'view': view.toJson(),
   };
 
@@ -52,6 +59,11 @@ class PluginReport {
     out.write(label);
     if (!status.isEmpty) out.write('  ${status.message}');
     out.writeln();
+    for (var child in children) {
+      out.write('  ${child.label}');
+      if (!child.status.isEmpty) out.write('  ${child.status.message}');
+      out.writeln();
+    }
     var body = view.toText();
     if (body.isNotEmpty) {
       for (var line in body.split('\n')) {

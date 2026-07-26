@@ -74,6 +74,14 @@ class DependenciesPlugin extends NativePlugin {
       id: host.id,
       label: host.label,
       status: _status(known),
+      children: [
+        for (var path in packages)
+          PluginChild(
+            id: path,
+            label: path == '.' ? 'root' : path,
+            status: _packageStatus(known[path]),
+          ),
+      ],
       badge: known.values.any((s) => s.error != null)
           ? const StatusBadge.dot(Tone.error)
           : StatusBadge.none,
@@ -82,18 +90,26 @@ class DependenciesPlugin extends NativePlugin {
     );
   }
 
+  /// Summarising several packages by *summing* their dependency counts is
+  /// meaningless — everything shared gets counted once per package. So the
+  /// parent row counts packages and the per-package numbers live in the
+  /// children.
   Status _status(Map<String, Snapshot<Dependencies>> known) {
     if (packages.isEmpty) return const Status.warn('no packages');
     if (known.values.any((s) => s.error != null)) {
       return const Status.error('failed to load');
     }
-    var loaded = [
-      for (var snapshot in known.values)
-        if (snapshot.data != null) snapshot.data!,
-    ];
-    if (loaded.isEmpty) return const Status.neutral('—');
-    var direct = loaded.fold(0, (sum, d) => sum + d.directs.length);
-    return Status.neutral('$direct direct');
+    var loaded = known.values.where((s) => s.data != null).length;
+    if (loaded == 0) return Status.neutral('${packages.length} packages');
+    return Status.neutral('$loaded/${packages.length} loaded');
+  }
+
+  Status _packageStatus(Snapshot<Dependencies>? snapshot) {
+    if (snapshot == null) return const Status.neutral('—');
+    if (snapshot.error != null) return const Status.error('failed');
+    var data = snapshot.data;
+    if (data == null) return const Status.neutral('loading…');
+    return Status.neutral('${data.directs.length} direct');
   }
 
   PluginView _view(Map<String, Snapshot<Dependencies>> known) {
@@ -149,7 +165,8 @@ class DependenciesPlugin extends NativePlugin {
   }
 
   @override
-  Widget buildPanel(BuildContext context) => _DependenciesPanel(this);
+  Widget buildPanel(BuildContext context, String? childId) =>
+      _DependenciesPanel(this, childId);
 
   @override
   void dispose() {
@@ -163,40 +180,52 @@ class DependenciesPlugin extends NativePlugin {
 /// Owns the subscription: mounting starts the load, unmounting releases it.
 /// With several packages it shows a picker and tracks only the visible one.
 class _DependenciesPanel extends StatefulWidget {
-  const _DependenciesPanel(this.plugin);
+  const _DependenciesPanel(this.plugin, this.childId);
 
   final DependenciesPlugin plugin;
+
+  /// The package the shell has selected, from the sidebar children.
+  final String? childId;
 
   @override
   State<_DependenciesPanel> createState() => _DependenciesPanelState();
 }
 
 class _DependenciesPanelState extends State<_DependenciesPanel> {
-  String? _path;
+  String? _tracked;
+
+  String? get _path => widget.childId ?? widget.plugin.packages.firstOrNull;
 
   @override
   void initState() {
     super.initState();
-    _path = widget.plugin.packages.firstOrNull;
-    if (_path != null) widget.plugin.track(_path!);
+    _retrack();
+  }
+
+  @override
+  void didUpdateWidget(_DependenciesPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _retrack();
+  }
+
+  /// Follows the shell's selection: only the visible package is subscribed, so
+  /// switching packages stops the old load and starts the new one.
+  void _retrack() {
+    var wanted = _path;
+    if (wanted == _tracked) return;
+    if (_tracked != null) widget.plugin.untrack(_tracked!);
+    _tracked = wanted;
+    if (wanted != null) widget.plugin.track(wanted);
   }
 
   @override
   void dispose() {
-    if (_path != null) widget.plugin.untrack(_path!);
+    if (_tracked != null) widget.plugin.untrack(_tracked!);
     super.dispose();
-  }
-
-  void _select(String path) {
-    if (path == _path) return;
-    if (_path != null) widget.plugin.untrack(_path!);
-    setState(() => _path = path);
-    widget.plugin.track(path);
   }
 
   @override
   Widget build(BuildContext context) {
-    var packages = widget.plugin.packages;
     var path = _path;
     if (path == null) {
       return Center(
@@ -209,68 +238,9 @@ class _DependenciesPanelState extends State<_DependenciesPanel> {
       );
     }
 
-    return Column(
-      children: [
-        if (packages.length > 1) _PackagePicker(packages, path, _select),
-        Expanded(
-          child: DependenciesScreen(
-            widget.plugin.host.workspace.projectFor(path),
-            key: ValueKey(path),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _PackagePicker extends StatelessWidget {
-  const _PackagePicker(this.packages, this.selected, this.onSelect);
-
-  final List<String> packages;
-  final String selected;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: FwSpacing.xxl,
-        vertical: FwSpacing.md,
-      ),
-      decoration: BoxDecoration(
-        color: colors.panel,
-        border: Border(bottom: BorderSide(color: colors.line)),
-      ),
-      child: Row(
-        children: [
-          for (var path in packages)
-            GestureDetector(
-              onTap: () => onSelect(path),
-              child: Container(
-                margin: const EdgeInsets.only(right: FwSpacing.xs),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: FwSpacing.lg,
-                  vertical: FwSpacing.sm,
-                ),
-                decoration: BoxDecoration(
-                  color: path == selected
-                      ? colors.accentSoft
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(
-                    context.radii.radiusSmall,
-                  ),
-                ),
-                child: Text(
-                  path,
-                  style: path == selected
-                      ? context.type.bodyStrong.copyWith(color: colors.accent)
-                      : context.type.body,
-                ),
-              ),
-            ),
-        ],
-      ),
+    return DependenciesScreen(
+      widget.plugin.host.workspace.projectFor(path),
+      key: ValueKey(path),
     );
   }
 }

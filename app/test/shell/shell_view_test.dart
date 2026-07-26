@@ -24,16 +24,22 @@ const _manifestJson =
     '{"id":"a.tests","label":"Tests"}]}';
 
 class _Fake extends NativePlugin {
-  _Fake(super.host, {this.status = Status.none});
+  _Fake(super.host, {this.status = Status.none, this.children = const []});
 
   final Status status;
+  final List<PluginChild> children;
 
   @override
-  PluginReport get report =>
-      PluginReport(id: host.id, label: host.label, status: status);
+  PluginReport get report => PluginReport(
+    id: host.id,
+    label: host.label,
+    status: status,
+    children: children,
+  );
 
   @override
-  Widget buildPanel(BuildContext context) => Center(child: Text('panel:$id'));
+  Widget buildPanel(BuildContext context, String? childId) =>
+      Center(child: Text('panel:$id/${childId ?? '-'}'));
 }
 
 /// A panel that starts work on mount — the shape every real plugin has, and
@@ -57,7 +63,7 @@ class _EagerPanelPlugin extends NativePlugin {
   );
 
   @override
-  Widget buildPanel(BuildContext context) => _EagerPanel(this);
+  Widget buildPanel(BuildContext context, String? childId) => _EagerPanel(this);
 }
 
 class _EagerPanel extends StatefulWidget {
@@ -136,14 +142,14 @@ void main() {
   testWidgets('mounts the selected plugin panel and switches', (tester) async {
     await _pumpShell(tester);
 
-    expect(find.text('panel:a.deps'), findsOneWidget);
-    expect(find.text('panel:a.tests'), findsNothing);
+    expect(find.text('panel:a.deps/-'), findsOneWidget);
+    expect(find.text('panel:a.tests/-'), findsNothing);
 
     await tester.tap(find.text('Tests'));
     await tester.pumpAndSettle();
 
-    expect(find.text('panel:a.tests'), findsOneWidget);
-    expect(find.text('panel:a.deps'), findsNothing);
+    expect(find.text('panel:a.tests/-'), findsOneWidget);
+    expect(find.text('panel:a.deps/-'), findsNothing);
   });
 
   testWidgets('the switcher lists worktrees that are not open', (tester) async {
@@ -184,6 +190,69 @@ void main() {
 
     expect(shell.openWorktrees, hasLength(1));
     expect(find.text('feature/explorer'), findsNothing);
+  });
+
+  group('children', () {
+    ShellController childShell() => ShellController(
+      appContext: AppContext(logger: LogClient.print()),
+      flutterSdk: FlutterSdkPath('/tmp/flutter'),
+      registry: PluginRegistry({
+        'a.deps': (h) => _Fake(
+          h,
+          status: const Status.neutral('2 packages'),
+          children: const [
+            PluginChild(id: 'app', label: 'app', status: Status.neutral('58')),
+            PluginChild(id: 'ui', label: 'ui', status: Status.error('failed')),
+          ],
+        ),
+        'a.tests': _Fake.new,
+      }),
+      manifestLoader: _StubLoader(),
+      discovery: WorktreeDiscovery(
+        runProcess: (_, _, {workingDirectory}) async =>
+            ProcessResult(0, 0, _listing, ''),
+      ),
+    );
+
+    testWidgets('expands under the selected plugin only', (tester) async {
+      var shell = childShell();
+      await shell.start('/repo');
+      await tester.pumpWidget(ShellApp(shell));
+      await tester.pumpAndSettle();
+
+      // a.deps is selected by default, so its children show with their status.
+      expect(find.text('app'), findsOneWidget);
+      expect(find.text('58'), findsOneWidget);
+      expect(find.text('failed'), findsOneWidget);
+
+      // Selecting the other plugin collapses them.
+      await tester.tap(find.text('Tests'));
+      await tester.pumpAndSettle();
+      expect(find.text('app'), findsNothing);
+    });
+
+    testWidgets('the first child is selected with its plugin', (tester) async {
+      var shell = childShell();
+      await shell.start('/repo');
+      await tester.pumpWidget(ShellApp(shell));
+      await tester.pumpAndSettle();
+
+      expect(shell.selectedChildId, 'app');
+      expect(find.text('panel:a.deps/app'), findsOneWidget);
+    });
+
+    testWidgets('selecting a child switches the panel', (tester) async {
+      var shell = childShell();
+      await shell.start('/repo');
+      await tester.pumpWidget(ShellApp(shell));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('ui'));
+      await tester.pumpAndSettle();
+
+      expect(shell.selectedChildId, 'ui');
+      expect(find.text('panel:a.deps/ui'), findsOneWidget);
+    });
   });
 
   testWidgets('a panel may start work in initState without crashing', (

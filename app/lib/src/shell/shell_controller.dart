@@ -47,6 +47,7 @@ class ShellController extends ChangeNotifier {
 
   String? _selectedPath;
   String? _selectedPluginId;
+  String? _selectedChildId;
   var _busy = false;
 
   /// Every worktree git reports, main first.
@@ -78,6 +79,9 @@ class ShellController extends ChangeNotifier {
 
   /// The plugin whose panel is mounted, or null when the worktree has none.
   String? get selectedPluginId => _selectedPluginId;
+
+  /// The selected sub-entry of that plugin — a package path — or null.
+  String? get selectedChildId => _selectedChildId;
 
   /// True while opening a worktree — the manifest runs a subprocess.
   bool get isBusy => _busy;
@@ -167,7 +171,7 @@ class ShellController extends ChangeNotifier {
       )..addListener(notifyListeners);
 
       _selectedPath = worktree.path;
-      _selectedPluginId = _sessions[worktree.path]!.plugins.firstOrNull?.id;
+      _selectPluginInternal(_sessions[worktree.path]!.plugins.firstOrNull?.id);
     } finally {
       _busy = false;
       notifyListeners();
@@ -195,20 +199,35 @@ class ShellController extends ChangeNotifier {
     _errors.remove(path);
     if (_selectedPath == path) {
       _selectedPath = _sessions.keys.lastOrNull;
-      _selectedPluginId = selectedSession?.plugins.firstOrNull?.id;
+      _selectPluginInternal(selectedSession?.plugins.firstOrNull?.id);
     }
   }
 
   void select(Worktree worktree) {
     if (!isOpen(worktree)) return;
     _selectedPath = worktree.path;
-    _selectedPluginId = selectedSession?.plugins.firstOrNull?.id;
+    _selectPluginInternal(selectedSession?.plugins.firstOrNull?.id);
     notifyListeners();
   }
 
   void selectPlugin(String id) {
-    _selectedPluginId = id;
+    _selectPluginInternal(id);
     notifyListeners();
+  }
+
+  /// Selects a plugin's sub-entry, and the plugin with it.
+  void selectChild(String pluginId, String childId) {
+    _selectedPluginId = pluginId;
+    _selectedChildId = childId;
+    notifyListeners();
+  }
+
+  /// Selecting a plugin defaults to its first child, so a panel always has a
+  /// concrete sub-entry to render rather than an ambiguous null.
+  void _selectPluginInternal(String? id) {
+    _selectedPluginId = id;
+    var plugin = id == null ? null : selectedSession?.pluginById(id);
+    _selectedChildId = plugin?.report.children.firstOrNull?.id;
   }
 
   @override

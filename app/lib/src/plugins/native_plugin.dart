@@ -23,7 +23,12 @@ abstract class NativePlugin extends ChangeNotifier {
   PluginReport get report;
 
   /// The panel mounted when this plugin is selected. Real Flutter, no limits.
-  Widget buildPanel(BuildContext context);
+  ///
+  /// [childId] is the selected sub-entry — a package path for a package-scoped
+  /// plugin — or null when the plugin has no children. The shell owns that
+  /// selection because the sidebar children *are* the picker; a panel that
+  /// grew its own would be a second, disagreeing source of truth.
+  Widget buildPanel(BuildContext context, String? childId);
 
   /// Schedules a change notification, coalescing bursts into one.
   ///
@@ -92,7 +97,8 @@ class MissingPlugin extends NativePlugin {
   );
 
   @override
-  Widget buildPanel(BuildContext context) => _MissingPanel(host: host);
+  Widget buildPanel(BuildContext context, String? childId) =>
+      _MissingPanel(host: host);
 }
 
 class _MissingPanel extends StatelessWidget {

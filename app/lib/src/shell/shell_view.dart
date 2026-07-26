@@ -416,7 +416,14 @@ class _Sidebar extends StatelessWidget {
               ),
             )
           else
-            for (var plugin in session.plugins) _PluginRow(shell, plugin),
+            for (var plugin in session.plugins) ...[
+              _PluginRow(shell, plugin),
+              // Expanded only for the selected plugin: a sidebar showing every
+              // package of every plugin at once is a wall, not a summary.
+              if (shell.selectedPluginId == plugin.id)
+                for (var child in plugin.report.children)
+                  _ChildRow(shell, plugin.id, child),
+            ],
         ],
       ),
     );
@@ -474,6 +481,63 @@ class _PluginRow extends StatelessWidget {
   }
 }
 
+/// One package of a plugin, indented under it. Selecting it is what raises
+/// that package's work.
+class _ChildRow extends StatelessWidget {
+  const _ChildRow(this.shell, this.pluginId, this.child);
+
+  final ShellController shell;
+  final String pluginId;
+  final PluginChild child;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var selected =
+        shell.selectedPluginId == pluginId && shell.selectedChildId == child.id;
+
+    return GestureDetector(
+      onTap: () => shell.selectChild(pluginId, child.id),
+      child: Container(
+        margin: const EdgeInsets.only(
+          left: FwSpacing.xxl,
+          right: FwSpacing.md,
+          top: 1,
+          bottom: 1,
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.lg,
+          vertical: FwSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: selected ? colors.bg : Colors.transparent,
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          border: selected ? Border.all(color: colors.line) : null,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                child.label,
+                style: selected
+                    ? context.type.bodySmall.copyWith(color: colors.ink)
+                    : context.type.bodySmall.copyWith(color: colors.mut),
+              ),
+            ),
+            if (!child.status.isEmpty)
+              Text(
+                child.status.message,
+                style: context.type.micro.copyWith(
+                  color: toneColor(colors, child.status.tone),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Mounts the selected plugin's panel — the one place a native plugin is
 /// unrestricted Flutter.
 class _Panel extends StatelessWidget {
@@ -505,9 +569,11 @@ class _Panel extends StatelessWidget {
           : KeyedSubtree(
               // Rebuild the panel from scratch when the worktree or the plugin
               // changes; panels hold their own state and must not leak it
-              // across worktrees.
+              // across worktrees. The child id is *not* in the key — switching
+              // packages should update the panel, not remount it, or the
+              // subscription would be torn down and rebuilt needlessly.
               key: ValueKey('${session.worktree.path}::${plugin.id}'),
-              child: plugin.buildPanel(context),
+              child: plugin.buildPanel(context, shell.selectedChildId),
             );
     }
 

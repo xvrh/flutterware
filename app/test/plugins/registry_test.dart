@@ -44,7 +44,7 @@ class _Fake extends NativePlugin {
   );
 
   @override
-  Widget buildPanel(BuildContext context) => const SizedBox();
+  Widget buildPanel(BuildContext context, String? childId) => const SizedBox();
 
   void bump() => notifyListeners();
 
