@@ -240,10 +240,53 @@ returns `defaultValue` from every method, and `UICatalogState.of()` falls back t
   it is what compiles to web for per-PR catalog links, it is the real-device path
   (each demo file already has its own `main()`), and it is the fallback wherever
   the embedder has no port. The flutterware GUI is an *additional* renderer.
-- **The catalog stays enumerable from a plain `flutter test`.** With the map
-  gone, that requires a checked-in generated file — guarded by a CI diff check,
-  the pattern `dart tool/prepare_submit.dart` already establishes in
-  `.github/workflows/`.
+- **The catalog stays enumerable from a plain `flutter test`** — see below.
+
+## Enumeration in `flutter test`
+
+**Discovery is not the blocker; invocation is.** Dart has no runtime reflection
+over annotations and no dynamic import, so knowing that `environmentsTable` lives
+in some file yields a string that cannot be turned into a call. A scanner
+embedded in the test would buy nothing — and a scanner in `package:flutterware`
+would violate decision 9 besides, since every user's app inherits its
+dependencies.
+
+Generated code is therefore the only mechanism, which is why Flutter generates
+`generated_preview.dart` and widgetbook generates
+`widgetbook.directories.g.dart`. Neither found a way out.
+
+**The cost is smaller than it first appears, because the artifact already
+exists.** With the map gone, the per-PR web build needs exactly what the test
+needs: every entry, imported and invocable. So the test adds no generator — it
+reuses one:
+
+| consumer | entrypoint |
+|---|---|
+| daemon inner loop | accumulating, lazy — only visited entries |
+| web PR build | full — every entry |
+| `flutter test` | full — the same file |
+
+**Decision: commit the full generated file**, produced by a CLI command
+(`fw catalog gen`) that CI also calls before the web build, and guard it with a
+regeneration-produces-no-diff check — reusing the guard rail
+`dart tool/prepare_submit.dart` already establishes in `.github/workflows/`.
+
+Rejected alternative: generating on demand into a gitignored `.dart_tool/` path.
+It is never stale, but bare `flutter test` stops working, the IDE's per-test run
+button breaks, a fresh clone fails, and the failure surfaces as a compile error.
+The CLI command is wanted either way; committing its output is a decision about
+the artifact, not the mechanism.
+
+The staleness window is narrow: the file lists `(id, name, path, () => fn())` and
+changes only when an entry is **added, removed, or renamed** — never when a demo
+body is edited. It stays out of the way during normal UI work, which is where
+diff noise would actually hurt.
+
+*Later convenience, not part of the design:* the test could assert its own
+freshness by comparing the generated list against a syntactic scan at test time
+(scanner as a project **dev**-dependency — dev-only, syntactic, ~478ms), failing
+with "run `fw catalog gen`" instead of quietly covering fewer entries than exist.
+Redundant with the CI check, which catches the same thing one step later.
 
 ## Deferred
 

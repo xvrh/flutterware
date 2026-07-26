@@ -388,9 +388,12 @@ deletable, not a transport to preserve.
   renderer.
 - **Invariant, amended:** the whole catalog stays enumerable and renderable from
   a plain `flutter test` with no running daemon. With the map gone, Dart has no
-  runtime reflection over annotations, so this now requires a **checked-in
-  generated file** — guarded by a CI diff check, the pattern
-  `dart tool/prepare_submit.dart` already establishes.
+  runtime reflection over annotations and no dynamic import — so *invocation*,
+  not discovery, forces generated code. The cost is small because the per-PR web
+  build already needs the same full entrypoint: one generator, three consumers
+  (lazy daemon, web build, test). The generated file is **committed** and guarded
+  by a regeneration-produces-no-diff check, reusing the
+  `dart tool/prepare_submit.dart` pattern.
 
 Still open for A: discovery without compiling, the watch-vs-explicit-reload
 split, and how the GUI and an agent share the warm process.
