@@ -1,9 +1,9 @@
 # UI catalog — the entry model
 
 **Date:** 2026-07-26
-**Updated:** 2026-07-27 — four of the five open items resolved; axis enumeration
-and the config split settled; the class-hierarchy closure cut; the evidence
-behind the problem statement corrected; two claims checked against SDK source.
+**Updated:** 2026-07-27 — four of the five open items resolved; axis enumeration,
+the config split and the contact sheet settled; the class-hierarchy closure cut;
+the evidence behind the problem statement corrected; the render path built.
 **Status:** Decided. The locked decisions below are settled; the code sketches
 are illustrative.
 **Supersedes:** the variant-model draft from earlier the same day, whose
@@ -571,6 +571,78 @@ one live. This is the second API shape that measurement has decided; the first
 was the annotation itself, which is `const` and re-evaluated per render for the
 same reason.
 
+## What the guest renders — the contact sheet, settled
+
+**Settled 2026-07-27.** This was open item 1, and it turned out to be an
+architecture decision rather than a layout one: in the flutterware GUI the demo
+renders in the **embedder guest** while the tree and chrome render in the **GUI
+process**, so "show ten demos at once" asks whether there are ten guests, one
+guest rendering ten views, or no live rendering at all.
+
+> **The guest renders exactly one entry, at one size, live. Everything that shows
+> more than one thing at once is a view over a capture cache.**
+
+### The evidence that decided it
+
+Both existing multi-view surfaces **already suppress interaction**:
+
+| surface | today | wrapped in |
+|---|---|---|
+| folder index | each entry live in a frameless `DeviceFrame`, clamped 200×200 | `AbsorbPointer` |
+| mosaic | the *same* demo widget repeated per device × orientation | `IgnorePointer` + `ExcludeFocus` |
+
+They are pictures already. Nothing interactive is lost by making them images —
+which removes the only real argument for rendering many things live.
+
+And mosaic is *one entry at N sizes*, while a contact sheet is *N entries at one
+size*. Both are the same operation: **a capture matrix**.
+
+### What follows
+
+- **One guest process, always.** The N-guests-versus-one-guest question does not
+  arise.
+- **Device frames render in the GUI**, uniformly — a bezel drawn around an image
+  for thumbnails, around the texture for the live entry. This closes the
+  frame-placement question, and the mosaic counter-argument (ten textures) fell
+  with it, since mosaic is captures.
+- **Changing device for the live entry is a resize message, not a recompile** —
+  provided the GUI sends safe-area padding alongside the size, so `SafeArea`
+  demos stay honest.
+- **The cache key is the entry address this document already defines** —
+  `{id, axis assignment, size}`. It was designed for "screenshot an entry"; it is
+  the same tuple. A theme change is a cache *miss*, not an invalidation.
+- **Source edits invalidate precisely.** The generator maps file → entries, so
+  editing one demo file invalidates exactly that file's captures.
+- **Captures persist** under `.dart_tool/`, so reopening the GUI is instant and a
+  worktree that has seen a group before pays nothing.
+- **S1's capture optimisation is promoted.** It noted that `layer.toImage()`
+  re-rasterises a frame the guest already composited into the shared `IOSurface`,
+  and filed it as "optimisation, not a blocker". Captures are now a *bulk*
+  operation, so grabbing the presented surface becomes the main path — and it
+  guarantees the thumbnail is what the user actually saw.
+
+### The costs, stated plainly
+
+- **Thumbnails do not animate.** Today's in-process grid renders live widgets, so
+  this is a real regression against the current catalog — though not against what
+  is *achievable*, since a lazily-compiled guest cannot render 300 entries live
+  at any price.
+- **Filling a fresh contact sheet compiles every entry in it.** Per S3's marginal
+  table a new entry costs 17–580ms to compile plus ~70ms to reload, so a group of
+  ten unseen entries is **seconds, not milliseconds**. The persisted cache is
+  what makes that a one-time cost; capture lazily in visible order with
+  placeholders, never as a blocking step.
+- **The two renderers now differ.** The preserved `UICatalog` app keeps its live
+  in-process grid; the flutterware GUI's sheet is captures. Consistent with it
+  being an *additional* renderer, but it is a real behavioural fork.
+
+### Still open
+
+Only the layout question that was originally asked — how a sheet mixing
+component-sized and screen-sized children should be arranged. That is now a
+GUI-side problem with no architectural consequences, and `IndexView`'s
+`FittedWidget` + `AspectRatio(1)` treatment is the starting point to beat.
+
 ## The same catalog, written both ways
 
 Every capability rimbaud exercises today, before and after. Written against real
@@ -995,16 +1067,10 @@ statically unenumerable. See *Enumeration in `flutter test`*.
 ## Open
 
 1. **Contact-sheet layout** for parent nodes mixing component-sized and
-   screen-sized children. It now has a defined anchor — the group node, derived
-   or declared
-   (decision 11) — and a defined stake: it is what replaces the stacked-`_Section`
-   idiom, so "three states side by side in one scroll" has to survive the move.
-   **Go look before designing:** `IndexView` already does
-   this with live scaled children in a 5-column grid, so how a folder holding a
-   `Scaffold` next to an `AvatarTile` renders today is observable in about a
-   minute. The thumbnail proposal assumed stacking live `Scaffold`s does not
-   work; the current code stacks them scaled, and whether that is adequate is a
-   measurement, not a judgement call.
+   screen-sized children — the layout question only; the architecture is settled
+   under *What the guest renders*. It has a defined anchor (the group node,
+   derived or declared) and `IndexView`'s `FittedWidget` + `AspectRatio(1)` is
+   the treatment to beat.
 2. **Migration** for the ~168 demo files / ~400 resulting entries: diagnostic-driven,
    or a codemod? (Owner, 2026-07-26: "we'll see.") Note the corrected shape of
    the job — it is not a rename pass but a decomposition of stacked `_Section`s
