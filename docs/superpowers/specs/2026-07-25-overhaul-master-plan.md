@@ -24,6 +24,23 @@ vocabulary. That is a **serializable manifest**. So:
 
 Everything below follows from taking that literally.
 
+> **Revised 2026-07-26.** That framing was wrong about *what* is shared, because
+> it was built on the wrong use case. "An agent reads what is shown in the app"
+> turns out to be marginal. The real asks are **commands that produce
+> artifacts** — "screenshot this catalog entry", "run this test", "give me the
+> widget tree" — plus a separate ability to *drive* the running GUI. A doer does
+> not need the GUI's state layer at all; it needs the manifest and the work.
+> So:
+>
+> > **The manifest and the artifact pipelines are shared. The GUI and the CLI
+> > are two *drivers* of the same pipelines, not two renderers of one state.**
+>
+> Consequences: no de-Fluttering of `Project` / `AsyncValue` / the services is
+> needed (a refactor that was proposed and withdrawn); the plugin *config* in
+> the manifest doubles as the CLI's contract; and the text projection
+> (`PluginView`, `report.toText()`) stays as a convenience but must stop driving
+> architecture.
+
 ## Locked decisions
 
 1. **Manifest as the single source of truth.** GUI / CLI / file projection / MCP
@@ -76,7 +93,22 @@ Everything below follows from taking that literally.
    renderer of the manifest. Do not delete the existing stack until termui is
    proven — deleting stays free, re-deriving five stages does not.
 
-9. **Distribution (`fw` walker + bootstrapper) is last.** It gates adoption; it
+9. **Artifact pipelines live in `app/`, and purity is a property of the
+   entrypoint's import closure — not of the package.** `package:flutterware` is
+   published and every user's app inherits its dependencies, so heavy tooling
+   deps must never land there. `flutterware_app` is `publish_to: none` and is
+   already where the CLI lives: `app/bin/flutterware.dart` is a pure-Dart
+   entrypoint inside a Flutter package, compiled with `dart compile exe`.
+   `app/lib/src/embedder/` already shows the split — `compiler.dart` and
+   `embedder_build.dart` are Flutter-free, `embedded_engine.dart` is not.
+
+   **The guardrail is the compile itself**: if the CLI's closure ever acquires
+   `package:flutter`, `dart compile exe` fails. That guardrail is currently
+   **off** — the compile is broken on build hooks (`objective_c`, needs
+   `dart build`), which promotes that fix from distribution debt to the thing
+   keeping this architecture honest.
+
+10. **Distribution (`fw` walker + bootstrapper) is last.** It gates adoption; it
    blocks no development. Saying so explicitly stops it from feeling like debt.
 
 ## Deliberately deferred
@@ -236,6 +268,31 @@ is boring.
 
 **Kill criteria.** If the tokens drag in `admin_ui`'s app state, CMS field
 model, or shell assumptions, stop and extract a smaller token set by hand.
+
+## Where to pick up
+
+The work has outgrown one session. Three, in this order:
+
+**A — UI catalog (next).** Its own session, goals first: what an entry is, how
+AI-friendliness actually works, what the hot-reload loop feels like. Read
+`2026-07-26-s1-scenario-in-embedder-findings.md` first — the guest, the ~130ms
+reload loop, and the plugin/platform-channel trap are all established there.
+It inherits exactly one constraint from this session: **the catalog pipeline
+must stay Flutter-free** (decision 9), so the CLI can drive it later without a
+rewrite. macOS-first is accepted; `FlutterEmbedder.framework` is `darwin-x64`
+only and Linux has no path yet.
+
+**B — The CLI.** Separate, because its blockers are distribution-shaped and
+independent of catalog goals: `dart compile exe` → `dart build` for build
+hooks, then the walker and bootstrapper. Do **not** fold this into A — but note
+that the compile fix is what re-arms the purity guardrail A depends on.
+
+**C — Remaining plugins**, once A settles the shape: tests (the dev_studio
+rewrite), launcher icon, and whatever else earns a row.
+
+Also outstanding, unowned: 5 pre-existing test failures in
+`app/test/passthrough/` and `app/test/wrap/`, which predate this work and will
+eventually mask a real regression.
 
 ## Open questions
 
