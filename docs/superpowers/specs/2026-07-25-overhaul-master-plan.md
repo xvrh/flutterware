@@ -156,6 +156,26 @@ flagships depend on it.
 
 No daemon rewrite. Ships something usable daily.
 
+### M1.5 — Monorepo packages + laziness
+
+Prompted by two bugs M1 surfaced: the shell opened the repo root instead of the
+project, and Dependencies reports "170 direct, 0 transitive" in a pub workspace.
+Both come from assuming one directory is one package is one project.
+
+Spec: `2026-07-26-packages-and-laziness.md`. Slice 1 is committed scope.
+
+Two decisions from it worth carrying here:
+
+- **Laziness is subscription**, not a demand protocol. Work starts on first
+  listener; in the GUI, widget lifecycle supplies that for free. The rule that
+  makes it hold: **`PluginReport` never triggers work** — it is a pure read of
+  cached state, which is what lets the sidebar, tab glyphs, `fw` and an agent
+  all call it for every plugin × package × worktree.
+- **Packages are declared, not inferred**, with per-plugin typed entries
+  (`UiCatalogPackage`, `ServerPackage`) so per-package config has somewhere to
+  live. The framework requires only `path`, as the join key for validation and
+  later tag filtering.
+
 ### M2 — The AI surface
 
 The manifest's non-GUI renderers: `fw status --json`, the live file projection
