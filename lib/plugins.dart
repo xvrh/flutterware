@@ -7,10 +7,11 @@
 library;
 
 export 'src/plugins/action.dart';
-export 'src/plugins/badge.dart';
+export 'src/plugins/status_badge.dart';
 export 'src/plugins/first_party.dart';
 export 'src/plugins/guard.dart';
 export 'src/plugins/manifest.dart';
+export 'src/plugins/package.dart';
 export 'src/plugins/plugin.dart';
 export 'src/plugins/report.dart';
 export 'src/plugins/status.dart';

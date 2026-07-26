@@ -106,8 +106,39 @@ class Dependencies implements Disposable {
 
   Dependency? operator [](String packageName) => _allPackages[packageName];
 
+  /// Names this package depends on directly, from its own pubspec.
+  ///
+  /// Direct-ness is read here rather than from a lockfile because in a pub
+  /// workspace the lockfile lives at the workspace root and describes the whole
+  /// resolution — a member has no per-package lock, so every package used to
+  /// classify as direct ("170 direct, 0 transitive" for a member with 14).
+  late final Set<String> declaredDirect = {
+    ...rootPubspec.dependencies.keys,
+    ...rootPubspec.devDependencies.keys,
+  };
+
+  /// Everything reachable from [declaredDirect]. In a workspace the package
+  /// config lists every member's dependencies, so without this a package would
+  /// list its siblings' dependencies as its own.
+  late final Set<String> reachable = _computeReachable();
+
+  Set<String> _computeReachable() {
+    var seen = <String>{};
+    var queue = [...declaredDirect];
+    while (queue.isNotEmpty) {
+      var name = queue.removeLast();
+      if (!seen.add(name)) continue;
+      var dependency = _allPackages[name];
+      if (dependency == null) continue;
+      // Only regular dependencies propagate; a transitive package's
+      // dev_dependencies are not resolved for its consumers.
+      queue.addAll(dependency.pubspec.dependencies.keys);
+    }
+    return seen;
+  }
+
   Iterable<Dependency> get dependencies => _allPackages.values.where((e) {
-    return e.name != rootPubspec.name;
+    return e.name != rootPubspec.name && reachable.contains(e.name);
   });
 
   List<Dependency>? _directs;
@@ -153,9 +184,11 @@ class Dependency implements Disposable {
 
   String get name => package.name;
 
-  bool get isTransitive => lockDependency?.type == DependencyType.transitive;
+  /// Declared in this package's own pubspec — see [Dependencies.declaredDirect]
+  /// for why the lockfile is not consulted.
+  bool get isDirect => parent.declaredDirect.contains(name);
 
-  bool get isDirect => !isTransitive;
+  bool get isTransitive => !isDirect;
 
   Future<ClocReport> _loadCloc() async {
     return compute<String, ClocReport>((path) async {

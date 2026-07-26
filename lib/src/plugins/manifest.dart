@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package.dart';
 import 'plugin.dart';
 
 /// What `tool/flutterware.dart` prints: the project's plugin declarations.
@@ -36,13 +37,23 @@ class PluginDeclaration {
 
 /// The decoded manifest.
 class PluginManifest {
-  const PluginManifest(this.plugins, {this.version = manifestVersion});
+  const PluginManifest(
+    this.plugins, {
+    this.packages = const [],
+    this.version = manifestVersion,
+  });
 
   final int version;
   final List<PluginDeclaration> plugins;
 
+  /// The project's declared packages. Reference data: the GUI validates plugin
+  /// package paths against it and warns on a mismatch, but nothing here is
+  /// active on its own.
+  final List<Pkg> packages;
+
   Map<String, Object?> toJson() => {
     'version': version,
+    if (packages.isNotEmpty) 'packages': [for (var p in packages) p.toJson()],
     'plugins': [for (var p in plugins) p.toJson()],
   };
 
@@ -54,10 +65,19 @@ class PluginManifest {
         '(this build understands $manifestVersion).',
       );
     }
-    return PluginManifest([
-      for (var p in (json['plugins']! as List).cast<Map<String, Object?>>())
-        PluginDeclaration.fromJson(p),
-    ], version: version);
+    return PluginManifest(
+      [
+        for (var p in (json['plugins']! as List).cast<Map<String, Object?>>())
+          PluginDeclaration.fromJson(p),
+      ],
+      packages: [
+        for (var p
+            in (json['packages'] as List? ?? const [])
+                .cast<Map<String, Object?>>())
+          Pkg.fromJson(p),
+      ],
+      version: version,
+    );
   }
 
   static PluginManifest parse(String source) =>
@@ -67,6 +87,18 @@ class PluginManifest {
 /// The object a project's `tool/flutterware.dart` configures.
 class FlutterwareConfig {
   final _plugins = <Plugin>[];
+  final _packages = <Pkg>[];
+
+  /// Declares the project's packages. Optional for a single-package project;
+  /// required for anything a plugin wants to name.
+  void packages(List<Pkg> packages) {
+    for (var pkg in packages) {
+      if (_packages.contains(pkg)) {
+        throw StateError('Duplicate package "${pkg.path}".');
+      }
+      _packages.add(pkg);
+    }
+  }
 
   /// Registers a plugin. The same class may be used more than once as long as
   /// the instances have distinct ids.
@@ -82,7 +114,7 @@ class FlutterwareConfig {
   PluginManifest toManifest() => PluginManifest([
     for (var p in _plugins)
       PluginDeclaration(id: p.id, label: p.label, config: p.config),
-  ]);
+  ], packages: List.of(_packages));
 }
 
 /// Entry point for a project's `tool/flutterware.dart`:

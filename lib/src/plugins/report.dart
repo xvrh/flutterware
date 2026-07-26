@@ -1,5 +1,5 @@
 import 'action.dart';
-import 'badge.dart';
+import 'status_badge.dart';
 import 'guard.dart';
 import 'status.dart';
 import 'teardown.dart';
@@ -17,7 +17,7 @@ class PluginReport {
     required this.id,
     required this.label,
     this.status = Status.none,
-    this.badge = Badge.none,
+    this.badge = StatusBadge.none,
     this.actions = const [],
     this.teardown = const [],
     this.guards = const [],
@@ -27,7 +27,7 @@ class PluginReport {
   final String id;
   final String label;
   final Status status;
-  final Badge badge;
+  final StatusBadge badge;
   final List<PluginAction> actions;
   final List<TeardownStep> teardown;
   final List<Guard> guards;

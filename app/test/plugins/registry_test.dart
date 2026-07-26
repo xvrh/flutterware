@@ -11,18 +11,20 @@ import 'package:flutterware_app/src/plugins/native_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/plugins/registry.dart';
 import 'package:flutterware_app/src/plugins/worktree_session.dart';
-import 'package:flutterware_app/src/project.dart';
+import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 
 const _worktree = Worktree(path: '/tmp/wt', branch: 'feature/x');
 
-// Project's services are `late final`, so building one costs nothing until a
-// plugin touches them — cheap enough for a unit test.
-Project _project() => Project(
-  AppContext(logger: LogClient.print()),
-  _worktree.path,
-  FlutterSdkPath('/tmp/flutter'),
+// Workspace carries package identity only; Projects are built on first use, so
+// constructing one costs nothing in a unit test.
+Workspace _workspace() => Workspace(
+  root: _worktree.path,
+  declared: const [Pkg('.')],
+  discovered: const ['.'],
+  appContext: AppContext(logger: LogClient.print()),
+  flutterSdk: FlutterSdkPath('/tmp/flutter'),
 );
 
 class _Fake extends NativePlugin {
@@ -64,7 +66,7 @@ void main() {
       var plugins = registry.resolve(
         _manifest(['a.two', 'a.one']),
         _worktree,
-        _project(),
+        _workspace(),
       );
       expect(plugins.map((p) => p.id), ['a.two', 'a.one']);
     });
@@ -74,7 +76,7 @@ void main() {
       var plugins = registry.resolve(
         _manifest(['a.one', 'ghost']),
         _worktree,
-        _project(),
+        _workspace(),
       );
 
       expect(plugins, hasLength(2));
@@ -101,7 +103,7 @@ void main() {
           ),
         ]),
         _worktree,
-        _project(),
+        _workspace(),
       );
 
       expect(seen!.string('compose'), 'dev.yml');
@@ -126,7 +128,7 @@ void main() {
         worktree: _worktree,
         manifest: _manifest(['a.one', 'a.two']),
         registry: registry,
-        project: _project(),
+        workspace: _workspace(),
       );
       var plugins = session.plugins.cast<_Fake>();
 
@@ -251,4 +253,4 @@ void main() {
 }
 
 PluginHost _host(String id) =>
-    PluginHost(id: id, label: id, worktree: _worktree, project: _project());
+    PluginHost(id: id, label: id, worktree: _worktree, workspace: _workspace());

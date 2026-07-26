@@ -1,6 +1,6 @@
 import 'package:flutterware/plugins.dart';
 
-import '../project.dart';
+import '../shell/workspace.dart';
 import '../shell/worktree.dart';
 import 'native_plugin.dart';
 import 'plugin_host.dart';
@@ -40,7 +40,7 @@ class PluginRegistry {
   List<NativePlugin> resolve(
     PluginManifest manifest,
     Worktree worktree,
-    Project project,
+    Workspace workspace,
   ) => [
     for (var declaration in manifest.plugins)
       create(
@@ -48,7 +48,7 @@ class PluginRegistry {
           id: declaration.id,
           label: declaration.label,
           worktree: worktree,
-          project: project,
+          workspace: workspace,
           config: declaration.config,
         ),
       ),

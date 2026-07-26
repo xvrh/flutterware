@@ -44,6 +44,7 @@ void main() async {
   );
 
   // Discovery runs a subprocess; the shell renders its empty state until it
-  // resolves rather than blocking the first frame.
-  await shell.start('../examples/example');
+  // resolves rather than blocking the first frame. The path is walked up to the
+  // repo root, so this opens flutterware's own workspace.
+  await shell.start('..');
 }

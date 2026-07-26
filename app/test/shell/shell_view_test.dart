@@ -36,6 +36,49 @@ class _Fake extends NativePlugin {
   Widget buildPanel(BuildContext context) => Center(child: Text('panel:$id'));
 }
 
+/// A panel that starts work on mount — the shape every real plugin has, and
+/// the one that crashed the app: notifying from initState marks the shell's
+/// AnimatedBuilder dirty during build.
+class _EagerPanelPlugin extends NativePlugin {
+  _EagerPanelPlugin(super.host);
+
+  var tracked = false;
+
+  void track() {
+    tracked = true;
+    notifyChanged();
+  }
+
+  @override
+  PluginReport get report => PluginReport(
+    id: host.id,
+    label: host.label,
+    status: Status.neutral(tracked ? 'tracking' : '—'),
+  );
+
+  @override
+  Widget buildPanel(BuildContext context) => _EagerPanel(this);
+}
+
+class _EagerPanel extends StatefulWidget {
+  const _EagerPanel(this.plugin);
+  final _EagerPanelPlugin plugin;
+
+  @override
+  State<_EagerPanel> createState() => _EagerPanelState();
+}
+
+class _EagerPanelState extends State<_EagerPanel> {
+  @override
+  void initState() {
+    super.initState();
+    widget.plugin.track();
+  }
+
+  @override
+  Widget build(BuildContext context) => const Text('eager');
+}
+
 class _StubLoader implements ManifestLoader {
   @override
   Future<PluginManifest?> load(String path) async =>
@@ -141,6 +184,29 @@ void main() {
 
     expect(shell.openWorktrees, hasLength(1));
     expect(find.text('feature/explorer'), findsNothing);
+  });
+
+  testWidgets('a panel may start work in initState without crashing', (
+    tester,
+  ) async {
+    var shell = ShellController(
+      appContext: AppContext(logger: LogClient.print()),
+      flutterSdk: FlutterSdkPath('/tmp/flutter'),
+      registry: PluginRegistry({'a.deps': _EagerPanelPlugin.new}),
+      manifestLoader: _StubLoader(),
+      discovery: WorktreeDiscovery(
+        runProcess: (_, _, {workingDirectory}) async =>
+            ProcessResult(0, 0, _listing, ''),
+      ),
+    );
+    await shell.start('/repo');
+    await tester.pumpWidget(ShellApp(shell));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('eager'), findsOneWidget);
+    // The deferred notification still lands.
+    expect(find.text('tracking'), findsOneWidget);
   });
 
   testWidgets('a worktree with no plugins explains itself', (tester) async {

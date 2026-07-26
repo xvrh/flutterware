@@ -6,8 +6,8 @@ import '../context.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/registry.dart';
 import '../plugins/worktree_session.dart';
-import '../project.dart';
 import '../utils/flutter_sdk.dart';
+import 'workspace.dart';
 import 'worktree.dart';
 import 'worktree_discovery.dart';
 
@@ -42,7 +42,7 @@ class ShellController extends ChangeNotifier {
 
   var _worktrees = <Worktree>[];
   final _sessions = <String, WorktreeSession>{};
-  final _projects = <String, Project>{};
+  final _workspaces = <String, Workspace>{};
   final _errors = <String, WorktreeError>{};
 
   String? _selectedPath;
@@ -68,6 +68,8 @@ class ShellController extends ChangeNotifier {
 
   WorktreeError? errorFor(Worktree worktree) => _errors[worktree.path];
 
+  Workspace? workspaceFor(Worktree worktree) => _workspaces[worktree.path];
+
   Worktree? get selected =>
       _selectedPath == null ? null : _worktreeAt(_selectedPath!);
 
@@ -85,14 +87,19 @@ class ShellController extends ChangeNotifier {
 
   /// Discovers the project's worktrees and opens **only** the one the app was
   /// launched in. Everything else is opened deliberately from the switcher.
+  ///
+  /// The launch directory is first walked **up** to its repo root, so starting
+  /// in `packages/admin/lib` opens the one window for the whole repo rather
+  /// than failing to match any worktree.
   Future<void> start(String launchDirectory) async {
-    _worktrees = await _discovery.discover(launchDirectory);
+    var root = findRepoRoot(launchDirectory) ?? launchDirectory;
+    _worktrees = await _discovery.discover(root);
     notifyListeners();
 
-    var launchPath = p.canonicalize(launchDirectory);
+    var rootPath = p.canonicalize(root);
     var launch =
         _worktrees
-            .where((w) => p.canonicalize(w.path) == launchPath)
+            .where((w) => p.canonicalize(w.path) == rootPath)
             .firstOrNull ??
         _worktrees.firstOrNull;
     if (launch != null) await open(launch);
@@ -128,14 +135,35 @@ class ShellController extends ChangeNotifier {
         _errors[worktree.path] = WorktreeError(worktree, result.error!);
       }
 
-      var project = Project(appContext, worktree.path, flutterSdk);
-      _projects[worktree.path] = project;
+      // No config file is not an error — the worktree opens with no plugins.
+      var manifest = result.manifest ?? const PluginManifest([]);
+      var workspace = Workspace(
+        root: worktree.path,
+        declared: manifest.packages.isEmpty
+            // A project that declares nothing still has itself.
+            ? const [Pkg('.')]
+            : manifest.packages,
+        discovered: discoverPackages(worktree.path),
+        appContext: appContext,
+        flutterSdk: flutterSdk,
+      );
+      _workspaces[worktree.path] = workspace;
+
+      // Never clobber a config-load failure: that is the more useful error,
+      // and a broken config is often *why* the declarations look wrong.
+      var unknown = workspace.unknownDeclarations;
+      if (unknown.isNotEmpty && !_errors.containsKey(worktree.path)) {
+        _errors[worktree.path] = WorktreeError(
+          worktree,
+          'Declared package(s) not found on disk: ${unknown.join(', ')}',
+        );
+      }
+
       _sessions[worktree.path] = WorktreeSession.resolve(
         worktree: worktree,
-        // No config file is not an error — the worktree opens with no plugins.
-        manifest: result.manifest ?? const PluginManifest([]),
+        manifest: manifest,
         registry: registry,
-        project: project,
+        workspace: workspace,
       )..addListener(notifyListeners);
 
       _selectedPath = worktree.path;
@@ -163,7 +191,7 @@ class ShellController extends ChangeNotifier {
     _sessions.remove(path)
       ?..removeListener(notifyListeners)
       ..dispose();
-    _projects.remove(path)?.dispose();
+    _workspaces.remove(path)?.dispose();
     _errors.remove(path);
     if (_selectedPath == path) {
       _selectedPath = _sessions.keys.lastOrNull;

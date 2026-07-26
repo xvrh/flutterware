@@ -88,7 +88,7 @@ args      2.7.0''');
       id: 'flutterware.tests',
       label: 'Tests',
       status: Status.error('3 failing'),
-      badge: Badge.dot(Tone.error),
+      badge: StatusBadge.dot(Tone.error),
       actions: [PluginAction('run', 'Run all')],
       teardown: [
         TeardownStep(

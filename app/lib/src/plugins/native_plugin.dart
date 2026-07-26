@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutterware/plugins.dart';
 
@@ -17,11 +19,31 @@ abstract class NativePlugin extends ChangeNotifier {
   String get id => host.id;
 
   /// Everything this plugin currently says about itself. Recomputed on demand;
-  /// call [notifyListeners] when the underlying state moves.
+  /// call [notifyChanged] when the underlying state moves.
   PluginReport get report;
 
   /// The panel mounted when this plugin is selected. Real Flutter, no limits.
   Widget buildPanel(BuildContext context);
+
+  /// Schedules a change notification, coalescing bursts into one.
+  ///
+  /// Prefer this over [notifyListeners]. A plugin's work starts when a widget
+  /// subscribes, and that happens in `initState` — inside the build phase,
+  /// where marking the shell dirty synchronously throws
+  /// "setState() called during build". Deferring by a microtask makes the
+  /// common case safe instead of leaving every plugin to remember.
+  @protected
+  void notifyChanged() {
+    if (_notifyScheduled || _disposed) return;
+    _notifyScheduled = true;
+    scheduleMicrotask(() {
+      _notifyScheduled = false;
+      if (!_disposed) notifyListeners();
+    });
+  }
+
+  var _notifyScheduled = false;
+  var _disposed = false;
 
   /// Runs one of [report]'s actions. The default refuses unknown ids loudly
   /// rather than silently doing nothing.
@@ -33,7 +55,10 @@ abstract class NativePlugin extends ChangeNotifier {
   /// processes here — this is what makes closing a worktree actually free
   /// resources rather than just hide a tab.
   @override
-  void dispose() => super.dispose();
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 }
 
 /// Builds a plugin's runtime for one worktree.
@@ -54,7 +79,7 @@ class MissingPlugin extends NativePlugin {
     id: host.id,
     label: host.label,
     status: Status.error('no implementation'),
-    badge: const Badge.dot(Tone.error),
+    badge: const StatusBadge.dot(Tone.error),
     view: PluginView([
       ViewText(
         'This build of flutterware has no native plugin registered for '
