@@ -153,11 +153,16 @@ share one substrate is what **spike S1** decides.
 
 ## Milestones
 
-### S — Spikes — **both complete**
+### S — Spikes — **all complete**
 
 - **S1 succeeded** → `2026-07-26-s1-scenario-in-embedder-findings.md`
 - **S2 succeeded** → `2026-07-26-s2-design-tokens-findings.md`. The token layer
   is ported and live in `app/lib/src/ui/design/`; M1 can build against it now.
+- **S3 succeeded** → `2026-07-26-s3-hot-switch-findings.md`. Run without a
+  written brief, during session A. Answers the question S1 left open: a
+  **newly reachable** library does enter a live isolate via `reloadSources`, so
+  switching catalog entries is a hot reload, not a restart. Also establishes the
+  compile economics the catalog and the scenario runner both budget against.
 
 ### M1 — The shell
 
@@ -218,10 +223,79 @@ shown in the app" means concretely, it lands here.
 built against a contract an agent is already reading. Built after, we retrofit
 forever.
 
-### M3 — ui_catalog on the embedder — *stub, S2 + the plugin spike fill this in*
+### M3 — ui_catalog on the embedder
 
 Substrate settled by S1: guest + resident compiler + cached asset bundle +
 capture path + ~130ms reload loop.
+
+**The loop settled by S3** (`2026-07-26-s3-hot-switch-findings.md`):
+
+- **One long-lived resident compiler per worktree.** The framework floor is 2.3s
+  and is paid once, not per entry.
+- **An accumulating generated entrypoint.** Each newly visited entry is *added*
+  as an import under a **fresh prefix**, never rebound — rebinding an existing
+  prefix to a different library is silently ignored by hot reload. Entries are
+  then selected at runtime, so revisiting one costs no compile at all.
+- **Measured cost:** cold once per worktree; 17ms–580ms for a first visit to a
+  new entry; ~12ms for a revisit; reload is flat in subtree size (~117ms).
+- Focus vs. browse is therefore a **UI** question, not a process question.
+
+**The entry model settled by session A**
+(`2026-07-26-ui-catalog-entry-model.md`): **the catalog map is gone.** Entries are
+declared by annotation — `Demo extends Preview` from
+`package:flutter/widget_previews.dart`, shipped in `package:flutterware` — so
+existence comes from the declaration and hierarchy from the file path. Variants
+are sibling entries with stable ids. Global axes (theme, locale, device) are
+applied rather than expanded, and are runtime concepts owned by the project's own
+wrapper, not by flutterware.
+
+`transform()` maps our richer fields (`formFactor`, `id`, `figma`) down to
+Flutter's, so one declaration serves both hosts: Flutter's previewer reads a
+correct `Preview`, our guest reads the full instance. Evidence and measurements:
+`2026-07-26-widget-previews-integration-findings.md`.
+
+**Discovery, sharing and lifetime — settled 2026-07-26:**
+
+- **Discovery is syntactic; resolution is the guest's job.** *Corrected
+  2026-07-26 by measurement* — an earlier draft of this section claimed a
+  resolved analyzer pass was "one file plus summaries, not a project analysis".
+  That is false: over rimbaud's 180-file demo tree, the **first** resolved unit
+  costs **17.3s** (it needs the linked element model of the whole transitive
+  closure), against 12.9s to compile the entire catalog. Subsequent units are
+  ~26ms, and a **syntactic scan of all 180 files is 20ms**.
+
+  Syntactic discovery sees a declaration, its name, its library path, an
+  annotation, and a literal config reference — everything the tree and the
+  generated entrypoint need. It cannot resolve an arbitrary expression to its
+  declaring element. **That is exactly the difference between a map of widget
+  expressions and a set of named declarations**, and it is an independent
+  argument for the declaration model. The syntactic tree is provisional; a warm
+  guest is ground truth, and a disagreement is a diagnostic. No resolved pass in
+  between, so `package:analyzer` is needed only as a parser.
+- **`@Preview` is discovered by the same syntactic scan**, not a separate
+  pipeline. One scanner, two sources.
+- **Watching is for humans; an explicit reload is for agents.** An agent needs a
+  request/response barrier ("apply my edit, tell me when the frame is ready") or
+  it races its own file write and captures the previous state.
+- **One compiler, one dill, several guests.** The accumulating entrypoint makes
+  entry selection a runtime choice, so the GUI and an agent share the expensive
+  compiler while driving separate guests — no contention, and the human can watch
+  what an agent is doing.
+- **An agent is a client of the warm daemon, never its own compile.** Shelling
+  out to a fresh compile costs 9–13s per screenshot and wastes S3 entirely. This
+  strengthens decision 9: the CLI compiles nothing, so staying Flutter-free is
+  structural rather than a discipline.
+- **Process topology is per project; disk caches are global.** One auto-started
+  daemon per repo root holding all its worktrees. Nothing heavy is shareable
+  across projects. Auto-start needs lock-file + atomic-bind race handling
+  (concurrent agents in several worktrees is the normal case) and a stated
+  lifetime policy.
+
+- **The daemon dies with its last client**, after a small grace period.
+- **`@Preview` entries get their own tree root**, deduplicated against map
+  entries that resolve to the same declaring library + symbol. **Preview support
+  is a nice-to-have and may be deferred** for simplicity — but see the entry
+  metadata note below, which is not deferrable.
 
 ### M4 — scenario runner (replaces test_runner) — *shape settled by S1*
 
@@ -297,6 +371,30 @@ beside it, and what the published runtime API owes existing users. The plugin id
 `flutterware.ui_catalog` and the `UiCatalogPackage(entrypoint:)` config shape
 already exist; the id currently resolves to `MissingPlugin`.
 
+**Session A, 2026-07-26 — settled so far.** The transport question is separable
+from the compile loop, and it is smaller than it looked: `app/lib/src/ui_catalog/
+service/` is effectively dead — `api.dart` is five empty stubs, and the service
+discovers a `ui_book.dart` entrypoint name that real consumers do not use. It is
+deletable, not a transport to preserve.
+
+- The inner loop → S3 (`2026-07-26-s3-hot-switch-findings.md`).
+- The entry model → `2026-07-26-ui-catalog-entry-model.md`.
+- Why `@Preview`, and at which layer →
+  `2026-07-26-widget-previews-integration-findings.md`.
+- **The existing catalog app is kept, not replaced.** It is the published API,
+  it is what compiles to web for per-PR catalog links, it is the real-device
+  path (each demo file already has its own `main()`), and it is the fallback
+  where the embedder has no port. The flutterware GUI is an *additional*
+  renderer.
+- **Invariant, amended:** the whole catalog stays enumerable and renderable from
+  a plain `flutter test` with no running daemon. With the map gone, Dart has no
+  runtime reflection over annotations, so this now requires a **checked-in
+  generated file** — guarded by a CI diff check, the pattern
+  `dart tool/prepare_submit.dart` already establishes.
+
+Still open for A: discovery without compiling, the watch-vs-explicit-reload
+split, and how the GUI and an agent share the warm process.
+
 Deletable once A lands: `app/lib/main_shell_dev.dart` (the throwaway chrome
 prototype).
 
@@ -333,7 +431,21 @@ eventually mask a real regression.
    subscription — and closing a tab must release only the latter. Still to
    decide: are unopened badges computed eagerly, lazily when the popover opens,
    or not at all?
+
+   **Costed for the catalog (2026-07-26).** The state splits into three tiers
+   with different release policies: the **syntactic scan result** is cheap
+   (478ms cold for 778 files, ~1ms incremental) and should be *kept* on close —
+   it is what powers badges for unopened worktrees; the **resident compiler** is
+   hundreds of MB and should be released after a grace period; the **guest
+   engine** should be released immediately. The two-level split holds, now with
+   measured costs behind it.
 5. Manifest schema — the text projection's shape is the part with no prior art.
+   **Partly answered for the catalog (2026-07-26):** an entry's address is its
+   path + symbol (pinned by `Demo(id:)`), with global axes (theme, locale,
+   device) carried as an applied assignment rather than expanded into the tree.
+   "Screenshot an entry" is under-specified without the resolved axis
+   assignment, which every artifact must therefore record. See
+   `2026-07-26-ui-catalog-entry-model.md`.
 6. Whether termui can host the manifest renderer, or whether the CLI stays
    plain structured output (decision 8).
 7. What of the current app survives M1 beyond the two ported screens.
