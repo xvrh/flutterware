@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-26
 **Updated:** 2026-07-27 — four of the five open items resolved; axis enumeration,
-the config split and the contact sheet settled; the class-hierarchy closure cut;
+the config split and the canvas boundary settled; the closure cut;
 the evidence behind the problem statement corrected; the render path built.
 **Status:** Decided. The locked decisions below are settled; the code sketches
 are illustrative.
@@ -571,77 +571,105 @@ one live. This is the second API shape that measurement has decided; the first
 was the annotation itself, which is `const` and re-evaluated per render for the
 same reason.
 
-## What the guest renders — the contact sheet, settled
+## What the guest renders — the canvas boundary
 
-**Settled 2026-07-27.** This was open item 1, and it turned out to be an
-architecture decision rather than a layout one: in the flutterware GUI the demo
-renders in the **embedder guest** while the tree and chrome render in the **GUI
-process**, so "show ten demos at once" asks whether there are ten guests, one
-guest rendering ten views, or no live rendering at all.
+**Settled 2026-07-27.** This was open item 1, and it is an architecture decision
+rather than a layout one: in the flutterware GUI the demo renders in the
+**embedder guest** while the tree and chrome render in the **GUI process**, so
+"show ten demos at once" asks whether there are ten guests, one guest rendering
+ten views, or no live rendering at all.
 
-> **The guest renders exactly one entry, at one size, live. Everything that shows
-> more than one thing at once is a view over a capture cache.**
+> **The guest renders the canvas, live — one entry or many. The GUI renders the
+> tree and the chrome around it.**
 
-### The evidence that decided it
+### Corrects an earlier answer in this document
 
-Both existing multi-view surfaces **already suppress interaction**:
+An earlier revision of this section decided the opposite: that the guest renders
+exactly one entry and every multi-view surface is a cache of captured images.
+That was wrong twice, and both errors are worth keeping visible.
 
-| surface | today | wrapped in |
-|---|---|---|
-| folder index | each entry live in a frameless `DeviceFrame`, clamped 200×200 | `AbsorbPointer` |
-| mosaic | the *same* demo widget repeated per device × orientation | `IgnorePointer` + `ExcludeFocus` |
+**The evidence did not support the conclusion.** It argued from the fact that
+both existing multi-view surfaces already suppress interaction — the folder index
+wraps each live entry in `AbsorbPointer`, `_Mosaic` wraps the repeated demo in
+`IgnorePointer` + `ExcludeFocus`. That establishes the sheet need not be
+*interactive*. It says nothing about whether it need be *live*.
+**Non-interactive is not the same as static.**
 
-They are pictures already. Nothing interactive is lost by making them images —
-which removes the only real argument for rendering many things live.
+**The cost argument ran backwards.** It claimed filling a sheet costs
+N × (compile + reload). The compile term is real and unavoidable either way — a
+demo must be compiled to be shown at all. The reload term is not, because of a
+figure S3 had already measured:
 
-And mosaic is *one entry at N sizes*, while a contact sheet is *N entries at one
-size*. Both are the same operation: **a capture matrix**.
+> **Reload cost is flat in subtree size.** 718 new libraries reloaded in 45ms.
+> Compile dominates; reload does not.
+
+The accumulating entrypoint already imports every entry ever visited. So showing
+N demos is **one incremental compile, one reload, one frame** — not N switches, N
+captures and N PNG encodes. Live rendering is *cheaper* than capturing, not more
+expensive.
+
+The empirical check settles it: today's in-process catalog already renders the
+whole recursive index live — `IndexView` → `_Folder` → nested `IndexView` — with
+rimbaud's ~300 entries. Many demos live in one tree is current shipping
+behaviour, not a hypothesis.
+
+### The boundary
+
+| guest — the canvas | GUI — around it |
+|---|---|
+| the demo | tree, search, breadcrumb |
+| the project shell (`catalogConfig.wrapper`) | toolbar: axis pickers |
+| device frames, orientation | knobs panel |
+| the contact sheet, the folder index, mosaic | Figma panel, error surfacing |
+| scrolling within the canvas | |
+
+This is almost exactly today's `Menu` versus `DetailView`/`IndexView` split, which
+is the point: **`_Mosaic`, `IndexView`, `FittedWidget` and `DeviceFrame` move
+rather than get rewritten.** They live in `package:flutterware`, which the project
+already depends on, so they are in the guest closure for free.
 
 ### What follows
 
-- **One guest process, always.** The N-guests-versus-one-guest question does not
+- **One guest process**, rendering one texture. The N-guests question does not
   arise.
-- **Device frames render in the GUI**, uniformly — a bezel drawn around an image
-  for thumbnails, around the texture for the live entry. This closes the
-  frame-placement question, and the mosaic counter-argument (ten textures) fell
-  with it, since mosaic is captures.
-- **Changing device for the live entry is a resize message, not a recompile** —
-  provided the GUI sends safe-area padding alongside the size, so `SafeArea`
-  demos stay honest.
-- **The cache key is the entry address this document already defines** —
-  `{id, axis assignment, size}`. It was designed for "screenshot an entry"; it is
-  the same tuple. A theme change is a cache *miss*, not an invalidation.
-- **Source edits invalidate precisely.** The generator maps file → entries, so
-  editing one demo file invalidates exactly that file's captures.
-- **Captures persist** under `.dart_tool/`, so reopening the GUI is instant and a
-  worktree that has seen a group before pays nothing.
-- **S1's capture optimisation is promoted.** It noted that `layer.toImage()`
-  re-rasterises a frame the guest already composited into the shared `IOSurface`,
-  and filed it as "optimisation, not a blocker". Captures are now a *bulk*
-  operation, so grabbing the presented surface becomes the main path — and it
-  guarantees the thumbnail is what the user actually saw.
+- **Device frames render in the guest**, reusing the vendored `device_frame`.
+  Changing device is guest-side state — a message and a rebuild, **not a
+  recompile and not an engine resize**.
+- **No cache, no invalidation, no staleness, no LRU.** Editing a demo hot-reloads
+  the whole sheet at once, because every entry in it is in the same tree.
+- **The sheet is interactive in exactly one way**: clicking a thumbnail selects
+  that entry. Today that is an `InkWell` outside an `AbsorbPointer` — tap the
+  card, not the demo. The guest handles the tap and reports the selection to the
+  GUI, which moves the tree.
+- **A demo that throws is contained** by Flutter's per-subtree error widget, as
+  it is today.
 
-### The costs, stated plainly
+### Where captures still earn their keep
 
-- **Thumbnails do not animate.** Today's in-process grid renders live widgets, so
-  this is a real regression against the current catalog — though not against what
-  is *achievable*, since a lazily-compiled guest cannot render 300 entries live
-  at any price.
-- **Filling a fresh contact sheet compiles every entry in it.** Per S3's marginal
-  table a new entry costs 17–580ms to compile plus ~70ms to reload, so a group of
-  ten unseen entries is **seconds, not milliseconds**. The persisted cache is
-  what makes that a one-time cost; capture lazily in visible order with
-  placeholders, never as a blocking step.
-- **The two renderers now differ.** The preserved `UICatalog` app keeps its live
-  in-process grid; the flutterware GUI's sheet is captures. Consistent with it
-  being an *additional* renderer, but it is a real behavioural fork.
+Two places, neither of which is the rendering architecture:
+
+1. **Entries this session has never compiled.** Live means compiling everything
+   you display, so a root index of ~300 entries is the full **12.9s** catalog
+   compile — precisely what lazy compilation exists to avoid. A persisted
+   thumbnail lets the index show something real without paying for it. This is an
+   optimisation layered *on* live rendering, and it is where the "cached, very
+   fast" goal actually cashes out.
+2. **CI baselines and per-PR screenshots** — already deferred, and capturable
+   from the live path when wanted.
+
+If captures are added, the key is the entry address this document already
+defines — `{id, axis assignment, size}` — and source edits invalidate precisely,
+since the generator maps file → entries.
 
 ### Still open
 
-Only the layout question that was originally asked — how a sheet mixing
-component-sized and screen-sized children should be arranged. That is now a
-GUI-side problem with no architectural consequences, and `IndexView`'s
-`FittedWidget` + `AspectRatio(1)` treatment is the starting point to beat.
+- **Sheet layout** — the original open item 1: arranging a sheet that mixes
+  component-sized and screen-sized children. Now purely a guest-side widget
+  problem, with `IndexView`'s `FittedWidget` + `AspectRatio(1)` as the treatment
+  to beat.
+- **The cold-index policy.** What a folder shows for entries not yet compiled:
+  placeholders, persisted captures, or names only. This is the one place the
+  laziness goal and the live-rendering model genuinely pull against each other.
 
 ## The same catalog, written both ways
 
@@ -1066,11 +1094,11 @@ statically unenumerable. See *Enumeration in `flutter test`*.
 
 ## Open
 
-1. **Contact-sheet layout** for parent nodes mixing component-sized and
-   screen-sized children — the layout question only; the architecture is settled
-   under *What the guest renders*. It has a defined anchor (the group node,
-   derived or declared) and `IndexView`'s `FittedWidget` + `AspectRatio(1)` is
-   the treatment to beat.
+1. **Sheet layout, and the cold-index policy** — the architecture is settled
+   under *What the guest renders*; what remains is arranging a sheet that mixes
+   component-sized and screen-sized children (anchored on the group node, with
+   `IndexView`'s `FittedWidget` + `AspectRatio(1)` to beat), and deciding what a
+   folder shows for entries this session has not compiled.
 2. **Migration** for the ~168 demo files / ~400 resulting entries: diagnostic-driven,
    or a codemod? (Owner, 2026-07-26: "we'll see.") Note the corrected shape of
    the job — it is not a rename pass but a decomposition of stacked `_Section`s
