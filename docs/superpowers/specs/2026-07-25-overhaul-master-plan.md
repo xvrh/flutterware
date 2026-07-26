@@ -282,6 +282,24 @@ must stay Flutter-free** (decision 9), so the CLI can drive it later without a
 rewrite. macOS-first is accepted; `FlutterEmbedder.framework` is `darwin-x64`
 only and Linux has no path yet.
 
+There is already a UI catalog, and deciding what happens to it is part of A's
+scope rather than something to discover mid-build:
+
+- `lib/src/ui_catalog/` (~15 files, published in `package:flutterware`) — the
+  runtime users embed in their app: `UICatalog`, parameters editor, device
+  panel, treeview, Figma hooks. Exported from `lib/ui_catalog.dart`, so its API
+  is a **public commitment** to existing users.
+- `app/lib/src/ui_catalog/service/` — the GUI half, which today reaches the
+  running app over a **UDP-discovered socket server**, not the embedder.
+
+So A's first question is whether the embedder *replaces* that transport or sits
+beside it, and what the published runtime API owes existing users. The plugin id
+`flutterware.ui_catalog` and the `UiCatalogPackage(entrypoint:)` config shape
+already exist; the id currently resolves to `MissingPlugin`.
+
+Deletable once A lands: `app/lib/main_shell_dev.dart` (the throwaway chrome
+prototype).
+
 **B — The CLI.** Separate, because its blockers are distribution-shaped and
 independent of catalog goals: `dart compile exe` → `dart build` for build
 hooks, then the walker and bootstrapper. Do **not** fold this into A — but note
