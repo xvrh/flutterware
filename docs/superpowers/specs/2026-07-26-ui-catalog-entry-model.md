@@ -1,7 +1,8 @@
 # UI catalog — the entry model
 
 **Date:** 2026-07-26
-**Updated:** 2026-07-27 — four of the five open items resolved; the evidence
+**Updated:** 2026-07-27 — four of the five open items resolved; axis enumeration
+and the config split settled; the class-hierarchy closure cut; the evidence
 behind the problem statement corrected; two claims checked against SDK source.
 **Status:** Decided. The locked decisions below are settled; the code sketches
 are illustrative.
@@ -329,6 +330,10 @@ This is the entry address the manifest needs, and it answers master-plan open
 question 5 for the catalog: *"screenshot an entry" is under-specified without the
 variant and the resolved axis assignment.*
 
+An axis assignment is `{axis name: option label}` — labels, not values — and an
+assignment naming an axis the entry does not declare is **reported, not
+rejected**. How the names get known before the first render: *Axis enumeration*.
+
 ## Discovery
 
 One syntactic parse pass, **one output**: every annotation usage with its target
@@ -420,6 +425,126 @@ returns `defaultValue` from every method, and `UICatalogState.of()` falls back t
 | device frame, orientation, mosaic | yes | no | no |
 | `id`, `figma` | yes | ignored | available |
 | screenshots, driving, tree dump | yes | no | partial |
+
+## Axis enumeration
+
+**Settled 2026-07-27.** Decision 9 obliges axes to be *enumerable* and *settable
+by name*, and nothing enumerated them: `EditableParameters._addParameter` fires
+its `onAdded` callback the first time a demo **asks** for a picker, during build.
+An axis existed only after rendering the entry that declared it — which blocks an
+agent from requesting "screenshot E with `Language=fr`" before it knows the axis
+is there.
+
+**1. Declaration stays where it is.** No registry, no second declarative API.
+`topBar.picker` and `parameters.*` remain the only place an axis is declared —
+requiring a project to also list its axes somewhere would duplicate the
+declaration, and would need its own degradation story in the two hosts where the
+picker call already returns `defaultValue`.
+
+**2. Enumeration is a probe, and global axes need no entry at all.** The project
+shell is a `WidgetWrapper` — `Widget Function(Widget)` — so it can be rendered
+around nothing:
+
+```dart
+// enumerate every global axis without compiling a single demo
+config.wrapper(const SizedBox());
+```
+
+Its `build` runs the `topBar.picker` calls regardless of the child. **One probe
+per session yields every global axis.** Local knobs live in a demo body and need
+that entry rendered — which the session is doing anyway before it can screenshot
+it. So the cost is one extra render of an empty shell, once.
+
+**3. The wire model is labels, never values.** `PickerParameter.options` is
+already `Map<String, T>`, so the label set survives without `T` crossing the
+boundary:
+
+```
+{ name: 'Language', kind: picker, options: ['en', 'fr', 'nl'], current: 'en' }
+```
+
+Setting is `param.value = options[label]`, which already calls
+`notifyListeners()`. No API change on either side.
+
+**4. What is addressable, from the existing sealed `Parameter`:**
+
+| kind | addressed as | in an entry address? |
+|---|---|---|
+| `PickerParameter` | a label from a known set | yes |
+| `BoolParameter` | `true` / `false` | yes |
+| `StringParameter`, `NumParameter`, `DateTimeParameter` | a literal value | settable, not enumerable |
+| `ActionButtonParameter` | — | no: an action, not state |
+
+This also draws the line decision 8 needs. A finite picker or bool is an
+*addressable axis*; a free-form knob is not, which is precisely why the design
+refuses to promote either into the tree.
+
+**5. The chicken-and-egg is answered by reporting, not blocking.** A request
+naming an axis the entry has not declared renders with defaults and returns the
+axes it *did* find:
+
+> Rendered `…#memberListEmpty` with defaults. Unknown axis `Theme`. Axes
+> available here: `Language` (en, fr, nl), `Edit mode` (bool).
+
+First call teaches, second call sets. The posture is the same one used for
+unexpanded pickers and unmatched form-factor globs; the alternative — failing the
+request — would make the first screenshot of any entry impossible to write
+blind.
+
+**6. Re-probe on hot reload.** The shell is ordinary code and can gain or lose an
+axis on any edit.
+
+## Project configuration
+
+**Settled 2026-07-27.** The design accumulated four pieces of project config —
+`previewAnnotations`, the form-factor path rule, the default size, and the
+default wrapper — with no home, and they do not all belong in the same one.
+
+**The criterion:**
+
+> **Must the tool know it before the first compile? Then it is static. Otherwise
+> it is Dart.**
+
+| config | needed by | when | home |
+|---|---|---|---|
+| `previewAnnotations` | discovery filter | before any compile | static |
+| scan roots | the parse pass | before any compile | static |
+| default wrapper / shell | the guest | at render | **Dart — it is a function** |
+| default form factor, default size | the guest, the test | at render | Dart |
+| the axes | the guest | at render | Dart, by construction — they live inside the shell |
+
+**Decision: no static config file on day one.** Both static entries have working
+defaults — `['Preview', 'Demo']`, and scanning `demo/`. A project that must
+deviate gets a file then; stating the criterion now means its contents are
+already decided. This is the same defer-until-evidence posture the rest of the
+design takes, and it keeps the count of things a new project must write at zero.
+
+**The Dart half is discovered the way entries are** — syntactically, by symbol
+name, in the same 478ms parse. It needs no pointer and no registration.
+
+**It must be a getter, not a `final`.** From the widget-previews findings:
+
+> A top-level `final` is lazily initialised once, and **hot reload does not re-run
+> the initialiser of an already-initialised static.**
+
+```dart
+// demo/src/catalog_config.dart
+
+// WRONG — freezes the shell for the life of the session
+final catalogConfig = CatalogConfig(wrapper: catalogShell);
+
+// RIGHT — re-evaluated on every read, so editing the shell hot-reloads
+CatalogConfig get catalogConfig => CatalogConfig(
+  wrapper: catalogShell,
+  formFactor: projectFormFactor,
+);
+```
+
+Editing the shell — adding an axis, changing the theme — is exactly the edit a
+developer makes mid-session, and the `final` spelling would silently keep the old
+one live. This is the second API shape that measurement has decided; the first
+was the annotation itself, which is `const` and re-evaluated per render for the
+same reason.
 
 ## The same catalog, written both ways
 
@@ -591,8 +716,17 @@ Widget catalogShell(Widget child) => CatalogShell(child: child);
 ```
 
 Applied per entry with `@Demo(wrapper: catalogShell)`, or — for the 168 entries
-that all want it — as the project-level default wrapper, with the same layer-3
-caveat as `formFactor`: the project default is invisible to Flutter's previewer.
+that all want it — as the project-level default wrapper, declared once:
+
+```dart
+// demo/src/catalog_config.dart — a getter, never a final; see Project configuration
+CatalogConfig get catalogConfig => CatalogConfig(wrapper: catalogShell);
+```
+
+Same layer-3 caveat as `formFactor`: the project default is invisible to
+Flutter's previewer. And because the shell is a plain `Widget Function(Widget)`,
+it is what the host renders around a `SizedBox` to enumerate global axes without
+compiling a demo — see *Axis enumeration*.
 
 The degradation is already shipped and already relied on: outside our host,
 `topBar.picker` returns `defaultValue`, so the same file renders in
