@@ -1,13 +1,20 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart';
 import 'package:glob/glob.dart';
 import 'package:glob/list_local_fs.dart';
 import 'package:image/image.dart';
 import 'package:path/path.dart' as p;
 import 'package:pool/pool.dart';
+
+/// `kDebugMode` without `package:flutter/foundation.dart`.
+///
+/// Flutter defines it as `!kReleaseMode && !kProfileMode`; this differs only in
+/// profile mode, which this tool never runs in.
+const _isDebugMode = !bool.fromEnvironment('dart.vm.product');
 
 class IconPlatform {
   static final android = IconPlatform('Android', [
@@ -86,10 +93,8 @@ class AppIcons {
       var files = await platform.allFiles(directory);
       files = files.sortedBy<num>((e) => e.lengthSync()).toList();
       if (files.isNotEmpty) {
-        return compute<_LoadRequest, AppIcon?>(
-          _loadIcon,
-          _LoadRequest(files.last, size),
-        );
+        var request = _LoadRequest(files.last, size);
+        return Isolate.run(() => _loadIcon(request));
       }
     }
     return null;
@@ -110,12 +115,16 @@ class AppIcons {
         unawaited(
           pool.withResource(() async {
             AppIcon? icon;
-            if (kDebugMode) {
-              // "compute" function is not parallelized in debug mode, so it is
-              // too slow.
-              icon = _loadIcon(_LoadRequest(file, size));
+            var request = _LoadRequest(file, size);
+            if (_isDebugMode) {
+              // Kept from when this used `compute`, which does not parallelise
+              // in debug mode and was too slow. `Isolate.run` spawns a real
+              // isolate in every mode, so this branch may now be unnecessary —
+              // it is retained rather than removed because dropping it changes
+              // debug-mode timings nobody has measured.
+              icon = _loadIcon(request);
             } else {
-              icon = await compute(_loadIcon, _LoadRequest(file, size));
+              icon = await Isolate.run(() => _loadIcon(request));
             }
             if (icon != null) {
               icons.add(icon);
@@ -163,11 +172,14 @@ class AppIcons {
     Uint8List bytes, {
     required List<IconPlatform> platforms,
   }) async {
-    await compute((_) {
+    // Hoisted so the closure captures the map rather than `this` — `Isolate.run`
+    // sends the closure with everything it closes over.
+    var iconsByPlatform = icons;
+    await Isolate.run(() {
       var encoders = {'.png': encodePng, '.ico': encodeIco};
       var image = decodeImage(bytes)!.convert(numChannels: 4);
       for (var platform in platforms) {
-        var iconsForPlatform = icons[platform];
+        var iconsForPlatform = iconsByPlatform[platform];
         if (iconsForPlatform != null) {
           for (var icon in iconsForPlatform) {
             var encoder = encoders[p.extension(icon.path).toLowerCase()];
@@ -187,7 +199,7 @@ class AppIcons {
           }
         }
       }
-    }, null);
+    });
   }
 }
 

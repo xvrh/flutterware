@@ -4,6 +4,7 @@ import '../dependencies/model/service.dart';
 import '../project.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
+import '../utils/value_stream_builder.dart';
 import '../utils/cloc/cloc.dart';
 import '../utils/utils.dart';
 import 'model/assets.dart';
@@ -28,8 +29,8 @@ class MetricsCard extends StatelessWidget {
                 onTap: () {
                   context.router.go('/project/dependencies');
                 },
-                child: ValueListenableBuilder<Snapshot<Dependencies>>(
-                  valueListenable: project.dependencies.dependencies,
+                child: ValueStreamBuilder<Snapshot<Dependencies>>(
+                  stream: project.dependencies.dependencies.snapshots,
                   builder: (context, snapshot, child) {
                     var data = snapshot.data;
                     if (data == null) {
@@ -47,8 +48,8 @@ class MetricsCard extends StatelessWidget {
             ),
             _InfoRow(
               label: Text('Lines of Code'),
-              value: ValueListenableBuilder<Snapshot<CodeMetrics>>(
-                valueListenable: project.info.codeMetrics,
+              value: ValueStreamBuilder<Snapshot<CodeMetrics>>(
+                stream: project.info.codeMetrics,
                 builder: (context, snapshot, child) {
                   if (snapshot.error != null) {
                     return ErrorPanel(
@@ -86,8 +87,8 @@ class MetricsCard extends StatelessWidget {
             ),
             _InfoRow(
               label: Text('Assets'),
-              value: ValueListenableBuilder<Snapshot<AssetsReport>>(
-                valueListenable: project.info.assetsMetrics,
+              value: ValueStreamBuilder<Snapshot<AssetsReport>>(
+                stream: project.info.assetsMetrics,
                 builder: (context, snapshot, child) {
                   var data = snapshot.data;
                   if (data == null) {

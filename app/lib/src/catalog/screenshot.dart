@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../embedder/protocol.dart';
 import '../embedder/raw_frame.dart';
 import '../embedder/guest_vm_service.dart';
+import '../utils/run_dir.dart';
 import 'compiler_daemon_client.dart';
 import 'protocol.dart';
 
@@ -21,18 +23,11 @@ import 'protocol.dart';
 /// The guest is spawned with `--capture-raw`, which writes the composited frame
 /// the user would have seen rather than re-rasterising it.
 class CatalogScreenshot {
-  CatalogScreenshot({
-    required this.dartExecutable,
-    required this.hostPath,
-    required this.config,
-  });
+  CatalogScreenshot({required this.dartExecutable, required this.config});
 
   /// A real Dart VM — the Flutter SDK's `dart`, never the running executable
   /// when that is a Flutter app.
   final String dartExecutable;
-
-  /// The built embedder host binary.
-  final String hostPath;
 
   final DaemonConfig config;
 
@@ -94,7 +89,11 @@ class CatalogScreenshot {
             throw StateError('$id did not compile:\n${compiled.error}');
           }
           guest = await _GuestSession.start(
-            hostPath: hostPath,
+            // The daemon builds the host and reports where it put it. Taking
+            // it from the handshake rather than a caller's guess means there
+            // is one answer to "where is the host binary", and it is the one
+            // that was actually built.
+            hostPath: ready.hostPath,
             assetsDir: ready.assetsDir,
             icuData: ready.icuData,
             workDir: p.join(config.appPackageRoot, 'build', 'catalog'),
@@ -146,7 +145,13 @@ class _GuestSession {
     required int width,
     required int height,
   }) async {
-    var socketPath = p.join(workDir, 'screenshot.sock');
+    // Not under [workDir]: a unix socket path is capped at 104 bytes, and a
+    // build directory inside a worktree already spends most of that. The
+    // derived name keeps two concurrent captures from colliding.
+    var key = sha1.convert(utf8.encode(workDir)).toString().substring(0, 12);
+    var socketPath = checkSocketPath(
+      p.join(flutterwareRunDir(), 'shot-$key.sock'),
+    );
     var socket = File(socketPath);
     if (socket.existsSync()) socket.deleteSync();
     var server = await ServerSocket.bind(

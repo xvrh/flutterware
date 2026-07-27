@@ -1,23 +1,25 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'dart:isolate';
 import 'package:path/path.dart' as p;
+import 'package:pubspec_parse/pubspec_parse.dart' show Pubspec;
 import 'package:watcher/watcher.dart';
-import '../project.dart';
+import '../package_ref.dart';
 import '../utils/async_value.dart';
+import '../utils/value_stream.dart';
 import 'model/assets.dart';
 import 'model/code_metrics.dart';
 
 class ProjectInfoService {
-  final Project project;
+  final PackageRef package;
   late final AsyncValue<Pubspec> _pubspec;
   late final AsyncValue<List<FlutterPlatform>> _platforms;
   late final AsyncValue<CodeMetrics> _codeMetrics;
   late final AsyncValue<AssetsReport> _assetsMetrics;
   late StreamSubscription _pubspecWatcher;
 
-  ProjectInfoService(this.project) {
-    var pubspec = p.join(project.directory.path, 'pubspec.yaml');
+  ProjectInfoService(this.package) {
+    var pubspec = p.join(package.directory.path, 'pubspec.yaml');
     _pubspec = AsyncValue(
       debugName: 'Pubspec',
       loader: () async {
@@ -34,19 +36,21 @@ class ProjectInfoService {
     _assetsMetrics = AsyncValue(loader: _loadAssetsMetrics);
   }
 
-  ValueListenable<Snapshot<Pubspec>> get pubspec => _pubspec;
+  ValueStream<Snapshot<Pubspec>> get pubspec => _pubspec.snapshots;
 
-  ValueListenable<Snapshot<List<FlutterPlatform>>> get platforms => _platforms;
+  ValueStream<Snapshot<List<FlutterPlatform>>> get platforms =>
+      _platforms.snapshots;
 
-  ValueListenable<Snapshot<CodeMetrics>> get codeMetrics => _codeMetrics;
+  ValueStream<Snapshot<CodeMetrics>> get codeMetrics => _codeMetrics.snapshots;
 
-  ValueListenable<Snapshot<AssetsReport>> get assetsMetrics => _assetsMetrics;
+  ValueStream<Snapshot<AssetsReport>> get assetsMetrics =>
+      _assetsMetrics.snapshots;
 
   Future<List<FlutterPlatform>> _loadPlatforms() async {
     var result = <FlutterPlatform>[];
     for (var platform in FlutterPlatform.values) {
       var exists = await Directory(
-        p.join(project.absolutePath, platform.folder),
+        p.join(package.absolutePath, platform.folder),
       ).exists();
       if (exists) {
         result.add(platform);
@@ -56,14 +60,15 @@ class ProjectInfoService {
   }
 
   Future<CodeMetrics> _loadCodeMetrics() async {
-    return compute<String, CodeMetrics>(codeMetricsOf, project.absolutePath);
+    // The path is read out first so the closure captures a String and not
+    // `this` — `Isolate.run` sends the closure, and a a `PackageRef` holds a Directory.
+    var path = package.absolutePath;
+    return Isolate.run(() => codeMetricsOf(path));
   }
 
   Future<AssetsReport> _loadAssetsMetrics() async {
-    return compute<String, AssetsReport>(
-      createAssetReport,
-      project.absolutePath,
-    );
+    var path = package.absolutePath;
+    return Isolate.run(() => createAssetReport(path));
   }
 
   void dispose() {

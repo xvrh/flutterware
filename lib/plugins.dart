@@ -7,6 +7,8 @@
 library;
 
 export 'src/plugins/action.dart';
+export 'src/plugins/address.dart';
+export 'src/plugins/artifact.dart';
 export 'src/plugins/child.dart';
 export 'src/plugins/status_badge.dart';
 export 'src/plugins/first_party.dart';

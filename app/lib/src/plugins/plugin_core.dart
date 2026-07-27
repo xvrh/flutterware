@@ -1,0 +1,161 @@
+import 'dart:async';
+
+import 'package:flutterware/plugins.dart';
+
+import '../shell/workspace.dart';
+import '../shell/worktree.dart';
+import '../utils/value_stream.dart';
+import 'plugin_host.dart';
+
+/// A plugin's behaviour, with no Flutter in it.
+///
+/// This is master-plan decision 2 made literal: `status`, `badge`, `actions`,
+/// `teardown`, `guard` and the text projection are data, and **only the panel
+/// forks**. Everything a renderer other than the GUI needs lives here, so the
+/// same object serves the sidebar, `fw` and an agent.
+///
+/// The reason it is a separate type from `NativePlugin` rather than a
+/// refactoring of it: `NativePlugin.buildPanel` returns a `Widget`, so that
+/// class can never be linked into a pure-Dart entry point. `fw` links cores.
+///
+/// Change notification is a [ValueStream] rather than a `ChangeNotifier`, for
+/// the same reason — see `2026-07-27-gui-cli-mcp-architecture.md`, decision 4.
+abstract class PluginCore {
+  PluginCore(this.host);
+
+  final PluginHost host;
+
+  String get id => host.id;
+  String get label => host.label;
+
+  /// Everything this plugin currently says about itself.
+  ///
+  /// **A pure read of cached state — it must never start work.** That is what
+  /// makes it safe for the sidebar, a tab glyph, `fw` and an agent to call it
+  /// for every plugin × package × worktree. A plugin with nothing cached
+  /// reports "not computed" rather than computing on the spot.
+  PluginReport get report;
+
+  /// Runs one of [report]'s actions. [arguments] are keyed by
+  /// `ActionParameter.id`, whether they came from a form, a flag or an agent.
+  Future<Object?> invoke(
+    String actionId, {
+    Map<String, Object?> arguments = const {},
+  }) async {
+    throw ArgumentError.value(actionId, 'actionId', 'unknown action on $id');
+  }
+
+  /// Loads whatever [report] would otherwise call "not computed", and waits.
+  ///
+  /// The explicit opt-in behind `fw status --compute`. It exists because a
+  /// widget subscribing is what normally starts work, and a CLI has no widget
+  /// — but it must stay *explicit*, because an invocation that silently
+  /// scanned or compiled thirty packages would make `status` unusable as a
+  /// quick check.
+  ///
+  /// Default: nothing. A plugin with nothing expensive to load needs no
+  /// override, and callers never have to ask which kind they have.
+  Future<void> computeAll() async {}
+
+  /// Bumps whenever [report] would answer differently. A renderer subscribes;
+  /// it carries no payload because the report is the payload.
+  ValueStream<int> get changes => _changes;
+  final _changes = ValueStream<int>(0);
+
+  /// Schedules a change notification, coalescing bursts into one.
+  ///
+  /// Deferred by a microtask because work starts when a widget subscribes, and
+  /// that happens in `initState` — inside the build phase, where marking the
+  /// shell dirty synchronously throws "setState() called during build".
+  void notifyChanged() {
+    if (_notifyScheduled || _disposed) return;
+    _notifyScheduled = true;
+    scheduleMicrotask(() {
+      _notifyScheduled = false;
+      if (!_disposed) _changes.value = _changes.value + 1;
+    });
+  }
+
+  var _notifyScheduled = false;
+  var _disposed = false;
+
+  bool get isDisposed => _disposed;
+
+  /// Release watchers, subscriptions and processes here — this is what makes
+  /// closing a worktree free resources rather than just hide a tab.
+  void dispose() {
+    _disposed = true;
+    unawaited(_changes.close());
+  }
+}
+
+/// Builds a plugin's core for one worktree.
+typedef PluginCoreFactory = PluginCore Function(PluginHost host);
+
+/// Stands in for a plugin that is declared but has no core in this build.
+///
+/// Visible rather than skipped, for the same reason as `MissingPlugin`: a
+/// declaration that silently vanishes looks like a config bug that never
+/// surfaces. `fw` printing nothing for a declared plugin would be a lie.
+class MissingPluginCore extends PluginCore {
+  MissingPluginCore(super.host, {this.reason = 'no implementation'});
+
+  final String reason;
+
+  @override
+  PluginReport get report => PluginReport(
+    id: host.id,
+    label: host.label,
+    status: Status.error(reason),
+    badge: const StatusBadge.dot(Tone.error),
+    view: PluginView([
+      ViewText('No core is registered for "${host.id}" in this build.'),
+      ViewField('Declared in', 'tool/flutterware.dart'),
+    ]),
+  );
+}
+
+/// Maps a declared plugin id to the core compiled into this binary.
+///
+/// The pure-Dart counterpart of `PluginRegistry`. They are deliberately
+/// separate: the GUI's registry produces panels and cannot be linked into
+/// `fw`, while this one produces behaviour and can be linked into both.
+class PluginCoreRegistry {
+  PluginCoreRegistry([Map<String, PluginCoreFactory>? factories])
+    : _factories = {...?factories};
+
+  final Map<String, PluginCoreFactory> _factories;
+
+  Iterable<String> get ids => _factories.keys;
+
+  void register(String id, PluginCoreFactory factory) {
+    if (_factories.containsKey(id)) {
+      throw StateError('A core is already registered for "$id".');
+    }
+    _factories[id] = factory;
+  }
+
+  bool knows(String id) => _factories.containsKey(id);
+
+  PluginCore create(PluginHost host) =>
+      (_factories[host.id] ?? MissingPluginCore.new)(host);
+
+  /// Resolves a manifest into cores for one worktree, in declared order — the
+  /// project's order, so `fw` prints the config file's shape.
+  List<PluginCore> resolve(
+    PluginManifest manifest,
+    Worktree worktree,
+    Workspace workspace,
+  ) => [
+    for (var declaration in manifest.plugins)
+      create(
+        PluginHost(
+          id: declaration.id,
+          label: declaration.label,
+          worktree: worktree,
+          workspace: workspace,
+          config: declaration.config,
+        ),
+      ),
+  ];
+}

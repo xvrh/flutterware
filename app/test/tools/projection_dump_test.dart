@@ -14,8 +14,8 @@ import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 ///
 ///     cd app && flutter test test/tools/projection_dump_test.dart
 ///
-/// Shaped as a test only because a native plugin transitively needs `dart:ui`
-/// and cannot run under a plain `dart run` — which is itself a finding.
+/// Superseded by `dart run bin/fw.dart status --compute`, which prints this for
+/// real. Kept because it drives the plugin directly, with no Session in the way.
 void main() {
   test('dump', () async {
     var root = findRepoRoot('..')!;
@@ -48,10 +48,10 @@ void main() {
     // A CLI would subscribe for the duration of the request; this is that.
     for (var plugin in plugins.whereType<DependenciesPlugin>()) {
       for (var path in plugin.packages) {
-        plugin.track(path);
+        plugin.core.track(path);
       }
       for (var path in plugin.packages) {
-        await workspace.projectFor(path).dependencies.dependencies.refresh();
+        await plugin.core.serviceFor(path).dependencies.refresh();
       }
     }
 

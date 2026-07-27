@@ -1,171 +1,43 @@
+import 'dart:async';
+
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-// `Dependencies` here is the app's dependency model, not the plugin
-// declaration of the same name in package:flutterware.
 import 'package:flutterware/plugins.dart' hide Dependencies;
 
 import '../../dependencies/list.dart';
-import '../../dependencies/model/service.dart';
 import '../../ui/theme.dart';
-import '../../utils/async_value.dart';
 import '../native_plugin.dart';
+import '../plugin_host.dart';
+import 'dependencies_core.dart';
 
-/// The registered id — also what `tool/flutterware.dart` declares.
-const dependenciesPluginId = 'flutterware.dependencies';
+export 'dependencies_core.dart' show DependenciesCore, dependenciesPluginId;
 
-/// Rows the text projection carries before it starts counting. A projection is
-/// read, not scrolled; the rest is reported as a count so it never looks
-/// complete when it is not.
-const _projectedRows = 12;
-
-/// Pub dependencies for each declared package.
+/// The GUI half of the dependencies plugin: a panel, and nothing else.
 ///
-/// Shows the shape every native plugin follows, including the rule that matters
-/// most: **nothing here starts work.** The constructor allocates nothing and
-/// [report] only reads what some widget already caused to load. Loading begins
-/// in [track], which the panel calls on mount and reverses on unmount.
+/// Every decision — what the report says, which packages are declared, what
+/// `reload` does — lives in [DependenciesCore], which is pure Dart so that
+/// `fw` and an agent reach exactly the same behaviour. This class exists only
+/// because `buildPanel` returns a `Widget`.
 class DependenciesPlugin extends NativePlugin {
-  DependenciesPlugin(super.host);
+  DependenciesPlugin(PluginHost host) : this._(DependenciesCore(host));
 
-  final _tracked = <String, VoidCallback>{};
-
-  /// Declared packages, filtered to those the workspace knows about.
-  late final List<String> packages = [
-    for (var path in host.packagePaths)
-      if (host.workspace.declaredAt(path) != null) path,
-  ];
-
-  /// Starts (and keeps) the load for [path]. Idempotent.
-  void track(String path) {
-    if (_tracked.containsKey(path)) return;
-    void listener() => notifyChanged();
-    _tracked[path] = listener;
-    // AsyncValue loads on its first listener, so this *is* the trigger.
-    _sourceFor(path).addListener(listener);
-    notifyChanged();
+  DependenciesPlugin._(this.core) : super(core.host) {
+    _changes = core.changes.listen((_) => notifyListeners());
   }
 
-  /// Releases [path]. The data stays cached — demand says what work is
-  /// justified, not what must be discarded.
-  void untrack(String path) {
-    var listener = _tracked.remove(path);
-    if (listener == null) return;
-    if (host.workspace.isRealised(path)) {
-      _sourceFor(path).removeListener(listener);
-    }
-    notifyChanged();
-  }
+  final DependenciesCore core;
+  late final StreamSubscription<int> _changes;
 
-  AsyncValue<Dependencies> _sourceFor(String path) =>
-      host.workspace.projectFor(path).dependencies.dependencies;
-
-  /// Cached snapshot for [path], or null when nothing has looked at it yet.
-  /// Deliberately does **not** realise the package's services.
-  Snapshot<Dependencies>? _cached(String path) =>
-      host.workspace.isRealised(path) ? _sourceFor(path).value : null;
+  List<String> get packages => core.packages;
 
   @override
-  PluginReport get report {
-    var known = <String, Snapshot<Dependencies>>{};
-    for (var path in packages) {
-      var snapshot = _cached(path);
-      if (snapshot != null) known[path] = snapshot;
-    }
-    return PluginReport(
-      id: host.id,
-      label: host.label,
-      status: _status(known),
-      children: [
-        for (var path in packages)
-          PluginChild(
-            id: path,
-            label: path == '.' ? 'root' : path,
-            status: _packageStatus(known[path]),
-          ),
-      ],
-      badge: known.values.any((s) => s.error != null)
-          ? const StatusBadge.dot(Tone.error)
-          : StatusBadge.none,
-      actions: const [PluginAction('reload', 'Reload')],
-      view: _view(known),
-    );
-  }
-
-  /// Silent once loaded. Counting dependencies across packages by *summing*
-  /// them is meaningless — everything shared gets counted once per package —
-  /// and the per-package number is already a click away in the panel. The row
-  /// speaks only while it is working or when something went wrong.
-  Status _status(Map<String, Snapshot<Dependencies>> known) {
-    if (packages.isEmpty) return const Status.warn('no packages');
-    if (known.values.any((s) => s.error != null)) {
-      return const Status.error('failed to load');
-    }
-    var loading = known.values.where((s) => s.data == null).length;
-    return loading == 0 ? Status.none : const Status.info('loading…');
-  }
-
-  Status _packageStatus(Snapshot<Dependencies>? snapshot) {
-    if (snapshot == null) return Status.none;
-    if (snapshot.error != null) return const Status.error('failed');
-    if (snapshot.data == null) return const Status.info('loading…');
-    return Status.none;
-  }
-
-  PluginView _view(Map<String, Snapshot<Dependencies>> known) {
-    if (packages.isEmpty) {
-      return const PluginView([
-        ViewText(
-          'This plugin has no packages. Add them in tool/flutterware.dart.',
-          tone: Tone.warn,
-        ),
-      ]);
-    }
-
-    return PluginView([
-      for (var path in packages)
-        ViewSection(path, [
-          // Honest: nothing has looked at this package, so nothing was
-          // computed. That is not the same as "zero dependencies".
-          ...?(known[path] == null ? null : _packageNodes(known[path]!)),
-          if (known[path] == null) const ViewText('not computed'),
-        ]),
-    ]);
-  }
-
-  List<ViewNode> _packageNodes(Snapshot<Dependencies> snapshot) {
-    if (snapshot.error != null) {
-      return [ViewField('Error', '${snapshot.error}', tone: Tone.error)];
-    }
-    var data = snapshot.data;
-    if (data == null) return const [ViewText('loading…')];
-
-    var direct = data.directs;
-    var shown = direct.take(_projectedRows).toList();
-    return [
-      ViewField('Direct', '${direct.length}'),
-      ViewField('Transitive', '${data.transitives.length}'),
-      ViewTable(
-        const ['PACKAGE', 'VERSION'],
-        [
-          for (var dependency in shown)
-            [dependency.name, dependency.pubspec.version?.toString() ?? ''],
-        ],
-        truncated: direct.length - shown.length,
-      ),
-    ];
-  }
+  PluginReport get report => core.report;
 
   @override
   Future<Object?> invoke(
     String actionId, {
     Map<String, Object?> arguments = const {},
-  }) async {
-    if (actionId != 'reload') {
-      return super.invoke(actionId, arguments: arguments);
-    }
-    for (var path in _tracked.keys.toList()) {
-      await _sourceFor(path).refresh();
-    }
-  }
+  }) => core.invoke(actionId, arguments: arguments);
 
   @override
   Widget buildPanel(BuildContext context, String? childId) =>
@@ -173,9 +45,8 @@ class DependenciesPlugin extends NativePlugin {
 
   @override
   void dispose() {
-    for (var path in _tracked.keys.toList()) {
-      untrack(path);
-    }
+    unawaited(_changes.cancel());
+    core.dispose();
     super.dispose();
   }
 }
@@ -197,7 +68,9 @@ class _DependenciesPanel extends StatefulWidget {
 class _DependenciesPanelState extends State<_DependenciesPanel> {
   String? _tracked;
 
-  String? get _path => widget.childId ?? widget.plugin.packages.firstOrNull;
+  DependenciesCore get _core => widget.plugin.core;
+
+  String? get _path => widget.childId ?? _core.packages.firstOrNull;
 
   @override
   void initState() {
@@ -216,14 +89,14 @@ class _DependenciesPanelState extends State<_DependenciesPanel> {
   void _retrack() {
     var wanted = _path;
     if (wanted == _tracked) return;
-    if (_tracked != null) widget.plugin.untrack(_tracked!);
+    if (_tracked != null) _core.untrack(_tracked!);
     _tracked = wanted;
-    if (wanted != null) widget.plugin.track(wanted);
+    if (wanted != null) _core.track(wanted);
   }
 
   @override
   void dispose() {
-    if (_tracked != null) widget.plugin.untrack(_tracked!);
+    if (_tracked != null) _core.untrack(_tracked!);
     super.dispose();
   }
 
@@ -241,9 +114,6 @@ class _DependenciesPanelState extends State<_DependenciesPanel> {
       );
     }
 
-    return DependenciesScreen(
-      widget.plugin.host.workspace.projectFor(path),
-      key: ValueKey(path),
-    );
+    return DependenciesScreen(_core.serviceFor(path), key: ValueKey(path));
   }
 }

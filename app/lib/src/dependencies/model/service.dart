@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart';
 import 'package:package_config/package_config.dart';
+import 'package:pubspec_parse/pubspec_parse.dart' show Pubspec;
 import 'package:path/path.dart' as p;
 import 'package:pub_scores/pub_scores.dart';
-import '../../project.dart';
+import '../../package_ref.dart';
 import '../../utils/async_value.dart';
 import '../../utils/cloc/cloc.dart';
 import '../../utils/list_files.dart';
@@ -14,20 +15,20 @@ import 'dependency_graph.dart';
 import 'package_imports.dart';
 
 class DependenciesService {
-  final Project project;
+  final PackageRef package;
   late final dependencies = AsyncValue<Dependencies>(loader: _load);
   late final pubScores = AsyncValue<PubScores>(loader: _loadPubScores);
   late final packageImports = AsyncValue<PackageImports>(
     loader: _loadPackageImports,
   );
 
-  DependenciesService(this.project);
+  DependenciesService(this.package);
 
   Future<Dependencies> _load() async {
     //TODO(xha): upgrade for workspace support
-    var rootPubspec = await _readPubspec(project.absolutePath);
-    var pubspecLock = await PubspecLock.load(project.absolutePath);
-    var packageConfig = (await findPackageConfig(project.directory))!;
+    var rootPubspec = await _readPubspec(package.absolutePath);
+    var pubspecLock = await PubspecLock.load(package.absolutePath);
+    var packageConfig = (await findPackageConfig(package.directory))!;
 
     var results = Dependencies(rootPubspec, <Dependency>[]);
     for (var package in packageConfig.packages) {
@@ -73,22 +74,23 @@ class DependenciesService {
       'lib/data/all_packages.json',
     );
 
-    return await compute<String, PubScores>((path) async {
+    return Isolate.run(() {
       //TODO(xha): consider a lighter parsing as the file is big
-      var content = File(path).readAsStringSync();
+      var content = File(dataPath).readAsStringSync();
       var json = jsonDecode(content) as Map<String, dynamic>;
       return PubScores.fromJson(json);
-    }, dataPath);
+    });
   }
 
   Future<PackageImports> _loadPackageImports() async {
-    return await compute<String, PackageImports>((path) async {
+    var path = package.absolutePath;
+    return Isolate.run(() {
       return PackageImports.gather(
         listFilesInDirectory(
           path,
         ).whereType<File>().where((f) => f.path.endsWith('.dart')),
       );
-    }, project.absolutePath);
+    });
   }
 
   void dispose() {
@@ -191,13 +193,15 @@ class Dependency implements Disposable {
   bool get isTransitive => !isDirect;
 
   Future<ClocReport> _loadCloc() async {
-    return compute<String, ClocReport>((path) async {
+    var path = package.root.toFilePath();
+    return Isolate.run(() {
       return countLinesOfCode(listFilesInDirectory(path));
-    }, package.root.toFilePath());
+    });
   }
 
   Future<SizeReport> _loadSize() async {
-    return compute<String, SizeReport>((path) async {
+    var path = package.root.toFilePath();
+    return Isolate.run(() {
       var files = listFilesInDirectory(path);
       var count = 0;
       var size = 0;
@@ -206,7 +210,7 @@ class Dependency implements Disposable {
         size += file.lengthSync();
       }
       return SizeReport(fileCount: count, totalBytes: size);
-    }, package.root.toFilePath());
+    });
   }
 
   List<List<String>>? _dependencyPaths;

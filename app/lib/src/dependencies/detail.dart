@@ -8,9 +8,9 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:pub_scores/pub_scores.dart';
 import '../app/ui/breadcrumb.dart';
-import '../project.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
+import '../utils/value_stream_builder.dart';
 import '../utils/cloc/cloc.dart';
 import '../utils/utils.dart';
 import 'model/package_imports.dart';
@@ -26,15 +26,19 @@ class MyCustomScrollBehavior extends MaterialScrollBehavior {
 }
 
 class DependencyDetailScreen extends StatelessWidget {
-  final Project project;
+  final DependenciesService dependencies;
   final String packageName;
 
-  const DependencyDetailScreen(this.project, this.packageName, {super.key});
+  const DependencyDetailScreen(
+    this.dependencies,
+    this.packageName, {
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Snapshot<Dependencies>>(
-      valueListenable: project.dependencies.dependencies,
+    return ValueStreamBuilder<Snapshot<Dependencies>>(
+      stream: dependencies.dependencies.snapshots,
       builder: (context, snapshot, child) {
         if (snapshot.hasError) {
           return ErrorWidget(snapshot.error!);
@@ -45,10 +49,10 @@ class DependencyDetailScreen extends StatelessWidget {
           if (dependency == null) {
             return ErrorWidget('$packageName not found');
           }
-          return ValueListenableBuilder<Snapshot<PubScores>>(
-            valueListenable: project.dependencies.pubScores,
+          return ValueStreamBuilder<Snapshot<PubScores>>(
+            stream: dependencies.pubScores.snapshots,
             builder: (context, pubScores, child) {
-              return _DetailScreen(project, dependency, pubScores.data);
+              return _DetailScreen(dependencies, dependency, pubScores.data);
             },
           );
         }
@@ -58,11 +62,11 @@ class DependencyDetailScreen extends StatelessWidget {
 }
 
 class _DetailScreen extends StatelessWidget {
-  final Project project;
+  final DependenciesService dependencies;
   final Dependency dependency;
   final PubScores? pubScores;
 
-  const _DetailScreen(this.project, this.dependency, this.pubScores);
+  const _DetailScreen(this.dependencies, this.dependency, this.pubScores);
 
   @override
   Widget build(BuildContext context) {
@@ -246,9 +250,8 @@ class _InfoTabState extends State<_InfoTab> {
               if (dependency.isDirect)
                 _InfoRow(
                   label: Text('Imports'),
-                  value: ValueListenableBuilder<Snapshot<PackageImports>>(
-                    valueListenable:
-                        widget.parent.project.dependencies.packageImports,
+                  value: ValueStreamBuilder<Snapshot<PackageImports>>(
+                    stream: widget.parent.dependencies.packageImports.snapshots,
                     builder: (context, snapshot, child) {
                       var packageImports = snapshot.data;
                       if (packageImports != null) {
@@ -258,7 +261,7 @@ class _InfoTabState extends State<_InfoTab> {
                             showDialog(
                               context: context,
                               builder: (context) => _ImportListDialog(
-                                widget.parent.project,
+                                widget.parent.dependencies,
                                 dependency,
                                 imports,
                               ),
@@ -303,8 +306,8 @@ class _InfoTabState extends State<_InfoTab> {
               ),
               _InfoRow(
                 label: Text('Lines of Code'),
-                value: ValueListenableBuilder<Snapshot<ClocReport>>(
-                  valueListenable: dependency.cloc,
+                value: ValueStreamBuilder<Snapshot<ClocReport>>(
+                  stream: dependency.cloc.snapshots,
                   builder: (context, snapshot, child) {
                     var data = snapshot.data;
                     if (data != null) {
@@ -328,8 +331,8 @@ class _InfoTabState extends State<_InfoTab> {
               ),
               _InfoRow(
                 label: Text('Size'),
-                value: ValueListenableBuilder<Snapshot<SizeReport>>(
-                  valueListenable: dependency.size,
+                value: ValueStreamBuilder<Snapshot<SizeReport>>(
+                  stream: dependency.size.snapshots,
                   builder: (context, snapshot, child) {
                     var data = snapshot.data;
                     if (data != null) {
@@ -434,11 +437,11 @@ class _FilePageState extends State<_FilePage> {
 }
 
 class _ImportListDialog extends StatelessWidget {
-  final Project project;
+  final DependenciesService dependencies;
   final Dependency dependency;
   final List<File> files;
 
-  const _ImportListDialog(this.project, this.dependency, this.files);
+  const _ImportListDialog(this.dependencies, this.dependency, this.files);
 
   @override
   Widget build(BuildContext context) {
@@ -454,7 +457,7 @@ class _ImportListDialog extends StatelessWidget {
             return Text(
               p.relative(
                 files[index].absolute.path,
-                from: project.absolutePath,
+                from: dependencies.package.absolutePath,
               ),
             );
           },

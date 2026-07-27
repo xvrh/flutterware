@@ -2,10 +2,10 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:pub_scores/pub_scores.dart';
 import '../app/ui/breadcrumb.dart';
-import '../project.dart';
 import '../ui/theme.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
+import '../utils/value_stream_builder.dart';
 import 'detail.dart';
 import 'model/package_imports.dart';
 import 'model/service.dart';
@@ -13,9 +13,9 @@ import 'upgrades.dart';
 import 'utils.dart';
 
 class DependenciesScreen extends StatefulWidget {
-  final Project project;
+  final DependenciesService dependencies;
 
-  const DependenciesScreen(this.project, {super.key});
+  const DependenciesScreen(this.dependencies, {super.key});
 
   @override
   State<DependenciesScreen> createState() => _DependenciesScreenState();
@@ -36,7 +36,7 @@ class _DependenciesScreenState extends State<DependenciesScreen> {
         '': (_) => _DependencyListScreen(this),
         'upgrade': (_) => DependenciesUpgradeScreen(),
         'packages/:packageName': (args) =>
-            DependencyDetailScreen(widget.project, args['packageName']),
+            DependencyDetailScreen(widget.dependencies, args['packageName']),
       }),
     );
   }
@@ -67,7 +67,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
     4: _selectGithubScore,
   };
 
-  Project get project => widget.parent.widget.project;
+  DependenciesService get dependencies => widget.parent.widget.dependencies;
 
   TextEditingController get _searchController =>
       widget.parent._searchController;
@@ -83,8 +83,8 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Snapshot<Dependencies>>(
-      valueListenable: project.dependencies.dependencies,
+    return ValueStreamBuilder<Snapshot<Dependencies>>(
+      stream: dependencies.dependencies.snapshots,
       builder: (context, snapshot, child) {
         var data = snapshot.data;
         var error = snapshot.error;
@@ -109,7 +109,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                     PopupMenuItem(
                       child: Text('Reload'),
                       onTap: () {
-                        project.dependencies.dependencies.refresh();
+                        dependencies.dependencies.refresh();
                       },
                     ),
                   ],
@@ -122,7 +122,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
             else if (error != null)
               ErrorPanel(
                 message: 'Failed to load dependencies',
-                onRetry: project.dependencies.dependencies.refresh,
+                onRetry: dependencies.dependencies.refresh,
               )
             else
               LoadingPanel(),
@@ -255,8 +255,8 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
   }
 
   Widget _data(Dependencies all, Iterable<Dependency> list) {
-    return ValueListenableBuilder<Snapshot<PubScores>>(
-      valueListenable: project.dependencies.pubScores,
+    return ValueStreamBuilder<Snapshot<PubScores>>(
+      stream: dependencies.pubScores.snapshots,
       builder: (context, pubScores, child) {
         var sort = _sorts[_sortIndex]!;
         var comparator = (Comparable a, Comparable b) => a.compareTo(b);
@@ -295,7 +295,7 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
                   DataCell(
                     dependency.isTransitive
                         ? _DependencyTransitiveBadge(dependency)
-                        : _DependencyDirectBadge(project, dependency),
+                        : _DependencyDirectBadge(dependencies, dependency),
                   ),
                   DataCell(_VersionCell(dependency)),
                   DataCell(_PubCell(dependency, pubScores.data)),
@@ -424,10 +424,10 @@ class _DependencyTransitiveBadge extends StatelessWidget {
 }
 
 class _DependencyDirectBadge extends StatelessWidget {
-  final Project project;
+  final DependenciesService dependencies;
   final Dependency dependency;
 
-  const _DependencyDirectBadge(this.project, this.dependency);
+  const _DependencyDirectBadge(this.dependencies, this.dependency);
 
   @override
   Widget build(BuildContext context) {
@@ -442,8 +442,8 @@ class _DependencyDirectBadge extends StatelessWidget {
         border: Border.all(color: colors.statusBorder(colors.grn)),
         borderRadius: BorderRadius.circular(context.radii.radiusSmall),
       ),
-      child: ValueListenableBuilder<Snapshot<PackageImports>>(
-        valueListenable: project.dependencies.packageImports,
+      child: ValueStreamBuilder<Snapshot<PackageImports>>(
+        stream: dependencies.packageImports.snapshots,
         builder: (context, snapshot, child) {
           var packageImports = snapshot.data;
           var tooltip = '';

@@ -4,16 +4,19 @@ import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
 import '../context.dart';
-import '../project.dart';
+import '../package_ref.dart';
 import '../utils/flutter_sdk.dart';
 
 export 'repo_layout.dart';
 
-/// The packages of one worktree, and the [Project] services for each.
+/// The packages of one worktree.
 ///
-/// Carries **identity only** until something asks: `projectFor` builds a
-/// [Project] on first use and caches it, so opening a worktree with twelve
-/// declared packages does not construct twelve service graphs nobody looked at.
+/// Identity and paths only — deliberately **no services**. It used to hand out
+/// a `Project`, which declared a field per service and so dragged every one of
+/// them (and `package:flutter` with them) into the closure of any plugin that
+/// touched a workspace. A plugin has to be linkable into a pure-Dart `fw`, so a
+/// plugin now builds the one service it needs from a [PackageRef] and owns its
+/// lifetime.
 class Workspace {
   Workspace({
     required this.root,
@@ -36,7 +39,7 @@ class Workspace {
 
   final AppContext appContext;
   final FlutterSdkPath flutterSdk;
-  final _projects = <String, Project>{};
+  final _packages = <String, PackageRef>{};
 
   /// Declared paths that are not on disk — almost always a typo, and worth
   /// saying out loud rather than silently doing nothing.
@@ -55,20 +58,15 @@ class Workspace {
   Pkg? declaredAt(String path) =>
       declared.where((pkg) => pkg.path == path).firstOrNull;
 
-  /// The services for one package, built on first request and reused after.
-  Project projectFor(String path) => _projects.putIfAbsent(
+  /// The handle for one package, interned so callers can compare identity.
+  ///
+  /// Cheap and service-free, so unlike the `Project` it replaces, asking for
+  /// one starts no work — which is what lets a plugin resolve a path without
+  /// deciding to compute anything.
+  PackageRef packageFor(String path) => _packages.putIfAbsent(
     path,
-    () => Project(appContext, absolutePathOf(path), flutterSdk),
+    () => PackageRef(appContext, absolutePathOf(path), flutterSdk),
   );
 
-  /// True once [projectFor] has actually built this package's services — lets a
-  /// report distinguish "nothing yet" from "nothing there".
-  bool isRealised(String path) => _projects.containsKey(path);
-
-  void dispose() {
-    for (var project in _projects.values) {
-      project.dispose();
-    }
-    _projects.clear();
-  }
+  void dispose() => _packages.clear();
 }

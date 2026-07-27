@@ -73,7 +73,7 @@ void main() {
 
     // The laziness rule: constructing the plugin and reading its report must
     // not have started any work.
-    expect(workspace.isRealised('.'), isFalse);
+    expect(dependencies.core.isRealised('.'), isFalse);
     var report = dependencies.report;
     // Nothing has loaded, so there is nothing to say. Counting dependencies
     // across packages would double-count everything shared between them
