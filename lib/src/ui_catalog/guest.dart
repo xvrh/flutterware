@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/widgets.dart';
 
+import 'knob.dart';
 import 'parameters.dart';
 import 'ui_catalog.dart';
 
@@ -64,7 +65,9 @@ class CatalogParameters {
   /// Registers the extensions. Call once, before `runApp`.
   void registerExtensions() {
     developer.registerExtension('ext.flutterware.parameters', (_, _) async {
-      return developer.ServiceExtensionResponse.result(jsonEncode(describe()));
+      return developer.ServiceExtensionResponse.result(
+        jsonEncode(describe().toJson()),
+      );
     });
     developer.registerExtension('ext.flutterware.setParameter', (
       _,
@@ -84,49 +87,46 @@ class CatalogParameters {
   }
 
   /// Every knob the last build declared, in declaration order.
-  Map<String, Object?> describe() => {
-    'entry': _entryId,
-    'revision': revision.value,
-    'declared': _declared,
-    'parameters': [
+  KnobReport describe() => KnobReport(
+    entryId: _entryId,
+    declared: _declared,
+    revision: revision.value,
+    knobs: [
       for (var entry in editable.parameters.entries)
         ?_describe(entry.key, entry.value),
     ],
-  };
+  );
 
-  static Map<String, Object?>? _describe(String name, Parameter<Object?> p) =>
+  static KnobDescriptor? _describe(String name, Parameter<Object?> p) =>
       switch (p) {
-        StringParameter() => {
-          'name': name,
-          'kind': 'string',
-          'value': p.requiredValue,
-          'default': p.defaultValue,
-        },
-        BoolParameter() => {
-          'name': name,
-          'kind': 'bool',
-          'value': p.requiredValue,
-          'default': p.defaultValue,
-        },
-        NumParameter() => {
-          'name': name,
-          'kind': p.isInt ? 'int' : 'double',
-          'value': p.requiredValue,
-          'default': p.defaultValue,
-          'min': p.min,
-          'max': p.max,
-        },
-        PickerParameter() => {
-          'name': name,
-          'kind': 'picker',
-          // Labels, not values: a picker's values are whatever the demo wants
-          // them to be, and only the demo can turn a label back into one.
-          'options': p.options.keys.toList(),
-          'value': _labelOf(p, p.requiredValue),
-          'default': _labelOf(p, p.defaultValue),
-        },
-        // Dates and buttons are not carried yet; a panel that cannot render a
-        // knob is better than one that renders it wrong.
+        StringParameter() => KnobDescriptor(
+          name: name,
+          kind: KnobKind.string,
+          value: p.requiredValue,
+          defaultValue: p.defaultValue,
+        ),
+        BoolParameter() => KnobDescriptor(
+          name: name,
+          kind: KnobKind.boolean,
+          value: p.requiredValue,
+          defaultValue: p.defaultValue,
+        ),
+        NumParameter() => KnobDescriptor(
+          name: name,
+          kind: p.isInt ? KnobKind.integer : KnobKind.number,
+          value: p.requiredValue,
+          defaultValue: p.defaultValue,
+          min: p.min,
+          max: p.max,
+        ),
+        PickerParameter() => KnobDescriptor(
+          name: name,
+          kind: KnobKind.picker,
+          options: p.options.keys.toList(),
+          value: _labelOf(p, p.requiredValue),
+          defaultValue: _labelOf(p, p.defaultValue),
+        ),
+        // Dates and buttons are left out rather than described wrong.
         _ => null,
       };
 

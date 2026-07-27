@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:device_frame/device_frame.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutterware/ui_catalog.dart';
 import 'package:path/path.dart' as p;
 
 import '../embedder/embedded_engine.dart';
@@ -210,6 +212,10 @@ class CatalogSession extends ChangeNotifier {
   SwitchReport? lastSwitch;
   Duration? coldCompile;
 
+  /// The controls the entry on screen declared while it built, or an empty
+  /// report for one that declares none.
+  KnobReport knobs = KnobReport.empty;
+
   /// Everything discovery found, broken or not, in discovery's own order.
   ///
   /// Sorted by id because that is how the scanner sorts, so merging the two
@@ -360,6 +366,50 @@ class CatalogSession extends ChangeNotifier {
     return _queue;
   }
 
+  /// Sets a knob and rebuilds the demo in place.
+  ///
+  /// No compile and no reload: the value goes into the object the demo reads
+  /// while building, and the guest rebuilds. Turning a knob costs a frame, and
+  /// the demo keeps whatever state it was holding.
+  ///
+  /// Read back afterwards rather than patched locally, because a demo's build
+  /// decides what knobs exist — turning one can reveal or retire another.
+  Future<void> setKnob(String name, Object? value) async {
+    var vmService = _vmService;
+    if (vmService == null) return;
+    await vmService.callExtension(
+      'ext.flutterware.setParameter',
+      args: {
+        'payload': jsonEncode({'name': name, 'value': value}),
+      },
+    );
+    await _readKnobs();
+  }
+
+  /// Asks the guest what the entry on screen offers.
+  ///
+  /// Retried while the report names another entry: the knobs are recorded by
+  /// the demo's *build*, so a read that lands between the reload and the frame
+  /// describes the entry that was there before. Giving up quietly after a few
+  /// tries beats a panel that spins.
+  Future<void> _readKnobs() async {
+    var vmService = _vmService;
+    var entry = selected;
+    if (vmService == null || entry == null) return;
+    for (var attempt = 0; attempt < 10; attempt++) {
+      var json = await vmService.callExtension('ext.flutterware.parameters');
+      if (_disposed) return;
+      if (json == null) return; // A guest without the extension: no knobs.
+      var report = KnobReport.fromJson(json);
+      if (report.entryId == entry.id) {
+        knobs = report;
+        notifyListeners();
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+    }
+  }
+
   /// Rebuilds what is on screen from the files as they are now.
   ///
   /// Literally a switch to the entry already selected: the daemon sweeps for
@@ -479,6 +529,7 @@ class CatalogSession extends ChangeNotifier {
     watch.stop();
 
     active = entry;
+    unawaited(_readKnobs());
     lastSwitch = SwitchReport(
       entry: entry,
       compile: compiled.compile,

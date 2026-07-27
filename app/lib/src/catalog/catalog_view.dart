@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:device_frame/device_frame.dart';
+import 'package:flutterware/ui_catalog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -171,6 +172,10 @@ class _CatalogViewState extends State<CatalogView> {
                     _TopBar(session: _session),
                     const Divider(height: 1),
                     Expanded(child: _buildCanvas(context)),
+                    if (_session.knobs.knobs.isNotEmpty) ...[
+                      const Divider(height: 1),
+                      _KnobPanel(session: _session),
+                    ],
                     const Divider(height: 1),
                     _StatusBar(session: _session, onReload: _reload),
                   ],
@@ -356,6 +361,271 @@ class _CatalogViewState extends State<CatalogView> {
               ? sizedBox
               : Texture(textureId: engine.textureId!),
         ),
+      ),
+    );
+  }
+}
+
+/// The controls the entry declared while it built.
+///
+/// Absent, not empty, when there are none: most demos have no knobs, and a
+/// permanent empty drawer is a permanent reminder of a feature you are not
+/// using.
+class _KnobPanel extends StatelessWidget {
+  const _KnobPanel({required this.session});
+
+  final CatalogSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: context.colors.panel,
+      constraints: const BoxConstraints(maxHeight: 140),
+      width: double.infinity,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.lg,
+          vertical: FwSpacing.md,
+        ),
+        child: Wrap(
+          spacing: FwSpacing.xxl,
+          runSpacing: FwSpacing.md,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (var knob in session.knobs.knobs)
+              _Knob(
+                // Keyed by name, so a field keeps its cursor when the report
+                // is read back and the list is rebuilt around it.
+                key: ValueKey(knob.name),
+                knob: knob,
+                onChanged: (value) => session.setKnob(knob.name, value),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Knob extends StatelessWidget {
+  const _Knob({super.key, required this.knob, required this.onChanged});
+
+  final KnobDescriptor knob;
+  final ValueChanged<Object?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: FwSpacing.md,
+      children: [
+        Text(
+          knob.name,
+          style: context.type.caption.copyWith(
+            // Bright when it has been moved, so what you have changed is
+            // legible at a glance against what you have not.
+            color: knob.isDefault ? context.colors.mut : context.colors.ink,
+          ),
+        ),
+        _control(context),
+      ],
+    );
+  }
+
+  Widget _control(BuildContext context) {
+    switch (knob.kind) {
+      case KnobKind.boolean:
+        return SizedBox(
+          height: 24,
+          child: Switch(value: knob.value == true, onChanged: onChanged),
+        );
+      case KnobKind.picker:
+        return _Popover<String?>(
+          selected: knob.value as String?,
+          onSelected: onChanged,
+          groups: [
+            (
+              heading: null,
+              items: [
+                for (var option in knob.options)
+                  (value: option, label: option, detail: ''),
+              ],
+            ),
+          ],
+          child: _Field(
+            child: Text(
+              '${knob.value ?? '—'}',
+              style: context.type.caption.copyWith(color: context.colors.ink),
+            ),
+          ),
+        );
+      case KnobKind.integer || KnobKind.number:
+        if (knob.min case var min?) {
+          if (knob.max case var max?) return _slider(context, min, max);
+        }
+        return _NumberField(knob: knob, onChanged: onChanged);
+      case KnobKind.string:
+        return _StringField(knob: knob, onChanged: onChanged);
+    }
+  }
+
+  Widget _slider(BuildContext context, num min, num max) {
+    var value = (knob.value as num? ?? min).toDouble().clamp(
+      min.toDouble(),
+      max.toDouble(),
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 132,
+          // Without this the slider reserves room for a touch target on each
+          // side, and the value beside it reads as belonging to the next knob.
+          child: SliderTheme(
+            data: const SliderThemeData(padding: EdgeInsets.zero),
+            child: Slider(
+              value: value,
+              min: min.toDouble(),
+              max: max.toDouble(),
+              // Whole steps for a whole number, so dragging cannot land between
+              // two of them.
+              divisions: knob.kind == KnobKind.integer
+                  ? (max - min).round().clamp(1, 1000)
+                  : null,
+              onChanged: (v) =>
+                  onChanged(knob.kind == KnobKind.integer ? v.round() : v),
+            ),
+          ),
+        ),
+        const Gap(FwSpacing.md),
+        SizedBox(
+          width: 26,
+          child: Text(
+            knob.kind == KnobKind.integer
+                ? '${value.round()}'
+                : value.toStringAsFixed(1),
+            textAlign: TextAlign.right,
+            style: context.type.caption.copyWith(fontFamily: 'monospace'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The box every knob control sits in, so a field, a picker and a number all
+/// line up.
+class _Field extends StatelessWidget {
+  const _Field({required this.child, this.width});
+
+  final Widget child;
+  final double? width;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: 24,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+      decoration: BoxDecoration(
+        color: context.colors.bg,
+        border: Border.all(color: context.colors.line),
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// A text knob, applied as you stop typing rather than as you type.
+///
+/// Every keystroke would be a round trip to the guest and a rebuild of the
+/// demo, which is both wasteful and jumpy to read.
+class _StringField extends StatefulWidget {
+  const _StringField({required this.knob, required this.onChanged});
+
+  final KnobDescriptor knob;
+  final ValueChanged<Object?> onChanged;
+
+  @override
+  State<_StringField> createState() => _StringFieldState();
+}
+
+class _StringFieldState extends State<_StringField> {
+  late final _controller = TextEditingController(
+    text: '${widget.knob.value ?? ''}',
+  );
+  Timer? _debounce;
+
+  @override
+  void didUpdateWidget(_StringField old) {
+    super.didUpdateWidget(old);
+    // Only when the change came from somewhere else — writing back what the
+    // user is typing would fight the cursor.
+    var value = '${widget.knob.value ?? ''}';
+    if (_debounce == null && value != _controller.text) {
+      _controller.text = value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _Field(
+      width: 140,
+      child: TextField(
+        controller: _controller,
+        style: context.type.caption.copyWith(color: context.colors.ink),
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+        onChanged: (value) {
+          _debounce?.cancel();
+          _debounce = Timer(const Duration(milliseconds: 300), () {
+            _debounce = null;
+            widget.onChanged(value);
+          });
+        },
+      ),
+    );
+  }
+}
+
+/// A number without bounds, which is a field rather than a slider — there is
+/// nothing to slide between.
+class _NumberField extends StatelessWidget {
+  const _NumberField({required this.knob, required this.onChanged});
+
+  final KnobDescriptor knob;
+  final ValueChanged<Object?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Field(
+      width: 80,
+      child: TextField(
+        controller: TextEditingController(text: '${knob.value ?? ''}'),
+        style: context.type.caption.copyWith(color: context.colors.ink),
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+        onSubmitted: (text) {
+          var parsed = num.tryParse(text);
+          if (parsed == null) return;
+          onChanged(knob.kind == KnobKind.integer ? parsed.round() : parsed);
+        },
       ),
     );
   }

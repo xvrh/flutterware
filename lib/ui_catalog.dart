@@ -7,3 +7,4 @@ export 'src/ui_catalog/parameters.dart' show PickerStyle;
 // entrypoint is written into the user's project and imports this library like
 // any other consumer.
 export 'src/ui_catalog/guest.dart' show CatalogGuest, CatalogParameters;
+export 'src/ui_catalog/knob.dart' show KnobDescriptor, KnobKind, KnobReport;

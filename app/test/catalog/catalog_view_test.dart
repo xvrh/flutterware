@@ -1,6 +1,7 @@
 import 'package:device_frame/device_frame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/ui_catalog.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/catalog_session.dart';
 import 'package:flutterware_app/src/catalog/catalog_view.dart';
@@ -372,6 +373,94 @@ void main() {
       var staging = CatalogStaging()..device = Devices.ios.iPad;
       staging.followEntry(null);
       expect(staging.device?.identifier, Devices.ios.iPad.identifier);
+    });
+  });
+
+  group('the knob panel', () {
+    KnobReport report(List<KnobDescriptor> knobs) =>
+        KnobReport(entryId: beta.id, knobs: knobs);
+
+    testWidgets('is absent when the entry declares none', (tester) async {
+      await pump(tester, sessionWithBroken(beta, 'boom'));
+      expect(find.byType(Slider), findsNothing);
+      expect(find.byType(Switch), findsNothing);
+    });
+
+    testWidgets('renders a control per kind', (tester) async {
+      var session = sessionWithBroken(beta, 'boom')
+        ..knobs = report(const [
+          KnobDescriptor(
+            name: 'label',
+            kind: KnobKind.string,
+            value: 'Hello',
+            defaultValue: 'Hello',
+          ),
+          KnobDescriptor(
+            name: 'count',
+            kind: KnobKind.integer,
+            value: 2,
+            defaultValue: 2,
+            min: 0,
+            max: 9,
+          ),
+          KnobDescriptor(
+            name: 'dense',
+            kind: KnobKind.boolean,
+            value: false,
+            defaultValue: false,
+          ),
+        ]);
+      await pump(tester, session);
+
+      expect(find.text('label'), findsOneWidget);
+      expect(find.text('count'), findsOneWidget);
+      expect(find.text('dense'), findsOneWidget);
+      // Bounded, so it slides; the value reads out beside it.
+      expect(find.byType(Slider), findsOneWidget);
+      expect(find.byType(Switch), findsOneWidget);
+    });
+
+    testWidgets('a number with no bounds is a field, not a slider', (
+      tester,
+    ) async {
+      var session = sessionWithBroken(beta, 'boom')
+        ..knobs = report(const [
+          KnobDescriptor(
+            name: 'ratio',
+            kind: KnobKind.number,
+            value: 1.5,
+            defaultValue: 1.5,
+          ),
+        ]);
+      await pump(tester, session);
+
+      expect(find.byType(Slider), findsNothing);
+      expect(find.text('1.5'), findsOneWidget);
+    });
+
+    testWidgets('a knob that has moved is legible against one that has not', (
+      tester,
+    ) async {
+      var session = sessionWithBroken(beta, 'boom')
+        ..knobs = report(const [
+          KnobDescriptor(
+            name: 'moved',
+            kind: KnobKind.string,
+            value: 'changed',
+            defaultValue: 'Hello',
+          ),
+          KnobDescriptor(
+            name: 'resting',
+            kind: KnobKind.string,
+            value: 'Hello',
+            defaultValue: 'Hello',
+          ),
+        ]);
+      await pump(tester, session);
+
+      Color colorOf(String name) =>
+          tester.widget<Text>(find.text(name)).style!.color!;
+      expect(colorOf('moved'), isNot(colorOf('resting')));
     });
   });
 }
