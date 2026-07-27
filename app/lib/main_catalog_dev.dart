@@ -20,6 +20,17 @@ import 'src/utils/flutter_sdk.dart';
 const _appRootDefine = String.fromEnvironment('FLUTTERWARE_APP_ROOT');
 const _sdkRootDefine = String.fromEnvironment('FLUTTER_SDK_ROOT');
 
+/// Scan root, so this can be pointed at a project other than the app package —
+/// which is the shape the CLI-installed GUI has and the one every headless
+/// harness here lacked.
+const _rootsDefine = String.fromEnvironment(
+  'FLUTTERWARE_ROOTS',
+  defaultValue: 'tool/catalog',
+);
+
+/// Where the demos are, when that is not the app package.
+const _projectDefine = String.fromEnvironment('FLUTTERWARE_PROJECT');
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -38,11 +49,14 @@ Future<void> main() async {
           : Scaffold(
               body: CatalogView(
                 appPackageRoot: _appRootDefine,
+                // Defaults to the app package, where flutterware's own demos
+                // live; override to drive a different project through the same
+                // widget.
+                projectRoot: _projectDefine.isEmpty
+                    ? _appRootDefine
+                    : _projectDefine,
                 flutterSdkRoot: flutterSdkRoot,
-                // The demos live under `app/tool/catalog/`, so the app package
-                // is both the scan root and the entrypoint's package.
-                projectRoot: _appRootDefine,
-                roots: const ['tool/catalog'],
+                roots: _rootsDefine.split(','),
               ),
             ),
     ),

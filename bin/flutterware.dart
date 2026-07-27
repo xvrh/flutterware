@@ -49,10 +49,20 @@ void main(List<String> arguments) async {
   // has a build hook, and `path_provider_foundation` pulls in `objective_c`,
   // which has one. Kernel does not link native assets ahead of time, so it is
   // unaffected — and it starts fast enough that this is no real loss.
+  // Re-copy whenever the sources differ, not only on the first run. The GUI
+  // the CLI launches is a *copy* under ~/.flutterware, and a copy that is only
+  // refreshed by an explicit flag means every fix has to be remembered into
+  // existence. It also defeats the daemon's own revision check, which reads
+  // the copy's timestamps and so never sees a change either.
+  var stampFile = File(p.join(copiedSourcePath, '.source_stamp'));
+  var stamp = _sourceStamp(packageRoot);
+  var stale = !stampFile.existsSync() || stampFile.readAsStringSync() != stamp;
+
   var compiledCliPath = 'build/compiled_cli.dill';
   var compiledCliFile = File(p.join(copiedSourcePath, 'app', compiledCliPath));
   //TODO(xha): we should detect if any file has changed and re-compile as needed.
-  if (!compiledCliFile.existsSync() ||
+  if (stale ||
+      !compiledCliFile.existsSync() ||
       arguments.contains('--$forceCompileOption')) {
     var buildCliProgress = logger.startProgress(
       'Building Flutterware executable',
@@ -86,6 +96,16 @@ void main(List<String> arguments) async {
         'Failed to compile flutterware CLI ${compiledResult.stderr}',
       );
     }
+    // The GUI is built by the child CLI only when its binary is missing, so
+    // removing it is how newly copied sources reach the window.
+    for (var built in [
+      Directory(p.join(appPath, 'build', 'macos')),
+      Directory(p.join(appPath, 'build', 'linux')),
+      Directory(p.join(appPath, 'build', 'windows')),
+    ]) {
+      if (built.existsSync()) built.deleteSync(recursive: true);
+    }
+    stampFile.writeAsStringSync(stamp);
     buildCliProgress.stop();
   }
 
@@ -148,6 +168,24 @@ Logger _createLogger({required bool isVerbose}) {
   }
 
   return logger;
+}
+
+/// Identifies the source tree, so a changed checkout is noticed without being
+/// declared.
+///
+/// The same walk the copy uses, so what is fingerprinted is exactly what is
+/// copied — a file the copy would skip must not be able to invalidate it.
+String _sourceStamp(String root) {
+  var digest = <String>[];
+  for (var file in listFilesInDirectory(root)) {
+    var stat = file.statSync();
+    digest.add(
+      '${p.relative(file.path, from: root)}'
+      '|${stat.size}|${stat.modified.millisecondsSinceEpoch}',
+    );
+  }
+  digest.sort();
+  return sha1.convert(utf8.encode(digest.join('\n'))).toString();
 }
 
 Future<void> _copyDirectory(String source, String destination) async {

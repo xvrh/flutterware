@@ -205,6 +205,17 @@ String get _entryId => r'${active.id}';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Framework errors, on stdout, always.
+  //
+  // A demo that throws while building paints Flutter's red ErrorWidget in the
+  // guest and nothing else changes: the compile succeeded, the reload
+  // succeeded, and every check that asserts on those passes while the user
+  // looks at an error. This is what makes such a failure observable to
+  // anything that is not a pair of eyes.
+  FlutterError.onError = (details) {
+    print('FW-ERROR: \${details.exceptionAsString()}');
+    FlutterError.presentError(details);
+  };
   runApp(const _CatalogHost());
 ${emitProbe ? _probe : ''}}
 

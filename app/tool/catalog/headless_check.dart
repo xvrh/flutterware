@@ -131,6 +131,9 @@ Future<void> main(List<String> args) async {
   ]);
   // ignore: close_sinks — the process exits at the end of this script.
   var probes = StreamController<String>.broadcast();
+  // A demo that throws while building leaves the compile and the reload both
+  // reporting success. Without this the check is blind to it.
+  var guestErrors = <String>[];
   var vmServiceUri = Completer<String>();
   // Dart `print` in the guest goes through the engine's log handler, which
   // writes to stderr — so both streams have to be watched.
@@ -140,6 +143,9 @@ Future<void> main(List<String> args) async {
   ]).transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
     // host.c tags every engine log line, so the probe arrives as
     // `[embedder] FW-PROBE: ...` rather than at the start of the line.
+    if (line.contains('FW-ERROR:')) {
+      guestErrors.add(line.substring(line.indexOf('FW-ERROR:')));
+    }
     var probe = line.indexOf('FW-PROBE:');
     if (probe >= 0) {
       probes.add(line.substring(probe + 'FW-PROBE:'.length).trim());
@@ -238,6 +244,11 @@ Future<void> main(List<String> args) async {
     'revisiting the first entry renders it again',
   );
   check(frames > 0, 'the guest composited frames ($frames)');
+  check(
+    guestErrors.isEmpty,
+    'the guest reported no framework errors'
+    '${guestErrors.isEmpty ? '' : ':\n    ${guestErrors.join('\n    ')}'}',
+  );
 
   // 4. A second client on the same daemon — the reason the daemon is shared.
   //
