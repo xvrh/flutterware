@@ -374,6 +374,14 @@ class CatalogSession extends ChangeNotifier {
     return entry == null ? Future.value() : switchTo(entry);
   }
 
+  /// Asks the daemon whether entries have appeared or disappeared.
+  ///
+  /// Deliberately not a [reloadIfChanged]: this runs on a timer while you are
+  /// looking at the panel, and a catalog that reloaded itself every few
+  /// seconds — resetting the demo's state mid-refactor — is the thing we chose
+  /// not to build. This notices new *entries* and nothing else.
+  void refresh() => _daemon?.refresh();
+
   /// A [reload] that costs nothing when nothing was edited.
   ///
   /// For the triggers the user did not press — coming back to the window, or

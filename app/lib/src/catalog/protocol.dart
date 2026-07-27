@@ -47,6 +47,7 @@ sealed class DaemonRequest implements ProtocolMessage {
   static DaemonRequest decode(Map<String, dynamic> json) =>
       switch (json['type']) {
         SelectRequest.wireName => SelectRequest.fromJson(json),
+        RefreshRequest.wireName => const RefreshRequest(),
         StopDaemonRequest.wireName => const StopDaemonRequest(),
         var unknown => throw FormatException('unknown request "$unknown"'),
       };
@@ -95,6 +96,25 @@ class SelectRequest extends DaemonRequest {
 
   @override
   Map<String, dynamic> toJson() => _$SelectRequestToJson(this);
+}
+
+/// Look for entries that appeared or disappeared, and tell everyone if any
+/// did. Compiles nothing and reloads nothing.
+///
+/// What a panel asks on a timer while you are looking at it. A [SelectRequest]
+/// would rescan too, but it would also compile and hand back a kernel — and a
+/// catalog that quietly reloaded itself every few seconds while you were
+/// mid-refactor would be its own kind of annoying.
+class RefreshRequest extends DaemonRequest {
+  const RefreshRequest();
+
+  static const wireName = 'refresh';
+
+  @override
+  String get type => wireName;
+
+  @override
+  Map<String, dynamic> toJson() => const {};
 }
 
 /// Stop the daemon itself, disconnecting everyone.

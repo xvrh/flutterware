@@ -147,6 +147,18 @@ class CompilerDaemonClient {
     return reply;
   }
 
+  /// Asks the daemon to look for entries that appeared or disappeared.
+  ///
+  /// Fire and forget: what it finds arrives on [catalogChanges], to every
+  /// client, which is also how this client hears about somebody else's.
+  void refresh() {
+    try {
+      _socket.writeln(encodeLine(const RefreshRequest()));
+    } catch (_) {
+      // A daemon on its way out is not worth reporting over a poll.
+    }
+  }
+
   /// Leaves the daemon running for whoever else wants it.
   Future<void> close() async {
     try {

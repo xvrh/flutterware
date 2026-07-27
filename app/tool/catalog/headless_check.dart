@@ -633,11 +633,9 @@ Widget addedWhileOpen() => const Center(child: Text('ADDED LATE'));
     // after that leaves it out, being unchanged, so a guest that was not there
     // for that compile would reload a program referring to a library it has
     // never had. Nothing here reloads into this check's guest on purpose.
-    var refreshed = await second.select(entries.first.id, ifChanged: true);
-    check(
-      !refreshed.unchanged,
-      'a request that finds a new entry does not report nothing to do',
-    );
+    // A refresh, not a select: this is the panel's timer, which must notice
+    // the file without compiling anything or touching anybody's guest.
+    second.refresh();
     var announced = await appeared;
     check(
       announced.entries.any((e) => e.id == addedId),

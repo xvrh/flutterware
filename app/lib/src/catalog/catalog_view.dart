@@ -32,7 +32,17 @@ class CatalogView extends StatefulWidget {
 }
 
 class _CatalogViewState extends State<CatalogView> {
+  /// How often the panel asks whether entries have appeared or disappeared.
+  ///
+  /// Cheap enough not to think about — the daemon compares a listing of the
+  /// roots, a few milliseconds, and answers nothing at all when it matches.
+  /// It exists because the other triggers are all things *you* do, and files
+  /// arrive without you: an agent writing a demo while you watch the panel
+  /// would otherwise go unnoticed until you touched something.
+  static const _pollInterval = Duration(seconds: 3);
+
   final FocusNode _focusNode = FocusNode();
+  Timer? _poll;
   (int, int, double, EdgeInsets)? _lastReported;
   late final AppLifecycleListener _lifecycle;
 
@@ -44,7 +54,16 @@ class _CatalogViewState extends State<CatalogView> {
     // Coming back to the window after editing elsewhere. `onResume` is
     // documented as "a view in the application gains input focus", which on
     // desktop is exactly the alt-tab back from the editor.
-    _lifecycle = AppLifecycleListener(onResume: _reloadIfChanged);
+    _lifecycle = AppLifecycleListener(
+      onResume: () {
+        _reloadIfChanged();
+        _startPolling();
+      },
+      // Nothing arrives on screen while the window is behind another one, and
+      // coming back runs a full check anyway.
+      onInactive: _stopPolling,
+    );
+    _startPolling();
 
     // And coming back to the *panel*: the shell rebuilds it from scratch when
     // you switch plugins, so a mount is the other half of the same signal.
@@ -54,9 +73,20 @@ class _CatalogViewState extends State<CatalogView> {
 
   @override
   void dispose() {
+    _stopPolling();
     _lifecycle.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
+    _poll = Timer.periodic(_pollInterval, (_) => _session.refresh());
+  }
+
+  void _stopPolling() {
+    _poll?.cancel();
+    _poll = null;
   }
 
   /// Cheap by construction: the daemon answers `unchanged` when nothing on disk

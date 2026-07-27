@@ -190,9 +190,16 @@ class _Daemon {
   /// is on screen yet and a catalog that lies is worse than none; mid-session
   /// it would take away a working panel because someone was midway through
   /// typing a duplicate id.
-  List<Uri> _rescanIfNeeded() {
+  /// What a rescan changed and the next compile has to invalidate.
+  ///
+  /// Held rather than returned, because a rescan is no longer always part of a
+  /// compile: a refresh rescans and stops there, and the files it rewrote
+  /// still have to reach the compiler whenever the next one happens.
+  final _pending = <Uri>{};
+
+  void _rescanIfNeeded() {
     var fingerprint = _scanner.fingerprint();
-    if (fingerprint == _scanned) return const [];
+    if (fingerprint == _scanned) return;
     _scanned = fingerprint;
 
     var watch = Stopwatch()..start();
@@ -202,7 +209,7 @@ class _Daemon {
         '[catalog] rescan found errors, keeping the previous entries:\n'
         '${scan.diagnostics.where((d) => d.isError).join('\n')}',
       );
-      return const [];
+      return;
     }
 
     var before = {for (var entry in _discovered) entry.id: entry};
@@ -219,7 +226,7 @@ class _Daemon {
         if (!before.containsKey(entry.id) || _differs(before[entry.id]!, entry))
           entry,
     ];
-    if (gone.isEmpty && fresh.isEmpty) return const [];
+    if (gone.isEmpty && fresh.isEmpty) return;
 
     _discovered = scan.entries;
     _diagnostics = [
@@ -234,18 +241,18 @@ class _Daemon {
     // Dropped before they are registered again: a changed entry needs a fresh
     // wrapper, and the generator never reuses an index, so this is what makes
     // the entrypoint point at the new one.
-    var invalidated = [
+    _pending.addAll([
       ..._generator.drop([...gone, ...fresh]),
       ..._generator.registerAll([
         for (var entry in _entries)
           if (fresh.any((f) => f.id == entry.id)) entry,
       ]),
-    ];
+    ]);
     // The entrypoint imports what is registered, so it is rewritten last —
     // after the new wrappers exist and whatever went away is gone.
     if (_entries.isNotEmpty) {
       var active = _active;
-      invalidated.addAll(
+      _pending.addAll(
         _makeActive(
           active != null && after.containsKey(active.id)
               ? _entryById(active.id)
@@ -260,7 +267,6 @@ class _Daemon {
       '${fresh.length} new or changed, ${gone.length} gone',
     );
     _catalogChanged();
-    return invalidated;
   }
 
   /// Whether the generated wrapper for [before] would be written differently
@@ -467,6 +473,13 @@ class _Daemon {
     diagnostics: _diagnostics,
   );
 
+  /// Looks for entries that appeared or disappeared. Compiles nothing.
+  Future<void> refresh() {
+    var result = _queue.then((_) => _rescanIfNeeded());
+    _queue = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
   /// Compiles [id] for [session], one request at a time.
   Future<DaemonCompiled> select(
     _Session session,
@@ -493,7 +506,9 @@ class _Daemon {
   }) async {
     // Before the id is resolved: it may be an entry that only exists now, or
     // one that has just stopped existing.
-    var rescanned = _rescanIfNeeded();
+    _rescanIfNeeded();
+    var rescanned = _pending.toList();
+    _pending.clear();
     var entry = _entryById(id);
 
     // Then: what the user edited. Re-selecting the entry that
@@ -890,6 +905,12 @@ class _Session {
             ),
           );
         }
+      case RefreshRequest():
+        // Through the queue like any other work: a rescan rewrites the
+        // generated wrappers and the entrypoint, which a compile in flight is
+        // reading. Nothing is sent back — whatever it finds goes out as a
+        // CatalogChanged, to every client rather than just this one.
+        await _daemon.refresh();
       case StopDaemonRequest():
         await _daemon.stop();
     }
