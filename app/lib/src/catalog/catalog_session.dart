@@ -99,6 +99,7 @@ class CatalogSession extends ChangeNotifier {
             '.dart_tool',
             'package_config.json',
           ),
+          flutterSdkRoot: flutterSdkRoot,
           roots: roots,
         ),
         onLog: (line) => debugPrint('[catalog] $line'),

@@ -288,6 +288,7 @@ class UiCatalogPlugin extends NativePlugin {
         appPackageRoot: packageRoot,
         projectRoot: packageRoot,
         packageConfig: p.join(packageRoot, '.dart_tool', 'package_config.json'),
+        flutterSdkRoot: host.workspace.flutterSdk.root,
         roots: [_rootFor(packagePath)],
       ),
     ).capture(entryId: entryId, output: output);

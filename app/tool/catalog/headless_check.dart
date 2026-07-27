@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:async/async.dart';
 
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
+import 'package:flutterware_app/src/catalog/compiler_daemon_client.dart';
 import 'package:flutterware_app/src/catalog/protocol.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
@@ -34,52 +35,26 @@ Future<void> main(List<String> args) async {
     // scan root and the entrypoint's package.
     projectRoot: packageRoot,
     packageConfig: p.join(repoRoot, '.dart_tool', 'package_config.json'),
+    flutterSdkRoot: cache.flutterRoot,
     roots: const ['tool/catalog'],
     emitProbe: true,
   );
-  var configFile = File(p.join(buildDir, 'daemon_config.json'))
-    ..writeAsStringSync(jsonEncode(config.toJson()));
-
   var failures = <String>[];
   void check(bool condition, String description) {
     stdout.writeln('${condition ? '  ok  ' : ' FAIL '} $description');
     if (!condition) failures.add(description);
   }
 
-  // 1. The daemon: a plain Dart process, spawned the way the GUI would.
+  // Through the real client, so this exercises what the GUI uses — including
+  // the precompiled daemon binary.
   stdout.writeln('[check] starting the compiler daemon');
-  var daemon = await Process.start(p.join(cache.flutterRoot, 'bin', 'dart'), [
-    'run',
-    p.join('tool', 'catalog', 'compiler_daemon.dart'),
-    configFile.path,
-  ], workingDirectory: packageRoot);
-  daemon.stderr.transform(utf8.decoder).listen(stderr.write);
-
-  var responses = daemon.stdout
-      .transform(utf8.decoder)
-      .transform(const LineSplitter())
-      .map((line) {
-        var json = tryDecodeLine(line);
-        if (json == null) {
-          stdout.writeln('  [daemon] $line');
-          return null;
-        }
-        return DaemonResponse.decode(json);
-      })
-      .where((r) => r != null)
-      .cast<DaemonResponse>()
-      .asBroadcastStream();
-
-  var first = await responses.first.timeout(
-    const Duration(minutes: 5),
-    onTimeout: () => const DaemonFailed(message: 'the daemon timed out'),
+  var spawn = Stopwatch()..start();
+  var (daemon, ready) = await CompilerDaemonClient.start(
+    dartExecutable: p.join(cache.flutterRoot, 'bin', 'dart'),
+    config: config,
+    onLog: (line) => stdout.writeln('  [daemon] $line'),
   );
-  if (first is! DaemonReady) {
-    stderr.writeln('daemon failed: $first');
-    daemon.kill();
-    exit(1);
-  }
-  var ready = first;
+  stdout.writeln('[check] spawn->ready ${spawn.elapsedMilliseconds}ms');
   var entries = ready.entries;
   stdout.writeln(
     '[check] daemon ready — cold compile ${ready.coldCompile.inMilliseconds}ms, '
@@ -164,12 +139,7 @@ Future<void> main(List<String> args) async {
 
   // 3. Switch through every entry, then revisit one.
   for (var entry in [...entries.skip(1), entries.first]) {
-    var reply = responses
-        .where((r) => r is DaemonCompiled)
-        .cast<DaemonCompiled>()
-        .first;
-    daemon.stdin.writeln(encodeLine(SelectRequest(entry.id)));
-    var compiled = await reply;
+    var compiled = await daemon.select(entry.id);
     if (!compiled.ok) {
       check(false, 'compiling ${entry.name}: ${compiled.error}');
       continue;
@@ -205,20 +175,13 @@ Future<void> main(List<String> args) async {
   );
   check(frames > 0, 'the guest composited frames ($frames)');
 
-  daemon.stdin.writeln(encodeLine(const ShutdownRequest()));
+  await daemon.shutdown();
   connected.add(encodeMessage(const ShutdownMessage()));
   await connected.flush();
   await vmService.close();
   await connected.close();
   guest.kill();
   await guest.exitCode;
-  await daemon.exitCode.timeout(
-    const Duration(seconds: 10),
-    onTimeout: () {
-      daemon.kill();
-      return 0;
-    },
-  );
   await server.close();
   if (socketFile.existsSync()) socketFile.deleteSync();
 

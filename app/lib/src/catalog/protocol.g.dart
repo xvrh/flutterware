@@ -70,6 +70,7 @@ DaemonConfig _$DaemonConfigFromJson(Map<String, dynamic> json) => DaemonConfig(
   appPackageRoot: json['appPackageRoot'] as String,
   projectRoot: json['projectRoot'] as String,
   packageConfig: json['packageConfig'] as String,
+  flutterSdkRoot: json['flutterSdkRoot'] as String,
   roots:
       (json['roots'] as List<dynamic>?)?.map((e) => e as String).toList() ??
       const ['demo'],
@@ -86,6 +87,7 @@ Map<String, dynamic> _$DaemonConfigToJson(DaemonConfig instance) =>
       'appPackageRoot': instance.appPackageRoot,
       'projectRoot': instance.projectRoot,
       'packageConfig': instance.packageConfig,
+      'flutterSdkRoot': instance.flutterSdkRoot,
       'roots': instance.roots,
       'previewAnnotations': instance.previewAnnotations,
       'emitProbe': instance.emitProbe,

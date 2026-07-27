@@ -75,7 +75,13 @@ class _Daemon {
   /// Everything slow and one-time: the engine framework, the asset bundle, the
   /// first compile, and the C host.
   Future<void> prepare() async {
-    _cache = FlutterCache.fromRunningSdk();
+    var phase = Stopwatch()..start();
+    void mark(String what) {
+      stderr.writeln('[catalog] $what ${phase.elapsedMilliseconds}ms');
+      phase.reset();
+    }
+
+    _cache = FlutterCache(p.join(config.flutterSdkRoot, 'bin', 'cache'));
 
     var scan = CatalogScanner(
       projectRoot: config.projectRoot,
@@ -90,6 +96,7 @@ class _Daemon {
         '${scan.diagnostics.where((d) => d.isError).join('\n')}',
       );
     }
+    mark('scan');
     _entries = scan.entries;
     if (_entries.isEmpty) {
       throw StateError(
@@ -107,7 +114,9 @@ class _Daemon {
 
     var engineDir = p.join(config.appPackageRoot, '.engine');
     await ensureEmbedderFramework(_cache, engineDir);
+    mark('engine framework');
     await _ensureAssetBundle();
+    mark('asset bundle');
 
     var watch = Stopwatch()..start();
     var compiler = _compiler = await ResidentCompiler.start(
@@ -116,7 +125,9 @@ class _Daemon {
       packageConfig: config.packageConfig,
       cache: _cache,
     );
+    mark('compiler start');
     var cold = await compiler.compile();
+    mark('cold compile');
     if (!cold.ok) {
       throw StateError(
         'the first entry did not compile:\n${cold.output.join('\n')}',
@@ -128,6 +139,7 @@ class _Daemon {
       nativeBuildDir: p.join(_buildDir, 'native'),
       engineDir: engineDir,
     );
+    mark('host build');
 
     _emit(
       DaemonReady(
@@ -176,13 +188,11 @@ class _Daemon {
   /// see [AssetBundleBuilder]. Rebuilt every start, since it is cheap and a
   /// stale manifest is worse than a rebuild.
   Future<void> _ensureAssetBundle() async {
-    var watch = Stopwatch()..start();
     await AssetBundleBuilder(
       cache: _cache,
       rootPackageRoot: config.appPackageRoot,
       packageConfigPath: config.packageConfig,
     ).build(_assetsDir);
-    stderr.writeln('[catalog] asset bundle ${watch.elapsedMilliseconds}ms');
   }
 
   Future<void> shutdown() async {

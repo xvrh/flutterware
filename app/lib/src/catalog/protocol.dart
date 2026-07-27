@@ -213,6 +213,7 @@ class DaemonConfig {
     required this.appPackageRoot,
     required this.projectRoot,
     required this.packageConfig,
+    required this.flutterSdkRoot,
     this.roots = const ['demo'],
     this.previewAnnotations = const ['Preview', 'Demo'],
     this.emitProbe = false,
@@ -224,6 +225,13 @@ class DaemonConfig {
   final String appPackageRoot;
   final String projectRoot;
   final String packageConfig;
+
+  /// The Flutter checkout the guest is built and compiled against.
+  ///
+  /// Passed explicitly rather than derived from the running executable: once
+  /// the daemon is precompiled, `Platform.resolvedExecutable` is the daemon
+  /// binary and knows nothing about any SDK.
+  final String flutterSdkRoot;
 
   /// Directories to scan for entries, relative to [projectRoot].
   final List<String> roots;
