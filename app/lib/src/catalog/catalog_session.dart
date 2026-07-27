@@ -8,7 +8,6 @@ import '../embedder/guest_vm_service.dart';
 import 'catalog_entry.dart';
 import 'compiler_daemon_client.dart';
 import 'protocol.dart';
-import 'session_lock.dart';
 
 enum CatalogSessionPhase { starting, ready, error }
 
@@ -54,6 +53,11 @@ class CatalogSession extends ChangeNotifier {
   /// Everything discovery found, populated when the daemon reports ready.
   List<CatalogEntry> entries = const [];
 
+  /// Entries discovery found but the compiler cannot build, with the error to
+  /// show for each. Kept out of [entries] rather than hidden: a demo you are
+  /// midway through editing should say why it is unavailable.
+  List<QuarantinedEntry> quarantined = const [];
+
   /// Warnings the scan produced; the daemon refuses to start on errors.
   List<String> diagnostics = const [];
 
@@ -80,15 +84,13 @@ class CatalogSession extends ChangeNotifier {
 
   CompilerDaemonClient? _daemon;
   GuestVmService? _vmService;
-  SessionLock? _lock;
+  StreamSubscription<CatalogChanged>? _changes;
   Future<void> _queue = Future.value();
   bool _disposed = false;
 
   /// Brings up the daemon, the guest and the reload channel.
   Future<void> start({int width = 900, int height = 700}) async {
     try {
-      _lock = SessionLock.acquire(p.join(appPackageRoot, 'build', 'catalog'));
-
       var (daemon, ready) = await CompilerDaemonClient.connect(
         dartExecutable: p.join(flutterSdkRoot, 'bin', 'dart'),
         config: DaemonConfig(
@@ -107,12 +109,17 @@ class CatalogSession extends ChangeNotifier {
       _daemon = daemon;
       coldCompile = ready.coldCompile;
       entries = ready.entries;
+      quarantined = ready.quarantined;
       diagnostics = ready.diagnostics;
+      _changes = daemon.catalogChanges.listen(_onCatalogChanged);
       if (_disposed) return;
 
       var engine = _engine = EmbeddedEngine(
         appPackageRoot: appPackageRoot,
         flutterSdkRoot: flutterSdkRoot,
+        // Keyed by session, so a second panel — or an agent taking a
+        // screenshot — does not bind over this guest's socket.
+        name: ready.sessionId,
         buildGuest: () async => (
           hostPath: ready.hostPath,
           assetsDir: ready.assetsDir,
@@ -184,6 +191,22 @@ class CatalogSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The daemon serves several clients, so the set of buildable entries can
+  /// move without this session having asked for anything — somebody edits a
+  /// demo and it breaks, or they fix it and it comes back.
+  void _onCatalogChanged(CatalogChanged change) {
+    entries = change.entries;
+    quarantined = change.quarantined;
+
+    // The entry on screen may be the one that just broke. The guest keeps
+    // rendering it — it is still loaded — but the list no longer offers it, so
+    // move to something the user can actually switch back to.
+    if (active != null && !entries.any((e) => e.id == active!.id)) {
+      if (entries.isNotEmpty) unawaited(switchTo(entries.first));
+    }
+    notifyListeners();
+  }
+
   void _onEngineChanged() {
     if (_engine?.phase == EmbeddedEnginePhase.error) {
       _fail(_engine!.errorMessage ?? 'the embedder guest failed');
@@ -208,8 +231,8 @@ class CatalogSession extends ChangeNotifier {
     _engine?.removeListener(_onEngineChanged);
     _engine?.dispose();
     unawaited(_vmService?.close());
+    unawaited(_changes?.cancel());
     unawaited(_daemon?.close());
-    _lock?.release();
     super.dispose();
   }
 }

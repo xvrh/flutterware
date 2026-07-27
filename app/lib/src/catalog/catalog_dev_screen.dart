@@ -194,6 +194,55 @@ class _EntryList extends StatelessWidget {
             ),
             onTap: ready ? () => session.switchTo(entry) : null,
           ),
+
+        // Shown, not hidden. A demo you are midway through editing has not
+        // disappeared, it just does not build yet, and the compiler already
+        // said why.
+        if (session.quarantined.isNotEmpty) ...[
+          const Divider(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              "DOESN'T COMPILE",
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
+          for (var broken in session.quarantined)
+            ListTile(
+              dense: true,
+              title: Text(
+                broken.entry.name,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              subtitle: Text(
+                broken.error.split('\n').first,
+                style: const TextStyle(fontSize: 11),
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () => showDialog<void>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text(broken.entry.name),
+                  content: SingleChildScrollView(
+                    child: SelectableText(
+                      broken.error,
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ],
     );
   }

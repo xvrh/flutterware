@@ -19,7 +19,16 @@ class EmbeddedEngine extends ChangeNotifier {
     required this.appPackageRoot,
     required this.flutterSdkRoot,
     this.buildGuest,
+    this.name = 'gui',
   });
+
+  /// Distinguishes this engine's guest socket from any other's.
+  ///
+  /// A fixed name meant a second GUI deleted the first one's socket and bound
+  /// its own. Pass the daemon's session id: two clients of one daemon are now
+  /// an ordinary case — a panel open while an agent screenshots — rather than
+  /// something to refuse.
+  final String name;
 
   /// Produces the guest's binary and assets. Defaults to running
   /// `tool/embedder/build_guest.dart`, which compiles the fixed harness scene;
@@ -64,7 +73,7 @@ class EmbeddedEngine extends ChangeNotifier {
       if (_disposed) return;
 
       var buildDir = p.join(appPackageRoot, 'build', 'embedder');
-      var socketPath = p.join(buildDir, 'embedder_gui.sock');
+      var socketPath = p.join(buildDir, 'guest-$name.sock');
       var socketFile = File(socketPath);
       if (socketFile.existsSync()) socketFile.deleteSync();
       _server = await ServerSocket.bind(
