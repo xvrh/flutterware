@@ -5,7 +5,7 @@ homepage: https://github.com/xvrh/flutterware
 
 environment:
   sdk: ^3.13.0-0
-  flutter: '>=3.45.0-0'
+  flutter: '>=3.47.0-0'
 
 workspace:
   - app

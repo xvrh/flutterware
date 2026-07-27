@@ -22,3 +22,5 @@ generated_plugin_registrant.dart
 # don't check in golden failure output
 **/failures/*.png
 
+# FVM Version Cache
+.fvm/
