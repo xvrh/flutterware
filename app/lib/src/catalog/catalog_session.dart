@@ -8,6 +8,7 @@ import '../embedder/guest_vm_service.dart';
 import 'catalog_entry.dart';
 import 'compiler_daemon_client.dart';
 import 'daemon_protocol.dart';
+import 'session_lock.dart';
 
 enum CatalogSessionPhase { starting, ready, error }
 
@@ -72,6 +73,7 @@ class CatalogSession extends ChangeNotifier {
 
   CompilerDaemonClient? _daemon;
   GuestVmService? _vmService;
+  SessionLock? _lock;
   Future<void> _queue = Future.value();
   bool _disposed = false;
 
@@ -79,6 +81,7 @@ class CatalogSession extends ChangeNotifier {
   Future<void> start({int width = 900, int height = 700}) async {
     try {
       if (entries.isEmpty) throw StateError('the catalog has no entries');
+      _lock = SessionLock.acquire(p.join(appPackageRoot, 'build', 'catalog'));
 
       var (daemon, ready) = await CompilerDaemonClient.start(
         dartExecutable: p.join(flutterSdkRoot, 'bin', 'dart'),
@@ -197,6 +200,7 @@ class CatalogSession extends ChangeNotifier {
     _engine?.dispose();
     unawaited(_vmService?.close());
     unawaited(_daemon?.shutdown());
+    _lock?.release();
     super.dispose();
   }
 }
