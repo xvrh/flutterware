@@ -101,6 +101,10 @@ Future<void> main(List<String> args) async {
     entries.every((e) => e.symbol != 'doesNotCompile'),
     'a quarantined entry is not offered',
   );
+  check(
+    ready.reused || ready.timings.containsKey('rebuild after quarantine'),
+    'the prepared kernel was rebuilt whole after the quarantine',
+  );
   check(entries.length >= 5, 'discovery found the demo entries');
   check(
     entries.any((e) => e.group == 'Avatar tile'),

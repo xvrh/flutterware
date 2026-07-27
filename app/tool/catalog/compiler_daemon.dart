@@ -260,6 +260,19 @@ class _Daemon {
         '[catalog] quarantined ${_quarantine.length} entries that do not '
         'compile: ${_quarantine.keys.join(', ')}',
       );
+      // The successful compile was a *recompile* — round zero failed — so it
+      // wrote a delta, and the whole-program file still holds the kernel of
+      // the compile that failed. Publishing that gives every guest an
+      // incomplete program: reloads then fail to resolve libraries it never
+      // had, and appear to heal as later deltas patch them in one by one.
+      cold = await _fullCompile();
+      if (!cold.ok) {
+        throw StateError(
+          'the catalog compiled, but rebuilding it whole did not:\n'
+          '${cold.output.join('\n')}',
+        );
+      }
+      mark('rebuild after quarantine');
     }
     _coldCompile = watch.elapsed;
     compiler.saveWarmStart();
@@ -352,6 +365,17 @@ class _Daemon {
       newSourceCount: compiled.newSourceCount,
       error: compiled.ok ? null : compiled.output.join('\n'),
     );
+  }
+
+  /// Rebuilds the whole program at [_outputDill].
+  ///
+  /// Only a compile that has not failed leaves a valid program there — the
+  /// compiler writes deltas elsewhere, and a failed compile leaves its own
+  /// broken output behind. Anything that publishes [_outputDill] must be sure
+  /// the last thing to write it succeeded and was whole.
+  Future<CompileOutcome> _fullCompile() async {
+    _compiler!.reset();
+    return _compiler!.compile();
   }
 
   /// Makes [entry] the one the entrypoint renders, remembering it so a
