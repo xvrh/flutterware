@@ -1,0 +1,174 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/plugins.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/logs/remote_log_client.dart';
+import 'package:flutterware_app/src/context.dart';
+import 'package:flutterware_app/src/plugins/native/ui_catalog_plugin.dart';
+import 'package:flutterware_app/src/plugins/plugin_host.dart';
+import 'package:flutterware_app/src/shell/workspace.dart';
+import 'package:flutterware_app/src/shell/worktree.dart';
+import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+import 'package:path/path.dart' as p;
+
+/// Everything asserted here is read through [PluginReport] — the same data the
+/// sidebar, `fw` and an agent see. Nothing touches a widget, which is the point:
+/// a capability that only exists in the panel is invisible to every other
+/// renderer.
+void main() {
+  late Directory root;
+
+  UiCatalogPlugin plugin({
+    String? entrypoint,
+    List<String> packages = const ['.'],
+  }) {
+    var worktree = Worktree(path: root.path);
+    return UiCatalogPlugin(
+      PluginHost(
+        id: uiCatalogPluginId,
+        label: 'UI catalog',
+        worktree: worktree,
+        workspace: Workspace(
+          root: worktree.path,
+          declared: [for (var path in packages) Pkg(path)],
+          discovered: packages,
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            for (var path in packages)
+              {'path': path, 'entrypoint': ?entrypoint},
+          ],
+        },
+      ),
+    );
+  }
+
+  void write(String relative, String content) {
+    var file = File(p.join(root.path, relative));
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync(content);
+  }
+
+  setUp(() {
+    root = Directory.systemTemp.createTempSync('fw_catalog_plugin_test');
+    write('demo/team/avatar_tile.dart', '''
+@Demo(name: 'Members')
+Widget members() => const Placeholder();
+
+@Demo(name: 'Empty')
+Widget empty() => const Placeholder();
+''');
+    write('demo/counter.dart', '''
+@Demo(name: 'Counter')
+Widget counter() => const Placeholder();
+''');
+  });
+
+  tearDown(() => root.deleteSync(recursive: true));
+
+  /// Waits for the scan [track] kicked off. It runs in another isolate, so the
+  /// report is only meaningful once it lands.
+  Future<void> scanned(UiCatalogPlugin subject) async {
+    while (subject.isScanning) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+  }
+
+  test('reports nothing and scans nothing until something asks', () {
+    var subject = plugin();
+
+    expect(subject.report.status, Status.none);
+    expect(subject.entries, isEmpty);
+    expect(
+      subject.report.children.single.status,
+      Status.none,
+      reason: 'constructing the plugin must not read the disk',
+    );
+  });
+
+  test('track starts the scan, and the report carries the count', () async {
+    var subject = plugin()..track('.');
+    await scanned(subject);
+
+    expect(subject.report.status.tone, Tone.good);
+    expect(subject.report.status.message, '3 entries');
+    expect(subject.report.children.single.status.message, '3 entries');
+  });
+
+  test('the entries reach a non-GUI renderer through the view', () async {
+    var subject = plugin()..track('.');
+    await scanned(subject);
+
+    var text = subject.report.toText();
+    expect(text, contains('Avatar tile / Members'));
+    expect(text, contains('Avatar tile / Empty'));
+    expect(text, contains('Counter'));
+    expect(text, contains('demo/counter.dart#counter'));
+  });
+
+  test('the report round-trips to JSON', () async {
+    var subject = plugin()..track('.');
+    await scanned(subject);
+
+    var json = subject.report.toJson();
+    expect(json['id'], uiCatalogPluginId);
+    expect((json['actions']! as List).single, containsPair('id', 'rescan'));
+    expect(json['view'], isNotEmpty);
+  });
+
+  test('a package with no demos says so rather than looking healthy', () async {
+    var subject = plugin(entrypoint: 'nonexistent')..track('.');
+    await scanned(subject);
+
+    expect(subject.report.status.tone, Tone.warn);
+    expect(subject.report.status.message, 'no entries');
+  });
+
+  test('entrypoint overrides the demo/ convention', () async {
+    write('catalog/thing.dart', '''
+@Demo(name: 'Elsewhere')
+Widget thing() => const Placeholder();
+''');
+    var subject = plugin(entrypoint: 'catalog')..track('.');
+    await scanned(subject);
+
+    expect(subject.entries.map((e) => e.name), ['Elsewhere']);
+  });
+
+  test('a scan error is reported, not swallowed', () async {
+    // Two annotations on one declaration derive the same id, which discovery
+    // refuses. The plugin must surface that rather than show a short list.
+    write('demo/broken.dart', '''
+@Demo(name: 'A')
+@Demo(name: 'B')
+Widget broken() => const Placeholder();
+''');
+    var subject = plugin()..track('.');
+    await scanned(subject);
+
+    expect(subject.report.status.tone, Tone.error);
+    expect(subject.report.toText(), contains('same id'));
+  });
+
+  test('rescan picks up a file added after the first scan', () async {
+    var subject = plugin()..track('.');
+    await scanned(subject);
+    expect(subject.entries, hasLength(3));
+
+    write('demo/added.dart', '''
+@Demo(name: 'Added')
+Widget added() => const Placeholder();
+''');
+    await subject.invoke('rescan');
+    await scanned(subject);
+
+    expect(subject.entries.map((e) => e.name), contains('Added'));
+  });
+
+  test('an unknown action is refused loudly', () async {
+    expect(plugin().invoke('nope'), throwsArgumentError);
+  });
+}
