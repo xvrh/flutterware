@@ -196,8 +196,9 @@ class _GuestSession {
         _captures.remove(message.path)?.complete();
       } else if (message is ErrorMessage) {
         for (var pending in _captures.values) {
-          if (!pending.isCompleted)
+          if (!pending.isCompleted) {
             pending.completeError(StateError(message.message));
+          }
         }
         _captures.clear();
       }
