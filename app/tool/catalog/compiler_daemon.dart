@@ -100,6 +100,10 @@ class _Daemon {
 
   late final FlutterCache _cache;
   late final EntrypointGenerator _generator;
+  late final CatalogScanner _scanner;
+
+  /// What the roots looked like when [_discovered] was produced.
+  var _scanned = '';
   ResidentCompiler? _compiler;
 
   /// What turns an edit into a recompile. Every request sweeps: the daemon has
@@ -163,6 +167,98 @@ class _Daemon {
   String get _sharedAssetsDir => p.join(_buildDir, 'assets');
 
   String get _outputDill => p.join(_buildDir, 'out', 'kernel_blob.bin');
+
+  /// Re-runs discovery when the files under the roots have moved, so an entry
+  /// added, renamed or deleted while the catalog is open shows up.
+  ///
+  /// Guarded by a fingerprint rather than run every time: discovery reads and
+  /// parses, and this sits on the reload loop.
+  ///
+  /// A scan that comes back with errors is *reported and dropped* — the entry
+  /// set stays as it was. Refusing to serve is right at startup, where nothing
+  /// is on screen yet and a catalog that lies is worse than none; mid-session
+  /// it would take away a working panel because someone was midway through
+  /// typing a duplicate id.
+  List<Uri> _rescanIfNeeded() {
+    var fingerprint = _scanner.fingerprint();
+    if (fingerprint == _scanned) return const [];
+    _scanned = fingerprint;
+
+    var watch = Stopwatch()..start();
+    var scan = _scanner.scan();
+    if (!scan.ok) {
+      stderr.writeln(
+        '[catalog] rescan found errors, keeping the previous entries:\n'
+        '${scan.diagnostics.where((d) => d.isError).join('\n')}',
+      );
+      return const [];
+    }
+
+    var before = {for (var entry in _discovered) entry.id: entry};
+    var after = {for (var entry in scan.entries) entry.id: entry};
+    var gone = [
+      for (var entry in _discovered)
+        if (!after.containsKey(entry.id)) entry,
+    ];
+    var fresh = [
+      for (var entry in scan.entries)
+        // Rewritten as well as added: the wrapper bakes in the annotation and
+        // the demo file's imports, so an entry whose declaration changed needs
+        // a new one even though its id did not.
+        if (!before.containsKey(entry.id) || _differs(before[entry.id]!, entry))
+          entry,
+    ];
+    if (gone.isEmpty && fresh.isEmpty) return const [];
+
+    _discovered = scan.entries;
+    _diagnostics = [
+      for (var d in scan.diagnostics)
+        if (!d.isError) '$d',
+    ];
+    // A quarantine is about a build that no longer describes these entries.
+    for (var entry in [...gone, ...fresh]) {
+      _quarantine.remove(entry.id);
+    }
+
+    // Dropped before they are registered again: a changed entry needs a fresh
+    // wrapper, and the generator never reuses an index, so this is what makes
+    // the entrypoint point at the new one.
+    var invalidated = [
+      ..._generator.drop([...gone, ...fresh]),
+      ..._generator.registerAll([
+        for (var entry in _entries)
+          if (fresh.any((f) => f.id == entry.id)) entry,
+      ]),
+    ];
+    // The entrypoint imports what is registered, so it is rewritten last —
+    // after the new wrappers exist and whatever went away is gone.
+    if (_entries.isNotEmpty) {
+      var active = _active;
+      invalidated.addAll(
+        _makeActive(
+          active != null && after.containsKey(active.id)
+              ? _entryById(active.id)
+              : _entries.first,
+        ),
+      );
+    }
+
+    stderr.writeln(
+      '[catalog] rescanned in ${watch.elapsedMilliseconds}ms: '
+      '${fresh.length} new or changed, ${gone.length} gone',
+    );
+    _catalogChanged();
+    return invalidated;
+  }
+
+  /// Whether the generated wrapper for [before] would be written differently
+  /// for [after] — everything the wrapper or the entrypoint reads.
+  static bool _differs(CatalogEntry before, CatalogEntry after) =>
+      before.annotation != after.annotation ||
+      before.name != after.name ||
+      before.group != after.group ||
+      before.symbol != after.symbol ||
+      before.formFactor != after.formFactor;
 
   /// Looked up among everything discovered, not only what is servable: an entry
   /// that does not compile has to stay selectable, because selecting it is how
@@ -249,11 +345,13 @@ class _Daemon {
 
     _cache = FlutterCache(p.join(config.flutterSdkRoot, 'bin', 'cache'));
 
-    var scan = CatalogScanner(
+    _scanner = CatalogScanner(
       projectRoot: config.projectRoot,
       roots: config.roots,
       previewAnnotations: config.previewAnnotations,
-    ).scan();
+    );
+    _scanned = _scanner.fingerprint();
+    var scan = _scanner.scan();
     if (!scan.ok) {
       // A duplicate id or an uncallable target means an entry would be missing
       // or unreachable; refusing beats starting a catalog that lies.
@@ -381,9 +479,12 @@ class _Daemon {
     required bool full,
     required bool ifChanged,
   }) async {
+    // Before the id is resolved: it may be an entry that only exists now, or
+    // one that has just stopped existing.
+    var rescanned = _rescanIfNeeded();
     var entry = _entryById(id);
 
-    // Before anything else: what the user edited. Re-selecting the entry that
+    // Then: what the user edited. Re-selecting the entry that
     // is already active is how a client asks for a reload, and without this it
     // would recompile an entrypoint whose imports all resolve to the state the
     // compiler is already holding — a switch that reports success and changes
@@ -401,6 +502,7 @@ class _Daemon {
     // a decision, and a reload it did not need still reassembles the guest and
     // resets the demo's state.
     if (ifChanged &&
+        rescanned.isEmpty &&
         edited.isEmpty &&
         _active?.id == id &&
         !_quarantine.containsKey(id)) {
@@ -420,7 +522,7 @@ class _Daemon {
     // compile below succeeds.
     if (_quarantine.remove(id) != null) _catalogChanged();
 
-    var invalidated = {...edited, ..._makeActive(entry)};
+    var invalidated = {...rescanned, ...edited, ..._makeActive(entry)};
     if (full) {
       // A guest spawned from scratch loads kernel_blob.bin off disk, and a
       // delta is not a program. `reset` makes the next compile emit the whole

@@ -602,6 +602,65 @@ Future<void> main(List<String> args) async {
     'the catalog still compiles after a failed retry',
   );
 
+  // 4c. A demo that did not exist when the daemon started.
+  //
+  // Discovery runs once at startup, so without a rescan a file you add while
+  // the catalog is open is a file the catalog will never mention — and the
+  // daemon outlives the panel, so "restart it" means closing the worktree.
+  stdout.writeln('[check] adding a demo while the catalog is open');
+  var addedSource = File(
+    p.join(packageRoot, 'tool', 'catalog', 'demos', 'added_while_open.dart'),
+  );
+  var appeared = second.catalogChanges.first.timeout(
+    const Duration(seconds: 30),
+    onTimeout: () => throw StateError('no CatalogChanged announced the entry'),
+  );
+  addedSource.writeAsStringSync('''
+import 'package:flutter/material.dart';
+
+import 'package:flutterware/ui_catalog.dart';
+
+import 'shell.dart';
+
+@Demo(name: 'Added', wrapper: wrapInApp)
+Widget addedWhileOpen() => const Center(child: Text('ADDED LATE'));
+''');
+  const addedId = 'tool/catalog/demos/added_while_open.dart#addedWhileOpen';
+  try {
+    var compiled = await daemon.select(addedId);
+    check(compiled.ok, 'the new entry compiles: ${compiled.error}');
+    var announced = await appeared;
+    check(
+      announced.entries.any((e) => e.id == addedId),
+      'and every client is told it exists',
+    );
+    if (compiled.ok) {
+      await vmService.reload(compiled.dill!);
+      var probe = probing
+          ? await _nextProbe(
+              probes.stream,
+              const Duration(seconds: 10),
+              (line) => line.contains('ADDED LATE'),
+            )
+          : 'ADDED LATE';
+      check(probe.contains('ADDED LATE'), 'and it renders');
+    }
+  } finally {
+    addedSource.deleteSync();
+  }
+
+  // And gone again: the entry has to leave the list it just joined.
+  var removed = second.catalogChanges.first.timeout(
+    const Duration(seconds: 30),
+    onTimeout: () => throw StateError('no CatalogChanged withdrew the entry'),
+  );
+  var afterDelete = await daemon.select(entries.first.id);
+  check(afterDelete.ok, 'the catalog still compiles once it is deleted');
+  check(
+    !(await removed).entries.any((e) => e.id == addedId),
+    'and the entry is withdrawn',
+  );
+
   stdout.writeln('[check] repairing the broken demo');
   var brokenSource = File(
     p.join(packageRoot, 'tool', 'catalog', 'demos', 'does_not_compile.dart'),

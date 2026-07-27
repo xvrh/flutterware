@@ -77,6 +77,21 @@ class CatalogScanner {
     return ScanResult(entries: entries, diagnostics: diagnostics);
   }
 
+  /// What the roots look like from outside, without reading or parsing
+  /// anything: every `.dart` file and when it was last written.
+  ///
+  /// A stand-in for "is a rescan worth it". Listing is a millisecond where the
+  /// scan behind it reads and parses, and a daemon that rescanned on every
+  /// request just in case somebody added a demo would put that on the reload
+  /// loop, which is the one thing that has to stay quick.
+  String fingerprint() {
+    var files = [
+      for (var file in _dartFiles())
+        '${file.path}:${file.statSync().modified.microsecondsSinceEpoch}',
+    ]..sort();
+    return files.join('\n');
+  }
+
   Iterable<File> _dartFiles() sync* {
     for (var root in roots) {
       var directory = Directory(p.join(projectRoot, root));

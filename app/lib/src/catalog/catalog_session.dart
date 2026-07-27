@@ -489,11 +489,19 @@ class CatalogSession extends ChangeNotifier {
     entries = change.entries;
     quarantined = change.quarantined;
 
-    // The entry on screen may be the one that just broke, and nothing here
-    // moves away from it. It keeps its place in the list, it stays selected,
-    // and the panel says why it is not rendering — switching the user somewhere
-    // else and leaving them to find their way back is what made a typo feel
-    // like losing your place.
+    // An entry that stopped *compiling* keeps its place and stays selected —
+    // the panel says why it is not rendering, and moving the user somewhere
+    // else is what made a typo feel like losing your place.
+    //
+    // An entry that stopped *existing* is a different thing: it was deleted or
+    // renamed, there is nothing to go back to, and staying on it would leave
+    // the guest showing something the catalog no longer lists.
+    var selectedId = selected?.id;
+    if (selectedId != null &&
+        !allEntries.any((e) => e.id == selectedId) &&
+        entries.isNotEmpty) {
+      unawaited(switchTo(entries.first));
+    }
     notifyListeners();
   }
 
