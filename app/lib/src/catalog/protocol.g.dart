@@ -36,6 +36,11 @@ DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
           ?.map((e) => QuarantinedEntry.fromJson(e as Map<String, dynamic>))
           .toList() ??
       const [],
+  shells:
+      (json['shells'] as List<dynamic>?)
+          ?.map((e) => ShellDescriptor.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const [],
   reused: json['reused'] as bool? ?? false,
   timings:
       (json['timings'] as Map<String, dynamic>?)?.map(
@@ -60,6 +65,7 @@ Map<String, dynamic> _$DaemonReadyToJson(DaemonReady instance) =>
       'timings': instance.timings,
       'entries': instance.entries.map((e) => e.toJson()).toList(),
       'quarantined': instance.quarantined.map((e) => e.toJson()).toList(),
+      'shells': instance.shells.map((e) => e.toJson()).toList(),
       'diagnostics': instance.diagnostics,
     };
 
@@ -85,12 +91,18 @@ CatalogChanged _$CatalogChangedFromJson(Map<String, dynamic> json) =>
               ?.map((e) => QuarantinedEntry.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
+      shells:
+          (json['shells'] as List<dynamic>?)
+              ?.map((e) => ShellDescriptor.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
     );
 
 Map<String, dynamic> _$CatalogChangedToJson(CatalogChanged instance) =>
     <String, dynamic>{
       'entries': instance.entries.map((e) => e.toJson()).toList(),
       'quarantined': instance.quarantined.map((e) => e.toJson()).toList(),
+      'shells': instance.shells.map((e) => e.toJson()).toList(),
     };
 
 DaemonCompiled _$DaemonCompiledFromJson(Map<String, dynamic> json) =>

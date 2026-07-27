@@ -5,12 +5,21 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:path/path.dart' as p;
 
 import 'catalog_entry.dart';
+import 'shell_descriptor.dart';
 
 /// How a scan went: what it found, and what it noticed but did not act on.
 class ScanResult {
-  ScanResult({required this.entries, required this.diagnostics});
+  ScanResult({
+    required this.entries,
+    required this.diagnostics,
+    this.shells = const [],
+  });
 
   final List<CatalogEntry> entries;
+
+  /// Every `@CatalogShell` in the roots, with the axes its signature declares.
+  final List<ShellDescriptor> shells;
+
   final List<ScanDiagnostic> diagnostics;
 
   /// A scan with an error is not a usable catalog: an entry would be missing or
@@ -59,22 +68,36 @@ class CatalogScanner {
   /// missing entry.
   final List<String> previewAnnotations;
 
+  /// The annotation marking a project's catalog shell — the wrapper whose
+  /// optional named parameters are the top bar's axes.
+  static const shellAnnotation = 'CatalogShell';
+
   ScanResult scan() {
     var entries = <CatalogEntry>[];
+    var shells = <ShellDescriptor>[];
     var diagnostics = <ScanDiagnostic>[];
 
     for (var file in _dartFiles()) {
       var source = file.readAsStringSync();
       // A substring prefilter before parsing: 20ms across 180 files, against
       // 478ms to parse them.
-      if (!previewAnnotations.any((a) => source.contains('@$a'))) continue;
-      _scanFile(file, source, entries, diagnostics);
+      if (!previewAnnotations.any((a) => source.contains('@$a')) &&
+          !source.contains('@$shellAnnotation')) {
+        continue;
+      }
+      _scanFile(file, source, entries, shells, diagnostics);
     }
 
     _deriveGroups(entries);
     _rejectDuplicateIds(entries, diagnostics);
+    _linkShells(entries, shells, diagnostics);
     entries.sort((a, b) => a.id.compareTo(b.id));
-    return ScanResult(entries: entries, diagnostics: diagnostics);
+    shells.sort((a, b) => a.id.compareTo(b.id));
+    return ScanResult(
+      entries: entries,
+      shells: shells,
+      diagnostics: diagnostics,
+    );
   }
 
   /// What the roots look like from outside, without reading or parsing
@@ -106,6 +129,7 @@ class CatalogScanner {
     File file,
     String source,
     List<CatalogEntry> entries,
+    List<ShellDescriptor> shells,
     List<ScanDiagnostic> diagnostics,
   ) {
     var unit = parseString(content: source, throwIfDiagnostics: false).unit;
@@ -115,7 +139,8 @@ class CatalogScanner {
       switch (declaration) {
         case FunctionDeclaration():
           var annotations = _annotationsOn(declaration.metadata);
-          if (annotations.isEmpty) continue;
+          var isShell = _isShell(declaration.metadata);
+          if (annotations.isEmpty && !isShell) continue;
           if (!_returnsWidget(declaration.returnType)) {
             diagnostics.add(
               ScanDiagnostic.warning(
@@ -135,11 +160,21 @@ class CatalogScanner {
               declaration.functionExpression.parameters,
             );
           }
+          if (isShell) {
+            _addShell(
+              shells,
+              diagnostics,
+              path,
+              declaration.name.lexeme,
+              declaration.functionExpression.parameters,
+            );
+          }
 
         case ClassDeclaration():
           for (var member in declaration.body.members) {
             var annotations = _annotationsOn(member.metadata);
-            if (annotations.isEmpty) continue;
+            var isShell = _isShell(member.metadata);
+            if (annotations.isEmpty && !isShell) continue;
             var className = declaration.namePart.typeName.lexeme;
             switch (member) {
               // `Foo` names the type; `Foo.new` is the tear-off, which is what
@@ -170,6 +205,15 @@ class CatalogScanner {
                     parameters,
                   );
                 }
+                if (isShell) {
+                  _addShell(
+                    shells,
+                    diagnostics,
+                    path,
+                    '$className.${name.lexeme}',
+                    parameters,
+                  );
+                }
               default:
                 diagnostics.add(
                   ScanDiagnostic.warning(
@@ -184,6 +228,153 @@ class CatalogScanner {
         default:
           break;
       }
+    }
+  }
+
+  /// Reads a shell's signature into axes.
+  ///
+  /// The rules are not ours: a shell has to stay assignable to `WidgetWrapper`,
+  /// which is `Widget Function(Widget)`, or `@Demo(wrapper:)` will not take it.
+  /// That is exactly one required positional parameter, and everything else
+  /// optional and named. Anything else is refused here rather than left to fail
+  /// as a type error in generated code, where the message would be about a file
+  /// the author never wrote.
+  void _addShell(
+    List<ShellDescriptor> shells,
+    List<ScanDiagnostic> diagnostics,
+    String path,
+    String symbol,
+    FormalParameterList? parameters,
+  ) {
+    var all = parameters?.parameters ?? const <FormalParameter>[];
+    var positional = [
+      for (var p in all)
+        if (!p.isNamed) p,
+    ];
+    if (positional.length != 1 || !positional.single.isRequiredPositional) {
+      diagnostics.add(
+        ScanDiagnostic.error(
+          '$symbol is a catalog shell, so it must take exactly one required '
+          'positional parameter — the child — and nothing else positional.',
+          location: path,
+        ),
+      );
+      return;
+    }
+
+    var axes = <ShellAxis>[];
+    for (var parameter in all) {
+      if (!parameter.isNamed) continue;
+      var name = parameter.name?.lexeme;
+      if (name == null) continue;
+      if (parameter.isRequiredNamed) {
+        diagnostics.add(
+          ScanDiagnostic.error(
+            "$symbol's axis \"$name\" is required, so the shell cannot be "
+            "called with defaults — which is what Flutter's previewer and "
+            'your own app do.',
+            location: path,
+          ),
+        );
+        continue;
+      }
+      var type = parameter.type;
+      var typeName = type is NamedType ? type.name.lexeme : null;
+      if (typeName == null || (type is NamedType && type.question != null)) {
+        diagnostics.add(
+          ScanDiagnostic.warning(
+            "$symbol's axis \"$name\" has no plain named type, so the catalog "
+            'cannot offer it. Axes must be an enum or a bool.',
+            location: path,
+          ),
+        );
+        continue;
+      }
+      if (_notEnumerable.contains(typeName)) {
+        diagnostics.add(
+          ScanDiagnostic.warning(
+            "$symbol's axis \"$name\" is a $typeName, which has no set of "
+            'values to choose from. Axes must be an enum or a bool; a '
+            "free-form value belongs in the entry's own parameters.",
+            location: path,
+          ),
+        );
+        continue;
+      }
+      var defaultValue = parameter.defaultClause?.value;
+      if (defaultValue == null) {
+        diagnostics.add(
+          ScanDiagnostic.error(
+            "$symbol's axis \"$name\" has no default, so the shell cannot be "
+            'called with defaults.',
+            location: path,
+          ),
+        );
+        continue;
+      }
+      axes.add(
+        ShellAxis(
+          name: name,
+          typeName: typeName,
+          defaultSource: defaultValue.toSource(),
+        ),
+      );
+    }
+
+    shells.add(ShellDescriptor(path: path, symbol: symbol, axes: axes));
+  }
+
+  /// Types a top bar has nothing to offer for. Named rather than inferred:
+  /// everything else is *assumed* to be an enum, and the generated
+  /// `<Type>.values` is what proves it.
+  static const _notEnumerable = {
+    'String',
+    'int',
+    'double',
+    'num',
+    'Object',
+    'dynamic',
+    'Widget',
+    'Color',
+    'Duration',
+    'DateTime',
+  };
+
+  /// Points every entry at the shell its `wrapper:` names.
+  ///
+  /// Matched by symbol, because that is all a syntactic scan has: the demo file
+  /// writes `wrapper: wrapInApp` and the import it came through is not followed.
+  /// Two shells sharing a name are therefore indistinguishable, which is an
+  /// error rather than a guess — the same rule two entries sharing an id get.
+  void _linkShells(
+    List<CatalogEntry> entries,
+    List<ShellDescriptor> shells,
+    List<ScanDiagnostic> diagnostics,
+  ) {
+    var bySymbol = <String, List<ShellDescriptor>>{};
+    for (var shell in shells) {
+      bySymbol.putIfAbsent(shell.symbol, () => []).add(shell);
+    }
+    for (var MapEntry(key: symbol, value: clashing) in bySymbol.entries) {
+      if (clashing.length < 2) continue;
+      diagnostics.add(
+        ScanDiagnostic.error(
+          '${clashing.length} catalog shells are called "$symbol" '
+          '(${clashing.map((s) => s.path).join(', ')}), so an entry naming it '
+          'as its wrapper is ambiguous. Rename all but one.',
+          location: clashing.first.path,
+        ),
+      );
+    }
+
+    for (var i = 0; i < entries.length; i++) {
+      var wrapper = entries[i].wrapper;
+      if (wrapper == null) continue;
+      var matches = bySymbol[wrapper];
+      // An entry may perfectly well name a wrapper that is not a shell. It
+      // simply has no axes; that is not worth a diagnostic.
+      if (matches == null || matches.length != 1) continue;
+      entries[i] = entries[i].withShell(matches.single.id);
     }
   }
 
@@ -218,6 +409,7 @@ class CatalogScanner {
         declaredId: _literalString(annotation, 'id'),
         group: _literalString(annotation, 'group'),
         formFactor: _enumName(annotation, 'formFactor'),
+        wrapper: _identifier(annotation, 'wrapper'),
       ),
     );
   }
@@ -274,6 +466,9 @@ class CatalogScanner {
       if (previewAnnotations.contains(annotation.name.name)) annotation,
   ];
 
+  static bool _isShell(List<Annotation> metadata) =>
+      metadata.any((a) => a.name.name == shellAnnotation);
+
   static bool _returnsWidget(TypeAnnotation? type) {
     if (type == null) return true; // Inferred; the compiler will judge it.
     var name = type is NamedType ? type.name.lexeme : type.toSource();
@@ -289,6 +484,27 @@ class CatalogScanner {
       if (argument.name.lexeme != parameter) continue;
       var value = argument.argumentExpression;
       if (value is SimpleStringLiteral) return value.value;
+    }
+    return null;
+  }
+
+  /// An argument that is a plain reference to a function — `wrapper: wrapInApp`
+  /// or `wrapper: MyShell.wrap`.
+  ///
+  /// `Preview` requires exactly that: a static, public, top-level function or
+  /// static member. Anything else written there is not a shell we can find, and
+  /// answering null lets the entry render through `preview.wrapper` as before.
+  static String? _identifier(Annotation annotation, String parameter) {
+    for (var argument
+        in annotation.arguments?.arguments ?? const <Argument>[]) {
+      if (argument is! NamedArgument) continue;
+      if (argument.name.lexeme != parameter) continue;
+      return switch (argument.argumentExpression) {
+        SimpleIdentifier(:var name) => name,
+        PrefixedIdentifier(:var prefix, :var identifier) =>
+          '${prefix.name}.${identifier.name}',
+        _ => null,
+      };
     }
     return null;
   }

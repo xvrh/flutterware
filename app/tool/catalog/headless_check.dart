@@ -106,6 +106,25 @@ Future<void> main(List<String> args) async {
     'the prepared kernel was rebuilt whole after the quarantine',
   );
   check(entries.length >= 5, 'discovery found the demo entries');
+
+  // The shell: found by the same scan that finds entries, with its axes read
+  // off its signature. Nothing has to run for this — the whole point of
+  // reading the parameter list rather than the shell's behaviour.
+  var shell = ready.shells.singleOrNull;
+  check(shell?.symbol == 'wrapInApp', 'discovery found the catalog shell');
+  check(
+    shell?.axes.map((a) => '${a.name}:${a.typeName}').join(',') ==
+        'flavor:Flavor,compact:bool',
+    'and read its axes off the signature — ${shell?.axes.map((a) => a.name)}',
+  );
+  check(
+    shell?.axes.map((a) => a.defaultSource).join(',') == 'Flavor.dev,false',
+    'including the defaults, as written',
+  );
+  check(
+    entries.every((e) => e.shellId == shell?.id),
+    'every entry is pointed at the shell its wrapper names',
+  );
   check(
     entries.any((e) => e.group == 'Avatar tile'),
     'a file with several entries derived a group',

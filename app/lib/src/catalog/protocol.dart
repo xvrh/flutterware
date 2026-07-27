@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'catalog_entry.dart';
+import 'shell_descriptor.dart';
 
 part 'protocol.g.dart';
 
@@ -159,6 +160,7 @@ class DaemonReady extends DaemonResponse {
     required this.coldCompile,
     required this.entries,
     this.quarantined = const [],
+    this.shells = const [],
     this.reused = false,
     this.timings = const {},
     this.diagnostics = const [],
@@ -202,6 +204,10 @@ class DaemonReady extends DaemonResponse {
   /// is how a client hears about later changes to either list.
   final List<QuarantinedEntry> quarantined;
 
+  /// Every `@CatalogShell` in the project, with the axes its signature
+  /// declares. An entry points at one through [CatalogEntry.shellId].
+  final List<ShellDescriptor> shells;
+
   /// What the scan noticed but did not act on. Errors never reach here — the
   /// daemon refuses to start on those.
   final List<String> diagnostics;
@@ -240,7 +246,11 @@ class QuarantinedEntry {
 /// entry the daemon can no longer build, or keep hiding one that now works.
 @JsonSerializable(explicitToJson: true)
 class CatalogChanged extends DaemonResponse {
-  const CatalogChanged({required this.entries, this.quarantined = const []});
+  const CatalogChanged({
+    required this.entries,
+    this.quarantined = const [],
+    this.shells = const [],
+  });
 
   factory CatalogChanged.fromJson(Map<String, dynamic> json) =>
       _$CatalogChangedFromJson(json);
@@ -249,6 +259,10 @@ class CatalogChanged extends DaemonResponse {
 
   final List<CatalogEntry> entries;
   final List<QuarantinedEntry> quarantined;
+
+  /// Re-sent whole, like the entries: a shell's axes change when its signature
+  /// does, which is an edit like any other.
+  final List<ShellDescriptor> shells;
 
   @override
   String get type => wireName;

@@ -8,6 +8,7 @@ import 'package:flutterware_app/src/catalog/compile_blame.dart';
 import 'package:flutterware_app/src/catalog/daemon_address.dart';
 import 'package:flutterware_app/src/catalog/discovery.dart';
 import 'package:flutterware_app/src/catalog/protocol.dart';
+import 'package:flutterware_app/src/catalog/shell_descriptor.dart';
 import 'package:flutterware_app/src/catalog/entrypoint_generator.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
@@ -134,6 +135,11 @@ class _Daemon {
   /// Everything discovery found, in tree order. Fixed until a rescan.
   var _discovered = <CatalogEntry>[];
 
+  /// Every `@CatalogShell` the scan found. Not filtered by the quarantine:
+  /// a shell is not an entry, and a demo that stopped compiling says nothing
+  /// about the wrapper it named.
+  var _shells = <ShellDescriptor>[];
+
   /// Entries the compiler could not build, by id. See [_compileServingWhatWorks].
   final _quarantine = <String, _Quarantined>{};
 
@@ -212,6 +218,11 @@ class _Daemon {
       return;
     }
 
+    // A shell's axes are its signature, so editing one changes what the top
+    // bar offers without any entry moving. Compared as a whole because that is
+    // what a client is sent.
+    var shellsMoved = jsonEncode(_shells) != jsonEncode(scan.shells);
+
     var before = {for (var entry in _discovered) entry.id: entry};
     var after = {for (var entry in scan.entries) entry.id: entry};
     var gone = [
@@ -226,9 +237,10 @@ class _Daemon {
         if (!before.containsKey(entry.id) || _differs(before[entry.id]!, entry))
           entry,
     ];
-    if (gone.isEmpty && fresh.isEmpty) return;
+    if (gone.isEmpty && fresh.isEmpty && !shellsMoved) return;
 
     _discovered = scan.entries;
+    _shells = scan.shells;
     _diagnostics = [
       for (var d in scan.diagnostics)
         if (!d.isError) '$d',
@@ -276,7 +288,11 @@ class _Daemon {
       before.name != after.name ||
       before.group != after.group ||
       before.symbol != after.symbol ||
-      before.formFactor != after.formFactor;
+      before.formFactor != after.formFactor ||
+      // The wrapper is baked into the generated file, and the shell decides
+      // which axes are passed to it, so either moving needs a fresh wrapper.
+      before.wrapper != after.wrapper ||
+      before.shellId != after.shellId;
 
   /// Looked up among everything discovered, not only what is servable: an entry
   /// that does not compile has to stay selectable, because selecting it is how
@@ -380,6 +396,7 @@ class _Daemon {
     }
     mark('scan');
     _discovered = scan.entries;
+    _shells = scan.shells;
     _diagnostics = [
       for (var d in scan.diagnostics)
         if (!d.isError) '$d',
@@ -468,6 +485,7 @@ class _Daemon {
       for (var q in _quarantine.values)
         QuarantinedEntry(entry: q.entry, error: q.error),
     ],
+    shells: _shells,
     reused: session.arrivedAfterPrepare,
     timings: _timings,
     diagnostics: _diagnostics,
@@ -704,6 +722,7 @@ class _Daemon {
         for (var q in _quarantine.values)
           QuarantinedEntry(entry: q.entry, error: q.error),
       ],
+      shells: _shells,
     );
     for (var session in [..._sessions]) {
       session.send(message);
