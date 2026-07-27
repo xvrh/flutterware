@@ -10,6 +10,7 @@ import '../embedder/embedded_engine.dart';
 import '../embedder/guest_vm_service.dart';
 import 'catalog_entry.dart';
 import 'compiler_daemon_client.dart';
+import 'shell_descriptor.dart';
 import 'package_config_locator.dart';
 import 'protocol.dart';
 
@@ -109,6 +110,34 @@ class CatalogBrowsing extends ChangeNotifier {
     if (value == _listVisible) return;
     _listVisible = value;
     notifyListeners();
+  }
+}
+
+/// What each shell's axes are set to, which is the host's to remember.
+///
+/// Keyed by shell rather than by entry, and that is the whole difference
+/// between an axis and a knob: moving between entries that share a shell
+/// changes nothing, and coming back to a shell finds what you had chosen.
+class ShellSelections {
+  final _byShell = <String, Map<String, Object?>>{};
+
+  /// Null means the default the signature declares.
+  void choose(String shellId, String name, Object? value) {
+    (_byShell[shellId] ??= {})[name] = value;
+  }
+
+  Object? chosen(String shellId, String name) => _byShell[shellId]?[name];
+
+  /// What to send the guest for [shell].
+  ///
+  /// Every axis it declares is named, with a null for the ones nothing has
+  /// chosen. The nulls are the point: the guest keys selections by axis name
+  /// alone, so two shells that both call something `flavor` would otherwise
+  /// inherit each other's — and a null is the instruction to go back to the
+  /// signature's default rather than merely the absence of one.
+  Map<String, Object?> payloadFor(ShellDescriptor shell) {
+    var chosen = _byShell[shell.id] ?? const <String, Object?>{};
+    return {for (var axis in shell.axes) axis.name: chosen[axis.name]};
   }
 }
 
@@ -216,6 +245,33 @@ class CatalogSession extends ChangeNotifier {
   /// report for one that declares none.
   KnobReport knobs = KnobReport.empty;
 
+  /// Every `@CatalogShell` discovery found. A shell decides what the top bar
+  /// offers, so an entry with none has a bare one.
+  List<ShellDescriptor> shells = const [];
+
+  /// The axes the shell on screen declared, with what each is set to.
+  ///
+  /// Read from the guest rather than derived from [shells] because a signature
+  /// carries a type name and not what its values are called — the guest is
+  /// handed the enum itself and reports from there.
+  AxisReport axes = AxisReport.empty;
+
+  /// What each shell is set to. Host state, and the reason an axis outlives an
+  /// entry — see [ShellSelections].
+  final selections = ShellSelections();
+
+  /// The last payload sent, so a switch that changes nothing costs no frame.
+  Map<String, Object?>? _pushed;
+
+  ShellDescriptor? get _activeShell {
+    var shellId = (selected ?? active)?.shellId;
+    if (shellId == null) return null;
+    for (var shell in shells) {
+      if (shell.id == shellId) return shell;
+    }
+    return null;
+  }
+
   /// Everything discovery found, broken or not, in discovery's own order.
   ///
   /// Sorted by id because that is how the scanner sorts, so merging the two
@@ -321,6 +377,7 @@ class CatalogSession extends ChangeNotifier {
       coldCompile = ready.coldCompile;
       entries = ready.entries;
       quarantined = ready.quarantined;
+      shells = ready.shells;
       diagnostics = ready.diagnostics;
       _changes = daemon.catalogChanges.listen(_onCatalogChanged);
       if (_disposed) return;
@@ -423,6 +480,82 @@ class CatalogSession extends ChangeNotifier {
 
   final _pendingKnobs = <String, Object?>{};
   var _settingKnobs = false;
+
+  /// Sets one of the shell's axes: a picker to an option's name, a flag to a
+  /// bool, or either to null for the default its signature declares.
+  ///
+  /// Recorded against the shell rather than the entry, which is what makes an
+  /// axis outlive a switch.
+  Future<void> setAxis(String name, Object? value) async {
+    var shellId = axes.shellId;
+    if (shellId == null) return;
+    selections.choose(shellId, name, value);
+
+    // Drawn before it is sent, like a knob: the guest confirms by reporting,
+    // and a control that waited for a round trip to move would feel stuck.
+    axes = AxisReport(
+      shellId: shellId,
+      axes: [
+        for (var axis in axes.axes)
+          if (axis.name == name)
+            axis.withValue(value ?? axis.defaultValue)
+          else
+            axis,
+      ],
+    );
+    notifyListeners();
+
+    await _pushAxes(shellId);
+    await _readAxes();
+  }
+
+  /// Sends a shell's selections to the guest. See [ShellSelections.payloadFor]
+  /// for why every axis is named, including the ones nothing has chosen.
+  Future<void> _pushAxes(String? shellId) async {
+    var vmService = _vmService;
+    if (vmService == null || shellId == null) return;
+    var shell = _activeShell;
+    if (shell == null || shell.id != shellId) return;
+    var payload = selections.payloadFor(shell);
+    if (payload.isEmpty || mapEquals(payload, _pushed)) return;
+    _pushed = payload;
+    await vmService.callExtension(
+      'ext.flutterware.setAxes',
+      args: {'payload': jsonEncode(payload)},
+    );
+  }
+
+  /// Asks the guest what the shell on screen offers.
+  ///
+  /// Retried while the report names another shell, for the reason a knob read
+  /// is: the axes are recorded by the *call* the generated wrapper makes, so a
+  /// read landing between the reload and the frame describes the shell that was
+  /// there before.
+  Future<void> _readAxes() async {
+    var vmService = _vmService;
+    var shellId = (selected ?? active)?.shellId;
+    if (vmService == null) return;
+    if (shellId == null) {
+      // An entry with no shell has no axes, and nothing to wait for.
+      if (axes.axes.isNotEmpty) {
+        axes = AxisReport.empty;
+        notifyListeners();
+      }
+      return;
+    }
+    for (var attempt = 0; attempt < 10; attempt++) {
+      var json = await vmService.callExtension('ext.flutterware.axes');
+      if (_disposed) return;
+      if (json == null) return; // A guest from before the extension existed.
+      var report = AxisReport.fromJson(json);
+      if (report.shellId == shellId) {
+        axes = report;
+        notifyListeners();
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+    }
+  }
 
   /// Asks the guest what the entry on screen offers.
   ///
@@ -544,6 +677,11 @@ class CatalogSession extends ChangeNotifier {
       return;
     }
 
+    // Before the reload, not after: the shell reads its axes as it builds, so
+    // a push that landed afterwards would mean one frame rendered with the
+    // previous shell's selections and then a second correcting it.
+    await _pushAxes(entry.shellId);
+
     var watch = Stopwatch()..start();
     try {
       await vmService.reload(compiled.dill!);
@@ -568,6 +706,7 @@ class CatalogSession extends ChangeNotifier {
 
     active = entry;
     unawaited(_readKnobs());
+    unawaited(_readAxes());
     lastSwitch = SwitchReport(
       entry: entry,
       compile: compiled.compile,
@@ -585,6 +724,7 @@ class CatalogSession extends ChangeNotifier {
   void _onCatalogChanged(CatalogChanged change) {
     entries = change.entries;
     quarantined = change.quarantined;
+    shells = change.shells;
 
     // An entry that stopped *compiling* keeps its place and stays selected —
     // the panel says why it is not rendering, and moving the user somewhere

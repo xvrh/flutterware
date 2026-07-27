@@ -110,8 +110,11 @@ Future<void> main(List<String> args) async {
   // The shell: found by the same scan that finds entries, with its axes read
   // off its signature. Nothing has to run for this — the whole point of
   // reading the parameter list rather than the shell's behaviour.
-  var shell = ready.shells.singleOrNull;
-  check(shell?.symbol == 'wrapInApp', 'discovery found the catalog shell');
+  var shell = ready.shells.firstWhereOrNull((s) => s.symbol == 'wrapInApp');
+  var otherShell = ready.shells.firstWhereOrNull(
+    (s) => s.symbol == 'wrapInPlainApp',
+  );
+  check(shell != null && otherShell != null, 'discovery found both shells');
   check(
     shell?.axes.map((a) => '${a.name}:${a.typeName}').join(',') ==
         'flavor:Flavor,compact:bool',
@@ -122,8 +125,9 @@ Future<void> main(List<String> args) async {
     'including the defaults, as written',
   );
   check(
-    entries.every((e) => e.shellId == shell?.id),
-    'every entry is pointed at the shell its wrapper names',
+    entries.every((e) => e.shellId == shell?.id) == false &&
+        entries.where((e) => e.shellId == otherShell?.id).length == 1,
+    'each entry is pointed at the shell *its own* wrapper names',
   );
   check(
     entries.any((e) => e.group == 'Avatar tile'),
@@ -845,6 +849,48 @@ Future<void> main(List<String> args) async {
       'a selection survives switching entries — $elsewhere',
     );
     await setAxes({'flavor': null});
+  }
+
+  // A second shell. The top bar is the axes of whichever shell the entry on
+  // screen uses, so moving between them has to change what there is to turn —
+  // and a selection must not leak across two shells that name an axis alike.
+  if (probing) {
+    await setAxes({'flavor': 'prod'});
+    var elsewhere = entries.firstWhere((e) => e.symbol == 'elsewhere');
+    await _renderEntry(daemon, vmService, probes, elsewhere);
+    var there = await vmService.callExtension('ext.flutterware.axes');
+    check(
+      there?['shell'] == otherShell?.id,
+      'the report names the shell the entry actually uses — ${there?['shell']}',
+    );
+    check(
+      [
+            for (var a in (there?['axes'] as List? ?? [])) (a as Map)['name'],
+          ].join(',') ==
+          'loudness,flavor',
+      'with that shell\'s axes',
+    );
+    var options = ((there?['axes'] as List).last as Map)['options'].toString();
+    check(
+      options == '[plain, fancy]',
+      'and its own enum, not the other shell\'s — $options',
+    );
+
+    // Both shells declare `flavor`, and the guest keys selections by name
+    // alone. Two things stop them inheriting each other's, and this covers the
+    // guest's half: a name the enum does not have falls back to the default.
+    // The host's half — naming every axis, with a null for the unchosen — is
+    // what covers two shells that share a *value* name too, and is tested
+    // against `ShellSelections` rather than here.
+    var drawn = await _nextProbe(
+      probes.stream,
+      const Duration(seconds: 10),
+      (line) => line.contains('OTHER'),
+    );
+    check(
+      drawn.contains('OTHER quiet plain'),
+      'a selection made on one shell does not leak into another — $drawn',
+    );
   }
 
   // An axis added to the signature. The shell is baked into the wrapper of

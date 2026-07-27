@@ -506,4 +506,80 @@ void main() {
       expect(find.text('12'), findsOneWidget);
     });
   });
+
+  group('the top bar axes', () {
+    AxisReport report(List<KnobDescriptor> axes) =>
+        AxisReport(shellId: 'demo/shell.dart#wrapInApp', axes: axes);
+
+    const flavor = KnobDescriptor(
+      name: 'flavor',
+      kind: KnobKind.picker,
+      value: 'dev',
+      defaultValue: 'dev',
+      options: ['dev', 'staging', 'prod'],
+    );
+    const compact = KnobDescriptor(
+      name: 'compact',
+      kind: KnobKind.boolean,
+      value: false,
+      defaultValue: false,
+    );
+
+    testWidgets('an entry whose wrapper is not a shell has a bare bar', (
+      tester,
+    ) async {
+      await pump(tester, sessionWithBroken(beta, 'boom'));
+      expect(find.text('flavor'), findsNothing);
+      expect(find.byType(Switch), findsNothing);
+    });
+
+    testWidgets('each axis is named, and drawn by its kind', (tester) async {
+      var session = sessionWithBroken(beta, 'boom')
+        ..axes = report(const [flavor, compact]);
+      await pump(tester, session);
+
+      // Named unconditionally: up here an axis sits beside a device picker, and
+      // an unlabelled control would read as something about the phone.
+      expect(find.text('flavor'), findsOneWidget);
+      expect(find.text('compact'), findsOneWidget);
+      expect(find.text('dev'), findsOneWidget);
+      expect(find.byType(Switch), findsOneWidget);
+    });
+
+    testWidgets('an axis off its default is legible against one that is not', (
+      tester,
+    ) async {
+      var session = sessionWithBroken(beta, 'boom')
+        ..axes = report(const [
+          KnobDescriptor(
+            name: 'flavor',
+            kind: KnobKind.picker,
+            value: 'prod',
+            defaultValue: 'dev',
+            options: ['dev', 'prod'],
+          ),
+          compact,
+        ]);
+      await pump(tester, session);
+
+      Color colorOf(String name) =>
+          tester.widget<Text>(find.text(name)).style!.color!;
+      expect(colorOf('flavor'), isNot(colorOf('compact')));
+    });
+
+    testWidgets('the options are what the guest reported, not the signature', (
+      tester,
+    ) async {
+      // A signature carries `Flavor`; only the guest knows what its values are
+      // called, which is why the report is what the picker is built from.
+      var session = sessionWithBroken(beta, 'boom')
+        ..axes = report(const [flavor]);
+      await pump(tester, session);
+
+      await tester.tap(find.text('dev'));
+      await tester.pumpAndSettle();
+      expect(find.text('staging'), findsOneWidget);
+      expect(find.text('prod'), findsOneWidget);
+    });
+  });
 }

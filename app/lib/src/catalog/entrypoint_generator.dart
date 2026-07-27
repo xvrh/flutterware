@@ -40,9 +40,7 @@ class EntrypointGenerator {
   /// Read when a wrapper is written, because an entry's shell decides what the
   /// generated call passes it. Replaced rather than mutated when a scan finds
   /// the signature changed — see [shells].
-  Map<String, ShellDescriptor> get shells => _shells;
-  var _shells = const <String, ShellDescriptor>{};
-  set shells(Map<String, ShellDescriptor> value) => _shells = value;
+  var shells = const <String, ShellDescriptor>{};
 
   final _wrapperIndex = <String, int>{};
 
@@ -134,7 +132,7 @@ class EntrypointGenerator {
 
   String _wrapper(CatalogEntry entry, int index) {
     var source = p.join(projectRoot, entry.path);
-    var shell = _shells[entry.shellId];
+    var shell = shells[entry.shellId];
     // The shell's own imports as well as the demo's. The generated call names
     // an axis's *type* — `Flavor.values` is where the option labels come from —
     // and that type is in scope where the shell is written, not necessarily
@@ -197,13 +195,7 @@ Widget Function(Widget)? get fwShellWrap => null;
       for (var axis in shell.axes)
         // A bool is a closed set without being an Enum, so it has no `values`
         // to hand over and gets its own call.
-        if (axis.isBoolean)
-          '  ${axis.name}: CatalogAxes.instance'
-              ".flag('${axis.name}', ${axis.defaultSource}),"
-        else
-          '  ${axis.name}: CatalogAxes.instance.pick('
-              "'${axis.name}', ${axis.typeName}.values, "
-              '${axis.defaultSource}),',
+        if (axis.isBoolean) _flagCall(axis) else _pickCall(axis),
     ];
     return '''
 String? get fwShellId => r'${shell.id}';
@@ -222,6 +214,14 @@ ${arguments.join('\n')}
 );
 ''';
   }
+
+  static String _flagCall(ShellAxis axis) =>
+      "  ${axis.name}: CatalogAxes.instance.flag('${axis.name}', "
+      '${axis.defaultSource}),';
+
+  static String _pickCall(ShellAxis axis) =>
+      "  ${axis.name}: CatalogAxes.instance.pick('${axis.name}', "
+      '${axis.typeName}.values, ${axis.defaultSource}),';
 
   /// The demo file's own import directives, with relative URIs rewritten to
   /// resolve from [outputDir].

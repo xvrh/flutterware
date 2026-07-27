@@ -729,12 +729,38 @@ class _TopBar extends StatelessWidget {
         spacing: FwSpacing.md,
         children: [
           _DevicePicker(staging: staging),
-          if (device != null) ...[
+          if (device != null)
             Text(
               describeDevice(device),
               style: context.type.caption.copyWith(fontFamily: 'monospace'),
             ),
-            const Spacer(),
+          // The shell's own switches, after what the guest is *staged* as. A
+          // different order would read as if the flavor were a property of the
+          // phone rather than of the app inside it.
+          //
+          // Scrolling rather than wrapping or shrinking: the bar is one row
+          // tall by design, a project may declare more axes than fit beside a
+          // device name, and the alternative is that the last one silently
+          // pushes the frame toggle off the end.
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                spacing: FwSpacing.lg,
+                children: [
+                  for (var axis in session.axes.axes)
+                    _Axis(
+                      // Keyed by name so a picker keeps its place when the
+                      // report is read back and the row is rebuilt around it.
+                      key: ValueKey(axis.name),
+                      axis: axis,
+                      onChanged: (value) => session.setAxis(axis.name, value),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (device != null)
             IconButton(
               icon: Icon(
                 staging.frameVisible ? Icons.phone_iphone : Icons.crop_din,
@@ -747,9 +773,71 @@ class _TopBar extends StatelessWidget {
                   : 'Show the frame',
               onPressed: () => staging.frameVisible = !staging.frameVisible,
             ),
-          ],
         ],
       ),
+    );
+  }
+}
+
+/// One of the shell's axes, in the top bar.
+///
+/// Labelled unconditionally, unlike a knob, which is written as
+/// `name  [control]` in a panel of its own. Up here an axis sits beside a
+/// device picker and a frame toggle, and an unlabelled `staging` would read as
+/// something about the phone.
+class _Axis extends StatelessWidget {
+  const _Axis({super.key, required this.axis, required this.onChanged});
+
+  final KnobDescriptor axis;
+  final ValueChanged<Object?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: FwSpacing.sm,
+      children: [
+        Text(
+          axis.name,
+          style: context.type.caption.copyWith(
+            // Bright once it is off its default, so what you have changed
+            // about the whole catalog is legible without reading the values.
+            color: axis.isDefault ? context.colors.mut : context.colors.ink,
+          ),
+        ),
+        if (axis.kind == KnobKind.boolean)
+          SizedBox(
+            height: 24,
+            child: Switch(
+              value: axis.value == true,
+              onChanged: (value) => onChanged(value),
+            ),
+          )
+        else
+          _Popover<String?>(
+            selected: axis.value as String?,
+            onSelected: onChanged,
+            groups: [
+              (
+                heading: null,
+                items: [
+                  for (var option in axis.options)
+                    (
+                      value: option,
+                      label: option,
+                      detail: option == axis.defaultValue ? 'default' : '',
+                    ),
+                ],
+              ),
+            ],
+            child: _Field(
+              child: Text(
+                '${axis.value ?? '—'}',
+                style: context.type.caption.copyWith(color: context.colors.ink),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
