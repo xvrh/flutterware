@@ -46,8 +46,8 @@ Future<void> main(List<String> args) async {
     var json = tryDecodeLine(line);
     if (json == null) continue;
     switch (DaemonRequest.decode(json)) {
-      case SelectRequest(:var id):
-        await daemon.select(id);
+      case SelectRequest(:var id, :var full):
+        await daemon.select(id, full: full);
       case ShutdownRequest():
         await daemon.shutdown();
         return;
@@ -144,10 +144,22 @@ class _Daemon {
     );
   }
 
-  Future<void> select(String id) async {
+  Future<void> select(String id, {bool full = false}) async {
     var entry = _entryById(id);
     var invalidated = _generator.select(entry);
-    var compiled = await _compiler!.compile(invalidated);
+    if (full) {
+      // A fresh compiler's first compile writes the whole kernel to
+      // kernel_blob.bin, which is what a guest spawned from scratch loads.
+      // Everything else the daemon built — asset bundle, C host — is reused.
+      await _compiler!.shutdown();
+      _compiler = await ResidentCompiler.start(
+        entrypoint: _generator.entrypointPath,
+        outputDill: p.join(_assetsDir, 'kernel_blob.bin'),
+        packageConfig: config.packageConfig,
+        cache: _cache,
+      );
+    }
+    var compiled = await _compiler!.compile(full ? const [] : invalidated);
     _emit(
       DaemonCompiled(
         id: id,

@@ -52,7 +52,7 @@ sealed class DaemonRequest implements ProtocolMessage {
 /// Make [id] the active entry and compile it into the entrypoint.
 @JsonSerializable()
 class SelectRequest extends DaemonRequest {
-  const SelectRequest(this.id);
+  const SelectRequest(this.id, {this.full = false});
 
   factory SelectRequest.fromJson(Map<String, dynamic> json) =>
       _$SelectRequestFromJson(json);
@@ -61,6 +61,14 @@ class SelectRequest extends DaemonRequest {
 
   /// A [CatalogEntry.id].
   final String id;
+
+  /// Produce a **full** kernel rather than an incremental delta.
+  ///
+  /// A delta only means something to an isolate that is already running, so a
+  /// guest spawned from scratch — which loads the kernel out of the asset
+  /// directory — needs the whole thing. Costs a cold compile; only
+  /// screenshotting asks for it.
+  final bool full;
 
   @override
   String get type => wireName;

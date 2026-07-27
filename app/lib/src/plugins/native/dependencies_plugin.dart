@@ -157,8 +157,13 @@ class DependenciesPlugin extends NativePlugin {
   }
 
   @override
-  Future<void> invoke(String actionId) async {
-    if (actionId != 'reload') return super.invoke(actionId);
+  Future<Object?> invoke(
+    String actionId, {
+    Map<String, Object?> arguments = const {},
+  }) async {
+    if (actionId != 'reload') {
+      return super.invoke(actionId, arguments: arguments);
+    }
     for (var path in _tracked.keys.toList()) {
       await _sourceFor(path).refresh();
     }

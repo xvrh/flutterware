@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 
 import '../../catalog/catalog_entry.dart';
 import '../../catalog/discovery.dart';
+import '../../catalog/protocol.dart';
+import '../../catalog/screenshot.dart';
 import '../../ui/theme.dart';
 import '../native_plugin.dart';
 
@@ -18,6 +20,10 @@ const _defaultRoot = 'demo';
 /// Entries the text projection lists before it starts counting. A projection is
 /// read, not scrolled.
 const _projectedEntries = 20;
+
+/// Entry ids spelled out inline as action options. Beyond this the caller reads
+/// them from the view, which is what `optionsFrom` says.
+const _inlinedOptions = 50;
 
 /// The UI catalog's entries, per declared package.
 ///
@@ -122,11 +128,37 @@ class UiCatalogPlugin extends NativePlugin {
           status: _packageStatus(path),
         ),
     ],
-    actions: const [
-      PluginAction(
+    actions: [
+      const PluginAction(
         'rescan',
         'Rescan',
         description: 'Re-read the demo files and rebuild the entry list',
+      ),
+      PluginAction(
+        'screenshot',
+        'Screenshot',
+        description: 'Render one entry to a PNG',
+        parameters: [
+          ActionParameter(
+            'entry',
+            'Entry',
+            kind: ActionParameterKind.choice,
+            description: 'The id of the entry to render',
+            // Not inlined: a real catalog has hundreds of entries and they are
+            // already in the view, so pointing at them beats repeating them.
+            optionsFrom: 'view',
+            options: [
+              for (var entry in entries.take(_inlinedOptions))
+                ActionOption(entry.id, label: entry.name),
+            ],
+          ),
+          const ActionParameter(
+            'output',
+            'Output file',
+            required: false,
+            description: 'Where to write the PNG; a build path when omitted',
+          ),
+        ],
       ),
     ],
     view: _view,
@@ -205,13 +237,61 @@ class UiCatalogPlugin extends NativePlugin {
   }
 
   @override
-  Future<void> invoke(String actionId) async {
+  Future<Object?> invoke(
+    String actionId, {
+    Map<String, Object?> arguments = const {},
+  }) async {
     switch (actionId) {
       case 'rescan':
         rescan();
+        return null;
+      case 'screenshot':
+        return _screenshot(arguments);
       default:
-        await super.invoke(actionId);
+        return super.invoke(actionId, arguments: arguments);
     }
+  }
+
+  /// Renders one entry to a PNG and returns its path.
+  ///
+  /// Runs the whole pipeline headlessly, so the button, `fw` and an agent all
+  /// reach the same artifact by the same route.
+  Future<String> _screenshot(Map<String, Object?> arguments) async {
+    var entryId = arguments['entry'];
+    if (entryId is! String || entryId.isEmpty) {
+      throw ArgumentError.value(entryId, 'entry', 'required');
+    }
+    var packagePath = packages.firstWhere(
+      (path) => _scans[path]?.entries.any((e) => e.id == entryId) ?? false,
+      orElse: () => throw ArgumentError.value(
+        entryId,
+        'entry',
+        'no scanned entry with that id — has the package been scanned?',
+      ),
+    );
+
+    var packageRoot = p.join(host.worktree.path, packagePath);
+    var output =
+        arguments['output'] as String? ??
+        p.join(
+          packageRoot,
+          'build',
+          'catalog',
+          'screenshots',
+          '${entryId.replaceAll(RegExp('[^A-Za-z0-9]+'), '_')}.png',
+        );
+
+    var file = await CatalogScreenshot(
+      dartExecutable: p.join(host.workspace.flutterSdk.root, 'bin', 'dart'),
+      hostPath: p.join(packageRoot, 'build', 'catalog', 'native', 'host'),
+      config: DaemonConfig(
+        appPackageRoot: packageRoot,
+        projectRoot: packageRoot,
+        packageConfig: p.join(packageRoot, '.dart_tool', 'package_config.json'),
+        roots: [_rootFor(packagePath)],
+      ),
+    ).capture(entryId: entryId, output: output);
+    return file.path;
   }
 
   @override

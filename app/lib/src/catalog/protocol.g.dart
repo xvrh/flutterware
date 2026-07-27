@@ -7,10 +7,10 @@ part of 'protocol.dart';
 // **************************************************************************
 
 SelectRequest _$SelectRequestFromJson(Map<String, dynamic> json) =>
-    SelectRequest(json['id'] as String);
+    SelectRequest(json['id'] as String, full: json['full'] as bool? ?? false);
 
 Map<String, dynamic> _$SelectRequestToJson(SelectRequest instance) =>
-    <String, dynamic>{'id': instance.id};
+    <String, dynamic>{'id': instance.id, 'full': instance.full};
 
 DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
   hostPath: json['hostPath'] as String,

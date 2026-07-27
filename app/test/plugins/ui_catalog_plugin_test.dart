@@ -115,7 +115,9 @@ Widget counter() => const Placeholder();
 
     var json = subject.report.toJson();
     expect(json['id'], uiCatalogPluginId);
-    expect((json['actions']! as List).single, containsPair('id', 'rescan'));
+    expect([
+      for (var a in json['actions']! as List) (a as Map)['id'],
+    ], containsAll(['rescan', 'screenshot']));
     expect(json['view'], isNotEmpty);
   });
 
@@ -170,5 +172,58 @@ Widget added() => const Placeholder();
 
   test('an unknown action is refused loudly', () async {
     expect(plugin().invoke('nope'), throwsArgumentError);
+  });
+
+  test('the screenshot action declares what it needs', () async {
+    var subject = plugin()..track('.');
+    await scanned(subject);
+
+    var action = subject.report.actions.firstWhere((a) => a.id == 'screenshot');
+    var entry = action.parameters.firstWhere((p) => p.id == 'entry');
+
+    expect(entry.kind, ActionParameterKind.choice);
+    expect(entry.required, isTrue);
+    expect(
+      entry.options.map((o) => o.value),
+      contains('demo/counter.dart#counter'),
+      reason: 'a small catalog inlines its options',
+    );
+    expect(
+      entry.optionsFrom,
+      'view',
+      reason: 'a large one points at the list already in the report',
+    );
+    expect(
+      action.parameters.firstWhere((p) => p.id == 'output').required,
+      isFalse,
+    );
+  });
+
+  test('the action survives a JSON round trip', () async {
+    var subject = plugin()..track('.');
+    await scanned(subject);
+
+    var original = subject.report.actions.firstWhere(
+      (a) => a.id == 'screenshot',
+    );
+    var restored = PluginAction.fromJson(original.toJson());
+
+    expect(restored.parameters, hasLength(original.parameters.length));
+    var entry = restored.parameters.first;
+    expect(entry.id, 'entry');
+    expect(entry.kind, ActionParameterKind.choice);
+    expect(entry.optionsFrom, 'view');
+    expect(entry.options.first.label, isNotNull);
+  });
+
+  test('screenshot refuses a missing or unknown entry', () async {
+    var subject = plugin()..track('.');
+    await scanned(subject);
+
+    expect(subject.invoke('screenshot'), throwsArgumentError);
+    expect(
+      subject.invoke('screenshot', arguments: {'entry': 'nope#nope'}),
+      throwsArgumentError,
+    );
   });
 }

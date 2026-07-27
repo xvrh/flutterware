@@ -75,12 +75,15 @@ class CompilerDaemonClient {
   }
 
   /// Makes [id] the active entry and compiles it into the entrypoint.
-  Future<DaemonCompiled> select(String id) async {
+  ///
+  /// [full] asks for a whole kernel rather than a delta — needed when the
+  /// result will be loaded by a guest spawned from scratch.
+  Future<DaemonCompiled> select(String id, {bool full = false}) async {
     var reply = _responses
         .where((r) => r is DaemonCompiled)
         .cast<DaemonCompiled>()
         .first;
-    _process.stdin.writeln(encodeLine(SelectRequest(id)));
+    _process.stdin.writeln(encodeLine(SelectRequest(id, full: full)));
     return reply;
   }
 

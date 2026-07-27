@@ -50,9 +50,20 @@ abstract class NativePlugin extends ChangeNotifier {
   var _notifyScheduled = false;
   var _disposed = false;
 
-  /// Runs one of [report]'s actions. The default refuses unknown ids loudly
-  /// rather than silently doing nothing.
-  Future<void> invoke(String actionId) async {
+  /// Runs one of [report]'s actions.
+  ///
+  /// [arguments] are keyed by `ActionParameter.id` and come from whichever
+  /// renderer invoked it — a form in the GUI, flags on `fw`, a map from an
+  /// agent. A plugin validates its own: the framework cannot know what a
+  /// parameter means.
+  ///
+  /// The default refuses unknown ids loudly rather than silently doing
+  /// nothing. Returns whatever the action produced — a path to an artifact,
+  /// say — or null.
+  Future<Object?> invoke(
+    String actionId, {
+    Map<String, Object?> arguments = const {},
+  }) async {
     throw ArgumentError.value(actionId, 'actionId', 'unknown action on $id');
   }
 
