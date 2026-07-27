@@ -55,7 +55,12 @@ sealed class DaemonRequest implements ProtocolMessage {
 /// Make [id] the active entry and compile it into the entrypoint.
 @JsonSerializable()
 class SelectRequest extends DaemonRequest {
-  const SelectRequest(this.requestId, this.id, {this.full = false});
+  const SelectRequest(
+    this.requestId,
+    this.id, {
+    this.full = false,
+    this.ifChanged = false,
+  });
 
   factory SelectRequest.fromJson(Map<String, dynamic> json) =>
       _$SelectRequestFromJson(json);
@@ -76,6 +81,14 @@ class SelectRequest extends DaemonRequest {
   /// directory — needs the whole thing. Costs a cold compile; only
   /// screenshotting asks for it.
   final bool full;
+
+  /// Do nothing unless something on disk moved.
+  ///
+  /// For triggers the user did not press — coming back to the window, or to
+  /// the panel. A reload is not free of consequence even when it compiles to
+  /// the same bytes: it reassembles the guest and resets whatever state the
+  /// demo was holding. Answering "unchanged" is how a reflex stays invisible.
+  final bool ifChanged;
 
   @override
   String get type => wireName;
@@ -232,6 +245,8 @@ class DaemonCompiled extends DaemonResponse {
     required this.id,
     required this.compile,
     required this.newSourceCount,
+    this.editedCount = 0,
+    this.unchanged = false,
     this.dill,
     this.error,
   });
@@ -262,8 +277,21 @@ class DaemonCompiled extends DaemonResponse {
   /// compiler has already seen.
   final int newSourceCount;
 
+  /// How many source files the daemon found edited and invalidated for this
+  /// compile.
+  ///
+  /// Worth showing: a reload of zero edited files is a legitimate outcome —
+  /// nothing was saved — but it is also what a broken invalidation sweep looks
+  /// like, and the two are indistinguishable from the pixels.
+  final int editedCount;
+
   /// Compiler diagnostics when the entry did not build.
   final String? error;
+
+  /// The daemon did nothing, because a [SelectRequest.ifChanged] found nothing
+  /// to do. Neither success nor failure: there is no kernel, and the client
+  /// should leave its guest exactly as it is.
+  final bool unchanged;
 
   bool get ok => error == null && dill != null;
 

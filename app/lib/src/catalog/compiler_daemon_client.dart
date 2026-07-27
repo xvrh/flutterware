@@ -123,8 +123,14 @@ class CompilerDaemonClient {
   /// Makes [id] the active entry and compiles it into the entrypoint.
   ///
   /// [full] asks for a whole kernel rather than a delta — needed when the
-  /// result will be loaded by a guest spawned from scratch.
-  Future<DaemonCompiled> select(String id, {bool full = false}) {
+  /// result will be loaded by a guest spawned from scratch. [ifChanged] asks
+  /// the daemon to answer `unchanged` instead of working, when nothing on disk
+  /// has moved and this entry is already the compiled one.
+  Future<DaemonCompiled> select(
+    String id, {
+    bool full = false,
+    bool ifChanged = false,
+  }) {
     var requestId = _nextRequestId++;
     // Matched on the id, not on "the next compiled message": the daemon serves
     // other clients on the same compiler, and their replies share this stream's
@@ -133,7 +139,11 @@ class CompilerDaemonClient {
         .where((r) => r is DaemonCompiled && r.requestId == requestId)
         .cast<DaemonCompiled>()
         .first;
-    _socket.writeln(encodeLine(SelectRequest(requestId, id, full: full)));
+    _socket.writeln(
+      encodeLine(
+        SelectRequest(requestId, id, full: full, ifChanged: ifChanged),
+      ),
+    );
     return reply;
   }
 

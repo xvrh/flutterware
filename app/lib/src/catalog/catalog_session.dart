@@ -19,6 +19,8 @@ class SwitchReport {
     required this.compile,
     required this.reload,
     required this.newSourceCount,
+    required this.editedCount,
+    this.reloaded = false,
     this.error,
   });
 
@@ -26,6 +28,14 @@ class SwitchReport {
   final Duration compile;
   final Duration reload;
   final int newSourceCount;
+
+  /// How many edited files the daemon picked up. The interesting number when
+  /// [reloaded] — it is the difference between "your save is on screen" and
+  /// "nothing was saved".
+  final int editedCount;
+
+  /// This was a reload of the entry already showing, not a switch to another.
+  final bool reloaded;
 
   /// Compiler diagnostics when the entry did not build. The guest keeps
   /// rendering whatever it had.
@@ -77,8 +87,47 @@ class CatalogSession extends ChangeNotifier {
 
   /// What the guest is currently rendering.
   CatalogEntry? active;
+
+  /// What the user last asked for, which is not the same thing: an entry that
+  /// does not compile stays selected — and stays the one a reload retries —
+  /// while the guest goes on rendering whatever it last managed to load.
+  CatalogEntry? selected;
+
   SwitchReport? lastSwitch;
   Duration? coldCompile;
+
+  /// Everything discovery found, broken or not, in discovery's own order.
+  ///
+  /// Sorted by id because that is how the scanner sorts, so merging the two
+  /// lists puts a quarantined entry back exactly where it was rather than in a
+  /// section of its own. A demo you are midway through editing should not move.
+  List<CatalogEntry> get allEntries =>
+      [...entries, ...quarantined.map((q) => q.entry)]
+        ..sort((a, b) => a.id.compareTo(b.id));
+
+  /// The compiler's complaint about [entry], or null if it builds.
+  String? compileErrorFor(CatalogEntry entry) {
+    for (var broken in quarantined) {
+      if (broken.entry.id == entry.id) return broken.error;
+    }
+    return null;
+  }
+
+  /// Why [selected] is not what the guest is showing, or null when it is.
+  ///
+  /// Covers both ways that happens: the entry does not compile, or it compiled
+  /// and the reload was refused. Either way the guest keeps rendering the last
+  /// thing that worked, and this is the text that explains the difference.
+  String? get selectedError {
+    var entry = selected;
+    if (entry == null) return null;
+    if (compileErrorFor(entry) case var error?) return error;
+    var report = lastSwitch;
+    if (report != null && report.entry.id == entry.id && !report.ok) {
+      return report.error;
+    }
+    return null;
+  }
 
   EmbeddedEngine? get engine => _engine;
   EmbeddedEngine? _engine;
@@ -175,7 +224,7 @@ class CatalogSession extends ChangeNotifier {
       _vmService = await GuestVmService.connect(await engine.vmServiceUri);
       if (_disposed) return;
 
-      active = entries.first;
+      active = selected = entries.first;
       phase = CatalogSessionPhase.ready;
       _idle();
     } catch (e) {
@@ -187,14 +236,44 @@ class CatalogSession extends ChangeNotifier {
   ///
   /// Switches are serialised: the daemon and the isolate each tolerate one
   /// in-flight operation, and a click-happy user must not interleave them.
-  Future<void> switchTo(CatalogEntry entry) {
-    _queue = _queue.then((_) => _switchTo(entry)).catchError((Object e) {
-      _fail('$e');
-    });
+  Future<void> switchTo(CatalogEntry entry, {bool ifChanged = false}) {
+    _queue = _queue
+        .then((_) => _switchTo(entry, ifChanged: ifChanged))
+        .catchError((Object e) {
+          _fail('$e');
+        });
     return _queue;
   }
 
-  Future<void> _switchTo(CatalogEntry entry) async {
+  /// Rebuilds what is on screen from the files as they are now.
+  ///
+  /// Literally a switch to the entry already selected: the daemon sweeps for
+  /// edits on every request, so re-selecting is the whole of a reload — and
+  /// because the daemon retries a quarantined entry on request, this is also
+  /// how a demo that stopped compiling is asked again.
+  ///
+  /// Explicit rather than automatic on save: nothing watches the project yet,
+  /// and a catalog that reloads itself mid-refactor is its own annoyance.
+  Future<void> reload() {
+    var entry = selected ?? active;
+    return entry == null ? Future.value() : switchTo(entry);
+  }
+
+  /// A [reload] that costs nothing when nothing was edited.
+  ///
+  /// For the triggers the user did not press — coming back to the window, or
+  /// to the panel. The daemon answers `unchanged` rather than working, so the
+  /// guest is not reassembled and the demo keeps whatever state it was holding;
+  /// alt-tabbing must not be a way to lose your place.
+  Future<void> reloadIfChanged() {
+    var entry = selected ?? active;
+    if (entry == null || phase != CatalogSessionPhase.ready) {
+      return Future.value();
+    }
+    return switchTo(entry, ifChanged: true);
+  }
+
+  Future<void> _switchTo(CatalogEntry entry, {required bool ifChanged}) async {
     var daemon = _daemon;
     var vmService = _vmService;
     if (_disposed ||
@@ -204,9 +283,20 @@ class CatalogSession extends ChangeNotifier {
       return;
     }
 
-    _busy('compiling');
+    // Told apart by where the user already was, so that asking again for the
+    // entry on screen — or for the broken one they are fixing — reports what it
+    // did rather than what a switch would have done.
+    var reloaded = entry.id == selected?.id || entry.id == active?.id;
+    selected = entry;
+    _busy(reloaded ? 'reloading' : 'compiling');
     try {
-      await _switchOnce(daemon, vmService, entry);
+      await _switchOnce(
+        daemon,
+        vmService,
+        entry,
+        reloaded: reloaded,
+        ifChanged: ifChanged,
+      );
     } finally {
       _idle();
     }
@@ -215,9 +305,14 @@ class CatalogSession extends ChangeNotifier {
   Future<void> _switchOnce(
     CompilerDaemonClient daemon,
     GuestVmService vmService,
-    CatalogEntry entry,
-  ) async {
-    var compiled = await daemon.select(entry.id);
+    CatalogEntry entry, {
+    required bool reloaded,
+    required bool ifChanged,
+  }) async {
+    var compiled = await daemon.select(entry.id, ifChanged: ifChanged);
+    // Nothing on disk moved. Leave everything alone — including [lastSwitch],
+    // which still describes the last thing that actually happened.
+    if (compiled.unchanged) return;
     if (!compiled.ok) {
       // The guest keeps rendering the previous entry; a broken demo is a
       // reportable event, not the end of the session.
@@ -226,6 +321,8 @@ class CatalogSession extends ChangeNotifier {
         compile: compiled.compile,
         reload: Duration.zero,
         newSourceCount: compiled.newSourceCount,
+        editedCount: compiled.editedCount,
+        reloaded: reloaded,
         error: compiled.error,
       );
       notifyListeners();
@@ -245,6 +342,8 @@ class CatalogSession extends ChangeNotifier {
         compile: compiled.compile,
         reload: watch.elapsed,
         newSourceCount: compiled.newSourceCount,
+        editedCount: compiled.editedCount,
+        reloaded: reloaded,
         error: 'hot reload was refused: $e',
       );
       notifyListeners();
@@ -258,6 +357,8 @@ class CatalogSession extends ChangeNotifier {
       compile: compiled.compile,
       reload: watch.elapsed,
       newSourceCount: compiled.newSourceCount,
+      editedCount: compiled.editedCount,
+      reloaded: reloaded,
     );
     notifyListeners();
   }
@@ -269,12 +370,11 @@ class CatalogSession extends ChangeNotifier {
     entries = change.entries;
     quarantined = change.quarantined;
 
-    // The entry on screen may be the one that just broke. The guest keeps
-    // rendering it — it is still loaded — but the list no longer offers it, so
-    // move to something the user can actually switch back to.
-    if (active != null && !entries.any((e) => e.id == active!.id)) {
-      if (entries.isNotEmpty) unawaited(switchTo(entries.first));
-    }
+    // The entry on screen may be the one that just broke, and nothing here
+    // moves away from it. It keeps its place in the list, it stays selected,
+    // and the panel says why it is not rendering — switching the user somewhere
+    // else and leaving them to find their way back is what made a typo feel
+    // like losing your place.
     notifyListeners();
   }
 

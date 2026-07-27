@@ -29,6 +29,20 @@ class FrontendServer {
 
   var _compiled = false;
 
+  /// Every source the program currently consists of, accumulated from the
+  /// `+`/`-` diff each compile reports.
+  ///
+  /// This is the set to stat when asking what changed — the compiler will not
+  /// look, and it is the only place the answer exists: it spans the project,
+  /// its path dependencies and the SDK alike, without anyone having to guess
+  /// which of those an entry pulls in.
+  ///
+  /// Not rolled back by [reject], as `flutter_tools` does not roll its own copy
+  /// back either: a source the failed compile mentioned is one whose edits we
+  /// want to hear about, whether or not it built.
+  Set<Uri> get sources => _sources;
+  final _sources = <Uri>{};
+
   /// Spawns the compiler.
   ///
   /// [executable] is normally `dartaotruntime` and [snapshot] the engine's
@@ -181,6 +195,9 @@ class FrontendServer {
       var uri = Uri.parse(line.substring(1));
       (line.startsWith('+') ? newSources : removedSources).add(uri);
     }
+    _sources
+      ..addAll(newSources)
+      ..removeAll(removedSources);
 
     return FrontendServerResult(
       dillOutput: dill,

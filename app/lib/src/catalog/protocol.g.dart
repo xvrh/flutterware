@@ -11,6 +11,7 @@ SelectRequest _$SelectRequestFromJson(Map<String, dynamic> json) =>
       (json['requestId'] as num).toInt(),
       json['id'] as String,
       full: json['full'] as bool? ?? false,
+      ifChanged: json['ifChanged'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$SelectRequestToJson(SelectRequest instance) =>
@@ -18,6 +19,7 @@ Map<String, dynamic> _$SelectRequestToJson(SelectRequest instance) =>
       'requestId': instance.requestId,
       'id': instance.id,
       'full': instance.full,
+      'ifChanged': instance.ifChanged,
     };
 
 DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
@@ -97,6 +99,8 @@ DaemonCompiled _$DaemonCompiledFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String,
       compile: _millis.fromJson((json['compile'] as num).toInt()),
       newSourceCount: (json['newSourceCount'] as num).toInt(),
+      editedCount: (json['editedCount'] as num?)?.toInt() ?? 0,
+      unchanged: json['unchanged'] as bool? ?? false,
       dill: json['dill'] as String?,
       error: json['error'] as String?,
     );
@@ -108,7 +112,9 @@ Map<String, dynamic> _$DaemonCompiledToJson(DaemonCompiled instance) =>
       'dill': instance.dill,
       'compile': _millis.toJson(instance.compile),
       'newSourceCount': instance.newSourceCount,
+      'editedCount': instance.editedCount,
       'error': instance.error,
+      'unchanged': instance.unchanged,
     };
 
 DaemonFailed _$DaemonFailedFromJson(Map<String, dynamic> json) => DaemonFailed(

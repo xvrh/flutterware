@@ -12,6 +12,7 @@ import 'package:flutterware_app/src/catalog/entrypoint_generator.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/resident_compiler.dart';
+import 'package:flutterware_app/src/embedder/source_invalidator.dart';
 import 'package:path/path.dart' as p;
 
 /// The catalog's build and compile half, as a plain Dart process shared by
@@ -61,6 +62,21 @@ Future<void> main(List<String> args) async {
   await daemon.serve();
 }
 
+/// Where pub keeps its packages, so the invalidator can skip them. A dependency
+/// is immutable by construction — the way you change one is to resolve a
+/// different version, which rewrites the package config and recompiles anyway.
+List<String> get _pubCacheRoots {
+  var env = Platform.environment;
+  var home = env[Platform.isWindows ? 'LOCALAPPDATA' : 'HOME'];
+  return [
+    ?env['PUB_CACHE'],
+    if (home != null)
+      Platform.isWindows
+          ? p.join(home, 'Pub', 'Cache')
+          : p.join(home, '.pub-cache'),
+  ];
+}
+
 class _Daemon {
   _Daemon(this.config, this.address, this._server)
     // Keyed by address, so two daemons never share a working directory. They
@@ -85,6 +101,20 @@ class _Daemon {
   late final FlutterCache _cache;
   late final EntrypointGenerator _generator;
   ResidentCompiler? _compiler;
+
+  /// What turns an edit into a recompile. Every request sweeps: the daemon has
+  /// no watcher, so a client asking for something is the only moment it can
+  /// notice the files moved — which is exactly what a client's reload button
+  /// is for.
+  late final _invalidator = SourceInvalidator(
+    ignoredRoots: [
+      config.flutterSdkRoot,
+      ..._pubCacheRoots,
+      // Generated, and already invalidated by name when the generator rewrites
+      // them. Statting them would only report what we just did ourselves.
+      _generator.outputDir,
+    ],
+  );
 
   /// Everything discovery found, in tree order. Fixed until a rescan.
   var _discovered = <CatalogEntry>[];
@@ -134,7 +164,10 @@ class _Daemon {
 
   String get _outputDill => p.join(_buildDir, 'out', 'kernel_blob.bin');
 
-  CatalogEntry _entryById(String id) => _entries.firstWhere(
+  /// Looked up among everything discovered, not only what is servable: an entry
+  /// that does not compile has to stay selectable, because selecting it is how
+  /// a client retries it.
+  CatalogEntry _entryById(String id) => _discovered.firstWhere(
     (e) => e.id == id,
     orElse: () => throw ArgumentError.value(id, 'id', 'no such entry'),
   );
@@ -287,6 +320,11 @@ class _Daemon {
       mark('rebuild after quarantine');
     }
     _coldCompile = watch.elapsed;
+    // The baseline every later sweep reads against. Taken here rather than on
+    // the first request: a file edited between startup and that request would
+    // otherwise be recorded *as* the baseline, and the edit would never compile.
+    _invalidator.sweep(compiler.sources);
+    mark('source baseline (${_invalidator.watched} files)');
     compiler.saveWarmStart();
     File(_outputDill).copySync(p.join(_sharedAssetsDir, 'kernel_blob.bin'));
     mark('publish prepared kernel');
@@ -325,9 +363,10 @@ class _Daemon {
     int requestId,
     String id, {
     required bool full,
+    required bool ifChanged,
   }) {
     var result = _queue.then(
-      (_) => _select(session, requestId, id, full: full),
+      (_) => _select(session, requestId, id, full: full, ifChanged: ifChanged),
     );
     // The queue must survive a failed request, or one bad select wedges every
     // client behind it.
@@ -340,9 +379,48 @@ class _Daemon {
     int requestId,
     String id, {
     required bool full,
+    required bool ifChanged,
   }) async {
     var entry = _entryById(id);
-    var invalidated = _makeActive(entry);
+
+    // Before anything else: what the user edited. Re-selecting the entry that
+    // is already active is how a client asks for a reload, and without this it
+    // would recompile an entrypoint whose imports all resolve to the state the
+    // compiler is already holding — a switch that reports success and changes
+    // nothing on screen.
+    var edited = _invalidator.sweep(_compiler!.sources);
+    if (edited.isNotEmpty) {
+      stderr.writeln(
+        '[catalog] ${edited.length} of ${_invalidator.watched} sources edited '
+        '(swept in ${_invalidator.lastSweep.inMilliseconds}ms)',
+      );
+    }
+
+    // Nothing moved, and the entry asked for is the one already compiled in.
+    // Saying so is the whole value of `ifChanged`: the caller is a reflex, not
+    // a decision, and a reload it did not need still reassembles the guest and
+    // resets the demo's state.
+    if (ifChanged &&
+        edited.isEmpty &&
+        _active?.id == id &&
+        !_quarantine.containsKey(id)) {
+      return DaemonCompiled(
+        requestId: requestId,
+        id: id,
+        compile: Duration.zero,
+        newSourceCount: 0,
+        unchanged: true,
+      );
+    }
+
+    // Asking for a quarantined entry *is* the retry: let it back into the
+    // entrypoint and let the compile decide again. Answering from the
+    // quarantine instead would leave an entry that only some other file's edit
+    // could ever bring back — and would report the stale error even when the
+    // compile below succeeds.
+    if (_quarantine.remove(id) != null) _catalogChanged();
+
+    var invalidated = {...edited, ..._makeActive(entry)};
     if (full) {
       // A guest spawned from scratch loads kernel_blob.bin off disk, and a
       // delta is not a program. `reset` makes the next compile emit the whole
@@ -351,7 +429,7 @@ class _Daemon {
       // another's warm state.
       _compiler!.reset();
     }
-    var compiled = await _compileServingWhatWorks(invalidated);
+    var compiled = await _compileServingWhatWorks(invalidated.toList());
 
     // The requested entry may be exactly what the compile just quarantined, in
     // which case the compile "succeeded" — without it. Say so rather than hand
@@ -363,6 +441,7 @@ class _Daemon {
         id: id,
         compile: compiled.elapsed,
         newSourceCount: 0,
+        editedCount: edited.length,
         error: 'this entry does not compile:\n${quarantined.error}',
       );
     }
@@ -375,6 +454,7 @@ class _Daemon {
           : null,
       compile: compiled.elapsed,
       newSourceCount: compiled.newSourceCount,
+      editedCount: edited.length,
       error: compiled.ok ? null : compiled.output.join('\n'),
     );
   }
@@ -666,9 +746,17 @@ class _Session {
     var json = tryDecodeLine(line);
     if (json == null) return;
     switch (DaemonRequest.decode(json)) {
-      case SelectRequest(:var requestId, :var id, :var full):
+      case SelectRequest(:var requestId, :var id, :var full, :var ifChanged):
         try {
-          send(await _daemon.select(this, requestId, id, full: full));
+          send(
+            await _daemon.select(
+              this,
+              requestId,
+              id,
+              full: full,
+              ifChanged: ifChanged,
+            ),
+          );
         } catch (e, s) {
           send(
             DaemonCompiled(

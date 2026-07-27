@@ -250,6 +250,155 @@ Future<void> main(List<String> args) async {
     '${guestErrors.isEmpty ? '' : ':\n    ${guestErrors.join('\n    ')}'}',
   );
 
+  // 3b. An edit to a demo, put on screen by a reload of the entry already
+  // showing.
+  //
+  // The invalidation is the daemon's to do: `frontend_server` recompiles
+  // exactly the files a `recompile` request names and nothing else. Without the
+  // stat sweep this reload compiles, reloads, reports success in milliseconds
+  // and renders the file as it was when the daemon started — which is what it
+  // did before this check existed.
+  if (probing) {
+    stdout.writeln('[check] editing a demo and reloading it');
+    var members = entries.firstWhere((e) => e.symbol == 'avatarTileMembers');
+    var source = File(p.join(packageRoot, members.path));
+    var original = source.readAsStringSync();
+    await _renderEntry(daemon, vmService, probes, members);
+    try {
+      source.writeAsStringSync(
+        original.replaceAll('Dr. Sarah Chen', 'Dr. Sarah Chen (edited)'),
+      );
+      var edited = await daemon.select(members.id);
+      check(edited.ok, 'the edited demo compiled: ${edited.error}');
+      check(
+        edited.editedCount == 1,
+        'the sweep found exactly the edited file (${edited.editedCount})',
+      );
+      if (edited.ok) {
+        var watch = Stopwatch()..start();
+        await vmService.reload(edited.dill!);
+        var probe = await _nextProbe(
+          probes.stream,
+          const Duration(seconds: 10),
+          (line) => line.contains('(edited)'),
+        );
+        check(probe.contains('(edited)'), 'the reload put the edit on screen');
+        stdout.writeln(
+          '[check] edit->screen: compile ${edited.compile.inMilliseconds}ms · '
+          'reload ${watch.elapsedMilliseconds}ms',
+        );
+      }
+    } finally {
+      source.writeAsStringSync(original);
+    }
+    var reverted = await daemon.select(members.id);
+    check(
+      reverted.editedCount == 1,
+      'and the revert is an edit like any other',
+    );
+    if (reverted.ok) await vmService.reload(reverted.dill!);
+    var back = await _nextProbe(probes.stream, const Duration(seconds: 10));
+    check(!back.contains('(edited)'), 'reverting the file reverts the screen');
+
+    // What the checks below expect the guest to be rendering.
+    await _renderEntry(daemon, vmService, probes, entries.first);
+
+    // 3c. The contract the focus-triggered reload rests on: a request nobody
+    // pressed must cost nothing when nothing was edited. A reload that always
+    // works reassembles the guest and resets the demo's state, which would make
+    // alt-tabbing back to the panel a way to lose your place.
+    var quiet = await daemon.select(entries.first.id, ifChanged: true);
+    check(quiet.unchanged, 'ifChanged does nothing when nothing was edited');
+    check(quiet.dill == null, 'and hands back no kernel to reload');
+
+    try {
+      source.writeAsStringSync(
+        original.replaceAll('No members yet', 'Nobody yet'),
+      );
+      var noisy = await daemon.select(entries.first.id, ifChanged: true);
+      check(!noisy.unchanged, 'and does not skip when a file did move');
+      check(noisy.ok, 'compiling what changed: ${noisy.error}');
+      check(noisy.editedCount == 1, 'having found the one edited file');
+      if (noisy.ok) await vmService.reload(noisy.dill!);
+      var probe = await _nextProbe(
+        probes.stream,
+        const Duration(seconds: 10),
+        (line) => line.contains('Nobody yet'),
+      );
+      check(probe.contains('Nobody yet'), 'and put it on screen');
+    } finally {
+      source.writeAsStringSync(original);
+    }
+
+    // 3d. Hover reaches the guest.
+    //
+    // The phase travels the whole way — GUI socket, `input.c`, engine, demo —
+    // and only the demo can confirm it arrived: hover leaves nothing behind but
+    // a colour, so the probe reads a demo that turns it into text.
+    stdout.writeln('[check] hovering the guest');
+    var hover = entries.firstWhere((e) => e.symbol == 'hoverProbe');
+    await _renderEntry(daemon, vmService, probes, hover);
+    var resting = await _nextProbe(probes.stream, const Duration(seconds: 10));
+    check(resting.contains('POINTER OUT'), 'the demo starts un-hovered');
+
+    // The hover has to land somewhere other than the add: the engine drops a
+    // hover that does not move, so sending both at one point proves nothing.
+    for (var (phase, x, y) in [
+      (PointerPhase.add, 400.0, 300.0),
+      (PointerPhase.hover, 420.0, 320.0),
+    ]) {
+      connected.add(
+        encodeMessage(
+          PointerEventMessage(
+            phase: phase,
+            x: x,
+            y: y,
+            buttons: 0,
+            scrollDeltaX: 0,
+            scrollDeltaY: 0,
+            timestampMicros: DateTime.now().microsecondsSinceEpoch,
+          ),
+        ),
+      );
+    }
+    await connected.flush();
+    var hovered = await _nextProbe(
+      probes.stream,
+      const Duration(seconds: 10),
+      (line) => line.contains('POINTER IN'),
+    );
+    check(hovered.contains('POINTER IN'), 'the guest received the hover');
+    check(
+      !hovered.contains('no hover yet'),
+      'carrying a position, so onHover fired and not only onEnter — $hovered',
+    );
+
+    // And the pairing: a device that leaves has to be removed, or the hover
+    // state it left behind never lifts.
+    connected.add(
+      encodeMessage(
+        PointerEventMessage(
+          phase: PointerPhase.remove,
+          x: 420,
+          y: 320,
+          buttons: 0,
+          scrollDeltaX: 0,
+          scrollDeltaY: 0,
+          timestampMicros: DateTime.now().microsecondsSinceEpoch,
+        ),
+      ),
+    );
+    await connected.flush();
+    var left = await _nextProbe(
+      probes.stream,
+      const Duration(seconds: 10),
+      (line) => line.contains('POINTER OUT'),
+    );
+    check(left.contains('POINTER OUT'), 'and the hover lifts when it leaves');
+
+    await _renderEntry(daemon, vmService, probes, entries.first);
+  }
+
   // 4. A second client on the same daemon — the reason the daemon is shared.
   //
   // What is asserted is both halves of that: that it costs nothing, and that it
@@ -372,6 +521,23 @@ Future<void> main(List<String> args) async {
   // still learns, which is the whole point of a shared daemon: a panel sitting
   // idle while someone edits must not keep offering an entry the daemon cannot
   // build, nor keep hiding one that now works.
+  // 5. Retrying, then fixing, a demo that does not compile.
+  //
+  // Selecting a quarantined entry is the retry, and it has to be: nothing else
+  // compiles that entry, so an id the daemon refuses to look up is an entry
+  // only an edit to some *other* file could ever bring back.
+  const brokenId = 'tool/catalog/demos/does_not_compile.dart#doesNotCompile';
+  var retried = await daemon.select(brokenId);
+  check(!retried.ok, 'selecting a broken entry does not pretend to succeed');
+  check(
+    retried.error?.contains('ThisTypeDoesNotExist') ?? false,
+    'and answers with the compiler error, not "no such entry"',
+  );
+  check(
+    (await daemon.select(entries.first.id)).ok,
+    'the catalog still compiles after a failed retry',
+  );
+
   stdout.writeln('[check] repairing the broken demo');
   var brokenSource = File(
     p.join(packageRoot, 'tool', 'catalog', 'demos', 'does_not_compile.dart'),
@@ -422,6 +588,23 @@ Future<void> main(List<String> args) async {
         : '\n[check] FAILED:\n${failures.map((f) => '  - $f').join('\n')}',
   );
   exit(failures.isEmpty ? 0 : 1);
+}
+
+/// Puts [entry] on the guest's screen and waits until the probe says so.
+Future<void> _renderEntry(
+  CompilerDaemonClient daemon,
+  GuestVmService vmService,
+  StreamController<String> probes,
+  CatalogEntry entry,
+) async {
+  var compiled = await daemon.select(entry.id);
+  if (!compiled.ok) return;
+  await vmService.reload(compiled.dill!);
+  await _nextProbe(
+    probes.stream,
+    const Duration(seconds: 10),
+    (line) => line.contains(entry.id),
+  );
 }
 
 Future<String> _nextProbe(

@@ -56,6 +56,10 @@ class ResidentCompiler {
   /// null when warm starts are off.
   final String? _warmDill;
 
+  /// Every file the compiled program is made of, which is what a
+  /// `SourceInvalidator` stats to answer "what did the user edit".
+  Set<Uri> get sources => _server.sources;
+
   static Future<ResidentCompiler> start({
     required String entrypoint,
     required String outputDill,
