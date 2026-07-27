@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
+
+import '../utils/run_dir.dart';
 
 import 'protocol.dart';
 
@@ -28,11 +29,11 @@ class DaemonAddress {
       .toString()
       .substring(0, 16);
 
-  /// A short, stable directory — unix socket paths are capped near 104 bytes on
-  /// macOS, so this cannot live under the project's build directory.
-  static String get runDir => p.join(_home, '.flutterware', 'run');
+  /// A short, stable directory — see [flutterwareRunDir] for why it cannot live
+  /// under the project's build directory.
+  static String get runDir => flutterwareRunDir();
 
-  String get socketPath => p.join(runDir, '$key.sock');
+  String get socketPath => checkSocketPath(p.join(runDir, '$key.sock'));
 
   /// Held while deciding whether to spawn, so two clients starting at once
   /// produce one daemon rather than two.
@@ -41,12 +42,7 @@ class DaemonAddress {
   /// Where a daemon that dies before it can speak leaves its reason.
   String get logPath => p.join(runDir, '$key.log');
 
-  void ensureRunDir() => Directory(runDir).createSync(recursive: true);
-
-  static String get _home =>
-      Platform.environment['HOME'] ??
-      Platform.environment['USERPROFILE'] ??
-      Directory.systemTemp.path;
+  void ensureRunDir() => flutterwareRunDir();
 
   /// Sorts maps by key so the hash depends on the values, not on the order
   /// `toJson` happened to emit them in.

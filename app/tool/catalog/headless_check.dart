@@ -39,8 +39,12 @@ Future<void> main(List<String> args) async {
     packageConfig: requirePackageConfig(packageRoot),
     flutterSdkRoot: cache.flutterRoot,
     roots: const ['tool/catalog'],
-    emitProbe: true,
+    // `--no-probe` reproduces exactly what the GUI compiles. The probe adds a
+    // timer to the generated entrypoint, and a difference in the entrypoint is
+    // a difference in what hot reload has to do, so a bug can hide behind it.
+    emitProbe: !args.contains('--no-probe'),
   );
+  var probing = config.emitProbe;
   var failures = <String>[];
   void check(bool condition, String description) {
     stdout.writeln('${condition ? '  ok  ' : ' FAIL '} $description');
@@ -159,7 +163,19 @@ Future<void> main(List<String> args) async {
   var connectedAt = launch.elapsedMilliseconds;
   var vmService = await GuestVmService.connect(await vmServiceUri.future);
   var vmServiceAt = launch.elapsedMilliseconds;
-  var firstProbe = await _nextProbe(probes.stream, const Duration(seconds: 20));
+  // With no probe there is no rendered text to wait on, so wait for a
+  // composited frame instead. Something must say the guest is up: reloading
+  // before the framework has registered `ext.flutter.reassemble` fails with a
+  // "Method not found" that looks nothing like the real cause.
+  if (!probing) {
+    var waited = Stopwatch()..start();
+    while (frames == 0 && waited.elapsed < const Duration(seconds: 20)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  }
+  var firstProbe = probing
+      ? await _nextProbe(probes.stream, const Duration(seconds: 20))
+      : entries.first.id;
   stdout.writeln(
     '[check] guest launch: socket ${connectedAt}ms · vm service '
     '${vmServiceAt}ms · first frame ${launch.elapsedMilliseconds}ms',
@@ -189,18 +205,20 @@ Future<void> main(List<String> args) async {
     await vmService.reload(compiled.dill!);
     var reloadMs = watch.elapsedMilliseconds;
 
-    var probe = await _nextProbe(probes.stream, const Duration(seconds: 10), (
-      line,
-    ) {
-      return line.contains(entry.id);
-    });
+    var probe = probing
+        ? await _nextProbe(
+            probes.stream,
+            const Duration(seconds: 10),
+            (line) => line.contains(entry.id),
+          )
+        : entry.id;
     stdout.writeln(
       '[check] ${entry.name.padRight(10)} '
       'compile ${compiled.compile.inMilliseconds}ms · reload ${reloadMs}ms · '
       '+${compiled.newSourceCount} libs',
     );
     check(probe.contains(entry.id), 'switched to ${entry.name} by hot reload');
-    if (entry.name == 'Members') {
+    if (probing && entry.name == 'Members') {
       check(
         probe.contains('Dr. Sarah Chen'),
         'the Members entry rendered its own content',
@@ -208,7 +226,9 @@ Future<void> main(List<String> args) async {
     }
   }
 
-  var lastProbe = await _nextProbe(probes.stream, const Duration(seconds: 10));
+  var lastProbe = probing
+      ? await _nextProbe(probes.stream, const Duration(seconds: 10))
+      : entries.first.id;
   check(
     lastProbe.contains(entries.first.id),
     'revisiting the first entry renders it again',
@@ -271,7 +291,9 @@ Future<void> main(List<String> args) async {
   // The probe is the evidence, not the frame counter: an idle guest paints
   // nothing, quite correctly, so a frame count that stops rising says only that
   // the UI is static.
-  var stillLive = await _nextProbe(probes.stream, const Duration(seconds: 10));
+  var stillLive = probing
+      ? await _nextProbe(probes.stream, const Duration(seconds: 10))
+      : entries.first.id;
   check(
     stillLive.contains(entries.first.id),
     'the first client keeps rendering while another client compiles',

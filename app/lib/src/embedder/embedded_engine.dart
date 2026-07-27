@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/run_dir.dart';
 import 'protocol.dart';
 
 enum EmbeddedEnginePhase { building, running, error }
@@ -72,8 +73,12 @@ class EmbeddedEngine extends ChangeNotifier {
       var build = await (buildGuest ?? _runBuild)();
       if (_disposed) return;
 
-      var buildDir = p.join(appPackageRoot, 'build', 'embedder');
-      var socketPath = p.join(buildDir, 'guest-$name.sock');
+      // Not under the build directory: the CLI installs the GUI at
+      // `~/.flutterware/<sha1>/app/`, and a socket below that overflows the
+      // 104-byte cap on a unix socket path.
+      var socketPath = checkSocketPath(
+        p.join(flutterwareRunDir(), 'g-$name.sock'),
+      );
       var socketFile = File(socketPath);
       if (socketFile.existsSync()) socketFile.deleteSync();
       _server = await ServerSocket.bind(

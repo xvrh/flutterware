@@ -177,7 +177,23 @@ class CatalogSession extends ChangeNotifier {
     }
 
     var watch = Stopwatch()..start();
-    await vmService.reload(compiled.dill!);
+    try {
+      await vmService.reload(compiled.dill!);
+    } catch (e) {
+      // A refused reload leaves the guest exactly as it was, still rendering
+      // the previous entry, so this is reportable rather than fatal — the same
+      // rule a failed compile already follows. Ending the session would throw
+      // away a working engine over one bad switch.
+      lastSwitch = SwitchReport(
+        entry: entry,
+        compile: compiled.compile,
+        reload: watch.elapsed,
+        newSourceCount: compiled.newSourceCount,
+        error: 'hot reload was refused: $e',
+      );
+      notifyListeners();
+      return;
+    }
     watch.stop();
 
     active = entry;

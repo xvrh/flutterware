@@ -41,6 +41,15 @@ class CompilerDaemonClient {
     void Function(String)? onLog,
     Duration readyTimeout = const Duration(minutes: 5),
   }) async {
+    // Compiled before the address is derived, not after: the daemon's own build
+    // is part of the config, and so part of the address, so a client never
+    // attaches to a daemon compiled from different sources than it expects.
+    var launch = await _ensureCompiled(
+      dartExecutable: dartExecutable,
+      appPackageRoot: config.appPackageRoot,
+      onLog: onLog,
+    );
+    config = config.withDaemonRevision(launch.revision);
     var address = DaemonAddress(config);
     address.ensureRunDir();
 
@@ -48,7 +57,7 @@ class CompilerDaemonClient {
     if (socket == null) {
       socket = await _spawnAndConnect(
         address: address,
-        dartExecutable: dartExecutable,
+        launch: launch,
         config: config,
         onLog: onLog,
       );
@@ -174,7 +183,7 @@ class CompilerDaemonClient {
   /// Starts a daemon under a lock, so several clients racing produce one.
   static Future<Socket> _spawnAndConnect({
     required DaemonAddress address,
-    required String dartExecutable,
+    required _DaemonLaunch launch,
     required DaemonConfig config,
     void Function(String)? onLog,
   }) async {
@@ -198,12 +207,6 @@ class CompilerDaemonClient {
       configFile.parent.createSync(recursive: true);
       configFile.writeAsStringSync(jsonEncode(config.toJson()));
 
-      var (executable, arguments) = await _ensureCompiled(
-        dartExecutable: dartExecutable,
-        appPackageRoot: config.appPackageRoot,
-        onLog: onLog,
-      );
-
       // Detached, so the daemon outlives whoever happened to start it — that is
       // the whole point of sharing it. Its output goes to a log file rather
       // than to our pipes, which would break the moment we exit; the shell is
@@ -215,8 +218,8 @@ class CompilerDaemonClient {
           '-c',
           'exec "\$@" >> "\$FW_DAEMON_LOG" 2>&1',
           'sh',
-          executable,
-          ...arguments,
+          launch.executable,
+          ...launch.arguments,
           configFile.path,
         ],
         workingDirectory: config.appPackageRoot,
@@ -275,7 +278,20 @@ const _daemonSources = [
 /// about the same to build and saves ~80ms at startup; the snapshot rebuilds
 /// far more often than it runs during development. Nothing forbids AOT now that
 /// `FrontendServer` is handed its executable.
-Future<(String, List<String>)> _ensureCompiled({
+/// How to launch the daemon, and which build of it that is.
+class _DaemonLaunch {
+  _DaemonLaunch(this.executable, this.arguments, this.revision);
+
+  final String executable;
+  final List<String> arguments;
+
+  /// Changes whenever the daemon's own sources change. Part of the daemon's
+  /// address, so a newer client starts a newer daemon rather than attaching to
+  /// one running yesterday's code.
+  final String revision;
+}
+
+Future<_DaemonLaunch> _ensureCompiled({
   required String dartExecutable,
   required String appPackageRoot,
   void Function(String)? onLog,
@@ -286,14 +302,15 @@ Future<(String, List<String>)> _ensureCompiled({
     'catalog',
     'compiler_daemon.dart',
   );
-  var fallback = (dartExecutable, ['run', script]);
+  var newest = _newestSource(appPackageRoot);
+  var revision = '${newest.millisecondsSinceEpoch}';
+  var fallback = _DaemonLaunch(dartExecutable, ['run', script], revision);
 
   var snapshot = File(
     p.join(appPackageRoot, 'build', 'catalog', 'daemon.dill'),
   );
-  if (snapshot.existsSync() &&
-      snapshot.statSync().modified.isAfter(_newestSource(appPackageRoot))) {
-    return (dartExecutable, [snapshot.path]);
+  if (snapshot.existsSync() && snapshot.statSync().modified.isAfter(newest)) {
+    return _DaemonLaunch(dartExecutable, [snapshot.path], revision);
   }
 
   snapshot.parent.createSync(recursive: true);
@@ -311,7 +328,7 @@ Future<(String, List<String>)> _ensureCompiled({
     return fallback;
   }
   onLog?.call('snapshotted the daemon in ${watch.elapsedMilliseconds}ms');
-  return (dartExecutable, [snapshot.path]);
+  return _DaemonLaunch(dartExecutable, [snapshot.path], revision);
 }
 
 DateTime _newestSource(String appPackageRoot) {

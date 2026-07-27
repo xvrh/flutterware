@@ -309,6 +309,7 @@ class DaemonConfig {
     this.roots = const ['demo'],
     this.previewAnnotations = const ['Preview', 'Demo'],
     this.emitProbe = false,
+    this.daemonRevision = '',
   });
 
   factory DaemonConfig.fromJson(Map<String, dynamic> json) =>
@@ -334,6 +335,33 @@ class DaemonConfig {
   /// Makes the generated guest print a periodic `FW-PROBE:` line naming the
   /// live entry and the text it renders. Used by the headless check.
   final bool emitProbe;
+
+  /// Identifies the daemon *build*. Set by the client, never by a caller.
+  ///
+  /// A daemon outlives the session that started it, and nothing restarts one
+  /// when its own code changes — so without this, editing the daemon and
+  /// re-running silently reuses the old behaviour. That is not a
+  /// developer-only annoyance: the daemon decides what goes into a hot-reload
+  /// delta, and an older one can hand a guest a delta missing a library the
+  /// guest never had, which surfaces as `lookup Failed: <name> in ...` from
+  /// the VM.
+  ///
+  /// It lives here rather than beside the config so that *both* sides derive
+  /// the same [DaemonAddress] from the same bytes — the daemon computes its
+  /// own address from the config file it is handed, and anything the client
+  /// keeps to itself would put them on different sockets.
+  final String daemonRevision;
+
+  DaemonConfig withDaemonRevision(String revision) => DaemonConfig(
+    appPackageRoot: appPackageRoot,
+    projectRoot: projectRoot,
+    packageConfig: packageConfig,
+    flutterSdkRoot: flutterSdkRoot,
+    roots: roots,
+    previewAnnotations: previewAnnotations,
+    emitProbe: emitProbe,
+    daemonRevision: revision,
+  );
 
   Map<String, dynamic> toJson() => _$DaemonConfigToJson(this);
 }
