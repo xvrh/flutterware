@@ -5,10 +5,10 @@ import 'dart:io';
 import 'package:async/async.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
+import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart';
 import 'package:frontend_server_client/frontend_server_client.dart';
 import 'package:path/path.dart' as p;
-import 'package:web_socket_channel/io.dart';
 
 /// S1 spike host: builds and spawns the embedder guest running
 /// `scenario_scene.dart`, then collects each step's text projection and
@@ -255,7 +255,9 @@ Future<bool> _hotCycle({
     var compileMs = watch.elapsedMilliseconds;
 
     watch.reset();
-    await _reload(vmServiceUri, result.dillOutput!);
+    var vmService = await GuestVmService.connect(vmServiceUri);
+    await vmService.reload(result.dillOutput!);
+    await vmService.close();
     var reloadMs = watch.elapsedMilliseconds;
     stdout.writeln(
       '[hot] incremental compile ${compileMs}ms · reload ${reloadMs}ms',
@@ -264,60 +266,6 @@ Future<bool> _hotCycle({
     return _runOnce(control, lines, outDir, 'run-1-hot');
   } finally {
     file.writeAsStringSync(original);
-  }
-}
-
-/// Minimal VM-service JSON-RPC: find the isolate, reload the kernel delta,
-/// then ask the framework to reassemble so the widget tree picks up new code.
-Future<void> _reload(String httpUri, String dillPath) async {
-  var ws = httpUri.replaceFirst('http://', 'ws://');
-  var channel = IOWebSocketChannel.connect(Uri.parse('${ws}ws'));
-  var id = 0;
-  var pending = <String, Completer<Map<String, Object?>>>{};
-  channel.stream.listen((raw) {
-    var message = jsonDecode(raw as String) as Map<String, Object?>;
-    var completer = pending.remove(message['id']);
-    if (completer == null) return;
-    if (message['error'] != null) {
-      completer.completeError(StateError('${message['error']}'));
-    } else {
-      completer.complete(message['result']! as Map<String, Object?>);
-    }
-  });
-
-  Future<Map<String, Object?>> call(
-    String method,
-    Map<String, Object?> params,
-  ) {
-    var requestId = '${id++}';
-    var completer = Completer<Map<String, Object?>>();
-    pending[requestId] = completer;
-    channel.sink.add(
-      jsonEncode({
-        'jsonrpc': '2.0',
-        'id': requestId,
-        'method': method,
-        'params': params,
-      }),
-    );
-    return completer.future.timeout(const Duration(seconds: 30));
-  }
-
-  try {
-    var vm = await call('getVM', {});
-    var isolates = (vm['isolates']! as List).cast<Map<String, Object?>>();
-    var isolateId = isolates.first['id']! as String;
-
-    var report = await call('reloadSources', {
-      'isolateId': isolateId,
-      'rootLibUri': dillPath,
-    });
-    if (report['success'] != true) {
-      throw StateError('reloadSources failed: $report');
-    }
-    await call('ext.flutter.reassemble', {'isolateId': isolateId});
-  } finally {
-    await channel.sink.close();
   }
 }
 

@@ -1,103 +1,59 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:web_socket_channel/io.dart';
+import 'package:vm_service/vm_service.dart';
+import 'package:vm_service/vm_service_io.dart';
 
-/// A minimal VM-service JSON-RPC client for the embedder guest — enough to push
-/// a kernel delta into the live isolate and have the framework rebuild.
+/// The embedder guest's VM service — enough to push a kernel delta into the
+/// live isolate and have the framework rebuild.
 ///
-/// The connection is held open across reloads rather than reopened per reload.
+/// Wraps `package:vm_service`, the generated client the Dart team ships,
+/// rather than hand-rolling JSON-RPC. The spike this grew from did hand-roll
+/// it, which was fine for one call and stops being fine as soon as anything
+/// needs **events** — guest stdout, stderr, and `Extension` streams all arrive
+/// as server-initiated notifications with no request id, which a
+/// request/response-only client drops on the floor.
 class GuestVmService {
-  GuestVmService._(this._rpc, this.isolateId);
+  GuestVmService._(this.service, this.isolateId);
 
-  final _Rpc _rpc;
+  /// The underlying client, for calls this wrapper does not name.
+  final VmService service;
 
-  /// The guest's main isolate. Captured once at connect.
+  /// The guest's main isolate, captured once at connect.
   final String isolateId;
 
   /// Connects to the `http://` URI the guest prints on stdout at startup.
   static Future<GuestVmService> connect(String httpUri) async {
     var ws = httpUri.replaceFirst('http://', 'ws://');
-    var rpc = _Rpc(IOWebSocketChannel.connect(Uri.parse('${ws}ws')));
+    var service = await vmServiceConnectUri('${ws}ws');
     try {
-      var vm = await rpc.call('getVM', {});
-      var isolates = (vm['isolates']! as List).cast<Map<String, Object?>>();
-      if (isolates.isEmpty) {
+      var vm = await service.getVM();
+      var isolates = vm.isolates;
+      if (isolates == null || isolates.isEmpty) {
         throw StateError('the guest reported no isolates');
       }
-      return GuestVmService._(rpc, isolates.first['id']! as String);
+      return GuestVmService._(service, isolates.first.id!);
     } catch (_) {
-      await rpc.close();
+      await service.dispose();
       rethrow;
     }
   }
 
   /// Loads [dillPath] into the live isolate and asks the framework to rebuild.
   ///
-  /// [dillPath] is **required**, and is the whole trick: without it the VM
-  /// tries to start its own kernel-compiler isolate, which the embedder guest
-  /// does not have, and every reload fails with
-  /// `Error while starting Kernel isolate task`.
+  /// [dillPath] is the whole trick: without it the VM tries to start its own
+  /// kernel-compiler isolate, which the embedder guest does not have, and every
+  /// reload fails with `Error while starting Kernel isolate task`. It is what
+  /// `flutter_tools` does at `run_hot.dart:1272`.
   Future<void> reload(String dillPath) async {
-    var report = await _rpc.call('reloadSources', {
-      'isolateId': isolateId,
-      'rootLibUri': dillPath,
-    });
-    if (report['success'] != true) {
-      throw StateError('reloadSources failed: $report');
+    var report = await service.reloadSources(isolateId, rootLibUri: dillPath);
+    if (report.success != true) {
+      throw StateError('reloadSources failed: ${report.json}');
     }
-    await _rpc.call('ext.flutter.reassemble', {'isolateId': isolateId});
-  }
-
-  Future<void> close() => _rpc.close();
-}
-
-class _Rpc {
-  _Rpc(this._channel) {
-    _channel.stream.listen(
-      (raw) {
-        var message = jsonDecode(raw as String) as Map<String, Object?>;
-        var completer = _pending.remove(message['id']);
-        if (completer == null) return;
-        if (message['error'] != null) {
-          completer.completeError(StateError('${message['error']}'));
-        } else {
-          completer.complete(message['result']! as Map<String, Object?>);
-        }
-      },
-      onError: _failAll,
-      onDone: () => _failAll(StateError('the guest VM service closed')),
+    await service.callServiceExtension(
+      'ext.flutter.reassemble',
+      isolateId: isolateId,
     );
   }
 
-  final IOWebSocketChannel _channel;
-  final _pending = <String, Completer<Map<String, Object?>>>{};
-  var _nextId = 0;
-
-  Future<Map<String, Object?>> call(
-    String method,
-    Map<String, Object?> params,
-  ) {
-    var requestId = '${_nextId++}';
-    var completer = Completer<Map<String, Object?>>();
-    _pending[requestId] = completer;
-    _channel.sink.add(
-      jsonEncode({
-        'jsonrpc': '2.0',
-        'id': requestId,
-        'method': method,
-        'params': params,
-      }),
-    );
-    return completer.future.timeout(const Duration(seconds: 30));
-  }
-
-  void _failAll(Object error) {
-    for (var completer in _pending.values.toList()) {
-      if (!completer.isCompleted) completer.completeError(error);
-    }
-    _pending.clear();
-  }
-
-  Future<void> close() => _channel.sink.close();
+  Future<void> close() => service.dispose();
 }

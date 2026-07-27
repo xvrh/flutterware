@@ -104,8 +104,13 @@ half of the codebase.
    → `ext.flutter.reassemble`. **11ms compile, 117ms reload.** One edit changed
    both the app's UI (`Taps:` → `Count:`) and the scenario's own logic; both
    took effect. The guest, engine, and compiler all stayed warm.
-   The VM service is driven with raw JSON-RPC over `web_socket_channel` (a
-   direct dependency); `package:vm_service` is only transitive here.
+   The spike drove the VM service with raw JSON-RPC over `web_socket_channel`.
+   **Superseded 2026-07-27:** both this harness and the catalog now use
+   `package:vm_service`, the generated client the Dart team ships. Hand-rolled
+   JSON-RPC is fine for one request/response call and stops being fine at
+   events — guest stdout, stderr and `Extension` streams arrive as
+   server-initiated notifications with no request id, which a
+   request/response-only client silently drops.
 
 ## Constraints discovered
 

@@ -85,6 +85,7 @@ dependencies:
   vector_math:
   watcher:
   web:
+  vm_service: ^15.0.0
   web_socket_channel:
   win32:
   standard_message_codec: ^0.0.1+5
