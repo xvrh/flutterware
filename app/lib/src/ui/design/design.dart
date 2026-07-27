@@ -11,7 +11,7 @@ export 'palette.dart';
 export 'radii.dart';
 export 'spacing.dart';
 export 'themes/fw_theme.dart';
-export 'themes/iris.dart';
+export 'themes/flutter_blue.dart';
 export 'themes/shadcn.dart';
 export 'tokens.dart';
 export 'typography.dart';

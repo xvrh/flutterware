@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'elevation.dart';
 import 'palette.dart';
 import 'radii.dart';
-import 'themes/iris.dart';
+import 'themes/flutter_blue.dart';
 import 'typography.dart';
 
 /// The complete set of themeable design tokens, carried on [ThemeData] as a
@@ -73,8 +73,12 @@ class FwTokens extends ThemeExtension<FwTokens> {
   }
 }
 
-/// The default (iris) token set.
-final defaultTokens = FwTokens.from(palette: irisPalette);
+/// The default (Flutter blue) token set.
+final defaultTokens = FwTokens.from(palette: flutterBluePalette);
+
+/// Its dark counterpart. Same radii, type and elevation — only the palette
+/// differs, which is what keeps the two from drifting apart.
+final darkTokens = FwTokens.from(palette: flutterBlueDarkPalette);
 
 extension FwTokensContext on BuildContext {
   /// All design tokens for the active theme.

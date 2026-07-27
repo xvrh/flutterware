@@ -330,7 +330,28 @@ Future<void> main(List<String> args) async {
       source.writeAsStringSync(original);
     }
 
-    // 3d. Hover reaches the guest.
+    // 3d. A resize alone repaints.
+    //
+    // What the device picker rests on: choosing a phone resizes the guest and
+    // nothing else happens, so if metrics alone did not produce a frame the
+    // new size would not appear until something unrelated made the guest
+    // paint. Metrics *do* schedule a frame — this is here to keep it that way,
+    // since the capture path a few lines below already had to learn that the
+    // engine renders nothing when nothing changed.
+    var before = frames;
+    connected.add(
+      encodeMessage(
+        const ResizeMessage(width: 500, height: 900, pixelRatio: 2),
+      ),
+    );
+    await connected.flush();
+    var waited = Stopwatch()..start();
+    while (frames == before && waited.elapsed < const Duration(seconds: 5)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    check(frames > before, 'a resize on a static scene paints a frame');
+
+    // 3e. Hover reaches the guest.
     //
     // The phase travels the whole way — GUI socket, `input.c`, engine, demo —
     // and only the demo can confirm it arrived: hover leaves nothing behind but

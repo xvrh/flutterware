@@ -88,15 +88,27 @@ class _Chip extends StatelessWidget {
         border: Border.all(color: colors.line),
         borderRadius: BorderRadius.circular(context.radii.radiusSmall),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 12, color: colors.mut),
-            const Gap(FwSpacing.xs),
+      // Capped: a Wrap hands its children unbounded width, so a chip carrying
+      // a long branch name would run off the panel rather than wrap.
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 300),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 12, color: colors.mut),
+              const Gap(FwSpacing.xs),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: context.type.caption,
+              ),
+            ),
           ],
-          Text(label, style: context.type.caption),
-        ],
+        ),
       ),
     );
   }

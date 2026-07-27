@@ -1,3 +1,4 @@
+import 'package:device_frame/device_frame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
@@ -310,5 +311,48 @@ void main() {
     await tester.tap(find.byTooltip('Expand all'));
     await tester.pump();
     expect(find.text('One'), findsOneWidget);
+  });
+
+  group('the top bar', () {
+    testWidgets('starts on Fit, and says nothing else', (tester) async {
+      await pump(tester, sessionWithBroken(beta, 'boom'));
+
+      expect(find.text('Fit'), findsOneWidget);
+      expect(
+        find.byTooltip('Hide the frame'),
+        findsNothing,
+        reason: 'there is no frame to hide until there is a device',
+      );
+    });
+
+    testWidgets('picking a device sizes the guest to its screen', (
+      tester,
+    ) async {
+      var session = sessionWithBroken(beta, 'boom');
+      await pump(tester, session);
+
+      await tester.tap(find.text('Fit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('iPhone 13').last);
+      await tester.pumpAndSettle();
+
+      expect(session.staging.device?.name, isNotNull);
+      // The screen in logical pixels, which is the number a layout is written
+      // against — not the physical one the guest is actually rendering.
+      expect(find.text('390×844'), findsOneWidget);
+      expect(find.text('iPhone 13'), findsOneWidget);
+    });
+
+    testWidgets('the frame can be taken off once there is one', (tester) async {
+      var session = sessionWithBroken(beta, 'boom');
+      session.staging.device = Devices.ios.iPhone13;
+      await pump(tester, session);
+
+      await tester.tap(find.byTooltip('Hide the frame'));
+      await tester.pump();
+
+      expect(session.staging.frameVisible, isFalse);
+      expect(find.byTooltip('Show the frame'), findsOneWidget);
+    });
   });
 }

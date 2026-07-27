@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
@@ -99,7 +101,7 @@ class _StubLoader implements ManifestLoader {
   String get dartExecutable => 'dart';
 }
 
-ShellController _controller() => ShellController(
+ShellController _controller({String listing = _listing}) => ShellController(
   appContext: AppContext(logger: LogClient.print()),
   flutterSdk: FlutterSdkPath('/tmp/flutter'),
   registry: PluginRegistry({
@@ -109,7 +111,7 @@ ShellController _controller() => ShellController(
   manifestLoader: _StubLoader(),
   discovery: WorktreeDiscovery(
     runProcess: (_, _, {workingDirectory}) async =>
-        ProcessResult(0, 0, _listing, ''),
+        ProcessResult(0, 0, listing, ''),
   ),
 );
 
@@ -315,6 +317,62 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('No plugins declared'), findsOneWidget);
+  });
+
+  testWidgets('a long worktree name does not stretch its tab', (tester) async {
+    // A tab wide enough to hold the whole name is a tab wide enough to push
+    // the switcher off screen; the tooltip is where the full name lives.
+    var shell = _controller(
+      listing:
+          'worktree /repo/a-very-long-worktree-name-that-keeps-going-and-going\n'
+          'branch refs/heads/main\n\n',
+    );
+    await shell.start(
+      '/repo/a-very-long-worktree-name-that-keeps-going-and-going',
+    );
+    await tester.pumpWidget(ShellApp(shell));
+    await tester.pumpAndSettle();
+
+    var label = find.descendant(
+      of: find.byKey(worktreeTabKey(shell.worktrees.first)),
+      matching: find.byType(Text),
+    );
+    expect(tester.getSize(label.first).width, lessThanOrEqualTo(180));
+  });
+
+  testWidgets('clickable rows take the pointer cursor', (tester) async {
+    await _pumpShell(tester);
+
+    var mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(() => mouse.removePointer());
+    await tester.pump();
+
+    await mouse.moveTo(tester.getCenter(find.text('Overview')));
+    await tester.pump();
+
+    expect(
+      RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
+      SystemMouseCursors.click,
+      reason: 'a row that does not answer the mouse reads as decoration',
+    );
+  });
+
+  testWidgets('the sidebar can be hidden and brought back', (tester) async {
+    await _pumpShell(tester);
+    expect(find.text('Overview'), findsOneWidget);
+
+    await tester.tap(find.byTooltip(RegExp('Hide the sidebar')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Overview'),
+      findsNothing,
+      reason: 'the rail goes to nothing, not to a strip',
+    );
+
+    await tester.tap(find.byTooltip(RegExp('Show the sidebar')));
+    await tester.pumpAndSettle();
+    expect(find.text('Overview'), findsOneWidget);
   });
 }
 

@@ -13,7 +13,8 @@ Widget buttons() => Scaffold(
       mainAxisSize: MainAxisSize.min,
       spacing: 12,
       children: [
-        ElevatedButton(onPressed: () {}, child: const Text('Elevated')),
+        for (var i = 0; i < 5; i++)
+          ElevatedButton(onPressed: () {}, child: Text('Elevated $i')),
         FilledButton(onPressed: () {}, child: const Text('Filled')),
         OutlinedButton(onPressed: () {}, child: const Text('Outlined')),
         TextButton(onPressed: () {}, child: const Text('Text')),

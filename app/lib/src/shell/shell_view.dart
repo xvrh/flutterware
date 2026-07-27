@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutterware/plugins.dart';
 
 import '../plugins/native_plugin.dart';
@@ -17,6 +19,9 @@ const _bandHeight = 40.0;
 /// How far tabs sit below the top of the band. Everything else in the band
 /// aligns to the box this leaves, not to the band itself.
 const _tabInset = 6.0;
+
+/// How much of a tab a worktree's name may claim before it is ellipsised.
+const _tabLabelMaxWidth = 180.0;
 const _sidebarWidth = 232.0;
 
 /// Maps a plugin [Tone] to a palette colour. The single place tones become
@@ -39,6 +44,11 @@ class ShellApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flutterware',
       theme: appTheme,
+      // Follows the OS. The shell reads every colour through `context.colors`,
+      // so both builds come from the same widgets — but a plugin panel that
+      // still hardcodes its own will stay light, and look it.
+      darkTheme: appDarkTheme,
+      themeMode: ThemeMode.system,
       debugShowCheckedModeBanner: false,
       home: RouterOutlet.root(child: ShellView(shell)),
     );
@@ -54,19 +64,27 @@ class ShellView extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: shell,
-      builder: (context, _) => Scaffold(
-        body: Column(
-          children: [
-            _Band(shell),
-            Expanded(
-              child: Row(
-                children: [
-                  _Sidebar(shell),
-                  Expanded(child: _Panel(shell)),
-                ],
+      builder: (context, _) => CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.keyB, meta: true):
+              shell.toggleSidebar,
+          const SingleActivator(LogicalKeyboardKey.keyB, control: true):
+              shell.toggleSidebar,
+        },
+        child: Scaffold(
+          body: Column(
+            children: [
+              _Band(shell),
+              Expanded(
+                child: Row(
+                  children: [
+                    if (shell.sidebarVisible) _Sidebar(shell),
+                    Expanded(child: _Panel(shell)),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -91,6 +109,12 @@ class _Band extends StatelessWidget {
       padding: const EdgeInsets.only(left: _trafficLightInset),
       child: Row(
         children: [
+          // Where a desktop app puts it: in the chrome, always in the same
+          // place, so the rail can go to nothing at all rather than leaving a
+          // strip behind — a panel that hides its own list would otherwise
+          // leave two empty strips side by side.
+          _SidebarButton(shell),
+          const Gap(FwSpacing.xs),
           Expanded(
             child: ListView(
               scrollDirection: Axis.horizontal,
@@ -105,6 +129,30 @@ class _Band extends StatelessWidget {
           const Gap(FwSpacing.md),
         ],
       ),
+    );
+  }
+}
+
+/// Shows and hides the plugin rail.
+class _SidebarButton extends StatelessWidget {
+  const _SidebarButton(this.shell);
+
+  final ShellController shell;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(
+        shell.sidebarVisible ? Icons.chevron_left : Icons.chevron_right,
+        size: 16,
+        color: context.colors.mut,
+      ),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+      tooltip:
+          '${shell.sidebarVisible ? 'Hide' : 'Show'} the sidebar '
+          '(${Platform.isMacOS ? '⌘B' : 'Ctrl+B'})',
+      onPressed: shell.toggleSidebar,
     );
   }
 }
@@ -163,14 +211,18 @@ class _WorktreeTab extends StatelessWidget {
     // selection changes the tab's size and shifts everything beside it.
     var edge = BorderSide(color: selected ? colors.line : Colors.transparent);
 
-    return GestureDetector(
+    return _Hoverable(
       onTap: () => shell.select(worktree),
-      child: Container(
+      builder: (context, hovered) => Container(
         height: _bandHeight - _tabInset,
         margin: const EdgeInsets.only(top: _tabInset, right: FwSpacing.xs),
         padding: const EdgeInsets.only(left: FwSpacing.lg, right: FwSpacing.sm),
         decoration: BoxDecoration(
-          color: selected ? colors.bg : Colors.transparent,
+          color: selected
+              ? colors.bg
+              : hovered
+              ? colors.hoverOverlay
+              : Colors.transparent,
           borderRadius: BorderRadius.only(topLeft: radius, topRight: radius),
           border: Border(top: edge, left: edge, right: edge),
         ),
@@ -189,11 +241,24 @@ class _WorktreeTab extends StatelessWidget {
               _Dot(toneColor(colors, status.tone)),
               const Gap(FwSpacing.sm),
             ],
-            Text(
-              worktree.displayName,
-              style: selected
-                  ? context.type.bodyStrong
-                  : context.type.bodyMuted,
+            // Capped, or a branch called `feature/some-long-description` gives
+            // itself a tab wide enough to push the switcher off screen. The
+            // tooltip is where the whole name still lives.
+            Tooltip(
+              message: worktree.branch == null || worktree.title == null
+                  ? worktree.displayName
+                  : '${worktree.displayName}\n${worktree.branch}',
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _tabLabelMaxWidth),
+                child: Text(
+                  worktree.displayName,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: selected
+                      ? context.type.bodyStrong
+                      : context.type.bodyMuted,
+                ),
+              ),
             ),
             const Gap(FwSpacing.sm),
             _CloseButton(shell, worktree),
@@ -202,6 +267,37 @@ class _WorktreeTab extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Gives a target a pointer cursor and a hover state.
+///
+/// The shell is a desktop app: a row that does not answer the mouse reads as
+/// decoration rather than as something you can click. [builder] receives the
+/// hover state so each row decides what hovering means for it — a wash, a
+/// brighter rail — instead of every one growing its own [MouseRegion].
+class _Hoverable extends StatefulWidget {
+  const _Hoverable({required this.onTap, required this.builder});
+
+  final VoidCallback onTap;
+  final Widget Function(BuildContext context, bool hovered) builder;
+
+  @override
+  State<_Hoverable> createState() => _HoverableState();
+}
+
+class _HoverableState extends State<_Hoverable> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: SystemMouseCursors.click,
+    onEnter: (_) => setState(() => _hovered = true),
+    onExit: (_) => setState(() => _hovered = false),
+    child: GestureDetector(
+      onTap: widget.onTap,
+      child: widget.builder(context, _hovered),
+    ),
+  );
 }
 
 /// Closing releases the worktree's plugins. A plugin that hard-blocks teardown
@@ -220,16 +316,21 @@ class _CloseButton extends StatelessWidget {
         if (guard.level == GuardLevel.block) guard.reason,
     ];
 
+    var colors = context.colors;
     return Tooltip(
       message: blockers.isEmpty ? 'Close worktree' : blockers.join('\n'),
-      child: GestureDetector(
+      child: _Hoverable(
         onTap: () {
           if (!shell.close(worktree)) _showBlocked(context, blockers);
         },
-        child: Icon(
+        builder: (context, hovered) => Icon(
           blockers.isEmpty ? Icons.close : Icons.lock_outline,
           size: 13,
-          color: blockers.isEmpty ? context.colors.mut2 : context.colors.amber,
+          color: blockers.isNotEmpty
+              ? colors.amber
+              : hovered
+              ? colors.ink
+              : colors.mut2,
         ),
       ),
     );
@@ -548,9 +649,9 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return GestureDetector(
+    return _Hoverable(
       onTap: onTap,
-      child: Container(
+      builder: (context, hovered) => Container(
         margin: const EdgeInsets.symmetric(
           horizontal: FwSpacing.md,
           vertical: 1,
@@ -560,7 +661,11 @@ class _Row extends StatelessWidget {
           vertical: FwSpacing.md,
         ),
         decoration: BoxDecoration(
-          color: selected ? colors.accentSoft : Colors.transparent,
+          color: selected
+              ? colors.accentSoft
+              : hovered
+              ? colors.hoverOverlay
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(context.radii.radiusSmall),
         ),
         child: Row(
@@ -631,16 +736,23 @@ class _ChildRow extends StatelessWidget {
     var selected =
         shell.selectedPluginId == pluginId && shell.selectedChildId == child.id;
 
-    return GestureDetector(
+    return _Hoverable(
       onTap: () => shell.selectChild(pluginId, child.id),
-      child: Container(
+      builder: (context, hovered) => Container(
         // The rail is always drawn — only its colour changes — so the row keeps
         // its geometry and nothing below it moves on selection.
         margin: const EdgeInsets.only(left: FwSpacing.xxl),
         decoration: BoxDecoration(
+          color: hovered && !selected
+              ? colors.hoverOverlay
+              : Colors.transparent,
           border: Border(
             left: BorderSide(
-              color: selected ? colors.accent : colors.line,
+              color: selected
+                  ? colors.accent
+                  : hovered
+                  ? colors.mut3
+                  : colors.line,
               width: 2,
             ),
           ),

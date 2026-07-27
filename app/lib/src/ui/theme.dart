@@ -17,6 +17,19 @@ ThemeData get appTheme {
   }
 }
 
+ThemeData? __darkTheme;
+
+/// The dark build of the same theme. [FwPalette.brightness] is read from the
+/// palette's background, so [buildAppTheme] produces dark Material chrome from
+/// this without a second code path.
+ThemeData get appDarkTheme {
+  if (kDebugMode) {
+    return buildAppTheme(darkTokens);
+  } else {
+    return __darkTheme ??= buildAppTheme(darkTokens);
+  }
+}
+
 /// Builds the app [ThemeData] for a given token set and attaches [tokens] as a
 /// [ThemeExtension] so widgets can read it via `context.colors` / `context.type`.
 /// Material-rendered chrome (inputs, cards, dialogs) is driven by the tokens too

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:device_frame/device_frame.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -11,6 +12,34 @@ import 'package_config_locator.dart';
 import 'protocol.dart';
 
 enum CatalogSessionPhase { starting, ready, error }
+
+/// What the guest is being rendered *as*, which the top bar owns.
+///
+/// A device here is not decoration around the picture. The guest's window is
+/// resized to the device's screen at the device's own pixel ratio, so a demo
+/// reads the phone's size from `MediaQuery` rather than the panel's — which is
+/// the difference between looking at a layout and testing one.
+class CatalogStaging extends ChangeNotifier {
+  /// The device the guest is sized to, or null to fill the panel.
+  DeviceInfo? get device => _device;
+  DeviceInfo? _device;
+  set device(DeviceInfo? value) {
+    if (value?.identifier == _device?.identifier) return;
+    _device = value;
+    notifyListeners();
+  }
+
+  /// Whether the device's chrome is drawn around the screen. Off leaves a
+  /// plain rectangle of the right size, which is what you want once you are
+  /// looking at the layout rather than at the phone.
+  bool get frameVisible => _frameVisible;
+  var _frameVisible = true;
+  set frameVisible(bool value) {
+    if (value == _frameVisible) return;
+    _frameVisible = value;
+    notifyListeners();
+  }
+}
 
 /// The entry browser's own state, which is about looking rather than compiling.
 ///
@@ -111,6 +140,7 @@ class CatalogSession extends ChangeNotifier {
   }) {
     // Forwarded, so a renderer has one thing to listen to.
     browsing.addListener(notifyListeners);
+    staging.addListener(notifyListeners);
   }
 
   /// Where the browser was left: what is folded away, what was typed, whether
@@ -121,6 +151,9 @@ class CatalogSession extends ChangeNotifier {
   /// tree you had arranged and a filter you had typed is the same courtesy as
   /// returning to the entry you had selected.
   final browsing = CatalogBrowsing();
+
+  /// What the guest is rendered as: a device, or the panel.
+  final staging = CatalogStaging();
 
   /// Everything discovery found, populated when the daemon reports ready.
   List<CatalogEntry> entries = const [];
@@ -462,6 +495,9 @@ class CatalogSession extends ChangeNotifier {
     _disposed = true;
     _ticker?.cancel();
     browsing
+      ..removeListener(notifyListeners)
+      ..dispose();
+    staging
       ..removeListener(notifyListeners)
       ..dispose();
     _engine?.removeListener(_onEngineChanged);

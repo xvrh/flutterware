@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:device_frame/device_frame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../embedder/embedded_engine.dart';
 import '../embedder/protocol.dart';
 import '../ui/design/design.dart';
+import 'catalog_devices.dart';
 import 'catalog_entry.dart';
 import 'catalog_session.dart';
 import 'catalog_tree.dart';
@@ -31,7 +33,7 @@ class CatalogView extends StatefulWidget {
 
 class _CatalogViewState extends State<CatalogView> {
   final FocusNode _focusNode = FocusNode();
-  Size? _lastReportedSize;
+  (int, int, double)? _lastReported;
   late final AppLifecycleListener _lifecycle;
 
   CatalogSession get _session => widget.session;
@@ -64,21 +66,27 @@ class _CatalogViewState extends State<CatalogView> {
   }
 
   void _maybeResize(EmbeddedEngine engine, Size size, double dpr) {
-    if (size == _lastReportedSize) return;
     var width = (size.width * dpr).round();
     var height = (size.height * dpr).round();
     if (width < 1 || height < 1) return;
-    _lastReportedSize = size;
+    // Keyed on the ratio as well as the size: switching to a device of the
+    // same logical size at a different pixel ratio is a different window, and
+    // comparing only the size would leave the guest rendering at the old one.
+    var next = (width, height, dpr);
+    if (next == _lastReported) return;
+    _lastReported = next;
     engine.resize(width, height, dpr);
   }
 
-  /// True for the reload chord, which the canvas has to answer itself: its
-  /// [Focus] forwards every key to the guest and reports it handled, so nothing
-  /// above ever sees this one.
-  bool _isReload(KeyEvent event) =>
-      event.logicalKey == LogicalKeyboardKey.keyR &&
-      (HardwareKeyboard.instance.isMetaPressed ||
-          HardwareKeyboard.instance.isControlPressed);
+  /// Whether a key belongs to the app rather than to the guest.
+  ///
+  /// The canvas forwards everything else and reports it handled, so without
+  /// this no shortcut survives a click on the demo — not the panel's own
+  /// reload, and not the shell's. Command chords are the app's; a demo that
+  /// wants one is rarer than a user who wants their window back.
+  bool _isAppChord(KeyEvent event) =>
+      HardwareKeyboard.instance.isMetaPressed ||
+      HardwareKeyboard.instance.isControlPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +108,16 @@ class _CatalogViewState extends State<CatalogView> {
   Widget _buildBody(BuildContext context) {
     return Material(
       child: AnimatedBuilder(
-        animation: _session,
+        // All three, named here rather than relied on being forwarded. The
+        // session does forward them, but it wires that up in its constructor —
+        // which a hot reload never re-runs, so an existing session ends up with
+        // a staging nobody listens to and a top bar that only catches up when
+        // something else happens to rebuild it.
+        animation: Listenable.merge([
+          _session,
+          _session.browsing,
+          _session.staging,
+        ]),
         builder: (context, _) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,6 +131,8 @@ class _CatalogViewState extends State<CatalogView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    _TopBar(session: _session),
+                    const Divider(height: 1),
                     Expanded(child: _buildCanvas(context)),
                     const Divider(height: 1),
                     _StatusBar(session: _session, onReload: _reload),
@@ -171,84 +190,355 @@ class _CatalogViewState extends State<CatalogView> {
     }
   }
 
+  /// The guest, sized either to the panel or to a device.
+  ///
+  /// A device is not a frame drawn around the same picture: the guest's window
+  /// *is* the device screen, at the device's own pixel ratio, so what the demo
+  /// reads from `MediaQuery` is what it would read on the phone. Rendering at
+  /// the device's resolution and scaling the result down is also the only way
+  /// the texture stays sharp.
   Widget _buildTexture(BuildContext context, EmbeddedEngine engine) {
-    var dpr = MediaQuery.of(context).devicePixelRatio;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _maybeResize(engine, constraints.biggest, dpr);
-        });
-        return Focus(
-          focusNode: _focusNode,
-          onKeyEvent: (node, event) {
-            if (_isReload(event)) {
-              if (event is KeyDownEvent) _reload();
-              return KeyEventResult.handled;
-            }
-            engine.sendKey(
-              kind: event is KeyDownEvent
-                  ? KeyEventKind.down
-                  : event is KeyRepeatEvent
-                  ? KeyEventKind.repeat
-                  : KeyEventKind.up,
-              physicalKey: event.physicalKey.usbHidUsage,
-              logicalKey: event.logicalKey.keyId,
-            );
-            return KeyEventResult.handled;
-          },
-          // Hover is not a [Listener]'s business: with no button held the
-          // engine sends `PointerHoverEvent`, which `onPointerMove` never
-          // sees. Without this the demo is blind to the mouse unless you are
-          // dragging — no ink highlight, no `MouseRegion`, no hover tooltip,
-          // every demo frozen in its resting state.
-          child: MouseRegion(
-            onEnter: (e) => engine.sendPointer(
-              phaseKind: PointerPhase.add,
-              x: e.localPosition.dx * dpr,
-              y: e.localPosition.dy * dpr,
-            ),
-            onHover: (e) => engine.sendPointer(
-              phaseKind: PointerPhase.hover,
-              x: e.localPosition.dx * dpr,
-              y: e.localPosition.dy * dpr,
-            ),
-            // Paired with the add: the guest is tracking a device that has
-            // left the window, and a hover state left behind never lifts.
-            onExit: (e) => engine.sendPointer(
-              phaseKind: PointerPhase.remove,
-              x: e.localPosition.dx * dpr,
-              y: e.localPosition.dy * dpr,
-            ),
-            child: Listener(
-              onPointerDown: (e) {
-                _focusNode.requestFocus();
-                engine.sendPointer(
-                  phaseKind: PointerPhase.down,
-                  x: e.localPosition.dx * dpr,
-                  y: e.localPosition.dy * dpr,
-                  buttons: 1,
-                );
-              },
-              onPointerMove: (e) => engine.sendPointer(
-                phaseKind: PointerPhase.move,
-                x: e.localPosition.dx * dpr,
-                y: e.localPosition.dy * dpr,
-                buttons: 1,
-              ),
-              onPointerUp: (e) => engine.sendPointer(
-                phaseKind: PointerPhase.up,
-                x: e.localPosition.dx * dpr,
-                y: e.localPosition.dy * dpr,
-              ),
-              child: SizedBox.expand(
-                child: engine.textureId == null
-                    ? const SizedBox()
-                    : Texture(textureId: engine.textureId!),
-              ),
+    var device = _session.staging.device;
+    if (device == null) {
+      var dpr = MediaQuery.of(context).devicePixelRatio;
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          _resizeAfterFrame(engine, constraints.biggest, dpr);
+          return _guestInput(engine, dpr, const SizedBox.expand());
+        },
+      );
+    }
+
+    var screen = device.screenSize;
+    _resizeAfterFrame(engine, screen, device.pixelRatio);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(FwSpacing.xl),
+        // scaleDown, never up: a texture rendered at the device's resolution
+        // and then enlarged is just a blurrier phone.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: DeviceFrame(
+            device: device,
+            isFrameVisible: _session.staging.frameVisible,
+            screen: _guestInput(
+              engine,
+              device.pixelRatio,
+              SizedBox.fromSize(size: screen),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _resizeAfterFrame(EmbeddedEngine engine, Size logical, double dpr) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeResize(engine, logical, dpr);
+    });
+  }
+
+  /// Everything the guest needs to be driven: keys, hover, and pointers, in
+  /// [dpr] — the panel's when it fills the panel, the device's when it is one.
+  Widget _guestInput(EmbeddedEngine engine, double dpr, Widget sizedBox) {
+    return Focus(
+      focusNode: _focusNode,
+      onKeyEvent: (node, event) {
+        // Ignored, not handled: it carries on up to whichever
+        // `CallbackShortcuts` claims it — this panel's, or the shell's.
+        if (_isAppChord(event)) return KeyEventResult.ignored;
+        engine.sendKey(
+          kind: event is KeyDownEvent
+              ? KeyEventKind.down
+              : event is KeyRepeatEvent
+              ? KeyEventKind.repeat
+              : KeyEventKind.up,
+          physicalKey: event.physicalKey.usbHidUsage,
+          logicalKey: event.logicalKey.keyId,
         );
+        return KeyEventResult.handled;
       },
+      // Hover is not a [Listener]'s business: with no button held the engine
+      // sends `PointerHoverEvent`, which `onPointerMove` never sees. Without
+      // this the demo is blind to the mouse unless you are dragging — no ink
+      // highlight, no `MouseRegion`, no hover tooltip, every demo frozen in
+      // its resting state.
+      child: MouseRegion(
+        onEnter: (e) => engine.sendPointer(
+          phaseKind: PointerPhase.add,
+          x: e.localPosition.dx * dpr,
+          y: e.localPosition.dy * dpr,
+        ),
+        onHover: (e) => engine.sendPointer(
+          phaseKind: PointerPhase.hover,
+          x: e.localPosition.dx * dpr,
+          y: e.localPosition.dy * dpr,
+        ),
+        // Paired with the add: the guest is tracking a device that has left
+        // the window, and a hover state left behind never lifts.
+        onExit: (e) => engine.sendPointer(
+          phaseKind: PointerPhase.remove,
+          x: e.localPosition.dx * dpr,
+          y: e.localPosition.dy * dpr,
+        ),
+        child: Listener(
+          onPointerDown: (e) {
+            _focusNode.requestFocus();
+            engine.sendPointer(
+              phaseKind: PointerPhase.down,
+              x: e.localPosition.dx * dpr,
+              y: e.localPosition.dy * dpr,
+              buttons: 1,
+            );
+          },
+          onPointerMove: (e) => engine.sendPointer(
+            phaseKind: PointerPhase.move,
+            x: e.localPosition.dx * dpr,
+            y: e.localPosition.dy * dpr,
+            buttons: 1,
+          ),
+          onPointerUp: (e) => engine.sendPointer(
+            phaseKind: PointerPhase.up,
+            x: e.localPosition.dx * dpr,
+            y: e.localPosition.dy * dpr,
+          ),
+          child: engine.textureId == null
+              ? sizedBox
+              : Texture(textureId: engine.textureId!),
+        ),
+      ),
+    );
+  }
+}
+
+/// What the guest is being rendered as, and nothing about which entry it is —
+/// that is the list's job, and the status bar's.
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.session});
+
+  final CatalogSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    var staging = session.staging;
+    var device = staging.device;
+    return Container(
+      color: context.colors.panel,
+      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
+      height: 36,
+      child: Row(
+        spacing: FwSpacing.md,
+        children: [
+          _DevicePicker(staging: staging),
+          if (device != null) ...[
+            Text(
+              describeDevice(device),
+              style: context.type.caption.copyWith(fontFamily: 'monospace'),
+            ),
+            const Spacer(),
+            IconButton(
+              icon: Icon(
+                staging.frameVisible ? Icons.phone_iphone : Icons.crop_din,
+                size: 16,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+              tooltip: staging.frameVisible
+                  ? 'Hide the frame'
+                  : 'Show the frame',
+              onPressed: () => staging.frameVisible = !staging.frameVisible,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Picks what the guest is sized to. "Fit" is the panel itself.
+///
+/// Hand-rolled rather than a [PopupMenuButton]: the stock menu gives every row
+/// the same weight, so the platform headings read as disabled entries, and its
+/// scale-from-nothing entrance belongs to a floating action button rather than
+/// to a control that drops open under your cursor.
+class _DevicePicker extends StatelessWidget {
+  const _DevicePicker({required this.staging});
+
+  final CatalogStaging staging;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var device = staging.device;
+    var label = device == null
+        ? 'Fit'
+        : catalogDevices
+              .firstWhere(
+                (d) => d.info.identifier == device.identifier,
+                orElse: () => (group: '', label: device.name, info: device),
+              )
+              .label;
+    return _Popover<DeviceInfo?>(
+      selected: device,
+      onSelected: (value) => staging.device = value,
+      groups: [
+        (
+          heading: null,
+          items: [(value: null, label: 'Fit', detail: 'the panel')],
+        ),
+        for (var group in {for (var d in catalogDevices) d.group})
+          (
+            heading: group,
+            items: [
+              for (var d in catalogDevices.where((d) => d.group == group))
+                (value: d.info, label: d.label, detail: describeDevice(d.info)),
+            ],
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.only(left: FwSpacing.md, right: FwSpacing.xs),
+        height: 24,
+        decoration: BoxDecoration(
+          color: colors.bg,
+          border: Border.all(color: colors.line),
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        ),
+        child: Row(
+          spacing: FwSpacing.xs,
+          children: [
+            Text(
+              label,
+              style: context.type.caption.copyWith(color: colors.ink),
+            ),
+            Icon(Icons.expand_more, size: 14, color: colors.mut),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+typedef _PopoverItem<T> = ({T value, String label, String detail});
+typedef _PopoverGroup<T> = ({String? heading, List<_PopoverItem<T>> items});
+
+/// A menu that drops open under its anchor.
+class _Popover<T> extends StatelessWidget {
+  const _Popover({
+    required this.groups,
+    required this.selected,
+    required this.onSelected,
+    required this.child,
+  });
+
+  final List<_PopoverGroup<T>> groups;
+  final T selected;
+  final ValueChanged<T> onSelected;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, FwSpacing.xs),
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(context.colors.panel),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: FwSpacing.sm),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            side: BorderSide(color: context.colors.line),
+            borderRadius: BorderRadius.circular(context.radii.radius),
+          ),
+        ),
+      ),
+      builder: (context, controller, child) => InkWell(
+        onTap: () => controller.isOpen ? controller.close() : controller.open(),
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        child: child,
+      ),
+      menuChildren: [
+        for (var group in groups) ...[
+          if (group.heading case var heading?)
+            // A heading, not a disabled row: uppercase, muted and half-height,
+            // so the eye takes it for a label rather than for something it is
+            // not allowed to pick.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                FwSpacing.lg,
+                FwSpacing.md,
+                FwSpacing.lg,
+                FwSpacing.xxs,
+              ),
+              child: Text(
+                heading.toUpperCase(),
+                style: context.type.micro.copyWith(
+                  color: context.colors.mut2,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
+          for (var item in group.items)
+            _PopoverRow(
+              item: item,
+              selected: item.value == selected,
+              onTap: () => onSelected(item.value),
+            ),
+        ],
+      ],
+      child: child,
+    );
+  }
+}
+
+class _PopoverRow<T> extends StatelessWidget {
+  const _PopoverRow({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _PopoverItem<T> item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return MenuItemButton(
+      onPressed: onTap,
+      style: ButtonStyle(
+        backgroundColor: WidgetStatePropertyAll(
+          selected ? colors.accentSoft : Colors.transparent,
+        ),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: FwSpacing.lg),
+        ),
+        minimumSize: const WidgetStatePropertyAll(Size(0, 28)),
+      ),
+      child: SizedBox(
+        width: 200,
+        child: Row(
+          spacing: FwSpacing.lg,
+          children: [
+            Expanded(
+              child: Text(
+                item.label,
+                style: context.type.bodySmall.copyWith(color: colors.ink),
+              ),
+            ),
+            // The size, right-aligned in its own column: it is what you are
+            // choosing between once you know the names.
+            Text(
+              item.detail,
+              style: context.type.caption.copyWith(
+                fontFamily: 'monospace',
+                color: colors.mut,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

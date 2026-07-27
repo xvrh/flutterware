@@ -115,6 +115,20 @@ class ShellController extends ChangeNotifier {
   /// True while the selected worktree is showing its home screen.
   bool get isHome => selectedPluginId == null;
 
+  /// Whether the plugin rail is showing.
+  ///
+  /// Hiding it gives the whole window to the panel, which is what a catalog
+  /// wants once you are looking at a device rather than choosing what to look
+  /// at. Not per worktree: it is a preference about the window, and having it
+  /// come back on every tab switch would be its own small annoyance.
+  bool get sidebarVisible => _sidebarVisible;
+  var _sidebarVisible = true;
+
+  void toggleSidebar() {
+    _sidebarVisible = !_sidebarVisible;
+    notifyListeners();
+  }
+
   Selection? get _selection =>
       _selectedPath == null ? null : _selections[_selectedPath!];
 
