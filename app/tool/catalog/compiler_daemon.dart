@@ -140,6 +140,10 @@ class _Daemon {
   /// about the wrapper it named.
   var _shells = <ShellDescriptor>[];
 
+  Map<String, ShellDescriptor> get _shellsById => {
+    for (var shell in _shells) shell.id: shell,
+  };
+
   /// Entries the compiler could not build, by id. See [_compileServingWhatWorks].
   final _quarantine = <String, _Quarantined>{};
 
@@ -225,11 +229,11 @@ class _Daemon {
 
     var before = {for (var entry in _discovered) entry.id: entry};
     var after = {for (var entry in scan.entries) entry.id: entry};
-    var gone = [
+    var gone = <CatalogEntry>[
       for (var entry in _discovered)
         if (!after.containsKey(entry.id)) entry,
     ];
-    var fresh = [
+    var fresh = <CatalogEntry>[
       for (var entry in scan.entries)
         // Rewritten as well as added: the wrapper bakes in the annotation and
         // the demo file's imports, so an entry whose declaration changed needs
@@ -241,6 +245,7 @@ class _Daemon {
 
     _discovered = scan.entries;
     _shells = scan.shells;
+    _generator.shells = _shellsById;
     _diagnostics = [
       for (var d in scan.diagnostics)
         if (!d.isError) '$d',
@@ -248,6 +253,19 @@ class _Daemon {
     // A quarantine is about a build that no longer describes these entries.
     for (var entry in [...gone, ...fresh]) {
       _quarantine.remove(entry.id);
+    }
+
+    // A shell's axes are baked into the wrapper of every entry that uses it, so
+    // editing a signature invalidates far more than the file it happened in.
+    // Every wrapper is rewritten rather than only the ones that use it: working
+    // out which is exactly the bookkeeping a wrong answer here would hide, and
+    // a shell's signature changes about as often as anyone edits it.
+    //
+    // After the quarantine, not before: this must not decide that every entry
+    // is fresh and thereby readmit the ones that do not compile.
+    if (shellsMoved) {
+      _pending.addAll(_generator.drop(_generator.visited.toList()));
+      fresh = [..._entries];
     }
 
     // Dropped before they are registered again: a changed entry needs a fresh
@@ -412,7 +430,7 @@ class _Daemon {
       outputDir: p.join(_buildDir, 'entrypoint'),
       projectRoot: config.projectRoot,
       emitProbe: config.emitProbe,
-    );
+    )..shells = _shellsById;
     _generator.registerAll(_entries);
     _makeActive(_entries.first);
 

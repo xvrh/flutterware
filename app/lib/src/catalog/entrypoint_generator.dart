@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'catalog_entry.dart';
+import 'shell_descriptor.dart';
 
 /// Writes the guest's entrypoint: one wrapper file per entry ever visited, plus
 /// an accumulating `main.dart` that selects the active one.
@@ -33,6 +34,15 @@ class EntrypointGenerator {
   /// rendering, so a headless harness can assert what the guest actually shows
   /// rather than only that a reload reported success.
   final bool emitProbe;
+
+  /// Every `@CatalogShell` discovery found, by [ShellDescriptor.id].
+  ///
+  /// Read when a wrapper is written, because an entry's shell decides what the
+  /// generated call passes it. Replaced rather than mutated when a scan finds
+  /// the signature changed — see [shells].
+  Map<String, ShellDescriptor> get shells => _shells;
+  var _shells = const <String, ShellDescriptor>{};
+  set shells(Map<String, ShellDescriptor> value) => _shells = value;
 
   final _wrapperIndex = <String, int>{};
 
@@ -124,7 +134,19 @@ class EntrypointGenerator {
 
   String _wrapper(CatalogEntry entry, int index) {
     var source = p.join(projectRoot, entry.path);
-    var carried = _carriedImports(source);
+    var shell = _shells[entry.shellId];
+    // The shell's own imports as well as the demo's. The generated call names
+    // an axis's *type* — `Flavor.values` is where the option labels come from —
+    // and that type is in scope where the shell is written, not necessarily
+    // where the demo is. Importing the shell file covers an enum declared
+    // beside it; carrying that file's imports covers one it got from elsewhere.
+    var carried = {
+      ..._carriedImports(source),
+      if (shell != null) ...[
+        ..._carriedImports(p.join(projectRoot, shell.path)),
+        "import '${_relative(p.join(projectRoot, shell.path))}';",
+      ],
+    };
     return '''
 // GENERATED — do not edit.
 // Imports carried from the demo file: the annotation is written in *its* scope,
@@ -151,6 +173,53 @@ import '${_relative(source)}' as fw$index;
 Demo get fwDemo => ${entry.annotation};
 
 Widget Function() get fwBuilder => fw$index.${entry.symbol};
+
+${_shellBinding(entry, shell)}''';
+  }
+
+  /// What the entry's shell contributes to its wrapper file.
+  ///
+  /// An entry with no shell answers null twice, and the entrypoint falls back
+  /// to `preview.wrapper` — which is what every entry did before shells existed
+  /// and what an entry wrapped by a plain function still does.
+  ///
+  /// The shell is called **by name** rather than through `preview.wrapper`,
+  /// because the typedef that field holds is `Widget Function(Widget)` and
+  /// erases exactly the named parameters the axes live in.
+  String _shellBinding(CatalogEntry entry, ShellDescriptor? shell) {
+    if (shell == null) {
+      return '''
+String? get fwShellId => null;
+Widget Function(Widget)? get fwShellWrap => null;
+''';
+    }
+    var arguments = [
+      for (var axis in shell.axes)
+        // A bool is a closed set without being an Enum, so it has no `values`
+        // to hand over and gets its own call.
+        if (axis.isBoolean)
+          '  ${axis.name}: CatalogAxes.instance'
+              ".flag('${axis.name}', ${axis.defaultSource}),"
+        else
+          '  ${axis.name}: CatalogAxes.instance.pick('
+              "'${axis.name}', ${axis.typeName}.values, "
+              '${axis.defaultSource}),',
+    ];
+    return '''
+String? get fwShellId => r'${shell.id}';
+
+// A getter, like everything else here: a top-level final holding a tear-off is
+// initialised once and hot reload does not re-run it.
+Widget Function(Widget)? get fwShellWrap => _fwWrapInShell;
+
+// `<Type>.values` is what lets the guest report the options for an axis that a
+// syntactic scan of the signature saw only a type name for. It is also the
+// check: a type that is not an enum fails to compile here, in one generated
+// function, naming the axis.
+Widget _fwWrapInShell(Widget child) => ${shell.symbol}(
+  child,
+${arguments.join('\n')}
+);
 ''';
   }
 
@@ -203,6 +272,8 @@ $imports
 Preview get _preview => fw$activeIndex.fwDemo.transform();
 Widget Function() get _builder => fw$activeIndex.fwBuilder;
 String get _entryId => r'${active.id}';
+String? get _shellId => fw$activeIndex.fwShellId;
+Widget Function(Widget)? get _shellWrap => fw$activeIndex.fwShellWrap;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -232,15 +303,26 @@ class _CatalogHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The shell first, when the entry's wrapper is one: it is called by name,
+    // which is the only place the axes are still visible, where
+    // `preview.wrapper` is a Widget Function(Widget) and erases them. An entry
+    // wrapped by a plain function — or by nothing — goes the old way.
     var preview = _preview;
-    var wrapper = preview.wrapper ?? (Widget child) => child;
+    var wrapper = _shellWrap ?? preview.wrapper ?? (Widget child) => child;
     Widget child = CatalogGuest(
       entryId: _entryId,
       child: KeyedSubtree(
         // A fresh key per entry so switching remounts rather than reusing the
         // previous entry's State.
         key: ValueKey<String>(_entryId),
-        child: wrapper(_builder()),
+        // Inside the scope, because the pick calls that declare the axes are
+        // in the wrapper it invokes — and they have to run after beginShell,
+        // which is what makes the report this shell's axes and not the last
+        // one's.
+        child: CatalogAxesScope(
+          shellId: _shellId,
+          builder: (context) => wrapper(_builder()),
+        ),
       ),
     );
     // No `preview.size` here. The host sizes the guest's *window* to whatever

@@ -783,21 +783,108 @@ Future<void> main(List<String> args) async {
   // the shell that reads them has built — which is the whole reason a switch
   // does not flash the previous shell's values.
   stdout.writeln('[check] the axes wire');
-  var axes = await vmService.callExtension('ext.flutterware.axes');
-  check(axes != null, 'the guest answers what axes it has');
-  var pushed = await vmService.callExtension(
-    'ext.flutterware.setAxes',
-    args: {
-      'payload': jsonEncode({'flavor': 'prod'}),
-    },
-  );
-  check(pushed != null, 'and takes a selection for an axis nothing reads yet');
+  var described = await vmService.callExtension('ext.flutterware.axes');
+  var axisNames = [
+    for (var a in (described?['axes'] as List? ?? [])) (a as Map)['name'],
+  ];
   check(
-    (await vmService.callExtension('ext.flutterware.axes'))?['axes']
-            is List<Object?> ==
-        true,
-    'and still answers afterwards',
+    described?['shell'] == shell?.id,
+    'the guest reports which shell it is rendering in — ${described?['shell']}',
   );
+  check(
+    axisNames.join(',') == 'flavor,compact',
+    'and the axes its signature declared — $axisNames',
+  );
+  check(
+    ((described?['axes'] as List).first as Map)['options'].toString() ==
+        '[dev, staging, prod]',
+    'with the options the enum has, which only the guest could know',
+  );
+
+  // Turning one, which is the whole point: it goes in as a name, comes out as
+  // the enum value the shell was called with, and is on screen in a frame.
+  Future<String> setAxes(Map<String, Object?> selections) async {
+    await vmService.callExtension(
+      'ext.flutterware.setAxes',
+      args: {'payload': jsonEncode(selections)},
+    );
+    return probing
+        ? await _nextProbe(
+            probes.stream,
+            const Duration(seconds: 10),
+            (line) => line.contains('SHELL'),
+          )
+        : '';
+  }
+
+  if (probing) {
+    var staged = await setAxes({'flavor': 'staging', 'compact': true});
+    check(
+      staged.contains('SHELL staging compact'),
+      'turning an axis rebuilds the shell around the demo — $staged',
+    );
+    var back = await setAxes({'flavor': null, 'compact': null});
+    check(
+      back.contains('SHELL dev roomy'),
+      'and a null selection puts it back to the signature default — $back',
+    );
+  }
+
+  // The selection outlives the entry, which is what separates an axis from a
+  // knob: it belongs to the shell, not to whatever is being rendered inside it.
+  if (probing) {
+    await setAxes({'flavor': 'prod'});
+    await _renderEntry(daemon, vmService, probes, entries.first);
+    var elsewhere = await _nextProbe(
+      probes.stream,
+      const Duration(seconds: 10),
+      (line) => line.contains('SHELL'),
+    );
+    check(
+      elsewhere.contains('SHELL prod'),
+      'a selection survives switching entries — $elsewhere',
+    );
+    await setAxes({'flavor': null});
+  }
+
+  // An axis added to the signature. The shell is baked into the wrapper of
+  // every entry that names it, so this reaches far more than the file it
+  // happened in — which is the case a rescan that only looked at entries would
+  // get silently wrong.
+  var shellSource = File(
+    p.join(packageRoot, 'tool', 'catalog', 'demos', 'shell.dart'),
+  );
+  var shellOriginal = shellSource.readAsStringSync();
+  try {
+    shellSource.writeAsStringSync(
+      shellOriginal.replaceFirst(
+        '  bool compact = false,',
+        '  bool compact = false,\n  bool wide = false,',
+      ),
+    );
+    // Queued like any other request, so the select behind it sees the rescan.
+    daemon.refresh();
+    var withWide = await daemon.select(entries.first.id);
+    check(withWide.ok, 'the catalog still compiles: ${withWide.error}');
+    if (withWide.ok) {
+      await vmService.reload(withWide.dill!);
+      var reported = [
+        for (var a
+            in ((await vmService.callExtension('ext.flutterware.axes'))?['axes']
+                    as List? ??
+                []))
+          (a as Map)['name'],
+      ];
+      check(
+        reported.join(',') == 'flavor,compact,wide',
+        'an axis added to the signature reaches the entry — $reported',
+      );
+    }
+  } finally {
+    shellSource.writeAsStringSync(shellOriginal);
+    daemon.refresh();
+    await daemon.select(entries.first.id);
+  }
 
   // 4c. A demo that did not exist when the daemon started.
   //

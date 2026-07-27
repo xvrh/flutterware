@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/entrypoint_generator.dart';
+import 'package:flutterware_app/src/catalog/shell_descriptor.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -176,5 +177,94 @@ Widget avatarTileEmpty() => const Placeholder();
         "#avatarTileMembers';",
       ),
     );
+  });
+
+  group('a shell', () {
+    const shell = ShellDescriptor(
+      path: 'demo/shell.dart',
+      symbol: 'wrapInApp',
+      axes: [
+        ShellAxis(
+          name: 'flavor',
+          typeName: 'Flavor',
+          defaultSource: 'Flavor.dev',
+        ),
+        ShellAxis(name: 'compact', typeName: 'bool', defaultSource: 'false'),
+      ],
+    );
+    const wrapped = CatalogEntry(
+      path: 'demo/team/avatar_tile.dart',
+      symbol: 'avatarTileMembers',
+      name: 'Members',
+      annotation: "Demo(name: 'Members', wrapper: wrapInApp)",
+      wrapper: 'wrapInApp',
+      shellId: 'demo/shell.dart#wrapInApp',
+    );
+
+    setUp(() {
+      File(p.join(root.path, 'demo', 'shell.dart')).writeAsStringSync('''
+import 'package:flutter/material.dart';
+
+import 'flavors.dart';
+
+@CatalogShell()
+Widget wrapInApp(Widget child, {Flavor flavor = Flavor.dev}) => child;
+''');
+      generator.shells = {shell.id: shell};
+    });
+
+    test('is called by name, which is where the axes still exist', () {
+      // Through `preview.wrapper` they would be gone: that field is a
+      // WidgetWrapper, and the typedef erases every named parameter.
+      generator.select(wrapped);
+      expect(
+        wrapper(0),
+        contains('Widget _fwWrapInShell(Widget child) => wrapInApp('),
+      );
+      expect(entrypoint(), contains('_shellWrap ?? preview.wrapper'));
+    });
+
+    test('hands the enum its own values, which is where options come from', () {
+      generator.select(wrapped);
+      expect(
+        wrapper(0),
+        contains(
+          "flavor: CatalogAxes.instance.pick('flavor', Flavor.values, "
+          'Flavor.dev),',
+        ),
+      );
+    });
+
+    test('a bool axis is a flag, having no values to hand over', () {
+      generator.select(wrapped);
+      expect(
+        wrapper(0),
+        contains("compact: CatalogAxes.instance.flag('compact', false),"),
+      );
+    });
+
+    test("carries the shell's file and its imports, for the axis types", () {
+      // `Flavor` has to resolve where the generated call is written, and that
+      // is not necessarily where the demo is: it may be declared beside the
+      // shell, or imported by it.
+      generator.select(wrapped);
+      expect(wrapper(0), contains("import '../../demo/shell.dart';"));
+      expect(wrapper(0), contains("import '../../demo/flavors.dart';"));
+    });
+
+    test('an entry with no shell says so, and goes the old way', () {
+      generator.select(members);
+      expect(wrapper(0), contains('String? get fwShellId => null;'));
+      expect(
+        wrapper(0),
+        contains('Widget Function(Widget)? get fwShellWrap => null;'),
+      );
+    });
+
+    test('the scope wraps the entry, so a turn rebuilds the shell', () {
+      generator.select(wrapped);
+      expect(entrypoint(), contains('CatalogAxesScope('));
+      expect(entrypoint(), contains('shellId: _shellId,'));
+    });
   });
 }
