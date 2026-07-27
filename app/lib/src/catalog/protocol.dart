@@ -6,10 +6,13 @@ import 'catalog_entry.dart';
 
 part 'protocol.g.dart';
 
-/// The wire format between the GUI and the compiler daemon.
+/// The wire format between a catalog client and the compiler daemon.
 ///
-/// Line-delimited JSON over the daemon's stdio: stdout carries the protocol and
-/// nothing else, and the daemon's own logging goes to stderr.
+/// Line-delimited JSON over a unix socket, one connection per client. The
+/// daemon serves several at once — a GUI panel and an agent taking screenshots
+/// are two clients of one compiler — so every request carries an id and every
+/// reply echoes it. Without that, one client's `select` would be answered to
+/// whoever happened to be listening.
 ///
 /// Every message is a typed class with a generated codec — the discriminator is
 /// read once, in [DaemonRequest.decode] / [DaemonResponse.decode], and nothing
@@ -37,14 +40,14 @@ class _DurationMillis implements JsonConverter<Duration, int> {
 
 const _millis = _DurationMillis();
 
-/// GUI → daemon.
+/// client → daemon.
 sealed class DaemonRequest implements ProtocolMessage {
   const DaemonRequest();
 
   static DaemonRequest decode(Map<String, dynamic> json) =>
       switch (json['type']) {
         SelectRequest.wireName => SelectRequest.fromJson(json),
-        ShutdownRequest.wireName => const ShutdownRequest(),
+        StopDaemonRequest.wireName => const StopDaemonRequest(),
         var unknown => throw FormatException('unknown request "$unknown"'),
       };
 }
@@ -52,12 +55,16 @@ sealed class DaemonRequest implements ProtocolMessage {
 /// Make [id] the active entry and compile it into the entrypoint.
 @JsonSerializable()
 class SelectRequest extends DaemonRequest {
-  const SelectRequest(this.id, {this.full = false});
+  const SelectRequest(this.requestId, this.id, {this.full = false});
 
   factory SelectRequest.fromJson(Map<String, dynamic> json) =>
       _$SelectRequestFromJson(json);
 
   static const wireName = 'select';
+
+  /// Unique within a connection; echoed on [DaemonCompiled] so a client can
+  /// tell its own reply from another client's.
+  final int requestId;
 
   /// A [CatalogEntry.id].
   final String id;
@@ -77,10 +84,15 @@ class SelectRequest extends DaemonRequest {
   Map<String, dynamic> toJson() => _$SelectRequestToJson(this);
 }
 
-class ShutdownRequest extends DaemonRequest {
-  const ShutdownRequest();
+/// Stop the daemon itself, disconnecting everyone.
+///
+/// Closing the socket is how a client *leaves*; this is for tooling that wants
+/// the process gone. Rare on purpose — a shared daemon that any client can kill
+/// is not shared.
+class StopDaemonRequest extends DaemonRequest {
+  const StopDaemonRequest();
 
-  static const wireName = 'shutdown';
+  static const wireName = 'stop-daemon';
 
   @override
   String get type => wireName;
@@ -106,11 +118,14 @@ sealed class DaemonResponse implements ProtocolMessage {
 @JsonSerializable(explicitToJson: true)
 class DaemonReady extends DaemonResponse {
   const DaemonReady({
+    required this.sessionId,
     required this.hostPath,
     required this.assetsDir,
     required this.icuData,
     required this.coldCompile,
     required this.entries,
+    this.reused = false,
+    this.timings = const {},
     this.diagnostics = const [],
   });
 
@@ -119,12 +134,29 @@ class DaemonReady extends DaemonResponse {
 
   static const wireName = 'ready';
 
+  /// Identifies this connection's session for the life of the daemon.
+  final String sessionId;
+
   final String hostPath;
+
+  /// This session's asset directory: the shared bundle by symlink, plus a
+  /// `kernel_blob.bin` only this client's guest reads. Sessions do not share it
+  /// because a guest launch reads that file by name, and another client's
+  /// compile would otherwise decide what it finds there.
   final String assetsDir;
+
   final String icuData;
 
   @_millis
   final Duration coldCompile;
+
+  /// True when this client attached to a daemon that was already up, and so
+  /// paid for none of the work reported in [timings].
+  final bool reused;
+
+  /// What the one-time work cost, by phase. Reported rather than logged so the
+  /// GUI and `fw` can show it without scraping a log.
+  final Map<String, int> timings;
 
   /// Everything discovery found, in tree order. The daemon owns the scan so
   /// the GUI and the CLI read one list rather than each building their own.
@@ -145,6 +177,7 @@ class DaemonReady extends DaemonResponse {
 @JsonSerializable()
 class DaemonCompiled extends DaemonResponse {
   const DaemonCompiled({
+    required this.requestId,
     required this.id,
     required this.compile,
     required this.newSourceCount,
@@ -157,10 +190,18 @@ class DaemonCompiled extends DaemonResponse {
 
   static const wireName = 'compiled';
 
+  /// The [SelectRequest.requestId] this answers.
+  final int requestId;
+
   final String id;
 
   /// The kernel to hand the VM service as `rootLibUri`. Null when [ok] is
   /// false — the guest keeps rendering whatever it had.
+  ///
+  /// Written per request rather than to one well-known path: the compiler
+  /// always writes its delta to the same file, so a reply that named it would
+  /// be overwritten by the next client's compile before this client's guest had
+  /// read it.
   final String? dill;
 
   @_millis

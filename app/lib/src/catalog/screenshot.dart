@@ -67,7 +67,7 @@ class CatalogScreenshot {
     int width = 900,
     int height = 700,
   }) async {
-    var (daemon, ready) = await CompilerDaemonClient.start(
+    var (daemon, ready) = await CompilerDaemonClient.connect(
       dartExecutable: dartExecutable,
       config: config,
     );
@@ -113,7 +113,7 @@ class CatalogScreenshot {
       return captured;
     } finally {
       await guest?.close();
-      await daemon.shutdown();
+      await daemon.close();
     }
   }
 }

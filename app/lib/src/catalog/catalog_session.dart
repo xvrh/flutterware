@@ -89,7 +89,7 @@ class CatalogSession extends ChangeNotifier {
     try {
       _lock = SessionLock.acquire(p.join(appPackageRoot, 'build', 'catalog'));
 
-      var (daemon, ready) = await CompilerDaemonClient.start(
+      var (daemon, ready) = await CompilerDaemonClient.connect(
         dartExecutable: p.join(flutterSdkRoot, 'bin', 'dart'),
         config: DaemonConfig(
           appPackageRoot: appPackageRoot,
@@ -208,7 +208,7 @@ class CatalogSession extends ChangeNotifier {
     _engine?.removeListener(_onEngineChanged);
     _engine?.dispose();
     unawaited(_vmService?.close());
-    unawaited(_daemon?.shutdown());
+    unawaited(_daemon?.close());
     _lock?.release();
     super.dispose();
   }

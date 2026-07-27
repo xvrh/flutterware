@@ -109,6 +109,15 @@ class FrontendServer {
   /// Keeps the last compile's result, so the next one is a delta against it.
   void accept() => _send('accept');
 
+  /// Forgets everything accepted so far, so the next [compile] emits a whole
+  /// program rather than a delta.
+  ///
+  /// This is how a guest that is about to be *launched* gets its kernel: it
+  /// reads a file, and a delta is not a program. The compiler keeps its parsed
+  /// state, so this is far cheaper than restarting it — and unlike a restart it
+  /// does not disturb anyone else holding this compiler.
+  void reset() => _send('reset');
+
   /// Throws the last compile away, so the next one recompiles the same sources.
   ///
   /// Must be awaited: the compiler replies, and a compile sent before that

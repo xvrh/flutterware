@@ -35,6 +35,7 @@ dependencies:
   auto_size_text:
   built_collection:
   collection:
+  crypto:
   dart_style:
   device_frame:
   diacritic:

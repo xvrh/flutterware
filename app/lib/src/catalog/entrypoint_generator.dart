@@ -42,25 +42,44 @@ class EntrypointGenerator {
   Iterable<CatalogEntry> get visited => _visited;
   final _visited = <CatalogEntry>[];
 
+  /// Imports every entry up front, so that from here on the only file a
+  /// [select] changes is `main.dart`.
+  ///
+  /// This is what makes one compiler safe to share. Deltas are relative to the
+  /// compiler's baseline, not to any particular guest: if a wrapper were added
+  /// on one client's first visit, a second client selecting that same entry
+  /// later would get a delta with the wrapper *missing* — unchanged since the
+  /// baseline — and its guest, which never had that library, would reload
+  /// nothing. Registering everything at once removes the divergence rather than
+  /// tracking it.
+  ///
+  /// The cost is that a demo that does not compile breaks the catalog's cold
+  /// start rather than only its own entry.
+  List<Uri> registerAll(List<CatalogEntry> entries) => [
+    for (var entry in entries) ..._register(entry),
+  ];
+
   /// Makes [active] the rendered entry, adding it to the entrypoint if this is
   /// the first visit. Returns the files a caller should invalidate.
   List<Uri> select(CatalogEntry active) {
     Directory(outputDir).createSync(recursive: true);
 
-    var invalidated = <Uri>[];
-    if (!_wrapperIndex.containsKey(active.id)) {
-      var index = _wrapperIndex.length;
-      _wrapperIndex[active.id] = index;
-      _visited.add(active);
-      var wrapper = File(p.join(outputDir, 'entry_$index.dart'));
-      wrapper.writeAsStringSync(_wrapper(active, index));
-      invalidated.add(wrapper.uri);
-    }
-
+    var invalidated = _register(active);
     var entrypoint = File(entrypointPath);
     entrypoint.writeAsStringSync(_entrypoint(active));
     invalidated.add(entrypoint.uri);
     return invalidated;
+  }
+
+  List<Uri> _register(CatalogEntry entry) {
+    if (_wrapperIndex.containsKey(entry.id)) return [];
+    Directory(outputDir).createSync(recursive: true);
+    var index = _wrapperIndex.length;
+    _wrapperIndex[entry.id] = index;
+    _visited.add(entry);
+    var wrapper = File(p.join(outputDir, 'entry_$index.dart'));
+    wrapper.writeAsStringSync(_wrapper(entry, index));
+    return [wrapper.uri];
   }
 
   String _wrapper(CatalogEntry entry, int index) {

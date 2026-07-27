@@ -7,12 +7,21 @@ part of 'protocol.dart';
 // **************************************************************************
 
 SelectRequest _$SelectRequestFromJson(Map<String, dynamic> json) =>
-    SelectRequest(json['id'] as String, full: json['full'] as bool? ?? false);
+    SelectRequest(
+      (json['requestId'] as num).toInt(),
+      json['id'] as String,
+      full: json['full'] as bool? ?? false,
+    );
 
 Map<String, dynamic> _$SelectRequestToJson(SelectRequest instance) =>
-    <String, dynamic>{'id': instance.id, 'full': instance.full};
+    <String, dynamic>{
+      'requestId': instance.requestId,
+      'id': instance.id,
+      'full': instance.full,
+    };
 
 DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
+  sessionId: json['sessionId'] as String,
   hostPath: json['hostPath'] as String,
   assetsDir: json['assetsDir'] as String,
   icuData: json['icuData'] as String,
@@ -20,6 +29,12 @@ DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
   entries: (json['entries'] as List<dynamic>)
       .map((e) => CatalogEntry.fromJson(e as Map<String, dynamic>))
       .toList(),
+  reused: json['reused'] as bool? ?? false,
+  timings:
+      (json['timings'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, (e as num).toInt()),
+      ) ??
+      {},
   diagnostics:
       (json['diagnostics'] as List<dynamic>?)
           ?.map((e) => e as String)
@@ -29,16 +44,20 @@ DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
 
 Map<String, dynamic> _$DaemonReadyToJson(DaemonReady instance) =>
     <String, dynamic>{
+      'sessionId': instance.sessionId,
       'hostPath': instance.hostPath,
       'assetsDir': instance.assetsDir,
       'icuData': instance.icuData,
       'coldCompile': _millis.toJson(instance.coldCompile),
+      'reused': instance.reused,
+      'timings': instance.timings,
       'entries': instance.entries.map((e) => e.toJson()).toList(),
       'diagnostics': instance.diagnostics,
     };
 
 DaemonCompiled _$DaemonCompiledFromJson(Map<String, dynamic> json) =>
     DaemonCompiled(
+      requestId: (json['requestId'] as num).toInt(),
       id: json['id'] as String,
       compile: _millis.fromJson((json['compile'] as num).toInt()),
       newSourceCount: (json['newSourceCount'] as num).toInt(),
@@ -48,6 +67,7 @@ DaemonCompiled _$DaemonCompiledFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$DaemonCompiledToJson(DaemonCompiled instance) =>
     <String, dynamic>{
+      'requestId': instance.requestId,
       'id': instance.id,
       'dill': instance.dill,
       'compile': _millis.toJson(instance.compile),

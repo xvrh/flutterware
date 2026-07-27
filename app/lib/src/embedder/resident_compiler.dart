@@ -73,6 +73,11 @@ class ResidentCompiler {
     var warm = warmDill != null && File(warmDill).existsSync()
         ? warmDill
         : null;
+    stderr.writeln(
+      warm == null
+          ? '[compiler] no warm kernel; this compile is cold'
+          : '[compiler] starting from $warm',
+    );
     var server = await FrontendServer.start(
       executable: cache.dartAotRuntime,
       snapshot: cache.frontendServerSnapshot,
@@ -106,6 +111,10 @@ class ResidentCompiler {
       newSourceCount: result.newSources.length,
     );
   }
+
+  /// Makes the next [compile] emit a whole program at [outputDill], which is
+  /// what a guest launched from scratch loads.
+  void reset() => _server.reset();
 
   /// Saves the full kernel at [outputDill] as the next session's warm start.
   ///

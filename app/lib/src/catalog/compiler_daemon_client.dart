@@ -4,62 +4,65 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'daemon_address.dart';
 import 'protocol.dart';
 
 /// Talks to the compiler daemon, which runs as a separate plain-Dart process.
 ///
 /// The daemon is not a workaround. It is where the catalog pipeline lives so
 /// that the GUI, `fw`, and an agent are three *drivers* of one pipeline rather
-/// than three copies of it — a screenshot must not require a running GUI, and a
+/// than three copies of it: a screenshot must not require a running GUI, and a
 /// second consumer must not repeat the first one's work.
+///
+/// So [connect] connects before it considers spawning. Whoever arrives first
+/// pays for the scan, the bundle, the host and the cold compile; everyone after
+/// gets a compiler that already holds the whole catalog in memory.
 ///
 /// (It was once also a containment measure: `package:frontend_server_client`
 /// spawns the compiler through `Platform.resolvedExecutable`, which inside a
 /// Flutter app is the app binary, so compiling in-process relaunched the app
-/// recursively. [FrontendServer] takes an explicit executable, so that class of
+/// recursively. `FrontendServer` takes an explicit executable, so that class of
 /// bug is gone and no longer the reason for anything here.)
 class CompilerDaemonClient {
-  CompilerDaemonClient._(this._process, this._responses);
+  CompilerDaemonClient._(this._socket, this._responses, this.address);
 
-  final Process _process;
+  final Socket _socket;
   final Stream<DaemonResponse> _responses;
+  final DaemonAddress address;
 
-  /// Starts the daemon and waits for it to finish the slow one-time work.
+  var _nextRequestId = 0;
+
+  /// Connects to the daemon for [config], starting one if nobody is serving.
   ///
-  /// [dartExecutable] must be a real Dart VM — pass the Flutter SDK's `dart`,
-  /// never `Platform.resolvedExecutable`.
-  static Future<(CompilerDaemonClient, DaemonReady)> start({
+  /// [dartExecutable] must be a real Dart VM — pass the Flutter SDK's `dart`.
+  static Future<(CompilerDaemonClient, DaemonReady)> connect({
     required String dartExecutable,
     required DaemonConfig config,
     void Function(String)? onLog,
+    Duration readyTimeout = const Duration(minutes: 5),
   }) async {
-    var configFile = File(
-      p.join(config.appPackageRoot, 'build', 'catalog', 'daemon_config.json'),
-    );
-    configFile.parent.createSync(recursive: true);
-    configFile.writeAsStringSync(jsonEncode(config.toJson()));
+    var address = DaemonAddress(config);
+    address.ensureRunDir();
 
-    var executable = await _ensureCompiled(
-      dartExecutable: dartExecutable,
-      appPackageRoot: config.appPackageRoot,
-      onLog: onLog,
-    );
-    var process = await Process.start(executable.$1, [
-      ...executable.$2,
-      configFile.path,
-    ], workingDirectory: config.appPackageRoot);
+    var socket = await _connect(address);
+    if (socket == null) {
+      socket = await _spawnAndConnect(
+        address: address,
+        dartExecutable: dartExecutable,
+        config: config,
+        onLog: onLog,
+      );
+    } else {
+      onLog?.call('attached to the daemon already serving ${address.key}');
+    }
 
-    process.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) => onLog?.call(line));
-
-    var responses = process.stdout
+    var responses = socket
+        .cast<List<int>>()
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .map((line) {
           var json = tryDecodeLine(line);
-          // Anything the daemon prints that is not protocol is a log, not a
+          // Anything the daemon writes that is not protocol is a log, not a
           // reason to fail.
           if (json == null) {
             onLog?.call(line);
@@ -71,15 +74,30 @@ class CompilerDaemonClient {
         .cast<DaemonResponse>()
         .asBroadcastStream();
 
-    var first = await responses.first;
+    var first = await responses.first
+        .timeout(
+          readyTimeout,
+          onTimeout: () => throw StateError(
+            'the compiler daemon did not become ready within '
+            '${readyTimeout.inSeconds}s. See ${address.logPath}',
+          ),
+        )
+        .onError<StateError>((e, _) => throw e)
+        .catchError((Object e) {
+          throw StateError(
+            'the compiler daemon closed the connection before it was ready: '
+            '$e\n${_tailLog(address)}',
+          );
+        });
+
     switch (first) {
       case DaemonReady():
-        return (CompilerDaemonClient._(process, responses), first);
+        return (CompilerDaemonClient._(socket, responses, address), first);
       case DaemonFailed(:var message, :var stackTrace):
-        process.kill();
+        socket.destroy();
         throw StateError('the compiler daemon failed: $message\n$stackTrace');
       case DaemonCompiled():
-        process.kill();
+        socket.destroy();
         throw StateError('the daemon compiled before it was ready');
     }
   }
@@ -88,23 +106,143 @@ class CompilerDaemonClient {
   ///
   /// [full] asks for a whole kernel rather than a delta — needed when the
   /// result will be loaded by a guest spawned from scratch.
-  Future<DaemonCompiled> select(String id, {bool full = false}) async {
+  Future<DaemonCompiled> select(String id, {bool full = false}) {
+    var requestId = _nextRequestId++;
+    // Matched on the id, not on "the next compiled message": the daemon serves
+    // other clients on the same compiler, and their replies share this stream's
+    // shape but not its meaning.
     var reply = _responses
-        .where((r) => r is DaemonCompiled)
+        .where((r) => r is DaemonCompiled && r.requestId == requestId)
         .cast<DaemonCompiled>()
         .first;
-    _process.stdin.writeln(encodeLine(SelectRequest(id, full: full)));
+    _socket.writeln(encodeLine(SelectRequest(requestId, id, full: full)));
     return reply;
   }
 
-  Future<void> shutdown() async {
+  /// Leaves the daemon running for whoever else wants it.
+  Future<void> close() async {
     try {
-      _process.stdin.writeln(encodeLine(const ShutdownRequest()));
-      await _process.exitCode.timeout(const Duration(seconds: 5));
+      await _socket.close();
     } catch (_) {
-      // Falls through to the kill below.
+      // Falls through to the destroy below.
     }
-    _process.kill();
+    _socket.destroy();
+  }
+
+  /// Stops the daemon process, disconnecting every other client too.
+  ///
+  /// For tooling that wants a clean slate. Ordinary consumers call [close].
+  Future<void> stopDaemon() async {
+    try {
+      _socket.writeln(encodeLine(const StopDaemonRequest()));
+      await _socket.flush();
+    } catch (_) {
+      // The daemon may already be gone.
+    }
+    await close();
+    // Give it a moment to unlink its socket, so an immediately following
+    // connect does not attach to a daemon on its way out.
+    for (var i = 0; i < 50; i++) {
+      if (!File(address.socketPath).existsSync()) return;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+  }
+
+  static Future<Socket?> _connect(DaemonAddress address) async {
+    if (!File(address.socketPath).existsSync()) return null;
+    try {
+      return await Socket.connect(
+        InternetAddress(address.socketPath, type: InternetAddressType.unix),
+        0,
+      );
+    } on SocketException {
+      // The file is there but nobody is listening: a daemon that died without
+      // unlinking. The caller holds the lock before cleaning it up.
+      return null;
+    }
+  }
+
+  /// Starts a daemon under a lock, so several clients racing produce one.
+  static Future<Socket> _spawnAndConnect({
+    required DaemonAddress address,
+    required String dartExecutable,
+    required DaemonConfig config,
+    void Function(String)? onLog,
+  }) async {
+    var lock = File(address.lockPath).openSync(mode: FileMode.write);
+    try {
+      lock.lockSync(FileLock.blockingExclusive);
+
+      // Someone may have won the race while we waited for the lock.
+      var existing = await _connect(address);
+      if (existing != null) {
+        onLog?.call('attached to a daemon started while we waited');
+        return existing;
+      }
+
+      var stale = File(address.socketPath);
+      if (stale.existsSync()) stale.deleteSync();
+
+      var configFile = File(
+        p.join(config.appPackageRoot, 'build', 'catalog', 'daemon_config.json'),
+      );
+      configFile.parent.createSync(recursive: true);
+      configFile.writeAsStringSync(jsonEncode(config.toJson()));
+
+      var (executable, arguments) = await _ensureCompiled(
+        dartExecutable: dartExecutable,
+        appPackageRoot: config.appPackageRoot,
+        onLog: onLog,
+      );
+
+      // Detached, so the daemon outlives whoever happened to start it — that is
+      // the whole point of sharing it. Its output goes to a log file rather
+      // than to our pipes, which would break the moment we exit; the shell is
+      // how a detached process gets a redirect it did not open itself, and so
+      // catches VM-level failures too.
+      await Process.start(
+        '/bin/sh',
+        [
+          '-c',
+          'exec "\$@" >> "\$FW_DAEMON_LOG" 2>&1',
+          'sh',
+          executable,
+          ...arguments,
+          configFile.path,
+        ],
+        workingDirectory: config.appPackageRoot,
+        mode: ProcessStartMode.detached,
+        environment: {'FW_DAEMON_LOG': address.logPath},
+      );
+      onLog?.call('started a daemon for ${address.key}');
+
+      // The daemon binds before it prepares, so this waits only for the bind.
+      var deadline = DateTime.now().add(const Duration(seconds: 30));
+      while (DateTime.now().isBefore(deadline)) {
+        var socket = await _connect(address);
+        if (socket != null) return socket;
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+      }
+      throw StateError(
+        'the compiler daemon never started listening on '
+        '${address.socketPath}\n${_tailLog(address)}',
+      );
+    } finally {
+      try {
+        lock.unlockSync();
+      } catch (_) {
+        // Already released by the close below.
+      }
+      lock.closeSync();
+    }
+  }
+
+  /// The last of whatever the daemon managed to say before it died.
+  static String _tailLog(DaemonAddress address) {
+    var log = File(address.logPath);
+    if (!log.existsSync()) return '(no daemon log at ${address.logPath})';
+    var lines = log.readAsLinesSync();
+    return lines.skip(lines.length > 40 ? lines.length - 40 : 0).join('\n');
   }
 }
 
@@ -125,9 +263,9 @@ const _daemonSources = [
 /// of it the user's project.
 ///
 /// A kernel snapshot rather than `dart compile exe` only because AOT costs
-/// ~1.6s to build against the snapshot's ~1.6s and saves ~80ms at startup; the
-/// snapshot rebuilds far more often than it runs during development. Nothing
-/// forbids AOT now that [FrontendServer] is handed its executable.
+/// about the same to build and saves ~80ms at startup; the snapshot rebuilds
+/// far more often than it runs during development. Nothing forbids AOT now that
+/// `FrontendServer` is handed its executable.
 Future<(String, List<String>)> _ensureCompiled({
   required String dartExecutable,
   required String appPackageRoot,

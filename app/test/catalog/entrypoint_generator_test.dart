@@ -110,6 +110,52 @@ Widget avatarTileEmpty() => const Placeholder();
     );
   });
 
+  group('registerAll — what makes one compiler safe to share', () {
+    test('imports every entry, so a select only ever changes main.dart', () {
+      generator.registerAll([members, empty]);
+      expect(generator.visited, [members, empty]);
+      expect(
+        generator.select(empty),
+        hasLength(1),
+        reason:
+            'the wrapper is already registered, so only the entrypoint is '
+            'invalidated',
+      );
+      expect(entrypoint(), contains("import 'entry_0.dart' as fw0;"));
+      expect(
+        entrypoint(),
+        contains("import 'entry_1.dart' as fw1;"),
+        reason: 'an entry nobody has selected is still imported',
+      );
+    });
+
+    test('a second client selecting first is not what adds the wrapper', () {
+      // The hazard this closes: with lazy registration, whoever selects an
+      // entry first adds its wrapper, and that is the only compile whose delta
+      // carries it. A second client selecting the same entry later would be
+      // handed a delta with the wrapper missing — unchanged since the baseline
+      // — and its guest, which never had that library, would reload nothing.
+      generator.registerAll([members, empty]);
+
+      var first = generator.select(empty);
+      var second = generator.select(empty);
+
+      expect(first.map((u) => p.basename(u.path)), ['main.dart']);
+      expect(
+        second.map((u) => p.basename(u.path)),
+        ['main.dart'],
+        reason: 'both clients see the same delta, whoever got there first',
+      );
+    });
+
+    test('is idempotent, so a rescan does not renumber live wrappers', () {
+      generator.registerAll([members, empty]);
+      var before = wrapper(0);
+      expect(generator.registerAll([members, empty]), isEmpty);
+      expect(wrapper(0), before);
+    });
+  });
+
   test('keys the rendered subtree by entry, so switching remounts state', () {
     generator.select(members);
     expect(entrypoint(), contains('ValueKey<String>(_entryId)'));

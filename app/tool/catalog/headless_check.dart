@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:async/async.dart';
+import 'package:collection/collection.dart';
 
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/compiler_daemon_client.dart';
@@ -49,13 +50,19 @@ Future<void> main(List<String> args) async {
   // the precompiled daemon binary.
   stdout.writeln('[check] starting the compiler daemon');
   var spawn = Stopwatch()..start();
-  var (daemon, ready) = await CompilerDaemonClient.start(
+  var (daemon, ready) = await CompilerDaemonClient.connect(
     dartExecutable: p.join(cache.flutterRoot, 'bin', 'dart'),
     config: config,
     onLog: (line) => stdout.writeln('  [daemon] $line'),
   );
-  stdout.writeln('[check] spawn->ready ${spawn.elapsedMilliseconds}ms');
+  stdout.writeln(
+    '[check] connect->ready ${spawn.elapsedMilliseconds}ms '
+    '(${ready.reused ? 'attached to a running daemon' : 'started one'})',
+  );
   var entries = ready.entries;
+  for (var phase in ready.timings.entries) {
+    stdout.writeln('  [prepare] ${phase.key} ${phase.value}ms');
+  }
   stdout.writeln(
     '[check] daemon ready — cold compile ${ready.coldCompile.inMilliseconds}ms, '
     '${entries.length} entries discovered',
@@ -175,7 +182,57 @@ Future<void> main(List<String> args) async {
   );
   check(frames > 0, 'the guest composited frames ($frames)');
 
-  await daemon.shutdown();
+  // 3. A second client on the same daemon — the reason the daemon is shared.
+  //
+  // What is asserted is both halves of that: that it costs nothing, and that it
+  // is nonetheless isolated. The compiler, the generated entrypoint and the
+  // compiler's output file are one mutable thing shared between the two; if
+  // that leaked, one client would decide what the other renders. It has
+  // happened before, and it produced screenshots of the wrong entry that every
+  // test passed.
+  stdout.writeln('[check] attaching a second client');
+  var attach = Stopwatch()..start();
+  var (second, secondReady) = await CompilerDaemonClient.connect(
+    dartExecutable: p.join(cache.flutterRoot, 'bin', 'dart'),
+    config: config,
+    onLog: (line) => stdout.writeln('  [daemon] $line'),
+  );
+  stdout.writeln(
+    '[check] second connect->ready ${attach.elapsedMilliseconds}ms',
+  );
+  check(secondReady.reused, 'the second client attached rather than started');
+  check(
+    attach.elapsedMilliseconds < 500,
+    'attaching cost ${attach.elapsedMilliseconds}ms, not a cold start',
+  );
+  check(
+    secondReady.assetsDir != ready.assetsDir,
+    'each client gets its own asset directory',
+  );
+
+  // Different entries, deliberately: whichever kernel each client is handed
+  // must be the one it asked for.
+  var mine = await daemon.select(entries.first.id, full: true);
+  var theirs = await second.select(entries.last.id, full: true);
+  check(mine.ok && theirs.ok, 'both clients compiled');
+  check(
+    mine.dill != theirs.dill,
+    'each client got its own kernel, not one shared path',
+  );
+  check(
+    File(mine.dill!).lengthSync() > 0 && File(theirs.dill!).lengthSync() > 0,
+    'both kernels are whole programs',
+  );
+  check(
+    !const ListEquality<int>().equals(
+      File(mine.dill!).readAsBytesSync(),
+      File(theirs.dill!).readAsBytesSync(),
+    ),
+    'the two kernels differ — a shared file would have made them identical',
+  );
+
+  await second.close();
+  await daemon.close();
   connected.add(encodeMessage(const ShutdownMessage()));
   await connected.flush();
   await vmService.close();

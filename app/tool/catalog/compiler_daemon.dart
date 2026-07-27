@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutterware_app/src/catalog/asset_bundle.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
+import 'package:flutterware_app/src/catalog/daemon_address.dart';
 import 'package:flutterware_app/src/catalog/discovery.dart';
 import 'package:flutterware_app/src/catalog/protocol.dart';
 import 'package:flutterware_app/src/catalog/entrypoint_generator.dart';
@@ -11,18 +13,21 @@ import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/resident_compiler.dart';
 import 'package:path/path.dart' as p;
 
-/// The catalog's build and compile half, as a plain Dart process.
+/// The catalog's build and compile half, as a plain Dart process shared by
+/// every client that wants the same catalog.
 ///
 /// It runs outside the GUI so that a screenshot, a `fw` command and an agent
-/// reach the same pipeline the panel does, without a window open.
+/// reach the same pipeline the panel does, without a window open — and it is
+/// *one* process rather than one per consumer, so the second consumer pays for
+/// none of the scanning, bundling, host-building or compiling the first already
+/// did. [DaemonAddress] is how they find each other.
 ///
-/// Usage — the GUI spawns this with the Flutter SDK's `dart`:
+/// Usage — clients spawn this themselves; the address is derived from the
+/// config, so this is only ever run by hand for debugging:
 ///
 /// ```sh
 /// dart run tool/catalog/compiler_daemon.dart <config.json>
 /// ```
-///
-/// stdout is line-delimited JSON protocol and nothing else; logs go to stderr.
 Future<void> main(List<String> args) async {
   if (args.length != 1) {
     stderr.writeln('usage: compiler_daemon.dart <config.json>');
@@ -32,34 +37,36 @@ Future<void> main(List<String> args) async {
   var config = DaemonConfig.fromJson(
     jsonDecode(File(args.single).readAsStringSync()) as Map<String, dynamic>,
   );
-  var daemon = _Daemon(config);
+  var address = DaemonAddress(config);
+  address.ensureRunDir();
+
+  ServerSocket server;
   try {
-    await daemon.prepare();
-  } catch (e, s) {
-    _emit(DaemonFailed(message: '$e', stackTrace: '$s'));
-    exit(1);
+    server = await ServerSocket.bind(
+      InternetAddress(address.socketPath, type: InternetAddressType.unix),
+      0,
+    );
+  } on SocketException catch (e) {
+    // Another daemon holds the address. That is a correct outcome of two
+    // clients racing, not a failure — the loser exits and the winner serves.
+    stderr.writeln('[catalog] address already served, exiting: ${e.message}');
+    exit(0);
   }
 
-  await for (var line
-      in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
-    var json = tryDecodeLine(line);
-    if (json == null) continue;
-    switch (DaemonRequest.decode(json)) {
-      case SelectRequest(:var id, :var full):
-        await daemon.select(id, full: full);
-      case ShutdownRequest():
-        await daemon.shutdown();
-        return;
-    }
+  var daemon = _Daemon(config, address, server);
+  for (var signal in [ProcessSignal.sigint, ProcessSignal.sigterm]) {
+    signal.watch().listen((_) => daemon.stop());
   }
-  await daemon.shutdown();
+  await daemon.serve();
 }
 
 class _Daemon {
-  _Daemon(this.config)
+  _Daemon(this.config, this.address, this._server)
     : _buildDir = p.join(config.appPackageRoot, 'build', 'catalog');
 
   final DaemonConfig config;
+  final DaemonAddress address;
+  final ServerSocket _server;
   final String _buildDir;
 
   late final FlutterCache _cache;
@@ -67,15 +74,116 @@ class _Daemon {
   ResidentCompiler? _compiler;
   var _entries = <CatalogEntry>[];
 
-  String get _assetsDir => p.join(_buildDir, 'assets');
+  final _sessions = <_Session>[];
+  final _timings = <String, int>{};
+  var _sessionCounter = 0;
+  Duration _coldCompile = Duration.zero;
+  List<String> _diagnostics = const [];
+  String? _hostPath;
 
-  CatalogEntry _entryById(String id) => _entries.firstWhere((e) => e.id == id);
+  /// Completes when [prepare] has run — successfully or not. Sessions that
+  /// connect while it is pending wait on it rather than being turned away.
+  final _prepared = Completer<void>();
+
+  /// Every request runs through here. The compiler, the entrypoint on disk and
+  /// the generated wrappers are one shared, mutable thing; interleaving two
+  /// clients' selects would mean compiling a file the other client is midway
+  /// through rewriting.
+  Future<void> _queue = Future.value();
+
+  Timer? _idle;
+
+  /// How long the daemon outlives its last client. Long enough that closing a
+  /// panel and running `fw screenshot` costs nothing, short enough that a
+  /// forgotten daemon does not hold a compiler open overnight.
+  static const _idleTimeout = Duration(minutes: 10);
+
+  /// The bundle every session symlinks, including a `kernel_blob.bin` for the
+  /// entry [_prepare] compiled.
+  ///
+  /// Nothing writes here after [_prepare] returns. The compiler's output goes
+  /// to [_outputDill] instead, so a session that has asked for nothing can
+  /// still launch a guest against a kernel no later compile can move under it.
+  String get _sharedAssetsDir => p.join(_buildDir, 'assets');
+
+  String get _outputDill => p.join(_buildDir, 'out', 'kernel_blob.bin');
+
+  CatalogEntry _entryById(String id) => _entries.firstWhere(
+    (e) => e.id == id,
+    orElse: () => throw ArgumentError.value(id, 'id', 'no such entry'),
+  );
+
+  Future<void> serve() async {
+    _server.listen(_accept);
+    _armIdleTimer();
+    try {
+      await _prepare();
+      _prepared.complete();
+    } catch (e, s) {
+      var failure = DaemonFailed(message: '$e', stackTrace: '$s');
+      stderr.writeln(failure);
+      for (var session in [..._sessions]) {
+        session.send(failure);
+      }
+      _prepared.completeError(e, s);
+      await _shutdown();
+      exit(1);
+    }
+    for (var session in [..._sessions]) {
+      unawaited(session.sendReady());
+    }
+  }
+
+  void _accept(Socket socket) {
+    _idle?.cancel();
+    var session = _Session(this, socket, 'session-${_sessionCounter++}');
+    _sessions.add(session);
+    try {
+      session.start();
+      if (_prepared.isCompleted) unawaited(session.sendReady());
+    } catch (e, s) {
+      // One client that cannot be served is not a reason to drop the others.
+      stderr.writeln('[catalog] could not serve ${session.id}: $e\n$s');
+      session.send(DaemonFailed(message: '$e', stackTrace: '$s'));
+      _detach(session);
+    }
+  }
+
+  void _detach(_Session session) {
+    _sessions.remove(session);
+    session.dispose();
+    if (_sessions.isEmpty) _armIdleTimer();
+  }
+
+  void _armIdleTimer() {
+    _idle?.cancel();
+    _idle = Timer(_idleTimeout, () {
+      if (_sessions.isEmpty) stop();
+    });
+  }
+
+  Future<void> stop() async {
+    await _shutdown();
+    exit(0);
+  }
+
+  Future<void> _shutdown() async {
+    _idle?.cancel();
+    for (var session in [..._sessions]) {
+      session.dispose();
+    }
+    await _compiler?.shutdown();
+    await _server.close();
+    var socket = File(address.socketPath);
+    if (socket.existsSync()) socket.deleteSync();
+  }
 
   /// Everything slow and one-time: the engine framework, the asset bundle, the
-  /// first compile, and the C host.
-  Future<void> prepare() async {
+  /// first compile, and the C host. Paid once per daemon, not once per client.
+  Future<void> _prepare() async {
     var phase = Stopwatch()..start();
     void mark(String what) {
+      _timings[what] = phase.elapsedMilliseconds;
       stderr.writeln('[catalog] $what ${phase.elapsedMilliseconds}ms');
       phase.reset();
     }
@@ -97,6 +205,10 @@ class _Daemon {
     }
     mark('scan');
     _entries = scan.entries;
+    _diagnostics = [
+      for (var d in scan.diagnostics)
+        if (!d.isError) '$d',
+    ];
     if (_entries.isEmpty) {
       throw StateError(
         'no catalog entries found under ${config.roots.join(', ')} — is the '
@@ -109,6 +221,7 @@ class _Daemon {
       projectRoot: config.projectRoot,
       emitProbe: config.emitProbe,
     );
+    _generator.registerAll(_entries);
     _generator.select(_entries.first);
 
     var engineDir = p.join(config.appPackageRoot, '.engine');
@@ -127,69 +240,96 @@ class _Daemon {
         'the first entry did not compile:\n${cold.output.join('\n')}',
       );
     }
+    _coldCompile = watch.elapsed;
     compiler.saveWarmStart();
-    mark('save warm start');
+    File(_outputDill).copySync(p.join(_sharedAssetsDir, 'kernel_blob.bin'));
+    mark('publish prepared kernel');
 
-    var hostPath = await buildHost(
+    _hostPath = await buildHost(
       nativeSourceDir: p.join(config.appPackageRoot, 'native'),
       nativeBuildDir: p.join(_buildDir, 'native'),
       engineDir: engineDir,
     );
     mark('host build');
 
-    _emit(
-      DaemonReady(
-        hostPath: hostPath,
-        assetsDir: _assetsDir,
-        icuData: _cache.icuData,
-        coldCompile: watch.elapsed,
-        entries: _entries,
-        diagnostics: [
-          for (var d in scan.diagnostics)
-            if (!d.isError) '$d',
-        ],
-      ),
-    );
+    // Sessions from a previous daemon are meaningless now.
+    var sessions = Directory(p.join(_buildDir, 'sessions'));
+    if (sessions.existsSync()) sessions.deleteSync(recursive: true);
   }
 
-  Future<void> select(String id, {bool full = false}) async {
+  DaemonReady readyFor(_Session session) => DaemonReady(
+    sessionId: session.id,
+    hostPath: _hostPath!,
+    assetsDir: session.assetsDir,
+    icuData: _cache.icuData,
+    coldCompile: _coldCompile,
+    entries: _entries,
+    reused: session.arrivedAfterPrepare,
+    timings: _timings,
+    diagnostics: _diagnostics,
+  );
+
+  /// Compiles [id] for [session], one request at a time.
+  Future<DaemonCompiled> select(
+    _Session session,
+    int requestId,
+    String id, {
+    required bool full,
+  }) {
+    var result = _queue.then(
+      (_) => _select(session, requestId, id, full: full),
+    );
+    // The queue must survive a failed request, or one bad select wedges every
+    // client behind it.
+    _queue = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
+  Future<DaemonCompiled> _select(
+    _Session session,
+    int requestId,
+    String id, {
+    required bool full,
+  }) async {
     var entry = _entryById(id);
     var invalidated = _generator.select(entry);
     if (full) {
-      // A fresh compiler's first compile writes the whole kernel to
-      // kernel_blob.bin, which is what a guest spawned from scratch loads.
-      // Everything else the daemon built — asset bundle, C host — is reused.
-      await _compiler!.shutdown();
-      _compiler = await _startCompiler();
+      // A guest spawned from scratch loads kernel_blob.bin off disk, and a
+      // delta is not a program. `reset` makes the next compile emit the whole
+      // thing without restarting the compiler — which matters because the
+      // compiler is shared, and one client's launch must not throw away
+      // another's warm state.
+      _compiler!.reset();
     }
-    var compiled = await _compiler!.compile(full ? const [] : invalidated);
-    _emit(
-      DaemonCompiled(
-        id: id,
-        dill: compiled.ok ? compiled.dillOutput : null,
-        compile: compiled.elapsed,
-        newSourceCount: compiled.newSourceCount,
-        error: compiled.ok ? null : compiled.output.join('\n'),
-      ),
+    var compiled = await _compiler!.compile(invalidated);
+    return DaemonCompiled(
+      requestId: requestId,
+      id: id,
+      dill: compiled.ok
+          ? session.takeKernel(compiled.dillOutput!, requestId, full: full)
+          : null,
+      compile: compiled.elapsed,
+      newSourceCount: compiled.newSourceCount,
+      error: compiled.ok ? null : compiled.output.join('\n'),
     );
   }
 
   Future<ResidentCompiler> _startCompiler() => ResidentCompiler.start(
     entrypoint: _generator.entrypointPath,
-    outputDill: p.join(_assetsDir, 'kernel_blob.bin'),
+    outputDill: _outputDill,
     packageConfig: config.packageConfig,
     cache: _cache,
     warmDill: _warmDill,
   );
 
-  /// The kernel a previous session left behind, for the compiler to start from.
-  ///
-  /// Null when the stamp says it was produced under different conditions. The
-  /// compiler tolerates a stale *source* — that is the whole point, it
-  /// recompiles what changed — but a kernel built against another engine or
-  /// another package resolution is not a starting point, it is a wrong answer.
   late final String? _warmDill = _resolveWarmDill();
 
+  /// The kernel a previous daemon left behind, for the compiler to start from.
+  ///
+  /// Discarded when the stamp says it was produced under different conditions.
+  /// The compiler tolerates a stale *source* — that is the whole point, it
+  /// recompiles what changed — but a kernel built against another engine or
+  /// another package resolution is not a starting point, it is a wrong answer.
   String? _resolveWarmDill() {
     var dill = p.join(_buildDir, 'warm.dill');
     var stamp = File('$dill.stamp');
@@ -215,14 +355,146 @@ class _Daemon {
       cache: _cache,
       rootPackageRoot: config.appPackageRoot,
       packageConfigPath: config.packageConfig,
-    ).build(_assetsDir);
-  }
-
-  Future<void> shutdown() async {
-    await _compiler?.shutdown();
+    ).build(_sharedAssetsDir);
   }
 }
 
-void _emit(DaemonResponse message) {
-  stdout.writeln(encodeLine(message));
+/// One connected client.
+///
+/// Owns the only things a client may not share: the kernel its guest loads and
+/// the deltas its guest reloads. Both are files the compiler rewrites in place,
+/// so handing two clients the same path would let one decide what the other
+/// renders — the failure mode that once produced byte-identical screenshots of
+/// the wrong entry.
+class _Session {
+  _Session(this._daemon, this._socket, this.id)
+    : arrivedAfterPrepare = _daemon._prepared.isCompleted;
+
+  final _Daemon _daemon;
+  final Socket _socket;
+  final String id;
+
+  /// Whether this client attached to an already-prepared daemon, and so paid
+  /// nothing for it.
+  final bool arrivedAfterPrepare;
+
+  String get _dir => p.join(_daemon._buildDir, 'sessions', id);
+  String get assetsDir => p.join(_dir, 'assets');
+
+  final _deltas = <String>[];
+
+  void start() {
+    _socket
+        .cast<List<int>>()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(
+          _onLine,
+          onError: (_) => _daemon._detach(this),
+          onDone: () => _daemon._detach(this),
+        );
+  }
+
+  /// A directory that looks exactly like the shared bundle to the engine.
+  ///
+  /// Entirely symlinks, so it costs microseconds — including `kernel_blob.bin`,
+  /// which points at the prepared kernel until this session asks for one of its
+  /// own. That is what lets a client that has just attached launch a guest
+  /// immediately, without a compile.
+  void _prepareAssetsDir() {
+    var target = Directory(assetsDir);
+    if (target.existsSync()) target.deleteSync(recursive: true);
+    target.createSync(recursive: true);
+    for (var entity in Directory(_daemon._sharedAssetsDir).listSync()) {
+      Link(p.join(assetsDir, p.basename(entity.path))).createSync(entity.path);
+    }
+  }
+
+  /// Moves the compiler's output somewhere only this session reads.
+  ///
+  /// A [full] kernel becomes this session's `kernel_blob.bin`, which its guest
+  /// loads at launch. A delta gets a per-request name, because the compiler
+  /// writes every delta to the same path and the next client's compile would
+  /// otherwise land there before this client's guest had reloaded.
+  String takeKernel(String produced, int requestId, {required bool full}) {
+    if (full) {
+      var kernel = p.join(assetsDir, 'kernel_blob.bin');
+      // Replaces the symlink to the prepared kernel; copying onto it would
+      // write through to the shared bundle every other session reads.
+      var link = Link(kernel);
+      if (link.existsSync()) link.deleteSync();
+      File(produced).copySync(kernel);
+      return kernel;
+    }
+    var delta = p.join(_dir, 'deltas', '$requestId.dill');
+    Directory(p.dirname(delta)).createSync(recursive: true);
+    File(produced).copySync(delta);
+    _deltas.add(delta);
+    // The guest only ever reloads the newest; a couple of predecessors are kept
+    // in case one is still in flight.
+    while (_deltas.length > 4) {
+      var stale = File(_deltas.removeAt(0));
+      if (stale.existsSync()) stale.deleteSync();
+    }
+    return delta;
+  }
+
+  Future<void> sendReady() async {
+    try {
+      await _daemon._prepared.future;
+    } catch (_) {
+      return; // The failure was already sent.
+    }
+    try {
+      // After preparing, not on connect: the shared bundle this mirrors does
+      // not exist until then, and a client may well connect before it does.
+      _prepareAssetsDir();
+      send(_daemon.readyFor(this));
+    } catch (e, s) {
+      // This runs off the accept callback, so an escape here would be an
+      // unhandled async error and take the whole daemon with it.
+      stderr.writeln('[catalog] could not serve $id: $e\n$s');
+      send(DaemonFailed(message: '$e', stackTrace: '$s'));
+      _daemon._detach(this);
+    }
+  }
+
+  Future<void> _onLine(String line) async {
+    var json = tryDecodeLine(line);
+    if (json == null) return;
+    switch (DaemonRequest.decode(json)) {
+      case SelectRequest(:var requestId, :var id, :var full):
+        try {
+          send(await _daemon.select(this, requestId, id, full: full));
+        } catch (e, s) {
+          send(
+            DaemonCompiled(
+              requestId: requestId,
+              id: id,
+              compile: Duration.zero,
+              newSourceCount: 0,
+              error: '$e\n$s',
+            ),
+          );
+        }
+      case StopDaemonRequest():
+        await _daemon.stop();
+    }
+  }
+
+  void send(DaemonResponse message) {
+    try {
+      _socket.writeln(encodeLine(message));
+    } on SocketException {
+      // The client left mid-request; _detach will follow.
+    }
+  }
+
+  void dispose() {
+    try {
+      _socket.destroy();
+    } catch (_) {}
+    var dir = Directory(_dir);
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
+  }
 }
