@@ -15,17 +15,23 @@ import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 /// further, matched no worktree, fell back to the repo root, and found no
 /// config — an empty sidebar with a tab named after the repo branch.
 void main() {
-  test('walking up from a subdirectory finds the repo root', () {
-    var fromExample = findRepoRoot('../examples/example');
-    var fromAppLib = findRepoRoot('lib/src/shell');
-    expect(fromExample, isNotNull);
-    expect(fromAppLib, fromExample);
-    // The root is where the config lives.
+  test('a directory with no config walks up to the one that has it', () {
+    var root = findRepoRoot('..');
+    expect(root, isNotNull);
     expect(
-      findRepoRoot('..'),
-      fromExample,
-      reason: 'every subdirectory of the repo resolves to the same root',
+      findRepoRoot('lib/src/shell'),
+      root,
+      reason: 'app/ declares no config of its own',
     );
+  });
+
+  test('a directory with its own config is its own root', () {
+    // `examples/example` is both a workspace member of this repo and a project
+    // in its own right — it has a `tool/flutterware.dart`. Opening it must give
+    // you *its* config, not the monorepo's, or `dart run flutterware` inside a
+    // nested app would silently open the wrong project.
+    expect(findRepoRoot('../examples/example'), endsWith('examples/example'));
+    expect(findRepoRoot('../examples/example'), isNot(findRepoRoot('..')));
   });
 
   test('discovery reads the workspace members', () {

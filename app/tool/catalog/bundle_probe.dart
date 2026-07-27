@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutterware_app/src/catalog/asset_bundle.dart';
+import 'package:flutterware_app/src/catalog/package_config_locator.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart';
@@ -93,7 +94,7 @@ void main() => runApp(
   await compileScene(
     scenePath: scene.path,
     kernelBlob: p.join(toolDir, 'kernel_blob.bin'),
-    packageConfig: p.join(repoRoot, '.dart_tool', 'package_config.json'),
+    packageConfig: requirePackageConfig(packageRoot),
     cache: cache,
   );
   File(

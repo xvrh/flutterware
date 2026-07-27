@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
-import 'src/catalog/catalog_dev_screen.dart';
+import 'src/catalog/catalog_view.dart';
 import 'src/utils/flutter_sdk.dart';
 
-/// IDE dev entrypoint for the UI catalog loop.
+/// IDE dev entrypoint for the UI catalog loop, without the shell.
+///
+/// The same [CatalogView] the `flutterware.ui_catalog` plugin mounts as its
+/// panel — this just skips the shell, for working on the loop itself.
 ///
 /// A macOS app launched by `flutter run` has a stripped environment and a
 /// working directory of `/`, so the package and SDK roots are passed in:
@@ -32,13 +35,15 @@ Future<void> main() async {
       theme: ThemeData(colorSchemeSeed: const Color(0xff3366ff)),
       home: (_appRootDefine.isEmpty || flutterSdkRoot.isEmpty)
           ? const _MissingDefines()
-          : CatalogDevScreen(
-              appPackageRoot: _appRootDefine,
-              flutterSdkRoot: flutterSdkRoot,
-              // The demos live under `app/tool/catalog/`, so the app package
-              // is both the scan root and the entrypoint's package.
-              projectRoot: _appRootDefine,
-              roots: const ['tool/catalog'],
+          : Scaffold(
+              body: CatalogView(
+                appPackageRoot: _appRootDefine,
+                flutterSdkRoot: flutterSdkRoot,
+                // The demos live under `app/tool/catalog/`, so the app package
+                // is both the scan root and the entrypoint's package.
+                projectRoot: _appRootDefine,
+                roots: const ['tool/catalog'],
+              ),
             ),
     ),
   );

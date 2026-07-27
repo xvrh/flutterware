@@ -7,6 +7,7 @@ import '../embedder/embedded_engine.dart';
 import '../embedder/guest_vm_service.dart';
 import 'catalog_entry.dart';
 import 'compiler_daemon_client.dart';
+import 'package_config_locator.dart';
 import 'protocol.dart';
 
 enum CatalogSessionPhase { starting, ready, error }
@@ -96,11 +97,9 @@ class CatalogSession extends ChangeNotifier {
         config: DaemonConfig(
           appPackageRoot: appPackageRoot,
           projectRoot: projectRoot,
-          packageConfig: p.join(
-            p.dirname(appPackageRoot),
-            '.dart_tool',
-            'package_config.json',
-          ),
+          // The *project's* config, not the GUI's: it is the one that resolves
+          // the demos' own package as well as flutter and flutterware.
+          packageConfig: requirePackageConfig(projectRoot),
           flutterSdkRoot: flutterSdkRoot,
           roots: roots,
         ),

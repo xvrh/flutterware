@@ -7,6 +7,7 @@ import 'package:collection/collection.dart';
 
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/compiler_daemon_client.dart';
+import 'package:flutterware_app/src/catalog/package_config_locator.dart';
 import 'package:flutterware_app/src/catalog/protocol.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
@@ -35,7 +36,7 @@ Future<void> main(List<String> args) async {
     // The demos live under `app/tool/catalog/`, so the app package is both the
     // scan root and the entrypoint's package.
     projectRoot: packageRoot,
-    packageConfig: p.join(repoRoot, '.dart_tool', 'package_config.json'),
+    packageConfig: requirePackageConfig(packageRoot),
     flutterSdkRoot: cache.flutterRoot,
     roots: const ['tool/catalog'],
     emitProbe: true,

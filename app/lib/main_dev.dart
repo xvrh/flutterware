@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/logs/remote_log_client.dart';
@@ -16,10 +18,26 @@ import 'src/utils/flutter_sdk.dart';
 
 final _logger = Logger('main_dev');
 
-/// In-IDE entry point: runs the shell against `examples/example`.
+/// The `flutterware_app` package root, which owns `native/`, `tool/catalog/`
+/// and the build directory the catalog compiles into.
+///
+/// Passed in rather than derived: a macOS app launched by `flutter run` has a
+/// working directory of `/`, so the default of `Directory.current` finds
+/// nothing. Only the catalog needs it, and only when its panel is opened.
+const _appRootDefine = String.fromEnvironment('FLUTTERWARE_APP_ROOT');
+
+/// In-IDE entry point: runs the shell against flutterware's own workspace.
+///
+/// ```sh
+/// cd app && flutter run -t lib/main_dev.dart -d macos \
+///   --dart-define=FLUTTERWARE_APP_ROOT="$(pwd)"
+/// ```
 void main() async {
   setupDebugLogger();
-  var appContext = AppContext(logger: LogClient.print());
+  var appContext = AppContext(
+    logger: LogClient.print(),
+    appToolDirectory: _appRootDefine.isEmpty ? null : Directory(_appRootDefine),
+  );
   var flutterSdks = await FlutterSdkPath.findSdks();
   var flutterSdk = flutterSdks.first;
   _logger.info('Use SDK: ${flutterSdk.root}');

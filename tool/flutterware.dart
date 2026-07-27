@@ -16,4 +16,14 @@ void main() => Flutterware.configure((fw) {
   fw.use(
     Dependencies(packages: DependenciesPackage.each([root, app, example])),
   );
+  fw.use(
+    UiCatalog(
+      packages: [
+        // flutterware's own demos sit beside the harness that renders them
+        // rather than in `demo/`, because they exist to exercise the catalog.
+        UiCatalogPackage(app, entrypoint: 'tool/catalog'),
+        UiCatalogPackage(example),
+      ],
+    ),
+  );
 });

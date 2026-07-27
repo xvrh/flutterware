@@ -6,11 +6,15 @@ import '../embedder/protocol.dart';
 import 'catalog_entry.dart';
 import 'catalog_session.dart';
 
-/// Dev harness for the catalog loop: entries on the left, the live guest on the
-/// right. Selecting an entry hot-reloads the running guest rather than
-/// restarting it.
-class CatalogDevScreen extends StatefulWidget {
-  const CatalogDevScreen({
+/// The catalog loop: entries on the left, the live guest on the right.
+/// Selecting an entry hot-reloads the running guest rather than restarting it.
+///
+/// Mounted by the `flutterware.ui_catalog` plugin as its panel, and by
+/// `main_catalog_dev.dart` on its own for working on the loop itself. It owns a
+/// [CatalogSession] for as long as it is mounted — which is what starts the
+/// daemon, so an unopened catalog costs nothing.
+class CatalogView extends StatefulWidget {
+  const CatalogView({
     super.key,
     required this.appPackageRoot,
     required this.flutterSdkRoot,
@@ -24,10 +28,10 @@ class CatalogDevScreen extends StatefulWidget {
   final List<String> roots;
 
   @override
-  State<CatalogDevScreen> createState() => _CatalogDevScreenState();
+  State<CatalogView> createState() => _CatalogViewState();
 }
 
-class _CatalogDevScreenState extends State<CatalogDevScreen> {
+class _CatalogViewState extends State<CatalogView> {
   late final CatalogSession _session = CatalogSession(
     appPackageRoot: widget.appPackageRoot,
     flutterSdkRoot: widget.flutterSdkRoot,
@@ -61,8 +65,8 @@ class _CatalogDevScreenState extends State<CatalogDevScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: AnimatedBuilder(
+    return Material(
+      child: AnimatedBuilder(
         animation: _session,
         builder: (context, _) {
           return Row(

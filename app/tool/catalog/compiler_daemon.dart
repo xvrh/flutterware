@@ -500,7 +500,11 @@ class _Daemon {
   Future<void> _ensureAssetBundle() async {
     await AssetBundleBuilder(
       cache: _cache,
-      rootPackageRoot: config.appPackageRoot,
+      // The *project's* package owns the unprefixed asset keys: a demo saying
+      // `AssetImage('assets/logo.png')` means its own project's file, not the
+      // GUI's. These were the same package until the catalog started running
+      // against somebody else's project.
+      rootPackageRoot: config.projectRoot,
       packageConfigPath: config.packageConfig,
     ).build(_sharedAssetsDir);
   }

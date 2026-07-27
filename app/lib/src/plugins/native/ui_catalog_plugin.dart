@@ -6,7 +6,9 @@ import 'package:path/path.dart' as p;
 
 import '../../catalog/catalog_entry.dart';
 import '../../catalog/discovery.dart';
+import '../../catalog/package_config_locator.dart';
 import '../../catalog/protocol.dart';
+import '../../catalog/catalog_view.dart';
 import '../../catalog/screenshot.dart';
 import '../../ui/theme.dart';
 import '../native_plugin.dart';
@@ -287,7 +289,7 @@ class UiCatalogPlugin extends NativePlugin {
       config: DaemonConfig(
         appPackageRoot: packageRoot,
         projectRoot: packageRoot,
-        packageConfig: p.join(packageRoot, '.dart_tool', 'package_config.json'),
+        packageConfig: requirePackageConfig(packageRoot),
         flutterSdkRoot: host.workspace.flutterSdk.root,
         roots: [_rootFor(packagePath)],
       ),
@@ -348,7 +350,8 @@ class _CatalogPanelState extends State<_CatalogPanel> {
     return AnimatedBuilder(
       animation: widget.plugin,
       builder: (context, _) {
-        var scan = widget.plugin._scans[path];
+        // The scan's own failure, which is the one that arrives first and
+        // explains why the daemon would refuse to start.
         if (widget.plugin._failures[path] case var failure?) {
           return Center(
             child: Padding(
@@ -360,43 +363,18 @@ class _CatalogPanelState extends State<_CatalogPanel> {
             ),
           );
         }
-        if (scan == null) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return ListView(
-          children: [
-            for (var diagnostic in scan.diagnostics)
-              ListTile(
-                dense: true,
-                leading: Icon(
-                  diagnostic.isError
-                      ? Icons.error_outline
-                      : Icons.warning_amber,
-                  size: 18,
-                  color: diagnostic.isError
-                      ? Theme.of(context).colorScheme.error
-                      : null,
-                ),
-                title: Text(
-                  '$diagnostic',
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-            for (var entry in scan.entries)
-              ListTile(
-                dense: true,
-                title: Text(
-                  entry.group == null
-                      ? entry.name
-                      : '${entry.group} / ${entry.name}',
-                ),
-                subtitle: Text(
-                  entry.id,
-                  style: const TextStyle(fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
+
+        // The live loop. The plugin's own scan stays — it is what fills the
+        // sidebar count and what `fw` and an agent read without a daemon
+        // running — but what the panel shows is the compiled catalog, because
+        // only the daemon knows which entries actually build.
+        var host = widget.plugin.host;
+        return CatalogView(
+          key: ValueKey(path),
+          appPackageRoot: host.workspace.appContext.appToolDirectory.path,
+          flutterSdkRoot: host.workspace.flutterSdk.root,
+          projectRoot: p.join(host.worktree.path, path),
+          roots: [widget.plugin._rootFor(path)],
         );
       },
     );
