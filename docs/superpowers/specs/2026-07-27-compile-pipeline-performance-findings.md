@@ -195,6 +195,57 @@ Not built. The 374ms is engine startup, it is paid only once per invocation, and
 the batch case — the one that dominates — already avoids it. Worth doing if
 single screenshots turn out to be the common agent pattern.
 
+## A long-lived daemon needs a version, not just an address
+
+The daemon outlives the session that started it, and clients attach to whatever
+is listening. Nothing restarted one when its *own code* changed — so editing the
+daemon and re-running kept yesterday's behaviour, silently.
+
+That is not a developer-only annoyance. The daemon decides what goes into a
+hot-reload delta. A daemon predating `registerAll` registers wrappers lazily,
+and hands a guest a delta missing a library the guest never had; the VM then
+says
+
+```
+lookup Failed: wrapInApp in @method in file: .../shell.dart
+```
+
+naming a symbol from the *wrapper's* imports, which is a long way from the
+cause. `DaemonConfig.daemonRevision` is derived from the daemon's own sources,
+so a newer client derives a different `DaemonAddress` and starts its own; the
+stale one idles out.
+
+It has to live **in the config**, not beside it: the daemon computes its own
+address from the config file it is handed. Passing the revision only to the
+client's `DaemonAddress` put the two on different sockets, and the daemon exited
+with *"address already served"* — a failure that reads like a race and is not
+one.
+
+**The general shape:** any process that outlives its caller and is found by a
+derived address must fold its own build into that address. Otherwise the address
+identifies *what it serves* but not *how*, and "reuse the running one" quietly
+becomes "reuse the old one".
+
+## Unix socket paths are shorter than you think
+
+`sun_path` is 104 bytes on macOS, 108 on Linux (`man 7 unix`). The CLI installs
+the GUI at `~/.flutterware/<sha1>/app/`, which is 70 characters before anything
+is appended, so a socket under that copy's `build/` overflows:
+
+```
+.../app/build/embedder/guest-session-5.sock    107 bytes
+```
+
+Both the daemon and the guest sockets now live in one `flutterwareRunDir()` —
+`~/.flutterware/run/`, 47 bytes with a name — and `checkSocketPath` fails with
+the offending path and the limit. The OS error names the limit but nothing that
+produced the path, which is why this took a report from outside to find.
+
+Worth recording that the cap was *already known* here — it is why the daemon
+socket was put in a short directory in the first place — and the guest socket
+was lengthened under the deep path anyway. Knowing a constraint and encoding it
+are different things; `checkSocketPath` is the encoding.
+
 ## Still open
 
 - **`_ensureCompiled` walks `lib/src/catalog` and `lib/src/embedder` on every
