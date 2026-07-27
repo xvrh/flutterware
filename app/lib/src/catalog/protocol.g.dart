@@ -29,12 +29,17 @@ DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
   entries: (json['entries'] as List<dynamic>)
       .map((e) => CatalogEntry.fromJson(e as Map<String, dynamic>))
       .toList(),
+  quarantined:
+      (json['quarantined'] as List<dynamic>?)
+          ?.map((e) => QuarantinedEntry.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const [],
   reused: json['reused'] as bool? ?? false,
   timings:
       (json['timings'] as Map<String, dynamic>?)?.map(
         (k, e) => MapEntry(k, (e as num).toInt()),
       ) ??
-      {},
+      const {},
   diagnostics:
       (json['diagnostics'] as List<dynamic>?)
           ?.map((e) => e as String)
@@ -52,7 +57,38 @@ Map<String, dynamic> _$DaemonReadyToJson(DaemonReady instance) =>
       'reused': instance.reused,
       'timings': instance.timings,
       'entries': instance.entries.map((e) => e.toJson()).toList(),
+      'quarantined': instance.quarantined.map((e) => e.toJson()).toList(),
       'diagnostics': instance.diagnostics,
+    };
+
+QuarantinedEntry _$QuarantinedEntryFromJson(Map<String, dynamic> json) =>
+    QuarantinedEntry(
+      entry: CatalogEntry.fromJson(json['entry'] as Map<String, dynamic>),
+      error: json['error'] as String,
+    );
+
+Map<String, dynamic> _$QuarantinedEntryToJson(QuarantinedEntry instance) =>
+    <String, dynamic>{
+      'entry': instance.entry.toJson(),
+      'error': instance.error,
+    };
+
+CatalogChanged _$CatalogChangedFromJson(Map<String, dynamic> json) =>
+    CatalogChanged(
+      entries: (json['entries'] as List<dynamic>)
+          .map((e) => CatalogEntry.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      quarantined:
+          (json['quarantined'] as List<dynamic>?)
+              ?.map((e) => QuarantinedEntry.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+    );
+
+Map<String, dynamic> _$CatalogChangedToJson(CatalogChanged instance) =>
+    <String, dynamic>{
+      'entries': instance.entries.map((e) => e.toJson()).toList(),
+      'quarantined': instance.quarantined.map((e) => e.toJson()).toList(),
     };
 
 DaemonCompiled _$DaemonCompiledFromJson(Map<String, dynamic> json) =>

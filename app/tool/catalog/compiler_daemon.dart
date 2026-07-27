@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutterware_app/src/catalog/asset_bundle.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
+import 'package:flutterware_app/src/catalog/compile_blame.dart';
 import 'package:flutterware_app/src/catalog/daemon_address.dart';
 import 'package:flutterware_app/src/catalog/discovery.dart';
 import 'package:flutterware_app/src/catalog/protocol.dart';
@@ -72,7 +73,20 @@ class _Daemon {
   late final FlutterCache _cache;
   late final EntrypointGenerator _generator;
   ResidentCompiler? _compiler;
-  var _entries = <CatalogEntry>[];
+
+  /// Everything discovery found, in tree order. Fixed until a rescan.
+  var _discovered = <CatalogEntry>[];
+
+  /// Entries the compiler could not build, by id. See [_compileServingWhatWorks].
+  final _quarantine = <String, _Quarantined>{};
+
+  /// What the daemon will actually serve.
+  List<CatalogEntry> get _entries => [
+    for (var entry in _discovered)
+      if (!_quarantine.containsKey(entry.id)) entry,
+  ];
+
+  CatalogEntry? _active;
 
   final _sessions = <_Session>[];
   final _timings = <String, int>{};
@@ -204,7 +218,7 @@ class _Daemon {
       );
     }
     mark('scan');
-    _entries = scan.entries;
+    _discovered = scan.entries;
     _diagnostics = [
       for (var d in scan.diagnostics)
         if (!d.isError) '$d',
@@ -222,7 +236,7 @@ class _Daemon {
       emitProbe: config.emitProbe,
     );
     _generator.registerAll(_entries);
-    _generator.select(_entries.first);
+    _makeActive(_entries.first);
 
     var engineDir = p.join(config.appPackageRoot, '.engine');
     await ensureEmbedderFramework(_cache, engineDir);
@@ -233,11 +247,18 @@ class _Daemon {
     var watch = Stopwatch()..start();
     var compiler = _compiler = await _startCompiler();
     mark('compiler start');
-    var cold = await compiler.compile();
+    var cold = await _compileServingWhatWorks();
     mark('cold compile');
     if (!cold.ok) {
       throw StateError(
-        'the first entry did not compile:\n${cold.output.join('\n')}',
+        'the catalog did not compile, and no single entry could be blamed:\n'
+        '${cold.output.join('\n')}',
+      );
+    }
+    if (_quarantine.isNotEmpty) {
+      stderr.writeln(
+        '[catalog] quarantined ${_quarantine.length} entries that do not '
+        'compile: ${_quarantine.keys.join(', ')}',
       );
     }
     _coldCompile = watch.elapsed;
@@ -264,6 +285,10 @@ class _Daemon {
     icuData: _cache.icuData,
     coldCompile: _coldCompile,
     entries: _entries,
+    quarantined: [
+      for (var q in _quarantine.values)
+        QuarantinedEntry(entry: q.entry, error: q.error),
+    ],
     reused: session.arrivedAfterPrepare,
     timings: _timings,
     diagnostics: _diagnostics,
@@ -292,7 +317,7 @@ class _Daemon {
     required bool full,
   }) async {
     var entry = _entryById(id);
-    var invalidated = _generator.select(entry);
+    var invalidated = _makeActive(entry);
     if (full) {
       // A guest spawned from scratch loads kernel_blob.bin off disk, and a
       // delta is not a program. `reset` makes the next compile emit the whole
@@ -301,7 +326,22 @@ class _Daemon {
       // another's warm state.
       _compiler!.reset();
     }
-    var compiled = await _compiler!.compile(invalidated);
+    var compiled = await _compileServingWhatWorks(invalidated);
+
+    // The requested entry may be exactly what the compile just quarantined, in
+    // which case the compile "succeeded" — without it. Say so rather than hand
+    // back a kernel rendering something else.
+    var quarantined = _quarantine[id];
+    if (quarantined != null) {
+      return DaemonCompiled(
+        requestId: requestId,
+        id: id,
+        compile: compiled.elapsed,
+        newSourceCount: 0,
+        error: 'this entry does not compile:\n${quarantined.error}',
+      );
+    }
+
     return DaemonCompiled(
       requestId: requestId,
       id: id,
@@ -312,6 +352,113 @@ class _Daemon {
       newSourceCount: compiled.newSourceCount,
       error: compiled.ok ? null : compiled.output.join('\n'),
     );
+  }
+
+  /// Makes [entry] the one the entrypoint renders, remembering it so a
+  /// quarantine can tell when it needs to pick another.
+  List<Uri> _makeActive(CatalogEntry entry) {
+    _active = entry;
+    return _generator.select(entry);
+  }
+
+  /// Compiles, and on failure drops whatever it can blame rather than failing
+  /// the whole catalog.
+  ///
+  /// The entrypoint imports every entry — that is what makes one compiler safe
+  /// to share — so a single demo mid-edit fails the compile for all of them.
+  /// This reads the compiler's own diagnostics, quarantines the entries
+  /// declared in the files it reported, and tries again with the rest.
+  ///
+  /// Errors nobody declares an entry in — a shared helper, the app itself —
+  /// cannot be fixed by dropping anything, so they stay fatal. The caller gets
+  /// the failed outcome and reports it.
+  Future<CompileOutcome> _compileServingWhatWorks([
+    List<Uri> invalidated = const [],
+  ]) async {
+    var pending = [..._readmitRepairedEntries(), ...invalidated];
+
+    // Bounded: each round quarantines at least one entry, and errors in one
+    // file routinely hide errors in the next.
+    late CompileOutcome outcome;
+    for (var round = 0; round < 10; round++) {
+      outcome = await _compiler!.compile(pending);
+      if (outcome.ok) return outcome;
+
+      var blame = CompileBlame.of(
+        outcome.output,
+        entries: _entries,
+        projectRoot: config.projectRoot,
+        // Diagnostics name paths relative to the compiler's working directory,
+        // which is the daemon's.
+        workingDirectory: config.appPackageRoot,
+      );
+      if (blame.isEmpty) {
+        stderr.writeln(
+          '[catalog] compile failed and nothing could be blamed; errors in '
+          '${blame.unattributed.join(', ')}',
+        );
+        return outcome;
+      }
+
+      var broken = [
+        for (var entry in _entries)
+          if (blame.entryIds.contains(entry.id)) entry,
+      ];
+      var error = outcome.output.join('\n');
+      for (var entry in broken) {
+        _quarantine[entry.id] = _Quarantined(
+          entry: entry,
+          error: error,
+          sourceModified: _sourceModified(entry),
+        );
+      }
+      _catalogChanged();
+
+      pending = _generator.drop(broken);
+      if (_entries.isEmpty) return outcome;
+      if (_active == null || _quarantine.containsKey(_active!.id)) {
+        pending.addAll(_makeActive(_entries.first));
+      }
+    }
+    return outcome;
+  }
+
+  /// Brings back quarantined entries whose source has been edited since it
+  /// failed, so fixing a demo is enough to get it back.
+  ///
+  /// Cheap to attempt: if it still does not compile it is quarantined again,
+  /// with the new timestamp, so this cannot loop.
+  List<Uri> _readmitRepairedEntries() {
+    var repaired = <CatalogEntry>[];
+    for (var quarantined in _quarantine.values.toList()) {
+      var modified = _sourceModified(quarantined.entry);
+      if (modified == null || modified == quarantined.sourceModified) continue;
+      _quarantine.remove(quarantined.entry.id);
+      repaired.add(quarantined.entry);
+    }
+    if (repaired.isEmpty) return [];
+    _catalogChanged();
+    return _generator.registerAll(repaired);
+  }
+
+  DateTime? _sourceModified(CatalogEntry entry) {
+    var file = File(p.join(config.projectRoot, entry.path));
+    return file.existsSync() ? file.statSync().modified : null;
+  }
+
+  /// Tells every client the servable set moved under it.
+  void _catalogChanged() {
+    if (!_prepared.isCompleted) return;
+    var message = CatalogChanged(
+      entries: _entries,
+      quarantined: [
+        for (var q in _quarantine.values)
+          QuarantinedEntry(entry: q.entry, error: q.error),
+      ],
+    );
+    for (var session in [..._sessions]) {
+      session.send(message);
+    }
   }
 
   Future<ResidentCompiler> _startCompiler() => ResidentCompiler.start(
@@ -357,6 +504,22 @@ class _Daemon {
       packageConfigPath: config.packageConfig,
     ).build(_sharedAssetsDir);
   }
+}
+
+/// An entry held back because it does not compile.
+class _Quarantined {
+  _Quarantined({
+    required this.entry,
+    required this.error,
+    required this.sourceModified,
+  });
+
+  final CatalogEntry entry;
+  final String error;
+
+  /// The demo file's timestamp when it was quarantined. A newer one means
+  /// somebody has been editing, which is grounds for trying again.
+  final DateTime? sourceModified;
 }
 
 /// One connected client.

@@ -109,6 +109,7 @@ sealed class DaemonResponse implements ProtocolMessage {
       switch (json['type']) {
         DaemonReady.wireName => DaemonReady.fromJson(json),
         DaemonCompiled.wireName => DaemonCompiled.fromJson(json),
+        CatalogChanged.wireName => CatalogChanged.fromJson(json),
         DaemonFailed.wireName => DaemonFailed.fromJson(json),
         var unknown => throw FormatException('unknown response "$unknown"'),
       };
@@ -124,6 +125,7 @@ class DaemonReady extends DaemonResponse {
     required this.icuData,
     required this.coldCompile,
     required this.entries,
+    this.quarantined = const [],
     this.reused = false,
     this.timings = const {},
     this.diagnostics = const [],
@@ -158,9 +160,14 @@ class DaemonReady extends DaemonResponse {
   /// GUI and `fw` can show it without scraping a log.
   final Map<String, int> timings;
 
-  /// Everything discovery found, in tree order. The daemon owns the scan so
-  /// the GUI and the CLI read one list rather than each building their own.
+  /// Everything discovery found *and* the compiler can build, in tree order.
+  /// The daemon owns the scan so the GUI and the CLI read one list rather than
+  /// each building their own.
   final List<CatalogEntry> entries;
+
+  /// Entries discovery found but the compiler could not build. [CatalogChanged]
+  /// is how a client hears about later changes to either list.
+  final List<QuarantinedEntry> quarantined;
 
   /// What the scan noticed but did not act on. Errors never reach here — the
   /// daemon refuses to start on those.
@@ -171,6 +178,50 @@ class DaemonReady extends DaemonResponse {
 
   @override
   Map<String, dynamic> toJson() => _$DaemonReadyToJson(this);
+}
+
+/// An entry the daemon is not serving because it does not compile.
+///
+/// Reported rather than dropped silently: the entrypoint imports every entry,
+/// so one demo mid-edit would otherwise take the whole catalog down, and a
+/// catalog that quietly shrinks is worse than one that says what broke.
+@JsonSerializable(explicitToJson: true)
+class QuarantinedEntry {
+  const QuarantinedEntry({required this.entry, required this.error});
+
+  factory QuarantinedEntry.fromJson(Map<String, dynamic> json) =>
+      _$QuarantinedEntryFromJson(json);
+
+  final CatalogEntry entry;
+
+  /// The compiler's diagnostics, verbatim — what a renderer shows the user.
+  final String error;
+
+  Map<String, dynamic> toJson() => _$QuarantinedEntryToJson(this);
+}
+
+/// The set of servable entries changed.
+///
+/// Broadcast to every client, not just the one whose compile caused it: a panel
+/// sitting idle while someone edits a demo would otherwise keep offering an
+/// entry the daemon can no longer build, or keep hiding one that now works.
+@JsonSerializable(explicitToJson: true)
+class CatalogChanged extends DaemonResponse {
+  const CatalogChanged({required this.entries, this.quarantined = const []});
+
+  factory CatalogChanged.fromJson(Map<String, dynamic> json) =>
+      _$CatalogChangedFromJson(json);
+
+  static const wireName = 'catalog-changed';
+
+  final List<CatalogEntry> entries;
+  final List<QuarantinedEntry> quarantined;
+
+  @override
+  String get type => wireName;
+
+  @override
+  Map<String, dynamic> toJson() => _$CatalogChangedToJson(this);
 }
 
 /// The result of compiling one entry into the accumulating entrypoint.

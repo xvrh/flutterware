@@ -7,6 +7,9 @@ analyzer:
     # one compiler is safe to share, which by construction leaves most of those
     # imports unused in any single build.
     - app/build/**
+    # A fixture that must not compile: headless_check asserts the catalog
+    # quarantines it rather than failing, and recovers when it is repaired.
+    - app/tool/catalog/demos/does_not_compile.dart
     - android/**
     - ios/**
     - web/**

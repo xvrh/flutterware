@@ -36,11 +36,21 @@ class EntrypointGenerator {
 
   final _wrapperIndex = <String, int>{};
 
+  /// Never reused, even after a [drop]. A recycled index would point a live
+  /// prefix at a wrapper written for a different entry, which S3 measured as
+  /// silently ignored rather than an error.
+  var _nextIndex = 0;
+
   String get entrypointPath => p.join(outputDir, 'main.dart');
 
   /// The entries whose wrappers are currently imported, in import order.
   Iterable<CatalogEntry> get visited => _visited;
   final _visited = <CatalogEntry>[];
+
+  /// What the entrypoint on disk currently renders. Null when the last [drop]
+  /// removed it and no [select] has chosen a replacement.
+  CatalogEntry? get active => _active;
+  CatalogEntry? _active;
 
   /// Imports every entry up front, so that from here on the only file a
   /// [select] changes is `main.dart`.
@@ -64,6 +74,7 @@ class EntrypointGenerator {
   List<Uri> select(CatalogEntry active) {
     Directory(outputDir).createSync(recursive: true);
 
+    _active = active;
     var invalidated = _register(active);
     var entrypoint = File(entrypointPath);
     entrypoint.writeAsStringSync(_entrypoint(active));
@@ -71,10 +82,39 @@ class EntrypointGenerator {
     return invalidated;
   }
 
+  /// Stops importing [entries], so nothing they pull in is compiled.
+  ///
+  /// How a demo that does not compile is kept from breaking the whole catalog:
+  /// the wrapper file stays on disk, but an entrypoint that does not import it
+  /// makes it unreachable, and the compiler only compiles what it can reach.
+  /// Returns what to invalidate.
+  List<Uri> drop(Iterable<CatalogEntry> entries) {
+    var removed = false;
+    for (var entry in entries) {
+      if (_wrapperIndex.remove(entry.id) == null) continue;
+      _visited.removeWhere((e) => e.id == entry.id);
+      removed = true;
+    }
+    if (!removed) return [];
+
+    var active = _active;
+    if (active == null || _wrapperIndex.containsKey(active.id)) {
+      // Rewritten, not merely invalidated: the file on disk is what the
+      // compiler reads, so leaving the import in place would keep compiling
+      // exactly what was just dropped.
+      return select(active ?? _visited.first);
+    }
+    // The active entry was itself dropped; the caller has to choose another and
+    // call [select]. Until then the entrypoint on disk is stale, so say so by
+    // returning nothing to invalidate.
+    _active = null;
+    return [];
+  }
+
   List<Uri> _register(CatalogEntry entry) {
     if (_wrapperIndex.containsKey(entry.id)) return [];
     Directory(outputDir).createSync(recursive: true);
-    var index = _wrapperIndex.length;
+    var index = _nextIndex++;
     _wrapperIndex[entry.id] = index;
     _visited.add(entry);
     var wrapper = File(p.join(outputDir, 'entry_$index.dart'));

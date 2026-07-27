@@ -71,6 +71,18 @@ Future<void> main(List<String> args) async {
     stdout.writeln('  [scan] $diagnostic');
   }
   check(File(ready.hostPath).existsSync(), 'the C host was built');
+  check(
+    ready.quarantined.map((q) => q.entry.symbol).contains('doesNotCompile'),
+    'the demo that does not compile was quarantined, not fatal',
+  );
+  check(
+    ready.quarantined.any((q) => q.error.contains('ThisTypeDoesNotExist')),
+    'the quarantine carries the compiler error, so a renderer can show it',
+  );
+  check(
+    entries.every((e) => e.symbol != 'doesNotCompile'),
+    'a quarantined entry is not offered',
+  );
   check(entries.length >= 5, 'discovery found the demo entries');
   check(
     entries.any((e) => e.group == 'Avatar tile'),
@@ -182,7 +194,7 @@ Future<void> main(List<String> args) async {
   );
   check(frames > 0, 'the guest composited frames ($frames)');
 
-  // 3. A second client on the same daemon — the reason the daemon is shared.
+  // 4. A second client on the same daemon — the reason the daemon is shared.
   //
   // What is asserted is both halves of that: that it costs nothing, and that it
   // is nonetheless isolated. The compiler, the generated entrypoint and the
@@ -230,6 +242,46 @@ Future<void> main(List<String> args) async {
     ),
     'the two kernels differ — a shared file would have made them identical',
   );
+
+  // 5. Fixing a broken demo brings it back, and every client is told.
+  //
+  // Both halves matter. Re-admission means fixing the file is enough — no
+  // restart, no rescan. The broadcast means the client that was *not* compiling
+  // still learns, which is the whole point of a shared daemon: a panel sitting
+  // idle while someone edits must not keep offering an entry the daemon cannot
+  // build, nor keep hiding one that now works.
+  stdout.writeln('[check] repairing the broken demo');
+  var brokenSource = File(
+    p.join(packageRoot, 'tool', 'catalog', 'demos', 'does_not_compile.dart'),
+  );
+  var broken = brokenSource.readAsStringSync();
+  var announced = second.catalogChanges.first.timeout(
+    const Duration(seconds: 30),
+    onTimeout: () =>
+        throw StateError('no CatalogChanged reached the second client'),
+  );
+  brokenSource.writeAsStringSync(
+    broken.replaceAll('ThisTypeDoesNotExist(missing: 1)', 'Placeholder()'),
+  );
+  try {
+    var repaired = await daemon.select(entries.first.id);
+    check(repaired.ok, 'the catalog still compiles after the repair');
+
+    var change = await announced;
+    check(
+      change.entries.any((e) => e.symbol == 'doesNotCompile'),
+      'the repaired entry came back without a restart or a rescan',
+    );
+    check(change.quarantined.isEmpty, 'and the quarantine emptied');
+    check(
+      (await daemon.select(
+        'tool/catalog/demos/does_not_compile.dart#doesNotCompile',
+      )).ok,
+      'the repaired entry can be selected',
+    );
+  } finally {
+    brokenSource.writeAsStringSync(broken);
+  }
 
   await second.close();
   await daemon.close();

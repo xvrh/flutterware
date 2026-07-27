@@ -97,10 +97,19 @@ class CompilerDaemonClient {
         socket.destroy();
         throw StateError('the compiler daemon failed: $message\n$stackTrace');
       case DaemonCompiled():
+      case CatalogChanged():
         socket.destroy();
-        throw StateError('the daemon compiled before it was ready');
+        throw StateError('the daemon spoke before it was ready: $first');
     }
   }
+
+  /// Fires whenever the set of servable entries moves — an entry quarantined
+  /// because it stopped compiling, or brought back because it was fixed.
+  ///
+  /// Pushed rather than polled: a panel sitting idle while someone edits a demo
+  /// would otherwise keep offering an entry the daemon can no longer build.
+  Stream<CatalogChanged> get catalogChanges =>
+      _responses.where((r) => r is CatalogChanged).cast<CatalogChanged>();
 
   /// Makes [id] the active entry and compiles it into the entrypoint.
   ///
