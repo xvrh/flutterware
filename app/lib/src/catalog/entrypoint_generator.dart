@@ -237,7 +237,23 @@ class _CatalogHost extends StatelessWidget {
     // MediaQuery — and a SizedBox in here would fight it: an entry declaring
     // desktop would run off the edge of a phone that was picked on purpose.
     // The annotation still chooses which device the picker starts on.
-    return Directionality(textDirection: TextDirection.ltr, child: child);
+    //
+    // The device's safe areas arrive as view *insets*, because
+    // FlutterWindowMetricsEvent has no padding field — only
+    // `physical_view_inset_*` — and a frame drawn in the host's process cannot
+    // reach in here any other way. Turning them back into padding belongs
+    // above the entry's wrapper: `View` is what builds the root MediaQuery,
+    // and WidgetsApp inherits it rather than making its own, so an override
+    // here is what a MaterialApp inside the wrapper will read.
+    var media = MediaQuery.of(context);
+    return MediaQuery(
+      data: media.copyWith(
+        padding: media.viewInsets,
+        viewPadding: media.viewInsets,
+        viewInsets: EdgeInsets.zero,
+      ),
+      child: Directionality(textDirection: TextDirection.ltr, child: child),
+    );
   }
 }
 ''';
