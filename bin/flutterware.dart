@@ -44,7 +44,12 @@ void main(List<String> arguments) async {
   );
   var appPath = p.join(copiedSourcePath, 'app');
 
-  var compiledCliPath = 'build/compiled_cli${Platform.isWindows ? '.exe' : ''}';
+  // A kernel snapshot rather than an AOT executable, and not by preference:
+  // `dart compile exe` refuses to run at all once anything in the resolution
+  // has a build hook, and `path_provider_foundation` pulls in `objective_c`,
+  // which has one. Kernel does not link native assets ahead of time, so it is
+  // unaffected — and it starts fast enough that this is no real loss.
+  var compiledCliPath = 'build/compiled_cli.dill';
   var compiledCliFile = File(p.join(copiedSourcePath, 'app', compiledCliPath));
   //TODO(xha): we should detect if any file has changed and re-compile as needed.
   if (!compiledCliFile.existsSync() ||
@@ -71,7 +76,7 @@ void main(List<String> arguments) async {
     }
     var compiledResult = await Process.run(Platform.resolvedExecutable, [
       'compile',
-      'exe',
+      'kernel',
       '-o',
       compiledCliPath,
       'bin/flutterware.dart',
@@ -86,8 +91,10 @@ void main(List<String> arguments) async {
 
   logger.printTrace('Start process ${compiledCliFile.path}');
   var process = await Process.start(
-    compiledCliFile.path,
-    arguments,
+    // The snapshot is not executable on its own; it needs the VM that produced
+    // it, which is the one running this bootstrapper.
+    Platform.resolvedExecutable,
+    [compiledCliFile.path, ...arguments],
     environment: {
       dartExecutableEnvironmentKey: Platform.resolvedExecutable,
       appPathEnvironmentKey: p.absolute(appPath),
