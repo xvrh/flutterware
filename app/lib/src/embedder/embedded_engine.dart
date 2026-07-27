@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -11,8 +12,19 @@ enum EmbeddedEnginePhase { building, running, error }
 
 /// Drives an out-of-process Flutter-engine guest and bridges its rendered
 /// frames into a host external texture.
+typedef GuestBuild = ({String hostPath, String assetsDir, String icuData});
+
 class EmbeddedEngine extends ChangeNotifier {
-  EmbeddedEngine({required this.appPackageRoot, required this.flutterSdkRoot});
+  EmbeddedEngine({
+    required this.appPackageRoot,
+    required this.flutterSdkRoot,
+    this.buildGuest,
+  });
+
+  /// Produces the guest's binary and assets. Defaults to running
+  /// `tool/embedder/build_guest.dart`, which compiles the fixed harness scene;
+  /// a caller with its own entrypoint and resident compiler supplies its own.
+  final Future<GuestBuild> Function()? buildGuest;
 
   /// Absolute path to the `flutterware_app` package root (the `app/` dir).
   final String appPackageRoot;
@@ -37,13 +49,18 @@ class EmbeddedEngine extends ChangeNotifier {
   Future<void> _handleChain = Future.value();
   int _currentGeneration = -1;
   bool _disposed = false;
+  final Completer<String> _vmServiceUri = Completer<String>();
+
+  /// The guest's VM-service URI, which it prints on stdout at startup. Needed
+  /// to hot-reload the live guest.
+  Future<String> get vmServiceUri => _vmServiceUri.future;
 
   String get _dartExecutable => p.join(flutterSdkRoot, 'bin', 'dart');
 
   /// Builds and launches the guest. Call once.
   Future<void> start({int width = 800, int height = 600}) async {
     try {
-      var build = await _runBuild();
+      var build = await (buildGuest ?? _runBuild)();
       if (_disposed) return;
 
       var buildDir = p.join(appPackageRoot, 'build', 'embedder');
@@ -62,9 +79,16 @@ class EmbeddedEngine extends ChangeNotifier {
         '$width',
         '$height',
       ], mode: ProcessStartMode.normal);
-      _guest!.stdout.transform(const SystemEncoding().decoder).listen((line) {
-        debugPrint('[guest] $line');
-      });
+      _guest!.stdout
+          .transform(const SystemEncoding().decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+            debugPrint('[guest] $line');
+            var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
+            if (match != null && !_vmServiceUri.isCompleted) {
+              _vmServiceUri.complete(match.group(1));
+            }
+          });
       _guest!.stderr.transform(const SystemEncoding().decoder).listen((line) {
         debugPrint('[guest:err] $line');
       });
@@ -84,8 +108,7 @@ class EmbeddedEngine extends ChangeNotifier {
     }
   }
 
-  Future<({String hostPath, String assetsDir, String icuData})>
-  _runBuild() async {
+  Future<GuestBuild> _runBuild() async {
     var result = await Process.run(_dartExecutable, [
       'run',
       p.join('tool', 'embedder', 'build_guest.dart'),
@@ -167,6 +190,9 @@ class EmbeddedEngine extends ChangeNotifier {
   }
 
   void _fail(String message) {
+    if (!_vmServiceUri.isCompleted) {
+      _vmServiceUri.completeError(StateError(message));
+    }
     errorMessage = message;
     phase = EmbeddedEnginePhase.error;
     notifyListeners();
