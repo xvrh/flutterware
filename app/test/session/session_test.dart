@@ -19,8 +19,16 @@ void main() {
   tearDown(() => session.dispose());
 
   test('resolves the repo root by walking up', () {
-    expect(session.root, endsWith('gui-cli-mcp-architecture-391711'));
+    // Asserted by what a root *is*, not by its name: this test used to expect
+    // the directory the branch was written in, which passed in one worktree
+    // and failed everywhere else.
     expect(File('${session.root}/tool/flutterware.dart').existsSync(), isTrue);
+    // Deliberately not asserting on `.git`: it is a directory in the main
+    // checkout and a *file* in a linked worktree, so testing for either shape
+    // just swaps one environment-specific failure for another.
+    // Opened from `app/`, so the root has to be strictly above it.
+    expect(Directory.current.path, startsWith(session.root));
+    expect(Directory.current.path, isNot(session.root));
   });
 
   test('resolves a core per declared plugin, in declared order', () {
