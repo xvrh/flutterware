@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
@@ -6,10 +8,15 @@ import '../ui/theme.dart';
 import '../utils/router_outlet.dart';
 import 'shell_controller.dart';
 import 'worktree.dart';
+import 'worktree_home.dart';
 
 /// Width the macOS traffic lights occupy; band content insets past them.
 const _trafficLightInset = 78.0;
 const _bandHeight = 40.0;
+
+/// How far tabs sit below the top of the band. Everything else in the band
+/// aligns to the box this leaves, not to the band itself.
+const _tabInset = 6.0;
 const _sidebarWidth = 232.0;
 
 /// Maps a plugin [Tone] to a palette colour. The single place tones become
@@ -94,23 +101,7 @@ class _Band extends StatelessWidget {
               ],
             ),
           ),
-          if (shell.isBusy)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: FwSpacing.md),
-              child: SizedBox.square(
-                dimension: 13,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          Tooltip(
-            message: 'Rescan worktrees',
-            child: IconButton(
-              onPressed: shell.refresh,
-              icon: Icon(Icons.refresh, size: 16, color: colors.mut),
-              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-              padding: EdgeInsets.zero,
-            ),
-          ),
+          _ReloadButton(shell),
           const Gap(FwSpacing.md),
         ],
       ),
@@ -118,8 +109,45 @@ class _Band extends StatelessWidget {
   }
 }
 
+/// Re-runs the selected worktree's `tool/flutterware.dart`.
+///
+/// Worktree discovery is *not* what this does — the switcher rescans itself
+/// when it opens, which is the only moment that list is looked at.
+class _ReloadButton extends StatelessWidget {
+  const _ReloadButton(this.shell);
+
+  final ShellController shell;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var worktree = shell.selected;
+    var blocked =
+        worktree != null && (shell.sessionFor(worktree)?.isBlocked ?? false);
+    var enabled = worktree != null && !blocked && !shell.isLoading(worktree);
+
+    return Tooltip(
+      message: blocked
+          ? 'A plugin is busy; reloading would tear it down'
+          : 'Reload this worktree’s config',
+      child: IconButton(
+        onPressed: enabled ? () => shell.reloadConfig() : null,
+        icon: Icon(Icons.refresh, size: 16, color: colors.mut),
+        disabledColor: colors.mut3,
+        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+        padding: EdgeInsets.zero,
+      ),
+    );
+  }
+}
+
+/// The key a worktree's tab carries, so a test can point at the tab rather than
+/// at a name the home screen also shows.
+Key worktreeTabKey(Worktree worktree) => ValueKey('tab:${worktree.path}');
+
 class _WorktreeTab extends StatelessWidget {
-  const _WorktreeTab(this.shell, this.worktree);
+  _WorktreeTab(this.shell, this.worktree)
+    : super(key: worktreeTabKey(worktree));
 
   final ShellController shell;
   final Worktree worktree;
@@ -128,29 +156,36 @@ class _WorktreeTab extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var selected = shell.selected == worktree;
+    var loading = shell.isLoading(worktree);
     var status = shell.sessionFor(worktree)?.status ?? Status.none;
     var radius = Radius.circular(context.radii.radiusSmall);
+    // Always allocated, transparent when unselected: a border that appears on
+    // selection changes the tab's size and shifts everything beside it.
+    var edge = BorderSide(color: selected ? colors.line : Colors.transparent);
 
     return GestureDetector(
       onTap: () => shell.select(worktree),
       child: Container(
-        height: _bandHeight - 6,
-        margin: const EdgeInsets.only(top: 6, right: FwSpacing.xs),
+        height: _bandHeight - _tabInset,
+        margin: const EdgeInsets.only(top: _tabInset, right: FwSpacing.xs),
         padding: const EdgeInsets.only(left: FwSpacing.lg, right: FwSpacing.sm),
         decoration: BoxDecoration(
           color: selected ? colors.bg : Colors.transparent,
           borderRadius: BorderRadius.only(topLeft: radius, topRight: radius),
-          border: selected
-              ? Border(
-                  top: BorderSide(color: colors.line),
-                  left: BorderSide(color: colors.line),
-                  right: BorderSide(color: colors.line),
-                )
-              : null,
+          border: Border(top: edge, left: edge, right: edge),
         ),
         child: Row(
           children: [
-            if (!status.isEmpty && status.tone != Tone.neutral) ...[
+            if (loading) ...[
+              SizedBox.square(
+                dimension: 9,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: colors.mut2,
+                ),
+              ),
+              const Gap(FwSpacing.md),
+            ] else if (!status.isEmpty && status.tone != Tone.neutral) ...[
               _Dot(toneColor(colors, status.tone)),
               const Gap(FwSpacing.sm),
             ],
@@ -236,34 +271,45 @@ class _SwitcherButtonState extends State<_SwitcherButton> {
 
   ShellController get shell => widget.shell;
 
+  /// Opening the menu is the only moment this list is read, so it is also the
+  /// only moment worth rescanning. Not awaited: the last known worktrees are
+  /// shown immediately and git's answer folds in when it arrives.
+  void _open() {
+    _menuController.open();
+    unawaited(shell.rescanWorktrees());
+  }
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Center(
-      child: MenuAnchor(
-        controller: _menuController,
-        alignmentOffset: const Offset(0, 4),
-        style: MenuStyle(
-          backgroundColor: WidgetStatePropertyAll(colors.bg),
-          padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(vertical: FwSpacing.md),
-          ),
-          shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(context.radii.radius),
-              side: BorderSide(color: colors.line),
+    return Padding(
+      // Aligns to the tabs' box rather than the band's, which is 6px taller.
+      padding: const EdgeInsets.only(top: _tabInset),
+      child: Center(
+        child: MenuAnchor(
+          controller: _menuController,
+          alignmentOffset: const Offset(0, 4),
+          style: MenuStyle(
+            backgroundColor: WidgetStatePropertyAll(colors.bg),
+            padding: const WidgetStatePropertyAll(
+              EdgeInsets.symmetric(vertical: FwSpacing.md),
+            ),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(context.radii.radius),
+                side: BorderSide(color: colors.line),
+              ),
             ),
           ),
-        ),
-        menuChildren: [_SwitcherMenu(shell, _menuController)],
-        builder: (context, controller, child) => Tooltip(
-          message: 'Open a worktree',
-          child: IconButton(
-            onPressed: () =>
-                controller.isOpen ? controller.close() : controller.open(),
-            icon: Icon(Icons.add, size: 16, color: colors.mut),
-            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-            padding: EdgeInsets.zero,
+          menuChildren: [_SwitcherMenu(shell, _menuController)],
+          builder: (context, controller, child) => Tooltip(
+            message: 'Switch worktree',
+            child: IconButton(
+              onPressed: () => controller.isOpen ? controller.close() : _open(),
+              icon: Icon(Icons.expand_more, size: 18, color: colors.mut),
+              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+              padding: EdgeInsets.zero,
+            ),
           ),
         ),
       ),
@@ -334,7 +380,7 @@ class _SwitcherRow extends StatelessWidget {
         // A MenuAnchor menu lives in an overlay, not on the Navigator — popping
         // the route here would unmount the whole shell.
         menu.close();
-        isOpen ? shell.select(worktree) : shell.open(worktree);
+        isOpen ? shell.select(worktree) : unawaited(shell.open(worktree));
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(
@@ -379,7 +425,8 @@ class _SwitcherRow extends StatelessWidget {
   }
 }
 
-/// One row per plugin, with the status its report carries.
+/// The worktree's home row, then one row per plugin with the status its report
+/// carries.
 class _Sidebar extends StatelessWidget {
   const _Sidebar(this.shell);
 
@@ -388,6 +435,7 @@ class _Sidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    var worktree = shell.selected;
     var session = shell.selectedSession;
     return Container(
       width: _sidebarWidth,
@@ -395,55 +443,113 @@ class _Sidebar extends StatelessWidget {
         color: colors.panel,
         border: Border(right: BorderSide(color: colors.line)),
       ),
-      child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: FwSpacing.lg),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.xl,
-              0,
-              FwSpacing.xl,
-              FwSpacing.md,
+      child: worktree == null
+          ? null
+          : ListView(
+              padding: const EdgeInsets.symmetric(vertical: FwSpacing.lg),
+              children: [
+                _Row(
+                  // Not the worktree's name: the tab above already says that,
+                  // and this row is a destination, not a label.
+                  label: 'Overview',
+                  selected: shell.isHome,
+                  onTap: shell.selectHome,
+                  icon: Icons.home_outlined,
+                  // The config error lives on that screen, so the row has to
+                  // say so — otherwise it is invisible from any plugin panel.
+                  status: shell.errorFor(worktree) == null
+                      ? Status.none
+                      : const Status.error('config'),
+                ),
+                const Gap(FwSpacing.lg),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    FwSpacing.xl,
+                    0,
+                    FwSpacing.xl,
+                    FwSpacing.md,
+                  ),
+                  child: Text('PLUGINS', style: context.type.micro),
+                ),
+                if (session == null)
+                  const _SidebarSkeleton()
+                else if (session.plugins.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: FwSpacing.xl,
+                    ),
+                    child: Text(
+                      'No plugins declared.\nAdd them in tool/flutterware.dart.',
+                      style: context.type.caption,
+                    ),
+                  )
+                else
+                  for (var plugin in session.plugins) ...[
+                    _PluginRow(shell, plugin),
+                    // Expanded only for the selected plugin: a sidebar showing
+                    // every package of every plugin at once is a wall, not a
+                    // summary.
+                    if (shell.selectedPluginId == plugin.id)
+                      for (var child in plugin.report.children)
+                        _ChildRow(shell, plugin.id, child),
+                  ],
+              ],
             ),
-            child: Text('PLUGINS', style: context.type.micro),
-          ),
-          if (session == null || session.plugins.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: FwSpacing.xl),
-              child: Text(
-                'No plugins declared.\nAdd them in tool/flutterware.dart.',
-                style: context.type.caption,
-              ),
-            )
-          else
-            for (var plugin in session.plugins) ...[
-              _PluginRow(shell, plugin),
-              // Expanded only for the selected plugin: a sidebar showing every
-              // package of every plugin at once is a wall, not a summary.
-              if (shell.selectedPluginId == plugin.id)
-                for (var child in plugin.report.children)
-                  _ChildRow(shell, plugin.id, child),
-            ],
-        ],
-      ),
     );
   }
 }
 
-class _PluginRow extends StatelessWidget {
-  const _PluginRow(this.shell, this.plugin);
-
-  final ShellController shell;
-  final NativePlugin plugin;
+/// Stands in for the plugin rows while the config is still running, so the
+/// sidebar has the shape it will have rather than jumping into existence.
+class _SidebarSkeleton extends StatelessWidget {
+  const _SidebarSkeleton();
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var report = plugin.report;
-    var selected = shell.selectedPluginId == plugin.id;
+    return Column(
+      children: [
+        for (var i = 0; i < 3; i++)
+          Container(
+            height: 14,
+            margin: EdgeInsets.fromLTRB(
+              FwSpacing.xl,
+              FwSpacing.md,
+              FwSpacing.xl + i * 18.0,
+              FwSpacing.md,
+            ),
+            decoration: BoxDecoration(
+              color: colors.line,
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
+/// The one row shape the sidebar uses: a filled selection, no border, so
+/// selecting never changes anyone's size.
+class _Row extends StatelessWidget {
+  const _Row({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+    this.status = Status.none,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? icon;
+  final Status status;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
     return GestureDetector(
-      onTap: () => shell.selectPlugin(plugin.id),
+      onTap: onTap,
       child: Container(
         margin: const EdgeInsets.symmetric(
           horizontal: FwSpacing.md,
@@ -459,21 +565,32 @@ class _PluginRow extends StatelessWidget {
         ),
         child: Row(
           children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 14,
+                color: selected ? colors.accent : colors.mut,
+              ),
+              const Gap(FwSpacing.md),
+            ],
             Expanded(
               child: Text(
-                report.label,
+                label,
+                overflow: TextOverflow.ellipsis,
                 style: selected
                     ? context.type.bodyStrong.copyWith(color: colors.accent)
                     : context.type.body,
               ),
             ),
-            if (!report.status.isEmpty)
+            if (!status.isEmpty) ...[
+              const Gap(FwSpacing.sm),
               Text(
-                report.status.message,
+                status.message,
                 style: context.type.micro.copyWith(
-                  color: toneColor(colors, report.status.tone),
+                  color: toneColor(colors, status.tone),
                 ),
               ),
+            ],
           ],
         ),
       ),
@@ -481,8 +598,26 @@ class _PluginRow extends StatelessWidget {
   }
 }
 
-/// One package of a plugin, indented under it. Selecting it is what raises
-/// that package's work.
+class _PluginRow extends StatelessWidget {
+  const _PluginRow(this.shell, this.plugin);
+
+  final ShellController shell;
+  final NativePlugin plugin;
+
+  @override
+  Widget build(BuildContext context) {
+    var report = plugin.report;
+    return _Row(
+      label: report.label,
+      selected: shell.selectedPluginId == plugin.id,
+      onTap: () => shell.selectPlugin(plugin.id),
+      status: report.status,
+    );
+  }
+}
+
+/// One package of a plugin, hung off a rail rather than boxed. Selecting it is
+/// what raises that package's work.
 class _ChildRow extends StatelessWidget {
   const _ChildRow(this.shell, this.pluginId, this.child);
 
@@ -499,38 +634,43 @@ class _ChildRow extends StatelessWidget {
     return GestureDetector(
       onTap: () => shell.selectChild(pluginId, child.id),
       child: Container(
-        margin: const EdgeInsets.only(
-          left: FwSpacing.xxl,
-          right: FwSpacing.md,
-          top: 1,
-          bottom: 1,
-        ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.lg,
-          vertical: FwSpacing.sm,
-        ),
+        // The rail is always drawn — only its colour changes — so the row keeps
+        // its geometry and nothing below it moves on selection.
+        margin: const EdgeInsets.only(left: FwSpacing.xxl),
         decoration: BoxDecoration(
-          color: selected ? colors.bg : Colors.transparent,
-          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-          border: selected ? Border.all(color: colors.line) : null,
+          border: Border(
+            left: BorderSide(
+              color: selected ? colors.accent : colors.line,
+              width: 2,
+            ),
+          ),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          FwSpacing.lg,
+          FwSpacing.sm,
+          FwSpacing.xl,
+          FwSpacing.sm,
         ),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 child.label,
-                style: selected
-                    ? context.type.bodySmall.copyWith(color: colors.ink)
-                    : context.type.bodySmall.copyWith(color: colors.mut),
+                overflow: TextOverflow.ellipsis,
+                style: context.type.bodySmall.copyWith(
+                  color: selected ? colors.ink : colors.mut,
+                ),
               ),
             ),
-            if (!child.status.isEmpty)
+            if (!child.status.isEmpty) ...[
+              const Gap(FwSpacing.sm),
               Text(
                 child.status.message,
                 style: context.type.micro.copyWith(
                   color: toneColor(colors, child.status.tone),
                 ),
               ),
+            ],
           ],
         ),
       ),
@@ -539,7 +679,7 @@ class _ChildRow extends StatelessWidget {
 }
 
 /// Mounts the selected plugin's panel — the one place a native plugin is
-/// unrestricted Flutter.
+/// unrestricted Flutter — or the worktree's home screen.
 class _Panel extends StatelessWidget {
   const _Panel(this.shell);
 
@@ -548,24 +688,20 @@ class _Panel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    var worktree = shell.selected;
     var session = shell.selectedSession;
-    var error = session == null ? null : shell.errorFor(session.worktree);
 
     Widget body;
-    if (error != null) {
-      body = _Message(
-        title: 'This worktree’s config could not be read',
-        detail: error.message,
-        tone: Tone.error,
-      );
-    } else if (session == null) {
+    if (worktree == null) {
       body = const _Message(title: 'No worktree open');
+    } else if (session == null) {
+      body = _Loading(worktree.displayName);
     } else {
       var plugin = shell.selectedPluginId == null
           ? null
           : session.pluginById(shell.selectedPluginId!);
       body = plugin == null
-          ? const _Message(title: 'No plugin selected')
+          ? WorktreeHome(shell, worktree)
           : KeyedSubtree(
               // Rebuild the panel from scratch when the worktree or the plugin
               // changes; panels hold their own state and must not leak it
@@ -581,41 +717,44 @@ class _Panel extends StatelessWidget {
   }
 }
 
-class _Message extends StatelessWidget {
-  const _Message({required this.title, this.detail, this.tone = Tone.neutral});
+/// What an opening worktree shows while its config runs. The tab is already
+/// there; this is the rest of the window catching up.
+class _Loading extends StatelessWidget {
+  const _Loading(this.name);
 
-  final String title;
-  final String? detail;
-  final Tone tone;
+  final String name;
 
   @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(FwSpacing.xxxl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              title,
-              style: context.type.heading.copyWith(
-                color: toneColor(colors, tone),
-              ),
-            ),
-            if (detail != null) ...[
-              const Gap(FwSpacing.md),
-              SelectableText(
-                detail!,
-                style: context.type.caption,
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ],
+  Widget build(BuildContext context) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox.square(
+          dimension: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
         ),
+        const Gap(FwSpacing.lg),
+        Text('Reading $name’s config…', style: context.type.caption),
+      ],
+    ),
+  );
+}
+
+class _Message extends StatelessWidget {
+  const _Message({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(FwSpacing.xxxl),
+      child: Text(
+        title,
+        style: context.type.heading.copyWith(color: context.colors.mut2),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _Dot extends StatelessWidget {

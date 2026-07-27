@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 
+import 'src/catalog/catalog_session.dart';
 import 'src/catalog/catalog_view.dart';
 import 'src/utils/flutter_sdk.dart';
 
@@ -46,21 +46,46 @@ Future<void> main() async {
       theme: ThemeData(colorSchemeSeed: const Color(0xff3366ff)),
       home: (_appRootDefine.isEmpty || flutterSdkRoot.isEmpty)
           ? const _MissingDefines()
-          : Scaffold(
-              body: CatalogView(
-                appPackageRoot: _appRootDefine,
-                // Defaults to the app package, where flutterware's own demos
-                // live; override to drive a different project through the same
-                // widget.
-                projectRoot: _projectDefine.isEmpty
-                    ? _appRootDefine
-                    : _projectDefine,
-                flutterSdkRoot: flutterSdkRoot,
-                roots: _rootsDefine.split(','),
-              ),
-            ),
+          : _Harness(flutterSdkRoot: flutterSdkRoot),
     ),
   );
+}
+
+/// Stands in for the plugin: owns the session the view renders.
+class _Harness extends StatefulWidget {
+  const _Harness({required this.flutterSdkRoot});
+
+  final String flutterSdkRoot;
+
+  @override
+  State<_Harness> createState() => _HarnessState();
+}
+
+class _HarnessState extends State<_Harness> {
+  late final CatalogSession _session = CatalogSession(
+    appPackageRoot: _appRootDefine,
+    // Defaults to the app package, where flutterware's own demos live;
+    // override to drive a different project through the same widget.
+    projectRoot: _projectDefine.isEmpty ? _appRootDefine : _projectDefine,
+    flutterSdkRoot: widget.flutterSdkRoot,
+    roots: _rootsDefine.split(','),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _session.start();
+  }
+
+  @override
+  void dispose() {
+    _session.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      Scaffold(body: CatalogView(session: _session));
 }
 
 class _MissingDefines extends StatelessWidget {

@@ -112,8 +112,85 @@ void main() {
       'fix/pty',
     ]);
     expect(shell.selected!.branch, 'main');
-    // The first declared plugin is mounted by default.
-    expect(shell.selectedPluginId, 'a.one');
+    // Nothing is mounted: a worktree opens on its own home screen rather than
+    // on whichever plugin happens to be declared first.
+    expect(shell.isHome, isTrue);
+    expect(shell.selectedPluginId, isNull);
+  });
+
+  test('the tab exists before the config finishes running', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var explorer = shell.closedWorktrees.first;
+
+    // Not awaited: this is the window the user used to spend looking at an
+    // unchanged window.
+    var opening = shell.open(explorer);
+    expect(shell.openWorktrees.map((w) => w.branch), [
+      'main',
+      'feature/explorer',
+    ]);
+    expect(shell.isLoading(explorer), isTrue);
+    expect(shell.sessionFor(explorer), isNull);
+
+    await opening;
+    expect(shell.isLoading(explorer), isFalse);
+    expect(shell.sessionFor(explorer), isNotNull);
+  });
+
+  test('a worktree closed while it was still loading stays closed', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var explorer = shell.closedWorktrees.first;
+
+    var opening = shell.open(explorer);
+    expect(shell.close(explorer), isTrue);
+    await opening;
+
+    expect(shell.openWorktrees.map((w) => w.branch), ['main']);
+    expect(shell.sessionFor(explorer), isNull);
+  });
+
+  test('selection is remembered per worktree', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var main = shell.worktrees.first;
+    var explorer = shell.closedWorktrees.first;
+
+    shell.selectPlugin('a.two');
+    await shell.open(explorer);
+    expect(shell.isHome, isTrue, reason: 'the new worktree opens on its home');
+
+    shell.select(main);
+    expect(shell.selectedPluginId, 'a.two');
+  });
+
+  test('reloading the config rebuilds the plugins in place', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    shell.selectPlugin('a.two');
+    var before = shell.selectedSession!.plugins.first;
+
+    expect(await shell.reloadConfig(), isTrue);
+
+    expect(shell.openWorktrees.map((w) => w.branch), ['main']);
+    expect(_disposedIds, ['/repo:a.one', '/repo:a.two']);
+    expect(identical(shell.selectedSession!.plugins.first, before), isFalse);
+    // Where you were survives the reload; the plugin is still declared.
+    expect(shell.selectedPluginId, 'a.two');
+  });
+
+  test('a blocking guard refuses the reload too', () async {
+    var shell = _controller(
+      factories: {
+        'a.one': (host) => _Fake(host, guards: const [Guard.block('dirty')]),
+        'a.two': _Fake.new,
+      },
+    );
+    await shell.start('/repo');
+
+    expect(await shell.reloadConfig(), isFalse);
+    expect(_disposedIds, isEmpty);
   });
 
   test('opening a second worktree gives it its own plugin instances', () async {
@@ -178,7 +255,7 @@ void main() {
     expect(shell.sessionFor(shell.worktrees[0])!.plugins, isEmpty);
   });
 
-  test('refresh closes worktrees git no longer reports', () async {
+  test('rescanning closes worktrees git no longer reports', () async {
     var shell = _controller();
     await shell.start('/repo');
     await shell.open(shell.closedWorktrees.first);
@@ -191,7 +268,7 @@ void main() {
     _currentListing =
         'worktree /repo\nbranch refs/heads/main\n\n'
         'worktree /repo-pty\nbranch refs/heads/fix/pty\n';
-    await shell.refresh();
+    await shell.rescanWorktrees();
 
     expect(shell.worktrees.map((w) => w.branch), ['main', 'fix/pty']);
     expect(shell.openWorktrees.map((w) => w.branch), ['main']);

@@ -75,16 +75,17 @@ void main() {
     // not have started any work.
     expect(workspace.isRealised('.'), isFalse);
     var report = dependencies.report;
-    // The parent counts packages rather than summing their dependency counts,
-    // which would double-count everything shared between them.
-    expect(report.status.message, '3 packages');
+    // Nothing has loaded, so there is nothing to say. Counting dependencies
+    // across packages would double-count everything shared between them
+    // anyway, and the number only exists once the panel asks for it.
+    expect(report.status, Status.none);
     expect(report.children.map((c) => c.id), ['.', 'app', 'examples/example']);
     expect(report.children.map((c) => c.label), [
       'root',
       'app',
       'examples/example',
     ]);
-    expect(report.children.every((c) => c.status.message == '—'), isTrue);
+    expect(report.children.every((c) => c.status.isEmpty), isTrue);
     expect(report.view.toText(), contains('not computed'));
 
     workspace.dispose();

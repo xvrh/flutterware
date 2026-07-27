@@ -89,8 +89,51 @@ class CatalogSession extends ChangeNotifier {
   Future<void> _queue = Future.value();
   bool _disposed = false;
 
+  /// What the session is busy doing, or null when it is idle. A steady word,
+  /// not a number: this is what a sidebar shows while the compiler works, and a
+  /// figure that changes every second reads as movement rather than as news.
+  String? get busyWith => _busyWith;
+  String? _busyWith;
+
+  /// How long the current [busyWith] has been running.
+  ///
+  /// Only counts up on screen where a counter is the point — the cold-start
+  /// screen, which is a spinner and nothing else.
+  Duration get busyFor => _busySince.elapsed;
+  final _busySince = Stopwatch();
+  Timer? _ticker;
+
+  /// [tick] rebuilds listeners each second so an elapsed readout advances. Off
+  /// by default: everywhere but a dedicated loading screen, the label alone
+  /// says what is happening and its disappearance says when it stopped.
+  void _busy(String what, {bool tick = false}) {
+    if (_disposed) return;
+    _busyWith = what;
+    _busySince
+      ..reset()
+      ..start();
+    _ticker?.cancel();
+    _ticker = !tick
+        ? null
+        : Timer.periodic(const Duration(seconds: 1), (_) {
+            if (!_disposed && _busyWith != null) notifyListeners();
+          });
+    notifyListeners();
+  }
+
+  void _idle() {
+    _busyWith = null;
+    _busySince.stop();
+    _ticker?.cancel();
+    _ticker = null;
+    if (!_disposed) notifyListeners();
+  }
+
   /// Brings up the daemon, the guest and the reload channel.
   Future<void> start({int width = 900, int height = 700}) async {
+    // The one place a counter earns its keep: a cold compile is tens of seconds
+    // behind a spinner, and the screen has nothing else on it.
+    _busy('building', tick: true);
     try {
       var (daemon, ready) = await CompilerDaemonClient.connect(
         dartExecutable: p.join(flutterSdkRoot, 'bin', 'dart'),
@@ -134,7 +177,7 @@ class CatalogSession extends ChangeNotifier {
 
       active = entries.first;
       phase = CatalogSessionPhase.ready;
-      notifyListeners();
+      _idle();
     } catch (e) {
       _fail('$e');
     }
@@ -161,6 +204,19 @@ class CatalogSession extends ChangeNotifier {
       return;
     }
 
+    _busy('compiling');
+    try {
+      await _switchOnce(daemon, vmService, entry);
+    } finally {
+      _idle();
+    }
+  }
+
+  Future<void> _switchOnce(
+    CompilerDaemonClient daemon,
+    GuestVmService vmService,
+    CatalogEntry entry,
+  ) async {
     var compiled = await daemon.select(entry.id);
     if (!compiled.ok) {
       // The guest keeps rendering the previous entry; a broken demo is a
@@ -237,12 +293,13 @@ class CatalogSession extends ChangeNotifier {
     debugPrint('[catalog] failed: $message');
     errorMessage = message;
     phase = CatalogSessionPhase.error;
-    notifyListeners();
+    _idle();
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _ticker?.cancel();
     _engine?.removeListener(_onEngineChanged);
     _engine?.dispose();
     unawaited(_vmService?.close());

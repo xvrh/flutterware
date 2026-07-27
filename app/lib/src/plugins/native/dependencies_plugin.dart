@@ -90,26 +90,24 @@ class DependenciesPlugin extends NativePlugin {
     );
   }
 
-  /// Summarising several packages by *summing* their dependency counts is
-  /// meaningless — everything shared gets counted once per package. So the
-  /// parent row counts packages and the per-package numbers live in the
-  /// children.
+  /// Silent once loaded. Counting dependencies across packages by *summing*
+  /// them is meaningless — everything shared gets counted once per package —
+  /// and the per-package number is already a click away in the panel. The row
+  /// speaks only while it is working or when something went wrong.
   Status _status(Map<String, Snapshot<Dependencies>> known) {
     if (packages.isEmpty) return const Status.warn('no packages');
     if (known.values.any((s) => s.error != null)) {
       return const Status.error('failed to load');
     }
-    var loaded = known.values.where((s) => s.data != null).length;
-    if (loaded == 0) return Status.neutral('${packages.length} packages');
-    return Status.neutral('$loaded/${packages.length} loaded');
+    var loading = known.values.where((s) => s.data == null).length;
+    return loading == 0 ? Status.none : const Status.info('loading…');
   }
 
   Status _packageStatus(Snapshot<Dependencies>? snapshot) {
-    if (snapshot == null) return const Status.neutral('—');
+    if (snapshot == null) return Status.none;
     if (snapshot.error != null) return const Status.error('failed');
-    var data = snapshot.data;
-    if (data == null) return const Status.neutral('loading…');
-    return Status.neutral('${data.directs.length} direct');
+    if (snapshot.data == null) return const Status.info('loading…');
+    return Status.none;
   }
 
   PluginView _view(Map<String, Snapshot<Dependencies>> known) {

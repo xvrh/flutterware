@@ -3,53 +3,34 @@ import 'package:flutter/services.dart';
 
 import '../embedder/embedded_engine.dart';
 import '../embedder/protocol.dart';
-import 'catalog_entry.dart';
 import 'catalog_session.dart';
 
 /// The catalog loop: entries on the left, the live guest on the right.
 /// Selecting an entry hot-reloads the running guest rather than restarting it.
 ///
 /// Mounted by the `flutterware.ui_catalog` plugin as its panel, and by
-/// `main_catalog_dev.dart` on its own for working on the loop itself. It owns a
-/// [CatalogSession] for as long as it is mounted — which is what starts the
-/// daemon, so an unopened catalog costs nothing.
+/// `main_catalog_dev.dart` for working on the loop itself.
+///
+/// It **renders** a [CatalogSession]; it does not own one. The owner outlives
+/// the widget, which is what lets a cold compile keep running — and keep
+/// reporting into the sidebar — while you are looking at another plugin.
 class CatalogView extends StatefulWidget {
-  const CatalogView({
-    super.key,
-    required this.appPackageRoot,
-    required this.flutterSdkRoot,
-    required this.projectRoot,
-    this.roots = const ['demo'],
-  });
+  const CatalogView({super.key, required this.session});
 
-  final String appPackageRoot;
-  final String flutterSdkRoot;
-  final String projectRoot;
-  final List<String> roots;
+  final CatalogSession session;
 
   @override
   State<CatalogView> createState() => _CatalogViewState();
 }
 
 class _CatalogViewState extends State<CatalogView> {
-  late final CatalogSession _session = CatalogSession(
-    appPackageRoot: widget.appPackageRoot,
-    flutterSdkRoot: widget.flutterSdkRoot,
-    projectRoot: widget.projectRoot,
-    roots: widget.roots,
-  );
   final FocusNode _focusNode = FocusNode();
   Size? _lastReportedSize;
 
-  @override
-  void initState() {
-    super.initState();
-    _session.start();
-  }
+  CatalogSession get _session => widget.session;
 
   @override
   void dispose() {
-    _session.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -94,13 +75,16 @@ class _CatalogViewState extends State<CatalogView> {
   Widget _buildCanvas(BuildContext context) {
     switch (_session.phase) {
       case CatalogSessionPhase.starting:
-        return const Center(
+        return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             spacing: 16,
             children: [
-              CircularProgressIndicator(),
-              Text('Building the guest and compiling the first entry…'),
+              const CircularProgressIndicator(),
+              Text(
+                'Building the guest and compiling the first entry… '
+                '${_session.busyFor.inSeconds}s',
+              ),
             ],
           ),
         );
@@ -260,6 +244,9 @@ class _StatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var parts = <String>[];
+    // The word only. The timings that follow are measured, not guessed at from
+    // a counter running while you read them.
+    if (session.busyWith case var busy?) parts.add('$busy…');
     if (session.coldCompile case var cold?) {
       parts.add('cold ${cold.inMilliseconds}ms');
     }

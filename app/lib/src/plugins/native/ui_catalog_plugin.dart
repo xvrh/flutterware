@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:flutter/material.dart';
@@ -5,12 +6,12 @@ import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
 import '../../catalog/catalog_entry.dart';
+import '../../catalog/catalog_session.dart';
 import '../../catalog/discovery.dart';
 import '../../catalog/package_config_locator.dart';
 import '../../catalog/protocol.dart';
 import '../../catalog/catalog_view.dart';
 import '../../catalog/screenshot.dart';
-import '../../ui/theme.dart';
 import '../native_plugin.dart';
 
 /// The registered id — also what `tool/flutterware.dart` declares.
@@ -29,10 +30,12 @@ const _inlinedOptions = 50;
 
 /// The UI catalog's entries, per declared package.
 ///
-/// Only the **scan** happens here: parsing a package's demos costs ~38ms and
-/// touches no compiler, so a sidebar can honestly say "42 entries" without
-/// building anything. Rendering an entry is the expensive tier and belongs to
-/// the session, which nothing in this class starts.
+/// Two tiers, and the split is the point. The **scan** parses a package's demos
+/// in ~38ms and touches no compiler, so `fw` and an agent can read the entry
+/// list without building anything. The **session** is the compile loop — a
+/// daemon, a guest engine, seconds of cold compile — and it is owned here so
+/// that leaving the panel does not kill it and [report] can say how it is
+/// going while you are looking elsewhere.
 ///
 /// Follows the rule [DependenciesPlugin] establishes: the constructor allocates
 /// nothing, [report] only reads what something already asked for, and work
@@ -50,8 +53,12 @@ class UiCatalogPlugin extends NativePlugin {
   final _scans = <String, ScanResult>{};
   final _failures = <String, String>{};
   final _scanning = <String>{};
+  final _sessions = <String, CatalogSession>{};
 
   /// Scans [path], unless it already has been. Idempotent.
+  ///
+  /// Deliberately does **not** start the compile loop: a scan reads files, a
+  /// session spawns a daemon, and only mounting the panel justifies the second.
   void track(String path) {
     if (_scans.containsKey(path) ||
         _failures.containsKey(path) ||
@@ -63,9 +70,27 @@ class UiCatalogPlugin extends NativePlugin {
     _scan(path);
   }
 
-  /// Releases [path]. The scan stays cached — demand says what work is
-  /// justified, not what must be discarded.
+  /// Releases [path]. The scan and the compile loop stay — demand says what
+  /// work is justified, not what must be discarded. A cold compile you walked
+  /// away from is exactly the one worth keeping.
   void untrack(String path) {}
+
+  /// The live compile loop for [path], started on first ask — which is the
+  /// panel mounting.
+  ///
+  /// Owned here rather than by the panel, so leaving the panel does not throw
+  /// away a running daemon — and so [report] can say what the compiler is doing
+  /// while something else is on screen.
+  CatalogSession _sessionFor(String path) => _sessions.putIfAbsent(path, () {
+    var session = CatalogSession(
+      appPackageRoot: host.workspace.appContext.appToolDirectory.path,
+      flutterSdkRoot: host.workspace.flutterSdk.root,
+      projectRoot: p.join(host.worktree.path, path),
+      roots: [_rootFor(path)],
+    )..addListener(notifyChanged);
+    unawaited(session.start());
+    return session;
+  });
 
   /// Re-runs every scan that has been asked for. What an editor's "refresh"
   /// does, and what `rescan` invokes.
@@ -166,42 +191,64 @@ class UiCatalogPlugin extends NativePlugin {
     view: _view,
   );
 
+  /// What the compiler is doing for [path], or null when it is idle.
+  ///
+  /// This is the status worth a sidebar row: a cold compile is the only thing
+  /// here that takes seconds, and a word that stays put until it goes away is
+  /// what lets you look elsewhere and notice when it lands. No elapsed count —
+  /// a figure ticking in the corner of the eye is movement, not information.
+  Status? _busyStatus(String path) {
+    if (_sessions[path]?.busyWith case var busy?) return Status.info(busy);
+    return null;
+  }
+
+  /// Deliberately silent at rest. An entry count is not news — it cannot even
+  /// be known until something opens the panel — and a row that fills in a
+  /// number the moment you look at it is worse than an empty one.
   Status get _status {
     if (packages.isEmpty) return const Status.warn('no packages declared');
     if (_failures.isNotEmpty) {
       return Status.error('${_failures.length} failed to scan');
     }
-    if (_scans.isEmpty) {
-      return isScanning ? const Status.neutral('scanning…') : Status.none;
+    for (var path in packages) {
+      if (_busyStatus(path) case var busy?) return busy;
     }
+    if (_sessions.values.any((s) => s.phase == CatalogSessionPhase.error)) {
+      return const Status.error('failed to start');
+    }
+    if (isScanning) return const Status.info('scanning…');
+    if (_scans.isEmpty) return Status.none;
+
     // Discovery refuses on a duplicate id or an uncallable target, so the
-    // catalog is not usable; reporting a healthy count would be a lie.
+    // catalog is not usable; staying quiet would be a lie.
     var broken = _scans.values.where((scan) => !scan.ok).length;
     if (broken > 0) {
       return Status.error(
         '$broken ${broken == 1 ? 'package' : 'packages'} failed discovery',
       );
     }
-    var found = entries.length;
+    if (entries.isEmpty) return const Status.warn('no entries');
     var warnings = _scans.values.fold(
       0,
       (sum, scan) => sum + scan.diagnostics.length,
     );
-    if (found == 0) return const Status.warn('no entries');
     return warnings == 0
-        ? Status.good('$found ${found == 1 ? 'entry' : 'entries'}')
-        : Status.warn('$found entries, $warnings warnings');
+        ? Status.none
+        : Status.warn('$warnings ${warnings == 1 ? 'warning' : 'warnings'}');
   }
 
   Status _packageStatus(String path) {
     if (_failures[path] case var failure?) return Status.error(failure);
-    if (_scanning.contains(path)) return const Status.neutral('scanning…');
+    if (_busyStatus(path) case var busy?) return busy;
+    if (_sessions[path]?.phase == CatalogSessionPhase.error) {
+      return const Status.error('failed to start');
+    }
+    if (_scanning.contains(path)) return const Status.info('scanning…');
     var scan = _scans[path];
     if (scan == null) return Status.none;
     if (!scan.ok) return const Status.error('discovery failed');
-    var found = scan.entries.length;
-    if (found == 0) return const Status.warn('no entries');
-    return Status.good('$found ${found == 1 ? 'entry' : 'entries'}');
+    if (scan.entries.isEmpty) return const Status.warn('no entries');
+    return Status.none;
   }
 
   PluginView get _view {
@@ -300,6 +347,19 @@ class UiCatalogPlugin extends NativePlugin {
   @override
   Widget buildPanel(BuildContext context, String? childId) =>
       _CatalogPanel(plugin: this, packagePath: childId ?? packages.firstOrNull);
+
+  /// Closing the worktree is what ends the compile loops — nothing shorter
+  /// does, which is the whole point of the plugin owning them.
+  @override
+  void dispose() {
+    for (var session in _sessions.values) {
+      session
+        ..removeListener(notifyChanged)
+        ..dispose();
+    }
+    _sessions.clear();
+    super.dispose();
+  }
 }
 
 class _CatalogPanel extends StatefulWidget {
@@ -336,9 +396,14 @@ class _CatalogPanelState extends State<_CatalogPanel> {
     super.dispose();
   }
 
-  /// Mounting the panel is the demand that starts the scan.
+  /// Mounting the panel is the demand: the scan, and the compile loop the scan
+  /// deliberately leaves alone.
   void _track() {
-    if (widget.packagePath case var path?) widget.plugin.track(path);
+    if (widget.packagePath case var path?) {
+      widget.plugin
+        ..track(path)
+        .._sessionFor(path);
+    }
   }
 
   @override
@@ -364,17 +429,13 @@ class _CatalogPanelState extends State<_CatalogPanel> {
           );
         }
 
-        // The live loop. The plugin's own scan stays — it is what fills the
-        // sidebar count and what `fw` and an agent read without a daemon
-        // running — but what the panel shows is the compiled catalog, because
-        // only the daemon knows which entries actually build.
-        var host = widget.plugin.host;
+        // The live loop. The plugin's own scan stays — it is what `fw` and an
+        // agent read without a daemon running — but what the panel shows is the
+        // compiled catalog, because only the daemon knows which entries
+        // actually build.
         return CatalogView(
           key: ValueKey(path),
-          appPackageRoot: host.workspace.appContext.appToolDirectory.path,
-          flutterSdkRoot: host.workspace.flutterSdk.root,
-          projectRoot: p.join(host.worktree.path, path),
-          roots: [widget.plugin._rootFor(path)],
+          session: widget.plugin._sessionFor(path),
         );
       },
     );

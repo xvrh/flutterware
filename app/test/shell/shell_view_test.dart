@@ -123,11 +123,20 @@ Future<ShellController> _pumpShell(WidgetTester tester) async {
 
 void main() {
   testWidgets('renders a tab for the open worktree only', (tester) async {
+    var shell = await _pumpShell(tester);
+
+    expect(find.byKey(worktreeTabKey(shell.worktrees.first)), findsOneWidget);
+    // feature/explorer is discovered but not open, so it gets no tab.
+    expect(find.byKey(worktreeTabKey(shell.worktrees.last)), findsNothing);
+  });
+
+  testWidgets('a worktree opens on its home screen', (tester) async {
     await _pumpShell(tester);
 
-    expect(find.text('main'), findsOneWidget);
-    // feature/explorer is discovered but not open, so it gets no tab.
-    expect(find.text('feature/explorer'), findsNothing);
+    expect(find.text('Overview'), findsOneWidget);
+    expect(find.text('main checkout'), findsOneWidget);
+    // No plugin panel is mounted until you pick one.
+    expect(find.textContaining('panel:'), findsNothing);
   });
 
   testWidgets('the sidebar shows each plugin with its status', (tester) async {
@@ -142,6 +151,9 @@ void main() {
   testWidgets('mounts the selected plugin panel and switches', (tester) async {
     await _pumpShell(tester);
 
+    await tester.tap(find.text('Dependencies'));
+    await tester.pumpAndSettle();
+
     expect(find.text('panel:a.deps/-'), findsOneWidget);
     expect(find.text('panel:a.tests/-'), findsNothing);
 
@@ -155,7 +167,7 @@ void main() {
   testWidgets('the switcher lists worktrees that are not open', (tester) async {
     await _pumpShell(tester);
 
-    await tester.tap(find.byIcon(Icons.add));
+    await tester.tap(find.byIcon(Icons.expand_more));
     await tester.pumpAndSettle();
 
     expect(find.text('OPEN · 1'), findsOneWidget);
@@ -167,13 +179,13 @@ void main() {
   testWidgets('opening from the switcher adds a tab', (tester) async {
     var shell = await _pumpShell(tester);
 
-    await tester.tap(find.byIcon(Icons.add));
+    await tester.tap(find.byIcon(Icons.expand_more));
     await tester.pumpAndSettle();
     await tester.tap(find.text('feature/explorer'));
     await tester.pumpAndSettle();
 
     expect(shell.openWorktrees, hasLength(2));
-    expect(find.text('feature/explorer'), findsOneWidget);
+    expect(find.byKey(worktreeTabKey(shell.worktrees.last)), findsOneWidget);
   });
 
   testWidgets('closing a tab removes it and releases the session', (
@@ -189,7 +201,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(shell.openWorktrees, hasLength(1));
-    expect(find.text('feature/explorer'), findsNothing);
+    expect(find.byKey(worktreeTabKey(shell.worktrees.last)), findsNothing);
   });
 
   group('children', () {
@@ -220,7 +232,10 @@ void main() {
       await tester.pumpWidget(ShellApp(shell));
       await tester.pumpAndSettle();
 
-      // a.deps is selected by default, so its children show with their status.
+      await tester.tap(find.text('Dependencies'));
+      await tester.pumpAndSettle();
+
+      // Children show only under the selected plugin, with their status.
       expect(find.text('app'), findsOneWidget);
       expect(find.text('58'), findsOneWidget);
       expect(find.text('failed'), findsOneWidget);
@@ -236,6 +251,8 @@ void main() {
       await shell.start('/repo');
       await tester.pumpWidget(ShellApp(shell));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Dependencies'));
+      await tester.pumpAndSettle();
 
       expect(shell.selectedChildId, 'app');
       expect(find.text('panel:a.deps/app'), findsOneWidget);
@@ -245,6 +262,8 @@ void main() {
       var shell = childShell();
       await shell.start('/repo');
       await tester.pumpWidget(ShellApp(shell));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Dependencies'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('ui'));
@@ -270,6 +289,8 @@ void main() {
     );
     await shell.start('/repo');
     await tester.pumpWidget(ShellApp(shell));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dependencies'));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);

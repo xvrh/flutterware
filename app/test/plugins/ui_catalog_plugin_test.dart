@@ -89,13 +89,15 @@ Widget counter() => const Placeholder();
     );
   });
 
-  test('track starts the scan, and the report carries the count', () async {
+  test('track starts the scan, and stays quiet about a healthy one', () async {
     var subject = plugin()..track('.');
     await scanned(subject);
 
-    expect(subject.report.status.tone, Tone.good);
-    expect(subject.report.status.message, '3 entries');
-    expect(subject.report.children.single.status.message, '3 entries');
+    expect(subject.entries, hasLength(3));
+    // A count is not news, and it cannot be known before something asks for it.
+    // The row keeps its room for what is actually moving.
+    expect(subject.report.status, Status.none);
+    expect(subject.report.children.single.status, Status.none);
   });
 
   test('the entries reach a non-GUI renderer through the view', () async {
