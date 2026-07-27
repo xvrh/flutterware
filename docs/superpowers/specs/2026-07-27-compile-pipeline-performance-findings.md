@@ -117,9 +117,36 @@ obvious; the third was not, and no test would have caught it.
    divergence rather than tracking it.
 
    Cost, stated plainly: ~20ms of cold compile for five entries, scaling with
-   catalog size; and a demo that does not compile now breaks the catalog's cold
-   start rather than only its own entry. The second is a real regression in
-   robustness and is worth revisiting with a per-entry compile probe.
+   catalog size; and a demo that does not compile would break the catalog's cold
+   start rather than only its own entry. That second cost is paid off below.
+
+## Quarantine: a broken demo costs you that demo, not the catalog
+
+`CompileBlame` reads the compiler's own diagnostics — `<path>:<line>:<col>:
+Error:` — and maps each reported file back to the entries declared in it. Blame
+is per *file*: a file that does not compile takes every entry in it, because
+none of them can be reached.
+
+The daemon then compiles in rounds. On failure it quarantines what it can blame,
+drops those imports, and tries the rest. Errors nobody declares an entry in — a
+shared helper, the app itself — cannot be fixed by dropping anything, so they
+stay fatal and say so rather than quietly serving a shrunken catalog.
+
+A quarantined entry is re-admitted when its **source file changes**, so fixing a
+demo is enough: no restart, no rescan. If it still fails it is quarantined again
+with the new timestamp, which is what keeps that from looping.
+
+Quarantine moves the catalog under clients that are idle, so the daemon
+broadcasts `CatalogChanged` to every session and `DaemonReady` carries the same
+at connect. A panel must not keep offering an entry the daemon can no longer
+build, nor keep hiding one that now works.
+
+One bug worth naming, because the symptom pointed elsewhere: `drop` removed the
+entry from the import list but never rewrote `main.dart`. The compiler kept
+reading a file that still imported what had just been dropped, so round two had
+nothing new to blame and the whole thing presented as *"nothing could be
+blamed"* — as if the attribution were broken. The generator now owns its active
+entry so `drop` can rewrite the entrypoint itself.
 
 `full` now uses the compiler's `reset` rather than restarting it, so one client
 launching a guest no longer discards another's warm state. Verified: `reset`
@@ -135,12 +162,47 @@ New checks cover both halves of the sharing claim — that a second client costs
 nothing (`reused`, <500ms), and that it is nonetheless isolated (different
 asset dirs, different kernel paths, byte-different kernels).
 
+## Guest devices: on demand, not pooled
+
+Asked directly: with a panel open and rendering, can an agent get its own guest
+quickly, and are guests reused?
+
+**Reused: no. Created on demand, one per client, killed when the client leaves.**
+`CatalogScreenshot.captureAll` keeps one warm across a *batch*, so screenshotting
+20 entries pays for one guest; two separate invocations pay twice.
+
+Measured, with a daemon already running:
+
+```
+attach to the daemon        3–19ms
+guest process → socket        10ms
+        → vm service         110ms
+        → first painted frame 374ms
+```
+
+So an agent screenshotting while a panel is open costs roughly
+`19 + 374 + ~90 (select + reload)` ≈ **480ms**, and none of it is compilation.
+Verified that the panel is undisturbed: the first client keeps rendering its
+entry while the second compiles and launches its own guest.
+
+The guest must stay client-owned for the GUI, because the texture bridge shares
+an IOSurface with the process holding the socket. A *headless* guest has no such
+constraint — `kMsgCapture` writes a frame to a file — so the daemon could keep
+one warm and serve captures at the marginal 161ms, with no launch at all.
+`kMsgResize` already exists, so one warm guest could serve different sizes.
+
+Not built. The 374ms is engine startup, it is paid only once per invocation, and
+the batch case — the one that dominates — already avoids it. Worth doing if
+single screenshots turn out to be the common agent pattern.
+
 ## Still open
 
 - **`_ensureCompiled` walks `lib/src/catalog` and `lib/src/embedder` on every
   start** to date-check the daemon snapshot. Milliseconds, but O(files).
 - **The cmake no-op costs ~110ms** and could be skipped when the host binary is
   newer than `native/`.
-- **A demo that fails to compile now blocks the cold start.** Consider probing
-  entries individually and dropping the broken ones into `diagnostics`.
 - **The idle timeout is fixed at 10 minutes** and not configurable.
+- **A failing compile is slow** — 2.4s against 0.3s for a successful one — so a
+  cold start with a broken demo pays it twice, once to fail and once to retry.
+- **A warm headless guest in the daemon** would take a single agent screenshot
+  from ~480ms to ~161ms. See above for why it is not built yet.
