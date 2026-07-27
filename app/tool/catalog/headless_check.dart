@@ -46,6 +46,19 @@ Future<void> main(List<String> args) async {
     if (!condition) failures.add(description);
   }
 
+  // A daemon left over from a previous run carries that run's state — notably
+  // whichever entries it had quarantined, and this check edits a demo on
+  // purpose. Start from nothing so the assertions below mean the same thing
+  // every time. Reuse is measured deliberately further down, by the second
+  // client.
+  if (!args.contains('--reuse')) {
+    var (stale, _) = await CompilerDaemonClient.connect(
+      dartExecutable: p.join(cache.flutterRoot, 'bin', 'dart'),
+      config: config,
+    );
+    await stale.stopDaemon();
+  }
+
   // Through the real client, so this exercises what the GUI uses — including
   // the precompiled daemon binary.
   stdout.writeln('[check] starting the compiler daemon');
@@ -99,6 +112,7 @@ Future<void> main(List<String> args) async {
   );
 
   stdout.writeln('[check] spawning the guest');
+  var launch = Stopwatch()..start();
   var guest = await Process.start(ready.hostPath, [
     ready.assetsDir,
     ready.icuData,
@@ -141,8 +155,14 @@ Future<void> main(List<String> args) async {
     }
   });
 
+  var connectedAt = launch.elapsedMilliseconds;
   var vmService = await GuestVmService.connect(await vmServiceUri.future);
+  var vmServiceAt = launch.elapsedMilliseconds;
   var firstProbe = await _nextProbe(probes.stream, const Duration(seconds: 20));
+  stdout.writeln(
+    '[check] guest launch: socket ${connectedAt}ms · vm service '
+    '${vmServiceAt}ms · first frame ${launch.elapsedMilliseconds}ms',
+  );
   stdout.writeln('[check] rendering: $firstProbe');
   check(
     firstProbe.contains(entries.first.id),
@@ -241,6 +261,19 @@ Future<void> main(List<String> args) async {
       File(theirs.dill!).readAsBytesSync(),
     ),
     'the two kernels differ — a shared file would have made them identical',
+  );
+
+  // The scenario this is really about: a panel is open and rendering while an
+  // agent compiles something else against the same daemon. The panel's guest
+  // must not notice.
+  //
+  // The probe is the evidence, not the frame counter: an idle guest paints
+  // nothing, quite correctly, so a frame count that stops rising says only that
+  // the UI is static.
+  var stillLive = await _nextProbe(probes.stream, const Duration(seconds: 10));
+  check(
+    stillLive.contains(entries.first.id),
+    'the first client keeps rendering while another client compiles',
   );
 
   // 5. Fixing a broken demo brings it back, and every client is told.
