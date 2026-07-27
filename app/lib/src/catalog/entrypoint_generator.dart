@@ -209,6 +209,10 @@ void main() {
   // Before runApp, and once: the panel may ask what knobs exist before the
   // first frame, and the extensions have to outlive every entry switch.
   CatalogParameters.instance.registerExtensions();
+  // The axes are pushed *in* rather than read out, and the push can land
+  // before the shell that reads them has built — so this has to be up before
+  // anything renders, not merely before the first question.
+  CatalogAxes.instance.registerExtensions();
   // Framework errors, on stdout, always.
   //
   // A demo that throws while building paints Flutter's red ErrorWidget in the

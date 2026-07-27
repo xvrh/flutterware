@@ -776,6 +776,29 @@ Future<void> main(List<String> args) async {
     }
   }
 
+  // 4b-quater. The axes' wire, before anything is wired to it.
+  //
+  // The extension has to be up before the first frame rather than before the
+  // first question: selections are pushed *in*, and the push can land before
+  // the shell that reads them has built — which is the whole reason a switch
+  // does not flash the previous shell's values.
+  stdout.writeln('[check] the axes wire');
+  var axes = await vmService.callExtension('ext.flutterware.axes');
+  check(axes != null, 'the guest answers what axes it has');
+  var pushed = await vmService.callExtension(
+    'ext.flutterware.setAxes',
+    args: {
+      'payload': jsonEncode({'flavor': 'prod'}),
+    },
+  );
+  check(pushed != null, 'and takes a selection for an axis nothing reads yet');
+  check(
+    (await vmService.callExtension('ext.flutterware.axes'))?['axes']
+            is List<Object?> ==
+        true,
+    'and still answers afterwards',
+  );
+
   // 4c. A demo that did not exist when the daemon started.
   //
   // Discovery runs once at startup, so without a rescan a file you add while
