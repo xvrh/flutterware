@@ -12,6 +12,55 @@ import 'protocol.dart';
 
 enum CatalogSessionPhase { starting, ready, error }
 
+/// The entry browser's own state, which is about looking rather than compiling.
+///
+/// Folders are tracked by what has been *closed*, not by what has been opened:
+/// a folder that appears after a rescan is then open like everything around it,
+/// where an expanded-set would have hidden it until someone thought to look.
+class CatalogBrowsing extends ChangeNotifier {
+  final _closed = <String>{};
+
+  bool isOpen(String branchId) => !_closed.contains(branchId);
+
+  void toggle(String branchId) {
+    if (!_closed.remove(branchId)) _closed.add(branchId);
+    notifyListeners();
+  }
+
+  /// Whether anything is folded away at all, which is what makes one button
+  /// enough for both directions.
+  bool get anyClosed => _closed.isNotEmpty;
+
+  void closeAll(Iterable<String> branchIds) {
+    _closed.addAll(branchIds);
+    notifyListeners();
+  }
+
+  void openAll() {
+    if (_closed.isEmpty) return;
+    _closed.clear();
+    notifyListeners();
+  }
+
+  /// What was typed in the filter box. Empty shows everything.
+  String get filter => _filter;
+  var _filter = '';
+  set filter(String value) {
+    if (value == _filter) return;
+    _filter = value;
+    notifyListeners();
+  }
+
+  /// Whether the entry list is showing at all, so the guest can have the panel.
+  bool get listVisible => _listVisible;
+  var _listVisible = true;
+  set listVisible(bool value) {
+    if (value == _listVisible) return;
+    _listVisible = value;
+    notifyListeners();
+  }
+}
+
 /// How the last switch went, for the UI to show.
 class SwitchReport {
   SwitchReport({
@@ -59,7 +108,19 @@ class CatalogSession extends ChangeNotifier {
     required this.flutterSdkRoot,
     required this.projectRoot,
     this.roots = const ['demo'],
-  });
+  }) {
+    // Forwarded, so a renderer has one thing to listen to.
+    browsing.addListener(notifyListeners);
+  }
+
+  /// Where the browser was left: what is folded away, what was typed, whether
+  /// the list is showing.
+  ///
+  /// On the session because the session outlives the panel — the shell builds
+  /// the panel from scratch each time you come back to it, and returning to a
+  /// tree you had arranged and a filter you had typed is the same courtesy as
+  /// returning to the entry you had selected.
+  final browsing = CatalogBrowsing();
 
   /// Everything discovery found, populated when the daemon reports ready.
   List<CatalogEntry> entries = const [];
@@ -400,6 +461,9 @@ class CatalogSession extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _ticker?.cancel();
+    browsing
+      ..removeListener(notifyListeners)
+      ..dispose();
     _engine?.removeListener(_onEngineChanged);
     _engine?.dispose();
     unawaited(_vmService?.close());

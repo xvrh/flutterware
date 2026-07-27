@@ -29,7 +29,11 @@ void main() {
     name: 'Gamma',
   );
 
-  CatalogSession sessionWithBroken(CatalogEntry broken, String error) {
+  CatalogSession sessionOf(
+    List<CatalogEntry> all,
+    CatalogEntry broken,
+    String error,
+  ) {
     return CatalogSession(
         appPackageRoot: '/app',
         flutterSdkRoot: '/sdk',
@@ -37,13 +41,18 @@ void main() {
       )
       ..phase = CatalogSessionPhase.ready
       ..entries = [
-        for (var e in [alpha, beta, gamma])
+        for (var e in all)
           if (e.id != broken.id) e,
       ]
       ..quarantined = [QuarantinedEntry(entry: broken, error: error)]
       ..selected = broken
-      ..active = alpha;
+      ..active = all.first;
   }
+
+  // Every case here keeps one entry broken and selected: that is what renders
+  // the error page instead of the guest's texture, which no widget test has.
+  CatalogSession sessionWithBroken(CatalogEntry broken, String error) =>
+      sessionOf([alpha, beta, gamma], broken, error);
 
   Future<void> pump(WidgetTester tester, CatalogSession session) =>
       tester.pumpWidget(
@@ -52,33 +61,88 @@ void main() {
         ),
       );
 
-  testWidgets('a broken entry keeps its place in the list', (tester) async {
+  testWidgets('a broken entry keeps its place in the tree', (tester) async {
     var session = sessionWithBroken(beta, 'boom');
     await pump(tester, session);
 
-    var names = tester
-        .widgetList<ListTile>(find.byType(ListTile))
-        .map((tile) => ((tile.title as Text?)!).data)
-        .toList();
-    expect(names, ['Alpha', 'Beta', 'Gamma']);
+    // Ordered by where they sit on screen, which is the claim: a demo that
+    // stops compiling does not move.
+    double y(String name) => tester.getTopLeft(find.text(name)).dy;
+    expect(y('Alpha'), lessThan(y('Beta')));
+    expect(y('Beta'), lessThan(y('Gamma')));
   });
 
-  testWidgets('a broken entry stays selected and stays tappable', (
+  testWidgets('a broken entry stays tappable, because that is the retry', (
     tester,
   ) async {
     var session = sessionWithBroken(beta, 'boom');
     await pump(tester, session);
 
-    var tile = tester.widget<ListTile>(
-      find.ancestor(of: find.text('Beta'), matching: find.byType(ListTile)),
+    var row = tester.widget<InkWell>(
+      find
+          .ancestor(of: find.text('Beta'), matching: find.byType(InkWell))
+          .first,
     );
-    expect(
-      tile.selected,
-      isTrue,
-      reason: 'the entry you asked for is selected',
+    expect(row.onTap, isNotNull);
+  });
+
+  testWidgets('the filter narrows the tree', (tester) async {
+    var session = sessionWithBroken(beta, 'boom');
+    await pump(tester, session);
+
+    session.browsing.filter = 'alp';
+    await tester.pump();
+
+    expect(find.text('Alpha'), findsOneWidget);
+    expect(find.text('Beta'), findsNothing);
+    expect(find.text('Gamma'), findsNothing);
+  });
+
+  testWidgets('a filter that matches nothing says so', (tester) async {
+    var session = sessionWithBroken(beta, 'boom');
+    await pump(tester, session);
+
+    session.browsing.filter = 'zzz';
+    await tester.pump();
+
+    expect(find.text('Nothing matches'), findsOneWidget);
+  });
+
+  testWidgets('folders fold', (tester) async {
+    const one = CatalogEntry(
+      path: 'demo/team/one.dart',
+      symbol: 'one',
+      annotation: 'Demo()',
+      name: 'One',
     );
-    expect(tile.enabled, isTrue);
-    expect(tile.onTap, isNotNull, reason: 'selecting it again is the retry');
+    const two = CatalogEntry(
+      path: 'demo/billing/two.dart',
+      symbol: 'two',
+      annotation: 'Demo()',
+      name: 'Two',
+    );
+    var session = sessionOf([one, two, beta], beta, 'boom');
+    await pump(tester, session);
+    expect(find.text('One'), findsOneWidget);
+
+    await tester.tap(find.text('team'));
+    await tester.pump();
+    expect(find.text('One'), findsNothing);
+    expect(find.text('team'), findsOneWidget, reason: 'the folder remains');
+    expect(find.text('Two'), findsOneWidget, reason: 'its neighbour is intact');
+  });
+
+  testWidgets('hiding the list leaves the way back', (tester) async {
+    var session = sessionWithBroken(beta, 'boom');
+    await pump(tester, session);
+
+    await tester.tap(find.byTooltip('Hide the list'));
+    await tester.pump();
+    expect(find.text('Alpha'), findsNothing);
+
+    await tester.tap(find.byTooltip('Show the list'));
+    await tester.pump();
+    expect(find.text('Alpha'), findsOneWidget);
   });
 
   testWidgets('the compiler error is shown where the widget would be', (
@@ -136,5 +200,115 @@ void main() {
     await tester.pump();
 
     expect(tester.getSize(bar), idle);
+  });
+
+  testWidgets('the filter field keeps its height as you type', (tester) async {
+    var session = sessionWithBroken(beta, 'boom');
+    await pump(tester, session);
+    var field = find.byType(TextField);
+    var empty = tester.getSize(field);
+
+    // The clear button appears with the first character, and an
+    // InputDecorator sizes itself around its icons.
+    await tester.enterText(field, 'a');
+    await tester.pump();
+
+    expect(tester.getSize(field), empty);
+  });
+
+  testWidgets('a filtered row marks what matched', (tester) async {
+    var session = sessionWithBroken(beta, 'boom');
+    await pump(tester, session);
+    session.browsing.filter = 'lph';
+    await tester.pump();
+
+    var marked = tester.widget<Text>(
+      find
+          .ancestor(
+            of: find.text('Alpha', findRichText: true),
+            matching: find.byType(Text),
+          )
+          .first,
+    );
+    var spans = (marked.textSpan! as TextSpan).children!.cast<TextSpan>();
+    expect(spans.map((s) => s.text), ['A', 'lph', 'a']);
+    expect(
+      spans[1].style?.backgroundColor,
+      isNotNull,
+      reason: 'the matched run is the highlighted one',
+    );
+    expect(spans[0].style?.backgroundColor, isNull);
+  });
+
+  testWidgets('the busy dot waits before it shows itself', (tester) async {
+    // Driven directly: what is under test is the timing, and a switch that
+    // lands inside the delay must never show anything — a 90ms compile that
+    // blinks at you reads as a fault, not as progress.
+    Future<void> show(String? busy) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: BusyDot(busy: busy)),
+        ),
+      );
+    }
+
+    double opacity() =>
+        tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity;
+
+    await show(null);
+    expect(opacity(), 0);
+
+    await show('compiling');
+    expect(opacity(), 0);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(opacity(), 0, reason: 'a warm switch is over before this');
+
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(opacity(), 1);
+
+    await show(null);
+    expect(opacity(), 0);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a folded folder still shows what is selected', (tester) async {
+    const inFolder = CatalogEntry(
+      path: 'demo/team/one.dart',
+      symbol: 'one',
+      annotation: 'Demo()',
+      name: 'One',
+    );
+    var session = sessionOf([inFolder, alpha], inFolder, 'boom');
+    await pump(tester, session);
+
+    await tester.tap(find.text('team'));
+    await tester.pump();
+    expect(
+      find.text('One'),
+      findsOneWidget,
+      reason: 'folding away the selection would hide where you are',
+    );
+    // The fold is remembered, not refused: its neighbours are still folded.
+    expect(session.browsing.isOpen('/team'), isFalse);
+  });
+
+  testWidgets('one button folds everything, then unfolds it', (tester) async {
+    const one = CatalogEntry(
+      path: 'demo/team/one.dart',
+      symbol: 'one',
+      annotation: 'Demo()',
+      name: 'One',
+    );
+    var session = sessionOf([one, beta], beta, 'boom');
+    await pump(tester, session);
+    expect(find.text('One'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Collapse all'));
+    await tester.pump();
+    expect(find.text('One'), findsNothing);
+
+    await tester.tap(find.byTooltip('Expand all'));
+    await tester.pump();
+    expect(find.text('One'), findsOneWidget);
   });
 }

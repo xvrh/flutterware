@@ -9,6 +9,7 @@ import '../embedder/protocol.dart';
 import '../ui/design/design.dart';
 import 'catalog_entry.dart';
 import 'catalog_session.dart';
+import 'catalog_tree.dart';
 
 /// The catalog loop: entries on the left, the live guest on the right.
 /// Selecting an entry hot-reloads the running guest rather than restarting it.
@@ -104,7 +105,10 @@ class _CatalogViewState extends State<CatalogView> {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(width: 260, child: _EntryList(session: _session)),
+              if (_session.browsing.listVisible)
+                SizedBox(width: 260, child: _EntryList(session: _session))
+              else
+                _ShowListStrip(browsing: _session.browsing),
               const VerticalDivider(width: 1),
               Expanded(
                 child: Column(
@@ -249,6 +253,7 @@ class _CatalogViewState extends State<CatalogView> {
   }
 }
 
+/// The entry browser: a filter, then the tree.
 class _EntryList extends StatelessWidget {
   const _EntryList({required this.session});
 
@@ -256,70 +261,436 @@ class _EntryList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var ready = session.phase == CatalogSessionPhase.ready;
-    var error = context.colors.red;
-    return ListView(
-      // One list, in discovery's order. A demo that stops compiling is marked
-      // where it sits rather than moved to a section of its own: it is still
-      // selectable — selecting it is how you retry it — and a typo should not
-      // cost you your place in the tree.
+    var browsing = session.browsing;
+    // Built from everything discovered, broken included: an entry you are
+    // midway through fixing keeps its place, and selecting it is the retry.
+    var tree = filterCatalogTree(
+      buildCatalogTree(session.allEntries),
+      browsing.filter,
+    );
+    var filtering = browsing.filter.trim().isNotEmpty;
+    // Whatever is selected is visible, whatever was folded away before it was.
+    var reveal = branchesTo(tree, session.selected?.id);
+    var rows = <Widget>[];
+    void walk(List<CatalogNode> nodes, int depth) {
+      for (var node in nodes) {
+        switch (node) {
+          case CatalogLeaf(:var entry):
+            rows.add(
+              _LeafRow(
+                entry: entry,
+                depth: depth,
+                broken: session.compileErrorFor(entry),
+                selected: entry.id == session.selected?.id,
+                highlight: browsing.filter.trim(),
+                onTap: session.phase == CatalogSessionPhase.ready
+                    ? () => session.switchTo(entry)
+                    : null,
+              ),
+            );
+          case CatalogBranch(:var children):
+            // A filtered tree is already the answer to a question; folding
+            // part of it away would only hide what was asked for.
+            var open =
+                filtering ||
+                reveal.contains(node.id) ||
+                browsing.isOpen(node.id);
+            rows.add(
+              _BranchRow(
+                branch: node,
+                depth: depth,
+                open: open,
+                highlight: browsing.filter.trim(),
+                onTap: filtering ? null : () => browsing.toggle(node.id),
+              ),
+            );
+            if (open) walk(children, depth + 1);
+        }
+      }
+    }
+
+    walk(tree, 0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var entry in session.allEntries)
-          _EntryTile(
-            entry: entry,
-            broken: session.compileErrorFor(entry),
-            selected: entry.id == session.selected?.id,
-            errorColor: error,
-            onTap: ready ? () => session.switchTo(entry) : null,
-          ),
+        _FilterField(browsing: browsing, tree: tree),
+        const Divider(height: 1),
+        Expanded(
+          child: rows.isEmpty
+              ? Center(
+                  child: Text(
+                    filtering ? 'Nothing matches' : 'No entries',
+                    style: context.type.caption,
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
+                  children: rows,
+                ),
+        ),
       ],
     );
   }
 }
 
-class _EntryTile extends StatelessWidget {
-  const _EntryTile({
-    required this.entry,
-    required this.broken,
-    required this.selected,
-    required this.errorColor,
+/// Indent for [depth], plus the width a branch spends on its chevron so that
+/// leaves and folders at the same level start at the same place.
+EdgeInsets _rowPadding(int depth) =>
+    EdgeInsets.only(left: FwSpacing.md + depth * 14.0, right: FwSpacing.md);
+
+class _BranchRow extends StatelessWidget {
+  const _BranchRow({
+    required this.branch,
+    required this.depth,
+    required this.open,
+    required this.highlight,
     required this.onTap,
   });
 
-  final CatalogEntry entry;
+  final CatalogBranch branch;
+  final int depth;
+  final bool open;
 
-  /// The compiler's complaint, or null when the entry builds.
-  final String? broken;
-  final bool selected;
-  final Color errorColor;
+  /// What the filter is showing this row for, marked in the label.
+  final String highlight;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      selected: selected,
-      enabled: onTap != null,
-      // Selection has to be the tile, not the title: the titles carry explicit
-      // colours — red for broken — which a `selectedColor` would not override.
-      selectedTileColor: context.colors.accentSoft,
-      // Trailing, so that marking one entry does not indent every other one
-      // and leave the list with a ragged left edge.
-      trailing: broken == null
-          ? null
-          : Icon(Icons.error_outline, size: 16, color: errorColor),
-      title: Text(
-        entry.name,
-        style: broken == null
-            ? context.type.body
-            : context.type.body.copyWith(color: errorColor),
-      ),
-      subtitle: Text(
-        broken?.split('\n').first ?? entry.symbol,
-        style: context.type.caption,
-        overflow: TextOverflow.ellipsis,
-      ),
+    var colors = context.colors;
+    return InkWell(
       onTap: onTap,
+      child: Padding(
+        padding: _rowPadding(depth),
+        child: SizedBox(
+          height: 26,
+          child: Row(
+            children: [
+              Icon(
+                open ? Icons.expand_more : Icons.chevron_right,
+                size: 14,
+                color: colors.mut,
+              ),
+              const Gap(FwSpacing.xs),
+              Expanded(
+                child: _Marked(
+                  text: branch.label,
+                  mark: highlight,
+                  style: context.type.caption.copyWith(color: colors.ink2),
+                ),
+              ),
+              if (!open) ...[
+                const Gap(FwSpacing.xs),
+                Text(
+                  '${branch.entries.length}',
+                  style: context.type.micro.copyWith(color: colors.mut2),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LeafRow extends StatelessWidget {
+  const _LeafRow({
+    required this.entry,
+    required this.depth,
+    required this.broken,
+    required this.selected,
+    required this.highlight,
+    required this.onTap,
+  });
+
+  final CatalogEntry entry;
+  final int depth;
+
+  /// What the filter is showing this row for, marked in the name.
+  final String highlight;
+
+  /// The compiler's complaint, or null when the entry builds.
+  final String? broken;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var color = broken != null ? colors.red : colors.ink;
+    return Tooltip(
+      // One line per entry leaves no room for the file, and the file is often
+      // what you remember it by.
+      message: '${entry.path} · ${entry.symbol}',
+      waitDuration: const Duration(milliseconds: 600),
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          color: selected ? colors.accentSoft : null,
+          padding: _rowPadding(depth),
+          child: SizedBox(
+            height: 26,
+            child: Row(
+              children: [
+                // The chevron column a branch occupies, so a leaf beside a
+                // folder is indented to match rather than sitting under it.
+                const SizedBox(width: 14 + FwSpacing.xs),
+                Expanded(
+                  child: _Marked(
+                    text: entry.name,
+                    mark: highlight,
+                    style: context.type.bodySmall.copyWith(color: color),
+                  ),
+                ),
+                if (broken != null) ...[
+                  const Gap(FwSpacing.xs),
+                  Icon(Icons.error_outline, size: 14, color: colors.red),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// [text], with every occurrence of [mark] struck through with a highlighter.
+///
+/// A filtered list otherwise makes you find, in every row, the thing you just
+/// typed. A row with no mark on it has answered too: it matched on its file or
+/// its symbol, neither of which fits on the row.
+class _Marked extends StatelessWidget {
+  const _Marked({required this.text, required this.mark, required this.style});
+
+  final String text;
+  final String mark;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    var haystack = text.toLowerCase();
+    var needle = mark.toLowerCase();
+    if (needle.isEmpty || !haystack.contains(needle)) {
+      return Text(text, overflow: TextOverflow.ellipsis, style: style);
+    }
+
+    var marked = style.copyWith(
+      // Amber rather than a raw yellow, and see-through, so it reads as a
+      // highlighter over the row instead of a second background colour.
+      backgroundColor: context.colors.amber.withValues(alpha: 0.35),
+      color: context.colors.ink,
+    );
+    var spans = <TextSpan>[];
+    var at = 0;
+    while (true) {
+      var found = haystack.indexOf(needle, at);
+      if (found < 0) {
+        spans.add(TextSpan(text: text.substring(at)));
+        break;
+      }
+      if (found > at) spans.add(TextSpan(text: text.substring(at, found)));
+      at = found + needle.length;
+      spans.add(TextSpan(text: text.substring(found, at), style: marked));
+    }
+    return Text.rich(
+      TextSpan(children: spans),
+      overflow: TextOverflow.ellipsis,
+      style: style,
+    );
+  }
+}
+
+class _FilterField extends StatefulWidget {
+  const _FilterField({required this.browsing, required this.tree});
+
+  final CatalogBrowsing browsing;
+
+  /// What "collapse all" would have to name.
+  final List<CatalogNode> tree;
+
+  @override
+  State<_FilterField> createState() => _FilterFieldState();
+}
+
+/// One size for both of the field's icon slots, filled or not.
+const _iconSlot = BoxConstraints.tightFor(width: 24, height: 22);
+
+/// Says work is happening, but only once that is news.
+///
+/// A switch is 90ms. Anything that appears and disappears inside that is a
+/// flash on every click, which reads as a fault rather than as progress — so
+/// the dot waits out the common case and fades in only for the work you would
+/// otherwise wonder about. Its slot is always there, so nothing moves either
+/// way.
+class BusyDot extends StatefulWidget {
+  const BusyDot({super.key, required this.busy});
+
+  /// What the session is doing, or null when it is idle.
+  final String? busy;
+
+  /// Longer than a warm switch, shorter than a wait you would question.
+  static const appearsAfter = Duration(milliseconds: 250);
+
+  @override
+  State<BusyDot> createState() => _BusyDotState();
+}
+
+class _BusyDotState extends State<BusyDot> {
+  Timer? _timer;
+  var _shown = false;
+
+  @override
+  void didUpdateWidget(BusyDot old) {
+    super.didUpdateWidget(old);
+    if (widget.busy == old.busy) return;
+    _timer?.cancel();
+    if (widget.busy == null) {
+      setState(() => _shown = false);
+    } else {
+      _timer = Timer(BusyDot.appearsAfter, () {
+        if (mounted) setState(() => _shown = true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var dot = AnimatedOpacity(
+      opacity: _shown ? 1 : 0,
+      duration: const Duration(milliseconds: 180),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: context.colors.accent,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+    return SizedBox(
+      width: 8,
+      height: 8,
+      child: widget.busy == null
+          ? dot
+          : Tooltip(message: widget.busy!, child: dot),
+    );
+  }
+}
+
+class _FilterFieldState extends State<_FilterField> {
+  late final _controller = TextEditingController(
+    // Seeded rather than empty: the panel is rebuilt from scratch every time
+    // you come back to it, and a filter that clears itself is a filter you
+    // stop trusting.
+    text: widget.browsing.filter,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.all(FwSpacing.md),
+      child: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 28,
+              child: TextField(
+                controller: _controller,
+                style: context.type.caption.copyWith(color: colors.ink),
+                onChanged: (value) => widget.browsing.filter = value,
+                decoration: InputDecoration(
+                  hintText: 'Filter',
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: FwSpacing.md,
+                  ),
+                  prefixIcon: Icon(Icons.search, size: 14, color: colors.mut2),
+                  // Both slots are the same size whether or not they hold
+                  // anything. An `InputDecorator` sizes itself around its
+                  // icons, so a clear button that comes and goes with the text
+                  // takes the field's height with it.
+                  prefixIconConstraints: _iconSlot,
+                  suffixIconConstraints: _iconSlot,
+                  suffixIcon: _controller.text.isEmpty
+                      ? const SizedBox.shrink()
+                      : IconButton(
+                          icon: Icon(Icons.close, size: 14, color: colors.mut2),
+                          padding: EdgeInsets.zero,
+                          constraints: _iconSlot,
+                          onPressed: () {
+                            _controller.clear();
+                            widget.browsing.filter = '';
+                          },
+                        ),
+                ),
+              ),
+            ),
+          ),
+          const Gap(FwSpacing.xs),
+          // One button for both directions: with nothing folded away the only
+          // useful thing it can do is fold, and after that, unfold.
+          IconButton(
+            icon: Icon(
+              widget.browsing.anyClosed ? Icons.unfold_more : Icons.unfold_less,
+              size: 16,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+            tooltip: widget.browsing.anyClosed ? 'Expand all' : 'Collapse all',
+            onPressed: () => widget.browsing.anyClosed
+                ? widget.browsing.openAll()
+                : widget.browsing.closeAll(allBranches(widget.tree)),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_left, size: 16),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+            tooltip: 'Hide the list',
+            onPressed: () => widget.browsing.listVisible = false,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// All that is left of the list when it is hidden: the way back.
+class _ShowListStrip extends StatelessWidget {
+  const _ShowListStrip({required this.browsing});
+
+  final CatalogBrowsing browsing;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 28,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: Padding(
+          padding: const EdgeInsets.only(top: FwSpacing.md),
+          child: IconButton(
+            icon: const Icon(Icons.chevron_right, size: 16),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+            tooltip: 'Show the list',
+            onPressed: () => browsing.listVisible = true,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -479,21 +850,7 @@ class _StatusBar extends StatelessWidget {
           ),
           // Activity sits by the button that starts it, not in front of the
           // report — an empty slot at the head of the line reads as an indent.
-          SizedBox(
-            width: 76,
-            child: Text(
-              busy == null ? '' : '$busy…',
-              textAlign: TextAlign.right,
-              style: mono,
-            ),
-          ),
-          SizedBox(
-            width: 12,
-            height: 12,
-            child: busy == null
-                ? null
-                : CircularProgressIndicator(strokeWidth: 2, color: colors.mut2),
-          ),
+          BusyDot(busy: busy),
           IconButton(
             onPressed: ready && busy == null ? onReload : null,
             icon: const Icon(Icons.refresh, size: 16),
