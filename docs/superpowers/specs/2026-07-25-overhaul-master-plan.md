@@ -395,6 +395,15 @@ deletable, not a transport to preserve.
   by a regeneration-produces-no-diff check, reusing the
   `dart tool/prepare_submit.dart` pattern.
 
+**Session A, 2026-07-27 — the loop runs in the GUI.** The catalog renders a
+live embedder guest in the flutterware app and switches entries by hot reload
+(compile 5-10ms, reload 85-107ms, `+0 libs` on revisit); see
+`2026-07-27-gui-slice-findings.md`. The compile half runs in a **plain-Dart
+daemon**, not in the app — `FrontendServerClient` spawns the compiler through
+`Platform.resolvedExecutable`, so compiling inside the GUI relaunches the GUI,
+recursively. This document's "the catalog pipeline must stay Flutter-free"
+constraint turns out to be load-bearing rather than stylistic.
+
 Still open for A: discovery without compiling, the watch-vs-explicit-reload
 split, and how the GUI and an agent share the warm process.
 
