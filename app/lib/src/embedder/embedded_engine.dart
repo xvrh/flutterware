@@ -98,6 +98,7 @@ class EmbeddedEngine extends ChangeNotifier {
           .transform(const LineSplitter())
           .listen((line) {
             debugPrint('[guest] $line');
+            _rememberGuestOutput(line);
             var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
             if (match != null && !_vmServiceUri.isCompleted) {
               _vmServiceUri.complete(match.group(1));
@@ -105,6 +106,7 @@ class EmbeddedEngine extends ChangeNotifier {
           });
       _guest!.stderr.transform(const SystemEncoding().decoder).listen((line) {
         debugPrint('[guest:err] $line');
+        _rememberGuestOutput(line);
       });
 
       // Accept the guest's connection, but don't hang forever if the guest
@@ -202,14 +204,31 @@ class EmbeddedEngine extends ChangeNotifier {
 
   void _onSocketClosed() {
     if (phase != EmbeddedEnginePhase.error && !_disposed) {
-      _fail('the embedder guest exited');
+      // With what it last said. "the embedder guest exited" on its own names
+      // the symptom and nothing else, and the guest is the only thing that
+      // knows why it went.
+      var tail = _guestLog.isEmpty
+          ? ' (it printed nothing)'
+          : ':\n${_guestLog.join('\n')}';
+      _fail('the embedder guest exited$tail');
     }
+  }
+
+  /// The guest's last few lines, kept for the message above.
+  final _guestLog = <String>[];
+
+  void _rememberGuestOutput(String line) {
+    _guestLog.add(line);
+    if (_guestLog.length > 20) _guestLog.removeAt(0);
   }
 
   void _fail(String message) {
     if (!_vmServiceUri.isCompleted) {
       _vmServiceUri.completeError(StateError(message));
     }
+    // Notifying after dispose throws, and every socket error routes here —
+    // including the ones a teardown causes.
+    if (_disposed) return;
     errorMessage = message;
     phase = EmbeddedEnginePhase.error;
     notifyListeners();

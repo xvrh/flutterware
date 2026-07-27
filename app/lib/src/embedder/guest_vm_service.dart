@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
@@ -47,12 +48,38 @@ class GuestVmService {
   Future<void> reload(String dillPath) async {
     var report = await service.reloadSources(isolateId, rootLibUri: dillPath);
     if (report.success != true) {
-      throw StateError('reloadSources failed: ${report.json}');
+      // The VM's message names what the delta *wanted* and never what was
+      // there — `lookup Failed: <name> in @method in file:///...` says a
+      // library is not in the running program the way the delta expects, which
+      // cannot be acted on without knowing which of the two is wrong.
+      throw StateError(
+        'reloadSources refused ${p.basename(dillPath)}: ${report.json}\n'
+        'The isolate holds:\n${await _catalogLibraries()}',
+      );
     }
     await service.callServiceExtension(
       'ext.flutter.reassemble',
       isolateId: isolateId,
     );
+  }
+
+  /// The catalog-relevant libraries the isolate currently holds, for the error
+  /// above. Best effort: a diagnostic must not fail louder than the fault.
+  Future<String> _catalogLibraries() async {
+    try {
+      var isolate = await service.getIsolate(isolateId);
+      var uris = [
+        for (var library in isolate.libraries ?? const <LibraryRef>[])
+          if (library.uri case var uri?)
+            if (uri.contains('/build/catalog/') ||
+                uri.contains('/demo/') ||
+                uri.contains('/demos/'))
+              '  $uri',
+      ];
+      return uris.isEmpty ? '  (none from this catalog)' : uris.join('\n');
+    } catch (e) {
+      return '  (could not read the isolate: $e)';
+    }
   }
 
   Future<void> close() => service.dispose();
