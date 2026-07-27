@@ -157,10 +157,13 @@ class EmbeddedEngine extends ChangeNotifier {
         }
       case ErrorMessage():
         _fail(message.message);
+      case CapturedMessage():
+        break; // Awaited by whoever asked for the capture, not here.
       case ResizeMessage():
       case PointerEventMessage():
       case KeyEventMessage():
       case ShutdownMessage():
+      case CaptureMessage():
         break; // GUI-to-guest messages; never received here.
     }
   }

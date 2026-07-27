@@ -2,6 +2,7 @@
 // renderer directly into shared IOSurface-backed Metal textures (zero-copy),
 // and exchanges frames + input with a controlling process over a Unix domain
 // socket.
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -21,9 +22,14 @@ static uint32_t g_generation = 0;
 static uint64_t g_frame_id = 0;
 static double g_pixel_ratio = 1.0;
 
-// Optional headless smoke: dump the first frame as a step-2 raw file.
-static const char* g_capture_path = NULL;
-static bool g_captured = false;
+// A pending capture request. `--capture-raw` arms one at startup; a kMsgCapture
+// message arms another at any time, which is what lets one warm guest be
+// screenshotted repeatedly instead of being respawned per frame wanted.
+//
+// Written on the main thread (argv, socket loop), read and cleared on a
+// Metal completion thread, so it is guarded.
+static pthread_mutex_t g_capture_lock = PTHREAD_MUTEX_INITIALIZER;
+static char* g_capture_path = NULL;
 
 // Receives engine log output, including Dart print(). Kept on stdout so the
 // control socket carries only protocol traffic.
@@ -97,9 +103,21 @@ typedef struct {
 // read it back and to tell the GUI the frame is ready.
 static void OnFramePresented(void* user_data) {
   PresentedFrame* frame = (PresentedFrame*)user_data;
-  if (g_capture_path && !g_captured) {
-    WriteRawCapture(g_capture_path, (int)frame->ring_index);
-    g_captured = true;
+
+  // Take the pending request, if any, and clear it under the lock so a second
+  // request cannot be lost or double-written.
+  pthread_mutex_lock(&g_capture_lock);
+  char* capture_path = g_capture_path;
+  g_capture_path = NULL;
+  pthread_mutex_unlock(&g_capture_lock);
+
+  if (capture_path) {
+    WriteRawCapture(capture_path, (int)frame->ring_index);
+    // Tell the caller the file is complete; without this it can only guess
+    // when the bytes have landed.
+    ipc_send(g_socket, kMsgCaptured, (const uint8_t*)capture_path,
+             strlen(capture_path));
+    free(capture_path);
   }
   uint8_t payload[16];
   memcpy(payload + 0, &frame->ring_index, 4);
@@ -164,7 +182,7 @@ int main(int argc, char** argv) {
   int height = atoi(argv[5]);
   for (int i = 6; i + 1 < argc; i += 2) {
     if (strcmp(argv[i], "--capture-raw") == 0) {
-      g_capture_path = argv[i + 1];
+      g_capture_path = strdup(argv[i + 1]);
     }
   }
 
@@ -229,6 +247,18 @@ int main(int argc, char** argv) {
       input_handle_pointer(g_engine, payload, len);
     } else if (type == kMsgKeyEvent) {
       input_handle_key(g_engine, payload, len);
+    } else if (type == kMsgCapture) {
+      // Arm a capture and force a frame: the engine renders nothing when
+      // nothing changed, so without this a request on a static scene would
+      // wait forever.
+      char* path = (char*)malloc(len + 1);
+      memcpy(path, payload, len);
+      path[len] = '\0';
+      pthread_mutex_lock(&g_capture_lock);
+      free(g_capture_path);
+      g_capture_path = path;
+      pthread_mutex_unlock(&g_capture_lock);
+      FlutterEngineScheduleFrame(g_engine);
     } else if (type == kMsgShutdown) {
       free(payload);
       break;

@@ -16,7 +16,9 @@ enum MessageType {
   resize(5),
   pointerEvent(6),
   keyEvent(7),
-  shutdown(8);
+  shutdown(8),
+  capture(9),
+  captured(10);
 
   const MessageType(this.tag);
   final int tag;
@@ -39,6 +41,24 @@ sealed class EmbedderMessage {
 
 class ReadyMessage extends EmbedderMessage {
   const ReadyMessage();
+}
+
+/// GUI to guest: write the next composited frame to [path].
+///
+/// The guest schedules a frame itself, so this works on a static scene, and
+/// answers with [CapturedMessage] once the file is complete. That ack is the
+/// point — a caller cannot otherwise tell when the bytes have landed.
+class CaptureMessage extends EmbedderMessage {
+  const CaptureMessage(this.path);
+
+  final String path;
+}
+
+/// Guest to GUI: the capture at [path] is written.
+class CapturedMessage extends EmbedderMessage {
+  const CapturedMessage(this.path);
+
+  final String path;
 }
 
 class SurfacesAllocatedMessage extends EmbedderMessage {
@@ -194,6 +214,12 @@ Uint8List encodeMessage(EmbedderMessage message) {
       _u64(body, message.timestampMicros);
     case ShutdownMessage():
       body.addByte(MessageType.shutdown.tag);
+    case CaptureMessage():
+      body.addByte(MessageType.capture.tag);
+      body.add(utf8.encode(message.path));
+    case CapturedMessage():
+      body.addByte(MessageType.captured.tag);
+      body.add(utf8.encode(message.path));
   }
   var bodyBytes = body.toBytes();
   var frame = BytesBuilder();
@@ -214,6 +240,11 @@ EmbedderMessage decodeMessageBody(Uint8List body) {
       return const ReadyMessage();
     case MessageType.shutdown:
       return const ShutdownMessage();
+    // The path is the whole payload; the frame length already bounds it.
+    case MessageType.capture:
+      return CaptureMessage(utf8.decode(body.sublist(1)));
+    case MessageType.captured:
+      return CapturedMessage(utf8.decode(body.sublist(1)));
     case MessageType.surfacesAllocated:
       var generation = data.getUint32(0, Endian.little);
       var count = data.getUint32(4, Endian.little);

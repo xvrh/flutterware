@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:image/image.dart' as img;
@@ -6,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../embedder/protocol.dart';
 import '../embedder/raw_frame.dart';
+import '../embedder/guest_vm_service.dart';
 import 'compiler_daemon_client.dart';
 import 'protocol.dart';
 
@@ -54,14 +56,11 @@ class CatalogScreenshot {
     return results.values.single;
   }
 
-  /// Screenshots several entries against **one** daemon.
+  /// Screenshots several entries against **one** daemon and **one** guest.
   ///
-  /// The asset bundle and the C host are built once, but each entry still pays
-  /// a full compile, because `host.c` captures only its first frame
-  /// (`g_captured`) so every entry needs its own guest, and a fresh guest reads
-  /// the whole kernel rather than a delta. Making this as cheap as browsing
-  /// means teaching the host to capture on demand — then one warm guest could
-  /// reload between entries at ~70ms each.
+  /// The first entry pays a cold compile and a guest launch. Every entry after
+  /// it is a hot reload and a capture request — the same economics as browsing,
+  /// because it is the same mechanism.
   Future<Map<String, File>> captureAll({
     required List<String> entryIds,
     required String Function(String entryId) outputFor,
@@ -72,6 +71,7 @@ class CatalogScreenshot {
       dartExecutable: dartExecutable,
       config: config,
     );
+    _GuestSession? guest;
     try {
       var known = {for (var entry in ready.entries) entry.id};
       for (var id in entryIds) {
@@ -86,104 +86,151 @@ class CatalogScreenshot {
 
       var captured = <String, File>{};
       for (var id in entryIds) {
-        // Full, not incremental: each screenshot spawns its own guest, and a
-        // delta means nothing to a process that was never running.
-        var compiled = await daemon.select(id, full: true);
-        if (!compiled.ok) {
-          throw StateError('$id did not compile:\n${compiled.error}');
+        if (guest == null) {
+          // The guest loads the kernel from disk at launch, so the first entry
+          // needs a whole one; afterwards a delta is all a live isolate wants.
+          var compiled = await daemon.select(id, full: true);
+          if (!compiled.ok) {
+            throw StateError('$id did not compile:\n${compiled.error}');
+          }
+          guest = await _GuestSession.start(
+            hostPath: hostPath,
+            assetsDir: ready.assetsDir,
+            icuData: ready.icuData,
+            workDir: p.join(config.appPackageRoot, 'build', 'catalog'),
+            width: width,
+            height: height,
+          );
+        } else {
+          var compiled = await daemon.select(id);
+          if (!compiled.ok) {
+            throw StateError('$id did not compile:\n${compiled.error}');
+          }
+          await guest.reload(compiled.dill!);
         }
-        captured[id] = await _renderOnce(
-          assetsDir: ready.assetsDir,
-          icuData: ready.icuData,
-          output: outputFor(id),
-          width: width,
-          height: height,
-        );
+        captured[id] = await guest.capture(outputFor(id));
       }
       return captured;
     } finally {
+      await guest?.close();
       await daemon.shutdown();
     }
   }
+}
 
-  /// Spawns the guest, waits for a composited frame, and encodes it.
-  ///
-  /// A fresh guest per entry: the daemon has already done the expensive work,
-  /// and a guest that renders once and exits needs no reload plumbing.
-  Future<File> _renderOnce({
+/// One embedder guest, kept alive across captures.
+class _GuestSession {
+  _GuestSession._(
+    this._guest,
+    this._connection,
+    this._server,
+    this._reader,
+    this._vmService,
+    this._workDir,
+  );
+
+  final Process _guest;
+  final Socket _connection;
+  final ServerSocket _server;
+  final FrameReader _reader;
+  final GuestVmService _vmService;
+  final String _workDir;
+
+  final _captures = <String, Completer<void>>{};
+
+  static Future<_GuestSession> start({
+    required String hostPath,
     required String assetsDir,
     required String icuData,
-    required String output,
+    required String workDir,
     required int width,
     required int height,
   }) async {
-    var workDir = p.join(config.appPackageRoot, 'build', 'catalog');
     var socketPath = p.join(workDir, 'screenshot.sock');
-    var rawFrame = p.join(workDir, 'screenshot.rawframe');
-    for (var path in [socketPath, rawFrame]) {
-      var file = File(path);
-      if (file.existsSync()) file.deleteSync();
-    }
-
+    var socket = File(socketPath);
+    if (socket.existsSync()) socket.deleteSync();
     var server = await ServerSocket.bind(
       InternetAddress(socketPath, type: InternetAddressType.unix),
       0,
     );
-    Process? guest;
-    try {
-      guest = await Process.start(hostPath, [
-        assetsDir,
-        icuData,
-        socketPath,
-        '$width',
-        '$height',
-        '--capture-raw',
-        rawFrame,
-      ]);
-      unawaited(guest.stdout.drain<void>());
-      unawaited(guest.stderr.drain<void>());
 
-      var connection = await Future.any<Object?>([
-        server.first,
-        guest.exitCode,
-      ]);
-      if (connection is! Socket) {
-        throw StateError('the guest exited before rendering');
-      }
+    var guest = await Process.start(hostPath, [
+      assetsDir,
+      icuData,
+      socketPath,
+      '$width',
+      '$height',
+    ]);
+    var vmServiceUri = Completer<String>();
+    guest.stdout
+        .transform(const SystemEncoding().decoder)
+        .transform(const LineSplitter())
+        .listen((line) {
+          var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
+          if (match != null && !vmServiceUri.isCompleted) {
+            vmServiceUri.complete(match.group(1));
+          }
+        });
+    unawaited(guest.stderr.drain<void>());
 
-      var reader = FrameReader();
-      var rendered = Completer<void>();
-      connection.listen((chunk) {
-        for (var message in reader.addBytes(chunk)) {
-          if (message is FrameReadyMessage && !rendered.isCompleted) {
-            rendered.complete();
-          }
-          if (message is ErrorMessage && !rendered.isCompleted) {
-            rendered.completeError(StateError(message.message));
-          }
+    var connected = await Future.any<Object?>([server.first, guest.exitCode]);
+    if (connected is! Socket) {
+      throw StateError('the guest exited before connecting');
+    }
+
+    var session = _GuestSession._(
+      guest,
+      connected,
+      server,
+      FrameReader(),
+      await GuestVmService.connect(await vmServiceUri.future),
+      workDir,
+    );
+    connected.listen(session._onData);
+    return session;
+  }
+
+  void _onData(List<int> chunk) {
+    for (var message in _reader.addBytes(chunk)) {
+      if (message is CapturedMessage) {
+        _captures.remove(message.path)?.complete();
+      } else if (message is ErrorMessage) {
+        for (var pending in _captures.values) {
+          if (!pending.isCompleted)
+            pending.completeError(StateError(message.message));
         }
-      });
-      await rendered.future.timeout(const Duration(seconds: 30));
-      // The first frame can precede the fonts resolving; let it settle so the
-      // artifact matches what a viewer would see.
-      await Future<void>.delayed(const Duration(seconds: 1));
-
-      connection.add(encodeMessage(const ShutdownMessage()));
-      await connection.flush();
-      await connection.close();
-
-      var image = decodeRawFrame(File(rawFrame).readAsBytesSync());
-      var file = File(output);
-      file.parent.createSync(recursive: true);
-      file.writeAsBytesSync(img.encodePng(image));
-      return file;
-    } finally {
-      guest?.kill();
-      await server.close();
-      for (var path in [socketPath, rawFrame]) {
-        var file = File(path);
-        if (file.existsSync()) file.deleteSync();
+        _captures.clear();
       }
     }
+  }
+
+  Future<void> reload(String dill) => _vmService.reload(dill);
+
+  /// Asks the guest to write its next frame, and waits for the ack.
+  Future<File> capture(String output) async {
+    var rawFrame = p.join(_workDir, 'screenshot.rawframe');
+    var raw = File(rawFrame);
+    if (raw.existsSync()) raw.deleteSync();
+
+    var done = _captures[rawFrame] = Completer<void>();
+    _connection.add(encodeMessage(CaptureMessage(rawFrame)));
+    await _connection.flush();
+    await done.future.timeout(const Duration(seconds: 30));
+
+    var image = decodeRawFrame(raw.readAsBytesSync());
+    var file = File(output);
+    file.parent.createSync(recursive: true);
+    file.writeAsBytesSync(img.encodePng(image));
+    raw.deleteSync();
+    return file;
+  }
+
+  Future<void> close() async {
+    await _vmService.close();
+    _connection.add(encodeMessage(const ShutdownMessage()));
+    await _connection.flush();
+    await _connection.close();
+    _guest.kill();
+    await _server.close();
   }
 }
