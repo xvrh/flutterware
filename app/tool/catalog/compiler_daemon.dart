@@ -63,7 +63,19 @@ Future<void> main(List<String> args) async {
 
 class _Daemon {
   _Daemon(this.config, this.address, this._server)
-    : _buildDir = p.join(config.appPackageRoot, 'build', 'catalog');
+    // Keyed by address, so two daemons never share a working directory. They
+    // all run out of the *GUI's* package — one catalog per project, but one
+    // `app/build/catalog` — and everything in here is per-daemon state: the
+    // generated entrypoint, the compiler's output, the published kernel, the
+    // session directories. Sharing it meant two catalogs generating wrappers
+    // over each other and compiling to the same file, which resolves a name to
+    // whichever project wrote last.
+    : _buildDir = p.join(
+        config.appPackageRoot,
+        'build',
+        'catalog',
+        address.key,
+      );
 
   final DaemonConfig config;
   final DaemonAddress address;

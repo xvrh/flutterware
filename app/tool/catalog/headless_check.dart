@@ -303,6 +303,57 @@ Future<void> main(List<String> args) async {
     'the first client keeps rendering while another client compiles',
   );
 
+  // 4b. A second *project* on the same GUI, at the same time.
+  //
+  // Every daemon runs out of the GUI's package, so they all wanted one
+  // `app/build/catalog`: the generated entrypoint, the compiler's output, the
+  // published kernel and the session directories. Two catalogs then generated
+  // wrappers over each other and compiled to the same file, and a name present
+  // in both projects — `wrapInApp`, which each project's demo shell exports —
+  // resolved to whichever wrote last. The symptom was a hot reload failing with
+  // `lookup Failed: wrapInApp in @method in .../shell.dart`, intermittently,
+  // in whichever catalog lost the race.
+  stdout.writeln('[check] opening a second project against the same GUI');
+  var otherProject = p.join(p.dirname(packageRoot), 'examples', 'example');
+  var (other, otherReady) = await CompilerDaemonClient.connect(
+    dartExecutable: p.join(cache.flutterRoot, 'bin', 'dart'),
+    config: DaemonConfig(
+      appPackageRoot: packageRoot,
+      projectRoot: otherProject,
+      packageConfig: requirePackageConfig(otherProject),
+      flutterSdkRoot: cache.flutterRoot,
+    ),
+    onLog: (line) => stdout.writeln('  [daemon] $line'),
+  );
+  try {
+    check(
+      otherReady.entries.isNotEmpty,
+      'the second project has its own entries (${otherReady.entries.length})',
+    );
+    check(
+      otherReady.assetsDir != ready.assetsDir,
+      'the two projects do not share a working directory',
+    );
+
+    // The first project must still compile and reload *after* the second has
+    // generated its own entrypoint — that is the collision.
+    var afterOther = await daemon.select(entries.first.id);
+    check(
+      afterOther.ok,
+      'the first project still compiles: ${afterOther.error}',
+    );
+    if (afterOther.ok) {
+      try {
+        await vmService.reload(afterOther.dill!);
+        check(true, 'and its guest still reloads');
+      } catch (e) {
+        check(false, 'and its guest still reloads: $e');
+      }
+    }
+  } finally {
+    await other.close();
+  }
+
   // 5. Fixing a broken demo brings it back, and every client is told.
   //
   // Both halves matter. Re-admission means fixing the file is enough — no

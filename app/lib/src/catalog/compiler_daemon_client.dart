@@ -201,8 +201,16 @@ class CompilerDaemonClient {
       var stale = File(address.socketPath);
       if (stale.existsSync()) stale.deleteSync();
 
+      // Under the daemon's own key: two clients spawning at once would
+      // otherwise overwrite one another's config before either daemon read it.
       var configFile = File(
-        p.join(config.appPackageRoot, 'build', 'catalog', 'daemon_config.json'),
+        p.join(
+          config.appPackageRoot,
+          'build',
+          'catalog',
+          address.key,
+          'daemon_config.json',
+        ),
       );
       configFile.parent.createSync(recursive: true);
       configFile.writeAsStringSync(jsonEncode(config.toJson()));
