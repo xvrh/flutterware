@@ -12,16 +12,16 @@ import 'catalog_session.dart';
 class CatalogDevScreen extends StatefulWidget {
   const CatalogDevScreen({
     super.key,
-    required this.entries,
     required this.appPackageRoot,
     required this.flutterSdkRoot,
     required this.projectRoot,
+    this.roots = const ['demo'],
   });
 
-  final List<CatalogEntry> entries;
   final String appPackageRoot;
   final String flutterSdkRoot;
   final String projectRoot;
+  final List<String> roots;
 
   @override
   State<CatalogDevScreen> createState() => _CatalogDevScreenState();
@@ -29,10 +29,10 @@ class CatalogDevScreen extends StatefulWidget {
 
 class _CatalogDevScreenState extends State<CatalogDevScreen> {
   late final CatalogSession _session = CatalogSession(
-    entries: widget.entries,
     appPackageRoot: widget.appPackageRoot,
     flutterSdkRoot: widget.flutterSdkRoot,
     projectRoot: widget.projectRoot,
+    roots: widget.roots,
   );
   final FocusNode _focusNode = FocusNode();
   Size? _lastReportedSize;

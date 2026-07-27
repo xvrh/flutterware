@@ -6,7 +6,6 @@ import 'package:async/async.dart';
 
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/protocol.dart';
-import 'package:flutterware_app/src/catalog/stub_entries.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart';
@@ -31,9 +30,11 @@ Future<void> main(List<String> args) async {
 
   var config = DaemonConfig(
     appPackageRoot: packageRoot,
-    projectRoot: repoRoot,
+    // The demos live under `app/tool/catalog/`, so the app package is both the
+    // scan root and the entrypoint's package.
+    projectRoot: packageRoot,
     packageConfig: p.join(repoRoot, '.dart_tool', 'package_config.json'),
-    entries: stubEntries,
+    roots: const ['tool/catalog'],
     emitProbe: true,
   );
   var configFile = File(p.join(buildDir, 'daemon_config.json'))
@@ -79,10 +80,20 @@ Future<void> main(List<String> args) async {
     exit(1);
   }
   var ready = first;
+  var entries = ready.entries;
   stdout.writeln(
-    '[check] daemon ready — cold compile ${ready.coldCompile.inMilliseconds}ms',
+    '[check] daemon ready — cold compile ${ready.coldCompile.inMilliseconds}ms, '
+    '${entries.length} entries discovered',
   );
+  for (var diagnostic in ready.diagnostics) {
+    stdout.writeln('  [scan] $diagnostic');
+  }
   check(File(ready.hostPath).existsSync(), 'the C host was built');
+  check(entries.length >= 5, 'discovery found the demo entries');
+  check(
+    entries.any((e) => e.group == 'Avatar tile'),
+    'a file with several entries derived a group',
+  );
 
   // 2. The guest: the real embedder host, headless.
   var socketPath = p.join(buildDir, 'headless_check.sock');
@@ -140,16 +151,19 @@ Future<void> main(List<String> args) async {
   var firstProbe = await _nextProbe(probes.stream, const Duration(seconds: 20));
   stdout.writeln('[check] rendering: $firstProbe');
   check(
-    firstProbe.contains(stubEntries.first.id),
+    firstProbe.contains(entries.first.id),
     'the guest renders the first entry',
   );
+  // Order-independent: entries are sorted by id, so which one is first is not
+  // this check's business. That the probe carries rendered text at all means
+  // the wrapper ran, the builder ran, and the tree was walked.
   check(
-    firstProbe.contains('Dr. Sarah Chen'),
+    firstProbe.split('|').last.trim().isNotEmpty,
     'the entry wrapper and demo body both ran',
   );
 
   // 3. Switch through every entry, then revisit one.
-  for (var entry in [...stubEntries.skip(1), stubEntries.first]) {
+  for (var entry in [...entries.skip(1), entries.first]) {
     var reply = responses
         .where((r) => r is DaemonCompiled)
         .cast<DaemonCompiled>()
@@ -176,11 +190,17 @@ Future<void> main(List<String> args) async {
       '+${compiled.newSourceCount} libs',
     );
     check(probe.contains(entry.id), 'switched to ${entry.name} by hot reload');
+    if (entry.name == 'Members') {
+      check(
+        probe.contains('Dr. Sarah Chen'),
+        'the Members entry rendered its own content',
+      );
+    }
   }
 
   var lastProbe = await _nextProbe(probes.stream, const Duration(seconds: 10));
   check(
-    lastProbe.contains('Dr. Sarah Chen'),
+    lastProbe.contains(entries.first.id),
     'revisiting the first entry renders it again',
   );
   check(frames > 0, 'the guest composited frames ($frames)');

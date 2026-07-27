@@ -14,6 +14,8 @@ class CatalogEntry {
     required this.symbol,
     required this.annotation,
     required this.name,
+    this.group,
+    this.declaredId,
   });
 
   factory CatalogEntry.fromJson(Map<String, dynamic> json) =>
@@ -31,11 +33,33 @@ class CatalogEntry {
   /// interprets it.
   final String annotation;
 
-  /// Display name. A real scan reads this from a literal `name:` argument.
+  /// Display name, from a literal `name:` argument, else the symbol.
   final String name;
 
+  /// One tree level between the directory and the leaf.
+  ///
+  /// Declared by `group:`, or derived from the filename when a file holds more
+  /// than one entry — so variants get a parent with no ceremony.
+  final String? group;
+
+  /// An `id:` on the annotation, pinning identity across renames and moves.
+  final String? declaredId;
+
   /// Identity: derived from path and symbol unless the annotation pins it.
-  String get id => '$path#$symbol';
+  ///
+  /// Optional rather than required because nothing holds an id yet and the
+  /// derivation is unambiguous — except where several annotations sit on one
+  /// declaration, which the scanner rejects rather than silently collapses.
+  String get id => declaredId ?? '$path#$symbol';
+
+  CatalogEntry withGroup(String group) => CatalogEntry(
+    path: path,
+    symbol: symbol,
+    annotation: annotation,
+    name: name,
+    group: group,
+    declaredId: declaredId,
+  );
 
   Map<String, dynamic> toJson() => _$CatalogEntryToJson(this);
 }

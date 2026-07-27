@@ -45,13 +45,17 @@ class SwitchReport {
 /// why that is not a style preference.
 class CatalogSession extends ChangeNotifier {
   CatalogSession({
-    required this.entries,
     required this.appPackageRoot,
     required this.flutterSdkRoot,
     required this.projectRoot,
+    this.roots = const ['demo'],
   });
 
-  final List<CatalogEntry> entries;
+  /// Everything discovery found, populated when the daemon reports ready.
+  List<CatalogEntry> entries = const [];
+
+  /// Warnings the scan produced; the daemon refuses to start on errors.
+  List<String> diagnostics = const [];
 
   /// The `flutterware_app` package root, which owns `native/` and the build dir.
   final String appPackageRoot;
@@ -59,6 +63,9 @@ class CatalogSession extends ChangeNotifier {
 
   /// Root the entries' paths are relative to.
   final String projectRoot;
+
+  /// Directories to scan, relative to [projectRoot].
+  final List<String> roots;
 
   CatalogSessionPhase phase = CatalogSessionPhase.starting;
   String? errorMessage;
@@ -80,7 +87,6 @@ class CatalogSession extends ChangeNotifier {
   /// Brings up the daemon, the guest and the reload channel.
   Future<void> start({int width = 900, int height = 700}) async {
     try {
-      if (entries.isEmpty) throw StateError('the catalog has no entries');
       _lock = SessionLock.acquire(p.join(appPackageRoot, 'build', 'catalog'));
 
       var (daemon, ready) = await CompilerDaemonClient.start(
@@ -93,12 +99,14 @@ class CatalogSession extends ChangeNotifier {
             '.dart_tool',
             'package_config.json',
           ),
-          entries: entries,
+          roots: roots,
         ),
         onLog: (line) => debugPrint('[catalog] $line'),
       );
       _daemon = daemon;
       coldCompile = ready.coldCompile;
+      entries = ready.entries;
+      diagnostics = ready.diagnostics;
       if (_disposed) return;
 
       var engine = _engine = EmbeddedEngine(

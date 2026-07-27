@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutterware_app/src/catalog/asset_bundle.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
+import 'package:flutterware_app/src/catalog/discovery.dart';
 import 'package:flutterware_app/src/catalog/protocol.dart';
 import 'package:flutterware_app/src/catalog/entrypoint_generator.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
@@ -65,23 +66,44 @@ class _Daemon {
   late final FlutterCache _cache;
   late final EntrypointGenerator _generator;
   ResidentCompiler? _compiler;
+  var _entries = <CatalogEntry>[];
 
   String get _assetsDir => p.join(_buildDir, 'assets');
 
-  CatalogEntry _entryById(String id) =>
-      config.entries.firstWhere((e) => e.id == id);
+  CatalogEntry _entryById(String id) => _entries.firstWhere((e) => e.id == id);
 
   /// Everything slow and one-time: the engine framework, the asset bundle, the
   /// first compile, and the C host.
   Future<void> prepare() async {
-    if (config.entries.isEmpty) throw StateError('the catalog has no entries');
     _cache = FlutterCache.fromRunningSdk();
+
+    var scan = CatalogScanner(
+      projectRoot: config.projectRoot,
+      roots: config.roots,
+      previewAnnotations: config.previewAnnotations,
+    ).scan();
+    if (!scan.ok) {
+      // A duplicate id or an uncallable target means an entry would be missing
+      // or unreachable; refusing beats starting a catalog that lies.
+      throw StateError(
+        'discovery failed:\n'
+        '${scan.diagnostics.where((d) => d.isError).join('\n')}',
+      );
+    }
+    _entries = scan.entries;
+    if (_entries.isEmpty) {
+      throw StateError(
+        'no catalog entries found under ${config.roots.join(', ')} — is the '
+        'annotation registered? (looking for '
+        '${config.previewAnnotations.map((a) => '@$a').join(', ')})',
+      );
+    }
     _generator = EntrypointGenerator(
       outputDir: p.join(_buildDir, 'entrypoint'),
       projectRoot: config.projectRoot,
       emitProbe: config.emitProbe,
     );
-    _generator.select(config.entries.first);
+    _generator.select(_entries.first);
 
     var engineDir = p.join(config.appPackageRoot, '.engine');
     await ensureEmbedderFramework(_cache, engineDir);
@@ -113,6 +135,11 @@ class _Daemon {
         assetsDir: _assetsDir,
         icuData: _cache.icuData,
         coldCompile: watch.elapsed,
+        entries: _entries,
+        diagnostics: [
+          for (var d in scan.diagnostics)
+            if (!d.isError) '$d',
+        ],
       ),
     );
   }

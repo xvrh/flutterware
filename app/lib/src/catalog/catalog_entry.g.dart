@@ -11,6 +11,8 @@ CatalogEntry _$CatalogEntryFromJson(Map<String, dynamic> json) => CatalogEntry(
   symbol: json['symbol'] as String,
   annotation: json['annotation'] as String,
   name: json['name'] as String,
+  group: json['group'] as String?,
+  declaredId: json['declaredId'] as String?,
 );
 
 Map<String, dynamic> _$CatalogEntryToJson(CatalogEntry instance) =>
@@ -19,4 +21,6 @@ Map<String, dynamic> _$CatalogEntryToJson(CatalogEntry instance) =>
       'symbol': instance.symbol,
       'annotation': instance.annotation,
       'name': instance.name,
+      'group': instance.group,
+      'declaredId': instance.declaredId,
     };

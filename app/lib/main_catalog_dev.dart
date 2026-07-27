@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
-import 'src/catalog/stub_entries.dart';
 import 'src/catalog/catalog_dev_screen.dart';
 import 'src/utils/flutter_sdk.dart';
 
@@ -34,12 +33,12 @@ Future<void> main() async {
       home: (_appRootDefine.isEmpty || flutterSdkRoot.isEmpty)
           ? const _MissingDefines()
           : CatalogDevScreen(
-              entries: stubEntries,
               appPackageRoot: _appRootDefine,
               flutterSdkRoot: flutterSdkRoot,
-              // Stub entry paths are relative to the repo root, the parent of
-              // the `app/` package.
-              projectRoot: p.dirname(_appRootDefine),
+              // The demos live under `app/tool/catalog/`, so the app package
+              // is both the scan root and the entrypoint's package.
+              projectRoot: _appRootDefine,
+              roots: const ['tool/catalog'],
             ),
     ),
   );

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutterware/ui_catalog.dart';
+
 import 'shell.dart';
 
 /// Desktop-sized, to exercise `formFactor: FormFactor.desktop` resolving to a
 /// 1440x900 `Preview.size` through `transform()`.
+@Demo(name: 'Dashboard', formFactor: FormFactor.desktop, wrapper: wrapInApp)
 Widget dashboard() => const _Dashboard();
 
 class _Dashboard extends StatelessWidget {

@@ -17,6 +17,14 @@ DaemonReady _$DaemonReadyFromJson(Map<String, dynamic> json) => DaemonReady(
   assetsDir: json['assetsDir'] as String,
   icuData: json['icuData'] as String,
   coldCompile: _millis.fromJson((json['coldCompile'] as num).toInt()),
+  entries: (json['entries'] as List<dynamic>)
+      .map((e) => CatalogEntry.fromJson(e as Map<String, dynamic>))
+      .toList(),
+  diagnostics:
+      (json['diagnostics'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const [],
 );
 
 Map<String, dynamic> _$DaemonReadyToJson(DaemonReady instance) =>
@@ -25,6 +33,8 @@ Map<String, dynamic> _$DaemonReadyToJson(DaemonReady instance) =>
       'assetsDir': instance.assetsDir,
       'icuData': instance.icuData,
       'coldCompile': _millis.toJson(instance.coldCompile),
+      'entries': instance.entries.map((e) => e.toJson()).toList(),
+      'diagnostics': instance.diagnostics,
     };
 
 DaemonCompiled _$DaemonCompiledFromJson(Map<String, dynamic> json) =>
@@ -60,9 +70,14 @@ DaemonConfig _$DaemonConfigFromJson(Map<String, dynamic> json) => DaemonConfig(
   appPackageRoot: json['appPackageRoot'] as String,
   projectRoot: json['projectRoot'] as String,
   packageConfig: json['packageConfig'] as String,
-  entries: (json['entries'] as List<dynamic>)
-      .map((e) => CatalogEntry.fromJson(e as Map<String, dynamic>))
-      .toList(),
+  roots:
+      (json['roots'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+      const ['demo'],
+  previewAnnotations:
+      (json['previewAnnotations'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const ['Preview', 'Demo'],
   emitProbe: json['emitProbe'] as bool? ?? false,
 );
 
@@ -71,6 +86,7 @@ Map<String, dynamic> _$DaemonConfigToJson(DaemonConfig instance) =>
       'appPackageRoot': instance.appPackageRoot,
       'projectRoot': instance.projectRoot,
       'packageConfig': instance.packageConfig,
-      'entries': instance.entries.map((e) => e.toJson()).toList(),
+      'roots': instance.roots,
+      'previewAnnotations': instance.previewAnnotations,
       'emitProbe': instance.emitProbe,
     };

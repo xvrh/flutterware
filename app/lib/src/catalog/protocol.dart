@@ -95,13 +95,15 @@ sealed class DaemonResponse implements ProtocolMessage {
 }
 
 /// The daemon finished the slow one-time work; the guest can be launched.
-@JsonSerializable()
+@JsonSerializable(explicitToJson: true)
 class DaemonReady extends DaemonResponse {
   const DaemonReady({
     required this.hostPath,
     required this.assetsDir,
     required this.icuData,
     required this.coldCompile,
+    required this.entries,
+    this.diagnostics = const [],
   });
 
   factory DaemonReady.fromJson(Map<String, dynamic> json) =>
@@ -115,6 +117,14 @@ class DaemonReady extends DaemonResponse {
 
   @_millis
   final Duration coldCompile;
+
+  /// Everything discovery found, in tree order. The daemon owns the scan so
+  /// the GUI and the CLI read one list rather than each building their own.
+  final List<CatalogEntry> entries;
+
+  /// What the scan noticed but did not act on. Errors never reach here — the
+  /// daemon refuses to start on those.
+  final List<String> diagnostics;
 
   @override
   String get type => wireName;
@@ -182,6 +192,9 @@ class DaemonFailed extends DaemonResponse {
 
   @override
   Map<String, dynamic> toJson() => _$DaemonFailedToJson(this);
+
+  @override
+  String toString() => stackTrace == null ? message : '$message\n$stackTrace';
 }
 
 /// What the daemon needs to start, handed over as a file rather than argv so
@@ -192,7 +205,8 @@ class DaemonConfig {
     required this.appPackageRoot,
     required this.projectRoot,
     required this.packageConfig,
-    required this.entries,
+    this.roots = const ['demo'],
+    this.previewAnnotations = const ['Preview', 'Demo'],
     this.emitProbe = false,
   });
 
@@ -202,7 +216,12 @@ class DaemonConfig {
   final String appPackageRoot;
   final String projectRoot;
   final String packageConfig;
-  final List<CatalogEntry> entries;
+
+  /// Directories to scan for entries, relative to [projectRoot].
+  final List<String> roots;
+
+  /// Annotation names that mark an entry. Recognition is by registration.
+  final List<String> previewAnnotations;
 
   /// Makes the generated guest print a periodic `FW-PROBE:` line naming the
   /// live entry and the text it renders. Used by the headless check.

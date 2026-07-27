@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutterware/ui_catalog.dart';
+
 import 'shell.dart';
 
 const _members = [
@@ -16,10 +18,13 @@ const _longText = [
   ),
 ];
 
+@Demo(name: 'Members', wrapper: wrapInApp)
 Widget avatarTileMembers() => _list(_members);
 
+@Demo(name: 'Empty', wrapper: wrapInApp)
 Widget avatarTileEmpty() => _list(const []);
 
+@Demo(name: 'Long text', wrapper: wrapInApp)
 Widget avatarTileLongText() => _list(_longText);
 
 Widget _list(List<(String, String, String)> people) {
