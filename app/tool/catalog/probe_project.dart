@@ -44,6 +44,11 @@ Future<void> main(List<String> args) async {
       packageConfig: requirePackageConfig(projectRoot),
       flutterSdkRoot: cache.flutterRoot,
       roots: [scanRoot],
+      // What the harnesses were missing: the GUI installed by the CLI has an
+      // appPackageRoot under ~/.flutterware and a projectRoot in the user's
+      // tree, and the probe is how a failure that only shows at *render* time
+      // — after a reload the VM reported as successful — is visible at all.
+      emitProbe: true,
     ),
     onLog: (line) => stdout.writeln('  [daemon] $line'),
   );

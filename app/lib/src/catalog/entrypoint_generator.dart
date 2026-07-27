@@ -130,6 +130,9 @@ class EntrypointGenerator {
 // Imports carried from the demo file: the annotation is written in *its* scope,
 // so anything the annotation names has to resolve here too.
 ${carried.join('\n')}
+// Unconditional: the getters below are typed, and a demo file is not obliged
+// to import widgets itself.
+import 'package:flutter/widgets.dart';
 import 'package:flutterware/ui_catalog.dart';
 
 import '${_relative(source)}' as fw$index;
@@ -137,9 +140,17 @@ import '${_relative(source)}' as fw$index;
 // The annotation, evaluated as Dart rather than interpreted statically.
 // `transform()` returns a plain Preview and drops id/figma/formFactor, so the
 // annotation itself is kept alongside it.
-const fwDemo = ${entry.annotation};
+//
+// Getters, not consts. A const holding a function tear-off — every `wrapper:`
+// is one — is inlined into whichever library reads it, so the entrypoint's
+// constant pool ends up referring to a procedure in the demo's own file. A
+// reload that carries only the entrypoint then has to re-resolve that
+// reference against a library it does not contain, and the guest renders
+// `Lookup failed: <wrapper> in @methods in file:...` instead of the demo.
+// Behind a getter there is nothing to inline and nothing to re-resolve.
+Demo get fwDemo => ${entry.annotation};
 
-const fwBuilder = fw$index.${entry.symbol};
+Widget Function() get fwBuilder => fw$index.${entry.symbol};
 ''';
   }
 

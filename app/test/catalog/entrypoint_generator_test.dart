@@ -52,11 +52,21 @@ Widget avatarTileEmpty() => const Placeholder();
     expect(
       wrapper(0),
       contains(
-        "const fwDemo = Demo(name: 'Members', "
+        "Demo get fwDemo => Demo(name: 'Members', "
         'wrapper: wrapInApp);',
       ),
     );
-    expect(wrapper(0), contains('const fwBuilder = fw0.avatarTileMembers;'));
+    expect(
+      wrapper(0),
+      contains('Widget Function() get fwBuilder => fw0.avatarTileMembers;'),
+    );
+    // Not const, and this is the whole point: a const holding a function
+    // tear-off is inlined into the entrypoint's constant pool, and a reload
+    // carrying only the entrypoint cannot re-resolve it against a demo file it
+    // does not contain. The guest renders `Lookup failed: wrapInApp in
+    // @methods in file:...` instead of the demo.
+    expect(wrapper(0), isNot(contains('const fwDemo')));
+    expect(wrapper(0), isNot(contains('const fwBuilder')));
   });
 
   test('carries the demo file imports, re-relativised', () {
