@@ -49,7 +49,6 @@ dependencies:
     sdk: flutter
   flutterware:
     path: ../
-  frontend_server_client:
   github:
   glob:
   image:

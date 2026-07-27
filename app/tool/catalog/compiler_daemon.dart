@@ -13,9 +13,8 @@ import 'package:path/path.dart' as p;
 
 /// The catalog's build and compile half, as a plain Dart process.
 ///
-/// It **must not** run inside a Flutter app: `FrontendServerClient` spawns the
-/// compiler through `Platform.resolvedExecutable`, so an app that compiles
-/// in-process relaunches itself, recursively. Hence a daemon.
+/// It runs outside the GUI so that a screenshot, a `fw` command and an agent
+/// reach the same pipeline the panel does, without a window open.
 ///
 /// Usage — the GUI spawns this with the Flutter SDK's `dart`:
 ///
@@ -119,12 +118,7 @@ class _Daemon {
     mark('asset bundle');
 
     var watch = Stopwatch()..start();
-    var compiler = _compiler = await ResidentCompiler.start(
-      entrypoint: _generator.entrypointPath,
-      outputDill: p.join(_assetsDir, 'kernel_blob.bin'),
-      packageConfig: config.packageConfig,
-      cache: _cache,
-    );
+    var compiler = _compiler = await _startCompiler();
     mark('compiler start');
     var cold = await compiler.compile();
     mark('cold compile');
@@ -133,6 +127,8 @@ class _Daemon {
         'the first entry did not compile:\n${cold.output.join('\n')}',
       );
     }
+    compiler.saveWarmStart();
+    mark('save warm start');
 
     var hostPath = await buildHost(
       nativeSourceDir: p.join(config.appPackageRoot, 'native'),
@@ -164,12 +160,7 @@ class _Daemon {
       // kernel_blob.bin, which is what a guest spawned from scratch loads.
       // Everything else the daemon built — asset bundle, C host — is reused.
       await _compiler!.shutdown();
-      _compiler = await ResidentCompiler.start(
-        entrypoint: _generator.entrypointPath,
-        outputDill: p.join(_assetsDir, 'kernel_blob.bin'),
-        packageConfig: config.packageConfig,
-        cache: _cache,
-      );
+      _compiler = await _startCompiler();
     }
     var compiled = await _compiler!.compile(full ? const [] : invalidated);
     _emit(
@@ -181,6 +172,38 @@ class _Daemon {
         error: compiled.ok ? null : compiled.output.join('\n'),
       ),
     );
+  }
+
+  Future<ResidentCompiler> _startCompiler() => ResidentCompiler.start(
+    entrypoint: _generator.entrypointPath,
+    outputDill: p.join(_assetsDir, 'kernel_blob.bin'),
+    packageConfig: config.packageConfig,
+    cache: _cache,
+    warmDill: _warmDill,
+  );
+
+  /// The kernel a previous session left behind, for the compiler to start from.
+  ///
+  /// Null when the stamp says it was produced under different conditions. The
+  /// compiler tolerates a stale *source* — that is the whole point, it
+  /// recompiles what changed — but a kernel built against another engine or
+  /// another package resolution is not a starting point, it is a wrong answer.
+  late final String? _warmDill = _resolveWarmDill();
+
+  String? _resolveWarmDill() {
+    var dill = p.join(_buildDir, 'warm.dill');
+    var stamp = File('$dill.stamp');
+    var current = [
+      _cache.engineRevision,
+      config.packageConfig,
+      '${File(config.packageConfig).statSync().modified.millisecondsSinceEpoch}',
+    ].join(' ');
+
+    if (stamp.existsSync() && stamp.readAsStringSync() == current) return dill;
+    if (File(dill).existsSync()) File(dill).deleteSync();
+    stamp.parent.createSync(recursive: true);
+    stamp.writeAsStringSync(current);
+    return dill;
   }
 
   /// The asset directory the guest reads: manifests written here, payloads

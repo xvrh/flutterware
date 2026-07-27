@@ -5,9 +5,9 @@ import 'dart:io';
 import 'package:async/async.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
+import 'package:flutterware_app/src/embedder/frontend_server.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart';
-import 'package:frontend_server_client/frontend_server_client.dart';
 import 'package:path/path.dart' as p;
 
 /// S1 spike host: builds and spawns the embedder guest running
@@ -59,17 +59,18 @@ Future<void> main(List<String> args) async {
   // A *resident* compiler: the first compile is cold, every later one is an
   // incremental recompile of just the edited library.
   var watch = Stopwatch()..start();
-  var compiler = await FrontendServerClient.start(
-    scenePath,
-    p.join(assetsDir, 'kernel_blob.bin'),
-    cache.platformDill,
+  var compiler = await FrontendServer.start(
+    executable: cache.dartAotRuntime,
+    snapshot: cache.frontendServerSnapshot,
+    entrypoint: scenePath,
+    outputDill: p.join(assetsDir, 'kernel_blob.bin'),
+    packageConfig: p.join(repoRoot, '.dart_tool', 'package_config.json'),
     sdkRoot: cache.flutterPatchedSdkDir,
-    target: 'flutter',
-    packagesJson: p.join(repoRoot, '.dart_tool', 'package_config.json'),
+    platformDill: cache.platformDill,
   );
   var first = await compiler.compile();
   if (first.errorCount > 0) {
-    stderr.writeln(first.compilerOutputLines.join('\n'));
+    stderr.writeln(first.output.join('\n'));
     exit(1);
   }
   compiler.accept();
@@ -221,7 +222,7 @@ Future<bool> _runOnce(
 /// Edits the scenario source, recompiles incrementally, pushes the delta into
 /// the live guest via the VM service, and re-runs the scenario.
 Future<bool> _hotCycle({
-  required FrontendServerClient compiler,
+  required FrontendServer compiler,
   required String scenePath,
   required String vmServiceUri,
   required Socket control,
@@ -247,7 +248,7 @@ Future<bool> _hotCycle({
     var watch = Stopwatch()..start();
     var result = await compiler.compile([file.uri]);
     if (result.errorCount > 0) {
-      stderr.writeln(result.compilerOutputLines.join('\n'));
+      stderr.writeln(result.output.join('\n'));
       await compiler.reject();
       return false;
     }

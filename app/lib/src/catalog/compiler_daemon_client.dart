@@ -8,10 +8,16 @@ import 'protocol.dart';
 
 /// Talks to the compiler daemon, which runs as a separate plain-Dart process.
 ///
-/// The GUI never compiles in-process: `FrontendServerClient` spawns the
-/// compiler through `Platform.resolvedExecutable`, which inside a Flutter app
-/// is the app binary — so an app that compiles relaunches itself, recursively.
-/// The daemon exists to keep that impossible.
+/// The daemon is not a workaround. It is where the catalog pipeline lives so
+/// that the GUI, `fw`, and an agent are three *drivers* of one pipeline rather
+/// than three copies of it — a screenshot must not require a running GUI, and a
+/// second consumer must not repeat the first one's work.
+///
+/// (It was once also a containment measure: `package:frontend_server_client`
+/// spawns the compiler through `Platform.resolvedExecutable`, which inside a
+/// Flutter app is the app binary, so compiling in-process relaunched the app
+/// recursively. [FrontendServer] takes an explicit executable, so that class of
+/// bug is gone and no longer the reason for anything here.)
 class CompilerDaemonClient {
   CompilerDaemonClient._(this._process, this._responses);
 
@@ -118,11 +124,10 @@ const _daemonSources = [
 /// from a snapshot: the single largest cost in bringing a catalog up, and none
 /// of it the user's project.
 ///
-/// A kernel snapshot rather than `dart compile exe`, and this is not a
-/// preference: `FrontendServerClient` spawns the compiler as
-/// `Platform.resolvedExecutable <frontend_server snapshot>`, so the daemon must
-/// *be* a Dart VM invocation. An AOT binary would make the daemon relaunch
-/// itself — `ResidentCompiler` refuses to start at all in that case.
+/// A kernel snapshot rather than `dart compile exe` only because AOT costs
+/// ~1.6s to build against the snapshot's ~1.6s and saves ~80ms at startup; the
+/// snapshot rebuilds far more often than it runs during development. Nothing
+/// forbids AOT now that [FrontendServer] is handed its executable.
 Future<(String, List<String>)> _ensureCompiled({
   required String dartExecutable,
   required String appPackageRoot,

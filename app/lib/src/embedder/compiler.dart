@@ -1,8 +1,7 @@
 import 'dart:io';
 
-import 'package:frontend_server_client/frontend_server_client.dart';
-
 import 'flutter_cache.dart';
+import 'frontend_server.dart';
 
 /// Compiles [entrypoint] to a Flutter-target kernel blob at [outputDill] using
 /// the Flutter cache's `frontend_server`.
@@ -18,28 +17,26 @@ Future<File> compileToKernel({
   cache ??= FlutterCache.fromRunningSdk();
   File(outputDill).parent.createSync(recursive: true);
 
-  var client = await FrontendServerClient.start(
-    entrypoint,
-    outputDill,
-    cache.platformDill,
+  var server = await FrontendServer.start(
+    executable: cache.dartAotRuntime,
+    snapshot: cache.frontendServerSnapshot,
+    entrypoint: entrypoint,
+    outputDill: outputDill,
+    packageConfig: packageConfig,
     sdkRoot: cache.flutterPatchedSdkDir,
-    target: 'flutter',
-    packagesJson: packageConfig,
+    platformDill: cache.platformDill,
   );
   try {
-    var result = await client.compile();
+    var result = await server.compile();
     if (result.dillOutput == null) {
       throw StateError('frontend_server produced no kernel output.');
     }
     if (result.errorCount > 0) {
-      throw StateError(
-        'Compilation failed:\n'
-        '${result.compilerOutputLines.join('\n')}',
-      );
+      throw StateError('Compilation failed:\n${result.output.join('\n')}');
     }
-    client.accept();
+    server.accept();
     return File(result.dillOutput!);
   } finally {
-    await client.shutdown();
+    await server.shutdown();
   }
 }

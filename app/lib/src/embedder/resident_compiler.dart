@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:frontend_server_client/frontend_server_client.dart';
 import 'package:path/path.dart' as p;
 
 import 'flutter_cache.dart';
+import 'frontend_server.dart';
 
 /// The result of one [ResidentCompiler.compile] call.
 class CompileOutcome {
@@ -39,32 +39,51 @@ class CompileOutcome {
 /// This is the difference between a catalog that recompiles the world per entry
 /// and one that switches in milliseconds; see
 /// `docs/superpowers/specs/2026-07-26-s3-hot-switch-findings.md`.
+///
+/// The *first* compile is warm too when a `warmDill` is given: the compiler
+/// loads a kernel an earlier session produced and recompiles only what has
+/// changed since. Measured against `app/tool/catalog/demos`, that is 2396ms
+/// cold against 341ms warm, and an edited demo still comes back edited.
 class ResidentCompiler {
-  ResidentCompiler._(this._client, this.outputDill);
+  ResidentCompiler._(this._server, this.outputDill, this._warmDill);
 
-  final FrontendServerClient _client;
+  final FrontendServer _server;
 
   /// Where the first, full kernel is written. The guest loads this at startup.
   final String outputDill;
+
+  /// Where that kernel is kept for the *next* session to start warm from, or
+  /// null when warm starts are off.
+  final String? _warmDill;
 
   static Future<ResidentCompiler> start({
     required String entrypoint,
     required String outputDill,
     required String packageConfig,
-    FlutterCache? cache,
+    required FlutterCache cache,
+
+    /// Persist the cold kernel and start from it next time.
+    ///
+    /// Off by default because it costs a file copy and a correctness
+    /// assumption: the cached kernel must have been produced by the same SDK
+    /// against the same package config. The daemon owns that decision.
+    String? warmDill,
   }) async {
-    _refuseToRunInsideAFlutterApp();
-    cache ??= FlutterCache.fromRunningSdk();
     File(outputDill).parent.createSync(recursive: true);
-    var client = await FrontendServerClient.start(
-      entrypoint,
-      outputDill,
-      cache.platformDill,
+    var warm = warmDill != null && File(warmDill).existsSync()
+        ? warmDill
+        : null;
+    var server = await FrontendServer.start(
+      executable: cache.dartAotRuntime,
+      snapshot: cache.frontendServerSnapshot,
+      entrypoint: entrypoint,
+      outputDill: outputDill,
+      packageConfig: packageConfig,
       sdkRoot: cache.flutterPatchedSdkDir,
-      target: 'flutter',
-      packagesJson: packageConfig,
+      platformDill: cache.platformDill,
+      initializeFromDill: warm,
     );
-    return ResidentCompiler._(client, outputDill);
+    return ResidentCompiler._(server, outputDill, warmDill);
   }
 
   /// Compiles, invalidating [invalidated] first.
@@ -73,48 +92,33 @@ class ResidentCompiler {
   /// and can compile again. A broken demo must not end the session — S3
   /// measured that the guest survives, and this is what preserves it.
   Future<CompileOutcome> compile([List<Uri> invalidated = const []]) async {
-    var watch = Stopwatch()..start();
-    var result = await _client.compile(invalidated);
-    watch.stop();
-
-    var outcome = CompileOutcome(
+    var result = await _server.compile(invalidated);
+    if (result.ok) {
+      _server.accept();
+    } else {
+      await _server.reject();
+    }
+    return CompileOutcome(
       dillOutput: result.dillOutput,
       errorCount: result.errorCount,
-      output: result.compilerOutputLines.toList(),
-      elapsed: watch.elapsed,
+      output: result.output,
+      elapsed: result.elapsed,
       newSourceCount: result.newSources.length,
     );
-    if (outcome.ok) {
-      _client.accept();
-    } else {
-      await _client.reject();
-    }
-    return outcome;
   }
 
-  Future<void> shutdown() => _client.shutdown();
-}
+  /// Saves the full kernel at [outputDill] as the next session's warm start.
+  ///
+  /// Only meaningful right after a successful *full* compile — an incremental
+  /// delta is not a program. Copied rather than pointed at, because the
+  /// compiler rewrites [outputDill] and would otherwise be reading the file it
+  /// is initialising from.
+  void saveWarmStart() {
+    var warm = _warmDill;
+    if (warm == null || !File(outputDill).existsSync()) return;
+    Directory(p.dirname(warm)).createSync(recursive: true);
+    File(outputDill).copySync(warm);
+  }
 
-/// `FrontendServerClient` spawns the compiler as
-/// `Platform.resolvedExecutable <frontend_server snapshot>`, and offers no way
-/// to override the executable.
-///
-/// Inside a Flutter GUI app `resolvedExecutable` is **the app binary**, so that
-/// spawns another copy of the app. If the app starts a compiler on launch, each
-/// copy starts another — an exponential fork bomb that fills the machine in
-/// seconds. Observed, not theorised.
-///
-/// This is the concrete reason the catalog pipeline has to stay Flutter-free
-/// and run in a plain Dart process, as the master plan already required. Fail
-/// loudly rather than let it happen again.
-void _refuseToRunInsideAFlutterApp() {
-  var executable = p.basenameWithoutExtension(Platform.resolvedExecutable);
-  if (executable == 'dart' || executable == 'dartvm') return;
-  throw StateError(
-    'ResidentCompiler must run in a plain Dart process, but this one is '
-    '"${Platform.resolvedExecutable}".\n'
-    'FrontendServerClient launches the compiler via Platform.resolvedExecutable, '
-    'so running it inside a Flutter app relaunches the app instead — '
-    'recursively. Drive it from a separate Dart process.',
-  );
+  Future<void> shutdown() => _server.shutdown();
 }

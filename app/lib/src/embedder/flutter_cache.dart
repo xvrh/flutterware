@@ -30,6 +30,30 @@ class FlutterCache {
 
   String get _engine => p.join(cacheDir, 'artifacts', 'engine');
 
+  /// The Dart SDK bundled in this checkout — `<cache>/dart-sdk`.
+  String get dartSdkDir => p.join(cacheDir, 'dart-sdk');
+
+  String get _exe => Platform.isWindows ? '.exe' : '';
+
+  /// The Dart VM, for anything that must run as a plain Dart process.
+  String get dart => p.join(dartSdkDir, 'bin', 'dart$_exe');
+
+  /// The AOT runtime the compiler runs on.
+  String get dartAotRuntime => p.join(dartSdkDir, 'bin', 'dartaotruntime$_exe');
+
+  /// The `frontend_server` snapshot [dartAotRuntime] runs.
+  ///
+  /// Named and located exactly as `flutter_tools` expects it
+  /// (`Artifact.frontendServerSnapshotForEngineDartSdk`), because it is the
+  /// same artifact — we spawn it ourselves rather than let a package infer the
+  /// executable from whatever binary happens to be running.
+  String get frontendServerSnapshot => p.join(
+    dartSdkDir,
+    'bin',
+    'snapshots',
+    'frontend_server_aot.dart.snapshot',
+  );
+
   /// The Flutter patched SDK directory, used as `--sdk-root` for the compiler.
   String get flutterPatchedSdkDir =>
       p.join(_engine, 'common', 'flutter_patched_sdk');
