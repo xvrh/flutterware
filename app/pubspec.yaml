@@ -87,6 +87,7 @@ dependencies:
   web:
   web_socket_channel:
   win32:
+  standard_message_codec: ^0.0.1+5
   yaml:
 
 dev_dependencies:

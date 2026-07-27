@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutterware_app/src/catalog/asset_bundle.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/daemon_protocol.dart';
 import 'package:flutterware_app/src/catalog/entrypoint_generator.dart';
@@ -137,27 +138,18 @@ class _Daemon {
     );
   }
 
-  /// The Flutter asset bundle — fonts, MaterialIcons, the manifests. Slow
-  /// (~11s) and rarely changing, so it is cached; the resident compiler writes
-  /// its kernel over the top.
+  /// The asset directory the guest reads: manifests written here, payloads
+  /// symlinked. Milliseconds, against seconds for `flutter build bundle` —
+  /// see [AssetBundleBuilder]. Rebuilt every start, since it is cheap and a
+  /// stale manifest is worse than a rebuild.
   Future<void> _ensureAssetBundle() async {
-    if (File(p.join(_assetsDir, 'FontManifest.json')).existsSync()) return;
-    stderr.writeln('[catalog] building the Flutter asset bundle');
-    var result = await Process.run(
-      p.join(_cache.flutterRoot, 'bin', 'flutter'),
-      [
-        'build',
-        'bundle',
-        '-t',
-        _generator.entrypointPath,
-        '--asset-dir',
-        _assetsDir,
-      ],
-      workingDirectory: config.appPackageRoot,
-    );
-    if (result.exitCode != 0) {
-      throw StateError('flutter build bundle failed:\n${result.stderr}');
-    }
+    var watch = Stopwatch()..start();
+    await AssetBundleBuilder(
+      cache: _cache,
+      rootPackageRoot: config.appPackageRoot,
+      packageConfigPath: config.packageConfig,
+    ).build(_assetsDir);
+    stderr.writeln('[catalog] asset bundle ${watch.elapsedMilliseconds}ms');
   }
 
   Future<void> shutdown() async {
