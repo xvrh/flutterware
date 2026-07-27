@@ -1,9 +1,13 @@
+import 'package:json_annotation/json_annotation.dart';
+
+part 'catalog_entry.g.dart';
+
 /// One addressable catalog entry.
 ///
 /// Discovery does not exist yet, so these are supplied by hand — see
-/// `tool/catalog/stub_entries.dart`. The shape is what a syntactic scan will
-/// produce: a path, a symbol, and the annotation's source text, never its
-/// meaning.
+/// `stub_entries.dart`. The shape is what a syntactic scan will produce: a
+/// path, a symbol, and the annotation's source text, never its meaning.
+@JsonSerializable()
 class CatalogEntry {
   const CatalogEntry({
     required this.path,
@@ -11,6 +15,9 @@ class CatalogEntry {
     required this.annotation,
     required this.name,
   });
+
+  factory CatalogEntry.fromJson(Map<String, dynamic> json) =>
+      _$CatalogEntryFromJson(json);
 
   /// Project-relative path of the declaring file. Relative, never absolute:
   /// an absolute path would make a generated file machine-specific.
@@ -29,4 +36,6 @@ class CatalogEntry {
 
   /// Identity: derived from path and symbol unless the annotation pins it.
   String get id => '$path#$symbol';
+
+  Map<String, dynamic> toJson() => _$CatalogEntryToJson(this);
 }

@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutterware_app/src/catalog/asset_bundle.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
-import 'package:flutterware_app/src/catalog/daemon_protocol.dart';
+import 'package:flutterware_app/src/catalog/protocol.dart';
 import 'package:flutterware_app/src/catalog/entrypoint_generator.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
@@ -30,31 +30,26 @@ Future<void> main(List<String> args) async {
   }
 
   var config = DaemonConfig.fromJson(
-    jsonDecode(File(args.single).readAsStringSync()) as Map<String, Object?>,
+    jsonDecode(File(args.single).readAsStringSync()) as Map<String, dynamic>,
   );
   var daemon = _Daemon(config);
   try {
     await daemon.prepare();
   } catch (e, s) {
-    _emit({'type': 'error', 'message': '$e', 'stack': '$s'});
+    _emit(DaemonFailed(message: '$e', stackTrace: '$s'));
     exit(1);
   }
 
   await for (var line
       in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
-    if (line.trim().isEmpty) continue;
-    var message = jsonDecode(line) as Map<String, Object?>;
-    switch (message['type']) {
-      case 'select':
-        await daemon.select(message['id']! as String);
-      case 'shutdown':
+    var json = tryDecodeLine(line);
+    if (json == null) continue;
+    switch (DaemonRequest.decode(json)) {
+      case SelectRequest(:var id):
+        await daemon.select(id);
+      case ShutdownRequest():
         await daemon.shutdown();
         return;
-      default:
-        _emit({
-          'type': 'error',
-          'message': 'unknown message ${message['type']}',
-        });
     }
   }
   await daemon.shutdown();
@@ -118,7 +113,7 @@ class _Daemon {
         assetsDir: _assetsDir,
         icuData: _cache.icuData,
         coldCompile: watch.elapsed,
-      ).toJson(),
+      ),
     );
   }
 
@@ -129,12 +124,11 @@ class _Daemon {
     _emit(
       DaemonCompiled(
         id: id,
-        ok: compiled.ok,
-        dill: compiled.dillOutput,
+        dill: compiled.ok ? compiled.dillOutput : null,
         compile: compiled.elapsed,
         newSourceCount: compiled.newSourceCount,
         error: compiled.ok ? null : compiled.output.join('\n'),
-      ).toJson(),
+      ),
     );
   }
 
@@ -157,6 +151,6 @@ class _Daemon {
   }
 }
 
-void _emit(Map<String, Object?> message) {
-  stdout.writeln(jsonEncode(message));
+void _emit(DaemonResponse message) {
+  stdout.writeln(encodeLine(message));
 }

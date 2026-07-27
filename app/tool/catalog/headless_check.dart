@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:async/async.dart';
 
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
-import 'package:flutterware_app/src/catalog/daemon_protocol.dart';
+import 'package:flutterware_app/src/catalog/protocol.dart';
 import 'package:flutterware_app/src/catalog/stub_entries.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
@@ -37,7 +37,7 @@ Future<void> main(List<String> args) async {
     emitProbe: true,
   );
   var configFile = File(p.join(buildDir, 'daemon_config.json'))
-    ..writeAsStringSync(config.encode());
+    ..writeAsStringSync(jsonEncode(config.toJson()));
 
   var failures = <String>[];
   void check(bool condition, String description) {
@@ -54,29 +54,31 @@ Future<void> main(List<String> args) async {
   ], workingDirectory: packageRoot);
   daemon.stderr.transform(utf8.decoder).listen(stderr.write);
 
-  // ignore: close_sinks — the process exits at the end of this script.
-  var messages = StreamController<Map<String, Object?>>.broadcast();
-  daemon.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((
-    line,
-  ) {
-    if (line.trim().isEmpty) return;
-    try {
-      messages.add(jsonDecode(line) as Map<String, Object?>);
-    } catch (_) {
-      stdout.writeln('  [daemon] $line');
-    }
-  });
+  var responses = daemon.stdout
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())
+      .map((line) {
+        var json = tryDecodeLine(line);
+        if (json == null) {
+          stdout.writeln('  [daemon] $line');
+          return null;
+        }
+        return DaemonResponse.decode(json);
+      })
+      .where((r) => r != null)
+      .cast<DaemonResponse>()
+      .asBroadcastStream();
 
-  var first = await messages.stream.first.timeout(
+  var first = await responses.first.timeout(
     const Duration(minutes: 5),
-    onTimeout: () => {'type': 'error', 'message': 'daemon timed out'},
+    onTimeout: () => const DaemonFailed(message: 'the daemon timed out'),
   );
-  if (first['type'] != 'ready') {
-    stderr.writeln('daemon failed: ${first['message']}\n${first['stack']}');
+  if (first is! DaemonReady) {
+    stderr.writeln('daemon failed: $first');
     daemon.kill();
     exit(1);
   }
-  var ready = DaemonReady.fromJson(first);
+  var ready = first;
   stdout.writeln(
     '[check] daemon ready — cold compile ${ready.coldCompile.inMilliseconds}ms',
   );
@@ -148,10 +150,12 @@ Future<void> main(List<String> args) async {
 
   // 3. Switch through every entry, then revisit one.
   for (var entry in [...stubEntries.skip(1), stubEntries.first]) {
-    daemon.stdin.writeln(jsonEncode({'type': 'select', 'id': entry.id}));
-    var compiled = DaemonCompiled.fromJson(
-      await messages.stream.firstWhere((m) => m['type'] == 'compiled'),
-    );
+    var reply = responses
+        .where((r) => r is DaemonCompiled)
+        .cast<DaemonCompiled>()
+        .first;
+    daemon.stdin.writeln(encodeLine(SelectRequest(entry.id)));
+    var compiled = await reply;
     if (!compiled.ok) {
       check(false, 'compiling ${entry.name}: ${compiled.error}');
       continue;
@@ -181,7 +185,7 @@ Future<void> main(List<String> args) async {
   );
   check(frames > 0, 'the guest composited frames ($frames)');
 
-  daemon.stdin.writeln(jsonEncode({'type': 'shutdown'}));
+  daemon.stdin.writeln(encodeLine(const ShutdownRequest()));
   connected.add(encodeMessage(const ShutdownMessage()));
   await connected.flush();
   await vmService.close();

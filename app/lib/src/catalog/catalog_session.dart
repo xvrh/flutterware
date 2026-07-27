@@ -7,7 +7,7 @@ import '../embedder/embedded_engine.dart';
 import '../embedder/guest_vm_service.dart';
 import 'catalog_entry.dart';
 import 'compiler_daemon_client.dart';
-import 'daemon_protocol.dart';
+import 'protocol.dart';
 import 'session_lock.dart';
 
 enum CatalogSessionPhase { starting, ready, error }
