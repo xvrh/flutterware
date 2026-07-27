@@ -1,0 +1,236 @@
+import 'dart:convert';
+import 'dart:developer' as developer;
+
+import 'package:flutter/widgets.dart';
+
+import 'parameters.dart';
+import 'ui_catalog.dart';
+
+/// The catalog's side of a guest: the knobs a demo declares while it builds,
+/// and the two service extensions a panel reads and writes them through.
+///
+/// The panel runs in another process and the guest has no platform channels —
+/// there is nothing on the other end of one, the host is a few hundred lines
+/// of C. What it does have is a VM service, already connected because that is
+/// how a reload is pushed in. So the knobs travel as service extensions, which
+/// is the one bidirectional channel a plain embedder guest has.
+///
+/// Values do **not** travel as a reload. Setting one rebuilds the demo in
+/// place, which is the difference between turning a knob and recompiling: the
+/// demo keeps its state, and the answer is on screen in a frame rather than in
+/// a hundred milliseconds.
+class CatalogParameters {
+  CatalogParameters._();
+
+  static final instance = CatalogParameters._();
+
+  /// Bumped when a *value* changes, so the widget providing these to the demo
+  /// has something to rebuild on.
+  final revision = ValueNotifier<int>(0);
+
+  /// Bumped when a knob is *declared*, which happens while the demo builds —
+  /// so this one must never mark anything dirty. Nothing on screen depends on
+  /// it either: the demo already has the default it just asked for. It exists
+  /// so a panel can tell that the set it is showing is out of date.
+  int get declared => _declared;
+  var _declared = 0;
+
+  late final EditableParameters editable = EditableParameters(
+    onRefresh: _bump,
+    onAdded: () => _declared++,
+  );
+
+  /// What the entry that declared the current knobs was, so switching entries
+  /// starts from nothing rather than from the last demo's controls.
+  String? _entryId;
+
+  void _bump() => revision.value++;
+
+  /// Forgets everything the previous entry declared.
+  ///
+  /// Knobs are discovered by *running* the demo, so the set is only ever as
+  /// right as the last build. Carrying one entry's controls into the next
+  /// would leave a panel offering knobs nothing reads.
+  void resetFor(String entryId) {
+    if (_entryId == entryId) return;
+    _entryId = entryId;
+    editable.dispose();
+    editable.parameters.clear();
+    _declared++;
+    // No bump: this runs from the widget's own init or update, and the demo
+    // below is about to build anyway.
+  }
+
+  /// Registers the extensions. Call once, before `runApp`.
+  void registerExtensions() {
+    developer.registerExtension('ext.flutterware.parameters', (_, _) async {
+      return developer.ServiceExtensionResponse.result(jsonEncode(describe()));
+    });
+    developer.registerExtension('ext.flutterware.setParameter', (
+      _,
+      args,
+    ) async {
+      // A service extension's arguments are strings, so the payload is JSON in
+      // one of them rather than a map of typed values.
+      var payload = jsonDecode(args['payload'] ?? '{}') as Map<String, dynamic>;
+      var applied = apply(
+        payload['name'] as String,
+        payload.containsKey('value') ? payload['value'] : null,
+      );
+      return developer.ServiceExtensionResponse.result(
+        jsonEncode({'applied': applied}),
+      );
+    });
+  }
+
+  /// Every knob the last build declared, in declaration order.
+  Map<String, Object?> describe() => {
+    'entry': _entryId,
+    'revision': revision.value,
+    'declared': _declared,
+    'parameters': [
+      for (var entry in editable.parameters.entries)
+        ?_describe(entry.key, entry.value),
+    ],
+  };
+
+  static Map<String, Object?>? _describe(String name, Parameter<Object?> p) =>
+      switch (p) {
+        StringParameter() => {
+          'name': name,
+          'kind': 'string',
+          'value': p.requiredValue,
+          'default': p.defaultValue,
+        },
+        BoolParameter() => {
+          'name': name,
+          'kind': 'bool',
+          'value': p.requiredValue,
+          'default': p.defaultValue,
+        },
+        NumParameter() => {
+          'name': name,
+          'kind': p.isInt ? 'int' : 'double',
+          'value': p.requiredValue,
+          'default': p.defaultValue,
+          'min': p.min,
+          'max': p.max,
+        },
+        PickerParameter() => {
+          'name': name,
+          'kind': 'picker',
+          // Labels, not values: a picker's values are whatever the demo wants
+          // them to be, and only the demo can turn a label back into one.
+          'options': p.options.keys.toList(),
+          'value': _labelOf(p, p.requiredValue),
+          'default': _labelOf(p, p.defaultValue),
+        },
+        // Dates and buttons are not carried yet; a panel that cannot render a
+        // knob is better than one that renders it wrong.
+        _ => null,
+      };
+
+  static String? _labelOf(PickerParameter<Object?> p, Object? value) {
+    for (var entry in p.options.entries) {
+      if (entry.value == value) return entry.key;
+    }
+    return null;
+  }
+
+  /// Sets [name] to [value], or back to its default when [value] is null.
+  ///
+  /// Returns false for a knob the current build did not declare, which is what
+  /// a panel showing a stale set looks like from in here.
+  bool apply(String name, Object? value) {
+    var parameter = editable.parameters[name];
+    switch (parameter) {
+      case StringParameter():
+        parameter.value = value as String?;
+      case BoolParameter():
+        parameter.value = value as bool?;
+      case NumParameter<int>():
+        parameter.value = (value as num?)?.round();
+      case NumParameter():
+        parameter.value = (value as num?)?.toDouble();
+      case PickerParameter():
+        parameter.value = value == null ? null : parameter.options[value];
+      case _:
+        return false;
+    }
+    return true;
+  }
+}
+
+/// Provides the catalog's state to the entry below it, and rebuilds it when a
+/// knob moves.
+///
+/// The [UICatalogState] a demo reads through `context.uiCatalog` is otherwise
+/// the empty one, which answers every call with the default — which is exactly
+/// what should happen when the same widget is built inside the real app.
+class CatalogGuest extends StatefulWidget {
+  const CatalogGuest({super.key, required this.entryId, required this.child});
+
+  final String entryId;
+  final Widget child;
+
+  @override
+  State<CatalogGuest> createState() => _CatalogGuestState();
+}
+
+class _CatalogGuestState extends State<CatalogGuest> {
+  CatalogParameters get _parameters => CatalogParameters.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _parameters.resetFor(widget.entryId);
+  }
+
+  @override
+  void didUpdateWidget(CatalogGuest old) {
+    super.didUpdateWidget(old);
+    _parameters.resetFor(widget.entryId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: _parameters.revision,
+      builder: (context, revision, _) => UICatalogStateProvider(
+        // A new state per revision on purpose: the provider notifies its
+        // dependents by identity, and the demo *is* a dependent — reading a
+        // knob is what subscribed it.
+        state: _GuestCatalogState(_parameters.editable, revision),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+class _GuestCatalogState implements UICatalogState {
+  _GuestCatalogState(this.parameters, this.revision);
+
+  @override
+  final Parameters parameters;
+
+  final int revision;
+
+  @override
+  TopBarState get topBar => const _NoTopBar();
+}
+
+/// The app-wide axes are the shell's, not an entry's, and nothing carries them
+/// across the process boundary yet.
+class _NoTopBar implements TopBarState {
+  const _NoTopBar();
+
+  @override
+  T picker<T>(
+    String name,
+    Map<String, T> options,
+    T defaultValue, {
+    Color Function(T value)? swatch,
+    IconData Function(T value)? icon,
+    PickerStyle style = PickerStyle.popover,
+  }) => defaultValue;
+}

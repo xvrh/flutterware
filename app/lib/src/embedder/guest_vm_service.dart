@@ -63,6 +63,30 @@ class GuestVmService {
     );
   }
 
+  /// Calls one of the guest's own service extensions and decodes its JSON.
+  ///
+  /// Returns null when the extension is not registered — a guest from before
+  /// the extension existed, or one whose first frame has not run yet. That is
+  /// an answer, not a failure: a panel asking what knobs a demo has, of a demo
+  /// that has not built, should show nothing rather than an error.
+  Future<Map<String, dynamic>?> callExtension(
+    String method, {
+    Map<String, String>? args,
+  }) async {
+    try {
+      var response = await service.callServiceExtension(
+        method,
+        isolateId: isolateId,
+        args: args,
+      );
+      return response.json;
+    } on RPCError catch (e) {
+      // 32601: method not found, which is what an unregistered extension is.
+      if (e.code == 32601 || e.code == -32601) return null;
+      rethrow;
+    }
+  }
+
   /// The catalog-relevant libraries the isolate currently holds, for the error
   /// above. Best effort: a diagnostic must not fail louder than the fault.
   Future<String> _catalogLibraries() async {

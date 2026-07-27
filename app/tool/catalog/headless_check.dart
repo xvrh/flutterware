@@ -602,6 +602,64 @@ Future<void> main(List<String> args) async {
     'the catalog still compiles after a failed retry',
   );
 
+  // 4b-bis. Knobs: declared by building, read and set over the VM service.
+  //
+  // No platform channels exist in a guest, so this is the only bidirectional
+  // channel there is — and a value must *not* travel as a reload, or turning a
+  // knob would cost a compile and reset the demo's state.
+  if (probing) {
+    stdout.writeln('[check] turning a knob');
+    var knobs = entries.firstWhere((e) => e.symbol == 'knobs');
+    await _renderEntry(daemon, vmService, probes, knobs);
+    var resting = await _nextProbe(
+      probes.stream,
+      const Duration(seconds: 10),
+      (line) => line.contains('KNOB'),
+    );
+    check(
+      resting.contains('KNOB Hello x2 roomy'),
+      'the demo renders its defaults — $resting',
+    );
+
+    var described = await vmService.callExtension('ext.flutterware.parameters');
+    var declared = [
+      for (var p in (described?['parameters'] as List? ?? []))
+        (p as Map)['name'] as String,
+    ];
+    check(
+      declared.join(',') == 'label,count,dense',
+      'the knobs it read while building are the knobs it reports — $declared',
+    );
+
+    var set = await vmService.callExtension(
+      'ext.flutterware.setParameter',
+      args: {
+        'payload': jsonEncode({'name': 'label', 'value': 'Turned'}),
+      },
+    );
+    check(set?['applied'] == true, 'setting a declared knob is accepted');
+    var turned = await _nextProbe(
+      probes.stream,
+      const Duration(seconds: 10),
+      (line) => line.contains('Turned'),
+    );
+    check(
+      turned.contains('KNOB Turned x2 roomy'),
+      'and the demo rebuilds with it — $turned',
+    );
+
+    var refused = await vmService.callExtension(
+      'ext.flutterware.setParameter',
+      args: {
+        'payload': jsonEncode({'name': 'nope', 'value': 1}),
+      },
+    );
+    check(
+      refused?['applied'] == false,
+      'a knob the build never declared is refused, not invented',
+    );
+  }
+
   // 4c. A demo that did not exist when the daemon started.
   //
   // Discovery runs once at startup, so without a rescan a file you add while

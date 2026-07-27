@@ -195,6 +195,7 @@ Widget Function() get fwBuilder => fw$index.${entry.symbol};
 // GENERATED — do not edit.
 ${emitProbe ? "import 'dart:async';\n" : ''}import 'package:flutter/widgets.dart';
 import 'package:flutter/widget_previews.dart';
+import 'package:flutterware/ui_catalog.dart';
 
 $imports
 // Getters, never top-level finals: a final is initialised once and hot reload
@@ -205,6 +206,9 @@ String get _entryId => r'${active.id}';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Before runApp, and once: the panel may ask what knobs exist before the
+  // first frame, and the extensions have to outlive every entry switch.
+  CatalogParameters.instance.registerExtensions();
   // Framework errors, on stdout, always.
   //
   // A demo that throws while building paints Flutter's red ErrorWidget in the
@@ -226,11 +230,14 @@ class _CatalogHost extends StatelessWidget {
   Widget build(BuildContext context) {
     var preview = _preview;
     var wrapper = preview.wrapper ?? (Widget child) => child;
-    Widget child = KeyedSubtree(
-      // A fresh key per entry so switching remounts rather than reusing the
-      // previous entry's State.
-      key: ValueKey<String>(_entryId),
-      child: wrapper(_builder()),
+    Widget child = CatalogGuest(
+      entryId: _entryId,
+      child: KeyedSubtree(
+        // A fresh key per entry so switching remounts rather than reusing the
+        // previous entry's State.
+        key: ValueKey<String>(_entryId),
+        child: wrapper(_builder()),
+      ),
     );
     // No `preview.size` here. The host sizes the guest's *window* to whatever
     // device is chosen — which is how a demo reads a phone's dimensions from
