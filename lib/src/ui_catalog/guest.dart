@@ -47,6 +47,27 @@ class CatalogParameters {
 
   void _bump() => revision.value++;
 
+  /// Opens a declaration pass and closes it once the frame has been built.
+  ///
+  /// The frame is the right boundary because everything that reads a knob is a
+  /// dependent of the provider [CatalogGuest] puts up, so one build of that
+  /// widget rebuilds every reader there is. Whatever has not asked for a knob
+  /// by the end of it is not asking any more — the demo was edited, or it took
+  /// a different path through its own build.
+  void _beginPass() {
+    editable.beginPass();
+    if (_sweeping) return;
+    _sweeping = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sweeping = false;
+      // Retiring changes the set as much as declaring does, so a panel holding
+      // the old one has the same reason to ask again.
+      if (editable.endPass() > 0) _declared++;
+    });
+  }
+
+  var _sweeping = false;
+
   /// Forgets everything the previous entry declared.
   ///
   /// Knobs are discovered by *running* the demo, so the set is only ever as
@@ -80,6 +101,20 @@ class CatalogParameters {
         payload['name'] as String,
         payload.containsKey('value') ? payload['value'] : null,
       );
+      // Answered only once the demo has rebuilt on it. Turning a knob can
+      // reveal or retire another, so a reply that came back before the frame
+      // would leave the panel asking what to show and being told about the
+      // build it had just replaced — intermittently, depending on whether the
+      // frame beat the next request, which is worse than being wrong.
+      //
+      // Bounded because this is an RPC a panel waits on: a guest that has
+      // stopped drawing should make the panel late, not stuck.
+      if (applied) {
+        await WidgetsBinding.instance.endOfFrame.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {},
+        );
+      }
       return developer.ServiceExtensionResponse.result(
         jsonEncode({'applied': applied}),
       );
@@ -196,13 +231,18 @@ class _CatalogGuestState extends State<CatalogGuest> {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int>(
       valueListenable: _parameters.revision,
-      builder: (context, revision, _) => UICatalogStateProvider(
-        // A new state per revision on purpose: the provider notifies its
-        // dependents by identity, and the demo *is* a dependent — reading a
-        // knob is what subscribed it.
-        state: _GuestCatalogState(_parameters.editable, revision),
-        child: widget.child,
-      ),
+      builder: (context, revision, _) {
+        // Everything below is about to re-declare what it reads, which is the
+        // only chance there is to notice a knob nobody reads any more.
+        _parameters._beginPass();
+        return UICatalogStateProvider(
+          // A new state per revision on purpose: the provider notifies its
+          // dependents by identity, and the demo *is* a dependent — reading a
+          // knob is what subscribed it.
+          state: _GuestCatalogState(_parameters.editable, revision),
+          child: widget.child,
+        );
+      },
     );
   }
 }

@@ -42,8 +42,23 @@ class _CatalogViewState extends State<CatalogView> {
   /// would otherwise go unnoticed until you touched something.
   static const _pollInterval = Duration(seconds: 3);
 
+  /// When the panel looks again after coming back to the window.
+  ///
+  /// An editor that saves as it loses focus is racing the window that gains it:
+  /// IntelliJ writes the file at about the moment this panel sweeps for edits,
+  /// and often a beat after — so a single check on resume misses the very edit
+  /// you switched over to look at, and you have to reload by hand or save
+  /// again. Looking twice more costs nothing when nothing moved, which is the
+  /// same property the whole focus trigger rests on.
+  static const _afterFocus = [
+    Duration(milliseconds: 200),
+    Duration(milliseconds: 600),
+    Duration(milliseconds: 1500),
+  ];
+
   final FocusNode _focusNode = FocusNode();
   Timer? _poll;
+  final _settling = <Timer>[];
   (int, int, double, EdgeInsets)? _lastReported;
   late final AppLifecycleListener _lifecycle;
 
@@ -57,7 +72,7 @@ class _CatalogViewState extends State<CatalogView> {
     // desktop is exactly the alt-tab back from the editor.
     _lifecycle = AppLifecycleListener(
       onResume: () {
-        _reloadIfChanged();
+        _reloadAfterFocus();
         _startPolling();
       },
       // Nothing arrives on screen while the window is behind another one, and
@@ -75,9 +90,26 @@ class _CatalogViewState extends State<CatalogView> {
   @override
   void dispose() {
     _stopPolling();
+    _stopSettling();
     _lifecycle.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  /// Checks now, then again over the next second and a half — see [_afterFocus].
+  void _reloadAfterFocus() {
+    _reloadIfChanged();
+    _stopSettling();
+    _settling.addAll([
+      for (var delay in _afterFocus) Timer(delay, _reloadIfChanged),
+    ]);
+  }
+
+  void _stopSettling() {
+    for (var timer in _settling) {
+      timer.cancel();
+    }
+    _settling.clear();
   }
 
   void _startPolling() {
@@ -556,15 +588,18 @@ class _StringFieldState extends State<_StringField> {
   late final _controller = TextEditingController(
     text: '${widget.knob.value ?? ''}',
   );
+  final _focus = FocusNode();
   Timer? _debounce;
 
   @override
   void didUpdateWidget(_StringField old) {
     super.didUpdateWidget(old);
-    // Only when the change came from somewhere else — writing back what the
-    // user is typing would fight the cursor.
+    // Only when the change came from somewhere else — writing back into a field
+    // that has the caret would fight the cursor. Focus rather than the debounce
+    // timer: between a debounce firing and the guest answering there is a
+    // stretch where no timer is pending and the user is still typing.
     var value = '${widget.knob.value ?? ''}';
-    if (_debounce == null && value != _controller.text) {
+    if (!_focus.hasFocus && value != _controller.text) {
       _controller.text = value;
     }
   }
@@ -573,6 +608,7 @@ class _StringFieldState extends State<_StringField> {
   void dispose() {
     _debounce?.cancel();
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -582,6 +618,7 @@ class _StringFieldState extends State<_StringField> {
       width: 140,
       child: TextField(
         controller: _controller,
+        focusNode: _focus,
         style: context.type.caption.copyWith(color: context.colors.ink),
         decoration: const InputDecoration(
           border: InputBorder.none,
@@ -602,18 +639,50 @@ class _StringFieldState extends State<_StringField> {
 
 /// A number without bounds, which is a field rather than a slider — there is
 /// nothing to slide between.
-class _NumberField extends StatelessWidget {
+class _NumberField extends StatefulWidget {
   const _NumberField({required this.knob, required this.onChanged});
 
   final KnobDescriptor knob;
   final ValueChanged<Object?> onChanged;
 
   @override
+  State<_NumberField> createState() => _NumberFieldState();
+}
+
+class _NumberFieldState extends State<_NumberField> {
+  // Owned rather than built: a controller made in `build` is a new one on every
+  // rebuild, and the panel rebuilds whenever any knob moves — so typing here
+  // while a slider elsewhere settles would lose what you had typed.
+  late final _controller = TextEditingController(
+    text: '${widget.knob.value ?? ''}',
+  );
+  final _focus = FocusNode();
+
+  @override
+  void didUpdateWidget(_NumberField old) {
+    super.didUpdateWidget(old);
+    // Never while it has the caret: the value on screen is then the user's,
+    // and the guest's is what they are in the middle of replacing.
+    var value = '${widget.knob.value ?? ''}';
+    if (!_focus.hasFocus && value != _controller.text) {
+      _controller.text = value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return _Field(
       width: 80,
       child: TextField(
-        controller: TextEditingController(text: '${knob.value ?? ''}'),
+        controller: _controller,
+        focusNode: _focus,
         style: context.type.caption.copyWith(color: context.colors.ink),
         keyboardType: TextInputType.number,
         decoration: const InputDecoration(
@@ -621,12 +690,22 @@ class _NumberField extends StatelessWidget {
           isDense: true,
           contentPadding: EdgeInsets.zero,
         ),
-        onSubmitted: (text) {
-          var parsed = num.tryParse(text);
-          if (parsed == null) return;
-          onChanged(knob.kind == KnobKind.integer ? parsed.round() : parsed);
+        onSubmitted: _apply,
+        // Also on the way out, so clicking away from a number you have typed
+        // applies it rather than quietly reverting it on the next rebuild.
+        onTapOutside: (_) {
+          _focus.unfocus();
+          _apply(_controller.text);
         },
       ),
+    );
+  }
+
+  void _apply(String text) {
+    var parsed = num.tryParse(text);
+    if (parsed == null) return;
+    widget.onChanged(
+      widget.knob.kind == KnobKind.integer ? parsed.round() : parsed,
     );
   }
 }

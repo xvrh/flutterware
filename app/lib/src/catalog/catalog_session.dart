@@ -372,19 +372,57 @@ class CatalogSession extends ChangeNotifier {
   /// while building, and the guest rebuilds. Turning a knob costs a frame, and
   /// the demo keeps whatever state it was holding.
   ///
-  /// Read back afterwards rather than patched locally, because a demo's build
-  /// decides what knobs exist — turning one can reveal or retire another.
+  /// Drawn straight away, then sent — one at a time, keeping only the latest of
+  /// whatever piled up behind the one in flight — and read back afterwards,
+  /// because a demo's build decides what knobs exist and turning one can reveal
+  /// or retire another.
+  ///
+  /// A slider sends a value per frame of a drag and each one is a round trip
+  /// that waits for the guest's frame. Sent concurrently they can land out of
+  /// order, which is a slider that jumps backwards under the pointer; sent one
+  /// at a time without coalescing, the drag queues up and the demo finishes the
+  /// gesture seconds after your hand does.
   Future<void> setKnob(String name, Object? value) async {
-    var vmService = _vmService;
-    if (vmService == null) return;
-    await vmService.callExtension(
-      'ext.flutterware.setParameter',
-      args: {
-        'payload': jsonEncode({'name': name, 'value': value}),
-      },
+    // Optimistic, so the control follows the pointer at the panel's frame rate
+    // rather than the guest's round trip. The read below is what makes it true.
+    knobs = KnobReport(
+      entryId: knobs.entryId,
+      declared: knobs.declared,
+      revision: knobs.revision,
+      knobs: [
+        for (var knob in knobs.knobs)
+          knob.name == name ? knob.withValue(value) : knob,
+      ],
     );
-    await _readKnobs();
+    notifyListeners();
+
+    _pendingKnobs[name] = value;
+    if (_settingKnobs) return;
+    _settingKnobs = true;
+    try {
+      while (_pendingKnobs.isNotEmpty) {
+        var vmService = _vmService;
+        if (vmService == null) return;
+        var next = _pendingKnobs.keys.first;
+        var pending = _pendingKnobs.remove(next);
+        await vmService.callExtension(
+          'ext.flutterware.setParameter',
+          args: {
+            'payload': jsonEncode({'name': next, 'value': pending}),
+          },
+        );
+      }
+      // Once, after the last one: a demo's build decides what knobs exist, so
+      // turning one can reveal or retire another — but only the settled state
+      // is worth drawing.
+      await _readKnobs();
+    } finally {
+      _settingKnobs = false;
+    }
   }
+
+  final _pendingKnobs = <String, Object?>{};
+  var _settingKnobs = false;
 
   /// Asks the guest what the entry on screen offers.
   ///

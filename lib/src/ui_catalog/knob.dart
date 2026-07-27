@@ -79,6 +79,18 @@ class KnobDescriptor {
 
   bool get isDefault => value == defaultValue;
 
+  /// The same knob showing [value], for a panel that wants to draw the value a
+  /// user is choosing before the guest has confirmed it.
+  KnobDescriptor withValue(Object? value) => KnobDescriptor(
+    name: name,
+    kind: kind,
+    value: value,
+    defaultValue: defaultValue,
+    min: min,
+    max: max,
+    options: options,
+  );
+
   Map<String, Object?> toJson() => {
     'name': name,
     'kind': kind.name,

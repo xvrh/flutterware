@@ -18,9 +18,9 @@ class _Knobs extends StatelessWidget {
     var parameters = context.uiCatalog.parameters;
     var label = parameters.string('label', 'Hello');
     var count = parameters.int('count', 2, min: 0, max: 9);
-    var dense = parameters.bool('dense', false);
+    var dense = parameters.bool('denseaa', false);
     return Scaffold(
-      appBar: AppBar(title: const Text('Knobs')),
+      appBar: AppBar(title: const Text('Knobs3')),
       body: Center(
         child: Text(
           'KNOB $label x$count ${dense ? 'dense' : 'roomy'}',

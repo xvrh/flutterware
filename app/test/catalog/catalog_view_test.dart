@@ -462,5 +462,48 @@ void main() {
           tester.widget<Text>(find.text(name)).style!.color!;
       expect(colorOf('moved'), isNot(colorOf('resting')));
     });
+
+    testWidgets('a field keeps what you typed when another knob moves', (
+      tester,
+    ) async {
+      // The panel rebuilds whenever any knob changes — a slider settling, a
+      // value read back from the guest — and a field that rebuilt its own
+      // controller would throw away the half-typed number sitting in it.
+      var session = sessionWithBroken(beta, 'boom')
+        ..knobs = report(const [
+          KnobDescriptor(
+            name: 'ratio',
+            kind: KnobKind.number,
+            value: 1.5,
+            defaultValue: 1.5,
+          ),
+          KnobDescriptor(
+            name: 'dense',
+            kind: KnobKind.boolean,
+            value: false,
+            defaultValue: false,
+          ),
+        ]);
+      await pump(tester, session);
+
+      await tester.enterText(find.widgetWithText(TextField, '1.5'), '12');
+      session.knobs = report(const [
+        KnobDescriptor(
+          name: 'ratio',
+          kind: KnobKind.number,
+          value: 1.5,
+          defaultValue: 1.5,
+        ),
+        KnobDescriptor(
+          name: 'dense',
+          kind: KnobKind.boolean,
+          value: true,
+          defaultValue: false,
+        ),
+      ]);
+      await pump(tester, session);
+
+      expect(find.text('12'), findsOneWidget);
+    });
   });
 }

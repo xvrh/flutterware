@@ -610,54 +610,151 @@ Future<void> main(List<String> args) async {
   if (probing) {
     stdout.writeln('[check] turning a knob');
     var knobs = entries.firstWhere((e) => e.symbol == 'knobs');
-    await _renderEntry(daemon, vmService, probes, knobs);
-    var resting = await _nextProbe(
-      probes.stream,
-      const Duration(seconds: 10),
-      (line) => line.contains('KNOB'),
+    var knobSource = File(
+      p.join(packageRoot, 'tool', 'catalog', 'demos', 'knobs.dart'),
     );
-    check(
-      resting.contains('KNOB Hello x2 roomy'),
-      'the demo renders its defaults — $resting',
-    );
+    var knobOriginal = knobSource.readAsStringSync();
+    // Written rather than read: every assertion below is about *which* knobs a
+    // build declares, so the source has to be the check's to change. It also
+    // keeps the check honest against a demo somebody is editing by hand.
+    knobSource.writeAsStringSync(_knobsSource());
 
-    var described = await vmService.callExtension('ext.flutterware.parameters');
-    var declared = [
-      for (var p in (described?['parameters'] as List? ?? []))
-        (p as Map)['name'] as String,
-    ];
-    check(
-      declared.join(',') == 'label,count,dense',
-      'the knobs it read while building are the knobs it reports — $declared',
-    );
+    /// Reloads whatever the file now says and answers with the knob names, in
+    /// the order they were declared.
+    Future<String> reloadAndDescribe() async {
+      var compiled = await daemon.select(knobs.id);
+      if (!compiled.ok) return 'did not compile: ${compiled.error}';
+      await vmService.reload(compiled.dill!);
+      // Deliberately no wait: this is the sequence the panel runs, so anything
+      // that needs a pause to be right is a bug the panel has too.
+      var described = await vmService.callExtension(
+        'ext.flutterware.parameters',
+      );
+      return [
+        for (var p in (described?['parameters'] as List? ?? []))
+          (p as Map)['name'] as String,
+      ].join(',');
+    }
 
-    var set = await vmService.callExtension(
-      'ext.flutterware.setParameter',
-      args: {
-        'payload': jsonEncode({'name': 'label', 'value': 'Turned'}),
-      },
-    );
-    check(set?['applied'] == true, 'setting a declared knob is accepted');
-    var turned = await _nextProbe(
-      probes.stream,
-      const Duration(seconds: 10),
-      (line) => line.contains('Turned'),
-    );
-    check(
-      turned.contains('KNOB Turned x2 roomy'),
-      'and the demo rebuilds with it — $turned',
-    );
+    try {
+      await _renderEntry(daemon, vmService, probes, knobs);
+      var resting = await _nextProbe(
+        probes.stream,
+        const Duration(seconds: 10),
+        (line) => line.contains('KNOB'),
+      );
+      check(
+        resting.contains('KNOB Hello x2 roomy'),
+        'the demo renders its defaults — $resting',
+      );
 
-    var refused = await vmService.callExtension(
-      'ext.flutterware.setParameter',
-      args: {
-        'payload': jsonEncode({'name': 'nope', 'value': 1}),
-      },
-    );
-    check(
-      refused?['applied'] == false,
-      'a knob the build never declared is refused, not invented',
-    );
+      var described = await vmService.callExtension(
+        'ext.flutterware.parameters',
+      );
+      var declared = [
+        for (var p in (described?['parameters'] as List? ?? []))
+          (p as Map)['name'] as String,
+      ];
+      check(
+        declared.join(',') == 'label,count,dense',
+        'the knobs it read while building are the knobs it reports — $declared',
+      );
+
+      var set = await vmService.callExtension(
+        'ext.flutterware.setParameter',
+        args: {
+          'payload': jsonEncode({'name': 'label', 'value': 'Turned'}),
+        },
+      );
+      check(set?['applied'] == true, 'setting a declared knob is accepted');
+      var turned = await _nextProbe(
+        probes.stream,
+        const Duration(seconds: 10),
+        (line) => line.contains('Turned'),
+      );
+      check(
+        turned.contains('KNOB Turned x2 roomy'),
+        'and the demo rebuilds with it — $turned',
+      );
+
+      var refused = await vmService.callExtension(
+        'ext.flutterware.setParameter',
+        args: {
+          'payload': jsonEncode({'name': 'nope', 'value': 1}),
+        },
+      );
+      check(
+        refused?['applied'] == false,
+        'a knob the build never declared is refused, not invented',
+      );
+
+      /// The knob names the guest reports right now, in declaration order.
+      Future<String> describeNow() async {
+        var described = await vmService.callExtension(
+          'ext.flutterware.parameters',
+        );
+        return [
+          for (var p in (described?['parameters'] as List? ?? []))
+            (p as Map)['name'] as String,
+        ].join(',');
+      }
+
+      /// Sets a knob the way the panel does, then asks what there is to show.
+      ///
+      /// Back to back on purpose: turning a knob can reveal or retire another,
+      /// so a set that answers before the rebuild leaves the panel a read
+      /// behind — showing the controls of the build it just replaced.
+      Future<String> setAndDescribe(String name, Object? value) async {
+        await vmService.callExtension(
+          'ext.flutterware.setParameter',
+          args: {
+            'payload': jsonEncode({'name': name, 'value': value}),
+          },
+        );
+        return describeNow();
+      }
+
+      check(
+        await setAndDescribe('dense', true) == 'label,count,dense,spacing',
+        'a knob revealed by turning another is there when the set returns',
+      );
+      check(
+        await setAndDescribe('dense', false) == 'label,count,dense',
+        'and gone again the moment nothing reads it',
+      );
+
+      // 4b-ter. The declared set follows the source, in both directions.
+      //
+      // A knob exists because a build read it, so editing the demo is the only
+      // way to add, rename or remove one — and the panel asks again the moment
+      // the reload lands. Retiring is the half that is easy to get wrong: a
+      // knob nothing declares any more has no build to remove it, so unless the
+      // pass sweeps, it lingers as a control that reads nothing.
+      knobSource.writeAsStringSync(
+        _knobsSource(extra: "    parameters.bool('extra', false);"),
+      );
+      check(
+        await reloadAndDescribe() == 'label,count,dense,extra',
+        'a knob added to the source is declared by the next build',
+      );
+
+      knobSource.writeAsStringSync(_knobsSource());
+      check(
+        await reloadAndDescribe() == 'label,count,dense',
+        'a knob taken out of the source stops being offered',
+      );
+
+      knobSource.writeAsStringSync(_knobsSource(label: 'caption'));
+      check(
+        await reloadAndDescribe() == 'caption,count,dense',
+        'and a renamed knob replaces the old one instead of joining it',
+      );
+    } finally {
+      knobSource.writeAsStringSync(knobOriginal);
+      // Left compiling what is on disk, so the next section does not inherit an
+      // entry whose kernel disagrees with its file.
+      await daemon.select(knobs.id);
+    }
   }
 
   // 4c. A demo that did not exist when the daemon started.
@@ -782,6 +879,52 @@ Widget addedWhileOpen() => const Center(child: Text('ADDED LATE'));
 }
 
 /// Puts [entry] on the guest's screen and waits until the probe says so.
+/// The knobs demo, with [label] as the name of its first knob and [extra]
+/// spliced in as further declarations.
+///
+/// There is no list of knobs to edit — the calls a build makes *are* the set —
+/// so a check about adding, renaming and retiring them has to write the demo.
+String _knobsSource({String label = 'label', String extra = ''}) =>
+    '''
+import 'package:flutter/material.dart';
+
+import 'package:flutterware/ui_catalog.dart';
+
+import 'shell.dart';
+
+/// Declares its controls by reading them while it builds, which is how the
+/// catalog learns they exist — there is no list of knobs anywhere, only the
+/// calls a demo makes.
+@Demo(name: 'Knobs', wrapper: wrapInApp)
+Widget knobs() => const _Knobs();
+
+class _Knobs extends StatelessWidget {
+  const _Knobs();
+
+  @override
+  Widget build(BuildContext context) {
+    var parameters = context.uiCatalog.parameters;
+    var label = parameters.string('$label', 'Hello');
+    var count = parameters.int('count', 2, min: 0, max: 9);
+    var dense = parameters.bool('dense', false);
+    // Only while dense: a knob read on one branch of a build exists on that
+    // branch and nowhere else, which is the sharpest form of "the set is only
+    // as right as the last build".
+    if (dense) parameters.string('spacing', 'tight');
+$extra
+    return Scaffold(
+      appBar: AppBar(title: const Text('Knobs')),
+      body: Center(
+        child: Text(
+          'KNOB \$label x\$count \${dense ? 'dense' : 'roomy'}',
+          style: TextStyle(fontSize: dense ? 12 : 20),
+        ),
+      ),
+    );
+  }
+}
+''';
+
 Future<void> _renderEntry(
   CompilerDaemonClient daemon,
   GuestVmService vmService,
