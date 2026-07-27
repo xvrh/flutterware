@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import '../third_party/device_frame/lib/device_frame.dart';
 import 'default_device_list.dart';
+import 'demo.dart';
 import 'detail.dart';
 import 'device_choice_panel.dart';
 import 'figma/provider.dart';
@@ -15,8 +16,6 @@ import 'treeview.dart';
 import 'ui_catalog.dart';
 
 const _menuBackground = Color(0xfff7f9fc);
-
-enum FormFactor { mobile, desktop, all }
 
 typedef FormFactorPicker = FormFactor? Function(String);
 
