@@ -3,14 +3,22 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/src/logs/remote_log_adapter.dart';
 import 'package:flutterware/src/logs/remote_log_client.dart';
 import 'package:logging/logging.dart';
-import 'src/app/app.dart';
+import 'package:path/path.dart' as p;
 import 'src/constants.dart';
 import 'src/context.dart';
-import 'src/project.dart';
+import 'src/plugins/manifest_loader.dart';
+import 'src/plugins/native/registry.dart';
+import 'src/shell/shell_controller.dart';
+import 'src/shell/shell_view.dart';
 import 'src/utils/flutter_sdk.dart';
 
 // ignore_for_file: implementation_imports
 
+/// The production entry point: the plugin shell, against the project the CLI
+/// was run from.
+///
+/// Requires the environment the compiled CLI sets; use `main_dev.dart` for
+/// development, which is the same shell with the paths supplied by hand.
 void main() async {
   var projectPath = Platform.environment[projectDefineKey];
   var appToolPath = Platform.environment[appToolPathKey];
@@ -31,33 +39,42 @@ void main() async {
   }
   var appContext = AppContext(
     logger: remoteLoggerClient ?? LogClient.print(),
+    // Where `native/`, `tool/catalog/` and the build directory live — the
+    // copy under `~/.flutterware/`, not the user's project. The catalog needs
+    // it, and only once its panel is opened.
     appToolDirectory: appToolPath != null ? Directory(appToolPath) : null,
   );
-  var project = Project(
-    appContext,
-    projectPath,
-    FlutterSdkPath(flutterSdkPath),
-    loggerUri: loggerUri,
-  );
+  var flutterSdk = FlutterSdkPath(flutterSdkPath);
 
   Logger.root
     ..level = Level.ALL
     ..onRecord.listen(appContext.logger.printLogRecord);
   await appContext.resourceCleaner.initialize();
 
-  runApp(SingleProjectApp(project));
+  var shell = ShellController(
+    appContext: appContext,
+    flutterSdk: flutterSdk,
+    registry: buildNativeRegistry(),
+    manifestLoader: ManifestLoader(
+      dartExecutable: p.join(flutterSdk.root, 'bin', 'dart'),
+    ),
+  );
+
+  runApp(ShellApp(shell));
 
   appContext.logger.printBox(
     '''
-Discover the features:
-- Test runner with hot-reload
+Tools are declared in tool/flutterware.dart:
 - Pub dependencies manager
-- Launcher icon manager
-- ...
+- UI catalog, rendered in an embedded engine
 
 Contribute your ideas: https://github.com/xvrh/flutterware
 '''
         .trim(),
     title: 'Flutterware GUI is ready',
   );
+
+  // After the first frame: discovery runs a subprocess, and the shell renders
+  // its empty state until it resolves rather than holding up the window.
+  await shell.start(projectPath);
 }
