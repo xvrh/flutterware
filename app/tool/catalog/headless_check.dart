@@ -611,7 +611,7 @@ Future<void> main(List<String> args) async {
   var addedSource = File(
     p.join(packageRoot, 'tool', 'catalog', 'demos', 'added_while_open.dart'),
   );
-  var appeared = second.catalogChanges.first.timeout(
+  var appeared = daemon.catalogChanges.first.timeout(
     const Duration(seconds: 30),
     onTimeout: () => throw StateError('no CatalogChanged announced the entry'),
   );
@@ -627,13 +627,25 @@ Widget addedWhileOpen() => const Center(child: Text('ADDED LATE'));
 ''');
   const addedId = 'tool/catalog/demos/added_while_open.dart#addedWhileOpen';
   try {
-    var compiled = await daemon.select(addedId);
-    check(compiled.ok, 'the new entry compiles: ${compiled.error}');
+    // Discovered by the *other* client, which is the case that separates a
+    // shared daemon from a private one — and the harder one. Whoever compiles
+    // first puts the new wrapper into the compiler's baseline; every delta
+    // after that leaves it out, being unchanged, so a guest that was not there
+    // for that compile would reload a program referring to a library it has
+    // never had. Nothing here reloads into this check's guest on purpose.
+    var refreshed = await second.select(entries.first.id, ifChanged: true);
+    check(
+      !refreshed.unchanged,
+      'a request that finds a new entry does not report nothing to do',
+    );
     var announced = await appeared;
     check(
       announced.entries.any((e) => e.id == addedId),
       'and every client is told it exists',
     );
+
+    var compiled = await daemon.select(addedId);
+    check(compiled.ok, 'the new entry compiles: ${compiled.error}');
     if (compiled.ok) {
       await vmService.reload(compiled.dill!);
       var probe = probing
@@ -650,7 +662,7 @@ Widget addedWhileOpen() => const Center(child: Text('ADDED LATE'));
   }
 
   // And gone again: the entry has to leave the list it just joined.
-  var removed = second.catalogChanges.first.timeout(
+  var removed = daemon.catalogChanges.first.timeout(
     const Duration(seconds: 30),
     onTimeout: () => throw StateError('no CatalogChanged withdrew the entry'),
   );

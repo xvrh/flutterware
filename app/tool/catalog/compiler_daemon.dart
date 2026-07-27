@@ -104,6 +104,17 @@ class _Daemon {
 
   /// What the roots looked like when [_discovered] was produced.
   var _scanned = '';
+
+  /// Bumped whenever a rescan adds a library to the compiler's baseline.
+  ///
+  /// A delta is relative to that baseline, not to any particular guest: once a
+  /// new wrapper has been compiled in, a later delta no longer carries it —
+  /// it is unchanged — and a guest that never had the library reloads nothing
+  /// and renders nothing. Sessions that are behind get the whole program
+  /// instead. `EntrypointGenerator.registerAll` avoids the same divergence at
+  /// startup by registering everything before anyone connects; entries that
+  /// appear later cannot be handled that way.
+  var _baseline = 0;
   ResidentCompiler? _compiler;
 
   /// What turns an edit into a recompile. Every request sweeps: the daemon has
@@ -243,6 +254,7 @@ class _Daemon {
       );
     }
 
+    if (fresh.isNotEmpty) _baseline++;
     stderr.writeln(
       '[catalog] rescanned in ${watch.elapsedMilliseconds}ms: '
       '${fresh.length} new or changed, ${gone.length} gone',
@@ -523,7 +535,10 @@ class _Daemon {
     if (_quarantine.remove(id) != null) _catalogChanged();
 
     var invalidated = {...rescanned, ...edited, ..._makeActive(entry)};
-    if (full) {
+    // Whole program, not a delta: this guest is missing libraries that entered
+    // the baseline while it was elsewhere, and a delta would leave them out.
+    var behind = session.baseline != _baseline;
+    if (full || behind) {
       // A guest spawned from scratch loads kernel_blob.bin off disk, and a
       // delta is not a program. `reset` makes the next compile emit the whole
       // thing without restarting the compiler — which matters because the
@@ -548,6 +563,7 @@ class _Daemon {
       );
     }
 
+    if (compiled.ok) session.baseline = _baseline;
     return DaemonCompiled(
       requestId: requestId,
       id: id,
@@ -762,6 +778,10 @@ class _Session {
   /// Whether this client attached to an already-prepared daemon, and so paid
   /// nothing for it.
   final bool arrivedAfterPrepare;
+
+  /// The compiler baseline this session's guest has been fed up to. Behind the
+  /// daemon's own means the next kernel it is given has to be a whole program.
+  int baseline = 0;
 
   String get _dir => p.join(_daemon._buildDir, 'sessions', id);
   String get assetsDir => p.join(_dir, 'assets');
