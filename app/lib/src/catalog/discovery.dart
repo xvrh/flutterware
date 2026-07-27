@@ -202,6 +202,7 @@ class CatalogScanner {
         name: _literalString(annotation, 'name') ?? symbol,
         declaredId: _literalString(annotation, 'id'),
         group: _literalString(annotation, 'group'),
+        formFactor: _enumName(annotation, 'formFactor'),
       ),
     );
   }
@@ -273,6 +274,22 @@ class CatalogScanner {
       if (argument.name.lexeme != parameter) continue;
       var value = argument.argumentExpression;
       if (value is SimpleStringLiteral) return value.value;
+    }
+    return null;
+  }
+
+  /// The name an enum-valued argument ends in — `FormFactor.mobile` gives
+  /// `mobile`. Syntactic like everything else here: what it is called, never
+  /// what it resolves to. A project's own annotation subclass may write it
+  /// differently, and the last identifier is the part that means anything.
+  static String? _enumName(Annotation annotation, String parameter) {
+    for (var argument
+        in annotation.arguments?.arguments ?? const <Argument>[]) {
+      if (argument is! NamedArgument) continue;
+      if (argument.name.lexeme != parameter) continue;
+      var source = argument.argumentExpression.toSource();
+      var dot = source.lastIndexOf('.');
+      return dot < 0 ? source : source.substring(dot + 1);
     }
     return null;
   }

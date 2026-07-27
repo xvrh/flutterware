@@ -239,4 +239,26 @@ Widget avatarTile() => const Placeholder();
     write('a.dart', 'int x = 1;');
     expect(scan().entries, isEmpty);
   });
+
+  test('the form factor is read as the name it is written with', () {
+    write('sizes.dart', '''
+import 'package:flutter/widgets.dart';
+
+@Demo(name: 'Phone', formFactor: FormFactor.mobile)
+Widget phone() => const Placeholder();
+
+@Demo(name: 'Desk', formFactor: FormFactor.desktop)
+Widget desk() => const Placeholder();
+
+@Demo(name: 'Plain')
+Widget plain() => const Placeholder();
+''');
+
+    // The name it is written with, not what it resolves to: discovery parses,
+    // it does not analyse.
+    expect(
+      {for (var e in scan().entries) e.symbol: e.formFactor},
+      {'phone': 'mobile', 'desk': 'desktop', 'plain': null},
+    );
+  });
 }

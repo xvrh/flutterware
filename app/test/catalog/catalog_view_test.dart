@@ -355,4 +355,23 @@ void main() {
       expect(find.byTooltip('Show the frame'), findsOneWidget);
     });
   });
+
+  group('the form factor', () {
+    test('mobile and desktop each pick a device, all picks none', () {
+      var staging = CatalogStaging()..followEntry('mobile');
+      expect(staging.device?.screenSize, const Size(390, 844));
+
+      staging.followEntry('desktop');
+      expect(staging.device?.identifier.platform, TargetPlatform.macOS);
+
+      staging.followEntry('all');
+      expect(staging.device, isNull, reason: 'all is an entry with no opinion');
+    });
+
+    test('an entry that says nothing leaves the choice alone', () {
+      var staging = CatalogStaging()..device = Devices.ios.iPad;
+      staging.followEntry(null);
+      expect(staging.device?.identifier, Devices.ios.iPad.identifier);
+    });
+  });
 }

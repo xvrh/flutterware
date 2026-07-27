@@ -341,7 +341,14 @@ Future<void> main(List<String> args) async {
     var before = frames;
     connected.add(
       encodeMessage(
-        const ResizeMessage(width: 500, height: 900, pixelRatio: 2),
+        // With a phone's safe areas, to see where the engine puts them.
+        const ResizeMessage(
+          width: 500,
+          height: 900,
+          pixelRatio: 2,
+          insetTop: 94,
+          insetBottom: 68,
+        ),
       ),
     );
     await connected.flush();
@@ -350,6 +357,42 @@ Future<void> main(List<String> args) async {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
     check(frames > before, 'a resize on a static scene paints a frame');
+
+    // Where the embedder's view insets land, which decides whether a device's
+    // notch can reach a demo's AppBar at all: `padding` is what SafeArea and
+    // AppBar read, and the embedder API exposes only `physical_view_inset_*`.
+    var metrics = await _nextProbe(
+      probes.stream,
+      const Duration(seconds: 10),
+      (line) => line.contains('padding'),
+    );
+    stdout.writeln('[check] view metrics after an inset resize: $metrics');
+    check(
+      metrics.contains('insets 94.0'),
+      'the safe areas reach the guest — $metrics',
+    );
+    check(
+      metrics.contains('padding 0.0'),
+      'as view *insets*: the embedder API has no padding field, which is why '
+      'the demo shell has to translate them — $metrics',
+    );
+
+    // And that the translation works, read from a demo rather than from the
+    // view: what an AppBar respects is the MediaQuery it is built under.
+    var probe = entries.firstWhere((e) => e.symbol == 'paddingProbe');
+    await _renderEntry(daemon, vmService, probes, probe);
+    var seen = await _nextProbe(
+      probes.stream,
+      const Duration(seconds: 10),
+      (line) => line.contains('PADDING'),
+    );
+    check(
+      // Logical pixels: the host sends the safe areas in physical ones, and a
+      // MediaQuery is in the demo's own coordinates — 94 and 68 over a ratio
+      // of 2.
+      seen.contains('PADDING 47.0,34.0'),
+      'the demo sees the device safe areas as padding — $seen',
+    );
 
     // 3e. Hover reaches the guest.
     //

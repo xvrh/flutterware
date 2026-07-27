@@ -33,7 +33,7 @@ class CatalogView extends StatefulWidget {
 
 class _CatalogViewState extends State<CatalogView> {
   final FocusNode _focusNode = FocusNode();
-  (int, int, double)? _lastReported;
+  (int, int, double, EdgeInsets)? _lastReported;
   late final AppLifecycleListener _lifecycle;
 
   CatalogSession get _session => widget.session;
@@ -65,17 +65,24 @@ class _CatalogViewState extends State<CatalogView> {
     if (mounted) unawaited(_session.reloadIfChanged());
   }
 
-  void _maybeResize(EmbeddedEngine engine, Size size, double dpr) {
+  void _maybeResize(
+    EmbeddedEngine engine,
+    Size size,
+    double dpr, {
+    EdgeInsets safeAreas = EdgeInsets.zero,
+  }) {
     var width = (size.width * dpr).round();
     var height = (size.height * dpr).round();
     if (width < 1 || height < 1) return;
-    // Keyed on the ratio as well as the size: switching to a device of the
-    // same logical size at a different pixel ratio is a different window, and
-    // comparing only the size would leave the guest rendering at the old one.
-    var next = (width, height, dpr);
+    // Keyed on the ratio and the safe areas as well as the size: two devices
+    // can share a logical size at different ratios or different notches, and
+    // comparing only the size would leave the guest rendering as the old one.
+    var next = (width, height, dpr, safeAreas);
     if (next == _lastReported) return;
     _lastReported = next;
-    engine.resize(width, height, dpr);
+    // Physical pixels, like the size — the guest turns them back into logical
+    // padding on the other side.
+    engine.resize(width, height, dpr, insets: safeAreas * dpr);
   }
 
   /// Whether a key belongs to the app rather than to the guest.
@@ -210,7 +217,15 @@ class _CatalogViewState extends State<CatalogView> {
     }
 
     var screen = device.screenSize;
-    _resizeAfterFrame(engine, screen, device.pixelRatio);
+    _resizeAfterFrame(
+      engine,
+      screen,
+      device.pixelRatio,
+      // What the frame draws around the screen, told to the thing rendering
+      // inside it — otherwise the notch is decoration and an AppBar sits under
+      // it.
+      safeAreas: device.safeAreas,
+    );
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(FwSpacing.xl),
@@ -232,9 +247,14 @@ class _CatalogViewState extends State<CatalogView> {
     );
   }
 
-  void _resizeAfterFrame(EmbeddedEngine engine, Size logical, double dpr) {
+  void _resizeAfterFrame(
+    EmbeddedEngine engine,
+    Size logical,
+    double dpr, {
+    EdgeInsets safeAreas = EdgeInsets.zero,
+  }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _maybeResize(engine, logical, dpr);
+      _maybeResize(engine, logical, dpr, safeAreas: safeAreas);
     });
   }
 

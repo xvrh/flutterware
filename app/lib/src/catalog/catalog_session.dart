@@ -29,6 +29,26 @@ class CatalogStaging extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sets the device the entry asks for, if it asks for one.
+  ///
+  /// `@Demo(formFactor: FormFactor.mobile)` is the author saying what this
+  /// entry is *for*, so arriving at it should show it that way — which is what
+  /// the enum meant in the previous catalog, where it picked the toolbar's
+  /// device bucket. An explicit pick lasts until the next entry that has an
+  /// opinion; `all` is an entry saying it has none, and means the panel.
+  void followEntry(String? formFactor) {
+    switch (formFactor) {
+      case 'mobile':
+        device = Devices.ios.iPhone13;
+      case 'desktop':
+        device = Devices.macOS.macBookPro;
+      case 'all':
+        device = null;
+      default:
+        break; // No opinion: leave whatever is on screen alone.
+    }
+  }
+
   /// Whether the device's chrome is drawn around the screen. Off leaves a
   /// plain rectangle of the right size, which is what you want once you are
   /// looking at the layout rather than at the phone.
@@ -319,6 +339,7 @@ class CatalogSession extends ChangeNotifier {
       if (_disposed) return;
 
       active = selected = entries.first;
+      staging.followEntry(entries.first.formFactor);
       phase = CatalogSessionPhase.ready;
       _idle();
     } catch (e) {
@@ -382,6 +403,10 @@ class CatalogSession extends ChangeNotifier {
     // did rather than what a switch would have done.
     var reloaded = entry.id == selected?.id || entry.id == active?.id;
     selected = entry;
+    // Only on a real switch: re-selecting the entry you are already on is a
+    // reload, and a reload that undoes the device you just picked would make
+    // the picker feel like it forgets.
+    if (!reloaded) staging.followEntry(entry.formFactor);
     _busy(reloaded ? 'reloading' : 'compiling');
     try {
       await _switchOnce(

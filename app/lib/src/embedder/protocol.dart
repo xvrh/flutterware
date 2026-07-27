@@ -103,11 +103,26 @@ class ResizeMessage extends EmbedderMessage {
     required this.width,
     required this.height,
     required this.pixelRatio,
+    this.insetTop = 0,
+    this.insetRight = 0,
+    this.insetBottom = 0,
+    this.insetLeft = 0,
   });
 
   final int width;
   final int height;
   final double pixelRatio;
+
+  /// The device's safe areas, in physical pixels.
+  ///
+  /// A phone's notch and home indicator are the host's knowledge — it is the
+  /// one that chose the device — and the guest has no other way to hear about
+  /// them: the frame is drawn outside its process, so nothing in there can put
+  /// them into a `MediaQuery` the way an in-app device frame would.
+  final double insetTop;
+  final double insetRight;
+  final double insetBottom;
+  final double insetLeft;
 }
 
 class PointerEventMessage extends EmbedderMessage {
@@ -196,6 +211,10 @@ Uint8List encodeMessage(EmbedderMessage message) {
       _u32(body, message.width);
       _u32(body, message.height);
       _f64(body, message.pixelRatio);
+      _f64(body, message.insetTop);
+      _f64(body, message.insetRight);
+      _f64(body, message.insetBottom);
+      _f64(body, message.insetLeft);
     case PointerEventMessage():
       body.addByte(MessageType.pointerEvent.tag);
       _u32(body, message.phase.index);

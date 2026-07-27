@@ -82,12 +82,21 @@ static void SendSurfacesAllocated(void) {
   ipc_send(g_socket, kMsgSurfacesAllocated, payload, sizeof(payload));
 }
 
-static void SendWindowMetrics(int width, int height, double pixel_ratio) {
+// `insets` is top, right, bottom, left in physical pixels — a device's safe
+// areas, which only the GUI knows because it is the one that picked the
+// device. The frame around the screen is drawn in that other process, so
+// without this the guest has no way to learn that it is behind a notch.
+static void SendWindowMetrics(int width, int height, double pixel_ratio,
+                              const double insets[4]) {
   FlutterWindowMetricsEvent metrics = {0};
   metrics.struct_size = sizeof(FlutterWindowMetricsEvent);
   metrics.width = (size_t)width;
   metrics.height = (size_t)height;
   metrics.pixel_ratio = pixel_ratio;
+  metrics.physical_view_inset_top = insets[0];
+  metrics.physical_view_inset_right = insets[1];
+  metrics.physical_view_inset_bottom = insets[2];
+  metrics.physical_view_inset_left = insets[3];
   FlutterEngineSendWindowMetricsEvent(g_engine, &metrics);
 }
 
@@ -224,7 +233,8 @@ int main(int argc, char** argv) {
 
   ipc_send(g_socket, kMsgReady, NULL, 0);
   SendSurfacesAllocated();
-  SendWindowMetrics(width, height, g_pixel_ratio);
+  const double no_insets[4] = {0, 0, 0, 0};
+  SendWindowMetrics(width, height, g_pixel_ratio, no_insets);
 
   // Socket read loop on the main thread.
   for (;;) {
@@ -236,13 +246,16 @@ int main(int argc, char** argv) {
       uint32_t new_width;
       uint32_t new_height;
       double pixel_ratio;
+      double insets[4] = {0, 0, 0, 0};
       memcpy(&new_width, payload + 0, 4);
       memcpy(&new_height, payload + 4, 4);
       memcpy(&pixel_ratio, payload + 8, 8);
+      // Optional, so a client built before the insets existed still resizes.
+      if (len >= 48) memcpy(insets, payload + 16, 32);
       g_pixel_ratio = pixel_ratio;
       // The ring is reallocated inside GetNextDrawable on the raster thread;
       // here we only nudge the engine to render at the new size.
-      SendWindowMetrics((int)new_width, (int)new_height, pixel_ratio);
+      SendWindowMetrics((int)new_width, (int)new_height, pixel_ratio, insets);
     } else if (type == kMsgPointerEvent) {
       input_handle_pointer(g_engine, payload, len);
     } else if (type == kMsgKeyEvent) {

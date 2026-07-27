@@ -226,18 +226,17 @@ class _CatalogHost extends StatelessWidget {
   Widget build(BuildContext context) {
     var preview = _preview;
     var wrapper = preview.wrapper ?? (Widget child) => child;
-    var size = preview.size;
     Widget child = KeyedSubtree(
       // A fresh key per entry so switching remounts rather than reusing the
       // previous entry's State.
       key: ValueKey<String>(_entryId),
       child: wrapper(_builder()),
     );
-    if (size != null) {
-      child = Center(
-        child: SizedBox(width: size.width, height: size.height, child: child),
-      );
-    }
+    // No `preview.size` here. The host sizes the guest's *window* to whatever
+    // device is chosen — which is how a demo reads a phone's dimensions from
+    // MediaQuery — and a SizedBox in here would fight it: an entry declaring
+    // desktop would run off the edge of a phone that was picked on purpose.
+    // The annotation still chooses which device the picker starts on.
     return Directionality(textDirection: TextDirection.ltr, child: child);
   }
 }
@@ -254,7 +253,17 @@ class _CatalogHost extends StatelessWidget {
     }
 
     WidgetsBinding.instance.rootElement?.visitChildren(visit);
-    print('FW-PROBE: $_entryId | ${_preview.name} | ${texts.join(' / ')}');
+    // The view's own numbers, not a widget's: what the host's window metrics
+    // actually became is the question a device frame drawn in another process
+    // cannot answer any other way.
+    var view = WidgetsBinding.instance.platformDispatcher.implicitView;
+    var padding = view?.padding;
+    var insets = view?.viewInsets;
+    print(
+      'FW-PROBE: $_entryId | ${_preview.name} | ${texts.join(' / ')} '
+      '| padding ${padding?.top},${padding?.bottom} '
+      'insets ${insets?.top},${insets?.bottom}',
+    );
   });
 ''';
 
