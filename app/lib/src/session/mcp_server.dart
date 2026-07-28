@@ -36,10 +36,10 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
          implementation: Implementation(name: 'flutterware', version: '0.5.2'),
          instructions:
              'Inspect and drive a Flutter project through its flutterware '
-             'plugins. Start with flutterware_status; it reports what every '
-             'declared plugin currently knows. Reading never triggers work, so '
-             'a cold project reports "not computed" until you pass '
-             'compute: true or invoke an action.',
+             'plugins. Start with flutterware_status; it loads and reports what '
+             'every declared plugin knows. Anything that compiles, renders or '
+             'spawns a process is an action — list them with '
+             'flutterware_actions and run them with flutterware_invoke.',
        ) {
     registerTool(_statusTool, _status);
     registerTool(_actionsTool, _actions);
@@ -80,28 +80,19 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
   static final _statusTool = Tool(
     name: 'flutterware_status',
     description:
-        'What every declared flutterware plugin currently says about itself: '
-        'status, sub-entries per package, and a text projection of the panel. '
-        'Reading is free and never starts work — an untouched project reports '
-        '"not computed". Set compute to true to load it first, which can take '
-        'seconds.',
-    inputSchema: Schema.object(
-      properties: {
-        'compute': Schema.bool(
-          description:
-              'Load what has not been loaded before reporting. Off by default '
-              'so a status check cannot silently scan or compile a project.',
-        ),
-      },
-    ),
+        'What every declared flutterware plugin says about itself: status, '
+        'sub-entries per package, and a text projection of the panel. Loads '
+        'what has not been loaded yet, so the answer describes the project '
+        'rather than what a previous call happened to warm. Loading is parsing '
+        '— pubspecs, demo files — and never compiles, spawns a daemon or '
+        'touches the network; that work lives behind flutterware_invoke.',
+    inputSchema: Schema.object(properties: {}),
   );
 
   Future<CallToolResult> _status(CallToolRequest request) =>
       _withSession((session) async {
-        if (request.arguments?['compute'] == true) {
-          for (var core in session.cores) {
-            await core.computeAll();
-          }
+        for (var core in session.cores) {
+          await core.computeAll();
         }
         return _json({
           'root': session.root,

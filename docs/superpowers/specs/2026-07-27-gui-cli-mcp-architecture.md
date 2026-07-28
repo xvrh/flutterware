@@ -334,18 +334,34 @@ immediately which ones an agent cannot use from a name and a parameter list.
 
 ## Deferred
 
-**Global search**, until the CLI exists. The design constraint to carry, since it
-was nearly written down wrongly: the rule is **not** "search reads only cached
-data" — that would be a bad search engine. It is
+**Global search**, until the CLI exists. One constraint is worth carrying: the
+rule is **not** "search reads only cached data" — that would be a bad search
+engine.
 
-> **A keystroke may never start work. An intent may.**
+This section used to elevate that into an aphorism — *a keystroke may never
+start work, an intent may* — and it is **not load-bearing. Do not build on it.**
+Read literally it is either trivial or wrong: it does not say what an intent is,
+and the obvious reading (opening the palette is "just" a keystroke, so it must
+not load anything) leads straight to a phantom tier of "cheap warming" methods
+alongside `computeAll()` that separate things the code already separates. That
+was attempted on 2026-07-28 and thrown away.
 
-Two phases: instant on every keystroke from warm indexes (the syntactic scan is
-~1ms incremental over 778 files, so catalog entries and scenarios are free), then
-real work on intent — Enter, or the query settling — with results **streaming and
-merging** so a slow provider never blocks a fast one. The default flips per
-surface: the GUI starts fast and escalates; `fw search` and MCP `search` default
-to full, because an agent typing a query once has already expressed intent.
+The concrete mechanics, which is all there ever was:
+
+- **Opening the palette loads.** It is a deliberate act, it happens once per
+  worktree per session, and `computeAll()` is bounded to parsing by its own
+  contract (~430ms across this repo). Results **stream and merge** so a slow
+  provider never blocks a fast one.
+- **Typing filters.** Not because a rule forbids more, but because scans are
+  cached and idempotent — re-running them per character would be pointless work,
+  not dangerous work.
+- **Enter escalates.** Compiling, screenshotting and grepping source are
+  actions; they are invoked by name, and they were never inside `computeAll()`.
+
+The line that actually matters is the one on `computeAll()`: parse files, never
+compile, spawn nothing, no network. That is enforceable and it is where the
+budget belongs. `fw search` and MCP `search` go straight to full — an agent
+typing a query once has already expressed intent.
 
 Search hits carry an `Address`, which is what makes them equally actionable in
 all three surfaces — and is the reason search can be deferred without being
@@ -499,7 +515,7 @@ having no `report` or `invoke` to delegate with. `Session` resolves a manifest i
 `app/bin/fw.dart` renders them, and is in `_pureEntryPoints`.
 
 ```
-cd app && dart run bin/fw.dart status [--compute] [--json]
+cd app && dart run bin/fw.dart status [--json]
                                 actions [--json]
                                 run <plugin> <action> [--k=v]
 ```
@@ -605,9 +621,13 @@ $ dart run bin/fw.dart run ui_catalog screenshot \
 **5.5s cold, 900×700 PNG, no GUI involved.** This is the master plan's
 "screenshot an entry is a job, not a viewer capability" made real.
 
-**`computeAll()` moved onto `PluginCore`** with a do-nothing default, so
-`--compute` stopped being `if (core is DependenciesCore)` in two renderers.
+**`computeAll()` moved onto `PluginCore`** with a do-nothing default, so eager
+loading stopped being `if (core is DependenciesCore)` in two renderers.
 A capability belongs on the contract or nowhere.
+
+(It was reached by a `--compute` flag at the time. The flag is gone since
+2026-07-28 — `status` computes — but the point about the contract stands, and is
+in fact what made removing the flag a two-line change.)
 
 **The session's progress reaches the report through a hook.** `busyStatusFor`
 is a `Status? Function(String path)?` the GUI sets and a CLI leaves null —
@@ -729,7 +749,7 @@ Three smaller things fell out:
 `dependencies reload` and `ui_catalog rescan` were the only actions besides
 `screenshot`. Timed from `fw`: **0.86s and 0.75s, which is exactly the cost of
 starting the process and reading the config** — against 1.27s for
-`status --compute` doing real work. They were no-ops.
+`status` doing real work. They were no-ops.
 
 They iterate what is *being watched* and what has *already been scanned* — sets
 filled by a panel mounting. `fw` and MCP open a session per request and hold
@@ -974,8 +994,9 @@ two plugins; add it when a third makes you write the same thing a third time.
    `fw show <address>`. Nothing blocks it now that `Address` is real and
    carried by artifacts; it needs the GUI side, which is where it stops being
    cheap.
-3. **Global search**, once there is a viewer to drive. The rule to carry is in
-   "Deferred": a keystroke may never start work, an intent may.
+3. **Global search**, once there is a viewer to drive. See "Deferred" for the
+   mechanics — opening the palette loads, typing filters, Enter escalates — and
+   for why the aphorism that used to sit there should not be built on.
 
 Smaller things the last session left on the floor, in the order I would take
 them:

@@ -15,8 +15,8 @@ import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 ///
 ///     cd app && flutter test test/tools/projection_dump_test.dart
 ///
-/// Superseded by `dart run bin/fw.dart status --compute`, which prints this for
-/// real. Kept because it drives the plugin directly, with no Session in the way.
+/// Superseded by `dart run bin/fw.dart status`, which prints this for real.
+/// Kept because it drives the plugin directly, with no Session in the way.
 void main() {
   test('dump', () async {
     var root = findRepoRoot('..')!;

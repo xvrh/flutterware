@@ -239,10 +239,30 @@ building it:
   subscriber. A CLI can subscribe for the duration of a request and release —
   same source, same laziness, no GUI required. That is what keeps decision 1
   ("no renderer is privileged") true rather than aspirational.
-- The honest consequence: `fw status` on a cold app reports "not computed" for
+- ~~The honest consequence: `fw status` on a cold app reports "not computed" for
   anything nobody has looked at. Eager computation should be explicit
   (`--compute`), never implicit — a CLI invocation must not silently compile 30
-  packages.
+  packages.~~
+
+  **Wrong, and corrected in the code on 2026-07-28. Do not reinstate it.** This
+  was written before `fw` existed, and it guessed at a cost that no core has.
+  A `fw` process starts cold *every* time, so "report only what is cached" meant
+  `status` printed "not computed" for every package on every run — the config
+  file read back rather than a status. The flag did not gate expensive work; it
+  gated whether the command answered at all.
+
+  Measured once both cores existed: `computeAll()` across this repo is **~430ms**
+  — three packages of pubspec parsing plus two catalog scans — against **~4.2s**
+  of `dart run` startup to invoke the command offering the flag. It never
+  compiled 30 packages because it never compiles anything: the compile loop is
+  panel-side (`UiCatalogCore.track` declines to start it), and screenshots, pub
+  scores and import graphs are all behind actions.
+
+  `fw status` and `flutterware_status` now load, then report. The rule that
+  survives is the one above about `report` itself — reading is free, which is
+  what the GUI needs to read one per sidebar row per frame. That was never a
+  reason to make a CLI caller ask twice. `computeAll()`'s budget is stated on
+  the method: parse files, never compile, spawn nothing, no network.
 
 **The cheap way to stop speculating:** a ~50-line dev tool that loads a
 worktree's manifest and prints every plugin's `report.toText()`. It needs no

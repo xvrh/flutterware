@@ -36,13 +36,15 @@ class FwCommand {
 const fwCommands = [
   FwCommand(
     'status',
-    usage: 'status [--compute] [--json]',
+    usage: 'status [--json]',
     summary: 'what every plugin says about itself',
     details:
-        'Reading a report never starts work, so a cold run says "not '
-        'computed"\nfor anything nobody has looked at. `--compute` asks for it '
-        'explicitly,\nand it is explicit because a status check must not '
-        'silently scan or\ncompile a project.',
+        'Loads what each plugin has not loaded yet, then reports. A `fw` '
+        'process\nstarts cold every time, so a run that reported only cached '
+        'state would\nsay "not computed" for everything, every time.\n\n'
+        'Loading is parsing — pubspecs, demo files. Nothing here compiles, '
+        'spawns\na daemon or touches the network; that work lives behind '
+        '`fw run`.',
   ),
   FwCommand(
     'actions',
@@ -113,10 +115,7 @@ class FwCli {
 
     try {
       return switch (command) {
-        'status' => await _status(
-          json: json,
-          compute: rest.remove('--compute'),
-        ),
+        'status' => await _status(json: json),
         'actions' => await _actions(json: json),
         'run' => await _run(rest, json: json),
         'help' || '--help' || '-h' => _help(rest.firstOrNull),
@@ -128,19 +127,18 @@ class FwCli {
     }
   }
 
-  /// Everything every plugin says about itself, right now.
+  /// Everything every plugin says about itself.
   ///
-  /// Cold, this honestly prints "not computed" for anything nobody has looked
-  /// at — reading a report never starts work. `--compute` is the explicit
-  /// opt-in, and it is explicit precisely because a CLI invocation must not
-  /// silently compile or scan thirty packages.
-  Future<int> _status({required bool json, required bool compute}) async {
+  /// Computes first. Reading a report never starts work — that rule protects
+  /// the GUI, where a sidebar row reads one per frame — but a `fw` process has
+  /// no such history: it opens a session, reads, and exits. Reporting only
+  /// cached state here would print "not computed" for every package on every
+  /// run, which is the config file read back rather than a status.
+  Future<int> _status({required bool json}) async {
     var session = await openSession();
     try {
-      if (compute) {
-        for (var core in session.cores) {
-          await core.computeAll();
-        }
+      for (var core in session.cores) {
+        await core.computeAll();
       }
 
       if (json) {

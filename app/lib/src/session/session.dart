@@ -26,9 +26,12 @@ import 'job.dart';
 ///
 /// **Laziness is subscription.** A widget subscribes for as long as it is
 /// mounted; `fw` subscribes for the duration of a request and releases. Same
-/// sources, same rule, no GUI required — so a cold `fw status` honestly reports
-/// "not computed" for anything nobody has looked at, and computing is something
-/// the caller asks for explicitly.
+/// sources, same rule, no GUI required.
+///
+/// What laziness buys is that *reading* a report is free — which is what lets
+/// the GUI read one per sidebar row per frame. It is not a reason to make a
+/// caller ask twice: a `fw` process has no history to be lazy about, so
+/// `fw status` loads and then reports.
 class Session {
   Session._(
     this.root,

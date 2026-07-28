@@ -20,7 +20,7 @@ cd app && dart run bin/fw.dart <command>
 
 | command | what it does |
 |---|---|
-| `status [--compute] [--json]` | what every plugin says about itself |
+| `status [--json]` | what every plugin says about itself |
 | `actions [--json]` | what can be invoked, and with what |
 | `run <plugin> <action> [--k=v]` | invoke one action |
 | `help [<command>]` | this, or one command in detail |
@@ -43,11 +43,9 @@ Stdout belongs to the protocol — anything said to a human goes to stderr.
 
 ### `flutterware_status`
 
-What every declared flutterware plugin currently says about itself: status, sub-entries per package, and a text projection of the panel. Reading is free and never starts work — an untouched project reports "not computed". Set compute to true to load it first, which can take seconds.
+What every declared flutterware plugin says about itself: status, sub-entries per package, and a text projection of the panel. Loads what has not been loaded yet, so the answer describes the project rather than what a previous call happened to warm. Loading is parsing — pubspecs, demo files — and never compiles, spawns a daemon or touches the network; that work lives behind flutterware_invoke.
 
-| argument | required | |
-|---|---|---|
-| `compute` | no | Load what has not been loaded before reporting. Off by default so a status check cannot silently scan or compile a project. |
+Takes no arguments.
 
 ### `flutterware_actions`
 

@@ -285,25 +285,38 @@ void main() {
   });
 
   group('reading', () {
-    test('neither surface starts work by reading a report', () async {
-      await surfaces.cli(['status', '--json']);
-      await surfaces.mcpJson('flutterware_status');
+    test('reading a report starts no work on either surface', () async {
+      // `actions` reads every report to list what each plugin declares, and
+      // declarations are static — so this is the surface that shows the rule
+      // still holds. It is the same rule the GUI leans on, where a sidebar row
+      // reads a report per frame.
+      await surfaces.cli(['actions', '--json']);
+      await surfaces.mcpJson('flutterware_actions');
       expect(
         surfaces.core.computed,
         isFalse,
         reason:
             'A report is read by every sidebar row and every tab glyph; one '
-            'that computed would make status unusable.',
+            'that computed would make reading unusable.',
       );
     });
 
-    test('both compute only when asked, and by the same name', () async {
-      await surfaces.cli(['status', '--compute']);
+    test('both surfaces compute before reporting status', () async {
+      // A `fw` process and an MCP call both start cold, so a status that
+      // reported only cached state would say "not computed" every time. Both
+      // load first, and neither asks to be told to.
+      await surfaces.cli(['status', '--json']);
       expect(surfaces.core.computed, isTrue);
 
       surfaces.core.computed = false;
-      await surfaces.mcpJson('flutterware_status', {'compute': true});
-      expect(surfaces.core.computed, isTrue);
+      await surfaces.mcpJson('flutterware_status');
+      expect(
+        surfaces.core.computed,
+        isTrue,
+        reason:
+            'A surface that reported cold where the other loaded is exactly '
+            'the drift the parity rule exists to catch.',
+      );
     });
   });
 }

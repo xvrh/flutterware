@@ -47,14 +47,26 @@ abstract class PluginCore {
 
   /// Loads whatever [report] would otherwise call "not computed", and waits.
   ///
-  /// The explicit opt-in behind `fw status --compute`. It exists because a
-  /// widget subscribing is what normally starts work, and a CLI has no widget
-  /// — but it must stay *explicit*, because an invocation that silently
-  /// scanned or compiled thirty packages would make `status` unusable as a
-  /// quick check.
+  /// It exists because a widget subscribing is what normally starts work, and
+  /// `fw` and MCP have no widget. Both call this before reporting.
   ///
-  /// Default: nothing. A plugin with nothing expensive to load needs no
-  /// override, and callers never have to ask which kind they have.
+  /// **The budget is parsing.** Read files, parse them, cache the result. Do
+  /// not compile, spawn a process, open a socket or hit the network — that
+  /// work belongs behind an action, where a caller chose it by name and can be
+  /// told what it costs. The two first-party cores hold to this: the catalog
+  /// parses its demo files and deliberately does not start the compile loop
+  /// (see `UiCatalogCore.track`), and dependencies parses pubspecs without
+  /// resolving them.
+  ///
+  /// The budget is what lets every surface call this freely — `fw status`, MCP,
+  /// and search warming its index when the palette opens. A plugin that cannot
+  /// answer within it should leave this a no-op and expose the slow path as an
+  /// action rather than making those surfaces unpredictable.
+  ///
+  /// Idempotent: callers invoke it without knowing what has run before.
+  ///
+  /// Default: nothing. A plugin with nothing to load needs no override, and
+  /// callers never have to ask which kind they have.
   Future<void> computeAll() async {}
 
   /// Bumps whenever [report] would answer differently. A renderer subscribes;

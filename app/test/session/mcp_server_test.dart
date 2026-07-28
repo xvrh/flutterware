@@ -68,7 +68,7 @@ void main() {
     ]);
   });
 
-  test('status reports every declared plugin, computing nothing', () async {
+  test('status reports every declared plugin, loaded', () async {
     var result = await connection.callTool(
       CallToolRequest(name: 'flutterware_status'),
     );
@@ -79,9 +79,14 @@ void main() {
       'flutterware.dependencies',
       'flutterware.ui_catalog',
     ]);
-    // Nothing subscribed, so nothing loaded — the same answer `fw status`
-    // gives cold, and the reason `compute` has to be asked for.
-    expect(jsonEncode(payload), contains('not computed'));
+    // An MCP call starts cold, so a status that reported only cached state
+    // would say "not computed" for every package on every call — the config
+    // file read back rather than an answer. Both cores load first.
+    expect(
+      jsonEncode(payload),
+      isNot(contains('not computed')),
+      reason: 'every declared package is loaded, or says why it could not be',
+    );
   });
 
   test('a plugin with no core is reported, not omitted', () async {
