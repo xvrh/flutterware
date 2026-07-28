@@ -1,3 +1,4 @@
+import 'address.dart';
 import 'tone.dart';
 
 /// A plugin's answer to "what are you showing right now?", as data.
@@ -111,16 +112,36 @@ class ViewField extends ViewNode {
 
 /// One row of a [ViewItems] list: a name plus optional trailing state.
 class ViewItem {
-  const ViewItem(this.label, {this.detail, this.tone = Tone.neutral});
+  const ViewItem(
+    this.label, {
+    this.detail,
+    this.tone = Tone.neutral,
+    this.address,
+  });
 
   final String label;
   final String? detail;
   final Tone tone;
 
+  /// Where this row *is*, when it is a thing rather than a line of output.
+  ///
+  /// Identity, not decoration — which is why it belongs in a projection that
+  /// otherwise refuses anything a non-GUI renderer could not use. An address is
+  /// the one string the GUI, `fw`, MCP and an artifact all already carry, so a
+  /// row that has one becomes equally reachable from all four: search navigates
+  /// to it, `fw` prints something you can paste back, and an agent can act on it
+  /// without a second lookup to ask "which entry was that?".
+  ///
+  /// Null for rows that name no destination — a count, a diagnostic, a version.
+  /// A plugin that leaves it null loses nothing it had; the row is simply found
+  /// and not followed.
+  final Address? address;
+
   Map<String, Object?> toJson() => {
     'label': label,
     if (detail != null) 'detail': detail,
     if (tone != Tone.neutral) 'tone': tone.name,
+    if (address != null) 'address': address!.toString(),
   };
 }
 

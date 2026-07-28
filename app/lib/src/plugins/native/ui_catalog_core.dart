@@ -372,6 +372,11 @@ class UiCatalogCore extends PluginCore {
                   ? entry.name
                   : '${entry.group} / ${entry.name}',
               detail: entry.id,
+              // The same address the screenshot action and an artifact carry —
+              // built here rather than left to a reader to reassemble from the
+              // package and the id, which is how two surfaces come to disagree
+              // about what an entry is called.
+              address: addressFor(path, entry.id),
             ),
         ], truncated: scan.entries.length - _projectedEntries),
         if (scan.diagnostics.isNotEmpty)

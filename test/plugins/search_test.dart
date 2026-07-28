@@ -175,12 +175,37 @@ void main() {
       expect(hits.first.address.isRelative, isTrue);
     });
 
-    test('a view hit addresses the plugin, which is the documented floor', () {
-      // The limitation, pinned: `ViewItem` has no address, so the generic
-      // walk can find "Dashboard" but only navigate to the catalog. A plugin
-      // that knows better contributes its own hits.
-      var hit = searchReport(_report(), 'dash').first;
+    test('a row without an address falls back to its plugin', () {
+      // The honest floor: found, but not followed.
+      var hit = searchReport(_report(), 'counter').first;
       expect(hit.address.segments, isEmpty);
+    });
+
+    test('a row carrying an address is followed to the thing itself', () {
+      var report = PluginReport(
+        id: 'flutterware.ui_catalog',
+        label: 'UI catalog',
+        view: PluginView([
+          ViewItems([
+            ViewItem(
+              'Dashboard',
+              detail: 'demo/dashboard.dart#dashboard',
+              address: Address(
+                worktree: 'main',
+                plugin: 'flutterware.ui_catalog',
+                segments: ['app', 'demo/dashboard.dart#dashboard'],
+              ),
+            ),
+          ]),
+        ]),
+      );
+
+      var hit = searchReport(report, 'dash', worktree: 'main').first;
+      expect(hit.address.segments, ['app', 'demo/dashboard.dart#dashboard']);
+      expect(
+        hit.address.toString(),
+        'fw://main/flutterware.ui_catalog/app/demo%2Fdashboard.dart%23dashboard',
+      );
     });
 
     test('an address round-trips through its string form', () {
