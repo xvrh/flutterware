@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/logs/remote_log_client.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/plugins/native_plugin.dart';
@@ -303,6 +304,123 @@ void main() {
           ),
         ),
       );
+    });
+  });
+
+  group('manifest loader caches the compiled config', () {
+    late Directory dir;
+    late List<List<String>> invocations;
+
+    const manifest = '{"version":1,"plugins":[{"id":"a.one","label":"One"}]}';
+
+    /// A loader over a resolved project, recording what it spawned. The kernel
+    /// is only attempted when `package_config.json` exists, which is what
+    /// keeps every other test on the `dart run` path.
+    ManifestLoader loaderWith({
+      int compileExit = 0,
+      int kernelExit = 0,
+      String dart = 'dart',
+    }) => ManifestLoader(
+      dartExecutable: dart,
+      runProcess: (executable, arguments, {workingDirectory}) async {
+        invocations.add(arguments);
+        if (arguments.first == 'compile') {
+          if (compileExit == 0) {
+            File(arguments[arguments.indexOf('-o') + 1])
+              ..createSync(recursive: true)
+              ..writeAsStringSync('kernel');
+          }
+          return ProcessResult(0, compileExit, '', '');
+        }
+        if (arguments.first == 'run') return ProcessResult(0, 0, manifest, '');
+        return ProcessResult(
+          0,
+          kernelExit,
+          kernelExit == 0 ? manifest : '',
+          '',
+        );
+      },
+    );
+
+    setUp(() {
+      invocations = [];
+      dir = Directory.systemTemp.createTempSync('fw-manifest-cache');
+      File(p.join(dir.path, configFilePath))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('// config');
+      File(p.join(dir.path, '.dart_tool', 'package_config.json'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('{}');
+    });
+
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    test('compiles once, then runs the kernel', () async {
+      var loader = loaderWith();
+
+      expect((await loader.load(dir.path))!.plugins.single.id, 'a.one');
+      expect(invocations.map((a) => a.first), ['compile', endsWith('.dill')]);
+
+      invocations.clear();
+      expect((await loader.load(dir.path))!.plugins.single.id, 'a.one');
+      expect(
+        invocations.map((a) => a.first),
+        [endsWith('.dill')],
+        reason: 'the second load must not compile again',
+      );
+    });
+
+    test('recompiles when the config file changes', () async {
+      var loader = loaderWith();
+      await loader.load(dir.path);
+      invocations.clear();
+
+      // Size is part of the key, so this is a change even at the same mtime.
+      File(
+        p.join(dir.path, configFilePath),
+      ).writeAsStringSync('// config, edited');
+
+      await loader.load(dir.path);
+      expect(invocations.first.first, 'compile');
+    });
+
+    test('recompiles when a different SDK is doing the compiling', () async {
+      await loaderWith(dart: '/a/bin/dart').load(dir.path);
+      invocations.clear();
+
+      await loaderWith(dart: '/b/bin/dart').load(dir.path);
+      expect(
+        invocations.first.first,
+        'compile',
+        reason: 'an fvm switch changes neither the config nor the resolution',
+      );
+    });
+
+    test('a kernel that will not load falls back rather than blaming the '
+        'config', () async {
+      var loader = loaderWith(kernelExit: 253);
+
+      // It still answers, via `dart run` — the failure is ours, not the user's.
+      expect((await loader.load(dir.path))!.plugins.single.id, 'a.one');
+      expect(invocations.map((a) => a.first), [
+        'compile',
+        endsWith('.dill'),
+        'run',
+      ]);
+
+      invocations.clear();
+      await loader.load(dir.path);
+      expect(
+        invocations.first.first,
+        'compile',
+        reason: 'the bad kernel must have been invalidated',
+      );
+    });
+
+    test('falls back to dart run when the compile fails', () async {
+      var loader = loaderWith(compileExit: 1);
+      expect((await loader.load(dir.path))!.plugins.single.id, 'a.one');
+      expect(invocations.map((a) => a.first), ['compile', 'run']);
     });
   });
 }

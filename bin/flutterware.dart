@@ -1,173 +1,169 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:io' as io;
 import 'dart:isolate';
 import 'package:crypto/crypto.dart';
 import 'package:flutterware/src/constants.dart';
-import 'package:flutterware/src/logs/io.dart';
-import 'package:flutterware/src/logs/logger.dart';
-import 'package:flutterware/src/logs/platform.dart' show LocalPlatform;
-import 'package:flutterware/src/logs/remote_log_server.dart';
-import 'package:flutterware/src/logs/terminal.dart';
 import 'package:flutterware/src/utils/list_files.dart';
 import 'package:path/path.dart' as p;
 
+/// The launcher: find the CLI, build it if it is missing, get out of the way.
+///
+/// Reached three ways and always the same code — `dart run flutterware`, and
+/// (later) a global `fw` that execs exactly that. It does no real work; every
+/// command lives in `FwCli`, which this process starts and then waits for.
+///
+/// It deliberately does **not** hold stdin or pipe the child's output. The
+/// child owns the terminal, so a `flutter run` further down the chain keeps its
+/// own interactive console and its logs arrive without a websocket to carry
+/// them.
 void main(List<String> arguments) async {
-  var isVerbose = arguments.any((e) => ['-v', '--verbose'].contains(e));
-  var logger = _createLogger(isVerbose: isVerbose);
-
-  var remoteLogger = await RemoteLogServer.start(logger);
-
   var pubPackage = await Isolate.resolvePackageUri(
     Uri.parse('package:flutterware/lib'),
   );
-  var packageRoot = pubPackage!.resolve('..').toFilePath();
-  var sourceAppPath = p.join(packageRoot, 'app');
-  if (!File(p.join(packageRoot, 'pubspec.yaml')).existsSync() ||
-      !File(p.join(sourceAppPath, 'pubspec.yaml')).existsSync()) {
-    logger.printError('Failed to resolve flutterware (root: $packageRoot)');
-    return;
-  }
-
-  logger.printTrace(
-    'Platform.resolvedExecutable: ${Platform.resolvedExecutable}',
-  );
-  logger.printTrace('Platform.script: ${Platform.script}');
-  logger.printTrace('Flutterware Package: $pubPackage');
-  logger.printTrace('PackageRoot: $packageRoot');
-  logger.printTrace('App: $sourceAppPath');
-
-  var copiedSourcePath = p.join(
-    _userHomePath(),
-    '.flutterware',
-    _hash(packageRoot),
-  );
-  var appPath = p.join(copiedSourcePath, 'app');
-
-  // A kernel snapshot rather than an AOT executable, and not by preference:
-  // `dart compile exe` refuses to run at all once anything in the resolution
-  // has a build hook, and `path_provider_foundation` pulls in `objective_c`,
-  // which has one. Kernel does not link native assets ahead of time, so it is
-  // unaffected — and it starts fast enough that this is no real loss.
-  // Re-copy whenever the sources differ, not only on the first run. The GUI
-  // the CLI launches is a *copy* under ~/.flutterware, and a copy that is only
-  // refreshed by an explicit flag means every fix has to be remembered into
-  // existence. It also defeats the daemon's own revision check, which reads
-  // the copy's timestamps and so never sees a change either.
-  var stampFile = File(p.join(copiedSourcePath, '.source_stamp'));
-  var stamp = _sourceStamp(packageRoot);
-  var stale = !stampFile.existsSync() || stampFile.readAsStringSync() != stamp;
-
-  var compiledCliPath = 'build/compiled_cli.dill';
-  var compiledCliFile = File(p.join(copiedSourcePath, 'app', compiledCliPath));
-  //TODO(xha): we should detect if any file has changed and re-compile as needed.
-  if (stale ||
-      !compiledCliFile.existsSync() ||
-      arguments.contains('--$forceCompileOption')) {
-    var buildCliProgress = logger.startProgress(
-      'Building Flutterware executable',
+  if (pubPackage == null) {
+    stderr.writeln(
+      'flutterware: could not resolve its own package.\n'
+      'This entry point has to be run through pub:\n\n'
+      '    dart run flutterware',
     );
-
-    await _copyDirectory(packageRoot, copiedSourcePath);
-
-    compiledCliFile.parent.createSync(recursive: true);
-    try {
-      compiledCliFile.deleteSync();
-    } catch (e) {
-      // Don't care if the file doesn't exist
-    }
-
-    var pubGetResult = await Process.run(Platform.resolvedExecutable, [
-      'pub',
-      'get',
-    ], workingDirectory: appPath);
-    if (pubGetResult.exitCode != 0) {
-      throw Exception('Pub get failed ${pubGetResult.stderr}');
-    }
-    var compiledResult = await Process.run(Platform.resolvedExecutable, [
-      'compile',
-      'kernel',
-      '-o',
-      compiledCliPath,
-      'bin/flutterware.dart',
-    ], workingDirectory: appPath);
-    if (compiledResult.exitCode != 0) {
-      throw Exception(
-        'Failed to compile flutterware CLI ${compiledResult.stderr}',
-      );
-    }
-    // The GUI is built by the child CLI only when its binary is missing, so
-    // removing it is how newly copied sources reach the window.
-    for (var built in [
-      Directory(p.join(appPath, 'build', 'macos')),
-      Directory(p.join(appPath, 'build', 'linux')),
-      Directory(p.join(appPath, 'build', 'windows')),
-    ]) {
-      if (built.existsSync()) built.deleteSync(recursive: true);
-    }
-    stampFile.writeAsStringSync(stamp);
-    buildCliProgress.stop();
+    exit(70);
   }
 
-  logger.printTrace('Start process ${compiledCliFile.path}');
+  var packageRoot = pubPackage.resolve('..').toFilePath();
+  if (!File(p.join(packageRoot, 'pubspec.yaml')).existsSync() ||
+      !File(p.join(packageRoot, 'app', 'pubspec.yaml')).existsSync()) {
+    stderr.writeln('flutterware: incomplete package at $packageRoot');
+    exit(70);
+  }
+
+  var force = arguments.contains('--$forceCompileOption');
+  var editable = !_inPubCache(packageRoot);
+  var root = editable
+      // A checkout is already a writable tree, so there is nothing to copy
+      // into. Skipping it is not only faster: a copy is a *different* tree from
+      // the one being edited, which is why editing flutterware used to require
+      // remembering a flag, and why its own CLI was developed by a loop that
+      // never ran it.
+      ? packageRoot
+      : await _workingCopy(packageRoot, force: force);
+
+  var appPath = p.join(root, 'app');
+  var cli = await _ensureCli(appPath, force: force);
+
   var process = await Process.start(
-    // The snapshot is not executable on its own; it needs the VM that produced
-    // it, which is the one running this bootstrapper.
-    Platform.resolvedExecutable,
-    [compiledCliFile.path, ...arguments],
+    cli,
+    arguments,
     environment: {
       dartExecutableEnvironmentKey: Platform.resolvedExecutable,
       appPathEnvironmentKey: p.absolute(appPath),
-      remoteLoggerServerUrlKey: remoteLogger.url,
+      // One question, asked once: are these sources being edited? It decides
+      // both whether to copy and, downstream, whether the GUI runs under
+      // `flutter run` or as a built binary.
+      editableSourcesEnvironmentKey: '$editable',
     },
+    mode: ProcessStartMode.inheritStdio,
   );
-  logger.printTrace('Process started (pid ${process.pid})');
-
-  logger.terminal.keystrokes.listen((e) {
-    if (e.trim() == 'q') {
-      logger.printStatus('Bye bye');
-      process.kill();
-    }
-  });
-
-  var code = await process.exitCode;
-  logger.printTrace('Process exited ($code)');
-
-  if (code > 0) {
-    logger.printError(
-      'CLI terminated with error ($code).\n'
-      'Stdout: ${await utf8.decodeStream(process.stdout)}\n'
-      'Stderr: ${await utf8.decodeStream(process.stderr)}',
-    );
-  }
-  exit(code);
+  exit(await process.exitCode);
 }
 
-Logger _createLogger({required bool isVerbose}) {
-  var stdio = Stdio();
-  var terminal = AnsiTerminal(
-    stdio: stdio,
-    platform: LocalPlatform(),
-    now: DateTime.now(),
-  )..singleCharMode = true;
-  var outputPreferences = OutputPreferences(showColor: true, stdio: stdio);
+/// True when the package was resolved out of the pub cache — i.e. an ordinary
+/// consumer, rather than a path dependency on a checkout.
+bool _inPubCache(String packageRoot) {
+  var cache =
+      Platform.environment['PUB_CACHE'] ??
+      p.join(_userHomePath(), Platform.isWindows ? 'Pub/Cache' : '.pub-cache');
+  return p.isWithin(p.canonicalize(cache), p.canonicalize(packageRoot));
+}
 
-  Logger logger = io.Platform.isWindows
-      ? WindowsStdoutLogger(
-          terminal: terminal,
-          stdio: stdio,
-          outputPreferences: outputPreferences,
-        )
-      : StdoutLogger(
-          terminal: terminal,
-          stdio: stdio,
-          outputPreferences: outputPreferences,
-        );
-  if (isVerbose) {
-    logger = VerboseLogger(logger);
+/// Mirrors a pub-cache package into `~/.flutterware/<hash>` so there is a
+/// writable tree to resolve and build in.
+///
+/// The hash is of the *flutterware package root*, which for a hosted dependency
+/// already contains the version — so this is one copy per flutterware version
+/// per machine, shared across every project that uses it, not one per project.
+Future<String> _workingCopy(String packageRoot, {required bool force}) async {
+  var destination = p.join(_userHomePath(), '.flutterware', _hash(packageRoot));
+
+  var stampFile = File(p.join(destination, '.source_stamp'));
+  var stamp = _sourceStamp(packageRoot);
+  if (!force &&
+      stampFile.existsSync() &&
+      stampFile.readAsStringSync() == stamp) {
+    return destination;
   }
 
-  return logger;
+  stdout.writeln('Unpacking flutterware…');
+  var files = listFilesInDirectory(packageRoot);
+  for (var file in files) {
+    var target = p.join(destination, p.relative(file.path, from: packageRoot));
+    File(target).createSync(recursive: true);
+    await file.copy(target);
+  }
+  stampFile.writeAsStringSync(stamp);
+  return destination;
+}
+
+/// Returns the CLI executable, building it when it is missing or out of date.
+///
+/// `dart build cli` rather than `dart compile exe`: the latter refuses outright
+/// once anything in the resolution has a build hook, and `objective_c` arrives
+/// via `path_provider`. `dart build cli` runs the hooks and emits a bundle —
+/// the executable beside the dylibs it needs — which is why the answer is a
+/// path into `bundle/bin` and not a lone file.
+Future<String> _ensureCli(String appPath, {required bool force}) async {
+  var output = p.join(appPath, 'build', 'cli');
+  var executable = p.join(output, 'bundle', 'bin', 'fw');
+
+  if (!force && _isFresh(executable, appPath)) return executable;
+
+  stdout.writeln('Building the flutterware CLI (~10s, first run only)…');
+  var pubGet = await Process.run(Platform.resolvedExecutable, [
+    'pub',
+    'get',
+  ], workingDirectory: appPath);
+  if (pubGet.exitCode != 0) {
+    stderr.writeln('flutterware: pub get failed\n${pubGet.stderr}');
+    exit(70);
+  }
+
+  var built = await Process.run(Platform.resolvedExecutable, [
+    'build',
+    'cli',
+    '-t',
+    p.join('bin', 'fw.dart'),
+    '-o',
+    output,
+  ], workingDirectory: appPath);
+  if (built.exitCode != 0) {
+    stderr.writeln('flutterware: could not build the CLI\n${built.stderr}');
+    exit(70);
+  }
+  return executable;
+}
+
+/// Whether the built CLI is newer than every source that goes into it.
+///
+/// Modification times rather than the content hash [_sourceStamp] computes:
+/// this runs on every invocation, and stat-ing is cheap where hashing 1280
+/// files is ~100ms — about what the whole command should cost.
+bool _isFresh(String executable, String appPath) {
+  var built = File(executable);
+  if (!built.existsSync()) return false;
+  var builtAt = built.lastModifiedSync();
+
+  var packageRoot = p.dirname(appPath);
+  for (var directory in [
+    p.join(appPath, 'lib'),
+    p.join(appPath, 'bin'),
+    p.join(packageRoot, 'lib'),
+  ]) {
+    if (!Directory(directory).existsSync()) continue;
+    for (var file in listFilesInDirectory(directory)) {
+      if (!file.path.endsWith('.dart')) continue;
+      if (file.lastModifiedSync().isAfter(builtAt)) return false;
+    }
+  }
+  return true;
 }
 
 /// Identifies the source tree, so a changed checkout is noticed without being
@@ -188,25 +184,13 @@ String _sourceStamp(String root) {
   return sha1.convert(utf8.encode(digest.join('\n'))).toString();
 }
 
-Future<void> _copyDirectory(String source, String destination) async {
-  var files = listFilesInDirectory(source);
-  for (var file in files) {
-    var relativePath = p.relative(file.absolute.path, from: source);
-    var targetFile = p.join(destination, relativePath);
-    File(targetFile).createSync(recursive: true);
-    await file.copy(targetFile);
-  }
-}
-
 String _userHomePath() {
   var envKey = Platform.isWindows ? 'APPDATA' : 'HOME';
   return Platform.environment[envKey] ?? '.';
 }
 
-String _hash(String input) {
-  return sha1
-      .convert(utf8.encode(input))
-      .bytes
-      .map((b) => b.toRadixString(16))
-      .join('');
-}
+String _hash(String input) => sha1
+    .convert(utf8.encode(input))
+    .bytes
+    .map((b) => b.toRadixString(16).padLeft(2, '0'))
+    .join();

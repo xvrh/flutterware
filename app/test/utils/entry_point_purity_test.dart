@@ -22,8 +22,6 @@ const _pureEntryPoints = [
   'bin/fw.dart',
   // The MCP server. Same contract, same reason.
   'bin/mcp.dart',
-  // The compiled CLI (decision 9).
-  'bin/flutterware.dart',
   'bin/wrap.dart',
   'bin/passthrough.dart',
   // Writes docs/capabilities.md. Pure for the same reason `fw` is: it

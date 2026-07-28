@@ -1,9 +1,15 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutterware/plugins.dart';
 
+import '../constants.dart';
 import '../plugins/plugin_core.dart';
+import '../shell/repo_layout.dart';
+import '../utils/flutter_sdk.dart';
 import 'action_shapes.generated.dart';
+import 'gui.dart';
+import 'init.dart';
 import 'job.dart';
 import 'session.dart';
 
@@ -70,6 +76,36 @@ const fwCommands = [
         'artifact:\naddress, resolved axes and all.',
   ),
   FwCommand(
+    'init',
+    usage: 'init',
+    summary: 'record what this project needs, once',
+    details:
+        'Writes `.flutterware/`: which Flutter SDK to use, taken from the one\n'
+        'that ran this command rather than guessed at later. Adds the '
+        'directory\nto .gitignore if nothing already covers it, and writes a '
+        'starter\ntool/flutterware.dart if the project has none.\n'
+        '\n'
+        'It runs by itself the first time you use flutterware in a project, '
+        'so\nthis is here for scripts, for CI, and for running it again after '
+        'a\nchange of SDK.',
+  ),
+  FwCommand(
+    'app',
+    usage: 'app [--release]',
+    summary: 'open the flutterware GUI',
+    details:
+        'What `dart run flutterware` with no arguments does, spelled out.\n'
+        '\n'
+        'The GUI is one renderer of the plugin contract and this is one\n'
+        'command of the CLI — it is not a separate program, and there is no\n'
+        'capability it has that the commands above do not.\n'
+        '\n'
+        'When flutterware is a path dependency — when you are working on\n'
+        'flutterware itself — this runs the GUI under `flutter run`, so a\n'
+        'change is `r` away instead of a rebuild. `--release` takes the built\n'
+        'binary instead, which is what an ordinary install always gets.',
+  ),
+  FwCommand(
     'help',
     usage: 'help [<command>]',
     summary: 'this, or one command in detail',
@@ -98,7 +134,12 @@ const fwExitCodes = {
 ///
 /// `bin/fw.dart` is what remains: an `exitCode` and one call.
 class FwCli {
-  FwCli({required this.openSession, required this.out, required this.err});
+  FwCli({
+    required this.openSession,
+    required this.out,
+    required this.err,
+    this.launchGui,
+  });
 
   /// How to get a session. A function rather than a session, because `help`
   /// and a bad command line must not open one — running the project's config
@@ -108,16 +149,35 @@ class FwCli {
   final StringSink out;
   final StringSink err;
 
+  /// Opens the GUI. Injected so a test can drive `app` without a window and
+  /// without an SDK; the default reads what the launcher recorded in the
+  /// environment.
+  final Future<int> Function({required bool forceBuild})? launchGui;
+
   Future<int> run(List<String> arguments) async {
-    var command = arguments.isEmpty ? 'help' : arguments.first;
+    // No arguments opens the GUI, because that is what `dart run flutterware`
+    // has always done and the point of this CLI is that it is the same
+    // program, not a different one with different habits.
+    var command = arguments.isEmpty ? 'app' : arguments.first;
     var rest = arguments.skip(1).toList();
     var json = rest.remove('--json');
 
     try {
+      // Initializing is not a step someone should have to be told about: this
+      // process already knows everything `init` records. `help` is excluded so
+      // that reading the help for a project you have not adopted yet does not
+      // write to it.
+      if (command != 'help' && command != 'init') await _autoInit();
+
       return switch (command) {
+        'init' => await _init(),
         'status' => await _status(json: json),
         'actions' => await _actions(json: json),
         'run' => await _run(rest, json: json),
+        'app' => await _app(
+          forceBuild: rest.remove('--$forceCompileOption'),
+          release: rest.remove('--release'),
+        ),
         'help' || '--help' || '-h' => _help(rest.firstOrNull),
         _ => fail('unknown command "$command". Try `fw help`.'),
       };
@@ -125,6 +185,82 @@ class FwCli {
       err.writeln('fw: $e');
       return 1;
     }
+  }
+
+  /// Records the SDK and the rest of `.flutterware/`.
+  Future<int> _init({bool quiet = false}) async {
+    var init = _projectInit();
+    if (init == null) {
+      return fail(
+        'not inside a project: ${Directory.current.path}\n'
+        'Run this from a Flutter project — one with a pubspec.yaml.',
+      );
+    }
+    return init.run(quiet: quiet);
+  }
+
+  /// Initializes silently when the project has not been, so no command has to
+  /// begin by refusing.
+  ///
+  /// Only when the launcher told us which `dart` it used. A test driving
+  /// [FwCli] directly has no launcher, and must not have its working directory
+  /// written to as a side effect of calling a command.
+  Future<void> _autoInit() async {
+    var init = _projectInit();
+    if (init == null || init.isInitialized) return;
+    await init.run(quiet: true);
+  }
+
+  ProjectInit? _projectInit() {
+    var dartExecutable = Platform.environment[dartExecutableEnvironmentKey];
+    if (dartExecutable == null) return null;
+    var root = findRepoRoot(Directory.current.path);
+    if (root == null) return null;
+    return ProjectInit(
+      root: root,
+      dartExecutable: dartExecutable,
+      out: out,
+      err: err,
+    );
+  }
+
+  /// Builds the GUI if it is missing, then runs it.
+  ///
+  /// The context comes from the environment because this process is an AOT
+  /// binary: `Platform.resolvedExecutable` is this executable, so the SDK
+  /// cannot be found by walking up from it. The launcher ran under `dart run`
+  /// and therefore knew — which is the same "record, do not discover" rule the
+  /// adoption story applies to `.flutterware/sdk`.
+  Future<int> _app({required bool forceBuild, required bool release}) async {
+    if (launchGui case var launch?) return launch(forceBuild: forceBuild);
+
+    var appToolPath = Platform.environment[appPathEnvironmentKey];
+    var dartExecutable = Platform.environment[dartExecutableEnvironmentKey];
+    if (appToolPath == null || dartExecutable == null) {
+      return fail(
+        'the GUI has to be started through the launcher, which is what '
+        'knows\nwhich SDK and which copy to use:\n\n    dart run flutterware',
+      );
+    }
+
+    var sdk = await FlutterSdkPath.tryFind(dartExecutable);
+    if (sdk == null) {
+      return fail(
+        'no Flutter SDK above $dartExecutable.\n'
+        'Run flutterware with the `dart` from a Flutter SDK, not a standalone '
+        'one.',
+      );
+    }
+
+    return GuiLauncher(
+      appToolPath: appToolPath,
+      flutterSdk: sdk.root,
+      projectDirectory: Directory.current,
+      out: out,
+      err: err,
+      editableSources:
+          Platform.environment[editableSourcesEnvironmentKey] == 'true',
+    ).run(forceBuild: forceBuild, release: release);
   }
 
   /// Everything every plugin says about itself.
