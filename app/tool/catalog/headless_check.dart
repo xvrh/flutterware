@@ -1041,6 +1041,60 @@ Widget addedWhileOpen() => const Center(child: Text('ADDED LATE'));
     brokenSource.writeAsStringSync(broken);
   }
 
+  // What a panel opened *now* renders, against a daemon that has been running
+  // a while.
+  //
+  // A session's bundle symlinks the kernel the daemon compiled when it started
+  // — that is what lets a client attach and launch without paying for a
+  // compile. The cost is that the kernel is neither necessarily this entry nor,
+  // once anything has been edited, this source: every compile since has been a
+  // delta hot reloaded into a guest that was already up, and nothing rewrites
+  // what a new guest boots from. A client that launches without asking for a
+  // kernel of its own opens on a frame that corrects itself the moment anything
+  // reloads, which is a bug you re-find every time — by the time you look
+  // twice, it is gone. Asking for a whole kernel first is what closes it, and
+  // this is what keeps that answer true.
+  if (probing) {
+    stdout.writeln('[check] a panel opened after the source moved');
+    var shellSource = File(
+      p.join(packageRoot, 'tool', 'catalog', 'demos', 'shell.dart'),
+    );
+    var shellText = shellSource.readAsStringSync();
+    shellSource.writeAsStringSync(
+      shellText.replaceAll("'SHELL ", "'RELOADED "),
+    );
+    try {
+      // Consumed here and only here: a sweep reports a file once. This is the
+      // reload poll of the panel that is already open.
+      var polled = await daemon.select(entries.first.id, ifChanged: true);
+      check(!polled.unchanged, 'the panel already open picked the edit up');
+
+      var (panel, panelReady) = await CompilerDaemonClient.connect(
+        dartExecutable: p.join(cache.flutterRoot, 'bin', 'dart'),
+        config: config,
+      );
+      // Deliberately not the entry the daemon prepared: what a new guest boots
+      // has to be what its panel says it is showing.
+      var opening = entries.last;
+      check(
+        (await panel.select(opening.id, full: true)).ok,
+        'the opening panel compiled the entry it is about to show',
+      );
+      var painted = await _bootGuest(panelReady, 'opening');
+      check(
+        painted.contains(opening.id),
+        'a guest launched now renders the entry that was asked for — $painted',
+      );
+      check(
+        painted.contains('RELOADED'),
+        'and the source as it stands, not as the daemon first read it',
+      );
+      await panel.close();
+    } finally {
+      shellSource.writeAsStringSync(shellText);
+    }
+  }
+
   await second.close();
   await daemon.close();
   connected.add(encodeMessage(const ShutdownMessage()));
@@ -1121,6 +1175,56 @@ Future<void> _renderEntry(
     const Duration(seconds: 10),
     (line) => line.contains(entry.id),
   );
+}
+
+/// Launches a guest against [ready]'s bundle, returns the first frame's text,
+/// and shuts it down again — what a panel opening right now would see.
+Future<String> _bootGuest(DaemonReady ready, String name) async {
+  var socketPath = checkSocketPath(
+    p.join(flutterwareRunDir(), 'headless_check_$name.sock'),
+  );
+  var socketFile = File(socketPath);
+  if (socketFile.existsSync()) socketFile.deleteSync();
+  var server = await ServerSocket.bind(
+    InternetAddress(socketPath, type: InternetAddressType.unix),
+    0,
+  );
+  var guest = await Process.start(ready.hostPath, [
+    ready.assetsDir,
+    ready.icuData,
+    socketPath,
+    '800',
+    '600',
+  ]);
+  var probes = StreamController<String>.broadcast();
+  StreamGroup.merge([
+    guest.stdout,
+    guest.stderr,
+  ]).transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+    var at = line.indexOf('FW-PROBE:');
+    if (at >= 0) probes.add(line.substring(at + 'FW-PROBE:'.length).trim());
+  });
+  // Drained, or the guest blocks writing frames and never paints a second one.
+  var connected = await Future.any<Object?>([server.first, guest.exitCode]);
+  if (connected is Socket) {
+    var reader = FrameReader();
+    connected.listen((chunk) => reader.addBytes(chunk).toList());
+  }
+  try {
+    // The shell's own label, so this waits for a frame the wrapper has built
+    // rather than for whatever the guest printed first.
+    return await _nextProbe(
+      probes.stream,
+      const Duration(seconds: 30),
+      (line) => line.contains('SHELL') || line.contains('RELOADED'),
+    );
+  } finally {
+    guest.kill();
+    await guest.exitCode;
+    await server.close();
+    if (socketFile.existsSync()) socketFile.deleteSync();
+    await probes.close();
+  }
 }
 
 Future<String> _nextProbe(
