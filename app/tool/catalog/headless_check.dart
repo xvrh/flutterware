@@ -12,6 +12,7 @@ import 'package:flutterware_app/src/catalog/protocol.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart';
+import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:path/path.dart' as p;
 
 /// Proves the catalog loop end to end **without the GUI**: the compiler daemon,
@@ -113,7 +114,11 @@ Future<void> main(List<String> args) async {
   );
 
   // 2. The guest: the real embedder host, headless.
-  var socketPath = p.join(buildDir, 'headless_check.sock');
+  // Not under [buildDir]: a unix socket path is capped at 104 bytes, and a
+  // worktree checked out a few directories deep is already over it.
+  var socketPath = checkSocketPath(
+    p.join(flutterwareRunDir(), 'headless_check.sock'),
+  );
   var socketFile = File(socketPath);
   if (socketFile.existsSync()) socketFile.deleteSync();
   var server = await ServerSocket.bind(

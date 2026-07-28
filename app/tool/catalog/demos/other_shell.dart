@@ -32,7 +32,15 @@ Widget wrapInPlainApp(Widget child) => CatalogShell(
           Positioned(
             right: 0,
             bottom: 0,
-            child: Text('OTHER ${loudness.name} ${flavor.name}'),
+            // See `shell.dart`: unstyled text under a `MaterialApp` and outside
+            // a `Material` draws in Flutter's giant red debug style.
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: DefaultTextStyle(
+                style: const TextStyle(fontSize: 10, color: Color(0x8a000000)),
+                child: Text('OTHER ${loudness.name} ${flavor.name}'),
+              ),
+            ),
           ),
         ],
       ),
@@ -40,5 +48,7 @@ Widget wrapInPlainApp(Widget child) => CatalogShell(
   },
 );
 
+/// A `Scaffold`, for the `Material` it brings: a bare `Center` leaves its text
+/// with the style `MaterialApp` installs to flag a missing one.
 @Demo(name: 'Elsewhere', wrapper: wrapInPlainApp)
-Widget elsewhere() => const Center(child: Text('ELSEWHERE'));
+Widget elsewhere() => const Scaffold(body: Center(child: Text('ELSEWHERE')));

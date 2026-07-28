@@ -12,6 +12,9 @@ import 'package:flutterware/ui_catalog.dart';
 /// other function. In all three the axes answer with their defaults.
 enum Flavor { dev, staging, prod }
 
+/// Small and grey: the probe is for reading, not for looking at.
+const _probeStyle = TextStyle(fontSize: 10, color: Color(0x8a000000));
+
 Widget wrapInApp(Widget child) => CatalogShell(
   'app',
   builder: (context, topBar) {
@@ -58,8 +61,18 @@ class _Shell extends StatelessWidget {
           Positioned(
             right: 0,
             bottom: 0,
-            child: Text(
-              'SHELL ${flavor.name} ${compact ? 'compact' : 'roomy'}',
+            // Styled, because a `Text` with no `Material` above it inherits the
+            // style `MaterialApp` installs for exactly that mistake: 48px red
+            // on a yellow double underline. A probe that paints like a crashed
+            // demo is one you re-diagnose every time you see it.
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: DefaultTextStyle(
+                style: _probeStyle,
+                child: Text(
+                  'SHELL ${flavor.name} ${compact ? 'compact' : 'roomy'}',
+                ),
+              ),
             ),
           ),
         ],

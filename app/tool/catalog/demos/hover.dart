@@ -24,24 +24,29 @@ class _HoverProbeState extends State<_HoverProbe> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _inside = true),
-      onHover: (e) => setState(() => _at = e.localPosition),
-      onExit: (_) => setState(() {
-        _inside = false;
-        _at = null;
-      }),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 12,
-          children: [
-            Text(_inside ? 'POINTER IN' : 'POINTER OUT'),
-            if (_at case var at?)
-              Text('at ${at.dx.round()},${at.dy.round()}')
-            else
-              const Text('no hover yet'),
-          ],
+    // The `Scaffold` is for the `Material` it brings: without one, every line
+    // below draws in the giant red style `MaterialApp` installs to flag exactly
+    // that, and the probe reads as a crash.
+    return Scaffold(
+      body: MouseRegion(
+        onEnter: (_) => setState(() => _inside = true),
+        onHover: (e) => setState(() => _at = e.localPosition),
+        onExit: (_) => setState(() {
+          _inside = false;
+          _at = null;
+        }),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 12,
+            children: [
+              Text(_inside ? 'POINTER IN' : 'POINTER OUT'),
+              if (_at case var at?)
+                Text('at ${at.dx.round()},${at.dy.round()}')
+              else
+                const Text('no hover yet'),
+            ],
+          ),
         ),
       ),
     );

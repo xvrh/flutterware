@@ -365,21 +365,46 @@ void main() {
   });
 
   group('the form factor', () {
-    test('mobile and desktop each pick a device, all picks none', () {
+    test('mobile picks a device; desktop and all are the panel', () {
       var staging = CatalogStaging()..followEntry('mobile');
       expect(staging.device?.screenSize, const Size(390, 844));
 
       staging.followEntry('desktop');
-      expect(staging.device?.identifier.platform, TargetPlatform.macOS);
+      expect(
+        staging.device,
+        isNull,
+        reason: 'the panel is already desktop-shaped',
+      );
 
+      staging.followEntry('mobile');
       staging.followEntry('all');
       expect(staging.device, isNull, reason: 'all is an entry with no opinion');
     });
 
-    test('an entry that says nothing leaves the choice alone', () {
+    test('an entry that says nothing leaves a hand pick alone', () {
       var staging = CatalogStaging()..device = Devices.ios.iPad;
       staging.followEntry(null);
       expect(staging.device?.identifier, Devices.ios.iPad.identifier);
+    });
+
+    test('but does not inherit the device the last entry asked for', () {
+      var staging = CatalogStaging()..followEntry('mobile');
+      staging.followEntry(null);
+      expect(
+        staging.device,
+        isNull,
+        reason: 'one mobile demo must not turn the next demo into a phone',
+      );
+    });
+
+    test('and an entry with an opinion overrules a hand pick', () {
+      var staging = CatalogStaging()..device = Devices.ios.iPad;
+      staging.followEntry('mobile');
+      expect(staging.device?.screenSize, const Size(390, 844));
+
+      // The pick it overruled is gone, rather than waiting to come back.
+      staging.followEntry(null);
+      expect(staging.device, isNull);
     });
   });
 

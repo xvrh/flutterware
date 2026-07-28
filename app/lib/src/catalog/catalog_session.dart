@@ -25,7 +25,23 @@ class CatalogStaging extends ChangeNotifier {
   /// The device the guest is sized to, or null to fill the panel.
   DeviceInfo? get device => _device;
   DeviceInfo? _device;
+
+  /// The picker, which is the only place a person chooses a device.
   set device(DeviceInfo? value) {
+    _byHand = true;
+    _set(value);
+  }
+
+  /// Whether [device] is a hand pick rather than one an entry asked for.
+  ///
+  /// A hand pick answers "what am I looking at" and follows you between
+  /// entries. A device an entry asked for belongs to *that* entry, so leaving
+  /// for one with no opinion of its own has to put the panel back — otherwise
+  /// visiting a single mobile demo turns every demo you look at afterwards
+  /// into a phone.
+  var _byHand = false;
+
+  void _set(DeviceInfo? value) {
     if (value?.identifier == _device?.identifier) return;
     _device = value;
     notifyListeners();
@@ -36,18 +52,25 @@ class CatalogStaging extends ChangeNotifier {
   /// `@Demo(formFactor: FormFactor.mobile)` is the author saying what this
   /// entry is *for*, so arriving at it should show it that way — which is what
   /// the enum meant in the previous catalog, where it picked the toolbar's
-  /// device bucket. An explicit pick lasts until the next entry that has an
-  /// opinion; `all` is an entry saying it has none, and means the panel.
+  /// device bucket. A hand pick lasts until the next entry that has an opinion;
+  /// `all` is an entry saying it has none, and means the panel.
   void followEntry(String? formFactor) {
     switch (formFactor) {
       case 'mobile':
-        device = Devices.ios.iPhone13;
-      case 'desktop':
-        device = Devices.macOS.macBookPro;
-      case 'all':
-        device = null;
+        _byHand = false;
+        _set(Devices.ios.iPhone13);
+      // The panel, not a laptop: the panel is already a desktop-shaped canvas,
+      // and a 1440-wide frame scaled down to fit inside it is a worse look at a
+      // desktop layout than the room it costs. `desktop` still means something
+      // — it is what `Preview.size` reads for Flutter's own previewer, where
+      // there is no panel to fill.
+      case 'desktop' || 'all':
+        _byHand = false;
+        _set(null);
       default:
-        break; // No opinion: leave whatever is on screen alone.
+        // No opinion. What a person picked stays; what the last entry asked
+        // for leaves with it.
+        if (!_byHand) _set(null);
     }
   }
 
