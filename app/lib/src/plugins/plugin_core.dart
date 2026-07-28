@@ -45,6 +45,26 @@ abstract class PluginCore {
     throw ArgumentError.value(actionId, 'actionId', 'unknown action on $id');
   }
 
+  /// What this plugin has that matches [query].
+  ///
+  /// **A pure read, like [report], and for the same reason** — it is called for
+  /// every plugin on every keystroke. Loading happens once when a search
+  /// surface opens, through [computeAll]; by the time this runs there is
+  /// nothing left to fetch.
+  ///
+  /// The default walks [report], which is already all data, so **every plugin
+  /// is searchable the day it reports** — including one written long after this
+  /// method. The floor it establishes is real but blunt: a `ViewItem` has no
+  /// address, so a hit found in the projection can name a row and only navigate
+  /// to the plugin that drew it.
+  ///
+  /// Override to do better. A plugin that knows where its content lives — the
+  /// catalog has `addressFor(package, entry)` — returns hits that address the
+  /// thing itself, and should still call [searchReport] for the parts it has no
+  /// opinion about rather than reimplementing the walk.
+  List<SearchHit> search(String query) =>
+      searchReport(report, query, worktree: host.worktree.name);
+
   /// Loads whatever [report] would otherwise call "not computed", and waits.
   ///
   /// It exists because a widget subscribing is what normally starts work, and

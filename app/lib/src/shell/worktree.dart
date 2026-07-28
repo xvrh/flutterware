@@ -25,12 +25,21 @@ class Worktree {
   /// title). Null until something better than the branch is known.
   final String? title;
 
+  /// The checkout's directory name — this worktree's identity in an [Address].
+  ///
+  /// Deliberately not [displayName]: a branch can be renamed and a contributed
+  /// title is whatever a plugin last said, while git guarantees worktree
+  /// directory names are distinct within a repo. An identity that changed when
+  /// someone renamed a branch would invalidate every address holding it.
+  String get name =>
+      path.split(RegExp(r'[/\\]')).where((s) => s.isNotEmpty).last;
+
   /// What a tab or switcher row shows, best-first: a contributed title, then
   /// the branch, then the directory name.
   String get displayName {
     if (title != null) return title!;
     if (branch != null) return branch!;
-    return path.split(RegExp(r'[/\\]')).where((s) => s.isNotEmpty).last;
+    return name;
   }
 
   Worktree withTitle(String? title) => Worktree(

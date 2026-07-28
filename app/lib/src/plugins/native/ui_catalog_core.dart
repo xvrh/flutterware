@@ -152,7 +152,7 @@ class UiCatalogCore extends PluginCore {
     String entryId, {
     Map<String, String> axes = const {},
   }) => Address(
-    worktree: p.basename(host.worktree.path),
+    worktree: host.worktree.name,
     plugin: host.id,
     segments: [packagePath, ...entryId.split('/')],
     axes: axes,
