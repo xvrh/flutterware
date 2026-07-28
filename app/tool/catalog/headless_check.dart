@@ -868,12 +868,12 @@ Future<void> main(List<String> args) async {
             for (var a in (there?['axes'] as List? ?? [])) (a as Map)['name'],
           ].join(',') ==
           'loudness,flavor',
-      'with that shell\'s axes',
+      "with that shell's axes",
     );
     var options = ((there?['axes'] as List).last as Map)['options'].toString();
     check(
       options == '[plain, fancy]',
-      'and its own enum, not the other shell\'s — $options',
+      "and its own enum, not the other shell's — $options",
     );
 
     // Both shells declare `flavor`, and the guest keys selections by name

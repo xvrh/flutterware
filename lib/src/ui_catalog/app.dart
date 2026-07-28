@@ -1,7 +1,9 @@
 import 'dart:core' as core;
 import 'dart:core';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+
 import '../third_party/device_frame/lib/device_frame.dart';
 import 'default_device_list.dart';
 import 'demo.dart';
@@ -10,7 +12,6 @@ import 'device_choice_panel.dart';
 import 'figma/provider.dart';
 import 'figma/service.dart';
 import 'index.dart';
-import 'parameters.dart';
 import 'search.dart';
 import 'treeview.dart';
 import 'ui_catalog.dart';
@@ -47,7 +48,6 @@ class UICatalog extends StatefulWidget {
 }
 
 class UICatalogAppState extends State<UICatalog> {
-  final topBarPickers = <String, PickerParameter>{};
   DeviceChoice mobileDevice = DeviceChoice(
     isEnabled: true,
     useMosaic: false,

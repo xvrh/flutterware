@@ -292,35 +292,13 @@ class NumParameter<T extends num> extends Parameter<T> {
   bool get isInt => T == int;
 }
 
-/// How a [PickerParameter] renders in the toolbar.
-enum PickerStyle {
-  /// A compact button that opens a modal dialog listing the options. Best when
-  /// there are many options or little horizontal room for the list.
-  dialog,
-
-  /// An inline segmented control — every option visible at once. Best for two
-  /// or three options.
-  segmented,
-
-  /// A compact chip that opens an anchored popover menu under it. Less invasive
-  /// than [dialog]; best for a medium handful of options.
-  popover,
-}
-
 class PickerParameter<T> extends Parameter<T> {
   Map<String, T> options;
   Color Function(T value)? swatch;
   IconData Function(T value)? icon;
 
-  /// How this picker renders in the toolbar.
-  PickerStyle style;
-
-  PickerParameter({
-    required this.options,
-    this.swatch,
-    this.icon,
-    this.style = PickerStyle.popover,
-  }) : super(options.values.first);
+  PickerParameter({required this.options, this.swatch, this.icon})
+    : super(options.values.first);
 
   // Resolved here, inside the class, so the call runs with the reified [T] —
   // calling [swatch]/[icon] through the raw `PickerParameter` type would fail

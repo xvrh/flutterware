@@ -1,6 +1,8 @@
 import 'dart:core' as core;
 import 'dart:core';
+
 import 'package:flutter/material.dart';
+
 import 'parameters.dart';
 
 export 'app.dart' show UICatalog;
@@ -51,11 +53,13 @@ class UICatalogStateProvider extends InheritedWidget {
 abstract class UICatalogState {
   static final empty = _EmptyUICatalogState();
 
-  /// App-wide chrome shown in the top bar (e.g. theme, locale). Controls here
-  /// persist across demos — declare them from the app shell (`appBuilder`).
-  /// For controls specific to one demo, use [parameters] (the bottom panel).
-  TopBarState get topBar;
-
+  /// Controls belonging to one entry, read while it builds.
+  ///
+  /// App-wide switches — a flavour, a locale, a theme — are not declared here.
+  /// They are the optional named parameters of the project's `@CatalogShell`,
+  /// which is a declaration a scan can read rather than one only a running
+  /// build can, and they persist across entries because they belong to the
+  /// shell rather than to whatever it is wrapping.
   Parameters get parameters;
 
   static UICatalogState of(BuildContext context) {
@@ -64,39 +68,7 @@ abstract class UICatalogState {
   }
 }
 
-abstract class TopBarState {
-  /// A picker over [options] (label → value). [swatch]/[icon] render a colour
-  /// dot or glyph beside each option. [style] chooses how it renders — an
-  /// anchored [PickerStyle.popover] menu (default), an inline
-  /// [PickerStyle.segmented] control, or a modal [PickerStyle.dialog].
-  T picker<T>(
-    String name,
-    Map<String, T> options,
-    T defaultValue, {
-    Color Function(T value)? swatch,
-    IconData Function(T value)? icon,
-    PickerStyle style,
-  });
-}
-
 class _EmptyUICatalogState implements UICatalogState {
   @override
-  final topBar = _EmptyTopBarState();
-
-  @override
   final parameters = Parameters();
-}
-
-class _EmptyTopBarState implements TopBarState {
-  @override
-  T picker<T>(
-    core.String name,
-    core.Map<core.String, T> values,
-    T defaultValue, {
-    Color Function(T value)? swatch,
-    IconData Function(T value)? icon,
-    PickerStyle style = PickerStyle.popover,
-  }) {
-    return defaultValue;
-  }
 }

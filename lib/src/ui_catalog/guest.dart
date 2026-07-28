@@ -254,23 +254,4 @@ class _GuestCatalogState implements UICatalogState {
   final Parameters parameters;
 
   final int revision;
-
-  @override
-  TopBarState get topBar => const _NoTopBar();
-}
-
-/// The app-wide axes are the shell's, not an entry's, and nothing carries them
-/// across the process boundary yet.
-class _NoTopBar implements TopBarState {
-  const _NoTopBar();
-
-  @override
-  T picker<T>(
-    String name,
-    Map<String, T> options,
-    T defaultValue, {
-    Color Function(T value)? swatch,
-    IconData Function(T value)? icon,
-    PickerStyle style = PickerStyle.popover,
-  }) => defaultValue;
 }

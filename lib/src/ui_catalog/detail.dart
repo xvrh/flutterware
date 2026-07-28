@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../third_party/device_frame/lib/device_frame.dart';
 import 'app.dart';
 import 'device_choice_panel.dart';
@@ -32,84 +33,10 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
   final _knobsPanelKey = GlobalKey();
 
   @override
-  late final topBar = _TopBarAdapter(this);
-
-  @override
   late final EditableParameters parameters = EditableParameters(
     onRefresh: _onRefreshParameter,
     onAdded: _onAddedParameter,
   );
-
-  // Top-bar controls are app-level: they live on the app state so they persist
-  // across demos. (Per-demo controls go in [parameters] / the bottom panel.)
-  T _topBarPicker<T>(
-    String name,
-    Map<String, T> options,
-    T defaultValue, {
-    Color Function(T value)? swatch,
-    IconData Function(T value)? icon,
-    PickerStyle style = PickerStyle.popover,
-  }) {
-    var pickers = widget.appState.topBarPickers;
-
-    var existingParameter = pickers[name];
-    PickerParameter<T> parameter;
-    if (existingParameter is PickerParameter<T>) {
-      parameter = existingParameter;
-    } else {
-      if (existingParameter != null) {
-        existingParameter.dispose();
-        existingParameter = null;
-      }
-
-      parameter = PickerParameter(options: options);
-      parameter.addListener(_onRefreshParameter);
-    }
-
-    pickers[name] = parameter
-      ..defaultValue = defaultValue
-      ..options = options
-      ..swatch = swatch
-      ..icon = icon
-      ..style = style;
-
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-      setState(() {});
-    });
-
-    return parameter.value ?? parameter.defaultValue;
-  }
-
-  Widget _topBarControl(MapEntry<String, PickerParameter> entry) {
-    var picker = entry.value;
-    var value = picker.value ?? picker.defaultValue;
-    void onChanged(dynamic v) => setState(() => picker.value = v);
-    var title = Text(entry.key);
-    var items = {
-      for (var v in picker.options.entries)
-        v.value: pickerOptionWidget(picker, v.key, v.value),
-    };
-    return switch (picker.style) {
-      PickerStyle.segmented => ToolbarSegmented(
-        value: value,
-        onChanged: onChanged,
-        title: title,
-        items: items,
-      ),
-      PickerStyle.popover => ToolbarPopover(
-        value: value,
-        onChanged: onChanged,
-        title: title,
-        items: items,
-      ),
-      PickerStyle.dialog => ToolbarPicker(
-        value: value,
-        onChanged: onChanged,
-        title: title,
-        items: items,
-      ),
-    };
-  }
 
   void _onRefreshParameter() {
     setState(() {
@@ -204,8 +131,6 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
             },
           ),
         ),
-        for (var picker in widget.appState.topBarPickers.entries)
-          _topBarControl(picker),
       ],
     );
     return Column(
@@ -232,31 +157,6 @@ class _DetailViewState extends State<DetailView> implements UICatalogState {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _TopBarAdapter implements TopBarState {
-  final _DetailViewState _state;
-
-  _TopBarAdapter(this._state);
-
-  @override
-  T picker<T>(
-    String name,
-    Map<String, T> options,
-    T defaultValue, {
-    Color Function(T value)? swatch,
-    IconData Function(T value)? icon,
-    PickerStyle style = PickerStyle.popover,
-  }) {
-    return _state._topBarPicker(
-      name,
-      options,
-      defaultValue,
-      swatch: swatch,
-      icon: icon,
-      style: style,
     );
   }
 }
