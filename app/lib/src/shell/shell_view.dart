@@ -7,7 +7,9 @@ import 'package:flutterware/plugins.dart';
 
 import '../plugins/native_plugin.dart';
 import '../ui/theme.dart';
+import '../utils/hot_reload.dart';
 import '../utils/router_outlet.dart';
+import '../utils/value_stream_builder.dart';
 import 'shell_controller.dart';
 import 'worktree.dart';
 import 'worktree_home.dart';
@@ -126,6 +128,7 @@ class _Band extends StatelessWidget {
             ),
           ),
           _ReloadButton(shell),
+          const _HotReloadButtons(),
           const Gap(FwSpacing.md),
         ],
       ),
@@ -187,6 +190,97 @@ class _ReloadButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Hot reload and hot restart of flutterware itself.
+///
+/// Only rendered when `flutter run` is driving this process — see [HotReload],
+/// which is what registers the methods that make either possible. For anyone
+/// who installed flutterware rather than building it, these never appear, and
+/// that is correct rather than a degraded experience: there is no compiler
+/// present to produce new code.
+///
+/// Distinct from [_ReloadButton] beside it, which reloads the *worktree's
+/// config*. That one is for using flutterware; this pair is for working on it.
+class _HotReloadButtons extends StatefulWidget {
+  const _HotReloadButtons();
+
+  @override
+  State<_HotReloadButtons> createState() => _HotReloadButtonsState();
+}
+
+class _HotReloadButtonsState extends State<_HotReloadButtons> {
+  HotReload? _hot;
+
+  @override
+  void initState() {
+    super.initState();
+    // Connecting is a socket to ourselves and costs nothing when it fails,
+    // which is the common case.
+    unawaited(
+      HotReload.connect().then((hot) {
+        if (!mounted) {
+          unawaited(hot?.dispose());
+          return;
+        }
+        setState(() => _hot = hot);
+      }),
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_hot?.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var hot = _hot;
+    if (hot == null) return const SizedBox.shrink();
+
+    return ValueStreamBuilder<bool>(
+      stream: hot.available,
+      builder: (context, available, _) {
+        if (!available) return const SizedBox.shrink();
+        var colors = context.colors;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _bandButton(
+              colors: colors,
+              icon: Icons.local_fire_department_outlined,
+              tooltip: 'Hot reload flutterware',
+              onPressed: hot.reload,
+            ),
+            if (hot.canRestart)
+              _bandButton(
+                colors: colors,
+                icon: Icons.restart_alt,
+                // Naming what it costs: this tears down the window drawing it.
+                tooltip: 'Hot restart flutterware (the window will reappear)',
+                onPressed: hot.restart,
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _bandButton({
+    required FwPalette colors,
+    required IconData icon,
+    required String tooltip,
+    required Future<void> Function() onPressed,
+  }) => Tooltip(
+    message: tooltip,
+    child: IconButton(
+      onPressed: () => unawaited(onPressed()),
+      icon: Icon(icon, size: 16, color: colors.mut),
+      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+      padding: EdgeInsets.zero,
+    ),
+  );
 }
 
 /// The key a worktree's tab carries, so a test can point at the tab rather than
