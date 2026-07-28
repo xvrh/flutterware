@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/plugins/native/dependencies_core.dart';
+import 'package:flutterware_app/src/plugins/native/dependencies_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/session/session.dart';
 import 'package:flutterware_app/src/shell/repo_layout.dart';
@@ -99,15 +100,23 @@ void main() {
     );
   });
 
-  test('reload with nothing tracked stays lazy', () async {
+  test('an action asked for by name loads what it needs', () async {
     var dependencies =
         session.coreById(dependenciesPluginId)! as DependenciesCore;
-    await dependencies.invoke('reload');
-    // Reload refreshes what is being watched. With nothing watched there is
-    // nothing loaded to make stale, and starting the work here would turn an
-    // action meant to *redo* work into one that begins it.
-    for (var path in dependencies.packages) {
-      expect(dependencies.isRealised(path), isFalse);
-    }
+    var package = dependencies.packages.first;
+    expect(dependencies.isRealised(package), isFalse);
+
+    var result =
+        (await dependencies.invoke('list', arguments: {'package': package}))!
+            as DependencyListResult;
+
+    // The inversion worth keeping: a *report* may never start work, because
+    // everything reads it constantly. An action was asked for by name, and in
+    // `fw` and MCP the process holds nothing — so a query that only read the
+    // cache would answer "nothing" every time, which is what the plugin's two
+    // deleted cache-invalidation actions did.
+    expect(dependencies.isRealised(package), isTrue);
+    expect(result.packages.single.path, package);
+    expect(result.packages.single.direct, isA<int>());
   });
 }

@@ -10,6 +10,7 @@ import 'package:flutterware/src/logs/remote_log_client.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/plugins/native_plugin.dart';
+import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/plugins/registry.dart';
 import 'package:flutterware_app/src/shell/shell_controller.dart';
 import 'package:flutterware_app/src/shell/shell_view.dart';
@@ -25,8 +26,8 @@ const _manifestJson =
     '{"id":"a.deps","label":"Dependencies"},'
     '{"id":"a.tests","label":"Tests"}]}';
 
-class _Fake extends NativePlugin {
-  _Fake(super.host, {this.status = Status.none, this.children = const []});
+class _FakeCore extends PluginCore {
+  _FakeCore(super.host, {this.status = Status.none, this.children = const []});
 
   final Status status;
   final List<PluginChild> children;
@@ -38,17 +39,21 @@ class _Fake extends NativePlugin {
     status: status,
     children: children,
   );
+}
+
+class _Fake extends NativePlugin<_FakeCore> {
+  _Fake(super.core);
 
   @override
   Widget buildPanel(BuildContext context, String? childId) =>
       Center(child: Text('panel:$id/${childId ?? '-'}'));
 }
 
-/// A panel that starts work on mount — the shape every real plugin has, and
-/// the one that crashed the app: notifying from initState marks the shell's
+/// A core whose panel starts work on mount — the shape every real plugin has,
+/// and the one that crashed the app: notifying from initState marks the shell's
 /// AnimatedBuilder dirty during build.
-class _EagerPanelPlugin extends NativePlugin {
-  _EagerPanelPlugin(super.host);
+class _EagerCore extends PluginCore {
+  _EagerCore(super.host);
 
   var tracked = false;
 
@@ -63,6 +68,10 @@ class _EagerPanelPlugin extends NativePlugin {
     label: host.label,
     status: Status.neutral(tracked ? 'tracking' : '—'),
   );
+}
+
+class _EagerPanelPlugin extends NativePlugin<_EagerCore> {
+  _EagerPanelPlugin(super.core);
 
   @override
   Widget buildPanel(BuildContext context, String? childId) => _EagerPanel(this);
@@ -80,12 +89,15 @@ class _EagerPanelState extends State<_EagerPanel> {
   @override
   void initState() {
     super.initState();
-    widget.plugin.track();
+    widget.plugin.core.track();
   }
 
   @override
   Widget build(BuildContext context) => const Text('eager');
 }
+
+PluginRegistry _panels(Iterable<String> ids) =>
+    PluginRegistry({for (var id in ids) id: panelFor<_FakeCore>(_Fake.new)});
 
 class _StubLoader implements ManifestLoader {
   @override
@@ -104,9 +116,10 @@ class _StubLoader implements ManifestLoader {
 ShellController _controller({String listing = _listing}) => ShellController(
   appContext: AppContext(logger: LogClient.print()),
   flutterSdk: FlutterSdkPath('/tmp/flutter'),
-  registry: PluginRegistry({
-    'a.deps': (h) => _Fake(h, status: const Status.neutral('170 direct')),
-    'a.tests': (h) => _Fake(h, status: const Status.error('3 failing')),
+  registry: _panels(const ['a.deps', 'a.tests']),
+  coreRegistry: PluginCoreRegistry({
+    'a.deps': (h) => _FakeCore(h, status: const Status.neutral('170 direct')),
+    'a.tests': (h) => _FakeCore(h, status: const Status.error('3 failing')),
   }),
   manifestLoader: _StubLoader(),
   discovery: WorktreeDiscovery(
@@ -210,8 +223,9 @@ void main() {
     ShellController childShell() => ShellController(
       appContext: AppContext(logger: LogClient.print()),
       flutterSdk: FlutterSdkPath('/tmp/flutter'),
-      registry: PluginRegistry({
-        'a.deps': (h) => _Fake(
+      registry: _panels(const ['a.deps', 'a.tests']),
+      coreRegistry: PluginCoreRegistry({
+        'a.deps': (h) => _FakeCore(
           h,
           status: const Status.neutral('2 packages'),
           children: const [
@@ -219,7 +233,7 @@ void main() {
             PluginChild(id: 'ui', label: 'ui', status: Status.error('failed')),
           ],
         ),
-        'a.tests': _Fake.new,
+        'a.tests': _FakeCore.new,
       }),
       manifestLoader: _StubLoader(),
       discovery: WorktreeDiscovery(
@@ -282,7 +296,10 @@ void main() {
     var shell = ShellController(
       appContext: AppContext(logger: LogClient.print()),
       flutterSdk: FlutterSdkPath('/tmp/flutter'),
-      registry: PluginRegistry({'a.deps': _EagerPanelPlugin.new}),
+      registry: PluginRegistry({
+        'a.deps': panelFor<_EagerCore>(_EagerPanelPlugin.new),
+      }),
+      coreRegistry: PluginCoreRegistry({'a.deps': _EagerCore.new}),
       manifestLoader: _StubLoader(),
       discovery: WorktreeDiscovery(
         runProcess: (_, _, {workingDirectory}) async =>

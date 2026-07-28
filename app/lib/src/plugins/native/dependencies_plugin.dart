@@ -1,54 +1,28 @@
-import 'dart:async';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/plugins.dart' hide Dependencies;
 
 import '../../dependencies/list.dart';
 import '../../ui/theme.dart';
 import '../native_plugin.dart';
-import '../plugin_host.dart';
 import 'dependencies_core.dart';
 
 export 'dependencies_core.dart' show DependenciesCore, dependenciesPluginId;
 
-/// The GUI half of the dependencies plugin: a panel, and nothing else.
+/// The GUI half of the dependencies plugin: a panel, and literally nothing
+/// else.
 ///
 /// Every decision — what the report says, which packages are declared, what
 /// `reload` does — lives in [DependenciesCore], which is pure Dart so that
 /// `fw` and an agent reach exactly the same behaviour. This class exists only
 /// because `buildPanel` returns a `Widget`.
-class DependenciesPlugin extends NativePlugin {
-  DependenciesPlugin(PluginHost host) : this._(DependenciesCore(host));
-
-  DependenciesPlugin._(this.core) : super(core.host) {
-    _changes = core.changes.listen((_) => notifyListeners());
-  }
-
-  final DependenciesCore core;
-  late final StreamSubscription<int> _changes;
+class DependenciesPlugin extends NativePlugin<DependenciesCore> {
+  DependenciesPlugin(super.core);
 
   List<String> get packages => core.packages;
 
   @override
-  PluginReport get report => core.report;
-
-  @override
-  Future<Object?> invoke(
-    String actionId, {
-    Map<String, Object?> arguments = const {},
-  }) => core.invoke(actionId, arguments: arguments);
-
-  @override
   Widget buildPanel(BuildContext context, String? childId) =>
       _DependenciesPanel(this, childId);
-
-  @override
-  void dispose() {
-    unawaited(_changes.cancel());
-    core.dispose();
-    super.dispose();
-  }
 }
 
 /// Owns the subscription: mounting starts the load, unmounting releases it.

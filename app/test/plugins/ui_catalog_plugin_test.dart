@@ -5,7 +5,8 @@ import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/logs/remote_log_client.dart';
 import 'package:flutterware_app/src/context.dart';
-import 'package:flutterware_app/src/plugins/native/ui_catalog_plugin.dart';
+import 'package:flutterware_app/src/plugins/native/ui_catalog_core.dart';
+import 'package:flutterware_app/src/plugins/native/ui_catalog_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
@@ -16,15 +17,19 @@ import 'package:path/path.dart' as p;
 /// sidebar, `fw` and an agent see. Nothing touches a widget, which is the point:
 /// a capability that only exists in the panel is invisible to every other
 /// renderer.
+///
+/// So the subject is [UiCatalogCore], not the panel over it. The panel has no
+/// report and no `invoke` to test: it builds a widget, and that is all it
+/// does.
 void main() {
   late Directory root;
 
-  UiCatalogPlugin plugin({
+  UiCatalogCore catalog({
     String? entrypoint,
     List<String> packages = const ['.'],
   }) {
     var worktree = Worktree(path: root.path);
-    return UiCatalogPlugin(
+    return UiCatalogCore(
       PluginHost(
         id: uiCatalogPluginId,
         label: 'UI catalog',
@@ -71,8 +76,8 @@ Widget counter() => const Placeholder();
 
   group('addressFor — the identity every surface carries', () {
     test('is legible: only the # is escaped, the path stays a path', () {
-      var subject = plugin();
-      var address = subject.core.addressFor('.', 'demo/counter.dart#counter');
+      var subject = catalog();
+      var address = subject.addressFor('.', 'demo/counter.dart#counter');
       expect(
         address.toString(),
         'fw://${p.basename(root.path)}/flutterware.ui_catalog'
@@ -81,39 +86,36 @@ Widget counter() => const Placeholder();
     });
 
     test('round-trips back to the same segments', () {
-      var subject = plugin();
-      var address = subject.core.addressFor('.', 'demo/counter.dart#counter');
+      var subject = catalog();
+      var address = subject.addressFor('.', 'demo/counter.dart#counter');
       var parsed = Address.parse(address.toString());
       expect(parsed, address);
       expect(parsed.segments, ['.', 'demo', 'counter.dart#counter']);
     });
 
     test('carries the package, so two packages cannot collide', () {
-      var subject = plugin(packages: ['.', 'app']);
+      var subject = catalog(packages: ['.', 'app']);
       expect(
-        subject.core.addressFor('.', 'demo/x.dart#x'),
-        isNot(subject.core.addressFor('app', 'demo/x.dart#x')),
+        subject.addressFor('.', 'demo/x.dart#x'),
+        isNot(subject.addressFor('app', 'demo/x.dart#x')),
       );
     });
 
     test('axes are applied, not identity — bare strips them', () {
-      var subject = plugin();
-      var sized = subject.core.addressFor(
+      var subject = catalog();
+      var sized = subject.addressFor(
         '.',
         'demo/counter.dart#counter',
         axes: {'width': '900', 'height': '700'},
       );
       expect(sized.axes, {'height': '700', 'width': '900'});
-      expect(
-        sized.bare,
-        subject.core.addressFor('.', 'demo/counter.dart#counter'),
-      );
+      expect(sized.bare, subject.addressFor('.', 'demo/counter.dart#counter'));
       // Different axes are different addresses: a 420-wide capture is not the
       // same artifact as a 900-wide one, and the file names must differ too.
       expect(
         sized,
         isNot(
-          subject.core.addressFor(
+          subject.addressFor(
             '.',
             'demo/counter.dart#counter',
             axes: {'width': '420', 'height': '320'},
@@ -125,17 +127,17 @@ Widget counter() => const Placeholder();
 
   /// Waits for the scan [track] kicked off. It runs in another isolate, so the
   /// report is only meaningful once it lands.
-  Future<void> scanned(UiCatalogPlugin subject) async {
-    while (subject.core.isScanning) {
+  Future<void> scanned(UiCatalogCore subject) async {
+    while (subject.isScanning) {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
   }
 
   test('reports nothing and scans nothing until something asks', () {
-    var subject = plugin();
+    var subject = catalog();
 
     expect(subject.report.status, Status.none);
-    expect(subject.core.entries, isEmpty);
+    expect(subject.entries, isEmpty);
     expect(
       subject.report.children.single.status,
       Status.none,
@@ -144,10 +146,10 @@ Widget counter() => const Placeholder();
   });
 
   test('track starts the scan, and stays quiet about a healthy one', () async {
-    var subject = plugin()..core.track('.');
+    var subject = catalog()..track('.');
     await scanned(subject);
 
-    expect(subject.core.entries, hasLength(3));
+    expect(subject.entries, hasLength(3));
     // A count is not news, and it cannot be known before something asks for it.
     // The row keeps its room for what is actually moving.
     expect(subject.report.status, Status.none);
@@ -155,7 +157,7 @@ Widget counter() => const Placeholder();
   });
 
   test('the entries reach a non-GUI renderer through the view', () async {
-    var subject = plugin()..core.track('.');
+    var subject = catalog()..track('.');
     await scanned(subject);
 
     var text = subject.report.toText();
@@ -166,19 +168,19 @@ Widget counter() => const Placeholder();
   });
 
   test('the report round-trips to JSON', () async {
-    var subject = plugin()..core.track('.');
+    var subject = catalog()..track('.');
     await scanned(subject);
 
     var json = subject.report.toJson();
     expect(json['id'], uiCatalogPluginId);
     expect([
       for (var a in json['actions']! as List) (a as Map)['id'],
-    ], containsAll(['rescan', 'screenshot']));
+    ], containsAll(['entries', 'check', 'describe', 'screenshot']));
     expect(json['view'], isNotEmpty);
   });
 
   test('a package with no demos says so rather than looking healthy', () async {
-    var subject = plugin(entrypoint: 'nonexistent')..core.track('.');
+    var subject = catalog(entrypoint: 'nonexistent')..track('.');
     await scanned(subject);
 
     expect(subject.report.status.tone, Tone.warn);
@@ -190,10 +192,10 @@ Widget counter() => const Placeholder();
 @Demo(name: 'Elsewhere')
 Widget thing() => const Placeholder();
 ''');
-    var subject = plugin(entrypoint: 'catalog')..core.track('.');
+    var subject = catalog(entrypoint: 'catalog')..track('.');
     await scanned(subject);
 
-    expect(subject.core.entries.map((e) => e.name), ['Elsewhere']);
+    expect(subject.entries.map((e) => e.name), ['Elsewhere']);
   });
 
   test('a scan error is reported, not swallowed', () async {
@@ -204,34 +206,90 @@ Widget thing() => const Placeholder();
 @Demo(name: 'B')
 Widget broken() => const Placeholder();
 ''');
-    var subject = plugin()..core.track('.');
+    var subject = catalog()..track('.');
     await scanned(subject);
 
     expect(subject.report.status.tone, Tone.error);
     expect(subject.report.toText(), contains('same id'));
   });
 
-  test('rescan picks up a file added after the first scan', () async {
-    var subject = plugin()..core.track('.');
+  test('entries lists everything, with ids and addresses', () async {
+    var subject = catalog();
+    // No track() first: the action loads what it needs, which is the whole
+    // point of it existing. A report would have answered "not computed".
+    var result = (await subject.invoke('entries'))! as CatalogEntriesResult;
+    var entries = result.packages.single.entries;
+
+    expect(entries, hasLength(3));
+    expect(entries.map((e) => e.id), contains('demo/counter.dart#counter'));
+    expect(
+      entries.first.address,
+      startsWith('fw://'),
+      reason: 'an agent should be able to take this straight to screenshot',
+    );
+    // The wire form is generated from those fields, so it cannot disagree
+    // with them — but every surface reads it, so it is worth one look.
+    expect(result.toJson()['packages'], isA<List<Object?>>());
+  });
+
+  test('entries picks up a file added after an earlier scan', () async {
+    var subject = catalog()..track('.');
     await scanned(subject);
-    expect(subject.core.entries, hasLength(3));
+    expect(subject.entries, hasLength(3));
 
     write('demo/added.dart', '''
 @Demo(name: 'Added')
 Widget added() => const Placeholder();
 ''');
-    await subject.invoke('rescan');
-    await scanned(subject);
+    var result = (await subject.invoke('entries'))! as CatalogEntriesResult;
+    expect(
+      result.packages.single.entries.map((e) => e.name),
+      contains('Added'),
+    );
+  });
 
-    expect(subject.core.entries.map((e) => e.name), contains('Added'));
+  test('describe answers from the scan, address included', () async {
+    var subject = catalog();
+    var described =
+        (await subject.invoke(
+              'describe',
+              arguments: {'entry': 'demo/counter.dart#counter'},
+            ))!
+            as CatalogEntryDescription;
+
+    expect(described.name, 'Counter');
+    expect(described.package, '.');
+    expect(described.file, 'demo/counter.dart');
+    expect(described.symbol, 'counter');
+    expect(described.address, startsWith('fw://'));
+    // Knobs are a runtime fact and cost a build, so they are absent until
+    // asked for by name — null, not empty, because "none declared" is a
+    // different answer from "we did not look".
+    expect(described.knobs, isNull);
+    expect(described.toJson().containsKey('knobs'), isFalse);
+  });
+
+  test('describe refuses an entry that is not there', () async {
+    expect(
+      catalog().invoke('describe', arguments: {'entry': 'nope#nope'}),
+      throwsArgumentError,
+    );
+    expect(catalog().invoke('describe'), throwsArgumentError);
+  });
+
+  test('entries refuses a package the plugin does not declare', () async {
+    expect(
+      catalog().invoke('entries', arguments: {'package': 'nope'}),
+      throwsArgumentError,
+    );
   });
 
   test('an unknown action is refused loudly', () async {
-    expect(plugin().invoke('nope'), throwsArgumentError);
+    expect(catalog().invoke('nope'), throwsArgumentError);
   });
 
   test('the screenshot action declares what it needs', () async {
-    var subject = plugin()..core.track('.');
+    var subject = catalog()..track('.');
     await scanned(subject);
 
     var action = subject.report.actions.firstWhere((a) => a.id == 'screenshot');
@@ -246,8 +304,10 @@ Widget added() => const Placeholder();
     );
     expect(
       entry.optionsFrom,
-      'view',
-      reason: 'a large one points at the list already in the report',
+      'entries',
+      reason:
+          'a large one points at the action that returns them all — not at '
+          'the report view, which stops at 20',
     );
     expect(
       action.parameters.firstWhere((p) => p.id == 'output').required,
@@ -256,7 +316,7 @@ Widget added() => const Placeholder();
   });
 
   test('the action survives a JSON round trip', () async {
-    var subject = plugin()..core.track('.');
+    var subject = catalog()..track('.');
     await scanned(subject);
 
     var original = subject.report.actions.firstWhere(
@@ -268,12 +328,12 @@ Widget added() => const Placeholder();
     var entry = restored.parameters.first;
     expect(entry.id, 'entry');
     expect(entry.kind, ActionParameterKind.choice);
-    expect(entry.optionsFrom, 'view');
+    expect(entry.optionsFrom, 'entries');
     expect(entry.options.first.label, isNotNull);
   });
 
   test('screenshot refuses a missing or unknown entry', () async {
-    var subject = plugin()..core.track('.');
+    var subject = catalog()..track('.');
     await scanned(subject);
 
     expect(subject.invoke('screenshot'), throwsArgumentError);

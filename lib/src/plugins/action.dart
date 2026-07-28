@@ -11,6 +11,7 @@ class PluginAction {
     this.danger = false,
     this.confirm = false,
     this.parameters = const [],
+    this.returns,
   });
 
   /// Stable within a plugin — what `fw` and an agent name to invoke it.
@@ -24,6 +25,28 @@ class PluginAction {
 
   /// The GUI asks before running it.
   final bool confirm;
+
+  /// The [PluginResult] class this action hands back, when it hands back data.
+  ///
+  /// A `Type` rather than a name, because that is what can be *followed*: the
+  /// capability document resolves this literal statically and walks the class's
+  /// fields, so the published shape of a result is the class itself and cannot
+  /// drift from it. A string would document a promise nobody could check.
+  ///
+  /// It is also checked at run time — an action that declares one and returns
+  /// something else fails the way any other broken invocation does, rather than
+  /// quietly publishing a shape it does not produce.
+  ///
+  /// Null for an action that returns nothing, or a scalar.
+  final Type? returns;
+
+  /// [returns]'s name, which is what crosses the wire.
+  ///
+  /// A `Type` can be neither serialised nor reconstructed, so an action decoded
+  /// from JSON has neither this nor [returns]. Nothing needs one yet — every
+  /// reader of this is looking at a live action from a live report — and a
+  /// field for the day something does is a field nothing checks.
+  String? get returnsName => returns?.toString();
 
   /// What the action needs to be told, if anything.
   ///
@@ -42,6 +65,7 @@ class PluginAction {
     if (confirm) 'confirm': true,
     if (parameters.isNotEmpty)
       'parameters': [for (var p in parameters) p.toJson()],
+    if (returnsName != null) 'returns': returnsName,
   };
 
   static PluginAction fromJson(Map<String, Object?> json) => PluginAction(

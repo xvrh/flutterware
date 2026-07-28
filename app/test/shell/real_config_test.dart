@@ -5,6 +5,7 @@ import 'package:flutterware/src/logs/remote_log_client.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/dependencies_plugin.dart';
 import 'package:flutterware_app/src/plugins/native/registry.dart';
+import 'package:flutterware_app/src/session/session.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
@@ -63,18 +64,19 @@ void main() {
     );
     expect(workspace.unknownDeclarations, isEmpty);
 
-    var plugins = buildNativeRegistry().resolve(
-      manifest,
-      const Worktree(path: '/repo', branch: 'main'),
-      workspace,
+    var session = Session.resolved(
+      worktree: const Worktree(path: '/repo', branch: 'main'),
+      workspace: workspace,
+      manifest: manifest,
     );
+    var plugins = buildNativeRegistry().resolve(session.cores);
     var dependencies = plugins.whereType<DependenciesPlugin>().single;
     expect(dependencies.packages, ['.', 'app', 'examples/example']);
 
     // The laziness rule: constructing the plugin and reading its report must
     // not have started any work.
     expect(dependencies.core.isRealised('.'), isFalse);
-    var report = dependencies.report;
+    var report = dependencies.core.report;
     // Nothing has loaded, so there is nothing to say. Counting dependencies
     // across packages would double-count everything shared between them
     // anyway, and the number only exists once the panel asks for it.

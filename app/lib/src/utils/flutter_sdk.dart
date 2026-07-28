@@ -58,6 +58,16 @@ class FlutterSdkPath {
       sdks.add(await tryFind(homeEnvironment));
     }
 
+    // The SDK running us, which for `fw` is the one the user picked: `fvm dart
+    // bin/fw.dart` resolves to `<flutter>/bin/cache/dart-sdk/bin/dart`, and
+    // walking up from it finds the Flutter root three levels above.
+    //
+    // Without this, `fw` in this repo finds nothing at all — [_findProjectRoot]
+    // looks for a `flutter_version` file, and this project pins with `.fvmrc`.
+    // Null when the running executable is not inside a Flutter SDK, which is
+    // the case inside the GUI, where the executable is the app.
+    sdks.add(await tryFind(Platform.resolvedExecutable));
+
     var projectRoot = _findProjectRoot();
     if (projectRoot != null) {
       sdks.add(await tryFind(p.join(projectRoot.path, '.fvm/flutter_sdk')));

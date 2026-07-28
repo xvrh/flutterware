@@ -7,6 +7,7 @@ import 'package:flutterware/plugins.dart' hide Dependencies;
 import '../../dependencies/model/service.dart';
 import '../../utils/async_value.dart';
 import '../plugin_core.dart';
+import 'dependencies_results.dart';
 import '../plugin_host.dart';
 
 /// The registered id — also what `tool/flutterware.dart` declares.
@@ -97,7 +98,39 @@ class DependenciesCore extends PluginCore {
       badge: known.values.any((s) => s.error != null)
           ? const StatusBadge.dot(Tone.error)
           : StatusBadge.none,
-      actions: const [PluginAction('reload', 'Reload')],
+      actions: [
+        PluginAction(
+          'list',
+          'List',
+          returns: DependencyListResult,
+          description:
+              'Every dependency of a package, with its version — the whole '
+              'list, not the projection the report carries',
+          parameters: [
+            ActionParameter(
+              'package',
+              'Package',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'Which declared package; all of them when omitted',
+              options: [
+                for (var path in packages)
+                  ActionOption(path, label: path == '.' ? 'root' : path),
+              ],
+            ),
+            const ActionParameter(
+              'transitive',
+              'Include transitive',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'List what the package pulls in indirectly too. The counts '
+                  'are reported either way.',
+            ),
+          ],
+        ),
+      ],
       view: _view(known),
     );
   }
@@ -171,16 +204,90 @@ class DependenciesCore extends PluginCore {
     String actionId, {
     Map<String, Object?> arguments = const {},
   }) async {
-    if (actionId != 'reload') {
+    if (actionId != 'list') {
       return super.invoke(actionId, arguments: arguments);
     }
-    // Reload what is being watched; with nothing tracked there is nothing
-    // loaded to make stale, and refreshing would be starting work from an
-    // action that is meant to redo it.
-    for (var path in _tracked.keys.toList()) {
-      await _sourceFor(path).refresh();
+    return _list(arguments);
+  }
+
+  /// The dependencies of one package, or of every declared package.
+  ///
+  /// **Loads what it needs.** A report may never start work; an action asked
+  /// for by name may, and must — in `fw` and MCP the process was born for this
+  /// request and holds nothing, so a query that only read the cache would
+  /// answer "nothing" every time. That is what the plugin's two dead
+  /// cache-invalidation actions used to do.
+  ///
+  /// One package failing does not sink the others: its error is reported in
+  /// its place, the same way the report shows it.
+  Future<DependencyListResult> _list(Map<String, Object?> arguments) async {
+    var requested = arguments['package'];
+    if (requested != null && requested is! String) {
+      throw ArgumentError.value(requested, 'package', 'must be a package path');
     }
-    return null;
+    var paths = requested == null ? packages : [requested as String];
+    for (var path in paths) {
+      if (!packages.contains(path)) {
+        throw ArgumentError.value(
+          path,
+          'package',
+          'not declared for this plugin. Declared: ${packages.join(', ')}',
+        );
+      }
+    }
+
+    var transitive = arguments['transitive'] == true;
+
+    var loaded = await Future.wait([for (var path in paths) _load(path)]);
+
+    return DependencyListResult(
+      packages: [
+        for (var (index, snapshot) in loaded.indexed)
+          _describe(paths[index], snapshot, transitive: transitive),
+      ],
+    );
+  }
+
+  Future<Snapshot<Dependencies>> _load(String path) async {
+    track(path);
+    try {
+      await _sourceFor(path).refresh();
+    } catch (_) {
+      // Carried on the snapshot below — the report reads it the same way.
+    }
+    return _sourceFor(path).value;
+  }
+
+  DependencyListPackage _describe(
+    String path,
+    Snapshot<Dependencies> snapshot, {
+    required bool transitive,
+  }) {
+    if (snapshot.error case var error?) {
+      return DependencyListPackage(path: path, error: '$error');
+    }
+    var data = snapshot.data;
+    if (data == null) {
+      return DependencyListPackage(path: path, error: 'did not load');
+    }
+
+    return DependencyListPackage(
+      path: path,
+      direct: data.directs.length,
+      transitive: data.transitives.length,
+      dependencies: [
+        for (var dependency in [
+          ...data.directs,
+          if (transitive) ...data.transitives,
+        ])
+          DependencyEntry(
+            name: dependency.name,
+            version: dependency.pubspec.version?.toString(),
+            direct: dependency.isDirect,
+            source: dependency.lockDependency?.source,
+          ),
+      ],
+    );
   }
 
   /// Loads every declared package and waits — what `fw` does for the duration

@@ -1,12 +1,21 @@
 # GUI / CLI / MCP — the shared architecture
 
-**Date:** 2026-07-27
+**Date:** 2026-07-27, updated 2026-07-28
 **Status:** Decisions 1–6 agreed in discussion. **1, 2, 4 and 6 are
 implemented** — `Address`, `Artifact`, `ValueStream`, and the `Session` that
 `fw` and the MCP server both render. **3** (the daemon contract) and **5**
 (`reveal` vs `capture`) are pinned but unbuilt: there is no daemon holding a
 run log yet, and no viewer to reveal into. See the "landed" sections at the
 end for what exists.
+
+**2026-07-28 session, in one line:** every renderer now runs actions through
+one `Session.invoke`, the GUI included; the two actions we had turned out to do
+nothing and were replaced by queries people actually wanted; a test now drives
+`fw` and MCP over the same session and found three ways they disagreed; and what
+an action returns is a typed class whose shape is read out of the source and
+published to the document, to MCP and to `--help`. See "What running it taught
+us" near the end. `docs/capabilities.md` is generated and lists what exists
+today.
 **Extends:** `2026-07-25-overhaul-master-plan.md` (decisions 1–10 hold),
 `2026-07-26-packages-and-laziness.md`.
 
@@ -124,6 +133,38 @@ was proposed in discussion and dropped. Two reasons:
 Consequence, accepted: a badge for a worktree nobody has run anything in shows
 the last run and its age, or nothing. Nothing is computed to produce it. This
 answers master-plan open question 4.
+
+**Revised 2026-07-28, after reading the daemon that exists.** Three obligations
+are listed here as if they belong to one process. They have three homes:
+
+- **Live processes** — already the catalog's compiler daemon. Its address is
+  derived from the whole `DaemonConfig`, so it *fragments* on every input that
+  changes its output, which is right for a compiler and wrong for a run log:
+  bump the SDK and a log living inside it has silently moved. So that daemon
+  grows into a job executor, one of several, not into the registry.
+- **In-flight dedup** — belongs inside whichever daemon owns the resource. In
+  the compiler daemon that is a map of in-flight futures keyed by the request,
+  replacing the bare `Future _queue`; `ifChanged` is today's poor-man's version.
+- **The run log** — needs no process at all. Append-only JSONL with `O_APPEND`
+  is safe for concurrent `fw`, MCP and GUI writers as long as no record needs
+  two syscalls. Its embryo already exists in `wrap/session_sink.dart`, whose own
+  comment promises the daemon will replace it; the promise is the wrong way
+  round.
+
+**So the first real daemon looks like less than a daemon**, and the per-repo
+process arrives with the wrapper (PTY streaming, heartbeats, orphan sweeps),
+where a resident writer is genuinely required. A screenshot does not need one.
+
+**And the rule as stated flags correct code.** The daemon holds `_discovered`,
+`_quarantine`, `_baseline`, `_hostPath` — none of them one of the three, none of
+them wrong. They describe the live compiler, not memoised answers. What survives
+contact: **no answer outlives the request that produced it; state describing a
+live process is part of that process.**
+
+Sequencing, after the 2026-07-28 session: this is the *least* urgent of the
+three open threads. Nobody has asked "what did the last run say", and nothing is
+slow enough for two clients to collide over. Pick it up when something concrete
+asks.
 
 ### 4. `ValueStream` — one notification primitive, ours, stream-based
 
@@ -262,6 +303,15 @@ two:
 2. **A contract test.** Walk every plugin's manifest; assert every declared
    action is invocable through `fw` and through MCP, and every address the GUI
    can route to resolves headlessly.
+
+**Both landed on 2026-07-28.** `NativePlugin` has no `report` and no `invoke` to
+override, so (1) is structural rather than a convention; and
+`surface_parity_test.dart` is (2), walking the manifest and driving both
+surfaces over one session. It found three ways they disagreed on its first runs
+— see "A test that drives both surfaces". The addresses half of (2) waits on the
+viewer. Note what it does *not* cover: reads. Both surfaces answering the same
+way is checked; whether a plugin's data is reachable at all is not, which is how
+two actions managed to do nothing for a week.
 
 **Sequencing:** `Session` + `fw` together, against the two plugins that exist
 today, before more plugins are written. MCP within days, not weeks — it is a thin
@@ -444,7 +494,8 @@ entry point. Change notification is a `ValueStream`, not a `ChangeNotifier`,
 for the same reason.
 
 `DependenciesCore` holds everything the plugin used to; `DependenciesPlugin` is
-now a panel that delegates to it. `Session` resolves a manifest into cores.
+now a panel and nothing else — since 2026-07-28 it does not even delegate,
+having no `report` or `invoke` to delegate with. `Session` resolves a manifest into cores.
 `app/bin/fw.dart` renders them, and is in `_pureEntryPoints`.
 
 ```
@@ -538,7 +589,7 @@ along a line that already existed:
 
 | | |
 |---|---|
-| **Core** (pure) | the scan, entries, report, `rescan`, **and `screenshot`** |
+| **Core** (pure) | the scan, entries, report, `entries`, **and `screenshot`** |
 | **Panel** (Flutter) | `CatalogSession` — the live compile loop driving a guest engine into a texture |
 
 `screenshot` is in the core because `catalog/screenshot.dart` was already
@@ -615,7 +666,305 @@ added later is included without revisiting this. That is the sort of thing an
 identity type is *for*: the collision existed before, and was invisible until
 something was required to name it.
 
+### What running it taught us — 2026-07-28
+
+Three things landed and one assumption broke. The assumption is the important
+part.
+
+#### `Session.invoke` is the only way an action runs
+
+`fw` and MCP each resolved a plugin and called `core.invoke` themselves — the
+same six lines twice, each with its own copy of the "Declared: …" recovery
+message — and the GUI dispatched nothing at all. Three doors into one room, so
+anything that must happen on *every* invocation costs three edits and the
+forgotten renderer drifts silently.
+
+```dart
+Job invoke(String plugin, String action, {Map<String, Object?> arguments})
+```
+
+`Job` carries an id, a replaying event stream and a `JobResult` that **never
+completes with an error** — a failed run is still a run, with a duration and a
+line in the log to come. Two rules worth keeping:
+
+- **An unknown plugin throws; an unknown action is a failed job.** The line
+  [`Address`](#1-address--one-uri-for-everything) already draws: the framework
+  owns the namespace up to and including the plugin, the plugin owns the rest.
+  Naming a plugin that does not exist means nothing ran. Naming a bad action is
+  a real invocation of a real plugin that returned an error, and an agent
+  guessing action names should leave a trail that says so.
+- **`Job.events` replays.** Nobody can subscribe before `invoke` returns, so a
+  plain broadcast stream would never deliver `JobStarted` to anyone. Same trap
+  `ValueStream` exists to avoid.
+
+`JobEvent` is sealed and has three cases, because nothing emits progress yet.
+`JobLog`/`JobProgress` arrive when a `PluginCore` can report either, which
+needs a sink threaded into `PluginCore.invoke`.
+
+#### The GUI joins by construction, not by discipline
+
+`WorktreeSession` held a plugin list, a `reports` and a lookup — a parallel
+implementation of `Session` over panels instead of cores. It now *holds* a
+session. `NativePlugin` is a panel over a `PluginCore` with **no `report` and
+no `invoke`**: Dart cannot seal a member, so the only way to stop a panel
+answering differently from its core is not to give it one to override.
+`PluginRegistry` maps a core to a panel and no longer resolves manifests —
+which plugins a worktree has is decided once, by the session.
+
+Both plugins already had this shape (`UiCatalogPlugin` wrapped `UiCatalogCore`,
+`DependenciesPlugin` wrapped `DependenciesCore`); this made it the contract.
+
+Three smaller things fell out:
+
+- **`fw` never set an exit code.** `main` returned an `int`, which Dart ignores,
+  so every invocation exited 0 — including the ones that printed an error.
+- **Constructing a panel notified the shell.** `ValueStream` replays its latest
+  value to every new subscriber and "what it already was" is not a change.
+- **A core with no panel keeps its real report.** The sidebar shows the plugin's
+  true status and only the panel says anything is missing, which beats hiding a
+  working plugin behind an error.
+
+#### The assumption that broke: two of our three actions did nothing
+
+`dependencies reload` and `ui_catalog rescan` were the only actions besides
+`screenshot`. Timed from `fw`: **0.86s and 0.75s, which is exactly the cost of
+starting the process and reading the config** — against 1.27s for
+`status --compute` doing real work. They were no-ops.
+
+They iterate what is *being watched* and what has *already been scanned* — sets
+filled by a panel mounting. `fw` and MCP open a session per request and hold
+nothing, so both sets are empty and the loops have no iterations. No GUI code
+called either: the panels refresh through `CatalogSession` and the dependencies
+service directly. They were the GUI's refresh button declared as a capability.
+
+**The category error, stated so it is not repeated.** There are three kinds of
+thing a plugin does, and only two of them are capabilities:
+
+| | wanted by | we had |
+|---|---|---|
+| **Queries** — "list me that" | every surface | none |
+| **Commands** — "do that" | every surface | one (`screenshot`) |
+| **Cache management** — "you are stale" | only a process that persists | two |
+
+Replaced with `dependencies list [--package] [--transitive]` and
+`ui_catalog entries [--package]`, both returning the *whole* list — the report's
+projection stops at 12 rows and 20 entries, and `screenshot`'s options inline at
+most 50, which is right for something meant to be read and useless for "what can
+I screenshot". `entries` carries each entry's `Address`, so the answer goes
+straight back into `screenshot`.
+
+**The inversion that makes queries work: a report may never start work, but an
+action may.** Reports are read constantly, by every sidebar row and every tab
+glyph, so `PluginReport` stays a pure read of cached state. An action was asked
+for by name — and in `fw` and MCP the process was born for that request and
+holds nothing, so a query that only read the cache would answer "nothing" every
+time. That is precisely what the two deleted actions did.
+
+**No `--refresh` flag.** Every `fw` invocation and every MCP tool call opens a
+fresh `Session`, so a query is always cold and the flag's set and unset
+behaviour would be identical — a lie in a published schema, existing only for a
+daemon that does not exist. `entries` simply always re-scans: 38ms against a
+700ms process start.
+
+**What the invoke abstraction survived.** The obvious question after finding two
+fake actions is whether the dispatch was wrong too. It was not: swapping the
+content changed nothing about the mechanism, and both replacements worked on
+both surfaces immediately. `fw run dependencies list --package=app` arrives as
+strings from a shell and MCP arrives as JSON from a model — neither can reach a
+typed Dart method, so *something* must look up a name and hand it a bag of
+arguments. The alternative is not typed methods, it is three hand-written
+adapters. What is genuinely provisional is `Job`: `list` and `entries` compute
+and return, and nothing streams. It is carried for the test runner, builds and
+`pub upgrade`, which do stream.
+
+**The method mistake, since it cost a day:** the actions were read, not run. Two
+commands would have shown they did nothing.
+
+#### `docs/capabilities.md`, generated
+
+`app/lib/src/session/capabilities.dart` renders the whole surface — `fw`'s
+commands, the MCP tools taken from `FlutterwareMcpServer.tools`, and every
+plugin action with its parameters — and `tool/generate_capabilities.dart`
+writes it. `test/tools/capabilities_test.dart` fails when the file no longer
+matches the build, naming the command that fixes it, so the document cannot
+drift away from the code. `mcp_server_test` asserts a connected client is served
+exactly `FlutterwareMcpServer.tools`, so the generator cannot describe a tool
+nobody serves.
+
+**Schema, not data.** It resolves the cores against a synthetic one-package
+project, so it carries the shape every project gets — never this repo's entry
+ids. Those are what `entries` and `list` are for.
+
+#### The catalog answers two more questions
+
+`check` and `describe` landed, and both exist because a *scan* cannot answer
+them. Parsing finds an entry; whether it **compiles** is a fact only the
+compiler holds, and what **knobs** it offers is a fact only a running build
+holds. Until now the panel was the only thing that could ask either.
+
+- **`check [--package]`** needs no guest: the daemon compiles every wrapper
+  into one program while it prepares and quarantines what fails, so the answer
+  is already in the handshake. Against this repo it finds
+  `does_not_compile.dart` and returns the compiler's diagnostics verbatim.
+  Packages are checked one at a time — each may build a host binary, and two
+  cold builds racing helps nobody.
+- **`describe --entry [--knobs]`** answers from the scan in under a second;
+  `--knobs` costs a compile and a frame, which is why it is opt-in.
+
+**`screenshot` can turn the knobs before the frame is taken**, and knobs are
+axes — the same entry seen differently — so they go on the address, prefixed:
+
+```
+?height=700&knob.count=7&knob.label=Turned&width=900
+```
+
+Prefixed because a demo may declare a knob called `width`, and an address where
+a knob quietly overwrote the viewport would name a picture nobody took. The file
+name derives from the address, so two settings are two artifacts rather than one
+file written twice — the collision `Address` already caught once for sizes.
+
+Values arrive as text from every direction and are coerced to the kind the
+demo's `KnobDescriptor` declares; a name the entry does not declare is an error
+listing the ones it does, because a knob silently ignored renders a picture that
+looks right and is not.
+
+Two things running it taught us:
+
+- **A headless host draws nothing until a frame is asked for**, and a knob is
+  only declared while the demo builds — so reading knobs without rendering
+  first returns "no knobs" for a demo that plainly has three. The panel never
+  meets this because it drives frames continuously.
+- **`package:flutterware/ui_catalog.dart` reaches `package:flutter`.** Importing
+  the umbrella for `KnobDescriptor` made `fw` unlinkable; the purity walker
+  caught it and printed the chain. `knob.dart` is plain Dart by design, so the
+  import is that, directly. The lesson generalises: import the library, not the
+  umbrella.
+
+#### A test that drives both surfaces, and the three disagreements it found
+
+`test/session/surface_parity_test.dart` is enforcement #2 from decision 6, made
+real. It **walks the manifest** rather than naming actions: for every declared
+action it invokes through `fw` and through MCP over the *same* session and
+compares. A new action joins the matrix the day it is declared.
+
+Making it possible was most of the work: `fw`'s logic moved out of `bin/` into
+`FwCli` with injected sinks and a session factory, and the MCP server takes the
+same factory. **A parity rule that cannot be driven by a test is a claim, not a
+rule** — and a `bin/` file nothing can import cannot be driven.
+
+It found three real defects, one of them introduced by the fix for the first:
+
+1. **`--loud=true` was the string `'true'`.** A shell has no types, so a boolean
+   passed the explicit way arrived as text and every plugin asking
+   `arguments['x'] == true` saw false — silently, on the CLI only, while the
+   same call over MCP worked because JSON carries a real bool.
+   `fw run dependencies list --transitive=true` listed 27 of 88 dependencies and
+   said nothing.
+2. **The fix then crashed on a bad value**, with a stack trace and exit 255,
+   because it threw out of `invoke` before a job existed.
+3. **Both surfaces dropped the offending value from error messages.**
+   `ArgumentError` keeps it in `invalidValue`; both renderers formatted
+   `message (name)` and discarded it, so "expected red or blue" never said what
+   you passed.
+
+The fixes are all at the single door, which is what the door was for:
+
+**The declared `ActionParameterKind` is now applied in `Session.invoke`.** Once,
+for every renderer, rather than by hand in every core. Parameters an action does
+not declare pass through untouched — the framework parses up to the plugin and
+no further. A value of the wrong kind is a **failed job**, the same line an
+unknown action falls on: `fw: expected an integer (width): wide`, exit 64.
+
+This is the answer to a question left open earlier — the published parameter
+schema was a contract nothing enforced. It is enforced now, and the thing that
+made it visible was a test comparing two renderings of it.
+
+#### Typed results, and a schema read out of the code
+
+Three steps, in order, because each is worth having if the next is abandoned.
+
+**A `PluginResult` marker and a class per result.** `CatalogEntriesResult`,
+`CatalogCheckResult`, `CatalogEntryDescription`, `DependencyListResult` and the
+rows beneath them; `Artifact` implements it too, so it stops being a special
+case. `toJson` is generated from the fields, so the wire form cannot drift from
+the type. Renderers switch on the marker rather than asking
+`value is Map || value is List` — a test that says "somebody built a map" and
+goes false the moment a core returns something typed. (The map branch is kept:
+an action that has not adopted a type yet should not have its output degrade to
+`toString()`.)
+
+**Nullability is the reason this beats deriving shapes from sample output.**
+`knobs` is `List<CatalogKnob>?` because absent means "not looked at" and empty
+means "declares none". No sample can say that.
+
+**`PluginAction.returns` is a `Type`, not a name** — a type literal is what can
+be *followed*. And `Session.invoke` **checks it**: an action that declares one
+and returns something else fails like any other broken invocation, naming both
+types. Exact match rather than `is`, because a subclass would serialise fields
+the published shape does not mention. Verified by commenting the check out and
+watching the test fail.
+
+**`ShapeExtractor` reads the shape out of the classes**, and the document and
+MCP publish it. A spike answered the design questions first, and corrected the
+plan:
+
+- **A bare class name in an expression position is a `TypeLiteral`, not a
+  `SimpleIdentifier`.** The element hangs off `literal.type.element`. The first
+  version silently found nothing.
+- **No `build_runner`, no `source_gen`, no `build.yaml`.** A plain
+  `AnalysisContextCollection` in the existing generator does it — 4.4s against a
+  core that transitively imports Flutter. A builder was recommended and was not
+  needed.
+- **Only `@JsonSerializable` classes get a shape.** There the keys are generated
+  from the fields, so reading fields describes what is sent. `Artifact` writes
+  its own `toJson` and turns an `Address` into a string; the first version
+  walked it anyway and published `address: Address`, the exact lie the rule
+  exists to prevent. The document says why instead of guessing.
+- **First sentence, not first line.** Dartdoc wraps at 80, so taking the first
+  line published `reading a knob costs a`.
+- **The analyzer cannot infer its own SDK under `flutter test`**, where
+  `Platform.resolvedExecutable` is `flutter_tester`. It is found by walking up
+  for a `dart-sdk` directory, which works under `dart run` too.
+
+Kept honest by re-derivation: `action_shapes_test.dart` re-runs the extraction
+and fails when the checked-in data no longer matches the classes, because
+generated data nobody re-derives is a hand-maintained schema with extra steps.
+The generator formats its own output, or `prepare_submit` rewrites the file
+afterwards and the freshness test fails forever on a difference nobody made.
+
+#### `fw` explains itself, from the declarations it already has
+
+`fw help` was seven hand-written lines and `capabilities.dart` had the same
+prose typed out again. Commands are data now — `fwCommands` and `fwExitCodes`
+are the only place either is written, and both the terminal and the document
+render them.
+
+```
+fw help run                        what run does, and how to ask it things
+fw run ui_catalog                  the four actions that plugin has
+fw run ui_catalog describe --help  its parameters, and what comes back
+```
+
+The last prints the same `ActionParameter`s an agent gets over MCP and the
+result shape extracted from the returned class, so terminal, document and agent
+are three renderings of one source. A parameter with `optionsFrom` prints the
+command that lists its values — which only reads correctly because that pointer
+was fixed to name `entries` rather than the report view it was truncating.
+
+Three renderers were quietly duplicated and now are not: the shape tree is
+`ResultShape.toText`, the usage line is `FwCli.usageLine`, and the "no plugin X,
+declared: …" message is `Session.requireCore` — so a bad plugin name reads the
+same whether it was about to run something or only to describe it.
+
+`fw run <plugin>` with no action used to be a usage error. It is a question, and
+it is answered. Help never invokes anything, which a test asserts by counting.
+
 ### Next
+
+Item 0 of the previous list — queries for what the plugins already know — is
+done: `check`, `describe`, `entries` and `list` all exist. A framework-level
+`read <address>` is still the tidier long-term answer and still premature with
+two plugins; add it when a third makes you write the same thing a third time.
 
 1. **The CLI story proper** — how a user gets `fw` without `dart run`, and
    whether `fw` learns to fetch its own Flutter (it cannot today, which is why
@@ -627,6 +976,23 @@ something was required to name it.
    cheap.
 3. **Global search**, once there is a viewer to drive. The rule to carry is in
    "Deferred": a keystroke may never start work, an intent may.
+
+Smaller things the last session left on the floor, in the order I would take
+them:
+
+- **`Artifact` publishes no shape**, because its `toJson` is hand-written. It is
+  the most-returned result of all. Teaching the extractor to read a
+  `@JsonKey(toJson:)` converter's return type would fix it — worth doing when a
+  *second* class needs a converter, not before.
+- **A `PluginResult` is not required.** An action may still return a raw map,
+  and the renderers still print one. That is deliberate kindness to a plugin
+  that has not adopted a type, and it is also the hole through which an
+  undocumented result shape can arrive. Whether to close it is a decision for
+  when a third plugin exists.
+- **The daemon-backed actions are unverified by the parity harness.** `check`,
+  `screenshot` and `describe --knobs` need an SDK, a compile and a guest, so the
+  matrix covers the cheap ones and a fake. `headless_check.dart` is where an
+  integration pass would live.
 
 Two standing habits rather than tasks:
 

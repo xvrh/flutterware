@@ -5,6 +5,7 @@ import 'package:flutterware/src/logs/remote_log_client.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/dependencies_plugin.dart';
 import 'package:flutterware_app/src/plugins/native/registry.dart';
+import 'package:flutterware_app/src/session/session.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
@@ -34,15 +35,16 @@ void main() {
       appContext: AppContext(logger: LogClient.print()),
       flutterSdk: FlutterSdkPath('/tmp/flutter'),
     );
-    var plugins = buildNativeRegistry().resolve(
-      manifest,
-      Worktree(path: root, branch: 'xha/overhaulrework'),
-      workspace,
+    var session = Session.resolved(
+      worktree: Worktree(path: root, branch: 'xha/overhaulrework'),
+      workspace: workspace,
+      manifest: manifest,
     );
+    var plugins = buildNativeRegistry().resolve(session.cores);
 
     print('\n══ cold — nothing has been looked at ══\n');
-    for (var plugin in plugins) {
-      print(plugin.report.toText());
+    for (var report in session.reports) {
+      print(report.toText());
     }
 
     // A CLI would subscribe for the duration of the request; this is that.
@@ -56,8 +58,8 @@ void main() {
     }
 
     print('\n══ after subscribing ══\n');
-    for (var plugin in plugins) {
-      print(plugin.report.toText());
+    for (var report in session.reports) {
+      print(report.toText());
     }
 
     workspace.dispose();

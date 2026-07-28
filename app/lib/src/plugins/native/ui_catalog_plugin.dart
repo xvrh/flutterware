@@ -7,7 +7,6 @@ import 'package:path/path.dart' as p;
 import '../../catalog/catalog_session.dart';
 import '../../catalog/catalog_view.dart';
 import '../native_plugin.dart';
-import '../plugin_host.dart';
 import 'ui_catalog_core.dart';
 
 export 'ui_catalog_core.dart' show UiCatalogCore, uiCatalogPluginId;
@@ -24,16 +23,11 @@ export 'ui_catalog_core.dart' show UiCatalogCore, uiCatalogPluginId;
 /// panel does not throw away a running daemon — and so the sidebar can say what
 /// the compiler is doing while you are looking elsewhere. That progress reaches
 /// the report through [UiCatalogCore.busyStatusFor].
-class UiCatalogPlugin extends NativePlugin {
-  UiCatalogPlugin(PluginHost host) : this._(UiCatalogCore(host));
-
-  UiCatalogPlugin._(this.core) : super(core.host) {
+class UiCatalogPlugin extends NativePlugin<UiCatalogCore> {
+  UiCatalogPlugin(super.core) {
     core.busyStatusFor = _busyStatusFor;
-    _changes = core.changes.listen((_) => notifyListeners());
   }
 
-  final UiCatalogCore core;
-  late final StreamSubscription<int> _changes;
   final _sessions = <String, CatalogSession>{};
 
   List<String> get packages => core.packages;
@@ -76,15 +70,6 @@ class UiCatalogPlugin extends NativePlugin {
   }
 
   @override
-  PluginReport get report => core.report;
-
-  @override
-  Future<Object?> invoke(
-    String actionId, {
-    Map<String, Object?> arguments = const {},
-  }) => core.invoke(actionId, arguments: arguments);
-
-  @override
   Widget buildPanel(BuildContext context, String? childId) =>
       _CatalogPanel(plugin: this, packagePath: childId ?? packages.firstOrNull);
 
@@ -98,8 +83,6 @@ class UiCatalogPlugin extends NativePlugin {
         ..dispose();
     }
     _sessions.clear();
-    unawaited(_changes.cancel());
-    core.dispose();
     super.dispose();
   }
 }

@@ -8,6 +8,7 @@ import 'package:flutterware/src/logs/remote_log_client.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/plugins/native_plugin.dart';
+import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/plugins/registry.dart';
 import 'package:flutterware_app/src/plugins/worktree_session.dart';
@@ -27,12 +28,13 @@ Workspace _workspace() => Workspace(
   flutterSdk: FlutterSdkPath('/tmp/flutter'),
 );
 
-class _Fake extends NativePlugin {
-  _Fake(super.host, {this.status = Status.none, this.teardown = const []});
+class _FakeCore extends PluginCore {
+  _FakeCore(super.host, {this.status = Status.none, this.teardown = const []});
 
   final Status status;
   final List<TeardownStep> teardown;
   var disposed = false;
+  var invoked = <String, Object?>{};
 
   @override
   PluginReport get report => PluginReport(
@@ -44,9 +46,18 @@ class _Fake extends NativePlugin {
   );
 
   @override
-  Widget buildPanel(BuildContext context, String? childId) => const SizedBox();
+  Future<Object?> invoke(
+    String actionId, {
+    Map<String, Object?> arguments = const {},
+  }) async {
+    if (actionId != 'go') {
+      return super.invoke(actionId, arguments: arguments);
+    }
+    invoked = arguments;
+    return 'went';
+  }
 
-  void bump() => notifyListeners();
+  void bump() => notifyChanged();
 
   @override
   void dispose() {
@@ -55,57 +66,99 @@ class _Fake extends NativePlugin {
   }
 }
 
-PluginManifest _manifest(List<String> ids) => PluginManifest([
-  for (var id in ids) PluginDeclaration(id: id, label: id.split('.').last),
+class _Fake extends NativePlugin<_FakeCore> {
+  _Fake(super.core);
+
+  var disposed = false;
+
+  @override
+  Widget buildPanel(BuildContext context, String? childId) => const SizedBox();
+
+  @override
+  void dispose() {
+    disposed = true;
+    super.dispose();
+  }
+}
+
+PluginCoreFactory _core({
+  Status status = Status.none,
+  List<TeardownStep> teardown = const [],
+}) =>
+    (host) => _FakeCore(host, status: status, teardown: teardown);
+
+PluginManifest _manifest(
+  List<String> ids, {
+  Map<String, Object?> config = const {},
+}) => PluginManifest([
+  for (var id in ids)
+    PluginDeclaration(id: id, label: id.split('.').last, config: config),
 ]);
+
+/// A worktree session over fake cores, each with a panel — the arrangement the
+/// shell builds, with the two registries agreeing.
+WorktreeSession _session(
+  Map<String, PluginCoreFactory> cores, {
+  Map<String, Object?> config = const {},
+  List<String>? panelsFor,
+}) => WorktreeSession.resolve(
+  worktree: _worktree,
+  manifest: _manifest(cores.keys.toList(), config: config),
+  registry: PluginRegistry({
+    for (var id in panelsFor ?? cores.keys) id: panelFor<_FakeCore>(_Fake.new),
+  }),
+  workspace: _workspace(),
+  coreRegistry: PluginCoreRegistry(cores),
+);
 
 void main() {
   group('registry', () {
     test('resolves declarations in the config file order', () {
-      var registry = PluginRegistry({'a.one': _Fake.new, 'a.two': _Fake.new});
-      var plugins = registry.resolve(
-        _manifest(['a.two', 'a.one']),
-        _worktree,
-        _workspace(),
-      );
-      expect(plugins.map((p) => p.id), ['a.two', 'a.one']);
+      var session = _session({'a.two': _core(), 'a.one': _core()});
+      expect(session.plugins.map((p) => p.id), ['a.two', 'a.one']);
+      expect(session.session.cores.map((c) => c.id), ['a.two', 'a.one']);
     });
 
     test('surfaces an unknown id instead of dropping it', () {
-      var registry = PluginRegistry({'a.one': _Fake.new});
-      var plugins = registry.resolve(
-        _manifest(['a.one', 'ghost']),
-        _worktree,
-        _workspace(),
-      );
+      // "ghost" is declared but neither registry knows it.
+      var ghost = WorktreeSession.resolve(
+        worktree: _worktree,
+        manifest: _manifest(['a.one', 'ghost']),
+        registry: PluginRegistry({'a.one': panelFor<_FakeCore>(_Fake.new)}),
+        workspace: _workspace(),
+        coreRegistry: PluginCoreRegistry({'a.one': _core()}),
+      ).plugins.last;
 
-      expect(plugins, hasLength(2));
-      var ghost = plugins.last;
       expect(ghost, isA<MissingPlugin>());
-      expect(ghost.report.status.tone, Tone.error);
-      expect(ghost.report.view.toText(), contains('ghost'));
+      expect(ghost.core.report.status.tone, Tone.error);
+      expect(ghost.core.report.view.toText(), contains('ghost'));
+    });
+
+    test('a core with no panel keeps its real report', () {
+      // The GUI has no screen for it; `fw` and MCP are unaffected. Reporting
+      // an error in the sidebar would hide a plugin that works.
+      var session = _session({
+        'a.one': _core(status: Status.warn('2 outdated')),
+      }, panelsFor: const []);
+
+      var plugin = session.plugins.single;
+      expect(plugin, isA<MissingPlugin>());
+      expect(plugin.core.report.status, Status.warn('2 outdated'));
     });
 
     test('passes declared config through to the host', () {
       PluginHost? seen;
-      var registry = PluginRegistry({
-        'a.one': (host) {
-          seen = host;
-          return _Fake(host);
+      var session = _session(
+        {
+          'a.one': (host) {
+            seen = host;
+            return _FakeCore(host);
+          },
         },
-      });
-      registry.resolve(
-        PluginManifest([
-          PluginDeclaration(
-            id: 'a.one',
-            label: 'One',
-            config: {'compose': 'dev.yml', 'watch': true},
-          ),
-        ]),
-        _worktree,
-        _workspace(),
+        config: {'compose': 'dev.yml', 'watch': true},
       );
 
+      expect(session.plugins, hasLength(1));
       expect(seen!.string('compose'), 'dev.yml');
       expect(seen!.boolean('watch'), isTrue);
       expect(seen!.string('missing', 'fallback'), 'fallback');
@@ -113,74 +166,76 @@ void main() {
     });
 
     test('refuses a duplicate registration', () {
-      var registry = PluginRegistry({'a.one': _Fake.new});
+      var registry = PluginRegistry({'a.one': panelFor<_FakeCore>(_Fake.new)});
       expect(
-        () => registry.register('a.one', _Fake.new),
+        () => registry.register('a.one', panelFor<_FakeCore>(_Fake.new)),
         throwsA(isA<StateError>()),
       );
     });
   });
 
   group('worktree session', () {
-    test('closing disposes every plugin', () {
-      var registry = PluginRegistry({'a.one': _Fake.new, 'a.two': _Fake.new});
-      var session = WorktreeSession.resolve(
-        worktree: _worktree,
-        manifest: _manifest(['a.one', 'a.two']),
-        registry: registry,
-        workspace: _workspace(),
-      );
+    test('closing disposes every panel and every core', () {
+      var session = _session({'a.one': _core(), 'a.two': _core()});
       var plugins = session.plugins.cast<_Fake>();
+      var cores = session.session.cores.cast<_FakeCore>();
 
       expect(plugins.every((p) => p.disposed), isFalse);
       session.dispose();
       expect(plugins.every((p) => p.disposed), isTrue);
+      expect(cores.every((c) => c.disposed), isTrue);
       expect(session.isDisposed, isTrue);
     });
 
     test('reduces to the most severe plugin status', () {
-      var session = WorktreeSession(
-        worktree: _worktree,
-        plugins: [
-          _Fake(_host('a'), status: Status.good('ok')),
-          _Fake(_host('b'), status: Status.error('3 failing')),
-          _Fake(_host('c'), status: Status.warn('stack down')),
-        ],
-      );
+      var session = _session({
+        'a.one': _core(status: Status.good('ok')),
+        'a.two': _core(status: Status.error('3 failing')),
+        'a.three': _core(status: Status.warn('stack down')),
+      });
       expect(session.status.tone, Tone.error);
       expect(session.status.message, '3 failing');
     });
 
-    test('a plugin update notifies the session', () {
-      var plugin = _Fake(_host('a'));
-      var session = WorktreeSession(worktree: _worktree, plugins: [plugin]);
+    test('a core update notifies the session', () async {
+      var session = _session({'a.one': _core()});
       var notified = 0;
       session.addListener(() => notified++);
 
-      plugin.bump();
+      (session.session.cores.single as _FakeCore).bump();
+      // The core coalesces bursts into one microtask, and the stream delivers
+      // asynchronously; both are why the panel never marks the shell dirty
+      // during a build.
+      await pumpEventQueue();
       expect(notified, 1);
     });
 
     test('collects teardown steps in phase order', () {
-      var session = WorktreeSession(
-        worktree: _worktree,
-        plugins: [
-          _Fake(
-            _host('a'),
-            teardown: const [
-              TeardownStep('c', 'cleanup', phase: TeardownPhase.cleanup),
-            ],
-          ),
-          _Fake(
-            _host('b'),
-            teardown: const [
-              TeardownStep('i', 'infra', phase: TeardownPhase.infra),
-              TeardownStep('a', 'apps', phase: TeardownPhase.apps),
-            ],
-          ),
-        ],
-      );
+      var session = _session({
+        'a.one': _core(
+          teardown: const [
+            TeardownStep('c', 'cleanup', phase: TeardownPhase.cleanup),
+          ],
+        ),
+        'a.two': _core(
+          teardown: const [
+            TeardownStep('i', 'infra', phase: TeardownPhase.infra),
+            TeardownStep('a', 'apps', phase: TeardownPhase.apps),
+          ],
+        ),
+      });
       expect(session.teardownSteps.map((s) => s.id), ['a', 'i', 'c']);
+    });
+
+    test('invoking goes through the session, not the panel', () async {
+      var session = _session({'a.one': _core()});
+      var result = await session
+          .invoke('one', 'go', arguments: {'k': 'v'})
+          .done;
+
+      expect(result.ok, isTrue);
+      expect(result.value, 'went');
+      expect((session.session.cores.single as _FakeCore).invoked, {'k': 'v'});
     });
   });
 
@@ -251,6 +306,3 @@ void main() {
     });
   });
 }
-
-PluginHost _host(String id) =>
-    PluginHost(id: id, label: id, worktree: _worktree, workspace: _workspace());

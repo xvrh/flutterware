@@ -8,6 +8,7 @@ import 'package:flutterware/src/logs/remote_log_client.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/plugins/native_plugin.dart';
+import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/plugins/registry.dart';
 import 'package:flutterware_app/src/shell/shell_controller.dart';
 import 'package:flutterware_app/src/shell/worktree_discovery.dart';
@@ -24,8 +25,8 @@ const _manifestJson =
 
 var _disposedIds = <String>[];
 
-class _Fake extends NativePlugin {
-  _Fake(super.host, {this.guards = const []});
+class _FakeCore extends PluginCore {
+  _FakeCore(super.host, {this.guards = const []});
 
   final List<Guard> guards;
 
@@ -33,9 +34,8 @@ class _Fake extends NativePlugin {
   PluginReport get report =>
       PluginReport(id: host.id, label: host.label, guards: guards);
 
-  @override
-  Widget buildPanel(BuildContext context, String? childId) => const SizedBox();
-
+  /// Closing a worktree has to reach the core: that is where watchers,
+  /// subscriptions and processes live, and the panel is only a screen.
   @override
   void dispose() {
     _disposedIds.add('${host.worktree.path}:${host.id}');
@@ -43,20 +43,30 @@ class _Fake extends NativePlugin {
   }
 }
 
+class _Fake extends NativePlugin<_FakeCore> {
+  _Fake(super.core);
+
+  @override
+  Widget buildPanel(BuildContext context, String? childId) => const SizedBox();
+}
+
+PluginRegistry _panels(Iterable<String> ids) =>
+    PluginRegistry({for (var id in ids) id: panelFor<_FakeCore>(_Fake.new)});
+
 /// Mutable so a test can change what git reports between calls.
 var _currentListing = _listing;
 
 ShellController _controller({
   String manifest = _manifestJson,
   int manifestExit = 0,
-  Map<String, NativePluginFactory>? factories,
+  Map<String, PluginCoreFactory>? cores,
 }) {
+  cores ??= {'a.one': _FakeCore.new, 'a.two': _FakeCore.new};
   return ShellController(
     appContext: AppContext(logger: LogClient.print()),
     flutterSdk: FlutterSdkPath('/tmp/flutter'),
-    registry: PluginRegistry(
-      factories ?? {'a.one': _Fake.new, 'a.two': _Fake.new},
-    ),
+    registry: _panels(cores.keys),
+    coreRegistry: PluginCoreRegistry(cores),
     manifestLoader: _StubLoader(manifest, manifestExit),
     discovery: WorktreeDiscovery(
       runProcess: (_, _, {workingDirectory}) async =>
@@ -182,9 +192,10 @@ void main() {
 
   test('a blocking guard refuses the reload too', () async {
     var shell = _controller(
-      factories: {
-        'a.one': (host) => _Fake(host, guards: const [Guard.block('dirty')]),
-        'a.two': _Fake.new,
+      cores: {
+        'a.one': (host) =>
+            _FakeCore(host, guards: const [Guard.block('dirty')]),
+        'a.two': _FakeCore.new,
       },
     );
     await shell.start('/repo');
@@ -222,9 +233,10 @@ void main() {
 
   test('a blocking guard refuses the close', () async {
     var shell = _controller(
-      factories: {
-        'a.one': (host) => _Fake(host, guards: const [Guard.block('dirty')]),
-        'a.two': _Fake.new,
+      cores: {
+        'a.one': (host) =>
+            _FakeCore(host, guards: const [Guard.block('dirty')]),
+        'a.two': _FakeCore.new,
       },
     );
     await shell.start('/repo');
@@ -237,8 +249,8 @@ void main() {
 
   test('a warning guard does not refuse the close', () async {
     var shell = _controller(
-      factories: {
-        'a.one': (host) => _Fake(host, guards: const [Guard.warn('busy')]),
+      cores: {
+        'a.one': (host) => _FakeCore(host, guards: const [Guard.warn('busy')]),
       },
     );
     await shell.start('/repo');

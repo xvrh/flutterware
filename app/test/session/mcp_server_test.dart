@@ -50,6 +50,13 @@ void main() {
     await toClient.close();
   });
 
+  test('the declared tool list is what a client receives', () async {
+    // The capability document is generated from `FlutterwareMcpServer.tools`;
+    // this is what stops that list describing a surface nobody serves.
+    var listed = (await connection.listTools()).tools.map((t) => t.name);
+    expect(listed, FlutterwareMcpServer.tools.map((t) => t.name));
+  });
+
   test('exposes a small fixed tool set, not one tool per action', () async {
     var tools = (await connection.listTools()).tools
         .map((t) => t.name)
@@ -131,7 +138,7 @@ void main() {
       (dependencies['actions']! as List).cast<Map<String, Object?>>().map(
         (a) => a['id'],
       ),
-      ['reload'],
+      ['list'],
     );
   });
 
@@ -140,12 +147,12 @@ void main() {
       await connection.callTool(
         CallToolRequest(
           name: 'flutterware_invoke',
-          arguments: {'plugin': 'dependencies', 'action': 'reload'},
+          arguments: {'plugin': 'dependencies', 'action': 'list'},
         ),
       ),
     );
     expect(payload['plugin'], 'flutterware.dependencies');
-    expect(payload['action'], 'reload');
+    expect(payload['action'], 'list');
     // Saves the agent a second round-trip to see what changed.
     expect(payload['report'], isA<Map<String, Object?>>());
   });
@@ -155,7 +162,7 @@ void main() {
       var result = await connection.callTool(
         CallToolRequest(
           name: 'flutterware_invoke',
-          arguments: {'plugin': 'nope', 'action': 'reload'},
+          arguments: {'plugin': 'nope', 'action': 'list'},
         ),
       );
       expect(result.isError, isTrue);

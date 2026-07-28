@@ -591,7 +591,7 @@ class _Sidebar extends StatelessWidget {
                     // every package of every plugin at once is a wall, not a
                     // summary.
                     if (shell.selectedPluginId == plugin.id)
-                      for (var child in plugin.report.children)
+                      for (var child in plugin.core.report.children)
                         _ChildRow(shell, plugin.id, child),
                   ],
               ],
@@ -711,7 +711,7 @@ class _PluginRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var report = plugin.report;
+    var report = plugin.core.report;
     return _Row(
       label: report.label,
       selected: shell.selectedPluginId == plugin.id,

@@ -26,6 +26,9 @@ const _pureEntryPoints = [
   'bin/flutterware.dart',
   'bin/wrap.dart',
   'bin/passthrough.dart',
+  // Writes docs/capabilities.md. Pure for the same reason `fw` is: it
+  // resolves cores, and a core that reached a panel would drag in Flutter.
+  'tool/generate_capabilities.dart',
   // The catalog compile daemon. `ResidentCompiler` spawns
   // `Platform.resolvedExecutable`; inside a Flutter binary that is the app,
   // which starts a session, which asks for a compiler. Each generation

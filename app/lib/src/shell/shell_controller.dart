@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../context.dart';
 import '../plugins/manifest_loader.dart';
+import '../plugins/plugin_core.dart';
 import '../plugins/registry.dart';
 import '../plugins/worktree_session.dart';
 import '../utils/flutter_sdk.dart';
@@ -37,12 +38,19 @@ class ShellController extends ChangeNotifier {
     required this.flutterSdk,
     required this.registry,
     required this.manifestLoader,
+    this.coreRegistry,
     WorktreeDiscovery? discovery,
   }) : _discovery = discovery ?? WorktreeDiscovery();
 
   final AppContext appContext;
   final FlutterSdkPath flutterSdk;
+
+  /// Which panels this build can draw.
   final PluginRegistry registry;
+
+  /// Which cores this build can run. Null means the default set — the same one
+  /// `fw` and MCP link, which is what keeps the three from drifting.
+  final PluginCoreRegistry? coreRegistry;
   final ManifestLoader manifestLoader;
   final WorktreeDiscovery _discovery;
 
@@ -254,6 +262,7 @@ class ShellController extends ChangeNotifier {
       manifest: manifest,
       registry: registry,
       workspace: workspace,
+      coreRegistry: coreRegistry,
     )..addListener(notifyListeners);
 
     notifyListeners();
@@ -309,7 +318,7 @@ class ShellController extends ChangeNotifier {
     var plugin = selectedSession?.pluginById(id);
     _selections[_selectedPath!] = (
       pluginId: id,
-      childId: plugin?.report.children.firstOrNull?.id,
+      childId: plugin?.core.report.children.firstOrNull?.id,
     );
     notifyListeners();
   }

@@ -1,4 +1,5 @@
 import 'address.dart';
+import 'plugin_result.dart';
 
 /// What a job hands back.
 ///
@@ -11,7 +12,7 @@ import 'address.dart';
 /// [address] is required. An artifact that cannot say what it is *of* is not
 /// reproducible, and a screenshot without its resolved axes is exactly the
 /// under-specification the entry model warned about.
-class Artifact {
+class Artifact implements PluginResult {
   static const png = 'image/png';
   static const plainText = 'text/plain';
   static const json = 'application/json';
@@ -50,6 +51,7 @@ class Artifact {
   /// exit codes. Never load-bearing — a reader that ignores it still works.
   final Map<String, Object?> meta;
 
+  @override
   Map<String, Object?> toJson() => {
     'kind': kind,
     'address': address.toString(),
