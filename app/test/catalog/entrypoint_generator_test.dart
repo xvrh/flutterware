@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/entrypoint_generator.dart';
-import 'package:flutterware_app/src/catalog/shell_descriptor.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -179,92 +178,106 @@ Widget avatarTileEmpty() => const Placeholder();
     );
   });
 
-  group('a shell', () {
-    const shell = ShellDescriptor(
-      path: 'demo/shell.dart',
-      symbol: 'wrapInApp',
-      axes: [
-        ShellAxis(
-          name: 'flavor',
-          typeName: 'Flavor',
-          defaultSource: 'Flavor.dev',
+  group('carried imports', () {
+    /// Rewrites the demo file and returns the wrapper generated for it.
+    String wrapperFor(String source) {
+      File(
+        p.join(root.path, 'demo', 'team', 'avatar_tile.dart'),
+      ).writeAsStringSync(source);
+      generator.select(members);
+      return wrapper(0);
+    }
+
+    test('a directive split across lines is carried whole', () {
+      // What the regex this replaced got wrong. `dart format` wraps a directive
+      // as soon as a `show` clause makes it long enough, and a line-oriented
+      // match then carried a fragment — or, if the URI was on the second line,
+      // nothing at all.
+      var generated = wrapperFor('''
+import 'package:flutter/material.dart'
+    show Widget, Placeholder;
+
+import '../shell.dart'
+    show wrapInApp;
+
+Widget avatarTileMembers() => const Placeholder();
+''');
+      // Re-emitted on one line, because the directive is printed from the AST
+      // rather than copied. Its meaning is what has to survive, not its
+      // wrapping — and the generated file is not one anybody reads for style.
+      expect(
+        generated,
+        contains(
+          "import 'package:flutter/material.dart' "
+          'show Widget, Placeholder;',
         ),
-        ShellAxis(name: 'compact', typeName: 'bool', defaultSource: 'false'),
-      ],
-    );
+      );
+      expect(
+        generated,
+        contains("import '../../demo/shell.dart' show wrapInApp;"),
+      );
+    });
+
+    test('a prefix, a hide and a deferred load all survive', () {
+      var generated = wrapperFor('''
+import 'package:flutter/material.dart' as m hide Placeholder;
+import '../shell.dart' as s;
+
+m.Widget avatarTileMembers() => s.wrapInApp(const m.SizedBox());
+''');
+      expect(
+        generated,
+        contains(
+          "import 'package:flutter/material.dart' as m hide Placeholder;",
+        ),
+      );
+      expect(generated, contains("import '../../demo/shell.dart' as s;"));
+    });
+
+    test('an export is carried too, and a part is not', () {
+      // A part belongs to the library that declares it; carrying one would
+      // claim a second owner for the same file.
+      var generated = wrapperFor('''
+import 'package:flutter/material.dart';
+export '../shell.dart';
+part 'avatar_tile.g.dart';
+
+Widget avatarTileMembers() => const Placeholder();
+''');
+      expect(generated, contains("export '../../demo/shell.dart';"));
+      expect(generated, isNot(contains('part ')));
+    });
+  });
+
+  group('a shell', () {
     const wrapped = CatalogEntry(
       path: 'demo/team/avatar_tile.dart',
       symbol: 'avatarTileMembers',
       name: 'Members',
       annotation: "Demo(name: 'Members', wrapper: wrapInApp)",
-      wrapper: 'wrapInApp',
-      shellId: 'demo/shell.dart#wrapInApp',
     );
 
-    setUp(() {
-      File(p.join(root.path, 'demo', 'shell.dart')).writeAsStringSync('''
-import 'package:flutter/material.dart';
-
-import 'flavors.dart';
-
-@CatalogShell()
-Widget wrapInApp(Widget child, {Flavor flavor = Flavor.dev}) => child;
-''');
-      generator.shells = {shell.id: shell};
+    test('is called through preview.wrapper, like any other wrapper', () {
+      // There is nothing else left to call. The axes used to live in named
+      // parameters that `WidgetWrapper` erases, which is why the shell had to
+      // be named here; they are declared inside the shell now, so this file has
+      // no reason to know one exists.
+      generator.select(wrapped);
+      expect(entrypoint(), contains('var wrapper = preview.wrapper ??'));
+      expect(entrypoint(), isNot(contains('fwShellWrap')));
+      expect(entrypoint(), isNot(contains('CatalogAxesScope')));
+      expect(wrapper(0), isNot(contains('CatalogAxes')));
     });
 
-    test('is called by name, which is where the axes still exist', () {
-      // Through `preview.wrapper` they would be gone: that field is a
-      // WidgetWrapper, and the typedef erases every named parameter.
+    test('the annotation carries the wrapper, so the demo imports suffice', () {
+      // `wrapInApp` is named in the annotation's source text and resolved by
+      // the compiler. The demo's own `import '../shell.dart'` — rebased to
+      // resolve from the generated directory — is what puts it in scope. The
+      // shell's file contributes nothing of its own, so two files' import sets
+      // are never merged and can never collide.
       generator.select(wrapped);
-      expect(
-        wrapper(0),
-        contains('Widget _fwWrapInShell(Widget child) => wrapInApp('),
-      );
-      expect(entrypoint(), contains('_shellWrap ?? preview.wrapper'));
-    });
-
-    test('hands the enum its own values, which is where options come from', () {
-      generator.select(wrapped);
-      expect(
-        wrapper(0),
-        contains(
-          "flavor: CatalogAxes.instance.pick('flavor', Flavor.values, "
-          'Flavor.dev),',
-        ),
-      );
-    });
-
-    test('a bool axis is a flag, having no values to hand over', () {
-      generator.select(wrapped);
-      expect(
-        wrapper(0),
-        contains("compact: CatalogAxes.instance.flag('compact', false),"),
-      );
-    });
-
-    test("carries the shell's file and its imports, for the axis types", () {
-      // `Flavor` has to resolve where the generated call is written, and that
-      // is not necessarily where the demo is: it may be declared beside the
-      // shell, or imported by it.
-      generator.select(wrapped);
+      expect(wrapper(0), contains('wrapper: wrapInApp'));
       expect(wrapper(0), contains("import '../../demo/shell.dart';"));
-      expect(wrapper(0), contains("import '../../demo/flavors.dart';"));
-    });
-
-    test('an entry with no shell says so, and goes the old way', () {
-      generator.select(members);
-      expect(wrapper(0), contains('String? get fwShellId => null;'));
-      expect(
-        wrapper(0),
-        contains('Widget Function(Widget)? get fwShellWrap => null;'),
-      );
-    });
-
-    test('the scope wraps the entry, so a turn rebuilds the shell', () {
-      generator.select(wrapped);
-      expect(entrypoint(), contains('CatalogAxesScope('));
-      expect(entrypoint(), contains('shellId: _shellId,'));
     });
   });
 }

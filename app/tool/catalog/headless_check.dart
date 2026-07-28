@@ -107,28 +107,6 @@ Future<void> main(List<String> args) async {
   );
   check(entries.length >= 5, 'discovery found the demo entries');
 
-  // The shell: found by the same scan that finds entries, with its axes read
-  // off its signature. Nothing has to run for this — the whole point of
-  // reading the parameter list rather than the shell's behaviour.
-  var shell = ready.shells.firstWhereOrNull((s) => s.symbol == 'wrapInApp');
-  var otherShell = ready.shells.firstWhereOrNull(
-    (s) => s.symbol == 'wrapInPlainApp',
-  );
-  check(shell != null && otherShell != null, 'discovery found both shells');
-  check(
-    shell?.axes.map((a) => '${a.name}:${a.typeName}').join(',') ==
-        'flavor:Flavor,compact:bool',
-    'and read its axes off the signature — ${shell?.axes.map((a) => a.name)}',
-  );
-  check(
-    shell?.axes.map((a) => a.defaultSource).join(',') == 'Flavor.dev,false',
-    'including the defaults, as written',
-  );
-  check(
-    entries.every((e) => e.shellId == shell?.id) == false &&
-        entries.where((e) => e.shellId == otherShell?.id).length == 1,
-    'each entry is pointed at the shell *its own* wrapper names',
-  );
   check(
     entries.any((e) => e.group == 'Avatar tile'),
     'a file with several entries derived a group',
@@ -792,22 +770,38 @@ Future<void> main(List<String> args) async {
     for (var a in (described?['axes'] as List? ?? [])) (a as Map)['name'],
   ];
   check(
-    described?['shell'] == shell?.id,
+    described?['shell'] == 'app',
     'the guest reports which shell it is rendering in — ${described?['shell']}',
+  );
+  // Against the knobs report rather than a fixed entry, because both are
+  // stamped by the same guest from the same build. Agreeing is the property
+  // that matters: it is what lets the host tell a fresh report from one that
+  // landed between the reload and the frame.
+  var describedKnobs = await vmService.callExtension(
+    'ext.flutterware.parameters',
+  );
+  check(
+    described?['entry'] != null &&
+        described?['entry'] == describedKnobs?['entry'],
+    'and which entry declared them, which is what makes a stale read '
+    'detectable — ${described?['entry']}',
   );
   check(
     axisNames.join(',') == 'flavor,compact',
-    'and the axes its signature declared — $axisNames',
+    'and the axes the shell asked for — $axisNames',
   );
   check(
     ((described?['axes'] as List).first as Map)['options'].toString() ==
-        '[dev, staging, prod]',
-    'with the options the enum has, which only the guest could know',
+        '[Dev, Staging, Production]',
+    'with the labels the shell wrote, which only the guest could know',
   );
 
-  // Turning one, which is the whole point: it goes in as a name, comes out as
-  // the enum value the shell was called with, and is on screen in a frame.
-  Future<String> setAxes(Map<String, Object?> selections) async {
+  // Turning one, which is the whole point: it goes in as a label, comes out as
+  // the value the shell mapped it to, and is on screen in a frame.
+  //
+  // Keyed by shell, because the host sends every shell's selections at once —
+  // it cannot know which shell an entry uses until that entry has built.
+  Future<String> setAxes(Map<String, Map<String, Object?>> selections) async {
     await vmService.callExtension(
       'ext.flutterware.setAxes',
       args: {'payload': jsonEncode(selections)},
@@ -822,22 +816,28 @@ Future<void> main(List<String> args) async {
   }
 
   if (probing) {
-    var staged = await setAxes({'flavor': 'staging', 'compact': true});
+    var staged = await setAxes({
+      'app': {'flavor': 'Staging', 'compact': true},
+    });
     check(
       staged.contains('SHELL staging compact'),
       'turning an axis rebuilds the shell around the demo — $staged',
     );
-    var back = await setAxes({'flavor': null, 'compact': null});
+    var back = await setAxes({
+      'app': {'flavor': null, 'compact': null},
+    });
     check(
       back.contains('SHELL dev roomy'),
-      'and a null selection puts it back to the signature default — $back',
+      'and a null selection puts it back to the shell default — $back',
     );
   }
 
   // The selection outlives the entry, which is what separates an axis from a
   // knob: it belongs to the shell, not to whatever is being rendered inside it.
   if (probing) {
-    await setAxes({'flavor': 'prod'});
+    await setAxes({
+      'app': {'flavor': 'Production'},
+    });
     await _renderEntry(daemon, vmService, probes, entries.first);
     var elsewhere = await _nextProbe(
       probes.stream,
@@ -848,19 +848,23 @@ Future<void> main(List<String> args) async {
       elsewhere.contains('SHELL prod'),
       'a selection survives switching entries — $elsewhere',
     );
-    await setAxes({'flavor': null});
+    await setAxes({
+      'app': {'flavor': null},
+    });
   }
 
   // A second shell. The top bar is the axes of whichever shell the entry on
   // screen uses, so moving between them has to change what there is to turn —
   // and a selection must not leak across two shells that name an axis alike.
   if (probing) {
-    await setAxes({'flavor': 'prod'});
+    await setAxes({
+      'app': {'flavor': 'Production'},
+    });
     var elsewhere = entries.firstWhere((e) => e.symbol == 'elsewhere');
     await _renderEntry(daemon, vmService, probes, elsewhere);
     var there = await vmService.callExtension('ext.flutterware.axes');
     check(
-      there?['shell'] == otherShell?.id,
+      there?['shell'] == 'plain',
       'the report names the shell the entry actually uses — ${there?['shell']}',
     );
     check(
@@ -872,16 +876,13 @@ Future<void> main(List<String> args) async {
     );
     var options = ((there?['axes'] as List).last as Map)['options'].toString();
     check(
-      options == '[plain, fancy]',
-      "and its own enum, not the other shell's — $options",
+      options == '[Plain, Fancy]',
+      "and its own options, not the other shell's — $options",
     );
 
-    // Both shells declare `flavor`, and the guest keys selections by name
-    // alone. Two things stop them inheriting each other's, and this covers the
-    // guest's half: a name the enum does not have falls back to the default.
-    // The host's half — naming every axis, with a null for the unchosen — is
-    // what covers two shells that share a *value* name too, and is tested
-    // against `ShellSelections` rather than here.
+    // Both shells declare `flavor`. They cannot inherit each other's because
+    // selections are filed under the shell's own id on both sides of the wire
+    // — which is what this checks: `app`'s Production must not reach `plain`.
     var drawn = await _nextProbe(
       probes.stream,
       const Duration(seconds: 10),
@@ -893,10 +894,10 @@ Future<void> main(List<String> args) async {
     );
   }
 
-  // An axis added to the signature. The shell is baked into the wrapper of
-  // every entry that names it, so this reaches far more than the file it
-  // happened in — which is the case a rescan that only looked at entries would
-  // get silently wrong.
+  // An axis added to the shell. Nothing is regenerated for this and nothing is
+  // rescanned: the shell is an ordinary function the demo already imports, so
+  // recompiling reaches it the way it reaches any other edited file, and the
+  // new axis arrives with the reload.
   var shellSource = File(
     p.join(packageRoot, 'tool', 'catalog', 'demos', 'shell.dart'),
   );
@@ -904,8 +905,9 @@ Future<void> main(List<String> args) async {
   try {
     shellSource.writeAsStringSync(
       shellOriginal.replaceFirst(
-        '  bool compact = false,',
-        '  bool compact = false,\n  bool wide = false,',
+        "    var compact = topBar.flag('compact', false);",
+        "    var compact = topBar.flag('compact', false);\n"
+            "    topBar.flag('wide', false);",
       ),
     );
     // Queued like any other request, so the select behind it sees the rescan.
@@ -923,7 +925,7 @@ Future<void> main(List<String> args) async {
       ];
       check(
         reported.join(',') == 'flavor,compact,wide',
-        'an axis added to the signature reaches the entry — $reported',
+        'an axis added to the shell reaches the entry — $reported',
       );
     }
   } finally {

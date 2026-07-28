@@ -56,10 +56,11 @@ abstract class UICatalogState {
   /// Controls belonging to one entry, read while it builds.
   ///
   /// App-wide switches — a flavour, a locale, a theme — are not declared here.
-  /// They are the optional named parameters of the project's `@CatalogShell`,
-  /// which is a declaration a scan can read rather than one only a running
-  /// build can, and they persist across entries because they belong to the
-  /// shell rather than to whatever it is wrapping.
+  /// They are declared in the project's `CatalogShell`, which hands them out
+  /// through `TopBarState` rather than through this, and they persist across
+  /// entries because they belong to the shell rather than to whatever it is
+  /// wrapping. That they are *not* reachable from a context is deliberate; see
+  /// `TopBarState`.
   Parameters get parameters;
 
   static UICatalogState of(BuildContext context) {

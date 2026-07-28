@@ -4,19 +4,28 @@ import 'package:flutterware/ui_catalog.dart';
 
 /// Stands in for a project's own catalog shell.
 ///
-/// The axes are its optional named parameters and nothing else. That keeps the
-/// function assignable to `WidgetWrapper` — `@Demo(wrapper: wrapInApp)` still
-/// takes it, Flutter's own previewer still calls it with one argument, and the
-/// real app still calls it like any other function. Only the catalog calls it
-/// by name, which is where the named parameters are still visible.
+/// The axes are declared inside it, by asking for them, which is how the
+/// catalog learns they exist — there is no list of axes anywhere, only the
+/// calls the shell makes. That leaves `wrapInApp` an ordinary
+/// `Widget Function(Widget)`: `@Demo(wrapper: wrapInApp)` takes it, Flutter's
+/// own previewer calls it with one argument, and the real app calls it like any
+/// other function. In all three the axes answer with their defaults.
 enum Flavor { dev, staging, prod }
 
-@CatalogShell()
-Widget wrapInApp(
-  Widget child, {
-  Flavor flavor = Flavor.dev,
-  bool compact = false,
-}) => _Shell(flavor: flavor, compact: compact, child: child);
+Widget wrapInApp(Widget child) => CatalogShell(
+  'app',
+  builder: (context, topBar) {
+    // Labels, not identifiers: only the labels cross the wire, so the top bar
+    // shows what is written here rather than `Flavor.prod.name`.
+    var flavor = topBar.picker('flavor', {
+      'Dev': Flavor.dev,
+      'Staging': Flavor.staging,
+      'Production': Flavor.prod,
+    }, Flavor.dev);
+    var compact = topBar.flag('compact', false);
+    return _Shell(flavor: flavor, compact: compact, child: child);
+  },
+);
 
 class _Shell extends StatelessWidget {
   const _Shell({

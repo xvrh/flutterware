@@ -1,9 +1,10 @@
 import 'dart:io';
 
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:path/path.dart' as p;
 
 import 'catalog_entry.dart';
-import 'shell_descriptor.dart';
 
 /// Writes the guest's entrypoint: one wrapper file per entry ever visited, plus
 /// an accumulating `main.dart` that selects the active one.
@@ -34,13 +35,6 @@ class EntrypointGenerator {
   /// rendering, so a headless harness can assert what the guest actually shows
   /// rather than only that a reload reported success.
   final bool emitProbe;
-
-  /// Every `@CatalogShell` discovery found, by [ShellDescriptor.id].
-  ///
-  /// Read when a wrapper is written, because an entry's shell decides what the
-  /// generated call passes it. Replaced rather than mutated when a scan finds
-  /// the signature changed — see [shells].
-  var shells = const <String, ShellDescriptor>{};
 
   final _wrapperIndex = <String, int>{};
 
@@ -132,19 +126,13 @@ class EntrypointGenerator {
 
   String _wrapper(CatalogEntry entry, int index) {
     var source = p.join(projectRoot, entry.path);
-    var shell = shells[entry.shellId];
-    // The shell's own imports as well as the demo's. The generated call names
-    // an axis's *type* — `Flavor.values` is where the option labels come from —
-    // and that type is in scope where the shell is written, not necessarily
-    // where the demo is. Importing the shell file covers an enum declared
-    // beside it; carrying that file's imports covers one it got from elsewhere.
-    var carried = {
-      ..._carriedImports(source),
-      if (shell != null) ...[
-        ..._carriedImports(p.join(projectRoot, shell.path)),
-        "import '${_relative(p.join(projectRoot, shell.path))}';",
-      ],
-    };
+    // The demo's own imports, and only the demo's. A shell used to contribute
+    // its imports too, because the generated call named an axis's enum by type
+    // and that type is in scope where the shell is written rather than where
+    // the demo is. Axes are declared inside the shell now, so nothing the shell
+    // knows about has to be nameable from here — which is what removes the one
+    // case where two files' import sets were merged and could collide.
+    var carried = _carriedImports(source);
     return '''
 // GENERATED — do not edit.
 // Imports carried from the demo file: the annotation is written in *its* scope,
@@ -155,6 +143,16 @@ ${carried.join('\n')}
 import 'package:flutter/widgets.dart';
 import 'package:flutterware/ui_catalog.dart';
 
+// The demo file twice, and both are load-bearing. Prefixed, because fwBuilder
+// has to name the entry unambiguously. Unprefixed, because the annotation may
+// name something the demo file *declares* rather than imports — a wrapper
+// written beside the demo it wraps is the ordinary case — and a file does not
+// import itself, so nothing else would put that in scope.
+//
+// Together these reproduce the demo's own scope, which is the one the
+// annotation was written in. The gap that remains is privacy: a `_kName` in the
+// annotation is visible where it was written and not here.
+import '${_relative(source)}';
 import '${_relative(source)}' as fw$index;
 
 // The annotation, evaluated as Dart rather than interpreted statically.
@@ -171,83 +169,48 @@ import '${_relative(source)}' as fw$index;
 Demo get fwDemo => ${entry.annotation};
 
 Widget Function() get fwBuilder => fw$index.${entry.symbol};
-
-${_shellBinding(entry, shell)}''';
-  }
-
-  /// What the entry's shell contributes to its wrapper file.
-  ///
-  /// An entry with no shell answers null twice, and the entrypoint falls back
-  /// to `preview.wrapper` — which is what every entry did before shells existed
-  /// and what an entry wrapped by a plain function still does.
-  ///
-  /// The shell is called **by name** rather than through `preview.wrapper`,
-  /// because the typedef that field holds is `Widget Function(Widget)` and
-  /// erases exactly the named parameters the axes live in.
-  String _shellBinding(CatalogEntry entry, ShellDescriptor? shell) {
-    if (shell == null) {
-      return '''
-String? get fwShellId => null;
-Widget Function(Widget)? get fwShellWrap => null;
-''';
-    }
-    var arguments = [
-      for (var axis in shell.axes)
-        // A bool is a closed set without being an Enum, so it has no `values`
-        // to hand over and gets its own call.
-        if (axis.isBoolean) _flagCall(axis) else _pickCall(axis),
-    ];
-    return '''
-String? get fwShellId => r'${shell.id}';
-
-// A getter, like everything else here: a top-level final holding a tear-off is
-// initialised once and hot reload does not re-run it.
-Widget Function(Widget)? get fwShellWrap => _fwWrapInShell;
-
-// `<Type>.values` is what lets the guest report the options for an axis that a
-// syntactic scan of the signature saw only a type name for. It is also the
-// check: a type that is not an enum fails to compile here, in one generated
-// function, naming the axis.
-Widget _fwWrapInShell(Widget child) => ${shell.symbol}(
-  child,
-${arguments.join('\n')}
-);
 ''';
   }
 
-  static String _flagCall(ShellAxis axis) =>
-      "  ${axis.name}: CatalogAxes.instance.flag('${axis.name}', "
-      '${axis.defaultSource}),';
-
-  static String _pickCall(ShellAxis axis) =>
-      "  ${axis.name}: CatalogAxes.instance.pick('${axis.name}', "
-      '${axis.typeName}.values, ${axis.defaultSource}),';
-
-  /// The demo file's own import directives, with relative URIs rewritten to
-  /// resolve from [outputDir].
+  /// The demo file's own import and export directives, with relative URIs
+  /// rewritten to resolve from [outputDir].
   ///
   /// Demo files live outside `lib/` and so have no `package:` URI of their own;
   /// a carried `../utils/shell.dart` would not resolve from the generated
   /// directory without this.
+  ///
+  /// Parsed rather than matched. The regex this replaced was line-oriented, so
+  /// a directive written across two lines — which `dart format` produces as
+  /// soon as a `show` clause makes it long enough — was carried as a fragment
+  /// or dropped. Everything a directive can carry (`show`, `hide`, `as`,
+  /// `deferred`, configurable imports) is kept here by rewriting only the URI
+  /// literals inside the directive's own source and leaving the rest alone.
+  /// `part` is deliberately not carried: a part belongs to its own library.
   List<String> _carriedImports(String source) {
-    var directive = RegExp(
-      r'''^\s*(import|export)\s+(['"])([^'"]+)\2(.*)$''',
-      multiLine: true,
-    );
+    var unit = parseString(
+      content: File(source).readAsStringSync(),
+      throwIfDiagnostics: false,
+    ).unit;
+
     var carried = <String>[];
-    for (var match in directive.allMatches(File(source).readAsStringSync())) {
-      var uri = match.group(3)!;
+    for (var directive in unit.directives) {
+      if (directive is! NamespaceDirective) continue;
+      var uri = directive.uri.stringValue;
       // `package:flutterware/ui_catalog.dart` is emitted unconditionally below.
-      if (uri == 'package:flutterware/ui_catalog.dart') continue;
-      if (uri.contains(':')) {
-        carried.add(match.group(0)!.trim());
-      } else {
-        var target = p.normalize(p.join(p.dirname(source), uri));
-        carried.add(
-          "${match.group(1)} '${_relative(target)}'${match.group(4)};"
-              .replaceAll(';;', ';'),
-        );
+      if (uri == null || uri == 'package:flutterware/ui_catalog.dart') continue;
+
+      var text = directive.toSource();
+      for (var literal in [
+        directive.uri,
+        for (var configuration in directive.configurations) configuration.uri,
+      ]) {
+        var written = literal.stringValue;
+        // A `package:`/`dart:` URI means the same thing from anywhere.
+        if (written == null || written.contains(':')) continue;
+        var target = p.normalize(p.join(p.dirname(source), written));
+        text = text.replaceFirst(literal.toSource(), "'${_relative(target)}'");
       }
+      carried.add(text);
     }
     return carried;
   }
@@ -272,8 +235,6 @@ $imports
 Preview get _preview => fw$activeIndex.fwDemo.transform();
 Widget Function() get _builder => fw$activeIndex.fwBuilder;
 String get _entryId => r'${active.id}';
-String? get _shellId => fw$activeIndex.fwShellId;
-Widget Function(Widget)? get _shellWrap => fw$activeIndex.fwShellWrap;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -303,26 +264,19 @@ class _CatalogHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The shell first, when the entry's wrapper is one: it is called by name,
-    // which is the only place the axes are still visible, where
-    // `preview.wrapper` is a Widget Function(Widget) and erases them. An entry
-    // wrapped by a plain function — or by nothing — goes the old way.
+    // One wrapper, called the one way. A shell used to be called by name from
+    // here, because its axes lived in named parameters that
+    // `Widget Function(Widget)` erases; they are declared inside the shell now,
+    // so there is nothing left for this file to know about it.
     var preview = _preview;
-    var wrapper = _shellWrap ?? preview.wrapper ?? (Widget child) => child;
+    var wrapper = preview.wrapper ?? (Widget child) => child;
     Widget child = CatalogGuest(
       entryId: _entryId,
       child: KeyedSubtree(
         // A fresh key per entry so switching remounts rather than reusing the
         // previous entry's State.
         key: ValueKey<String>(_entryId),
-        // Inside the scope, because the pick calls that declare the axes are
-        // in the wrapper it invokes — and they have to run after beginShell,
-        // which is what makes the report this shell's axes and not the last
-        // one's.
-        child: CatalogAxesScope(
-          shellId: _shellId,
-          builder: (context) => wrapper(_builder()),
-        ),
+        child: wrapper(_builder()),
       ),
     );
     // No `preview.size` here. The host sizes the guest's *window* to whatever

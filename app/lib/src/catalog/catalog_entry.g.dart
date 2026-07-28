@@ -14,8 +14,6 @@ CatalogEntry _$CatalogEntryFromJson(Map<String, dynamic> json) => CatalogEntry(
   group: json['group'] as String?,
   declaredId: json['declaredId'] as String?,
   formFactor: json['formFactor'] as String?,
-  wrapper: json['wrapper'] as String?,
-  shellId: json['shellId'] as String?,
 );
 
 Map<String, dynamic> _$CatalogEntryToJson(CatalogEntry instance) =>
@@ -27,6 +25,4 @@ Map<String, dynamic> _$CatalogEntryToJson(CatalogEntry instance) =>
       'group': instance.group,
       'declaredId': instance.declaredId,
       'formFactor': instance.formFactor,
-      'wrapper': instance.wrapper,
-      'shellId': instance.shellId,
     };

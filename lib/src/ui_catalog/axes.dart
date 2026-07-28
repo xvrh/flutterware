@@ -6,20 +6,41 @@ import 'package:flutter/widgets.dart';
 import 'axis.dart';
 import 'knob.dart';
 
-/// The guest's side of the top bar: the switches a shell's signature declares,
-/// and the two extensions the host reads and writes them through.
+/// The app-wide switches a project's shell offers, drawn in the catalog's top
+/// bar.
 ///
-/// Deliberately the mirror image of [CatalogParameters]. A knob exists because
-/// a demo's build asked for it, so only the guest can say what there is. An
-/// axis exists because a *signature* declares it, so the host already knows the
-/// set from discovery and what it reads back here is the part a signature
-/// cannot carry — what the options are called.
+/// Handed to [CatalogShell]'s builder rather than read off a [BuildContext],
+/// and that confinement is the design rather than an accident of it. An axis
+/// outlives the entry on screen because it belongs to the shell, so a stray
+/// declaration from somewhere deep inside a demo would go on being offered
+/// after the demo that made it was gone, and a subtree built lazily — below a
+/// list, behind a tab — would make the top bar grow as you navigated. Knobs
+/// can afford to be read from anywhere precisely because they reset with the
+/// entry. These cannot.
 ///
-/// The selection is the host's. It has to outlive the entry you are looking at
-/// and the guest itself, so it is pushed down rather than owned here; what is
-/// held below is a cache of the last push, which survives a hot reload because
-/// this object does.
-class CatalogAxes {
+/// Every method answers with `defaultValue` when nothing is driving it, so the
+/// same shell behaves identically in the real app and in Flutter's own
+/// previewer as it does here.
+abstract class TopBarState {
+  /// A choice between named options, label to value.
+  ///
+  /// Only the labels cross the wire — see [KnobDescriptor.options] — so the
+  /// values behind them may be of any type at all, and the labels are whatever
+  /// reads well rather than whatever an identifier happened to be called.
+  T picker<T>(String name, Map<String, T> options, T defaultValue);
+
+  /// A switch. A `bool` is a closed set of two, which is all an axis needs.
+  bool flag(String name, bool defaultValue);
+}
+
+/// The guest's side of the top bar: what the shell on screen declared, and the
+/// two extensions the host reads and writes them through.
+///
+/// Deliberately the mirror image of `CatalogParameters`. Both learn what there
+/// is by *running* the thing that declares it; what separates them is scope.
+/// A knob is filed under the entry that asked for it and goes away with it, an
+/// axis is filed under its shell and does not.
+class CatalogAxes implements TopBarState {
   CatalogAxes._();
 
   static final instance = CatalogAxes._();
@@ -27,92 +48,118 @@ class CatalogAxes {
   /// Bumped when a selection changes, so the shell has something to rebuild on.
   final revision = ValueNotifier<int>(0);
 
-  /// What the current shell declared, in the order the generated call makes
-  /// them — which is the order they were written in the signature.
+  /// What the shell on screen declared, in the order it declared them.
   final _declared = <String, KnobDescriptor>{};
 
-  /// Axis name to the chosen option's name, or a bool for a flag.
+  /// Selections, by shell and then by axis name.
   ///
-  /// Not cleared when the shell changes. The host is authoritative and pushes
-  /// the right set before a switch lands, and [pick] falls back for anything it
-  /// does not recognise — so a leftover selection is harmless, where dropping
-  /// one the host had already sent would not be.
-  final _selected = <String, Object?>{};
+  /// Nested rather than flat because the host pushes the selections for *every*
+  /// shell it knows about, at any time: it cannot know which shell an entry
+  /// uses until that entry has built and said so, and waiting to find out would
+  /// show a frame of defaults first. A flat map would make two shells that both
+  /// call something `flavor` inherit each other's.
+  final _selected = <String, Map<String, Object?>>{};
 
   String? _shellId;
+  String? _entryId;
 
-  /// Starts a shell's declarations. Emitted by the generated host immediately
-  /// before the [pick] and [flag] calls for that shell's axes.
-  void beginShell(String? shellId) {
-    _shellId = shellId;
+  /// Forgets what the previous entry's shell declared.
+  ///
+  /// Called from the guest when the entry changes, so that an entry whose
+  /// wrapper is *not* a shell reports having no axes immediately, rather than
+  /// leaving the last shell's on the bar until something replaces them.
+  /// Selections are untouched — they belong to the shell, which is the whole
+  /// point of them.
+  void resetFor(String entryId) {
+    if (_entryId == entryId) return;
+    _entryId = entryId;
+    _shellId = null;
     _declared.clear();
   }
 
-  /// The value chosen for an enum axis, or [fallback].
+  /// Opens a shell's declaration pass and answers the object it declares
+  /// through. Called by [CatalogShell] and nothing else.
   ///
-  /// [values] is the enum's own `values`, handed in by the generated call —
-  /// which is how the guest can report what there is to choose from when a
-  /// syntactic scan of the signature saw only a type name.
-  T pick<T extends Enum>(String name, List<T> values, T fallback) {
-    var chosen = _selected[name];
-    var value = fallback;
-    if (chosen is String) {
-      for (var candidate in values) {
-        if (candidate.name == chosen) {
-          value = candidate;
-          break;
-        }
-      }
-    }
+  /// Shells do not nest: the pass is singular, so a [CatalogShell] built inside
+  /// another one replaces rather than extends what the outer one declared.
+  TopBarState beginShell(String shellId) {
+    _shellId = shellId;
+    _declared.clear();
+    return this;
+  }
+
+  @override
+  T picker<T>(String name, Map<String, T> options, T defaultValue) {
+    assert(
+      options.containsValue(defaultValue),
+      'The default for axis "$name" is not one of its options, so the top bar '
+      'would open with nothing selected.',
+    );
+    var chosen = _selected[_shellId]?[name];
+    var value = chosen is String && options.containsKey(chosen)
+        ? options[chosen] as T
+        : defaultValue;
     _declared[name] = KnobDescriptor(
       name: name,
       kind: KnobKind.picker,
-      options: [for (var candidate in values) candidate.name],
-      value: value.name,
-      defaultValue: fallback.name,
+      options: options.keys.toList(),
+      value: _labelOf(options, value),
+      defaultValue: _labelOf(options, defaultValue),
     );
     return value;
   }
 
-  /// The value chosen for a `bool` axis, or [fallback].
-  ///
-  /// Separate from [pick] because `bool` is not an `Enum` and has no `values`,
-  /// but it is still a closed set — which is the only thing an axis needs to be.
-  bool flag(String name, bool fallback) {
-    var chosen = _selected[name];
-    var value = chosen is bool ? chosen : fallback;
+  @override
+  bool flag(String name, bool defaultValue) {
+    var chosen = _selected[_shellId]?[name];
+    var value = chosen is bool ? chosen : defaultValue;
     _declared[name] = KnobDescriptor(
       name: name,
       kind: KnobKind.boolean,
       value: value,
-      defaultValue: fallback,
+      defaultValue: defaultValue,
     );
     return value;
   }
 
-  /// What the current shell offers, and what each is currently set to.
-  AxisReport describe() =>
-      AxisReport(shellId: _shellId, axes: _declared.values.toList());
+  static String? _labelOf<T>(Map<String, T> options, T value) {
+    for (var option in options.entries) {
+      if (option.value == value) return option.key;
+    }
+    return null;
+  }
 
-  /// Records selections and asks for a rebuild.
+  /// What the shell on screen offers, and what each is currently set to.
+  AxisReport describe() => AxisReport(
+    entryId: _entryId,
+    shellId: _shellId,
+    axes: [..._declared.values],
+  );
+
+  /// Records selections and asks for a rebuild. Returns whether anything moved.
   ///
-  /// A null value puts an axis back to the default its signature declares,
-  /// which is the same thing a null means to a knob — and is how a top bar
-  /// offers "reset" without having to know what the default was.
+  /// A null value puts an axis back to the default the shell wrote, which is
+  /// the same thing a null means to a knob — and is how a top bar offers
+  /// "reset" without having to know what the default was.
   ///
-  /// Values are taken for axes this build has not declared as well: the host
-  /// pushes a shell's selections *before* the reload that switches to it, so at
-  /// the moment they arrive the shell they belong to has not built yet.
-  void apply(Map<String, Object?> selections) {
-    if (selections.isEmpty) return;
-    for (var MapEntry(key: name, value: selection) in selections.entries) {
-      if (selection == null) {
-        _selected.remove(name);
-      } else {
-        _selected[name] = selection;
+  /// Selections for shells that have not built are kept rather than dropped:
+  /// that is what lets the host push everything it knows up front and have the
+  /// right values already in hand when a shell first builds.
+  bool apply(Map<String, Map<String, Object?>> byShell) {
+    var changed = false;
+    for (var MapEntry(key: shellId, value: selections) in byShell.entries) {
+      var current = _selected[shellId] ??= {};
+      for (var MapEntry(key: name, value: selection) in selections.entries) {
+        if (selection == null) {
+          if (current.remove(name) != null) changed = true;
+        } else if (current[name] != selection) {
+          current[name] = selection;
+          changed = true;
+        }
       }
     }
-    revision.value++;
+    if (changed) revision.value++;
+    return changed;
   }
 
   /// Registers the extensions. Call once, before `runApp`.
@@ -126,13 +173,16 @@ class CatalogAxes {
       // A service extension's arguments are strings, so the payload is JSON in
       // one of them rather than a map of typed values.
       var payload = jsonDecode(args['payload'] ?? '{}') as Map<String, dynamic>;
-      apply(payload);
+      var applied = apply({
+        for (var shell in payload.entries)
+          shell.key: (shell.value as Map).cast<String, Object?>(),
+      });
       // Answered only once the shell has rebuilt on it, so a host that asks
       // what there is to show right afterwards is told about the build it
       // caused rather than the one it replaced. Bounded because a panel waits
       // on this: a guest that has stopped drawing should make it late, not
       // stuck.
-      if (payload.isNotEmpty) {
+      if (applied) {
         await WidgetsBinding.instance.endOfFrame.timeout(
           const Duration(seconds: 2),
           onTimeout: () {},
@@ -145,32 +195,47 @@ class CatalogAxes {
   }
 }
 
-/// Scopes one shell's axes and rebuilds it when a selection changes.
+/// A project's catalog shell: the chrome every demo is rendered inside, and the
+/// one place its top-bar switches are declared.
 ///
-/// [builder] is where the generated host calls the shell, so the
-/// [CatalogAxes.pick] and [CatalogAxes.flag] calls that declare the axes run
-/// inside it — after [CatalogAxes.beginShell], which is what makes the report
-/// exactly this shell's axes and not the previous one's.
-class CatalogAxesScope extends StatelessWidget {
-  const CatalogAxesScope({
-    super.key,
-    required this.shellId,
-    required this.builder,
-  });
+/// ```dart
+/// // demo/shell.dart
+/// Widget wrapInApp(Widget child) => CatalogShell(
+///   'app',
+///   builder: (context, topBar) => MyApp(
+///     flavor: topBar.picker('flavor', {
+///       'Dev': Flavor.dev,
+///       'Production': Flavor.prod,
+///     }, Flavor.dev),
+///     home: child,
+///   ),
+/// );
+/// ```
+///
+/// A demo names it the way it always did, with `@Demo(wrapper: wrapInApp)`.
+/// Nothing about the shell is discovered: it is an ordinary
+/// `Widget Function(Widget)`, so Flutter's own previewer and the real app call
+/// it unchanged and [TopBarState] answers them with the defaults.
+///
+/// [id] is what the host files selections under, so leaving a shell and coming
+/// back finds the flavour you had chosen. Write it once and leave it alone —
+/// it is a name, not a path, so moving or renaming the file does not lose what
+/// was set.
+class CatalogShell extends StatelessWidget {
+  const CatalogShell(this.id, {super.key, required this.builder});
 
-  /// The shell whose axes are declared below, or null for an entry whose
-  /// wrapper is not a shell — which has none.
-  final String? shellId;
+  /// This shell's name, unique within the project.
+  final String id;
 
-  final WidgetBuilder builder;
+  /// Where the axes are declared. Called on every selection change.
+  final Widget Function(BuildContext context, TopBarState topBar) builder;
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int>(
       valueListenable: CatalogAxes.instance.revision,
       builder: (context, _, _) {
-        CatalogAxes.instance.beginShell(shellId);
-        return builder(context);
+        return builder(context, CatalogAxes.instance.beginShell(id));
       },
     );
   }

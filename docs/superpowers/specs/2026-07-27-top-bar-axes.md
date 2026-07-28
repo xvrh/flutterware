@@ -1,198 +1,171 @@
 # Top-bar axes: app-wide switches a project declares in its shell
 
-**Status.** Design, agreed in outline, not built. The one load-bearing
-assumption — that a wrapper can grow parameters and stay a `WidgetWrapper` —
-has been verified against the SDK rather than assumed.
+**Status.** Built. The signature-based design this document originally
+described was replaced on 2026-07-28 before it shipped; see "What changed, and
+why" at the end for what was tried and what it cost.
 
 ## What a project writes
 
 ```dart
 // demo/shell.dart
 enum Flavor { dev, staging, prod }
-enum Language { english, french }
 
-@CatalogShell()
-Widget wrapInApp(
-  Widget child, {
-  Flavor flavor = Flavor.dev,
-  Language language = Language.english,
-}) => MyApp(flavor: flavor, language: language, home: child);
+Widget wrapInApp(Widget child) => CatalogShell(
+  'app',
+  builder: (context, topBar) => MyApp(
+    flavor: topBar.picker('flavor', {
+      'Dev': Flavor.dev,
+      'Staging': Flavor.staging,
+      'Production': Flavor.prod,
+    }, Flavor.dev),
+    locale: topBar.picker('locale', {
+      'English': const Locale('en'),
+      'Français': const Locale('fr'),
+    }, const Locale('en')),
+    home: child,
+  ),
+);
 ```
 
-And nothing else. `@Demo(wrapper: wrapInApp)` is unchanged, every demo keeps
-naming it, and the axes are the shell's own named parameters.
+And nothing else. `@Demo(wrapper: wrapInApp)` is unchanged and every demo keeps
+naming it.
 
-## Why the wrapper can grow parameters
+Nothing marks the shell and nothing looks for it. `wrapInApp` is an ordinary
+`Widget Function(Widget)` that happens to build a `CatalogShell`, so:
 
-Flutter defines `typedef WidgetWrapper = Widget Function(Widget)` and `Preview`
-holds one in a typed field, so a wrapper's signature is not ours to change.
-Extra **optional named** parameters are the exception: Dart's function subtyping
-allows them, so the tear-off is still assignable.
+- **Flutter's own previewer is unaffected.** It calls the wrapper through
+  `WidgetWrapper`, gets the shell as written, and every axis answers with its
+  default.
+- **The real app is unaffected**, for the same reason.
+- **The catalog** drives the axes by pushing selections into `CatalogAxes`,
+  which the next build of the shell reads.
 
-Verified, not reasoned about:
+## Scope is the design
 
-```dart
-typedef WidgetWrapper = String Function(String);
-String wrapInApp(String child, {Flavor flavor = Flavor.dev}) => …;
-WidgetWrapper asWrapper = wrapInApp;            // compiles, runs
-wrapInApp('demo', flavor: Flavor.prod);         // and the axes are still there
-```
+`topBar` is handed to the builder rather than read off a `BuildContext`, and
+that is the whole reason axes stay tractable.
 
-This is what makes the whole design cheap. It means:
+An axis outlives the entry on screen — it belongs to the shell. If any widget
+could declare one, then a demo could file a control under the shell and have it
+persist after that demo was gone, and a subtree built lazily (below a list,
+behind a tab) would make the top bar grow as you navigated. Knobs can afford to
+be read from anywhere precisely because they reset with the entry.
 
-- **Flutter's own previewer is unaffected.** It calls the wrapper through the
-  typedef, with one argument, and gets the shell exactly as it is today —
-  including whatever dependency injection the shell does. A demo that reaches
-  for something the shell provides keeps working there.
-- **The real app is unaffected.** `wrapInApp(child)` is a normal function call
-  with defaults.
-- **The catalog goes around the typedef** by calling the function *by name*,
-  which is the one place the named parameters are still visible.
+So the confinement is not stylistic. It is what makes "an axis belongs to a
+shell" true rather than aspirational.
 
 ## Several shells
 
-A project has as many shells as it needs, and the top bar shows the axes of the
-shell the *current entry* uses. Switching to an entry with a different wrapper
+A project has as many as it needs, and the top bar shows the axes of whichever
+shell the entry on screen built. Switching to an entry with a different wrapper
 changes the top bar with it.
 
-- A shell is identified the way an entry is: path plus symbol.
-- An entry's shell is whatever its `@Demo(wrapper:)` names, when that names an
-  annotated shell. An entry with no wrapper, or a wrapper that is not a shell,
-  has no axes and the top bar shows none.
-- Selections are held **per shell**, so leaving a shell and coming back finds
-  the flavor you had chosen rather than the default.
+- A shell is identified by the id it gives itself — `'app'`. A name, not a
+  path, so moving or renaming the file does not lose what was set.
+- Selections are held **per shell**, on both sides of the wire, so two shells
+  that both call something `flavor` cannot inherit each other's.
 
 ## Who owns what
 
-The **selection** is the host's. It is UI state, it has to outlive the entry
-you are looking at and the guest itself, and only the host knows what you
-clicked. It is pushed down, and it can be pushed *before* the reload that
-switches entries, so no frame renders with the previous shell's values.
+The **selection** is the host's. It is UI state, it outlives the entry you are
+looking at and the guest itself, and only the host knows what you clicked.
 
-The **set of axes and their options** is reported by the guest, like a knob —
-see the section above for why.
+The **set of axes, and their options**, is reported by the guest — it is
+whatever the last build of the shell asked for.
 
-What still separates an axis from a knob, and is the reason they stay two
-things rather than one:
+What still separates an axis from a knob:
 
-- An axis is declared by a **signature**, not by a build, so it cannot appear or
-  disappear as a side effect of building. There is no pass, no sweep, no
-  ordering question — the list is whatever the parameter list said.
-- An axis belongs to a **shell**, not to an entry, so the selection persists
-  across entry switches instead of resetting with them.
+- An axis belongs to a **shell**, so the selection persists across entry
+  switches instead of resetting with them.
 - An axis is above the entry in the tree, so changing one rebuilds the shell
   rather than the demo alone.
+- An axis can only be declared from one place, which is what the section above
+  is about.
 
-## Discovery
+## Options are values, and only labels cross the wire
 
-The scanner already sweeps the roots for annotations, so `@CatalogShell` is
-found the same way `@Demo` is — in the file where the shell is declared, with
-its parameter list right there. From a purely syntactic read it yields, per
-axis: the name, the type name, and the default's source text.
+`picker<T>(String name, Map<String, T> options, T defaultValue)` takes the
+options explicitly, so:
 
-`Preview` allows a wrapper to be a top-level function *or* a public static
-member, so discovery has to handle `MyShell.wrap` as well as `wrapInApp`.
+- **`T` is unconstrained.** Enums, `Locale`s, `ThemeData`s, records — anything.
+  The earlier design needed the type to be one the tool could enumerate, which
+  is where the "axes must be an enum or a bool" rule and its whole family of
+  diagnostics came from. All of that is gone.
+- **Labels are written, not derived.** `'Production'`, not `prod`.
+- It matches `KnobDescriptor` exactly, whose doc already said "only the labels
+  cross the wire — the values behind them are whatever the demo said they are,
+  and only the demo can turn a label back into one."
 
-## Two different static reads, and only one of them is worth having
+`flag(String name, bool defaultValue)` is the toggle. A `bool` is a closed set
+of two, which is all an axis needs to be.
 
-**The signature is read statically.** A syntactic parse of the shell's
-parameter list gives, per axis, the name, the type name, and the default's
-source text. That is free, needs no resolution, and is all the generator needs.
+Not carried yet, deliberately: `swatch`, `icon` and `PickerStyle`. All three are
+presentation, all three would need new fields on `KnobDescriptor`, and the top
+bar renders one way today. Adding them is additive when it is wanted.
 
-**The enum's options are not.** A syntactic scan sees `Flavor` and cannot know
-it is an enum or what its values are. Parsing enums declared beside the shell
-would cover the common case, and resolving the file with `package:analyzer`
-would cover all of it at the cost of pulling the analyzer into the daemon and
-breaking the scanner's deliberately syntactic property.
+### What runtime declaration costs
 
-We do neither. The guest is handed `Flavor.values` by the generated call, so it
-knows the whole set at runtime and **reports it** — the same report shape as a
-picker knob, over the same extension, through the same read-back the knob panel
-already uses.
+Nothing can list a project's axes without booting a guest. Every operation that
+would use the answer boots one anyway — `fw screenshot tile --flavor=Production`
+has to render — so it costs those nothing. What it does cost:
 
-This is the same problem `parameters.picker` has, and the same answer. Its
-option values are arbitrary Dart, only labels cross the wire, and the demo maps
-a label back. Nothing about an axis is different.
+- a mistyped `--flavor=Prod` cannot be rejected until a guest is up
+- a shell's axes appear only once an entry using it has rendered
 
-### What that costs
-
-Nothing can list a project's axes without booting a guest. That is a smaller
-cost than it sounds: every operation that would use the answer boots a guest
-anyway — `fw screenshot tile --flavor=prod` has to render — so learning the axes
-costs it nothing extra. The only thing it hurts is a pure query that then does
-nothing, which is a cache away if it ever matters.
-
-Smaller and real: a mistyped `--flavor=prd` cannot be rejected until a guest is
-up, and a malformed axis is a runtime omission rather than a scan diagnostic.
-Both are what knobs already do. And with several shells, a shell's axes appear
-only once an entry using it has rendered — one reload, the same beat the knob
-panel already has.
-
-### What it buys
-
-Static could only ever have given us enum identifiers as labels: `english`,
-`staging`. Read-back gives real ones, because the guest holds the actual values
-— an enum implementing a `label` getter, or carrying a swatch colour or an icon,
-can say so at runtime. `PickerParameter` already carries `swatch` and `icon`,
-and `pickerOptionWidget` already renders them, so the top bar gets this for
-free.
-
-`bool` is worth allowing as a toggle. Nothing beyond enum and bool: anything
-else has no closed set for the guest to report.
-
-## What the generator emits
-
-For an entry whose wrapper is a shell, the host calls the shell directly instead
-of through `preview.wrapper`:
-
-```dart
-wrapInApp(child,
-  flavor: CatalogAxes.instance.pick('flavor', Flavor.values, Flavor.dev),
-  language: CatalogAxes.instance.pick('language', Language.values, Language.english),
-)
-```
-
-`pick<T extends Enum>(String name, List<T> values, T fallback)` maps the
-selected *name* to a value, falling back when the name is not one of them —
-which is also what makes a stale selection from another shell harmless.
-
-The type argument is the check: if `Flavor` is not an enum the compile fails,
-in one function in one file, with an error that says so. That is the trade
-accepted in place of resolution.
-
-`preview.wrapper` is still evaluated and still correct; the catalog simply does
-not route its own render through it.
+Both are what knobs already do.
 
 ## Wire
 
-Two directions, both reusing what knobs established.
+`ext.flutterware.axes` reports `{entry, shell, axes}`. Read after a switch and
+retried while the report names another **entry** — the same rule and the same
+reason as the knob report: a read landing between the reload and the frame
+describes what was there before. Matching on the entry rather than the shell is
+what lets an entry whose wrapper is *not* a shell settle: it reports no shell
+and no axes, and that is an answer rather than something to keep waiting for.
 
-`ext.flutterware.axes` reports the axes the current shell declared and the
-options each has, in the shape a picker knob is already reported in. Read after
-a switch, like the knob report, and subject to the same rule: a report naming
-another shell is a report from before the switch landed, not an empty top bar.
+`ext.flutterware.setAxes` takes `{shellId: {axis: value}}` — **every** shell the
+host knows about, not just the one on screen. The host cannot know which shell
+an entry uses until that entry has built, so sending the lot means the values
+are already in hand when a shell builds for the first time, instead of a frame
+of defaults followed by a correction.
 
-`ext.flutterware.setAxes` takes the active shell's selections as JSON — axis
-name to selected enum name. Called when a value changes, and before a switch
-that changes shells. Nothing comes back: the host already knows what it sent.
+## What changed, and why
 
-## Still to decide
+The original design put the axes in the shell's **signature**, marked with a
+`@CatalogShell` annotation:
 
-- **Persistence across sessions.** The selection is host state, so it can be
-  saved with the project's UI state the way the selected entry is. Probably
-  yes; not required for a first cut.
-- **Whether `@CatalogShell` needs any arguments.** Bare to start. A display
-  name for the top bar's grouping is the obvious first one if it needs any.
+```dart
+@CatalogShell()
+Widget wrapInApp(Widget child, {Flavor flavor = Flavor.dev}) => …;
+```
 
-## Order of work
+It worked, and it had one real advantage this design gives up: the axes were
+legible to a scan, so the top bar could in principle be drawn before the first
+compile. It was dropped anyway, because making it *correct* required knowing
+things a syntactic scan cannot know:
 
-1. `@CatalogShell` and discovery: find shells, read their parameter lists,
-   report them alongside entries.
-2. `CatalogAxes` in the published package, its `pick`, and both extensions.
-3. The generator: call the shell by name with `pick(...)` per axis.
-4. The top bar: render the reported axes, hold the selection per shell, push on
-   change.
+- which function `wrapper: wrapInApp` refers to (matched by bare symbol name,
+  so two files declaring `wrapInApp` were an ambiguity the scan had to refuse)
+- whether an axis's type was an enum, and what its values were called
+- what an axis's default expression evaluated to
 
-Each step is checkable in the headless harness before the one after it: (1) in
-discovery's own tests, (2) and (3) by asserting what the guest reports for a
-demo whose shell declares axes, (4) in widget tests.
+Resolution answers all three. It was measured — see
+`2026-07-28-resolved-discovery-findings.md` — and rejected on cost: ~19s cold
+per project and 164MB of cache per worktree, against a tool whose promise is
+that opening a worktree gets you a running demo quickly.
+
+Declaring the axes at runtime removes the questions instead of answering them.
+What went with it:
+
+| deleted | why it existed |
+|---|---|
+| `@CatalogShell` | to mark a shell for discovery |
+| `ShellDescriptor`, `ShellAxis` | to carry a signature's axes to the generator |
+| `_addShell`, `_linkShells`, `_notEnumerable` | to read and validate those signatures |
+| `CatalogEntry.wrapper`, `.shellId` | to point an entry at its shell |
+| `_shellBinding`, `_pickCall`, `_flagCall` | to call the shell by name |
+| `shells` on `DaemonReady` / `CatalogChanged` | to ship them to clients |
+| the demo+shell import union in `_carriedImports` | so `Flavor.values` resolved in generated code |
+
+The last one mattered beyond its size: merging two files' import sets was the
+only place two prefixes could collide, and it is gone rather than fixed.

@@ -4,18 +4,22 @@ import 'knob.dart';
 ///
 /// The axes themselves are [KnobDescriptor]s, which is deliberate rather than
 /// lazy: that type says it is "the shape a panel renders *whatever* produced
-/// it", and an enum axis is a picker with a closed set of labels — precisely
-/// what a picker knob already is. A renderer switches on [KnobKind] and does
-/// not need to know which side of the process declared it.
+/// it", and a picker over named options is precisely what a picker knob
+/// already is. A renderer switches on [KnobKind] and does not need to know
+/// which side of the process declared it.
 ///
-/// What differs is the envelope. A knob belongs to an entry and is declared by
-/// building it; an axis belongs to a *shell* and is declared by its signature,
-/// so the two are reported separately and only one of them resets when you
-/// move between entries.
+/// What differs is the envelope. A knob belongs to an entry and resets with
+/// it; an axis belongs to a *shell* and outlives the entry on screen, so the
+/// two are reported separately.
 class AxisReport {
-  const AxisReport({required this.shellId, required this.axes});
+  const AxisReport({
+    required this.entryId,
+    required this.shellId,
+    required this.axes,
+  });
 
   factory AxisReport.fromJson(Map<String, Object?> json) => AxisReport(
+    entryId: json['entry'] as String?,
     shellId: json['shell'] as String?,
     axes: [
       for (var axis in json['axes'] as List? ?? const [])
@@ -23,19 +27,27 @@ class AxisReport {
     ],
   );
 
-  static const empty = AxisReport(shellId: null, axes: []);
+  static const empty = AxisReport(entryId: null, shellId: null, axes: []);
 
-  /// Which shell declared these.
+  /// Which entry was on screen when these were declared.
   ///
-  /// A report naming another shell is a report from before the switch landed,
-  /// not a shell without axes — the same distinction [KnobReport.entryId]
-  /// draws, and for the same reason: the host has to know whether to show
-  /// nothing or to ask again.
+  /// The host retries a read until this names the entry it switched to, the
+  /// same distinction [KnobReport.entryId] draws and for the same reason: an
+  /// axis is recorded by the *build* of the shell, so a read landing between
+  /// the reload and the frame describes the shell that was there before.
+  final String? entryId;
+
+  /// Which shell declared these, or null for an entry whose wrapper is not a
+  /// shell — which has no axes.
+  ///
+  /// The name a shell gives itself, not a path: it is what the host files
+  /// selections under, so it survives the file being moved or renamed.
   final String? shellId;
 
   final List<KnobDescriptor> axes;
 
   Map<String, Object?> toJson() => {
+    'entry': entryId,
     'shell': shellId,
     'axes': [for (var axis in axes) axis.toJson()],
   };

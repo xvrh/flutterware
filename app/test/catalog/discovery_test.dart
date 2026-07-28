@@ -262,154 +262,52 @@ Widget plain() => const Placeholder();
     );
   });
 
-  group('catalog shells', () {
-    test("the axes are the shell's optional named parameters", () {
+  group('shells are not discovered at all', () {
+    test('a shell file yields no entries and no complaint', () {
+      // Nothing marks it and nothing looks for it. A shell is an ordinary
+      // `Widget Function(Widget)` that happens to build a `CatalogShell`, and
+      // the catalog learns about it only when the guest renders one and
+      // reports the axes it asked for.
       write('shell.dart', '''
 import 'package:flutter/widgets.dart';
+import 'package:flutterware/ui_catalog.dart';
 
 enum Flavor { dev, staging, prod }
 
-@CatalogShell()
-Widget wrapInApp(
-  Widget child, {
-  Flavor flavor = Flavor.dev,
-  bool compact = false,
-}) => child;
-''');
-
-      var shell = scan().shells.single;
-      expect(shell.symbol, 'wrapInApp');
-      expect(shell.path, 'demo/shell.dart');
-      expect(shell.id, 'demo/shell.dart#wrapInApp');
-      expect(
-        {for (var axis in shell.axes) axis.name: axis.typeName},
-        {'flavor': 'Flavor', 'compact': 'bool'},
-      );
-      expect(
-        {for (var axis in shell.axes) axis.name: axis.defaultSource},
-        {'flavor': 'Flavor.dev', 'compact': 'false'},
-      );
-    });
-
-    test('the child parameter is not an axis', () {
-      write('shell.dart', '''
-@CatalogShell()
-Widget wrapInApp(Widget child) => child;
+Widget wrapInApp(Widget child) => CatalogShell(
+  'app',
+  builder: (context, topBar) => topBar.flag('compact', false)
+      ? child
+      : const Placeholder(),
+);
 ''');
 
       var result = scan();
       expect(result.ok, isTrue);
-      expect(result.shells.single.axes, isEmpty);
+      expect(result.entries, isEmpty);
+      expect(result.diagnostics, isEmpty);
     });
 
-    test('an entry is pointed at the shell its wrapper names', () {
-      write('shell.dart', '''
-@CatalogShell()
-Widget wrapInApp(Widget child, {bool compact = false}) => child;
-''');
+    test('naming a wrapper is just an annotation argument now', () {
+      // It used to be linked to a discovered shell by symbol, which is what
+      // made two files declaring `wrapInApp` an ambiguity the scan had to
+      // refuse. Nothing reads it here any more — it rides along in the
+      // annotation's source text and is resolved by the compiler.
       write('a.dart', '''
 @Demo(name: 'Wrapped', wrapper: wrapInApp)
 Widget a() => const Placeholder();
 
 @Demo(name: 'Bare')
 Widget b() => const Placeholder();
-
-@Demo(name: 'Other', wrapper: somethingElse)
-Widget c() => const Placeholder();
-''');
-
-      var byName = {for (var e in scan().entries) e.name: e};
-      expect(byName['Wrapped']!.wrapper, 'wrapInApp');
-      expect(byName['Wrapped']!.shellId, 'demo/shell.dart#wrapInApp');
-      expect(byName['Bare']!.wrapper, isNull);
-      expect(byName['Bare']!.shellId, isNull);
-      // Naming a wrapper that is not a shell is perfectly legal — the entry
-      // simply has no axes, and that is not worth complaining about.
-      expect(byName['Other']!.wrapper, 'somethingElse');
-      expect(byName['Other']!.shellId, isNull);
-    });
-
-    test('a shell reached through a class is found too', () {
-      write('shell.dart', '''
-class Shells {
-  @CatalogShell()
-  static Widget wrap(Widget child, {bool compact = false}) => child;
-}
-''');
-      write('a.dart', '''
-@Demo(name: 'X', wrapper: Shells.wrap)
-Widget a() => const Placeholder();
 ''');
 
       var result = scan();
-      expect(result.shells.single.symbol, 'Shells.wrap');
-      expect(result.entries.single.shellId, 'demo/shell.dart#Shells.wrap');
-    });
-
-    test('two shells sharing a name are ambiguous, so the scan refuses', () {
-      // Matching is by symbol, because a syntactic scan does not follow the
-      // import a demo names its wrapper through.
-      write('one/shell.dart', '''
-@CatalogShell()
-Widget wrapInApp(Widget child) => child;
-''');
-      write('two/shell.dart', '''
-@CatalogShell()
-Widget wrapInApp(Widget child) => child;
-''');
-
-      var result = scan();
-      expect(result.ok, isFalse);
+      expect(result.ok, isTrue);
+      // Sorted by id, which is path plus symbol: `a` before `b`.
+      expect(result.entries.map((e) => e.name), ['Wrapped', 'Bare']);
       expect(
-        result.diagnostics.map((d) => d.message).join(),
-        contains('2 catalog shells are called "wrapInApp"'),
-      );
-    });
-
-    test('a shell that cannot be a WidgetWrapper is refused', () {
-      // Two positionals means `@Demo(wrapper:)` would not take it, and the
-      // failure would otherwise land on generated code the author never wrote.
-      write('shell.dart', '''
-@CatalogShell()
-Widget wrapInApp(Widget child, Widget other) => child;
-''');
-
-      var result = scan();
-      expect(result.ok, isFalse);
-      expect(
-        result.diagnostics.map((d) => d.message).join(),
-        contains('exactly one required positional parameter'),
-      );
-      expect(result.shells, isEmpty);
-    });
-
-    test('an axis with no default is refused', () {
-      // The previewer and the real app both call the shell with defaults.
-      write('shell.dart', '''
-@CatalogShell()
-Widget wrapInApp(Widget child, {required bool compact}) => child;
-''');
-
-      expect(scan().ok, isFalse);
-    });
-
-    test('an axis with no closed set is dropped with a warning', () {
-      write('shell.dart', '''
-@CatalogShell()
-Widget wrapInApp(
-  Widget child, {
-  String title = 'x',
-  Flavor? flavor,
-  bool compact = false,
-}) => child;
-''');
-
-      var result = scan();
-      expect(result.ok, isTrue, reason: 'the shell still works, minus those');
-      expect(result.shells.single.axes.map((a) => a.name), ['compact']);
-      expect(
-        result.diagnostics.map((d) => d.message).join('\n'),
-        allOf(contains('is a String'), contains('no plain named type')),
+        result.entries.firstWhere((e) => e.name == 'Wrapped').annotation,
+        "Demo(name: 'Wrapped', wrapper: wrapInApp)",
       );
     });
   });

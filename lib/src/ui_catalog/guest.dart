@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/widgets.dart';
 
+import 'axes.dart';
 import 'knob.dart';
 import 'parameters.dart';
 import 'ui_catalog.dart';
@@ -215,16 +216,25 @@ class CatalogGuest extends StatefulWidget {
 class _CatalogGuestState extends State<CatalogGuest> {
   CatalogParameters get _parameters => CatalogParameters.instance;
 
+  /// The axes are reset from here as well as the knobs, and it has to be from
+  /// here: the shell is *below* this widget, so an entry whose wrapper is not a
+  /// shell declares nothing at all, and without this the previous shell's axes
+  /// would stay on the bar with no build ever coming to replace them.
+  void _reset() {
+    _parameters.resetFor(widget.entryId);
+    CatalogAxes.instance.resetFor(widget.entryId);
+  }
+
   @override
   void initState() {
     super.initState();
-    _parameters.resetFor(widget.entryId);
+    _reset();
   }
 
   @override
   void didUpdateWidget(CatalogGuest old) {
     super.didUpdateWidget(old);
-    _parameters.resetFor(widget.entryId);
+    _reset();
   }
 
   @override

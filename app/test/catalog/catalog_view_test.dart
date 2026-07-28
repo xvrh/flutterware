@@ -516,7 +516,7 @@ void main() {
 
   group('the top bar axes', () {
     AxisReport report(List<KnobDescriptor> axes) =>
-        AxisReport(shellId: 'demo/shell.dart#wrapInApp', axes: axes);
+        AxisReport(entryId: 'demo/a.dart#a', shellId: 'app', axes: axes);
 
     const flavor = KnobDescriptor(
       name: 'flavor',
