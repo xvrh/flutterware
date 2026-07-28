@@ -467,10 +467,7 @@ class _Knob extends StatelessWidget {
   Widget _control(BuildContext context) {
     switch (knob.kind) {
       case KnobKind.boolean:
-        return SizedBox(
-          height: 24,
-          child: Switch(value: knob.value == true, onChanged: onChanged),
-        );
+        return _Toggle(value: knob.value == true, onChanged: onChanged);
       case KnobKind.picker:
         return _Popover<String?>(
           selected: knob.value as String?,
@@ -541,6 +538,73 @@ class _Knob extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A boolean, drawn to the same scale as the fields beside it.
+///
+/// Hand-rolled rather than a [Switch]: the stock one is 52 by 32 and coloured
+/// from the Material theme, so in a 36-pixel bar of 24-pixel fields it was both
+/// the largest thing on the row and the only thing not using the palette.
+class _Toggle extends StatelessWidget {
+  const _Toggle({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Semantics(
+      container: true,
+      toggled: value,
+      // A [Switch] carries these for free; a hand-rolled one has to say so, or
+      // the control becomes invisible to everything that is not a pair of eyes.
+      onTap: () => onChanged(!value),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          // The visible track is 14 tall; the target is the whole row height,
+          // so it can be hit without aiming.
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onChanged(!value),
+          child: SizedBox(
+            height: 24,
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                curve: Curves.easeOut,
+                width: 26,
+                height: 14,
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: value ? colors.accent : colors.bg,
+                  border: Border.all(
+                    color: value ? colors.accent : colors.line,
+                  ),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: AnimatedAlign(
+                  duration: const Duration(milliseconds: 120),
+                  curve: Curves.easeOut,
+                  alignment: value
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: value ? colors.panel : colors.mut,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -806,13 +870,7 @@ class _Axis extends StatelessWidget {
           ),
         ),
         if (axis.kind == KnobKind.boolean)
-          SizedBox(
-            height: 24,
-            child: Switch(
-              value: axis.value == true,
-              onChanged: (value) => onChanged(value),
-            ),
-          )
+          _Toggle(value: axis.value == true, onChanged: onChanged)
         else
           _Popover<String?>(
             selected: axis.value as String?,

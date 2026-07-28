@@ -56,6 +56,13 @@ void main() {
   CatalogSession sessionWithBroken(CatalogEntry broken, String error) =>
       sessionOf([alpha, beta, gamma], broken, error);
 
+  // Private to the view, so found by type name: it replaced a Material Switch,
+  // which was both oversized for a 36-pixel bar and the one control on the row
+  // not drawn from the palette.
+  final toggles = find.byWidgetPredicate(
+    (w) => w.runtimeType.toString() == '_Toggle',
+  );
+
   Future<void> pump(WidgetTester tester, CatalogSession session) =>
       tester.pumpWidget(
         MaterialApp(
@@ -383,7 +390,7 @@ void main() {
     testWidgets('is absent when the entry declares none', (tester) async {
       await pump(tester, sessionWithBroken(beta, 'boom'));
       expect(find.byType(Slider), findsNothing);
-      expect(find.byType(Switch), findsNothing);
+      expect(toggles, findsNothing);
     });
 
     testWidgets('renders a control per kind', (tester) async {
@@ -417,7 +424,7 @@ void main() {
       expect(find.text('dense'), findsOneWidget);
       // Bounded, so it slides; the value reads out beside it.
       expect(find.byType(Slider), findsOneWidget);
-      expect(find.byType(Switch), findsOneWidget);
+      expect(toggles, findsOneWidget);
     });
 
     testWidgets('a number with no bounds is a field, not a slider', (
@@ -530,7 +537,7 @@ void main() {
     ) async {
       await pump(tester, sessionWithBroken(beta, 'boom'));
       expect(find.text('flavor'), findsNothing);
-      expect(find.byType(Switch), findsNothing);
+      expect(toggles, findsNothing);
     });
 
     testWidgets('each axis is named, and drawn by its kind', (tester) async {
@@ -543,7 +550,7 @@ void main() {
       expect(find.text('flavor'), findsOneWidget);
       expect(find.text('compact'), findsOneWidget);
       expect(find.text('dev'), findsOneWidget);
-      expect(find.byType(Switch), findsOneWidget);
+      expect(toggles, findsOneWidget);
     });
 
     testWidgets('an axis off its default is legible against one that is not', (
@@ -565,6 +572,21 @@ void main() {
       Color colorOf(String name) =>
           tester.widget<Text>(find.text(name)).style!.color!;
       expect(colorOf('flavor'), isNot(colorOf('compact')));
+    });
+
+    testWidgets('the toggle reports its tap, and draws it before the guest', (
+      tester,
+    ) async {
+      // Hand-rolled, so the tap path is ours to get right — and the value is
+      // drawn from the optimistic patch, since the guest has not answered yet.
+      var session = sessionWithBroken(beta, 'boom')
+        ..axes = report(const [compact]);
+      await pump(tester, session);
+
+      await tester.tap(toggles);
+      await tester.pump();
+
+      expect(session.axes.axes.single.value, isTrue);
     });
 
     testWidgets('the options are what the guest reported, not the signature', (
