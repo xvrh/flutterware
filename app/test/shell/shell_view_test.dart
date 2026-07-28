@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
@@ -13,7 +14,9 @@ import 'package:flutterware_app/src/plugins/native_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/plugins/registry.dart';
 import 'package:flutterware_app/src/shell/shell_controller.dart';
+import 'package:flutterware_app/src/shell/shell_search.dart';
 import 'package:flutterware_app/src/shell/shell_view.dart';
+import 'package:flutterware_app/src/ui/command_palette.dart';
 import 'package:flutterware_app/src/shell/worktree_discovery.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 
@@ -390,6 +393,112 @@ void main() {
     await tester.tap(find.byTooltip(RegExp('Show the sidebar')));
     await tester.pumpAndSettle();
     expect(find.text('Overview'), findsOneWidget);
+  });
+
+  testWidgets('cmd+B works without clicking the window first', (tester) async {
+    // The binding existed but nothing in the shell held focus, so key events
+    // went to the root scope — an ancestor of the shortcuts, never a
+    // descendant — and no binding was reached until something was clicked.
+    await _pumpShell(tester);
+    expect(find.text('Overview'), findsOneWidget);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Overview'), findsNothing);
+  });
+
+  group('search', () {
+    /// Scoped to the palette: the sidebar shows the same plugin names, so an
+    /// unscoped finder would pass whether the palette opened or not.
+    Finder inPalette(String text) => find.descendant(
+      of: find.byType(CommandPalette),
+      matching: find.text(text, findRichText: true),
+    );
+
+    testWidgets('the trigger opens it', (tester) async {
+      await _pumpShell(tester);
+      expect(find.byType(CommandPalette), findsNothing);
+
+      await tester.tap(find.byType(SearchTrigger));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CommandPalette), findsOneWidget);
+      expect(inPalette('Type to search'), findsOneWidget);
+    });
+
+    testWidgets('cmd+K opens it', (tester) async {
+      await _pumpShell(tester);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CommandPalette), findsOneWidget);
+    });
+
+    testWidgets('typing finds a plugin by name', (tester) async {
+      await _pumpShell(tester);
+      await tester.tap(find.byType(SearchTrigger));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'depend');
+      await tester.pumpAndSettle();
+
+      expect(inPalette('Dependencies'), findsOneWidget);
+      expect(
+        inPalette('Tests'),
+        findsNothing,
+        reason: 'the query filters; it does not just list everything',
+      );
+    });
+
+    testWidgets('a hit navigates to its plugin and closes', (tester) async {
+      await _pumpShell(tester);
+      expect(find.text('panel:a.deps/-'), findsNothing);
+
+      await tester.tap(find.byType(SearchTrigger));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'depend');
+      await tester.pumpAndSettle();
+
+      await tester.tap(inPalette('Dependencies'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CommandPalette), findsNothing);
+      expect(
+        find.text('panel:a.deps/-'),
+        findsOneWidget,
+        reason: 'the address is the instruction — it selected the plugin',
+      );
+    });
+
+    testWidgets('escape closes without navigating', (tester) async {
+      await _pumpShell(tester);
+      await tester.tap(find.byType(SearchTrigger));
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CommandPalette), findsNothing);
+      expect(find.text('panel:a.deps/-'), findsNothing);
+      expect(find.text('Overview'), findsOneWidget);
+    });
+
+    testWidgets('a query that matches nothing says so', (tester) async {
+      await _pumpShell(tester);
+      await tester.tap(find.byType(SearchTrigger));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'zzzz');
+      await tester.pumpAndSettle();
+
+      expect(inPalette('No results for “zzzz”'), findsOneWidget);
+    });
   });
 }
 

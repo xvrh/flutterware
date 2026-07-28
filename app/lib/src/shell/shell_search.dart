@@ -1,0 +1,208 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutterware/plugins.dart';
+
+import '../plugins/plugin_core.dart';
+import '../ui/command_palette.dart';
+import '../ui/design/design.dart';
+import 'shell_controller.dart';
+import 'worktree.dart';
+
+/// Opens the palette over the shell.
+///
+/// Top-anchored: the field never moves, so the panel grows downward and the
+/// query stays where the eye already is.
+Future<void> showShellSearch(BuildContext context, ShellController shell) {
+  return showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.25),
+    builder: (context) => Padding(
+      padding: EdgeInsets.only(
+        top: (MediaQuery.sizeOf(context).height * 0.12).clamp(24.0, 140.0),
+        left: FwSpacing.xl,
+        right: FwSpacing.xl,
+        bottom: FwSpacing.xl,
+      ),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 520),
+          child: ShellSearch(shell, onDismiss: Navigator.of(context).pop),
+        ),
+      ),
+    ),
+  );
+}
+
+/// The Screen behind [CommandPalette]: it warms the index, runs the query
+/// across every open worktree, and turns the chosen hit into navigation.
+///
+/// Opening is the intent that pays for loading. Every keystroke after that
+/// filters what is already in memory — not because a rule forbids more, but
+/// because the scans are cached and idempotent, so redoing them per character
+/// would be work with no result.
+class ShellSearch extends StatefulWidget {
+  const ShellSearch(this.shell, {super.key, required this.onDismiss});
+
+  final ShellController shell;
+  final VoidCallback onDismiss;
+
+  @override
+  State<ShellSearch> createState() => _ShellSearchState();
+}
+
+class _ShellSearchState extends State<ShellSearch> {
+  var _query = '';
+  var _loading = false;
+
+  /// Every open worktree, not only the selected one. Two checkouts of the same
+  /// repo hold different work, and "which branch was that demo on?" is a
+  /// question the sidebar cannot answer at all.
+  Iterable<(Worktree, PluginCore)> get _cores sync* {
+    for (var worktree in widget.shell.openWorktrees) {
+      var session = widget.shell.sessionFor(worktree);
+      if (session == null) continue;
+      for (var core in session.session.cores) {
+        yield (worktree, core);
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_warm());
+  }
+
+  /// Loads what nothing has looked at yet, then lets the results in as each
+  /// core lands rather than waiting for the slowest.
+  Future<void> _warm() async {
+    var pending = [
+      for (var (_, core) in _cores)
+        core.computeAll().then((_) {
+          if (mounted) setState(() {});
+        }),
+    ];
+    if (pending.isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      await Future.wait(pending);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<PaletteSection> get _sections {
+    if (_query.trim().isEmpty) return const [];
+    var hits = [for (var (_, core) in _cores) ...core.search(_query)]
+      ..sort((a, b) => b.score - a.score);
+    return groupHits(hits);
+  }
+
+  /// Turns a hit into a place in the shell.
+  ///
+  /// The address is the instruction, which is what makes this one method rather
+  /// than a branch per kind of result. How deep it can go is bounded by what
+  /// the shell can select: a worktree, a plugin, and a plugin's child. An
+  /// address naming something further in — a catalog entry — selects its
+  /// package and stops there, because a panel's own state is not the shell's to
+  /// set. Closing that gap is what `reveal` is for.
+  void _open(SearchHit hit) {
+    widget.onDismiss();
+
+    var shell = widget.shell;
+    var address = hit.address;
+
+    if (address.worktree case var name?) {
+      var worktree = shell.openWorktrees
+          .where((w) => w.name == name)
+          .firstOrNull;
+      if (worktree != null && shell.selected?.path != worktree.path) {
+        shell.select(worktree);
+      }
+    }
+
+    if (address.plugin case var plugin?) {
+      // A child first when the address names one: `selectPlugin` would default
+      // to the first child and undo it.
+      if (address.segments.firstOrNull case var child?) {
+        shell.selectChild(plugin, child);
+      } else {
+        shell.selectPlugin(plugin);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CommandPalette(
+      sections: _sections,
+      loading: _loading,
+      onQueryChanged: (value) => setState(() => _query = value),
+      onActivate: _open,
+      onDismiss: widget.onDismiss,
+    );
+  }
+}
+
+/// A search-shaped button for the band. It is a button, not a field — the
+/// palette owns the real one — but it looks like a field because that is what
+/// it opens, and it carries the shortcut so the binding is discoverable
+/// without a menu.
+class SearchTrigger extends StatefulWidget {
+  const SearchTrigger({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<SearchTrigger> createState() => _SearchTriggerState();
+}
+
+class _SearchTriggerState extends State<SearchTrigger> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          height: 26,
+          width: 220,
+          padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
+          decoration: BoxDecoration(
+            color: _hovered ? colors.panel2 : colors.bg,
+            borderRadius: BorderRadius.circular(context.radii.radius),
+            border: Border.all(color: colors.line),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded, size: 14, color: colors.mut2),
+              const Gap(FwSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Search',
+                  style: context.type.caption.copyWith(color: colors.mut2),
+                ),
+              ),
+              Text(
+                _shortcutLabel(context),
+                style: context.type.micro.copyWith(color: colors.mut2),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What the platform actually calls the modifier. A macOS user reading `Ctrl K`
+/// would try the wrong key.
+String _shortcutLabel(BuildContext context) =>
+    Theme.of(context).platform == TargetPlatform.macOS ? '⌘K' : 'Ctrl K';

@@ -11,6 +11,7 @@ import '../utils/hot_reload.dart';
 import '../utils/router_outlet.dart';
 import '../utils/value_stream_builder.dart';
 import 'shell_controller.dart';
+import 'shell_search.dart';
 import 'worktree.dart';
 import 'worktree_home.dart';
 
@@ -72,20 +73,33 @@ class ShellView extends StatelessWidget {
               shell.toggleSidebar,
           const SingleActivator(LogicalKeyboardKey.keyB, control: true):
               shell.toggleSidebar,
+          const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
+              unawaited(showShellSearch(context, shell)),
+          const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
+              unawaited(showShellSearch(context, shell)),
         },
-        child: Scaffold(
-          body: Column(
-            children: [
-              _Band(shell),
-              Expanded(
-                child: Row(
-                  children: [
-                    if (shell.sidebarVisible) _Sidebar(shell),
-                    Expanded(child: _Panel(shell)),
-                  ],
+        // Key events dispatch from whatever holds primary focus and bubble to
+        // its *ancestors*. With nothing focused that is the root scope, which
+        // sits above `CallbackShortcuts` — so the bindings never see a key
+        // until something inside happens to be focused. Taking focus on mount
+        // puts the shell below them, which is what makes a shortcut work
+        // without clicking the window first.
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            body: Column(
+              children: [
+                _Band(shell),
+                Expanded(
+                  child: Row(
+                    children: [
+                      if (shell.sidebarVisible) _Sidebar(shell),
+                      Expanded(child: _Panel(shell)),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -127,6 +141,10 @@ class _Band extends StatelessWidget {
               ],
             ),
           ),
+          SearchTrigger(
+            onTap: () => unawaited(showShellSearch(context, shell)),
+          ),
+          const Gap(FwSpacing.md),
           _ReloadButton(shell),
           const _HotReloadButtons(),
           const Gap(FwSpacing.md),
