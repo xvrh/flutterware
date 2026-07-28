@@ -296,4 +296,95 @@ void main() {
     shell.dispose();
     expect(_disposedIds, hasLength(4));
   });
+
+  group('the address is the state', () {
+    test('every selection is legible as one', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      expect(
+        shell.address.toString(),
+        'fw://repo',
+        reason: 'a worktree on its home screen names no plugin',
+      );
+
+      shell.selectPlugin('a.two');
+      expect(shell.address.toString(), 'fw://repo/a.two');
+
+      shell.selectChild('a.two', 'packages/app');
+      expect(shell.address.toString(), 'fw://repo/a.two/packages%2Fapp');
+    });
+
+    test('go is the write every select goes through', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      shell.go(Address.parse('fw://repo/a.one'));
+
+      expect(shell.selectedPluginId, 'a.one');
+      expect(shell.isHome, isFalse);
+    });
+
+    test('an address round-trips back to the same place', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      shell.selectChild('a.two', 'packages/app');
+      var written = shell.address.toString();
+
+      shell.selectHome();
+      expect(shell.isHome, isTrue);
+
+      shell.go(Address.parse(written));
+      expect(shell.selectedPluginId, 'a.two');
+      expect(shell.selectedChildId, 'packages/app');
+    });
+
+    test('segments past the child ride along untouched', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      // What a catalog entry looks like: the shell reads the package and
+      // leaves the rest for whoever owns it.
+      shell.go(Address.parse('fw://repo/a.two/packages%2Fapp/demo.dart%23x'));
+
+      expect(shell.selectedPluginId, 'a.two');
+      expect(shell.selectedChildId, 'packages/app');
+      expect(shell.address!.segments, ['packages/app', 'demo.dart#x']);
+    });
+
+    test('a worktree that is not open is refused, not opened', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      var before = shell.address;
+
+      shell.go(Address.parse('fw://repo-explorer/a.one'));
+
+      expect(shell.address, before, reason: 'opening has a cost; go is a move');
+      expect(shell.openWorktrees, hasLength(1));
+    });
+
+    test('closing the selected tab moves the address to a live one', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      await shell.open(shell.closedWorktrees.first);
+      shell.selectPlugin('a.one');
+
+      expect(shell.close(shell.worktrees[1]), isTrue);
+
+      expect(shell.address!.worktree, 'repo');
+      expect(shell.selected!.branch, 'main');
+    });
+
+    test('the address a tab was left at is what it comes back to', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      var main = shell.worktrees.first;
+      shell.selectChild('a.two', 'packages/app');
+
+      await shell.open(shell.closedWorktrees.first);
+      shell.select(main);
+
+      expect(shell.address.toString(), 'fw://repo/a.two/packages%2Fapp');
+    });
+  });
 }

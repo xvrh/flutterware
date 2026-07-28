@@ -22,10 +22,6 @@ class WorktreeError {
 
 /// What a worktree's sidebar is pointed at. A null [pluginId] is the worktree's
 /// home screen, which is where a freshly opened worktree lands.
-typedef Selection = ({String? pluginId, String? childId});
-
-const Selection _home = (pluginId: null, childId: null);
-
 /// Owns the shell's state: which worktrees exist, which are open, and what is
 /// selected.
 ///
@@ -64,13 +60,25 @@ class ShellController extends ChangeNotifier {
   final _sessions = <String, WorktreeSession>{};
   final _workspaces = <String, Workspace>{};
   final _errors = <String, WorktreeError>{};
-  final _selections = <String, Selection>{};
+
+  /// Where each open worktree was left, so switching tabs comes back to the
+  /// same place rather than to its home screen. Keyed by path because that is
+  /// what everything else here is keyed by; the value is an [Address] like any
+  /// other, so restoring a tab is the same write as any other navigation.
+  final _remembered = <String, Address>{};
 
   /// Bumped per path on every load, so a load whose worktree was closed or
   /// reloaded underneath it drops its result instead of resurrecting a session.
   final _loads = <String, int>{};
 
-  String? _selectedPath;
+  /// **Where the shell is.** The one piece of navigation state; everything
+  /// below is read off it, and every way of moving is a write to it.
+  ///
+  /// Null before the first worktree opens. Its `worktree` is a directory name
+  /// (see [Worktree.name]) rather than a path, because that is what an address
+  /// carries and what makes one pasted from `fw` or an artifact resolve here.
+  Address? get address => _address;
+  Address? _address;
 
   /// Every worktree git reports, main first.
   List<Worktree> get worktrees => List.unmodifiable(_worktrees);
@@ -99,26 +107,40 @@ class ShellController extends ChangeNotifier {
 
   Workspace? workspaceFor(Worktree worktree) => _workspaces[worktree.path];
 
-  Worktree? get selected =>
-      _selectedPath == null ? null : _worktreeAt(_selectedPath!);
+  /// The open worktree the address names, or null when it names none.
+  ///
+  /// Resolved by name, so an address that arrived from outside — pasted, or
+  /// carried by an artifact — lands on the right tab without the writer having
+  /// known this machine's paths.
+  Worktree? get selected {
+    var name = _address?.worktree;
+    if (name == null) return null;
+    return openWorktrees.where((w) => w.name == name).firstOrNull;
+  }
 
-  WorktreeSession? get selectedSession =>
-      _selectedPath == null ? null : _sessions[_selectedPath!];
+  WorktreeSession? get selectedSession {
+    var path = selected?.path;
+    return path == null ? null : _sessions[path];
+  }
 
   /// The plugin whose panel is mounted, or null when the home screen is.
   String? get selectedPluginId {
-    var id = _selection?.pluginId;
+    var id = _address?.plugin;
     if (id == null) return null;
     // A reloaded config may no longer declare it; fall back to home rather than
     // to a panel that cannot be built.
-    var session = _sessions[_selectedPath!];
+    var session = selectedSession;
     if (session != null && session.pluginById(id) == null) return null;
     return id;
   }
 
   /// The selected sub-entry of that plugin — a package path — or null.
+  ///
+  /// The first segment after the plugin. Anything deeper belongs to the plugin
+  /// and the shell does not read it: a catalog entry is the catalog's business,
+  /// which is what keeps this from growing a case per plugin.
   String? get selectedChildId =>
-      selectedPluginId == null ? null : _selection?.childId;
+      selectedPluginId == null ? null : _address?.segments.firstOrNull;
 
   /// True while the selected worktree is showing its home screen.
   bool get isHome => selectedPluginId == null;
@@ -136,9 +158,6 @@ class ShellController extends ChangeNotifier {
     _sidebarVisible = !_sidebarVisible;
     notifyListeners();
   }
-
-  Selection? get _selection =>
-      _selectedPath == null ? null : _selections[_selectedPath!];
 
   Worktree? _worktreeAt(String path) =>
       _worktrees.where((w) => w.path == path).firstOrNull;
@@ -188,8 +207,10 @@ class ShellController extends ChangeNotifier {
     }
 
     _openPaths.add(worktree.path);
-    _selectedPath = worktree.path;
-    _selections[worktree.path] = _home;
+    // Before the session exists: the tab and its address are what the loader
+    // draws under.
+    _address = Address(worktree: worktree.name);
+    _remembered[worktree.path] = _address!;
     // The tab is on screen before the manifest subprocess starts; everything
     // below it draws a loader until the session lands.
     notifyListeners();
@@ -281,11 +302,25 @@ class ShellController extends ChangeNotifier {
   }
 
   void _closeAt(String path) {
+    // Read before the tab goes: `selected` resolves through `openWorktrees`,
+    // so after the removal it can no longer recognise the worktree it names
+    // and the address would be left pointing at a closed tab.
+    var wasSelected = selected?.path == path;
     _releaseAt(path);
     _openPaths.remove(path);
-    _selections.remove(path);
+    _remembered.remove(path);
     _loads.remove(path);
-    if (_selectedPath == path) _selectedPath = _openPaths.lastOrNull;
+    if (wasSelected) {
+      var fallback = _openPaths.lastOrNull;
+      _address = fallback == null ? null : _addressFor(fallback);
+    }
+  }
+
+  /// Where a tab should reopen: where it was left, else its home screen.
+  Address? _addressFor(String path) {
+    var worktree = _worktreeAt(path);
+    if (worktree == null) return null;
+    return _remembered[path] ?? Address(worktree: worktree.name);
   }
 
   /// Drops everything a load produced, keeping the tab and its selection. What
@@ -298,36 +333,60 @@ class ShellController extends ChangeNotifier {
     _errors.remove(path);
   }
 
+  /// **The one way the shell moves.** Every `select…` below is a call to this,
+  /// and so is opening a search hit or a pasted address.
+  ///
+  /// Refuses an address whose worktree is not open — navigation must not
+  /// silently land somewhere other than where it was told, and opening a
+  /// worktree is a decision with a cost, made by [open].
+  ///
+  /// The address is remembered against its worktree on the way through, so a
+  /// tab switched away from and back comes home to the same place.
+  void go(Address destination) {
+    var name = destination.worktree;
+    var worktree = name == null
+        ? null
+        : openWorktrees.where((w) => w.name == name).firstOrNull;
+    if (worktree == null) return;
+    if (destination == _address) return;
+
+    _address = destination;
+    _remembered[worktree.path] = destination;
+    notifyListeners();
+  }
+
+  /// Switches tabs, returning to wherever that tab was left.
   void select(Worktree worktree) {
     if (!isOpen(worktree)) return;
-    _selectedPath = worktree.path;
-    notifyListeners();
+    var destination = _addressFor(worktree.path);
+    if (destination != null) go(destination);
   }
 
   /// Returns the selected worktree to its home screen.
   void selectHome() {
-    if (_selectedPath == null) return;
-    _selections[_selectedPath!] = _home;
-    notifyListeners();
+    if (_address?.worktree case var name?) go(Address(worktree: name));
   }
 
   /// Selecting a plugin defaults to its first child, so a panel always has a
   /// concrete sub-entry to render rather than an ambiguous null.
   void selectPlugin(String id) {
-    if (_selectedPath == null) return;
-    var plugin = selectedSession?.pluginById(id);
-    _selections[_selectedPath!] = (
-      pluginId: id,
-      childId: plugin?.core.report.children.firstOrNull?.id,
-    );
-    notifyListeners();
+    var name = _address?.worktree;
+    if (name == null) return;
+    var child = selectedSession
+        ?.pluginById(id)
+        ?.core
+        .report
+        .children
+        .firstOrNull
+        ?.id;
+    go(Address(worktree: name, plugin: id, segments: [?child]));
   }
 
   /// Selects a plugin's sub-entry, and the plugin with it.
   void selectChild(String pluginId, String childId) {
-    if (_selectedPath == null) return;
-    _selections[_selectedPath!] = (pluginId: pluginId, childId: childId);
-    notifyListeners();
+    var name = _address?.worktree;
+    if (name == null) return;
+    go(Address(worktree: name, plugin: pluginId, segments: [childId]));
   }
 
   @override

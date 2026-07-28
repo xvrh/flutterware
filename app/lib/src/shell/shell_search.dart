@@ -95,38 +95,16 @@ class _ShellSearchState extends State<ShellSearch> {
     return groupHits(hits);
   }
 
-  /// Turns a hit into a place in the shell.
+  /// Hands the hit's address to the shell, which is the whole of it.
   ///
-  /// The address is the instruction, which is what makes this one method rather
-  /// than a branch per kind of result. How deep it can go is bounded by what
-  /// the shell can select: a worktree, a plugin, and a plugin's child. An
-  /// address naming something further in — a catalog entry — selects its
-  /// package and stops there, because a panel's own state is not the shell's to
-  /// set. Closing that gap is what `reveal` is for.
+  /// Not a branch per kind of result, and no longer a translation into
+  /// `select…` calls: the address *is* the instruction, and the shell's state
+  /// is an address, so opening a hit is one write. Segments the shell does not
+  /// understand ride along rather than being dropped — it reads the first as a
+  /// child and leaves the rest for whoever owns them.
   void _open(SearchHit hit) {
     widget.onDismiss();
-
-    var shell = widget.shell;
-    var address = hit.address;
-
-    if (address.worktree case var name?) {
-      var worktree = shell.openWorktrees
-          .where((w) => w.name == name)
-          .firstOrNull;
-      if (worktree != null && shell.selected?.path != worktree.path) {
-        shell.select(worktree);
-      }
-    }
-
-    if (address.plugin case var plugin?) {
-      // A child first when the address names one: `selectPlugin` would default
-      // to the first child and undo it.
-      if (address.segments.firstOrNull case var child?) {
-        shell.selectChild(plugin, child);
-      } else {
-        shell.selectPlugin(plugin);
-      }
-    }
+    widget.shell.go(hit.address);
   }
 
   @override
