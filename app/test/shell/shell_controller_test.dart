@@ -47,7 +47,7 @@ class _Fake extends NativePlugin<_FakeCore> {
   _Fake(super.core);
 
   @override
-  Widget buildPanel(BuildContext context, String? childId) => const SizedBox();
+  Widget buildPanel(BuildContext context) => const SizedBox();
 }
 
 PluginRegistry _panels(Iterable<String> ids) =>
@@ -349,7 +349,7 @@ void main() {
 
       expect(shell.selectedPluginId, 'a.two');
       expect(shell.selectedChildId, 'packages/app');
-      expect(shell.address!.segments, ['packages/app', 'demo.dart#x']);
+      expect(shell.address.segments, ['packages/app', 'demo.dart#x']);
     });
 
     test('a worktree that is not open is refused, not opened', () async {
@@ -371,7 +371,7 @@ void main() {
 
       expect(shell.close(shell.worktrees[1]), isTrue);
 
-      expect(shell.address!.worktree, 'repo');
+      expect(shell.address.worktree, 'repo');
       expect(shell.selected!.branch, 'main');
     });
 

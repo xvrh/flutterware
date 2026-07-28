@@ -195,6 +195,29 @@ void main() {
     expect(built, [Flavor.dev, Flavor.prod]);
   });
 
+  test('a name left out of a push is forgotten, like an explicit null', () {
+    // The host holds selections in the address, where an axis on its default is
+    // written as *nothing at all* — so an absent name is an instruction to
+    // forget rather than an absence of instruction. Merging instead is what
+    // made the top bar look stuck: choosing the default dropped the name from
+    // the payload and the shell went on rebuilding with the old choice.
+    axes.apply({
+      's': {'flavor': 'Production', 'compact': true},
+    });
+
+    expect(
+      axes.apply({
+        's': {'compact': true},
+      }),
+      isTrue,
+    );
+
+    // Proven by what the shell now builds with, not by reading a private map.
+    var topBar = axes.beginShell('s');
+    expect(topBar.picker('flavor', _flavors, Flavor.dev), Flavor.dev);
+    expect(topBar.flag('compact', false), isTrue, reason: 'this one was kept');
+  });
+
   test('an empty push changes nothing, and does not ask for a frame', () {
     var revision = axes.revision.value;
     expect(axes.apply(const {}), isFalse);

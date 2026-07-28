@@ -1,36 +1,62 @@
 import 'package:device_frame/device_frame.dart';
+import 'package:flutter/widgets.dart';
 
-/// A device the top bar offers, under the heading it appears below.
-typedef CatalogDevice = ({String group, String label, DeviceInfo info});
+import 'devices.dart';
 
-/// The devices worth offering, which is not all of them.
+export 'devices.dart';
+
+/// The silhouette to draw around a device, **built from our own measurements**.
 ///
-/// `Devices.all` is nearly a hundred entries and a menu nobody reads. This is
-/// the same shortlist the previous catalog shipped (`default_device_list.dart`)
-/// — one small, one large and one tablet per platform, which is what a layout
-/// actually gets tested against.
-final catalogDevices = <CatalogDevice>[
-  (group: 'iOS', label: 'iPhone SE', info: Devices.ios.iPhoneSE),
-  (group: 'iOS', label: 'iPhone 13 mini', info: Devices.ios.iPhone13Mini),
-  (group: 'iOS', label: 'iPhone 13', info: Devices.ios.iPhone13),
-  (group: 'iOS', label: 'iPhone 12 Pro Max', info: Devices.ios.iPhone12ProMax),
-  (group: 'iOS', label: 'iPad', info: Devices.ios.iPad),
-  (group: 'Android', label: 'Small phone', info: Devices.android.smallPhone),
-  (group: 'Android', label: 'Medium phone', info: Devices.android.mediumPhone),
-  (group: 'Android', label: 'Big phone', info: Devices.android.bigPhone),
-  (group: 'Android', label: 'Small tablet', info: Devices.android.smallTablet),
-  (
-    group: 'Android',
-    label: 'Medium tablet',
-    info: Devices.android.mediumTablet,
-  ),
-  (group: 'Desktop', label: 'MacBook Pro', info: Devices.macOS.macBookPro),
-  (group: 'Desktop', label: 'Wide monitor', info: Devices.macOS.wideMonitor),
-  (group: 'Desktop', label: 'Windows laptop', info: Devices.windows.laptop),
-  (group: 'Desktop', label: 'Linux laptop', info: Devices.linux.laptop),
-];
+/// Not a lookup. [catalogDevices] is the only list; this hands its numbers to
+/// `device_frame`'s generic builders, which take exactly what a [CatalogDevice]
+/// already holds — screen size, safe areas, pixel ratio, a name and a platform.
+/// So there is nothing here to keep in step with anything, and nothing to
+/// drift.
+///
+/// It used to map fourteen ids onto `device_frame`'s *named* devices, to borrow
+/// their hand-drawn bodies. That bought a more literal iPhone outline and cost
+/// a second list, a second set of measurements, and a test to hold the two
+/// together — for scenery around a picture whose size, ratio and safe areas
+/// were ours all along.
+///
+/// Null for [DeviceKind.desktop], which gets no silhouette: the panel is
+/// already a desktop-shaped canvas, and a monitor body scaled down to fit
+/// inside it costs more room than it explains. A desktop entry is a *size*.
+DeviceInfo? deviceFrameFor(CatalogDevice device) {
+  var screen = Size(device.width, device.height);
+  var safeAreas = EdgeInsets.fromLTRB(
+    device.insetLeft,
+    device.insetTop,
+    device.insetRight,
+    device.insetBottom,
+  );
 
-/// How a device reads in the bar: its screen in logical pixels, which is the
-/// number a layout is written against.
-String describeDevice(DeviceInfo device) =>
-    '${device.screenSize.width.round()}×${device.screenSize.height.round()}';
+  return switch (device.kind) {
+    DeviceKind.phone => DeviceInfo.genericPhone(
+      platform: _platform(device.platform),
+      id: device.id,
+      name: device.label,
+      screenSize: screen,
+      safeAreas: safeAreas,
+      pixelRatio: device.pixelRatio,
+    ),
+    DeviceKind.tablet => DeviceInfo.genericTablet(
+      platform: _platform(device.platform),
+      id: device.id,
+      name: device.label,
+      screenSize: screen,
+      safeAreas: safeAreas,
+      pixelRatio: device.pixelRatio,
+    ),
+    DeviceKind.desktop => null,
+  };
+}
+
+/// The one place our platform enum meets Flutter's.
+TargetPlatform _platform(DevicePlatform platform) => switch (platform) {
+  DevicePlatform.ios => TargetPlatform.iOS,
+  DevicePlatform.android => TargetPlatform.android,
+  DevicePlatform.macos => TargetPlatform.macOS,
+  DevicePlatform.windows => TargetPlatform.windows,
+  DevicePlatform.linux => TargetPlatform.linux,
+};

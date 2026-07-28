@@ -73,7 +73,7 @@ class _Fake extends NativePlugin<_FakeCore> {
   var disposed = false;
 
   @override
-  Widget buildPanel(BuildContext context, String? childId) => const SizedBox();
+  Widget buildPanel(BuildContext context) => const SizedBox();
 
   @override
   void dispose() {

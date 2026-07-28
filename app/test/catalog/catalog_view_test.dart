@@ -1,7 +1,8 @@
-import 'package:device_frame/device_frame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/ui_catalog.dart';
+import 'package:flutterware/plugins.dart';
+import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/catalog_session.dart';
 import 'package:flutterware_app/src/catalog/catalog_view.dart';
@@ -63,12 +64,39 @@ void main() {
     (w) => w.runtimeType.toString() == '_Toggle',
   );
 
-  Future<void> pump(WidgetTester tester, CatalogSession session) =>
-      tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(body: CatalogView(session: session)),
+  // The view reads what it is staged as from the address and writes picks back
+  // to it, so a test needs one. Exposed so a test can assert on the address
+  // rather than on a field, which is the whole point of the change.
+  late ValueNotifier<Address> address;
+
+  Future<void> pump(
+    WidgetTester tester,
+    CatalogSession session, {
+    String? device,
+    Map<String, String> axes = const {},
+    Map<String, String> knobs = const {},
+  }) {
+    address = ValueNotifier(
+      Address(
+        worktree: 'test',
+        plugin: 'flutterware.ui_catalog',
+        axes: {
+          if (device != null) 'device': device,
+          for (var axis in axes.entries) 'axis.${axis.key}': axis.value,
+          for (var knob in knobs.entries) 'knob.${knob.key}': knob.value,
+        },
+      ),
+    );
+    return tester.pumpWidget(
+      MaterialApp(
+        home: AddressRoot(
+          address: address,
+          onChanged: (next) => address.value = next,
+          child: Scaffold(body: CatalogView(session: session)),
         ),
-      );
+      ),
+    );
+  }
 
   testWidgets('a broken entry keeps its place in the tree', (tester) async {
     var session = sessionWithBroken(beta, 'boom');
@@ -344,7 +372,9 @@ void main() {
       await tester.tap(find.text('iPhone 13').last);
       await tester.pumpAndSettle();
 
-      expect(session.staging.device?.name, isNotNull);
+      // Into the address, not into a field on the session. That is the fix:
+      // one place holds it, and the picture is read back from there.
+      expect(address.value.axes['device'], 'iphone-13');
       // The screen in logical pixels, which is the number a layout is written
       // against — not the physical one the guest is actually rendering.
       expect(find.text('390×844'), findsOneWidget);
@@ -353,8 +383,7 @@ void main() {
 
     testWidgets('the frame can be taken off once there is one', (tester) async {
       var session = sessionWithBroken(beta, 'boom');
-      session.staging.device = Devices.ios.iPhone13;
-      await pump(tester, session);
+      await pump(tester, session, device: 'iphone-13');
 
       await tester.tap(find.byTooltip('Hide the frame'));
       await tester.pump();
@@ -365,46 +394,48 @@ void main() {
   });
 
   group('the form factor', () {
-    test('mobile picks a device; desktop and all are the panel', () {
-      var staging = CatalogStaging()..followEntry('mobile');
-      expect(staging.device?.screenSize, const Size(390, 844));
+    // Selected *and* broken, so the canvas renders the compile error rather
+    // than a texture — the only way in without a live guest engine. The top
+    // bar draws either way, which is what these are about.
+    const mobile = CatalogEntry(
+      path: 'demo/m.dart',
+      symbol: 'm',
+      annotation: 'Demo()',
+      name: 'M',
+      formFactor: 'mobile',
+    );
 
-      staging.followEntry('desktop');
-      expect(
-        staging.device,
-        isNull,
-        reason: 'the panel is already desktop-shaped',
+    testWidgets('a mobile demo is framed as a phone with no parameter at all', (
+      tester,
+    ) async {
+      // The entry's declaration is a default read at build time, not something
+      // pushed into the session on switch — so nothing is written to the
+      // address, and moving to a demo with no opinion simply stops defaulting.
+      await pump(tester, sessionOf([mobile, alpha], mobile, 'boom'));
+
+      expect(find.text('iPhone 13'), findsOneWidget);
+      expect(address.value.axes, isEmpty, reason: 'a default is not a choice');
+    });
+
+    testWidgets('and a chosen device outranks it', (tester) async {
+      await pump(
+        tester,
+        sessionOf([mobile, alpha], mobile, 'boom'),
+        device: 'ipad',
       );
 
-      staging.followEntry('mobile');
-      staging.followEntry('all');
-      expect(staging.device, isNull, reason: 'all is an entry with no opinion');
+      expect(find.text('iPad'), findsOneWidget);
+      expect(find.text('iPhone 13'), findsNothing);
     });
 
-    test('an entry that says nothing leaves a hand pick alone', () {
-      var staging = CatalogStaging()..device = Devices.ios.iPad;
-      staging.followEntry(null);
-      expect(staging.device?.identifier, Devices.ios.iPad.identifier);
-    });
-
-    test('but does not inherit the device the last entry asked for', () {
-      var staging = CatalogStaging()..followEntry('mobile');
-      staging.followEntry(null);
-      expect(
-        staging.device,
-        isNull,
-        reason: 'one mobile demo must not turn the next demo into a phone',
+    testWidgets('and fit silences it', (tester) async {
+      await pump(
+        tester,
+        sessionOf([mobile, alpha], mobile, 'boom'),
+        device: 'fit',
       );
-    });
 
-    test('and an entry with an opinion overrules a hand pick', () {
-      var staging = CatalogStaging()..device = Devices.ios.iPad;
-      staging.followEntry('mobile');
-      expect(staging.device?.screenSize, const Size(390, 844));
-
-      // The pick it overruled is gone, rather than waiting to come back.
-      staging.followEntry(null);
-      expect(staging.device, isNull);
+      expect(find.text('Fit'), findsOneWidget);
     });
   });
 
@@ -488,7 +519,9 @@ void main() {
             defaultValue: 'Hello',
           ),
         ]);
-      await pump(tester, session);
+      // Moved because the *address* says so. The report's own `value` is the
+      // demo's confirmation and does not decide what is drawn.
+      await pump(tester, session, knobs: const {'moved': 'changed'});
 
       Color colorOf(String name) =>
           tester.widget<Text>(find.text(name)).style!.color!;
@@ -592,26 +625,42 @@ void main() {
           ),
           compact,
         ]);
-      await pump(tester, session);
+      // Off its default because the *address* says so. The report's own
+      // `value` is the guest's confirmation and does not decide what is drawn.
+      await pump(tester, session, axes: const {'flavor': 'prod'});
 
       Color colorOf(String name) =>
           tester.widget<Text>(find.text(name)).style!.color!;
       expect(colorOf('flavor'), isNot(colorOf('compact')));
     });
 
-    testWidgets('the toggle reports its tap, and draws it before the guest', (
+    testWidgets('the toggle writes the address, and draws it at once', (
       tester,
     ) async {
-      // Hand-rolled, so the tap path is ours to get right — and the value is
-      // drawn from the optimistic patch, since the guest has not answered yet.
+      // Hand-rolled, so the tap path is ours to get right. The value is drawn
+      // from what the address now says rather than from an optimistic patch
+      // over the report: the guest has not answered, and nothing was mutated
+      // to make the control move.
       var session = sessionWithBroken(beta, 'boom')
         ..axes = report(const [compact]);
       await pump(tester, session);
 
+      var onDefault = tester.widget<Text>(find.text('compact')).style!.color;
+
       await tester.tap(toggles);
       await tester.pump();
 
-      expect(session.axes.axes.single.value, isTrue);
+      expect(address.value.axes['axis.compact'], 'true');
+      expect(
+        session.axes.axes.single.value,
+        isNot(true),
+        reason: 'the report is still exactly what the guest said',
+      );
+      expect(
+        tester.widget<Text>(find.text('compact')).style!.color,
+        isNot(onDefault),
+        reason: 'and the control has already moved, from the address alone',
+      );
     });
 
     testWidgets('the options are what the guest reported, not the signature', (
@@ -627,6 +676,52 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('staging'), findsOneWidget);
       expect(find.text('prod'), findsOneWidget);
+    });
+  });
+
+  group('a knob writes the address', () {
+    KnobReport report(List<KnobDescriptor> knobs) =>
+        KnobReport(entryId: beta.id, knobs: knobs);
+
+    const title = KnobDescriptor(
+      name: 'title',
+      kind: KnobKind.string,
+      value: 'Hello',
+      defaultValue: 'Hello',
+    );
+
+    testWidgets('and the demo is told because of that, not instead of it', (
+      tester,
+    ) async {
+      var session = sessionWithBroken(beta, 'boom')..knobs = report([title]);
+      await pump(tester, session);
+
+      await tester.enterText(find.byType(TextField).last, 'Bonjour');
+      // The field debounces, so a burst of typing is one write rather than one
+      // per keystroke.
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(address.value.axes['knob.title'], 'Bonjour');
+      expect(
+        session.knobs.knobs.single.value,
+        'Hello',
+        reason: 'the report is still exactly what the demo said',
+      );
+    });
+
+    testWidgets('and returning it to the default clears the parameter', (
+      tester,
+    ) async {
+      // Silence *is* the default, which is what makes an address name only
+      // what somebody chose — and what made the top bar stick when a stale
+      // confirmed value was used as the fallback instead.
+      var session = sessionWithBroken(beta, 'boom')..knobs = report([title]);
+      await pump(tester, session, knobs: const {'title': 'Bonjour'});
+
+      await tester.enterText(find.byType(TextField).last, 'Hello');
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(address.value.axes.containsKey('knob.title'), isFalse);
     });
   });
 }

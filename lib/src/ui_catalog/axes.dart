@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'axis.dart';
@@ -138,25 +139,31 @@ class CatalogAxes implements TopBarState {
 
   /// Records selections and asks for a rebuild. Returns whether anything moved.
   ///
-  /// A null value puts an axis back to the default the shell wrote, which is
-  /// the same thing a null means to a knob — and is how a top bar offers
-  /// "reset" without having to know what the default was.
+  /// **A shell's map is replaced, not merged.** What arrives is the whole truth
+  /// for that shell: the host holds selections in the address, and an axis on
+  /// its default is written there as *nothing at all*, so an absent name is an
+  /// instruction to forget rather than an absence of instruction. A null value
+  /// says the same thing explicitly, and both put an axis back to the default
+  /// the shell wrote.
   ///
-  /// Selections for shells that have not built are kept rather than dropped:
-  /// that is what lets the host push everything it knows up front and have the
-  /// right values already in hand when a shell first builds.
+  /// Merging was right when the host kept its own store and sent deltas, and it
+  /// is what made a top bar look stuck: choosing the default removed the name
+  /// from the payload, nothing here removed it from [_selected], and the shell
+  /// went on rebuilding with the old choice.
+  ///
+  /// Shells not named at all are untouched, which is what lets the host push
+  /// everything it knows up front and have the right values already in hand
+  /// when a shell first builds.
   bool apply(Map<String, Map<String, Object?>> byShell) {
     var changed = false;
     for (var MapEntry(key: shellId, value: selections) in byShell.entries) {
-      var current = _selected[shellId] ??= {};
-      for (var MapEntry(key: name, value: selection) in selections.entries) {
-        if (selection == null) {
-          if (current.remove(name) != null) changed = true;
-        } else if (current[name] != selection) {
-          current[name] = selection;
-          changed = true;
-        }
-      }
+      var next = {
+        for (var MapEntry(key: name, value: selection) in selections.entries)
+          name: ?selection,
+      };
+      if (mapEquals(_selected[shellId], next)) continue;
+      _selected[shellId] = next;
+      changed = true;
     }
     if (changed) revision.value++;
     return changed;

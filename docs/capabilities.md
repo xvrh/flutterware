@@ -192,7 +192,7 @@ knobs: List<CatalogKnob>?   # Present only when `--knobs` asked for them: readin
 Render one entry to a PNG
 
 ```sh
-fw run ui_catalog screenshot --entry=<choice> [--output=…] [--knobs=…] [--width=…] [--height=…]
+fw run ui_catalog screenshot --entry=<choice> [--output=…] [--knobs=…] [--device=…] [--width=…] [--height=…]
 ```
 
 Returns `Artifact`:
@@ -204,5 +204,6 @@ Shape not published: `Artifact` writes its own `toJson`, so its fields are not i
 | `entry` | choice (from `entries`) | yes | — | The id of the entry to render |
 | `output` | string | no | — | Where to write the PNG; a build path when omitted |
 | `knobs` | string | no | — | Values to turn before the frame is taken, as `name=value` pairs or a JSON object. Ask `describe --knobs` what an entry offers. Recorded on the address, so two settings are two artifacts rather than one file written twice. |
+| `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the demo reads the phone from `MediaQuery` rather than a rectangle. Omitted means the panel. The same value the GUI writes as `?device=`, so an address captured here reopens framed the way it was shot. |
 | `width` | integer | no | 900 | — |
 | `height` | integer | no | 700 | — |

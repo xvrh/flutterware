@@ -6,9 +6,11 @@ import 'package:flutterware/ui_catalog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../address/address_scope.dart';
 import '../embedder/embedded_engine.dart';
 import '../embedder/protocol.dart';
 import '../ui/design/design.dart';
+import 'catalog_params.dart';
 import 'catalog_devices.dart';
 import 'catalog_entry.dart';
 import 'catalog_session.dart';
@@ -120,6 +122,17 @@ class _CatalogViewState extends State<CatalogView> {
   void _stopPolling() {
     _poll?.cancel();
     _poll = null;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The guest is told what the address asks of the shell's axes, from here
+    // rather than from the panel above: this widget is what renders a session,
+    // and the standalone harness mounts it without a panel. One place, so the
+    // two cannot drift.
+    _session.axisSelections = AddressScope.params(context, namespace: 'axis');
+    _session.knobSelections = AddressScope.params(context, namespace: 'knob');
   }
 
   /// Cheap by construction: the daemon answers `unchanged` when nothing on disk
@@ -272,7 +285,7 @@ class _CatalogViewState extends State<CatalogView> {
   /// the device's resolution and scaling the result down is also the only way
   /// the texture stays sharp.
   Widget _buildTexture(BuildContext context, EmbeddedEngine engine) {
-    var device = _session.staging.device;
+    var device = _deviceOf(context, _session);
     if (device == null) {
       var dpr = MediaQuery.of(context).devicePixelRatio;
       return LayoutBuilder(
@@ -283,7 +296,7 @@ class _CatalogViewState extends State<CatalogView> {
       );
     }
 
-    var screen = device.screenSize;
+    var screen = Size(device.width, device.height);
     _resizeAfterFrame(
       engine,
       screen,
@@ -291,7 +304,21 @@ class _CatalogViewState extends State<CatalogView> {
       // What the frame draws around the screen, told to the thing rendering
       // inside it — otherwise the notch is decoration and an AppBar sits under
       // it.
-      safeAreas: device.safeAreas,
+      safeAreas: EdgeInsets.fromLTRB(
+        device.insetLeft,
+        device.insetTop,
+        device.insetRight,
+        device.insetBottom,
+      ),
+    );
+    // The one thing `device_frame` is here for, and the only place it is
+    // touched: the silhouette. Everything above came from our own measurements.
+    // Null for a desktop size, which gets none.
+    var chrome = deviceFrameFor(device);
+    var guest = _guestInput(
+      engine,
+      device.pixelRatio,
+      SizedBox.fromSize(size: screen),
     );
     return Center(
       child: Padding(
@@ -300,15 +327,9 @@ class _CatalogViewState extends State<CatalogView> {
         // and then enlarged is just a blurrier phone.
         child: FittedBox(
           fit: BoxFit.scaleDown,
-          child: DeviceFrame(
-            device: device,
-            isFrameVisible: _session.staging.frameVisible,
-            screen: _guestInput(
-              engine,
-              device.pixelRatio,
-              SizedBox.fromSize(size: screen),
-            ),
-          ),
+          child: chrome == null || !_session.staging.frameVisible
+              ? SizedBox.fromSize(size: screen, child: guest)
+              : DeviceFrame(device: chrome, screen: guest),
         ),
       ),
     );
@@ -414,25 +435,36 @@ class _KnobPanel extends StatelessWidget {
       color: context.colors.panel,
       constraints: const BoxConstraints(maxHeight: 140),
       width: double.infinity,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.lg,
-          vertical: FwSpacing.md,
-        ),
-        child: Wrap(
-          spacing: FwSpacing.xxl,
-          runSpacing: FwSpacing.md,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            for (var knob in session.knobs.knobs)
-              _Knob(
-                // Keyed by name, so a field keeps its cursor when the report
-                // is read back and the list is rebuilt around it.
-                key: ValueKey(knob.name),
-                knob: knob,
-                onChanged: (value) => session.setKnob(knob.name, value),
+      // The entry's knobs own `knob.*`, and only this panel. Nested below the
+      // level that owns the entry segment, which is what says a knob dies with
+      // the entry while an axis does not.
+      child: AddressScope(
+        namespace: 'knob',
+        child: Builder(
+          builder: (context) {
+            var selections = AddressScope.params(context);
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: FwSpacing.lg,
+                vertical: FwSpacing.md,
               ),
-          ],
+              child: Wrap(
+                spacing: FwSpacing.xxl,
+                runSpacing: FwSpacing.md,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (var knob in session.knobs.knobs)
+                    _Knob(
+                      // Keyed by name, so a field keeps its cursor when the
+                      // report is read back and the list is rebuilt around it.
+                      key: ValueKey(knob.name),
+                      knob: knob,
+                      selections: selections,
+                    ),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -440,10 +472,22 @@ class _KnobPanel extends StatelessWidget {
 }
 
 class _Knob extends StatelessWidget {
-  const _Knob({super.key, required this.knob, required this.onChanged});
+  const _Knob({super.key, required this.knob, required this.selections});
 
   final KnobDescriptor knob;
-  final ValueChanged<Object?> onChanged;
+
+  /// What the address asked for. Wins over the guest's confirmation while the
+  /// two disagree, which is the whole of the optimistic update — see
+  /// [paramDisplayValue]. Nothing is mutated to achieve it.
+  final Map<String, String> selections;
+
+  Object? get _value => paramDisplayValue(knob, selections);
+
+  /// Writes the choice into the address, and stops there. The demo is told
+  /// because the session is watching the address, not because this told it.
+  void _choose(BuildContext context, Object? value) => AddressScope.write(
+    context,
+  ).setParam(paramKeyFor(knob), paramValueSlug(knob, value));
 
   @override
   Widget build(BuildContext context) {
@@ -456,7 +500,9 @@ class _Knob extends StatelessWidget {
           style: context.type.caption.copyWith(
             // Bright when it has been moved, so what you have changed is
             // legible at a glance against what you have not.
-            color: knob.isDefault ? context.colors.mut : context.colors.ink,
+            color: _value == knob.defaultValue
+                ? context.colors.mut
+                : context.colors.ink,
           ),
         ),
         _control(context),
@@ -467,11 +513,14 @@ class _Knob extends StatelessWidget {
   Widget _control(BuildContext context) {
     switch (knob.kind) {
       case KnobKind.boolean:
-        return _Toggle(value: knob.value == true, onChanged: onChanged);
+        return _Toggle(
+          value: _value == true,
+          onChanged: (v) => _choose(context, v),
+        );
       case KnobKind.picker:
         return _Popover<String?>(
-          selected: knob.value as String?,
-          onSelected: onChanged,
+          selected: _value as String?,
+          onSelected: (v) => _choose(context, v),
           groups: [
             (
               heading: null,
@@ -483,7 +532,7 @@ class _Knob extends StatelessWidget {
           ],
           child: _Field(
             child: Text(
-              '${knob.value ?? '—'}',
+              (_value ?? '—').toString(),
               style: context.type.caption.copyWith(color: context.colors.ink),
             ),
           ),
@@ -492,14 +541,22 @@ class _Knob extends StatelessWidget {
         if (knob.min case var min?) {
           if (knob.max case var max?) return _slider(context, min, max);
         }
-        return _NumberField(knob: knob, onChanged: onChanged);
+        return _NumberField(
+          knob: knob,
+          value: _value,
+          onChanged: (v) => _choose(context, v),
+        );
       case KnobKind.string:
-        return _StringField(knob: knob, onChanged: onChanged);
+        return _StringField(
+          knob: knob,
+          value: _value,
+          onChanged: (v) => _choose(context, v),
+        );
     }
   }
 
   Widget _slider(BuildContext context, num min, num max) {
-    var value = (knob.value as num? ?? min).toDouble().clamp(
+    var value = (_value as num? ?? min).toDouble().clamp(
       min.toDouble(),
       max.toDouble(),
     );
@@ -521,8 +578,10 @@ class _Knob extends StatelessWidget {
               divisions: knob.kind == KnobKind.integer
                   ? (max - min).round().clamp(1, 1000)
                   : null,
-              onChanged: (v) =>
-                  onChanged(knob.kind == KnobKind.integer ? v.round() : v),
+              onChanged: (v) => _choose(
+                context,
+                knob.kind == KnobKind.integer ? v.round() : v,
+              ),
             ),
           ),
         ),
@@ -639,9 +698,16 @@ class _Field extends StatelessWidget {
 /// Every keystroke would be a round trip to the guest and a rebuild of the
 /// demo, which is both wasteful and jumpy to read.
 class _StringField extends StatefulWidget {
-  const _StringField({required this.knob, required this.onChanged});
+  const _StringField({
+    required this.knob,
+    required this.value,
+    required this.onChanged,
+  });
 
   final KnobDescriptor knob;
+
+  /// What the address asks for, not what the guest last confirmed.
+  final Object? value;
   final ValueChanged<Object?> onChanged;
 
   @override
@@ -649,9 +715,7 @@ class _StringField extends StatefulWidget {
 }
 
 class _StringFieldState extends State<_StringField> {
-  late final _controller = TextEditingController(
-    text: '${widget.knob.value ?? ''}',
-  );
+  late final _controller = TextEditingController(text: '${widget.value ?? ''}');
   final _focus = FocusNode();
   Timer? _debounce;
 
@@ -662,7 +726,7 @@ class _StringFieldState extends State<_StringField> {
     // that has the caret would fight the cursor. Focus rather than the debounce
     // timer: between a debounce firing and the guest answering there is a
     // stretch where no timer is pending and the user is still typing.
-    var value = '${widget.knob.value ?? ''}';
+    var value = '${widget.value ?? ''}';
     if (!_focus.hasFocus && value != _controller.text) {
       _controller.text = value;
     }
@@ -704,9 +768,16 @@ class _StringFieldState extends State<_StringField> {
 /// A number without bounds, which is a field rather than a slider — there is
 /// nothing to slide between.
 class _NumberField extends StatefulWidget {
-  const _NumberField({required this.knob, required this.onChanged});
+  const _NumberField({
+    required this.knob,
+    required this.value,
+    required this.onChanged,
+  });
 
   final KnobDescriptor knob;
+
+  /// What the address asks for, not what the guest last confirmed.
+  final Object? value;
   final ValueChanged<Object?> onChanged;
 
   @override
@@ -717,9 +788,7 @@ class _NumberFieldState extends State<_NumberField> {
   // Owned rather than built: a controller made in `build` is a new one on every
   // rebuild, and the panel rebuilds whenever any knob moves — so typing here
   // while a slider elsewhere settles would lose what you had typed.
-  late final _controller = TextEditingController(
-    text: '${widget.knob.value ?? ''}',
-  );
+  late final _controller = TextEditingController(text: '${widget.value ?? ''}');
   final _focus = FocusNode();
 
   @override
@@ -727,7 +796,7 @@ class _NumberFieldState extends State<_NumberField> {
     super.didUpdateWidget(old);
     // Never while it has the caret: the value on screen is then the user's,
     // and the guest's is what they are in the middle of replacing.
-    var value = '${widget.knob.value ?? ''}';
+    var value = '${widget.value ?? ''}';
     if (!_focus.hasFocus && value != _controller.text) {
       _controller.text = value;
     }
@@ -784,7 +853,7 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var staging = session.staging;
-    var device = staging.device;
+    var device = _deviceOf(context, session);
     return Container(
       color: context.colors.panel,
       padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
@@ -792,7 +861,7 @@ class _TopBar extends StatelessWidget {
       child: Row(
         spacing: FwSpacing.md,
         children: [
-          _DevicePicker(staging: staging),
+          _DevicePicker(device: device),
           if (device != null)
             Text(
               describeDevice(device),
@@ -807,20 +876,35 @@ class _TopBar extends StatelessWidget {
           // device name, and the alternative is that the last one silently
           // pushes the frame toggle off the end.
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                spacing: FwSpacing.lg,
-                children: [
-                  for (var axis in session.axes.axes)
-                    _Axis(
-                      // Keyed by name so a picker keeps its place when the
-                      // report is read back and the row is rebuilt around it.
-                      key: ValueKey(axis.name),
-                      axis: axis,
-                      onChanged: (value) => session.setAxis(axis.name, value),
+            // The shell's axes own `axis.*`, and only this subtree. Nested
+            // rather than written as a full key so the controls below say
+            // `theme`, not `axis.theme` — and so the device picker beside them
+            // keeps reading flutterware's own un-namespaced parameters.
+            child: AddressScope(
+              namespace: 'axis',
+              // Below the scope, so `params` is `axis.*` rather than
+              // flutterware's own un-namespaced ones.
+              child: Builder(
+                builder: (context) {
+                  var selections = AddressScope.params(context);
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      spacing: FwSpacing.lg,
+                      children: [
+                        for (var axis in session.axes.axes)
+                          _Axis(
+                            // Keyed by name so a picker keeps its place when
+                            // the report is read back and the row is rebuilt
+                            // around it.
+                            key: ValueKey(axis.name),
+                            axis: axis,
+                            selections: selections,
+                          ),
+                      ],
                     ),
-                ],
+                  );
+                },
               ),
             ),
           ),
@@ -850,13 +934,24 @@ class _TopBar extends StatelessWidget {
 /// device picker and a frame toggle, and an unlabelled `staging` would read as
 /// something about the phone.
 class _Axis extends StatelessWidget {
-  const _Axis({super.key, required this.axis, required this.onChanged});
+  const _Axis({super.key, required this.axis, required this.selections});
 
   final KnobDescriptor axis;
-  final ValueChanged<Object?> onChanged;
+
+  /// What the address asked for, which wins over the guest's own report while
+  /// the two disagree — see [axisDisplayValue]. That is the whole of the
+  /// optimistic update, and it mutates nothing.
+  final Map<String, String> selections;
+
+  /// Writes the choice into the address, and stops there. The guest is told
+  /// because the session is watching the address, not because this told it.
+  void _choose(BuildContext context, Object? value) => AddressScope.write(
+    context,
+  ).setParam(paramKeyFor(axis), paramValueSlug(axis, value));
 
   @override
   Widget build(BuildContext context) {
+    var value = paramDisplayValue(axis, selections);
     return Row(
       mainAxisSize: MainAxisSize.min,
       spacing: FwSpacing.sm,
@@ -866,15 +961,17 @@ class _Axis extends StatelessWidget {
           style: context.type.caption.copyWith(
             // Bright once it is off its default, so what you have changed
             // about the whole catalog is legible without reading the values.
-            color: axis.isDefault ? context.colors.mut : context.colors.ink,
+            color: value == axis.defaultValue
+                ? context.colors.mut
+                : context.colors.ink,
           ),
         ),
         if (axis.kind == KnobKind.boolean)
-          _Toggle(value: axis.value == true, onChanged: onChanged)
+          _Toggle(value: value == true, onChanged: (v) => _choose(context, v))
         else
           _Popover<String?>(
-            selected: axis.value as String?,
-            onSelected: onChanged,
+            selected: value as String?,
+            onSelected: (v) => _choose(context, v),
             groups: [
               (
                 heading: null,
@@ -890,7 +987,7 @@ class _Axis extends StatelessWidget {
             ],
             child: _Field(
               child: Text(
-                '${axis.value ?? '—'}',
+                (value ?? '—').toString(),
                 style: context.type.caption.copyWith(color: context.colors.ink),
               ),
             ),
@@ -907,25 +1004,22 @@ class _Axis extends StatelessWidget {
 /// scale-from-nothing entrance belongs to a floating action button rather than
 /// to a control that drops open under your cursor.
 class _DevicePicker extends StatelessWidget {
-  const _DevicePicker({required this.staging});
+  const _DevicePicker({required this.device});
 
-  final CatalogStaging staging;
+  /// What is on screen, already resolved. The picker holds nothing.
+  final CatalogDevice? device;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var device = staging.device;
-    var label = device == null
-        ? 'Fit'
-        : catalogDevices
-              .firstWhere(
-                (d) => d.info.identifier == device.identifier,
-                orElse: () => (group: '', label: device.name, info: device),
-              )
-              .label;
-    return _Popover<DeviceInfo?>(
+    return _Popover<CatalogDevice?>(
       selected: device,
-      onSelected: (value) => staging.device = value,
+      // **The only place a device is chosen, and it writes the address.** It
+      // used to set the staging and let the panel copy that into the address a
+      // frame later; the copy came back stale and undid the pick.
+      onSelected: (value) => AddressScope.write(
+        context,
+      ).setParam('device', value?.id ?? fitDeviceId),
       groups: [
         (
           heading: null,
@@ -936,7 +1030,7 @@ class _DevicePicker extends StatelessWidget {
             heading: group,
             items: [
               for (var d in catalogDevices.where((d) => d.group == group))
-                (value: d.info, label: d.label, detail: describeDevice(d.info)),
+                (value: d, label: d.label, detail: describeDevice(d)),
             ],
           ),
       ],
@@ -952,7 +1046,10 @@ class _DevicePicker extends StatelessWidget {
           spacing: FwSpacing.xs,
           children: [
             Text(
-              label,
+              // Straight off the device now. It used to be a scan of the list
+              // by `device_frame` identifier, because staging held that type
+              // rather than ours.
+              device?.label ?? 'Fit',
               style: context.type.caption.copyWith(color: colors.ink),
             ),
             Icon(Icons.expand_more, size: 14, color: colors.mut),
@@ -1698,3 +1795,15 @@ class _StatusBar extends StatelessWidget {
     );
   }
 }
+
+/// What the guest is staged as: whatever the address names, else what the entry
+/// on screen declares.
+///
+/// Read at every point of use rather than stored anywhere. Subscribes to the
+/// one parameter, so choosing a device rebuilds what draws the frame and
+/// nothing above it.
+CatalogDevice? _deviceOf(BuildContext context, CatalogSession session) =>
+    resolveDevice(
+      AddressScope.param(context, 'device'),
+      formFactor: session.selected?.formFactor,
+    );

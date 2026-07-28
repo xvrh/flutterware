@@ -74,11 +74,25 @@ class ShellController extends ChangeNotifier {
   /// **Where the shell is.** The one piece of navigation state; everything
   /// below is read off it, and every way of moving is a write to it.
   ///
-  /// Null before the first worktree opens. Its `worktree` is a directory name
-  /// (see [Worktree.name]) rather than a path, because that is what an address
-  /// carries and what makes one pasted from `fw` or an artifact resolve here.
-  Address? get address => _address;
-  Address? _address;
+  /// Always present, though it may name nothing — `fw://` before the first
+  /// worktree opens, and again if the last one closes. A nullable address would
+  /// make every reader below handle two empties.
+  ///
+  /// Its `worktree` is a directory name (see [Worktree.name]) rather than a
+  /// path, because that is what an address carries and what makes one pasted
+  /// from `fw` or an artifact resolve here.
+  Address get address => _address.value;
+
+  /// The address on its own, for widgets that want to rebuild when it moves and
+  /// not when a session finishes loading.
+  ///
+  /// What `AddressRoot` listens to. Separate from [notifyListeners] on purpose:
+  /// this notifier is how a change reaches exactly the widgets that read the
+  /// part that changed, and routing it through the shell's blanket
+  /// notification instead would rebuild the window for a slider.
+  ValueListenable<Address> get addressListenable => _address;
+
+  final _address = ValueNotifier<Address>(Address());
 
   /// Every worktree git reports, main first.
   List<Worktree> get worktrees => List.unmodifiable(_worktrees);
@@ -113,7 +127,7 @@ class ShellController extends ChangeNotifier {
   /// carried by an artifact — lands on the right tab without the writer having
   /// known this machine's paths.
   Worktree? get selected {
-    var name = _address?.worktree;
+    var name = address.worktree;
     if (name == null) return null;
     return openWorktrees.where((w) => w.name == name).firstOrNull;
   }
@@ -125,7 +139,7 @@ class ShellController extends ChangeNotifier {
 
   /// The plugin whose panel is mounted, or null when the home screen is.
   String? get selectedPluginId {
-    var id = _address?.plugin;
+    var id = address.plugin;
     if (id == null) return null;
     // A reloaded config may no longer declare it; fall back to home rather than
     // to a panel that cannot be built.
@@ -140,7 +154,7 @@ class ShellController extends ChangeNotifier {
   /// and the shell does not read it: a catalog entry is the catalog's business,
   /// which is what keeps this from growing a case per plugin.
   String? get selectedChildId =>
-      selectedPluginId == null ? null : _address?.segments.firstOrNull;
+      selectedPluginId == null ? null : address.segments.firstOrNull;
 
   /// True while the selected worktree is showing its home screen.
   bool get isHome => selectedPluginId == null;
@@ -209,8 +223,8 @@ class ShellController extends ChangeNotifier {
     _openPaths.add(worktree.path);
     // Before the session exists: the tab and its address are what the loader
     // draws under.
-    _address = Address(worktree: worktree.name);
-    _remembered[worktree.path] = _address!;
+    _address.value = Address(worktree: worktree.name);
+    _remembered[worktree.path] = address;
     // The tab is on screen before the manifest subprocess starts; everything
     // below it draws a loader until the session lands.
     notifyListeners();
@@ -312,7 +326,8 @@ class ShellController extends ChangeNotifier {
     _loads.remove(path);
     if (wasSelected) {
       var fallback = _openPaths.lastOrNull;
-      _address = fallback == null ? null : _addressFor(fallback);
+      _address.value =
+          (fallback == null ? null : _addressFor(fallback)) ?? Address();
     }
   }
 
@@ -338,21 +353,43 @@ class ShellController extends ChangeNotifier {
   ///
   /// Refuses an address whose worktree is not open — navigation must not
   /// silently land somewhere other than where it was told, and opening a
-  /// worktree is a decision with a cost, made by [open].
+  /// worktree is a decision with a cost, made by [open]. It says *why* it
+  /// refused rather than returning nothing: something that lets you type an
+  /// address has to be able to explain what happened to it.
   ///
   /// The address is remembered against its worktree on the way through, so a
   /// tab switched away from and back comes home to the same place.
-  void go(Address destination) {
+  GoResult go(Address destination) {
     var name = destination.worktree;
     var worktree = name == null
         ? null
         : openWorktrees.where((w) => w.name == name).firstOrNull;
-    if (worktree == null) return;
-    if (destination == _address) return;
+    if (worktree == null) {
+      return name != null && _worktrees.any((w) => w.name == name)
+          ? GoResult.worktreeNotOpen
+          : GoResult.worktreeUnknown;
+    }
+    if (destination == address) return GoResult.unchanged;
 
-    _address = destination;
+    // Read before the write, so the comparison is against where we were.
+    var moved = destination.bare != address.bare;
+
+    _address.value = destination;
     _remembered[worktree.path] = destination;
-    notifyListeners();
+
+    // **Only when the shell's own reading of the address changed.** Everything
+    // this notification serves — the tabs, the rail, which panel is mounted —
+    // is derived from the identity: the worktree, the plugin, the segments.
+    // Applied parameters are for whoever reads them, and they reach exactly
+    // those readers through [addressListenable] and the address scope above
+    // them.
+    //
+    // Not an optimisation. Dragging a slider writes a value per frame, and
+    // rebuilding the window at the frame rate of a drag is what the per-key
+    // scope exists to prevent — it cannot, while every write also marks the
+    // whole shell dirty.
+    if (moved) notifyListeners();
+    return GoResult.ok;
   }
 
   /// Switches tabs, returning to wherever that tab was left.
@@ -364,13 +401,18 @@ class ShellController extends ChangeNotifier {
 
   /// Returns the selected worktree to its home screen.
   void selectHome() {
-    if (_address?.worktree case var name?) go(Address(worktree: name));
+    if (address.worktree case var name?) go(Address(worktree: name));
   }
 
   /// Selecting a plugin defaults to its first child, so a panel always has a
   /// concrete sub-entry to render rather than an ambiguous null.
+  ///
+  /// The one place navigation fills in something it was not told, and it is
+  /// allowed here because choosing a plugin off the rail carries no deeper
+  /// intent. An address that arrived *already* naming something is never
+  /// completed or corrected — see [GoResult].
   void selectPlugin(String id) {
-    var name = _address?.worktree;
+    var name = address.worktree;
     if (name == null) return;
     var child = selectedSession
         ?.pluginById(id)
@@ -384,7 +426,7 @@ class ShellController extends ChangeNotifier {
 
   /// Selects a plugin's sub-entry, and the plugin with it.
   void selectChild(String pluginId, String childId) {
-    var name = _address?.worktree;
+    var name = address.worktree;
     if (name == null) return;
     go(Address(worktree: name, plugin: pluginId, segments: [childId]));
   }
@@ -394,6 +436,26 @@ class ShellController extends ChangeNotifier {
     for (var path in _openPaths.toList()) {
       _closeAt(path);
     }
+    _address.dispose();
     super.dispose();
   }
+}
+
+/// What [ShellController.go] did with an address.
+///
+/// Exists so the address bar can say what happened. A navigation that silently
+/// does nothing is indistinguishable from a broken app, and that is precisely
+/// the case a pasted address hits most.
+enum GoResult {
+  ok,
+
+  /// Already there. Not a failure — just nothing to do.
+  unchanged,
+
+  /// The worktree exists in this repo but has no tab. Recoverable: opening it
+  /// is one click, and the address stays valid meanwhile.
+  worktreeNotOpen,
+
+  /// No worktree by that name, or the address named none at all.
+  worktreeUnknown,
 }

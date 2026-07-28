@@ -6,11 +6,13 @@ import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
 import '../../catalog/catalog_entry.dart';
+import '../../catalog/devices.dart';
 import '../../catalog/discovery.dart';
 import '../../catalog/package_config_locator.dart';
 import '../../catalog/protocol.dart';
 import '../../catalog/headless_catalog.dart';
 import '../plugin_core.dart';
+import 'ui_catalog_address.dart';
 import 'ui_catalog_results.dart';
 import '../plugin_host.dart';
 
@@ -139,10 +141,13 @@ class UiCatalogCore extends PluginCore {
   /// fw://<worktree>/flutterware.ui_catalog/<package>/<file…>/<file.dart%23symbol>
   /// ```
   ///
-  /// The entry id is split on `/` rather than carried as one opaque segment, so
-  /// the path stays legible and only the `#` needs escaping. The package comes
-  /// first because two packages may legitimately declare the same entry id, and
-  /// an address that cannot tell them apart is not an identity.
+  /// The package comes first because two packages may legitimately declare the
+  /// same entry id, and an address that cannot tell them apart is not an
+  /// identity.
+  ///
+  /// The segments come from [catalogSegments], which the panel reads back
+  /// through its inverse. Both halves live in one file so that this — the way
+  /// in — and the way out cannot drift apart.
   ///
   /// [axes] are *applied*, not identity — the same entry rendered differently —
   /// which is what makes an address with its axes resolved a complete capture
@@ -154,7 +159,7 @@ class UiCatalogCore extends PluginCore {
   }) => Address(
     worktree: host.worktree.name,
     plugin: host.id,
-    segments: [packagePath, ...entryId.split('/')],
+    segments: catalogSegments(packagePath, entryId),
     axes: axes,
   );
 
@@ -279,6 +284,27 @@ class UiCatalogCore extends PluginCore {
                 'pairs or a JSON object. Ask `describe --knobs` what an entry '
                 'offers. Recorded on the address, so two settings are two '
                 'artifacts rather than one file written twice.',
+          ),
+          ActionParameter(
+            'device',
+            'Device',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description:
+                'Render as a device: its screen, its pixel ratio and its safe '
+                'areas, so the demo reads the phone from `MediaQuery` rather '
+                'than a rectangle. Omitted means the panel. The same value the '
+                'GUI writes as `?device=`, so an address captured here reopens '
+                'framed the way it was shot.',
+            options: [
+              for (var id in deviceIds)
+                ActionOption(
+                  id,
+                  label: id == fitDeviceId
+                      ? 'Fit'
+                      : catalogDevices.firstWhere((d) => d.id == id).label,
+                ),
+            ],
           ),
           // Declared because they change the pixels, and anything that changes
           // the pixels is recorded on the artifact's address.
@@ -620,9 +646,34 @@ class UiCatalogCore extends PluginCore {
 
     var packagePath = _packageHolding(entryId);
     var packageRoot = p.join(host.worktree.path, packagePath);
-    var width = _intArgument(arguments, 'width') ?? _defaultWidth;
-    var height = _intArgument(arguments, 'height') ?? _defaultHeight;
     var entry = _scans[packagePath]!.entries.firstWhere((e) => e.id == entryId);
+
+    // Named rather than defaulted, and refused rather than approximated. A
+    // device this build does not know is the one failure that has to be loud:
+    // quietly framing as the panel produces a PNG that is wrong without looking
+    // wrong, and something downstream files it as evidence.
+    var deviceId = arguments['device'];
+    if (deviceId != null && (deviceId is! String || !isDeviceId(deviceId))) {
+      throw ArgumentError.value(
+        deviceId,
+        'device',
+        'no such device. Accepted: ${deviceIds.join(', ')}',
+      );
+    }
+
+    // Width and height still win where they are given: they are how you ask for
+    // a size no device has, and on a device they stretch its screen rather than
+    // dropping its ratio and its notch.
+    // `fit` names the panel and resolves to no device, which is the same
+    // viewport by a different route.
+    var device = deviceId is String ? deviceById(deviceId) : null;
+    var viewport = device == null
+        ? CaptureViewport.panel
+        : CaptureViewport.of(device);
+    viewport = viewport.resized(
+      width: _intArgument(arguments, 'width'),
+      height: _intArgument(arguments, 'height'),
+    );
 
     var knobs = parseKnobs(arguments['knobs']);
 
@@ -637,8 +688,13 @@ class UiCatalogCore extends PluginCore {
       // `width`, and an address where a knob quietly overwrote the viewport
       // would name a picture that was never taken.
       axes: {
-        'width': '$width',
-        'height': '$height',
+        // The word the GUI reads, so an address that came out of a capture
+        // reopens framed the way it was shot. Without it the two surfaces
+        // describe the same picture in different vocabularies and the
+        // round-trip silently loses the framing.
+        'device': ?deviceId as String?,
+        'width': '${viewport.width}',
+        'height': '${viewport.height}',
         'formFactor': ?entry.formFactor,
         for (var knob in knobs.entries) 'knob.${knob.key}': knob.value,
       },
@@ -657,8 +713,7 @@ class UiCatalogCore extends PluginCore {
     var captured = await _headlessFor(packagePath).capture(
       entryId: entryId,
       output: output,
-      width: width,
-      height: height,
+      viewport: viewport,
       knobs: knobs,
     );
 

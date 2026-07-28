@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutterware/plugins.dart';
 
+import '../address/address_scope.dart';
 import '../plugins/native_plugin.dart';
 import '../ui/theme.dart';
+import 'address_bar.dart';
 import '../utils/hot_reload.dart';
 import '../utils/router_outlet.dart';
 import '../utils/value_stream_builder.dart';
@@ -86,19 +88,28 @@ class ShellView extends StatelessWidget {
         // without clicking the window first.
         child: Focus(
           autofocus: true,
-          child: Scaffold(
-            body: Column(
-              children: [
-                _Band(shell),
-                Expanded(
-                  child: Row(
-                    children: [
-                      if (shell.sidebarVisible) _Sidebar(shell),
-                      Expanded(child: _Panel(shell)),
-                    ],
+          // The top of the address tree, wrapping the band as well as the
+          // panel: the bar that displays the address is a consumer of it like
+          // any other, and putting it outside would make it the one thing that
+          // needs its own way of reading.
+          child: AddressRoot(
+            address: shell.addressListenable,
+            onChanged: shell.go,
+            child: Scaffold(
+              body: Column(
+                children: [
+                  _Band(shell),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        if (shell.sidebarVisible) _Sidebar(shell),
+                        Expanded(child: _Panel(shell)),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  AddressBar(shell),
+                ],
+              ),
             ),
           ),
         ),
@@ -640,6 +651,11 @@ class _SwitcherRow extends StatelessWidget {
 
 /// The worktree's home row, then one row per plugin with the status its report
 /// carries.
+/// Finds the plugin rail. A plugin's label and a package's name also appear in
+/// the address along the bottom, so a test about the rail has to say it means
+/// the rail.
+const sidebarKey = ValueKey('shell.sidebar');
+
 class _Sidebar extends StatelessWidget {
   const _Sidebar(this.shell);
 
@@ -651,6 +667,7 @@ class _Sidebar extends StatelessWidget {
     var worktree = shell.selected;
     var session = shell.selectedSession;
     return Container(
+      key: sidebarKey,
       width: _sidebarWidth,
       decoration: BoxDecoration(
         color: colors.panel,
@@ -929,11 +946,15 @@ class _Panel extends StatelessWidget {
           : KeyedSubtree(
               // Rebuild the panel from scratch when the worktree or the plugin
               // changes; panels hold their own state and must not leak it
-              // across worktrees. The child id is *not* in the key — switching
-              // packages should update the panel, not remount it, or the
-              // subscription would be torn down and rebuilt needlessly.
+              // across worktrees. Nothing below the plugin is in the key —
+              // moving within a plugin should update the panel, not remount it,
+              // or a compile loop would be torn down and restarted for a click
+              // in its own tree.
               key: ValueKey('${session.worktree.path}::${plugin.id}'),
-              child: plugin.buildPanel(context, shell.selectedChildId),
+              // The plugin's own level of the address tree. The panel reads
+              // what it needs from here; the shell does not read past the
+              // plugin segment and does not pass what it has not read.
+              child: AddressScope(child: plugin.buildPanel(context)),
             );
     }
 

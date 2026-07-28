@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutterware/plugins.dart';
+
+import 'src/address/address_scope.dart';
 import 'src/catalog/catalog_session.dart';
 import 'src/catalog/catalog_view.dart';
 import 'src/utils/flutter_sdk.dart';
@@ -62,6 +65,16 @@ class _Harness extends StatefulWidget {
 }
 
 class _HarnessState extends State<_Harness> {
+  /// The standalone entry's own address, so the view runs the same path here as
+  /// it does under the shell.
+  ///
+  /// Without one, `?device=` would have nowhere to live and the picker would
+  /// need a second code path — which is how the two-sources-of-truth bug got in
+  /// the first place.
+  final _address = ValueNotifier(
+    Address(worktree: 'dev', plugin: 'flutterware.ui_catalog'),
+  );
+
   late final CatalogSession _session = CatalogSession(
     appPackageRoot: _appRootDefine,
     // Defaults to the app package, where flutterware's own demos live;
@@ -79,13 +92,17 @@ class _HarnessState extends State<_Harness> {
 
   @override
   void dispose() {
+    _address.dispose();
     _session.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Scaffold(body: CatalogView(session: _session));
+  Widget build(BuildContext context) => AddressRoot(
+    address: _address,
+    onChanged: (next) => _address.value = next,
+    child: Scaffold(body: CatalogView(session: _session)),
+  );
 }
 
 class _MissingDefines extends StatelessWidget {

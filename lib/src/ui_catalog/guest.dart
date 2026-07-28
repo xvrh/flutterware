@@ -91,17 +91,14 @@ class CatalogParameters {
         jsonEncode(describe().toJson()),
       );
     });
-    developer.registerExtension('ext.flutterware.setParameter', (
+    developer.registerExtension('ext.flutterware.setParameters', (
       _,
       args,
     ) async {
       // A service extension's arguments are strings, so the payload is JSON in
       // one of them rather than a map of typed values.
       var payload = jsonDecode(args['payload'] ?? '{}') as Map<String, dynamic>;
-      var applied = apply(
-        payload['name'] as String,
-        payload.containsKey('value') ? payload['value'] : null,
-      );
+      var applied = applyAll(payload.cast<String, Object?>());
       // Answered only once the demo has rebuilt on it. Turning a knob can
       // reveal or retire another, so a reply that came back before the frame
       // would leave the panel asking what to show and being told about the
@@ -177,6 +174,26 @@ class CatalogParameters {
   ///
   /// Returns false for a knob the current build did not declare, which is what
   /// a panel showing a stale set looks like from in here.
+  /// Takes the whole set at once, and it **is** the whole set: a knob the
+  /// payload does not name goes back to the default the demo wrote.
+  ///
+  /// One call rather than one per knob, and replace rather than merge, because
+  /// the host keeps knob values in the address and an address writes a default
+  /// as *nothing at all*. A payload that only carried changes could never say
+  /// "forget this one", which is exactly how the top bar's axes came to look
+  /// stuck before they were moved to the same footing.
+  ///
+  /// It also collapses a queue: a slider drag used to be one round trip per
+  /// value with a pending-map serialising them, where now the latest payload
+  /// simply replaces whatever it caught up with.
+  bool applyAll(Map<String, Object?> values) {
+    var applied = false;
+    for (var name in editable.parameters.keys.toList()) {
+      if (apply(name, values[name])) applied = true;
+    }
+    return applied;
+  }
+
   bool apply(String name, Object? value) {
     var parameter = editable.parameters[name];
     switch (parameter) {

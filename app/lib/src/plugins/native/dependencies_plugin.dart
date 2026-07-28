@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
+import '../../address/address_scope.dart';
 import '../../dependencies/list.dart';
 import '../../ui/theme.dart';
 import '../native_plugin.dart';
@@ -21,19 +22,15 @@ class DependenciesPlugin extends NativePlugin<DependenciesCore> {
   List<String> get packages => core.packages;
 
   @override
-  Widget buildPanel(BuildContext context, String? childId) =>
-      _DependenciesPanel(this, childId);
+  Widget buildPanel(BuildContext context) => _DependenciesPanel(this);
 }
 
 /// Owns the subscription: mounting starts the load, unmounting releases it.
 /// With several packages it shows a picker and tracks only the visible one.
 class _DependenciesPanel extends StatefulWidget {
-  const _DependenciesPanel(this.plugin, this.childId);
+  const _DependenciesPanel(this.plugin);
 
   final DependenciesPlugin plugin;
-
-  /// The package the shell has selected, from the sidebar children.
-  final String? childId;
 
   @override
   State<_DependenciesPanel> createState() => _DependenciesPanelState();
@@ -41,25 +38,35 @@ class _DependenciesPanel extends StatefulWidget {
 
 class _DependenciesPanelState extends State<_DependenciesPanel> {
   String? _tracked;
+  String? _path;
 
   DependenciesCore get _core => widget.plugin.core;
 
-  String? get _path => widget.childId ?? _core.packages.firstOrNull;
+  /// The package the address names, or the first declared one when it names
+  /// none — which is where selecting the plugin off the rail leaves you.
+  String? _resolve() =>
+      AddressScope.segment(context, 0) ?? _core.packages.firstOrNull;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Where the address arrives, and where a later move to another package
+    // arrives too: reading segment 0 subscribes to segment 0 and nothing else.
+    _path = _resolve();
     _retrack();
   }
 
   @override
   void didUpdateWidget(_DependenciesPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // The declared packages can change under a reload without the address
+    // moving, and the fallback above is computed from them.
+    _path = _resolve();
     _retrack();
   }
 
-  /// Follows the shell's selection: only the visible package is subscribed, so
-  /// switching packages stops the old load and starts the new one.
+  /// Follows the address: only the visible package is subscribed, so moving to
+  /// another stops the old load and starts the new one.
   void _retrack() {
     var wanted = _path;
     if (wanted == _tracked) return;
@@ -76,7 +83,7 @@ class _DependenciesPanelState extends State<_DependenciesPanel> {
 
   @override
   Widget build(BuildContext context) {
-    var path = _path;
+    var path = _path ?? _resolve();
     if (path == null) {
       return Center(
         child: Text(

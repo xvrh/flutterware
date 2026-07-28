@@ -43,11 +43,23 @@ abstract class NativePlugin<C extends PluginCore> extends ChangeNotifier {
 
   /// The panel mounted when this plugin is selected. Real Flutter, no limits.
   ///
-  /// [childId] is the selected sub-entry — a package path for a package-scoped
-  /// plugin — or null when the plugin has no children. The shell owns that
-  /// selection because the sidebar children *are* the picker; a panel that
-  /// grew its own would be a second, disagreeing source of truth.
-  Widget buildPanel(BuildContext context, String? childId);
+  /// **Takes no selection argument.** Where the panel is comes from the
+  /// address, which it reads through `AddressScope` — installed by the shell
+  /// directly above this widget, already past the worktree and the plugin id,
+  /// so segment 0 is the plugin's own first segment.
+  ///
+  /// It used to be handed one `childId`, and that was the bug rather than a
+  /// simplification: an address naming a package *and* an entry arrived here as
+  /// the package alone, so a search hit opened the right plugin showing the
+  /// wrong thing. A parameter can only carry what the shell thought to put in
+  /// it, and the shell deliberately does not understand what is below the
+  /// plugin segment.
+  ///
+  /// Read at the grain you need — `AddressScope.segment(context, 0)` for a
+  /// package, `AddressScope.param(context, …)` for one control's value — and
+  /// the panel rebuilds for the part that moved rather than for the fact that
+  /// something did.
+  Widget buildPanel(BuildContext context);
 
   /// Schedules a change notification, coalescing bursts into one.
   ///
@@ -122,7 +134,7 @@ class MissingPlugin extends NativePlugin {
   final String? reason;
 
   @override
-  Widget buildPanel(BuildContext context, String? childId) =>
+  Widget buildPanel(BuildContext context) =>
       _MissingPanel(host: host, reason: reason);
 }
 

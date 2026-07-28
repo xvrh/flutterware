@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:device_frame/device_frame.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutterware/ui_catalog.dart';
 import 'package:path/path.dart' as p;
 
 import '../embedder/embedded_engine.dart';
 import '../embedder/guest_vm_service.dart';
+import 'catalog_params.dart';
+import 'devices.dart';
 import 'catalog_entry.dart';
 import 'compiler_daemon_client.dart';
 import 'package_config_locator.dart';
@@ -22,61 +23,17 @@ enum CatalogSessionPhase { starting, ready, error }
 /// reads the phone's size from `MediaQuery` rather than the panel's — which is
 /// the difference between looking at a layout and testing one.
 class CatalogStaging extends ChangeNotifier {
-  /// The device the guest is sized to, or null to fill the panel.
-  DeviceInfo? get device => _device;
-  DeviceInfo? _device;
-
-  /// The picker, which is the only place a person chooses a device.
-  set device(DeviceInfo? value) {
-    _byHand = true;
-    _set(value);
-  }
-
-  /// Whether [device] is a hand pick rather than one an entry asked for.
-  ///
-  /// A hand pick answers "what am I looking at" and follows you between
-  /// entries. A device an entry asked for belongs to *that* entry, so leaving
-  /// for one with no opinion of its own has to put the panel back — otherwise
-  /// visiting a single mobile demo turns every demo you look at afterwards
-  /// into a phone.
-  var _byHand = false;
-
-  void _set(DeviceInfo? value) {
-    if (value?.identifier == _device?.identifier) return;
-    _device = value;
-    notifyListeners();
-  }
-
-  /// Sets the device the entry asks for, if it asks for one.
-  ///
-  /// `@Demo(formFactor: FormFactor.mobile)` is the author saying what this
-  /// entry is *for*, so arriving at it should show it that way — which is what
-  /// the enum meant in the previous catalog, where it picked the toolbar's
-  /// device bucket. A hand pick lasts until the next entry that has an opinion;
-  /// `all` is an entry saying it has none, and means the panel.
-  void followEntry(String? formFactor) {
-    switch (formFactor) {
-      case 'mobile':
-        _byHand = false;
-        _set(Devices.ios.iPhone13);
-      // The panel, not a laptop: the panel is already a desktop-shaped canvas,
-      // and a 1440-wide frame scaled down to fit inside it is a worse look at a
-      // desktop layout than the room it costs. `desktop` still means something
-      // — it is what `Preview.size` reads for Flutter's own previewer, where
-      // there is no panel to fill.
-      case 'desktop' || 'all':
-        _byHand = false;
-        _set(null);
-      default:
-        // No opinion. What a person picked stays; what the last entry asked
-        // for leaves with it.
-        if (!_byHand) _set(null);
-    }
-  }
-
   /// Whether the device's chrome is drawn around the screen. Off leaves a
   /// plain rectangle of the right size, which is what you want once you are
   /// looking at the layout rather than at the phone.
+  ///
+  /// The only thing left here. The **device** used to live beside it, with a
+  /// flag saying whether a person or an entry had last set it, and the panel
+  /// copied it into the address a frame after every change. That copy loop was
+  /// the bug: a pick was read back from an address that had not caught up yet
+  /// and erased. A device is now a function of the address and the entry —
+  /// see [resolveDevice] — held nowhere, so there is nothing to fall out of
+  /// step.
   bool get frameVisible => _frameVisible;
   var _frameVisible = true;
   set frameVisible(bool value) {
@@ -133,35 +90,6 @@ class CatalogBrowsing extends ChangeNotifier {
     _listVisible = value;
     notifyListeners();
   }
-}
-
-/// What each shell's axes are set to, which is the host's to remember.
-///
-/// Keyed by shell rather than by entry, and that is the whole difference
-/// between an axis and a knob: moving between entries that share a shell
-/// changes nothing, and coming back to a shell finds what you had chosen.
-class ShellSelections {
-  final _byShell = <String, Map<String, Object?>>{};
-
-  /// Null means the default the shell wrote.
-  void choose(String shellId, String name, Object? value) {
-    (_byShell[shellId] ??= {})[name] = value;
-  }
-
-  Object? chosen(String shellId, String name) => _byShell[shellId]?[name];
-
-  /// Everything known, for every shell.
-  ///
-  /// All of it, rather than the shell on screen: which shell an entry uses is
-  /// something only the guest can say, and it cannot say it until that entry
-  /// has built. Sending the lot means the values are already in hand when a
-  /// shell builds for the first time, instead of a frame of defaults followed
-  /// by a correction. The guest files them by shell, so two shells that both
-  /// call something `flavor` do not inherit each other's.
-  Map<String, Map<String, Object?>> payload() => {
-    for (var MapEntry(key: shellId, value: chosen) in _byShell.entries)
-      shellId: {...chosen},
-  };
 }
 
 /// How the last switch went, for the UI to show.
@@ -261,6 +189,59 @@ class CatalogSession extends ChangeNotifier {
   /// while the guest goes on rendering whatever it last managed to load.
   CatalogEntry? selected;
 
+  /// The entry the address names, which is **a request rather than a call**.
+  ///
+  /// Nothing here can be selected until the daemon reports what exists, and on
+  /// a cold start the address arrives long before that — clicking a search hit
+  /// is what *starts* the compile it would be waiting for. So this is written
+  /// whenever it is known and applied whenever it becomes possible: at [start],
+  /// and again whenever the entry list moves. Setting it while ready switches
+  /// immediately.
+  ///
+  /// Null means the address named no entry, and the session picks for itself.
+  String? get wantedEntryId => _wantedEntryId;
+  String? _wantedEntryId;
+
+  set wantedEntryId(String? id) {
+    if (_wantedEntryId == id) return;
+    _wantedEntryId = id;
+    if (phase == CatalogSessionPhase.ready) _applyWanted();
+  }
+
+  /// The entry [wantedEntryId] names, if the catalog has one.
+  ///
+  /// Looks in [allEntries] rather than [entries]: an address naming a demo that
+  /// currently does not compile should land on it and show the error, which is
+  /// the useful answer. Being sent somewhere else instead is how a broken
+  /// build turns into "the link is wrong".
+  CatalogEntry? get wantedEntry {
+    var id = _wantedEntryId;
+    return id == null ? null : allEntries.where((e) => e.id == id).firstOrNull;
+  }
+
+  /// Set when the address names an entry this catalog does not have at all.
+  ///
+  /// Deliberately not repaired by moving somewhere that does exist. A pasted
+  /// address that quietly becomes a different one is indistinguishable from a
+  /// broken app; saying "there is no such entry" is information, and silently
+  /// showing the first demo is not.
+  ///
+  /// Only once the session is ready. Before that *nothing* exists yet, and
+  /// "there is no such entry" would be the first thing every cold start said
+  /// about a perfectly good address.
+  String? get missingEntryId =>
+      phase == CatalogSessionPhase.ready &&
+          _wantedEntryId != null &&
+          wantedEntry == null
+      ? _wantedEntryId
+      : null;
+
+  void _applyWanted() {
+    var entry = wantedEntry;
+    if (entry == null || entry.id == selected?.id) return;
+    unawaited(switchTo(entry));
+  }
+
   SwitchReport? lastSwitch;
   Duration? coldCompile;
 
@@ -276,9 +257,47 @@ class CatalogSession extends ChangeNotifier {
   /// report and from nowhere else.
   AxisReport axes = AxisReport.empty;
 
-  /// What each shell is set to. Host state, and the reason an axis outlives an
-  /// entry — see [ShellSelections].
-  final selections = ShellSelections();
+  /// What the address asks each of the shell's axes to be, as slugs.
+  ///
+  /// A **request**, like [wantedEntryId], and for the same reason: which axes
+  /// exist is something only the guest can say, and it cannot say it until the
+  /// shell has built. So this is written whenever the address moves and
+  /// resolved whenever resolving becomes possible.
+  ///
+  /// Slugs rather than the labels the guest wants — see [catalog_params.dart].
+  /// Turning one into the other needs the declaration, which arrives later.
+  Map<String, String> get axisSelections => _axisSelections;
+  var _axisSelections = const <String, String>{};
+
+  set axisSelections(Map<String, String> value) {
+    if (mapEquals(value, _axisSelections)) return;
+    _axisSelections = Map.unmodifiable(value);
+    // Deliberately silent. This is written while the view is building — the
+    // address is a dependency, so it arrives in `didChangeDependencies` — and
+    // notifying there would mark the builder listening to this session dirty
+    // mid-build. Nothing needs the notification anyway: the controls draw from
+    // the address, not from here, and the guest is told below.
+    //
+    // Read back afterwards, like a knob: a shell's build decides what axes
+    // exist, and setting one can reveal or retire another.
+    unawaited(_pushAxes().then((_) => _readAxes()));
+  }
+
+  /// What the address asks each of the entry's knobs to be, as slugs.
+  ///
+  /// The same shape as [axisSelections] and for the same reasons — a request
+  /// resolved once the declaration arrives — differing only in lifetime. A knob
+  /// belongs to the entry, so these go when the entry does; an axis belongs to
+  /// the shell and does not.
+  Map<String, String> get knobSelections => _knobSelections;
+  var _knobSelections = const <String, String>{};
+
+  set knobSelections(Map<String, String> value) {
+    if (mapEquals(value, _knobSelections)) return;
+    _knobSelections = Map.unmodifiable(value);
+    // Silent, and read back afterwards — see [axisSelections].
+    unawaited(_pushKnobs());
+  }
 
   /// The last payload sent, encoded, so a switch that changes nothing costs no
   /// frame. Starts as the empty selection, which is what a guest begins with.
@@ -393,6 +412,29 @@ class CatalogSession extends ChangeNotifier {
       _changes = daemon.catalogChanges.listen(_onCatalogChanged);
       if (_disposed) return;
 
+      // What the address asked for if the daemon turned out to have it, else
+      // the first — the fallback is for an address that named no entry, not a
+      // correction of one that named the wrong entry.
+      var first = wantedEntry ?? entries.first;
+      // Compiled before the guest exists, and whole.
+      //
+      // A session's bundle symlinks the kernel the daemon compiled when it
+      // *started*, which lets a client that has just attached launch without
+      // paying for a compile. What it costs is that the first frame is neither
+      // necessarily this entry — the daemon prepared whichever one was first —
+      // nor necessarily this source: every compile since has been a delta hot
+      // reloaded into a guest that was already up, and nothing rewrites the
+      // kernel a new guest boots from. So a panel opened against a daemon that
+      // has been running a while names one entry and renders another, or renders
+      // this one as it was written some edits ago, and then silently corrects
+      // itself the first time anything reloads.
+      //
+      // Asking for a whole kernel first is what closes that: ~40ms on a warm
+      // daemon, once per session, and it is what `HeadlessCatalog` has always
+      // done before it launches a guest.
+      var compiled = await daemon.select(first.id, full: true);
+      if (_disposed) return;
+
       var engine = _engine = EmbeddedEngine(
         appPackageRoot: appPackageRoot,
         flutterSdkRoot: flutterSdkRoot,
@@ -412,8 +454,23 @@ class CatalogSession extends ChangeNotifier {
       _vmService = await GuestVmService.connect(await engine.vmServiceUri);
       if (_disposed) return;
 
-      active = selected = entries.first;
-      staging.followEntry(entries.first.formFactor);
+      selected = first;
+      // [active] is what the guest actually holds. A demo that did not compile
+      // leaves it on the daemon's own kernel, so naming this entry there would
+      // be a claim the status bar goes on repeating; the report below is what
+      // puts the compiler's error where the widget would have been.
+      if (compiled.ok) {
+        active = first;
+      } else {
+        lastSwitch = SwitchReport(
+          entry: first,
+          compile: compiled.compile,
+          reload: Duration.zero,
+          newSourceCount: compiled.newSourceCount,
+          editedCount: compiled.editedCount,
+          error: compiled.error,
+        );
+      }
       phase = CatalogSessionPhase.ready;
       _idle();
     } catch (e) {
@@ -426,110 +483,96 @@ class CatalogSession extends ChangeNotifier {
   /// Switches are serialised: the daemon and the isolate each tolerate one
   /// in-flight operation, and a click-happy user must not interleave them.
   Future<void> switchTo(CatalogEntry entry, {bool ifChanged = false}) {
+    // **Selected now, not when the compile finishes.** [selected] is what the
+    // user last *asked for*, and asking happens here; assigning it at the far
+    // end of the queue left a window where everything else read the previous
+    // entry as the current intent.
+    //
+    // That window was a real bug, not a tidiness point. Opening the catalog at
+    // an address queues a switch, and then `CatalogView` mounts and reloads
+    // "whatever is selected" — which was still the entry before it. The reload
+    // queued *behind* the address's switch and won, so arriving from search
+    // landed on the last entry you had open, but only when the panel was not
+    // already mounted.
+    var previous = selected;
+    selected = entry;
     _queue = _queue
-        .then((_) => _switchTo(entry, ifChanged: ifChanged))
+        .then((_) => _switchTo(entry, previous: previous, ifChanged: ifChanged))
         .catchError((Object e) {
           _fail('$e');
         });
     return _queue;
   }
 
-  /// Sets a knob and rebuilds the demo in place.
+  /// Sends the entry's knobs what the address asks of them, and reads back
+  /// what the demo made of it.
   ///
-  /// No compile and no reload: the value goes into the object the demo reads
-  /// while building, and the guest rebuilds. Turning a knob costs a frame, and
-  /// the demo keeps whatever state it was holding.
+  /// **Coalesced, not queued.** A slider writes a value per frame of a drag,
+  /// and each push is a round trip that waits for the guest's frame. Sent
+  /// concurrently they land out of order — a slider that jumps backwards under
+  /// the pointer; sent one at a time in a queue, the drag finishes seconds
+  /// after your hand does. So one is in flight at a time and the rest is
+  /// simply the latest state, which the address already holds: whatever the
+  /// push catches up with is what gets sent.
   ///
-  /// Drawn straight away, then sent — one at a time, keeping only the latest of
-  /// whatever piled up behind the one in flight — and read back afterwards,
-  /// because a demo's build decides what knobs exist and turning one can reveal
-  /// or retire another.
-  ///
-  /// A slider sends a value per frame of a drag and each one is a round trip
-  /// that waits for the guest's frame. Sent concurrently they can land out of
-  /// order, which is a slider that jumps backwards under the pointer; sent one
-  /// at a time without coalescing, the drag queues up and the demo finishes the
-  /// gesture seconds after your hand does.
-  Future<void> setKnob(String name, Object? value) async {
-    // Optimistic, so the control follows the pointer at the panel's frame rate
-    // rather than the guest's round trip. The read below is what makes it true.
-    knobs = KnobReport(
-      entryId: knobs.entryId,
-      declared: knobs.declared,
-      revision: knobs.revision,
-      knobs: [
-        for (var knob in knobs.knobs)
-          knob.name == name ? knob.withValue(value) : knob,
-      ],
-    );
-    notifyListeners();
-
-    _pendingKnobs[name] = value;
-    if (_settingKnobs) return;
-    _settingKnobs = true;
+  /// That works because a push is the *whole* set rather than a change. There
+  /// is nothing to miss by skipping an intermediate value.
+  Future<void> _pushKnobs() async {
+    if (_pushingKnobs) return;
+    _pushingKnobs = true;
     try {
-      while (_pendingKnobs.isNotEmpty) {
+      String? sent;
+      while (true) {
         var vmService = _vmService;
         if (vmService == null) return;
-        var next = _pendingKnobs.keys.first;
-        var pending = _pendingKnobs.remove(next);
+        var payload = jsonEncode(paramPayloadFor(knobs.knobs, _knobSelections));
+        if (payload == sent || payload == _pushedKnobs) break;
+        sent = payload;
+        _pushedKnobs = payload;
         await vmService.callExtension(
-          'ext.flutterware.setParameter',
-          args: {
-            'payload': jsonEncode({'name': next, 'value': pending}),
-          },
+          'ext.flutterware.setParameters',
+          args: {'payload': payload},
         );
+        if (_disposed) return;
       }
       // Once, after the last one: a demo's build decides what knobs exist, so
       // turning one can reveal or retire another — but only the settled state
       // is worth drawing.
       await _readKnobs();
     } finally {
-      _settingKnobs = false;
+      _pushingKnobs = false;
     }
   }
 
-  final _pendingKnobs = <String, Object?>{};
-  var _settingKnobs = false;
+  var _pushingKnobs = false;
 
-  /// Sets one of the shell's axes: a picker to an option's label, a flag to a
-  /// bool, or either to null for the default the shell wrote.
+  /// The last payload sent, so a push that would repeat itself costs nothing.
+  var _pushedKnobs = '';
+
+  /// Sends the shell on screen what the address asked for, in the labels it
+  /// declared.
   ///
-  /// Recorded against the shell rather than the entry, which is what makes an
-  /// axis outlive a switch.
-  Future<void> setAxis(String name, Object? value) async {
-    var shellId = axes.shellId;
-    if (shellId == null) return;
-    selections.choose(shellId, name, value);
-
-    // Drawn before it is sent, like a knob: the guest confirms by reporting,
-    // and a control that waited for a round trip to move would feel stuck.
-    axes = AxisReport(
-      entryId: axes.entryId,
-      shellId: shellId,
-      axes: [
-        for (var axis in axes.axes)
-          if (axis.name == name)
-            axis.withValue(value ?? axis.defaultValue)
-          else
-            axis,
-      ],
-    );
-    notifyListeners();
-
-    await _pushAxes();
-    await _readAxes();
-  }
-
-  /// Sends every shell's selections to the guest. See [ShellSelections.payload]
-  /// for why all of them go rather than the one on screen.
+  /// Resolved here rather than held anywhere: [axisSelections] is slugs, the
+  /// guest wants labels, and only the declaration joins the two. So this is
+  /// recomputed on every push and nothing can fall out of step with the
+  /// address.
+  ///
+  /// Only the shell on screen. This used to send every shell it had ever seen,
+  /// so that one building for the first time had its values in hand rather than
+  /// showing a frame of defaults first — but that needed a store of selections
+  /// per shell, which is the thing the address replaced. A shell appearing for
+  /// the first time now shows its defaults for one frame and is corrected as
+  /// soon as it says what it declares.
   Future<void> _pushAxes() async {
     var vmService = _vmService;
-    if (vmService == null) return;
+    var shellId = axes.shellId;
+    if (vmService == null || shellId == null) return;
     // Compared encoded rather than with [mapEquals], which is shallow: the
     // payload is a map of maps, and a fresh copy of an unchanged one is a
     // different object every time.
-    var payload = jsonEncode(selections.payload());
+    var payload = jsonEncode({
+      shellId: paramPayloadFor(axes.axes, _axisSelections),
+    });
     if (payload == _pushed) return;
     _pushed = payload;
     await vmService.callExtension(
@@ -558,6 +601,11 @@ class CatalogSession extends ChangeNotifier {
       if (report.entryId == entryId) {
         axes = report;
         notifyListeners();
+        // The shell may only just have said who it is. Nothing could be pushed
+        // before that — [_pushAxes] needs a shell id — so a selection made
+        // while the previous entry was on screen would otherwise never reach
+        // this one. Self-dedupes when there is nothing new to send.
+        await _pushAxes();
         return;
       }
       await Future<void>.delayed(const Duration(milliseconds: 30));
@@ -624,7 +672,11 @@ class CatalogSession extends ChangeNotifier {
     return switchTo(entry, ifChanged: true);
   }
 
-  Future<void> _switchTo(CatalogEntry entry, {required bool ifChanged}) async {
+  Future<void> _switchTo(
+    CatalogEntry entry, {
+    required CatalogEntry? previous,
+    required bool ifChanged,
+  }) async {
     var daemon = _daemon;
     var vmService = _vmService;
     if (_disposed ||
@@ -637,12 +689,17 @@ class CatalogSession extends ChangeNotifier {
     // Told apart by where the user already was, so that asking again for the
     // entry on screen — or for the broken one they are fixing — reports what it
     // did rather than what a switch would have done.
-    var reloaded = entry.id == selected?.id || entry.id == active?.id;
-    selected = entry;
-    // Only on a real switch: re-selecting the entry you are already on is a
-    // reload, and a reload that undoes the device you just picked would make
-    // the picker feel like it forgets.
-    if (!reloaded) staging.followEntry(entry.formFactor);
+    //
+    // Against the selection as it stood when this was *asked for*, handed down
+    // by [switchTo]: `selected` has already moved to `entry` by the time this
+    // runs, so reading it here would call every switch a reload.
+    var reloaded = entry.id == previous?.id || entry.id == active?.id;
+    // Nothing to do about the device here any more. This used to push the
+    // entry's `formFactor` into the staging, guarded so a reload would not undo
+    // a pick — a mutation, an ordering rule, and a whole class of bug. The
+    // entry's declaration is now a *default* read at build time behind whatever
+    // the address says, so a switch changes what is on screen simply by
+    // changing which entry is selected.
     _busy(reloaded ? 'reloading' : 'compiling');
     try {
       await _switchOnce(
@@ -745,6 +802,11 @@ class CatalogSession extends ChangeNotifier {
         entries.isNotEmpty) {
       unawaited(switchTo(entries.first));
     }
+
+    // An entry the address asked for may have only just appeared — somebody
+    // finished writing the demo the link points at. This is the second half of
+    // "a request, not a call".
+    if (phase == CatalogSessionPhase.ready) _applyWanted();
     notifyListeners();
   }
 

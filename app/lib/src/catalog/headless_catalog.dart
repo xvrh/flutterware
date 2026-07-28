@@ -14,6 +14,7 @@ import 'package:flutterware/src/ui_catalog/knob.dart';
 
 import '../embedder/protocol.dart';
 import '../embedder/raw_frame.dart';
+import 'devices.dart';
 import 'catalog_entry.dart';
 import '../embedder/guest_vm_service.dart';
 import '../utils/run_dir.dart';
@@ -51,22 +52,18 @@ class HeadlessCatalog {
   Future<CatalogCapture> capture({
     required String entryId,
     required String output,
-    int width = 900,
-    int height = 700,
+    CaptureViewport viewport = CaptureViewport.panel,
     Map<String, String> knobs = const {},
   }) async {
     if (knobs.isEmpty) {
       var results = await captureAll(
         entryIds: [entryId],
         outputFor: (_) => output,
-        width: width,
-        height: height,
+        viewport: viewport,
       );
       return CatalogCapture(file: results.values.single, knobs: const []);
     }
-    return _withGuest(entryId: entryId, width: width, height: height, (
-      guest,
-    ) async {
+    return _withGuest(entryId: entryId, viewport: viewport, (guest) async {
       var applied = await guest.applyKnobs(entryId, knobs);
       return CatalogCapture(
         file: await guest.capture(output),
@@ -83,8 +80,7 @@ class HeadlessCatalog {
   Future<T> _withGuest<T>(
     Future<T> Function(_GuestSession guest) body, {
     required String entryId,
-    required int width,
-    required int height,
+    required CaptureViewport viewport,
   }) async {
     var (daemon, ready) = await CompilerDaemonClient.connect(
       dartExecutable: dartExecutable,
@@ -110,8 +106,7 @@ class HeadlessCatalog {
         assetsDir: ready.assetsDir,
         icuData: ready.icuData,
         workDir: p.join(config.appPackageRoot, 'build', 'catalog'),
-        width: width,
-        height: height,
+        viewport: viewport,
       );
       return await body(guest);
     } finally {
@@ -128,8 +123,7 @@ class HeadlessCatalog {
   Future<Map<String, File>> captureAll({
     required List<String> entryIds,
     required String Function(String entryId) outputFor,
-    int width = 900,
-    int height = 700,
+    CaptureViewport viewport = CaptureViewport.panel,
   }) async {
     var (daemon, ready) = await CompilerDaemonClient.connect(
       dartExecutable: dartExecutable,
@@ -166,8 +160,7 @@ class HeadlessCatalog {
             assetsDir: ready.assetsDir,
             icuData: ready.icuData,
             workDir: p.join(config.appPackageRoot, 'build', 'catalog'),
-            width: width,
-            height: height,
+            viewport: viewport,
           );
         } else {
           var compiled = await daemon.select(id);
@@ -221,12 +214,10 @@ class HeadlessCatalog {
   /// register the extension. That is an answer, not a failure.
   Future<KnobReport> knobs({
     required String entryId,
-    int width = 900,
-    int height = 700,
+    CaptureViewport viewport = CaptureViewport.panel,
   }) => _withGuest(
     entryId: entryId,
-    width: width,
-    height: height,
+    viewport: viewport,
     (guest) => guest.settledKnobs(entryId),
   );
 }
@@ -309,8 +300,7 @@ class _GuestSession {
     required String assetsDir,
     required String icuData,
     required String workDir,
-    required int width,
-    required int height,
+    required CaptureViewport viewport,
   }) async {
     // Not under [workDir]: a unix socket path is capped at 104 bytes, and a
     // build directory inside a worktree already spends most of that. The
@@ -330,8 +320,8 @@ class _GuestSession {
       assetsDir,
       icuData,
       socketPath,
-      '$width',
-      '$height',
+      '${viewport.width}',
+      '${viewport.height}',
     ]);
     var vmServiceUri = Completer<String>();
     guest.stdout
@@ -359,8 +349,26 @@ class _GuestSession {
       workDir,
     );
     connected.listen(session._onData);
+    // Argv carried the buffer size; this carries what the buffer *means*. The
+    // ratio and the safe areas have no other way in, and without them a phone
+    // capture is a correctly-sized picture of the wrong layout.
+    session._resize(viewport);
     return session;
   }
+
+  void _resize(CaptureViewport viewport) => _connection.add(
+    encodeMessage(
+      ResizeMessage(
+        width: viewport.width,
+        height: viewport.height,
+        pixelRatio: viewport.pixelRatio,
+        insetTop: viewport.insetTop,
+        insetRight: viewport.insetRight,
+        insetBottom: viewport.insetBottom,
+        insetLeft: viewport.insetLeft,
+      ),
+    ),
+  );
 
   void _onData(List<int> chunk) {
     for (var message in _reader.addBytes(chunk)) {

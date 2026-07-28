@@ -1,12 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
+import '../../address/address_scope.dart';
+import '../../catalog/catalog_devices.dart';
 import '../../catalog/catalog_session.dart';
 import '../../catalog/catalog_view.dart';
 import '../native_plugin.dart';
+import 'ui_catalog_address.dart';
 import 'ui_catalog_core.dart';
 
 export 'ui_catalog_core.dart' show UiCatalogCore, uiCatalogPluginId;
@@ -70,8 +74,7 @@ class UiCatalogPlugin extends NativePlugin<UiCatalogCore> {
   }
 
   @override
-  Widget buildPanel(BuildContext context, String? childId) =>
-      _CatalogPanel(plugin: this, packagePath: childId ?? packages.firstOrNull);
+  Widget buildPanel(BuildContext context) => _CatalogPanel(this);
 
   /// Closing the worktree is what ends the compile loops — nothing shorter
   /// does, which is the whole point of the plugin owning them.
@@ -87,52 +90,124 @@ class UiCatalogPlugin extends NativePlugin<UiCatalogCore> {
   }
 }
 
+/// Points the catalog at whatever the address names, and writes back where it
+/// ends up.
+///
+/// Both directions run through [catalogSegments] and [catalogPlace], so the
+/// address this writes for a given entry is byte-identical to the one it would
+/// have read for it. That is what stops the two directions chasing each other:
+/// the write-back for an entry the address already named produces the address
+/// it already is, and the shell recognises that as no move at all.
 class _CatalogPanel extends StatefulWidget {
-  const _CatalogPanel({required this.plugin, required this.packagePath});
+  const _CatalogPanel(this.plugin);
 
   final UiCatalogPlugin plugin;
-  final String? packagePath;
 
   @override
   State<_CatalogPanel> createState() => _CatalogPanelState();
 }
 
 class _CatalogPanelState extends State<_CatalogPanel> {
+  String? _package;
+  CatalogSession? _session;
+  var _writeScheduled = false;
+
   @override
-  void initState() {
-    super.initState();
-    _track();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _follow(catalogPlace(AddressScope.segments(context)));
   }
 
   @override
-  void didUpdateWidget(_CatalogPanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.packagePath != widget.packagePath) {
-      if (oldWidget.packagePath case var previous?) {
-        widget.plugin.core.untrack(previous);
-      }
-      _track();
-    }
-  }
-
-  @override
-  void dispose() {
-    if (widget.packagePath case var path?) widget.plugin.core.untrack(path);
-    super.dispose();
+  void didUpdateWidget(_CatalogPanel old) {
+    super.didUpdateWidget(old);
+    // The declared packages can change under a config reload without the
+    // address moving, and the fallback below is computed from them.
+    _follow(catalogPlace(AddressScope.segments(context)));
   }
 
   /// Mounting the panel is the demand: the scan, and the compile loop the scan
   /// deliberately leaves alone.
-  void _track() {
-    if (widget.packagePath case var path?) {
-      widget.plugin.core.track(path);
-      widget.plugin.sessionFor(path);
+  void _follow(CatalogPlace? place) {
+    var package = place?.package ?? widget.plugin.packages.firstOrNull;
+
+    if (package != _package) {
+      _release();
+      _package = package;
+      if (package != null) {
+        widget.plugin.core.track(package);
+        _session = widget.plugin.sessionFor(package)..addListener(_settled);
+      }
     }
+
+    // A request rather than a call: on a cold start the daemon has not reported
+    // anything yet, and clicking the link is what starts the compile it would
+    // otherwise be waiting for. The setter is already a no-op when unchanged,
+    // which is why this needs no guard of its own.
+    _session?.wantedEntryId = place?.entryId;
+  }
+
+  void _release() {
+    if (_package case var previous?) widget.plugin.core.untrack(previous);
+    _session?.removeListener(_settled);
+    _session = null;
+    _package = null;
+  }
+
+  /// The other direction: the catalog moved on its own — a click in its tree, a
+  /// device chosen from the picker, a deleted entry, or the first demo taken
+  /// because the address named none — so the address has to catch up.
+  ///
+  /// Deferred a frame because the session notifies from wherever its work
+  /// finished, which can be inside a build; writing the address marks the shell
+  /// dirty, and doing that mid-build is the crash this defers around.
+  ///
+  /// One write for both halves. Two would put an address on screen naming a
+  /// state that never existed — the new entry still framed as the old device —
+  /// and anything reading it in that gap would act on it.
+  void _settled() {
+    if (_writeScheduled || !mounted || _package == null) return;
+
+    _writeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _writeScheduled = false;
+      var package = _package;
+      var session = _session;
+      if (!mounted || package == null || session == null) return;
+
+      // **Never over a complaint.** An address naming an entry this catalog
+      // does not have is reported, not repaired — but restating wherever the
+      // session actually landed would repair it anyway, quietly. The banner
+      // would vanish along with what you had asked for, and a pasted link would
+      // look like it had worked.
+      if (session.missingEntryId != null) return;
+
+      // Nothing about the device or the axes here. Neither is state to write
+      // back: their controls write the address directly, and what is on screen
+      // is read from the address every time it is drawn.
+      var handle = AddressScope.write(context);
+      var segments = catalogSegments(package, session.selected?.id);
+      handle.update(
+        segments: segments,
+        // A knob belongs to the entry, so it cannot outlive one. Dropped here
+        // because this is the write that ends the entry — a demo's knobs are
+        // meaningless against the next one, and carrying them would leave an
+        // address accumulating settings for demos it no longer names. Axes
+        // belong to the shell and are deliberately untouched.
+        drop: listEquals(segments, handle.segments) ? const {} : const {'knob'},
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _release();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    var path = widget.packagePath;
+    var path = _package;
     if (path == null) {
       return const Center(child: Text('No package declared for this plugin.'));
     }
@@ -153,15 +228,55 @@ class _CatalogPanelState extends State<_CatalogPanel> {
           );
         }
 
-        // The live loop. The core's own scan stays — it is what `fw` and an
-        // agent read without a daemon running — but what the panel shows is the
-        // compiled catalog, because only the daemon knows which entries
-        // actually build.
-        return CatalogView(
-          key: ValueKey(path),
-          session: widget.plugin.sessionFor(path),
+        var session = widget.plugin.sessionFor(path);
+        return Column(
+          children: [
+            // Said out loud rather than repaired. The address is left naming
+            // what it named, so a link to a demo that has not been written yet
+            // still reads as that demo rather than turning into a different one.
+            if (session.missingEntryId case var missing?)
+              _Complaint('No entry "$missing" in this package.'),
+            // Derived from the address, like the framing itself. Nothing
+            // remembers that a bad value was seen, so nothing has to remember
+            // to forget it.
+            if (unknownDeviceIn(AddressScope.param(context, 'device'))
+                case var device?)
+              _Complaint('No device "$device". Try: ${deviceIds.join(', ')}.'),
+            // The live loop. The core's own scan stays — it is what `fw` and an
+            // agent read without a daemon running — but what the panel shows is
+            // the compiled catalog, because only the daemon knows which entries
+            // actually build.
+            Expanded(
+              child: CatalogView(key: ValueKey(path), session: session),
+            ),
+          ],
         );
       },
+    );
+  }
+}
+
+/// Something the address asked for that this catalog cannot give.
+///
+/// Shown rather than repaired, and the message names the accepted values where
+/// there is a closed set of them — the reader is often an agent that guessed,
+/// and the useful reply to a guess is the list it should have picked from.
+class _Complaint extends StatelessWidget {
+  const _Complaint(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    var scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      color: scheme.errorContainer,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SelectableText(
+        message,
+        style: TextStyle(fontSize: 12, color: scheme.onErrorContainer),
+      ),
     );
   }
 }

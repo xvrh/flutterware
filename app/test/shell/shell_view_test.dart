@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/logs/remote_log_client.dart';
+import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/plugins/native_plugin.dart';
@@ -47,9 +48,16 @@ class _FakeCore extends PluginCore {
 class _Fake extends NativePlugin<_FakeCore> {
   _Fake(super.core);
 
+  /// Reports every segment it was given, so a test can see what survived the
+  /// trip from the address to the panel — which is exactly what used to be
+  /// truncated to one.
   @override
-  Widget buildPanel(BuildContext context, String? childId) =>
-      Center(child: Text('panel:$id/${childId ?? '-'}'));
+  Widget buildPanel(BuildContext context) {
+    var segments = AddressScope.segments(context);
+    return Center(
+      child: Text('panel:$id/${segments.isEmpty ? '-' : segments.join('/')}'),
+    );
+  }
 }
 
 /// A core whose panel starts work on mount — the shape every real plugin has,
@@ -77,7 +85,7 @@ class _EagerPanelPlugin extends NativePlugin<_EagerCore> {
   _EagerPanelPlugin(super.core);
 
   @override
-  Widget buildPanel(BuildContext context, String? childId) => _EagerPanel(this);
+  Widget buildPanel(BuildContext context) => _EagerPanel(this);
 }
 
 class _EagerPanel extends StatefulWidget {
@@ -182,6 +190,46 @@ void main() {
     expect(find.text('panel:a.deps/-'), findsNothing);
   });
 
+  testWidgets('a panel is given every segment below the plugin', (
+    tester,
+  ) async {
+    // The bug this contract was widened for: an address naming a package *and*
+    // an entry used to reach the panel as the package alone, so a search hit
+    // opened the right plugin showing the wrong thing.
+    var shell = await _pumpShell(tester);
+
+    shell.go(
+      Address(
+        worktree: 'repo',
+        plugin: 'a.deps',
+        segments: ['app', 'demo/avatar.dart#members'],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('panel:a.deps/app/demo/avatar.dart#members'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('moving within a plugin does not remount its panel', (
+    tester,
+  ) async {
+    // A compile loop lives in the panel's plugin; remounting for a click in its
+    // own tree would tear one down and start another.
+    var shell = await _pumpShell(tester);
+    shell.selectChild('a.deps', 'app');
+    await tester.pumpAndSettle();
+    var before = tester.state(find.byType(Scaffold));
+
+    shell.selectChild('a.deps', 'examples/example');
+    await tester.pumpAndSettle();
+
+    expect(find.text('panel:a.deps/examples/example'), findsOneWidget);
+    expect(tester.state(find.byType(Scaffold)), same(before));
+  });
+
   testWidgets('the switcher lists worktrees that are not open', (tester) async {
     await _pumpShell(tester);
 
@@ -214,8 +262,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(shell.openWorktrees, hasLength(2));
 
-    // The second tab's close button.
-    await tester.tap(find.byIcon(Icons.close).last);
+    // The second tab's close button. Scrolled to first: the tab strip is a
+    // horizontal ListView by design, and at the 800px test surface a second
+    // tab no longer fits beside the rest of the band.
+    var close = find.byIcon(Icons.close).last;
+    await tester.ensureVisible(close);
+    await tester.pumpAndSettle();
+    await tester.tap(close);
     await tester.pumpAndSettle();
 
     expect(shell.openWorktrees, hasLength(1));
@@ -255,14 +308,20 @@ void main() {
       await tester.pumpAndSettle();
 
       // Children show only under the selected plugin, with their status.
-      expect(find.text('app'), findsOneWidget);
+      // Scoped to the rail: `app` is also a segment of the address, which the
+      // bar along the bottom now spells out.
+      var inRail = find.descendant(
+        of: find.byKey(sidebarKey),
+        matching: find.text('app'),
+      );
+      expect(inRail, findsOneWidget);
       expect(find.text('58'), findsOneWidget);
       expect(find.text('failed'), findsOneWidget);
 
       // Selecting the other plugin collapses them.
       await tester.tap(find.text('Tests'));
       await tester.pumpAndSettle();
-      expect(find.text('app'), findsNothing);
+      expect(inRail, findsNothing);
     });
 
     testWidgets('the first child is selected with its plugin', (tester) async {
