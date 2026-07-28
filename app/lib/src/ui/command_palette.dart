@@ -329,10 +329,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                   ),
                 ),
                 const Gap(FwSpacing.md),
-                if (hit.action != null)
-                  const _Kbd('Run')
-                else
-                  _ReasonChip(hit.reason),
+                _ReasonChip(hit.reason),
               ],
             ),
           ),
@@ -432,11 +429,7 @@ class _CommandPaletteState extends State<CommandPalette> {
 IconData _iconFor(SearchReason reason) => switch (reason) {
   SearchReason.plugin => Icons.extension_outlined,
   SearchReason.package => Icons.inventory_2_outlined,
-  SearchReason.action => Icons.bolt_outlined,
-  SearchReason.field => Icons.label_outline,
   SearchReason.item => Icons.crop_square_outlined,
-  SearchReason.row => Icons.table_rows_outlined,
-  SearchReason.text => Icons.notes_outlined,
 };
 
 /// A small keycap chip.

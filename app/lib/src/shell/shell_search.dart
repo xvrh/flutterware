@@ -7,7 +7,6 @@ import '../plugins/plugin_core.dart';
 import '../ui/command_palette.dart';
 import '../ui/design/design.dart';
 import 'shell_controller.dart';
-import 'worktree.dart';
 
 /// Opens the palette over the shell.
 ///
@@ -36,7 +35,7 @@ Future<void> showShellSearch(BuildContext context, ShellController shell) {
 }
 
 /// The Screen behind [CommandPalette]: it warms the index, runs the query
-/// across every open worktree, and turns the chosen hit into navigation.
+/// for the selected worktree, and turns the chosen hit into navigation.
 ///
 /// Opening is the intent that pays for loading. Every keystroke after that
 /// filters what is already in memory — not because a rule forbids more, but
@@ -56,18 +55,14 @@ class _ShellSearchState extends State<ShellSearch> {
   var _query = '';
   var _loading = false;
 
-  /// Every open worktree, not only the selected one. Two checkouts of the same
-  /// repo hold different work, and "which branch was that demo on?" is a
-  /// question the sidebar cannot answer at all.
-  Iterable<(Worktree, PluginCore)> get _cores sync* {
-    for (var worktree in widget.shell.openWorktrees) {
-      var session = widget.shell.sessionFor(worktree);
-      if (session == null) continue;
-      for (var core in session.session.cores) {
-        yield (worktree, core);
-      }
-    }
-  }
+  /// The selected worktree's cores, and only those.
+  ///
+  /// Searching every open worktree sounds better than it is: a hit in another
+  /// checkout switches the whole shell out from under you, and warming them all
+  /// pays for worktrees the query was never about. Whatever is on screen is
+  /// what the search is about.
+  List<PluginCore> get _cores =>
+      widget.shell.selectedSession?.session.cores ?? const [];
 
   @override
   void initState() {
@@ -79,7 +74,7 @@ class _ShellSearchState extends State<ShellSearch> {
   /// core lands rather than waiting for the slowest.
   Future<void> _warm() async {
     var pending = [
-      for (var (_, core) in _cores)
+      for (var core in _cores)
         core.computeAll().then((_) {
           if (mounted) setState(() {});
         }),
@@ -95,7 +90,7 @@ class _ShellSearchState extends State<ShellSearch> {
 
   List<PaletteSection> get _sections {
     if (_query.trim().isEmpty) return const [];
-    var hits = [for (var (_, core) in _cores) ...core.search(_query)]
+    var hits = [for (var core in _cores) ...core.search(_query)]
       ..sort((a, b) => b.score - a.score);
     return groupHits(hits);
   }

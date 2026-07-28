@@ -3,10 +3,9 @@ import 'package:test/test.dart';
 
 /// The generic tier: what every plugin gets without writing search code.
 ///
-/// The report below is shaped like the UI catalog's real one — children per
-/// package, declared actions, and a view of sections wrapping item lists —
-/// because the point of this walk is that it works on a report it has never
-/// been told about.
+/// Shaped like the UI catalog's real report — children per package, declared
+/// actions, and a view of sections wrapping item lists — because the point of
+/// this walk is that it works on a report it has never been told about.
 PluginReport _report() => PluginReport(
   id: 'flutterware.ui_catalog',
   label: 'UI catalog',
@@ -26,12 +25,12 @@ PluginReport _report() => PluginReport(
       description: 'Render one entry to a PNG',
     ),
   ],
-  view: const PluginView([
+  view: PluginView([
     ViewSection('app', [
       ViewItems([
-        ViewItem('Dashboard', detail: 'demo/dashboard.dart#dashboard'),
-        ViewItem('Counter', detail: 'demo/counter.dart#counter'),
-        ViewItem('Does not compile', detail: 'demo/broken.dart#broken'),
+        _entry('Dashboard', 'demo/dashboard.dart#dashboard'),
+        _entry('Counter', 'demo/counter.dart#counter'),
+        _entry('Does not compile', 'demo/broken.dart#broken'),
       ]),
       ViewSection('Diagnostics', [ViewText('demo/broken.dart: 1 error')]),
     ]),
@@ -41,15 +40,24 @@ PluginReport _report() => PluginReport(
         ['Package', 'Version'],
         [
           ['collection', '1.19.1'],
-          ['path', '1.9.1'],
         ],
       ),
     ]),
   ]),
 );
 
+ViewItem _entry(String name, String id) => ViewItem(
+  name,
+  detail: id,
+  address: Address(
+    worktree: 'main',
+    plugin: 'flutterware.ui_catalog',
+    segments: ['app', id],
+  ),
+);
+
 void main() {
-  group('the walk finds', () {
+  group('what is offered', () {
     test('an entry by name, which is the case that motivated this', () {
       var hits = searchReport(_report(), 'dash', worktree: 'main');
 
@@ -70,36 +78,51 @@ void main() {
       var package = hits.firstWhere((h) => h.reason == SearchReason.package);
 
       expect(package.title, 'examples/example');
-      expect(package.address.plugin, 'flutterware.ui_catalog');
       expect(package.address.segments, ['examples/example']);
       expect(package.subtitle, 'no entries', reason: 'the status comes along');
     });
 
-    test('an action, carried as a verb rather than a path', () {
-      var hits = searchReport(_report(), 'screensh', worktree: 'main');
-      var hit = hits.first;
-
-      expect(hit.reason, SearchReason.action);
-      expect(hit.action, 'screenshot');
-      expect(
-        hit.address.segments,
-        isEmpty,
-        reason: 'an action is run at the plugin, not at a path of its own',
-      );
-    });
-
-    test('a field, a table row and free text', () {
-      var report = _report();
-      expect(
-        searchReport(report, 'entrypoint').first.reason,
-        SearchReason.field,
-      );
-      expect(searchReport(report, 'collection').first.reason, SearchReason.row);
-      expect(searchReport(report, '1 error').first.reason, SearchReason.text);
-    });
-
     test('nothing for an empty query', () {
       expect(searchReport(_report(), '   '), isEmpty);
+    });
+  });
+
+  group('what is refused, because it is not a destination', () {
+    test('an action, however well it matches', () {
+      // "Screenshot" is a verb. Offering it beside a list of places is a
+      // category error, and some actions are declared `danger`.
+      expect(searchReport(_report(), 'screenshot'), isEmpty);
+      // Its description, too — "Render one entry to a PNG".
+      expect(searchReport(_report(), 'render'), isEmpty);
+    });
+
+    test('free text, such as a diagnostic', () {
+      expect(searchReport(_report(), '1 error'), isEmpty);
+    });
+
+    test('a field', () {
+      expect(searchReport(_report(), 'entrypoint'), isEmpty);
+    });
+
+    test('a table row, which has nowhere to put an address', () {
+      expect(searchReport(_report(), 'collection'), isEmpty);
+    });
+
+    test('an item that declares no address', () {
+      var report = PluginReport(
+        id: 'p',
+        label: 'P',
+        view: const PluginView([
+          ViewItems([ViewItem('Orphan', detail: 'nowhere to go')]),
+        ]),
+      );
+      expect(searchReport(report, 'orphan'), isEmpty);
+    });
+
+    test('a section heading, which is a heading and not a place', () {
+      // 'Diagnostics' titles a section; selecting it would mean nothing. Its
+      // children are still walked.
+      expect(searchReport(_report(), 'diagnostics'), isEmpty);
     });
   });
 
@@ -111,96 +134,50 @@ void main() {
         hits.first.matched,
         isNotEmpty,
         reason:
-            'a title match carries highlight offsets; a detail match does '
-            'not',
+            'a title match carries highlight offsets; a detail match does not',
       );
     });
 
     test('a detail match still lands, for an id you half remember', () {
       // "broken" appears only in the entry id, never in the display name.
-      var hits = searchReport(_report(), 'broken');
-      var hit = hits.firstWhere((h) => h.title == 'Does not compile');
+      var hit = searchReport(
+        _report(),
+        'broken',
+      ).firstWhere((h) => h.title == 'Does not compile');
 
       expect(hit.subtitle, 'demo/broken.dart#broken');
       expect(hit.matched, isEmpty);
     });
 
     test('a detail matches as a substring, never as a subsequence', () {
-      // "Render one entry to a PNG" contains r-e-n-d-e-r contiguously and also
-      // contains d-a-s-h scattered across it. Only the first is a match; the
-      // second is how a palette fills with prose that happens to share letters.
-      var hits = searchReport(_report(), 'render');
-      expect(hits.map((h) => h.action), contains('screenshot'));
-
-      var noise = searchReport(_report(), 'dash');
-      expect(
-        noise.map((h) => h.reason),
-        isNot(contains(SearchReason.action)),
-        reason: 'no action description should match "dash"',
-      );
-      expect(noise.first.title, 'Dashboard');
+      // 'dmo' is a subsequence of the detail "demo/dashboard.dart#dashboard"
+      // and of no title — matching it is how a palette fills with noise. A
+      // real substring of the same detail still lands.
+      expect(searchReport(_report(), 'dashboard.dart'), isNotEmpty);
+      expect(searchReport(_report(), 'dmo'), isEmpty);
     });
 
-    test('the plugin outranks a view row matching as well', () {
-      // Both "UI catalog" and the Diagnostics text contain these letters.
+    test('the plugin outranks an entry matching as well', () {
       var hits = searchReport(_report(), 'ca');
       expect(hits.first.reason, SearchReason.plugin);
     });
 
     test('but a better match beats the weight', () {
-      // The plugin does not match "dash" at all, so no weight rescues it.
       var hits = searchReport(_report(), 'dash');
       expect(hits.first.title, 'Dashboard');
     });
 
     test('hits come back sorted', () {
-      var scores = [for (var hit in searchReport(_report(), 'e')) hit.score];
+      var scores = [for (var hit in searchReport(_report(), 'a')) hit.score];
       expect(scores, isNotEmpty);
       expect(scores, orderedEquals(scores.toList()..sort((a, b) => b - a)));
     });
   });
 
   group('addressing', () {
-    test('every hit carries the worktree it came from', () {
-      var hits = searchReport(_report(), 'e', worktree: 'feature-x');
-      expect(hits, isNotEmpty);
-      for (var hit in hits) {
-        expect(hit.address.worktree, 'feature-x', reason: hit.title);
-        expect(hit.address.plugin, 'flutterware.ui_catalog', reason: hit.title);
-      }
-    });
+    test('an entry is followed to itself, not to its plugin', () {
+      var hit = searchReport(_report(), 'dash', worktree: 'main').first;
 
-    test('a relative address survives an omitted worktree', () {
-      var hits = searchReport(_report(), 'dash');
-      expect(hits.first.address.isRelative, isTrue);
-    });
-
-    test('a row without an address falls back to its plugin', () {
-      // The honest floor: found, but not followed.
-      var hit = searchReport(_report(), 'counter').first;
-      expect(hit.address.segments, isEmpty);
-    });
-
-    test('a row carrying an address is followed to the thing itself', () {
-      var report = PluginReport(
-        id: 'flutterware.ui_catalog',
-        label: 'UI catalog',
-        view: PluginView([
-          ViewItems([
-            ViewItem(
-              'Dashboard',
-              detail: 'demo/dashboard.dart#dashboard',
-              address: Address(
-                worktree: 'main',
-                plugin: 'flutterware.ui_catalog',
-                segments: ['app', 'demo/dashboard.dart#dashboard'],
-              ),
-            ),
-          ]),
-        ]),
-      );
-
-      var hit = searchReport(report, 'dash', worktree: 'main').first;
       expect(hit.address.segments, ['app', 'demo/dashboard.dart#dashboard']);
       expect(
         hit.address.toString(),
@@ -208,78 +185,49 @@ void main() {
       );
     });
 
+    test('the plugin and its packages carry the worktree', () {
+      var hits = searchReport(_report(), 'catalog', worktree: 'feature-x');
+      expect(hits, isNotEmpty);
+      for (var hit in hits) {
+        expect(hit.address.worktree, 'feature-x', reason: hit.title);
+      }
+    });
+
     test('an address round-trips through its string form', () {
-      var hit = searchReport(
-        _report(),
-        'examples',
-        worktree: 'main',
-      ).firstWhere((h) => h.reason == SearchReason.package);
+      var hit = searchReport(_report(), 'dash', worktree: 'main').first;
       expect(Address.parse(hit.address.toString()), hit.address);
     });
   });
 
-  group('grouping', () {
+  group('grouping and deduplication', () {
     test('every hit is grouped under the plugin label', () {
-      var hits = searchReport(_report(), 'e');
+      var hits = searchReport(_report(), 'a');
       expect(hits.map((h) => h.group).toSet(), {'UI catalog'});
     });
-  });
 
-  group('deduplication', () {
-    test('a row repeated across packages collapses to one', () {
-      // What the dependencies plugin really does: the same package listed once
-      // per declared package, identical in every way a user can see.
+    test('the same entry listed twice collapses to one', () {
+      var entry = _entry('Dashboard', 'demo/dashboard.dart#dashboard');
       var report = PluginReport(
-        id: 'flutterware.dependencies',
-        label: 'Dependencies',
-        view: const PluginView([
-          ViewSection('.', [
-            ViewTable(
-              ['Package', 'Version'],
-              [
-                ['collection', '1.19.1'],
-              ],
-            ),
+        id: 'flutterware.ui_catalog',
+        label: 'UI catalog',
+        view: PluginView([
+          ViewSection('by name', [
+            ViewItems([entry]),
           ]),
-          ViewSection('app', [
-            ViewTable(
-              ['Package', 'Version'],
-              [
-                ['collection', '1.19.1'],
-              ],
-            ),
+          ViewSection('by group', [
+            ViewItems([entry]),
           ]),
         ]),
       );
 
-      var hits = searchReport(report, 'collection');
-      expect(hits.where((h) => h.title == 'collection'), hasLength(1));
-    });
-
-    test('but rows differing in their detail both survive', () {
-      var report = PluginReport(
-        id: 'flutterware.dependencies',
-        label: 'Dependencies',
-        view: const PluginView([
-          ViewTable(
-            ['Package', 'Version'],
-            [
-              ['collection', '1.19.1'],
-              ['collection', '1.20.0'],
-            ],
-          ),
-        ]),
-      );
-
-      expect(searchReport(report, 'collection'), hasLength(2));
+      expect(searchReport(report, 'dash'), hasLength(1));
     });
   });
 
   group('fuzzyMatch', () {
     test('matches a subsequence and reports where', () {
       // D-a-s-h-b-o-a-r-d
-      var match = fuzzyMatch('dsh', 'Dashboard')!;
-      expect(match.matched, [0, 2, 3]);
+      expect(fuzzyMatch('dsh', 'Dashboard')!.matched, [0, 2, 3]);
     });
 
     test('refuses when a character is missing or out of order', () {
@@ -288,7 +236,6 @@ void main() {
     });
 
     test('a symbol after # starts a word', () {
-      // Entry ids are `file.dart#symbol`, and the symbol is what gets typed.
       expect(
         fuzzyMatch('t', 'x#team')!.score,
         greaterThan(fuzzyMatch('t', 'xxteam')!.score),
@@ -297,9 +244,7 @@ void main() {
 
     test('it takes the first subsequence, not the best one', () {
       // The documented greed: `t` lands in "dart" and never reaches the symbol
-      // after the `#`, so the boundary bonus above cannot rescue it. Pinned
-      // because it is the ceiling on ranking quality — lifting it means
-      // backtracking, and that is a deliberate later decision.
+      // after the `#`. Pinned because it is the ceiling on ranking quality.
       // a . d a r t # t e a m
       // 0 1 2 3 4 5 6 7 8 9 10
       expect(fuzzyMatch('t', 'a.dart#team')!.matched, [5]);

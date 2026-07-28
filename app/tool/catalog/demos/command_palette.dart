@@ -34,7 +34,6 @@ SearchHit _hit(
   required String group,
   required SearchReason reason,
   String? subtitle,
-  String? action,
   List<int> matched = const [],
   List<String> segments = const [],
   String plugin = 'flutterware.ui_catalog',
@@ -45,7 +44,6 @@ SearchHit _hit(
   group: group,
   reason: reason,
   score: 0,
-  action: action,
   matched: matched,
 );
 
@@ -68,20 +66,13 @@ List<PaletteSection> get _populated => [
       subtitle: 'tool/catalog/demos/avatar_tile.dart#avatarTileEmpty',
       segments: const ['app', 'tool/catalog/demos/avatar_tile.dart#empty'],
     ),
-    _hit(
-      'Screenshot',
-      group: 'UI catalog',
-      reason: SearchReason.action,
-      subtitle: 'Render one entry to a PNG',
-      action: 'screenshot',
-    ),
     _hit('app', group: 'UI catalog', reason: SearchReason.package),
   ]),
   PaletteSection('Dependencies', [
     _hit(
       'collection',
       group: 'Dependencies',
-      reason: SearchReason.row,
+      reason: SearchReason.item,
       subtitle: '1.19.1',
       plugin: 'flutterware.dependencies',
     ),
@@ -129,9 +120,9 @@ Widget paletteLoadingResults() =>
 
 @Demo(name: 'One result', group: 'Command palette', wrapper: wrapInAppTheme)
 Widget paletteSingle() => _Case(
-  query: 'screenshot',
+  query: 'dashboard',
   sections: [
-    PaletteSection('UI catalog', [_populated.first.hits[2]]),
+    PaletteSection('UI catalog', [_populated.first.hits.first]),
   ],
 );
 
@@ -151,7 +142,6 @@ Widget paletteKinds() => _Case(
           group: 'Kinds',
           reason: reason,
           subtitle: '${reason.name} hit',
-          action: reason == SearchReason.action ? 'run' : null,
         ),
     ]),
   ],
@@ -179,7 +169,7 @@ Widget paletteAwkward() => _Case(
       _hit(
         'Short title',
         group: 'Awkward',
-        reason: SearchReason.field,
+        reason: SearchReason.item,
         subtitle:
             'A detail that is itself far too long to fit on one line and must '
             'ellipsize rather than wrap the row into two',
