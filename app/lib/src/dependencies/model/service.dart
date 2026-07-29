@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'package:collection/collection.dart';
 import 'package:package_config/package_config.dart';
 import 'package:pubspec_parse/pubspec_parse.dart' show Pubspec;
 import 'package:path/path.dart' as p;
@@ -10,9 +9,12 @@ import '../../package_ref.dart';
 import '../../utils/async_value.dart';
 import '../../utils/cloc/cloc.dart';
 import '../../utils/list_files.dart';
-import '../model/pubspec_lock.dart';
 import 'dependency_graph.dart';
 import 'package_imports.dart';
+import 'package_origin.dart';
+import 'pub_deps.dart';
+import 'pub_dev_api.dart';
+import 'pubspec_lock.dart';
 
 class DependenciesService {
   final PackageRef package;
@@ -22,36 +24,78 @@ class DependenciesService {
     loader: _loadPackageImports,
   );
 
-  DependenciesService(this.package);
+  /// Injectable so tests can answer with a captured `pub deps --json` instead
+  /// of needing a resolved project and an SDK on the machine running them.
+  final RunProcess? runProcess;
+
+  /// pub.dev metadata, one [AsyncValue] per package, built on first look.
+  ///
+  /// Per package and lazy because the detail page is the only thing that wants
+  /// it: fetching for all 170 on the way into the list would be 170 requests
+  /// nobody asked for.
+  final _pubDev = <String, AsyncValue<PubDevPackage>>{};
+  late final PubDevApi _pubDevApi = pubDevApi ?? PubDevApi();
+
+  /// Injectable for the same reason as [runProcess] — so a test never reaches
+  /// the network.
+  final PubDevApi? pubDevApi;
+
+  DependenciesService(this.package, {this.runProcess, this.pubDevApi});
+
+  /// What pub.dev says about [name]. Starts the fetch on first subscription.
+  ///
+  /// The value is nullable inside the snapshot: a git-only or private package
+  /// is simply not on pub.dev, which is an answer rather than a failure.
+  AsyncValue<PubDevPackage> pubDevFor(String name) => _pubDev.putIfAbsent(
+    name,
+    () => AsyncValue<PubDevPackage>(
+      loader: () async {
+        var result = await _pubDevApi.fetch(name);
+        if (result == null) throw const NotOnPubDev();
+        return result;
+      },
+    ),
+  );
 
   Future<Dependencies> _load() async {
-    //TODO(xha): upgrade for workspace support
-    var rootPubspec = await _readPubspec(package.absolutePath);
-    var pubspecLock = await PubspecLock.load(package.absolutePath);
-    var packageConfig = (await findPackageConfig(package.directory))!;
+    var path = package.absolutePath;
+    var pubspec = await _readPubspec(path);
 
-    var results = Dependencies(rootPubspec, <Dependency>[]);
-    for (var package in packageConfig.packages) {
-      var pubspecLockDep = pubspecLock?.packages.firstWhereOrNull(
-        (e) => e.name == package.name,
-      );
+    // The three sources, each asked only what it alone knows: pub deps for the
+    // resolution and the declared constraints, the lockfile for where each
+    // package came from, the package config for where each one is on disk.
+    var pubDeps = await PubDeps.load(
+      dartExecutable: package.flutterSdkPath.dart,
+      directory: path,
+      runProcess: runProcess,
+    );
+    var lock = await PubspecLock.load(path);
+    var packageConfig = await findPackageConfig(package.directory);
 
-      var pubspec = await _readPubspec(package.root.toFilePath());
-
-      results._allPackages[package.name] = Dependency(
-        results,
-        package,
-        pubspec,
-        pubspecLockDep,
-      );
-    }
-    results.computeDependants();
-    return results;
+    return Dependencies.resolve(
+      pubspec: pubspec,
+      pubDeps: pubDeps,
+      lock: lock,
+      packageConfig: packageConfig,
+      readPubspec: _readPubspecOrNull,
+    );
   }
 
   static Future<Pubspec> _readPubspec(String path) async {
     var pubspecFile = File(p.join(path, 'pubspec.yaml'));
     return Pubspec.parse(await pubspecFile.readAsString());
+  }
+
+  /// A dependency whose pubspec will not parse is not worth failing the whole
+  /// listing over — everything else about it still reads.
+  static Pubspec? _readPubspecOrNull(String path) {
+    try {
+      return Pubspec.parse(
+        File(p.join(path, 'pubspec.yaml')).readAsStringSync(),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<PubScores> _loadPubScores() async {
@@ -86,9 +130,11 @@ class DependenciesService {
     var path = package.absolutePath;
     return Isolate.run(() {
       return PackageImports.gather(
+        path,
         listFilesInDirectory(
           path,
         ).whereType<File>().where((f) => f.path.endsWith('.dart')),
+        flutterSection: _readPubspecOrNull(path)?.flutter,
       );
     });
   }
@@ -96,72 +142,193 @@ class DependenciesService {
   void dispose() {
     dependencies.dispose();
     pubScores.dispose();
+    packageImports.dispose();
+    for (var value in _pubDev.values) {
+      value.dispose();
+    }
+    _pubDev.clear();
+    _pubDevApi.dispose();
   }
 }
 
-class Dependencies implements Disposable {
-  final Pubspec rootPubspec;
-  final Map<String, Dependency> _allPackages;
+/// Not published to pub.dev — a git, path or private package. Carried as an
+/// error so the panel can say so rather than showing an empty card forever.
+class NotOnPubDev implements Exception {
+  const NotOnPubDev();
 
-  Dependencies(this.rootPubspec, List<Dependency> dependencies)
-    : _allPackages = {for (var d in dependencies) d.name: d};
+  @override
+  String toString() => 'Not published on pub.dev';
+}
+
+/// How one package declares another.
+///
+/// Per-member, which is the whole point. `pub deps` reports a workspace-wide
+/// `kind` that folds every member's answer into one value, so a package that is
+/// direct for `app` reads as direct while you are looking at
+/// `examples/example`, which may not depend on it at all.
+enum DependencyKind {
+  /// In this package's `dependencies:`.
+  direct,
+
+  /// In this package's `dev_dependencies:`.
+  dev,
+
+  /// Reached through something else.
+  transitive,
+}
+
+/// The dependencies of **one** package, scoped to what that package can reach.
+///
+/// In a workspace the resolution is shared: `pub deps` reports 174 packages and
+/// three roots for this repo whichever member you run it in. Everything here is
+/// filtered down to the subgraph reachable from one member, because the
+/// alternative — which is what shipped — is `examples/example` claiming its
+/// siblings' dependencies as its own and reporting 170 direct, 0 transitive
+/// where the answer is 14 and 4.
+class Dependencies implements Disposable {
+  /// [packages] is sorted by name on the way in, so every list this hands out
+  /// is stable. Reachability is computed by traversal, and traversal order is
+  /// an implementation detail nobody should be able to see in a table.
+  Dependencies({
+    required this.rootPubspec,
+    required this.memberName,
+    required Map<String, Dependency> packages,
+  }) : _allPackages = {
+         for (var name in packages.keys.toList()..sort()) name: packages[name]!,
+       } {
+    for (var dependency in _allPackages.values) {
+      dependency._parent = this;
+    }
+  }
+
+  /// The pubspec of the package being looked at.
+  final Pubspec rootPubspec;
+
+  /// Its name as the resolution knows it.
+  final String memberName;
+
+  final Map<String, Dependency> _allPackages;
 
   Dependency? operator [](String packageName) => _allPackages[packageName];
 
-  /// Names this package depends on directly, from its own pubspec.
-  ///
-  /// Direct-ness is read here rather than from a lockfile because in a pub
-  /// workspace the lockfile lives at the workspace root and describes the whole
-  /// resolution — a member has no per-package lock, so every package used to
-  /// classify as direct ("170 direct, 0 transitive" for a member with 14).
-  late final Set<String> declaredDirect = {
-    ...rootPubspec.dependencies.keys,
-    ...rootPubspec.devDependencies.keys,
-  };
-
-  /// Everything reachable from [declaredDirect]. In a workspace the package
-  /// config lists every member's dependencies, so without this a package would
-  /// list its siblings' dependencies as its own.
-  late final Set<String> reachable = _computeReachable();
-
-  Set<String> _computeReachable() {
-    var seen = <String>{};
-    var queue = [...declaredDirect];
-    while (queue.isNotEmpty) {
-      var name = queue.removeLast();
-      if (!seen.add(name)) continue;
-      var dependency = _allPackages[name];
-      if (dependency == null) continue;
-      // Only regular dependencies propagate; a transitive package's
-      // dev_dependencies are not resolved for its consumers.
-      queue.addAll(dependency.pubspec.dependencies.keys);
-    }
-    return seen;
-  }
-
-  Iterable<Dependency> get dependencies => _allPackages.values.where((e) {
-    return e.name != rootPubspec.name && reachable.contains(e.name);
-  });
+  Iterable<Dependency> get dependencies => _allPackages.values;
 
   List<Dependency>? _directs;
-  List<Dependency> get directs =>
-      _directs ??= dependencies.where((e) => !e.isTransitive).toList();
+  List<Dependency> get directs => _directs ??= _ofKind(DependencyKind.direct);
+
+  List<Dependency>? _devs;
+
+  /// Split out from [directs] because the distinction is actionable — a package
+  /// in the wrong one of these two lists is a real bug — while the old model
+  /// merged them and could not tell you.
+  List<Dependency> get devs => _devs ??= _ofKind(DependencyKind.dev);
 
   List<Dependency>? _transitives;
   List<Dependency> get transitives =>
-      _transitives ??= dependencies.where((e) => e.isTransitive).toList();
+      _transitives ??= _ofKind(DependencyKind.transitive);
 
-  void computeDependants() {
+  List<Dependency> _ofKind(DependencyKind kind) =>
+      dependencies.where((e) => e.kind == kind).toList();
+
+  /// Builds the scoped view from the three sources.
+  ///
+  /// [readPubspec] is passed in rather than called directly so this stays
+  /// testable against a fixture with no packages on disk.
+  static Dependencies resolve({
+    required Pubspec pubspec,
+    required PubDeps pubDeps,
+    required PubspecLock? lock,
+    required PackageConfig? packageConfig,
+    required Pubspec? Function(String path) readPubspec,
+  }) {
+    var member = _member(pubspec.name, pubDeps);
+
+    // Seeded with both, then following only regular dependencies: pub does not
+    // resolve a dependency's dev_dependencies, so propagating them would invent
+    // edges the resolution does not have.
+    var reachable = <String>{};
+    var queue = [...member.directDependencies, ...member.devDependencies];
+    while (queue.isNotEmpty) {
+      var name = queue.removeLast();
+      if (name == member.name || !reachable.add(name)) continue;
+      queue.addAll(pubDeps[name]?.directDependencies ?? const []);
+    }
+
+    var directNames = member.directDependencies.toSet();
+    var devNames = member.devDependencies.toSet();
+
+    var packages = <String, Dependency>{};
+    for (var name in reachable) {
+      var node = pubDeps[name];
+      if (node == null) continue;
+      var lockEntry = lock?[name];
+      var root = packageConfig?[name]?.root.toFilePath();
+
+      packages[name] = Dependency(
+        name: name,
+        kind: directNames.contains(name)
+            ? DependencyKind.direct
+            : devNames.contains(name)
+            ? DependencyKind.dev
+            : DependencyKind.transitive,
+        node: node,
+        lock: lockEntry,
+        origin: lockEntry == null
+            ? PackageOrigin.fromSourceName(node.source)
+            : PackageOrigin.fromLock(lockEntry),
+        constraint: member.dependencyConstraints[name],
+        rootPath: root,
+        pubspec: root == null ? null : readPubspec(root),
+      );
+    }
+
+    var dependencies = Dependencies(
+      rootPubspec: pubspec,
+      memberName: member.name,
+      packages: packages,
+    );
+    dependencies._computeDependants(member);
+    return dependencies;
+  }
+
+  /// The entry in the resolution that *is* this package.
+  ///
+  /// By name, not by position: `pub deps` reports `root` as the workspace root
+  /// package regardless of which member it ran in, so trusting that field is
+  /// how you end up describing the wrong package.
+  static PubDepsPackage _member(String name, PubDeps pubDeps) {
+    var byName = pubDeps.memberNamed(name);
+    if (byName != null) return byName;
+
+    // A standalone project has exactly one member and it is the project, so a
+    // name that does not match (a rename between `pub get` and now) is still
+    // unambiguous.
+    var members = pubDeps.members.toList();
+    if (members.length == 1) return members.first;
+
+    throw StateError(
+      'Package "$name" is not one of the workspace members in the resolution '
+      '(${members.map((e) => e.name).join(', ')}). Run `flutter pub get`.',
+    );
+  }
+
+  /// Edges, confined to the reachable subgraph.
+  ///
+  /// The old version walked every package in the workspace's package config, so
+  /// a chain shown for one member could route through packages only a sibling
+  /// pulls in — an explanation of "why is this here" naming a package that is
+  /// not there.
+  void _computeDependants(PubDepsPackage member) {
     for (var dependency in _allPackages.values) {
-      for (var sub in dependency.pubspec.dependencies.keys) {
+      for (var sub in dependency.node.directDependencies) {
         _allPackages[sub]?.dependants.add(dependency.name);
       }
     }
-    for (var directDep in [
-      ...rootPubspec.dependencies.keys,
-      ...rootPubspec.devDependencies.keys,
+    for (var name in [
+      ...member.directDependencies,
+      ...member.devDependencies,
     ]) {
-      _allPackages[directDep]?.dependants.add(rootPubspec.name);
+      _allPackages[name]?.dependants.add(member.name);
     }
   }
 
@@ -174,33 +341,80 @@ class Dependencies implements Disposable {
 }
 
 class Dependency implements Disposable {
-  final Dependencies parent;
-  final Package package;
-  final LockDependency? lockDependency;
-  final Pubspec pubspec;
+  Dependency({
+    required this.name,
+    required this.kind,
+    required this.node,
+    required this.lock,
+    required this.origin,
+    required this.constraint,
+    required this.rootPath,
+    required this.pubspec,
+  });
+
+  late final Dependencies _parent;
+
+  final String name;
+
+  final DependencyKind kind;
+
+  /// This package's entry in the resolution.
+  final PubDepsPackage node;
+
+  final LockDependency? lock;
+
+  /// Where it came from, with the git ref or relative path filled in. Never
+  /// null: a source nobody recognised still reports itself, rather than
+  /// rendering as the blank cell every workspace member used to get.
+  final PackageOrigin origin;
+
+  /// What this package's consumer declared, as written — `^1.2.0`, `any`. Null
+  /// for a transitive dependency, which nobody here declared.
+  final String? constraint;
+
+  /// Where the package is on disk, or null when the package config does not
+  /// place it. Everything that reads files guards on this.
+  final String? rootPath;
+
+  /// The dependency's own pubspec, for its description. Null when it could not
+  /// be located or parsed.
+  final Pubspec? pubspec;
+
   final dependants = <String>{};
+
   late final cloc = AsyncValue<ClocReport>(loader: _loadCloc);
   late final size = AsyncValue<SizeReport>(loader: _loadSize);
 
-  Dependency(this.parent, this.package, this.pubspec, this.lockDependency);
+  /// The version actually resolved — from the lockfile, falling back to what
+  /// the resolution reported.
+  ///
+  /// Not the version in the package's own pubspec, which is what the table used
+  /// to print: for a path or git dependency that is whatever the checked-out
+  /// file happens to say, and it is unrelated to what pub picked.
+  String get resolvedVersion => lock?.version ?? node.version;
 
-  String get name => package.name;
+  /// SDK packages resolve as `0.0.0`, which is not a version anyone wants
+  /// printed. Ask this before showing [resolvedVersion].
+  bool get hasMeaningfulVersion => origin is! SdkOrigin;
 
-  /// Declared in this package's own pubspec — see [Dependencies.declaredDirect]
-  /// for why the lockfile is not consulted.
-  bool get isDirect => parent.declaredDirect.contains(name);
+  String? get description => pubspec?.description;
 
-  bool get isTransitive => !isDirect;
+  /// Declared by this package, in `dependencies:` or `dev_dependencies:`.
+  bool get isDirect => kind != DependencyKind.transitive;
+
+  bool get isDev => kind == DependencyKind.dev;
+
+  bool get isTransitive => kind == DependencyKind.transitive;
 
   Future<ClocReport> _loadCloc() async {
-    var path = package.root.toFilePath();
-    return Isolate.run(() {
-      return countLinesOfCode(listFilesInDirectory(path));
-    });
+    var path = rootPath;
+    if (path == null) return ClocReport(ClocResult.zero, const {});
+    return Isolate.run(() => countLinesOfCode(listFilesInDirectory(path)));
   }
 
   Future<SizeReport> _loadSize() async {
-    var path = package.root.toFilePath();
+    var path = rootPath;
+    if (path == null) return SizeReport(fileCount: 0, totalBytes: 0);
     return Isolate.run(() {
       var files = listFilesInDirectory(path);
       var count = 0;
@@ -215,13 +429,13 @@ class Dependency implements Disposable {
 
   List<List<String>>? _dependencyPaths;
 
-  List<List<String>> get dependencyPaths {
-    _dependencyPaths = dependenciesGraph(
-      name,
-      (e) => parent._allPackages[e]?.dependants ?? const {},
-    );
-    return _dependencyPaths!;
-  }
+  /// Why this package is here, shortest chain first.
+  ///
+  /// Genuinely cached. The field was previously assigned and then never read,
+  /// so every access re-ran an unbounded path enumeration — from inside a
+  /// `Tooltip`'s build, once per transitive row.
+  List<List<String>> get dependencyPaths => _dependencyPaths ??=
+      shortestDependencyPaths(name, (e) => _parent[e]?.dependants ?? const {});
 
   @override
   String toString() => 'Dependency($name)';
@@ -229,6 +443,7 @@ class Dependency implements Disposable {
   @override
   void dispose() {
     cloc.dispose();
+    size.dispose();
   }
 }
 

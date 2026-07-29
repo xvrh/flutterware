@@ -17,6 +17,7 @@ Map<String, dynamic> _$DependencyListPackageToJson(
 ) => <String, dynamic>{
   'path': instance.path,
   'direct': instance.direct,
+  'dev': instance.dev,
   'transitive': instance.transitive,
   'dependencies': instance.dependencies.map((e) => e.toJson()).toList(),
   'error': ?instance.error,
@@ -26,6 +27,9 @@ Map<String, dynamic> _$DependencyEntryToJson(DependencyEntry instance) =>
     <String, dynamic>{
       'name': instance.name,
       'direct': instance.direct,
+      'dev': instance.dev,
       'version': ?instance.version,
-      'source': ?instance.source,
+      'constraint': ?instance.constraint,
+      'source': instance.source,
+      'origin': ?instance.origin,
     };

@@ -85,13 +85,17 @@ Returns `DependencyListResult`:
 ```
 packages: List<DependencyListPackage>
   path: String
-  direct: int   # Counts are always both, even when only the direct ones are listed: a list that silently dropped 156 packages and said nothing would read as "this package has 14 dependencies".
+  direct: int   # Counts are always all three, even when only the declared ones are listed: a list that silently dropped 156 packages and said nothing would read as "this package has 14 dependencies".
+  dev: int
   transitive: int
   dependencies: List<DependencyEntry>
     name: String
     direct: bool   # Declared in this package's own pubspec, as opposed to pulled in by something else.
-    version: String?   # Null for a package whose pubspec declares none.
-    source: String?   # `hosted`, `git`, `path` — where pub resolved it from.
+    dev: bool   # Declared in `dev_dependencies:` rather than `dependencies:`.
+    version: String?   # The resolved version — what is on disk.
+    constraint: String?   # The constraint the depending package wrote — `^1.2.0`, `any`.
+    source: String   # `hosted`, `git`, `path`, `sdk`, `root` — where pub resolved it from.
+    origin: String?   # The identifying detail behind [source]: the git repository and ref, the relative path, a non-pub.dev server.
   error: String?   # Set when the package could not be loaded, in which case the counts mean nothing.
 ```
 

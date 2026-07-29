@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/plugins.dart' show SearchReason, searchReport;
 import 'package:flutterware_app/src/plugins/native/dependencies_core.dart';
 import 'package:flutterware_app/src/plugins/native/dependencies_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
@@ -118,5 +119,68 @@ void main() {
     expect(dependencies.isRealised(package), isTrue);
     expect(result.packages.single.path, package);
     expect(result.packages.single.direct, isA<int>());
+  });
+
+  test('the list reports where each package came from', () async {
+    var dependencies =
+        session.coreById(dependenciesPluginId)! as DependenciesCore;
+
+    var result =
+        (await dependencies.invoke(
+              'list',
+              arguments: {'package': 'examples/example'},
+            ))!
+            as DependencyListResult;
+    var entries = result.packages.single.dependencies;
+
+    // Every one of these was null before: the source was read off a lockfile
+    // entry that does not exist beside a member of a pub workspace.
+    expect(entries, isNotEmpty);
+    expect(entries.map((e) => e.source), everyElement(isNotEmpty));
+
+    var flutterware = entries.firstWhere((e) => e.name == 'flutterware');
+    expect(flutterware.source, 'root', reason: 'a sibling workspace member');
+    expect(flutterware.direct, isTrue);
+
+    var flutterTest = entries.firstWhere((e) => e.name == 'flutter_test');
+    expect(flutterTest.source, 'sdk');
+    expect(flutterTest.dev, isTrue, reason: 'declared in dev_dependencies');
+
+    // The counts are per-member, not per-workspace.
+    expect(result.packages.single.direct, 14);
+    expect(result.packages.single.dev, 4);
+  });
+
+  test('a dependency is findable in the palette once computed', () async {
+    var dependencies =
+        session.coreById(dependenciesPluginId)! as DependenciesCore;
+    await dependencies.invoke(
+      'list',
+      arguments: {'package': 'examples/example'},
+    );
+
+    var hits = searchReport(dependencies.report, 'auto_size', worktree: 'wt');
+
+    // The projection used to be a `ViewTable`, and `searchReport` skips tables
+    // because a table row has nowhere to put an address. So the plugin's only
+    // search hit was ever the plugin itself.
+    var hit = hits.firstWhere((e) => e.title == 'auto_size_text');
+    expect(hit.reason, SearchReason.item);
+    expect(hit.address.plugin, dependenciesPluginId);
+    expect(hit.address.segments, [
+      'examples/example',
+      'packages',
+      'auto_size_text',
+    ]);
+  });
+
+  test('nothing is searchable before it is computed', () {
+    // The laziness rule, from the search side: a report that started work just
+    // because somebody typed would defeat the whole design.
+    var dependencies = session.coreById(dependenciesPluginId)!;
+    expect(
+      searchReport(dependencies.report, 'auto_size', worktree: 'wt'),
+      isEmpty,
+    );
   });
 }

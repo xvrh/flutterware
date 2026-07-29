@@ -824,16 +824,34 @@ final resultShapes = <String, ResultShape>{
             'Declared in this package\'s own pubspec, as opposed to pulled in by something else.',
       },
       <String, Object?>{
+        'name': 'dev',
+        'type': 'bool',
+        'doc': 'Declared in `dev_dependencies:` rather than `dependencies:`.',
+      },
+      <String, Object?>{
         'name': 'version',
         'type': 'String',
         'optional': true,
-        'doc': 'Null for a package whose pubspec declares none.',
+        'doc': 'The resolved version — what is on disk.',
+      },
+      <String, Object?>{
+        'name': 'constraint',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The constraint the depending package wrote — `^1.2.0`, `any`.',
       },
       <String, Object?>{
         'name': 'source',
         'type': 'String',
+        'doc':
+            '`hosted`, `git`, `path`, `sdk`, `root` — where pub resolved it from.',
+      },
+      <String, Object?>{
+        'name': 'origin',
+        'type': 'String',
         'optional': true,
-        'doc': '`hosted`, `git`, `path` — where pub resolved it from.',
+        'doc':
+            'The identifying detail behind [source]: the git repository and ref, the relative path, a non-pub.dev server.',
       },
     ],
   }),
@@ -845,8 +863,9 @@ final resultShapes = <String, ResultShape>{
         'name': 'direct',
         'type': 'int',
         'doc':
-            'Counts are always both, even when only the direct ones are listed: a list that silently dropped 156 packages and said nothing would read as "this package has 14 dependencies".',
+            'Counts are always all three, even when only the declared ones are listed: a list that silently dropped 156 packages and said nothing would read as "this package has 14 dependencies".',
       },
+      <String, Object?>{'name': 'dev', 'type': 'int'},
       <String, Object?>{'name': 'transitive', 'type': 'int'},
       <String, Object?>{
         'name': 'dependencies',
@@ -862,16 +881,36 @@ final resultShapes = <String, ResultShape>{
                   'Declared in this package\'s own pubspec, as opposed to pulled in by something else.',
             },
             <String, Object?>{
+              'name': 'dev',
+              'type': 'bool',
+              'doc':
+                  'Declared in `dev_dependencies:` rather than `dependencies:`.',
+            },
+            <String, Object?>{
               'name': 'version',
               'type': 'String',
               'optional': true,
-              'doc': 'Null for a package whose pubspec declares none.',
+              'doc': 'The resolved version — what is on disk.',
+            },
+            <String, Object?>{
+              'name': 'constraint',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The constraint the depending package wrote — `^1.2.0`, `any`.',
             },
             <String, Object?>{
               'name': 'source',
               'type': 'String',
+              'doc':
+                  '`hosted`, `git`, `path`, `sdk`, `root` — where pub resolved it from.',
+            },
+            <String, Object?>{
+              'name': 'origin',
+              'type': 'String',
               'optional': true,
-              'doc': '`hosted`, `git`, `path` — where pub resolved it from.',
+              'doc':
+                  'The identifying detail behind [source]: the git repository and ref, the relative path, a non-pub.dev server.',
             },
           ],
         },
@@ -899,8 +938,9 @@ final resultShapes = <String, ResultShape>{
               'name': 'direct',
               'type': 'int',
               'doc':
-                  'Counts are always both, even when only the direct ones are listed: a list that silently dropped 156 packages and said nothing would read as "this package has 14 dependencies".',
+                  'Counts are always all three, even when only the declared ones are listed: a list that silently dropped 156 packages and said nothing would read as "this package has 14 dependencies".',
             },
+            <String, Object?>{'name': 'dev', 'type': 'int'},
             <String, Object?>{'name': 'transitive', 'type': 'int'},
             <String, Object?>{
               'name': 'dependencies',
@@ -916,17 +956,36 @@ final resultShapes = <String, ResultShape>{
                         'Declared in this package\'s own pubspec, as opposed to pulled in by something else.',
                   },
                   <String, Object?>{
+                    'name': 'dev',
+                    'type': 'bool',
+                    'doc':
+                        'Declared in `dev_dependencies:` rather than `dependencies:`.',
+                  },
+                  <String, Object?>{
                     'name': 'version',
                     'type': 'String',
                     'optional': true,
-                    'doc': 'Null for a package whose pubspec declares none.',
+                    'doc': 'The resolved version — what is on disk.',
+                  },
+                  <String, Object?>{
+                    'name': 'constraint',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The constraint the depending package wrote — `^1.2.0`, `any`.',
                   },
                   <String, Object?>{
                     'name': 'source',
                     'type': 'String',
+                    'doc':
+                        '`hosted`, `git`, `path`, `sdk`, `root` — where pub resolved it from.',
+                  },
+                  <String, Object?>{
+                    'name': 'origin',
+                    'type': 'String',
                     'optional': true,
                     'doc':
-                        '`hosted`, `git`, `path` — where pub resolved it from.',
+                        'The identifying detail behind [source]: the git repository and ref, the relative path, a non-pub.dev server.',
                   },
                 ],
               },

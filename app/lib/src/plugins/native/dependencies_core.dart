@@ -4,19 +4,16 @@ import 'dart:async';
 // declaration of the same name in package:flutterware.
 import 'package:flutterware/plugins.dart' hide Dependencies;
 
+import '../../dependencies/model/package_origin.dart';
 import '../../dependencies/model/service.dart';
 import '../../utils/async_value.dart';
 import '../plugin_core.dart';
+import 'dependencies_address.dart';
 import 'dependencies_results.dart';
 import '../plugin_host.dart';
 
 /// The registered id — also what `tool/flutterware.dart` declares.
 const dependenciesPluginId = 'flutterware.dependencies';
-
-/// Rows the text projection carries before it starts counting. A projection is
-/// read, not scrolled; the rest is reported as a count so it never looks
-/// complete when it is not.
-const _projectedRows = 12;
 
 /// Pub dependencies for each declared package — all of the behaviour, none of
 /// the widgets.
@@ -170,34 +167,68 @@ class DependenciesCore extends PluginCore {
         ViewSection(path, [
           // Honest: nothing has looked at this package, so nothing was
           // computed. That is not the same as "zero dependencies".
-          ...?(known[path] == null ? null : _packageNodes(known[path]!)),
+          ...?(known[path] == null ? null : _packageNodes(path, known[path]!)),
           if (known[path] == null) const ViewText('not computed'),
         ]),
     ]);
   }
 
-  List<ViewNode> _packageNodes(Snapshot<Dependencies> snapshot) {
+  List<ViewNode> _packageNodes(String path, Snapshot<Dependencies> snapshot) {
     if (snapshot.error != null) {
       return [ViewField('Error', '${snapshot.error}', tone: Tone.error)];
     }
     var data = snapshot.data;
     if (data == null) return const [ViewText('loading…')];
 
-    var direct = data.directs;
-    var shown = direct.take(_projectedRows).toList();
     return [
-      ViewField('Direct', '${direct.length}'),
+      ViewField('Direct', '${data.directs.length}'),
+      ViewField('Dev', '${data.devs.length}'),
       ViewField('Transitive', '${data.transitives.length}'),
-      ViewTable(
-        const ['PACKAGE', 'VERSION'],
-        [
-          for (var dependency in shown)
-            [dependency.name, dependency.pubspec.version?.toString() ?? ''],
-        ],
-        truncated: direct.length - shown.length,
-      ),
+      // Items rather than a table, because only an item can carry an address.
+      // `searchReport` walks items and skips tables, so as a table not one of
+      // these packages was reachable from the command palette — the plugin's
+      // only search hit was the plugin itself.
+      //
+      // **Every declared package, uncapped.** A projection is normally
+      // truncated because it is read rather than scrolled, but truncating here
+      // also decides what is findable, and "the first twelve dependencies are
+      // searchable" is not a rule anyone could hold in their head. What a
+      // package declares is a bounded list — tens, not hundreds — and it is
+      // the list this plugin exists to show. Transitives stay a count: they
+      // are the unbounded half, and you go looking for what you asked for.
+      ViewItems([
+        for (var dependency in [...data.directs, ...data.devs])
+          ViewItem(
+            dependency.name,
+            detail: _describeVersion(dependency),
+            address: addressFor(path, dependency.name),
+          ),
+      ]),
     ];
   }
+
+  /// What a row says about a package after its name.
+  ///
+  /// The origin is appended only when it is not an ordinary pub.dev package, so
+  /// a git or path dependency stands out in a list where almost everything came
+  /// from pub — which is exactly when you want to notice it.
+  static String _describeVersion(Dependency dependency) {
+    var origin = dependency.origin;
+    if (!dependency.hasMeaningfulVersion) return origin.label;
+    if (origin is HostedOrigin && origin.isPubDev) {
+      return dependency.resolvedVersion;
+    }
+    var detail = origin.detail;
+    return '${dependency.resolvedVersion} · ${detail ?? origin.label}';
+  }
+
+  /// Where one dependency's detail page is. The same segments the panel writes
+  /// when you click a row, built from the one helper both directions share.
+  Address addressFor(String packagePath, String dependency) => Address(
+    worktree: host.worktree.name,
+    plugin: host.id,
+    segments: dependencySegments(packagePath, dependency: dependency),
+  );
 
   @override
   Future<Object?> invoke(
@@ -274,17 +305,22 @@ class DependenciesCore extends PluginCore {
     return DependencyListPackage(
       path: path,
       direct: data.directs.length,
+      dev: data.devs.length,
       transitive: data.transitives.length,
       dependencies: [
         for (var dependency in [
           ...data.directs,
+          ...data.devs,
           if (transitive) ...data.transitives,
         ])
           DependencyEntry(
             name: dependency.name,
-            version: dependency.pubspec.version?.toString(),
+            version: dependency.resolvedVersion,
+            constraint: dependency.constraint,
             direct: dependency.isDirect,
-            source: dependency.lockDependency?.source,
+            dev: dependency.isDev,
+            source: dependency.node.source,
+            origin: dependency.origin.detail,
           ),
       ],
     );
