@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
@@ -74,13 +76,13 @@ class ShellController extends ChangeNotifier {
   /// **Where the shell is.** The one piece of navigation state; everything
   /// below is read off it, and every way of moving is a write to it.
   ///
-  /// Always present, though it may name nothing — `fw://` before the first
+  /// Always present, though it may name nothing — `fw:///` before the first
   /// worktree opens, and again if the last one closes. A nullable address would
   /// make every reader below handle two empties.
   ///
-  /// Its `worktree` is a directory name (see [Worktree.name]) rather than a
-  /// path, because that is what an address carries and what makes one pasted
-  /// from `fw` or an artifact resolve here.
+  /// Its `worktree` is git's own name for the checkout (see [Worktree.name])
+  /// rather than a path, because that is what an address carries and what makes
+  /// one pasted from `fw` or an artifact resolve here.
   Address get address => _address.value;
 
   /// The address on its own, for widgets that want to rebuild when it moves and
@@ -128,8 +130,24 @@ class ShellController extends ChangeNotifier {
   /// known this machine's paths.
   Worktree? get selected {
     var name = address.worktree;
-    if (name == null) return null;
-    return openWorktrees.where((w) => w.name == name).firstOrNull;
+    return name == null ? null : worktreeNamed(name, among: openWorktrees);
+  }
+
+  /// The worktree [name] refers to, by [Worktree.name] first and by branch
+  /// second.
+  ///
+  /// **Forgiving input, canonical output.** Nothing ever *writes* a branch into
+  /// an address — that would be an address that silently retargets when the
+  /// branch is checked out somewhere else. But a branch is what a tab shows and
+  /// therefore what someone types, so an address naming one still lands.
+  ///
+  /// Identity is checked across the whole set before any branch is, so a name
+  /// that is one worktree's identity and another's branch resolves to the
+  /// identity. The canonical form always wins, whichever order the list is in.
+  Worktree? worktreeNamed(String name, {Iterable<Worktree>? among}) {
+    var candidates = among ?? _worktrees;
+    return candidates.where((w) => w.name == name).firstOrNull ??
+        candidates.where((w) => w.branch == name).firstOrNull;
   }
 
   WorktreeSession? get selectedSession {
@@ -209,27 +227,38 @@ class ShellController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Opens [worktree]: the tab appears immediately, then its config runs and
-  /// its plugins resolve.
+  /// Opens [worktree] at its home screen: the tab appears immediately, then its
+  /// config runs and its plugins resolve.
   ///
   /// A worktree that fails to open is still selected, so the shell can show why
   /// rather than silently doing nothing.
+  ///
+  /// To open one *and* land somewhere inside it, pass the whole address to
+  /// [go] — it opens what it needs to.
   Future<void> open(Worktree worktree) async {
     if (isOpen(worktree)) {
       select(worktree);
       return;
     }
 
-    _openPaths.add(worktree.path);
+    var loaded = _openTab(worktree);
     // Before the session exists: the tab and its address are what the loader
     // draws under.
-    _address.value = Address(worktree: worktree.name);
-    _remembered[worktree.path] = address;
+    go(Address(worktree: worktree.name));
+    await loaded;
+  }
+
+  /// Gives [worktree] a tab and starts its config running.
+  ///
+  /// Deliberately says nothing about the address. [open] lands on the home
+  /// screen; [go] lands on wherever it was pointed, which is the whole reason
+  /// this is separate from either.
+  Future<void> _openTab(Worktree worktree) {
+    _openPaths.add(worktree.path);
     // The tab is on screen before the manifest subprocess starts; everything
     // below it draws a loader until the session lands.
     notifyListeners();
-
-    await _load(worktree);
+    return _load(worktree);
   }
 
   /// Re-runs the selected worktree's config and rebuilds its plugins.
@@ -270,35 +299,44 @@ class ShellController extends ChangeNotifier {
 
     // No config file is not an error — the worktree opens with no plugins.
     manifest ??= const PluginManifest([]);
-    var workspace = Workspace(
-      root: path,
-      declared: manifest.packages.isEmpty
-          // A project that declares nothing still has itself.
-          ? const [Pkg('.')]
-          : manifest.packages,
-      discovered: discoverPackages(path),
-      appContext: appContext,
-      flutterSdk: flutterSdk,
-    );
-    _workspaces[path] = workspace;
 
-    // Never clobber a config-load failure: that is the more useful error,
-    // and a broken config is often *why* the declarations look wrong.
-    var unknown = workspace.unknownDeclarations;
-    if (unknown.isNotEmpty && !_errors.containsKey(path)) {
-      _errors[path] = WorktreeError(
-        worktree,
-        'Declared package(s) not found on disk: ${unknown.join(', ')}',
+    // Everything past here touches the disk and builds the session, and since
+    // `go` opens a worktree without awaiting this, there is no caller left to
+    // catch what it throws. A tab with no session and no reason is a worktree
+    // that looks like it opened and then does nothing.
+    try {
+      var workspace = Workspace(
+        root: path,
+        declared: manifest.packages.isEmpty
+            // A project that declares nothing still has itself.
+            ? const [Pkg('.')]
+            : manifest.packages,
+        discovered: discoverPackages(path),
+        appContext: appContext,
+        flutterSdk: flutterSdk,
       );
-    }
+      _workspaces[path] = workspace;
 
-    _sessions[path] = WorktreeSession.resolve(
-      worktree: worktree,
-      manifest: manifest,
-      registry: registry,
-      workspace: workspace,
-      coreRegistry: coreRegistry,
-    )..addListener(notifyListeners);
+      // Never clobber a config-load failure: that is the more useful error,
+      // and a broken config is often *why* the declarations look wrong.
+      var unknown = workspace.unknownDeclarations;
+      if (unknown.isNotEmpty && !_errors.containsKey(path)) {
+        _errors[path] = WorktreeError(
+          worktree,
+          'Declared package(s) not found on disk: ${unknown.join(', ')}',
+        );
+      }
+
+      _sessions[path] = WorktreeSession.resolve(
+        worktree: worktree,
+        manifest: manifest,
+        registry: registry,
+        workspace: workspace,
+        coreRegistry: coreRegistry,
+      )..addListener(notifyListeners);
+    } catch (e) {
+      _errors.putIfAbsent(path, () => WorktreeError(worktree, '$e'));
+    }
 
     notifyListeners();
   }
@@ -351,24 +389,39 @@ class ShellController extends ChangeNotifier {
   /// **The one way the shell moves.** Every `select…` below is a call to this,
   /// and so is opening a search hit or a pasted address.
   ///
-  /// Refuses an address whose worktree is not open — navigation must not
-  /// silently land somewhere other than where it was told, and opening a
-  /// worktree is a decision with a cost, made by [open]. It says *why* it
-  /// refused rather than returning nothing: something that lets you type an
-  /// address has to be able to explain what happened to it.
+  /// **Opening is the navigation.** An address naming a closed worktree opens
+  /// it and lands inside it. This used to refuse, on the grounds that opening
+  /// costs a subprocess and should be a deliberate act — but the cost is the
+  /// user's to spend and they spent it by naming the worktree, and refusing to
+  /// go where you were told is itself landing somewhere you were not.
+  ///
+  /// Still synchronous. The tab and the address are in place before the config
+  /// starts, and everything under them draws a loader until the session lands —
+  /// which is what [open] already did, and is why nothing here has to wait.
+  ///
+  /// A name matching no worktree git reports is the one refusal left, and it
+  /// says so rather than returning nothing: something that lets you type an
+  /// address has to explain what happened to it.
   ///
   /// The address is remembered against its worktree on the way through, so a
   /// tab switched away from and back comes home to the same place.
   GoResult go(Address destination) {
     var name = destination.worktree;
-    var worktree = name == null
-        ? null
-        : openWorktrees.where((w) => w.name == name).firstOrNull;
-    if (worktree == null) {
-      return name != null && _worktrees.any((w) => w.name == name)
-          ? GoResult.worktreeNotOpen
-          : GoResult.worktreeUnknown;
-    }
+    var worktree = name == null ? null : worktreeNamed(name);
+    if (worktree == null) return GoResult.worktreeUnknown;
+
+    // The tab first, so the resolution below and everything that reads
+    // `selected` afterwards can see it.
+    if (!isOpen(worktree)) unawaited(_openTab(worktree));
+
+    // **Canonicalised on the way in**, so a branch is only ever input. Accepting
+    // one and then keeping it would put a name that moves with `git checkout`
+    // into [_remembered], into the bar, and into every artifact minted from
+    // where the shell is — which is the retarget the identity rule exists to
+    // prevent. This is the one place that can rewrite it, because it is the one
+    // place that knows which worktree the name found.
+    destination = destination.copyWith(worktree: worktree.name);
+
     if (destination == address) return GoResult.unchanged;
 
     // Read before the write, so the comparison is against where we were.
@@ -392,9 +445,9 @@ class ShellController extends ChangeNotifier {
     return GoResult.ok;
   }
 
-  /// Switches tabs, returning to wherever that tab was left.
+  /// Switches tabs, returning to wherever that tab was left — opening the
+  /// worktree first if it was closed, since [go] does.
   void select(Worktree worktree) {
-    if (!isOpen(worktree)) return;
     var destination = _addressFor(worktree.path);
     if (destination != null) go(destination);
   }
@@ -451,10 +504,6 @@ enum GoResult {
 
   /// Already there. Not a failure — just nothing to do.
   unchanged,
-
-  /// The worktree exists in this repo but has no tab. Recoverable: opening it
-  /// is one click, and the address stays valid meanwhile.
-  worktreeNotOpen,
 
   /// No worktree by that name, or the address named none at all.
   worktreeUnknown,

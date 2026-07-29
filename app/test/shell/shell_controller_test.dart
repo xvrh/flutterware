@@ -304,22 +304,22 @@ void main() {
 
       expect(
         shell.address.toString(),
-        'fw://repo',
-        reason: 'a worktree on its home screen names no plugin',
+        'fw:///~',
+        reason: 'the main checkout is ~, and names no plugin at home',
       );
 
       shell.selectPlugin('a.two');
-      expect(shell.address.toString(), 'fw://repo/a.two');
+      expect(shell.address.toString(), 'fw:///~/a.two');
 
       shell.selectChild('a.two', 'packages/app');
-      expect(shell.address.toString(), 'fw://repo/a.two/packages%2Fapp');
+      expect(shell.address.toString(), 'fw:///~/a.two/packages%2Fapp');
     });
 
     test('go is the write every select goes through', () async {
       var shell = _controller();
       await shell.start('/repo');
 
-      shell.go(Address.parse('fw://repo/a.one'));
+      shell.go(Address.parse('fw:///~/a.one'));
 
       expect(shell.selectedPluginId, 'a.one');
       expect(shell.isHome, isFalse);
@@ -345,22 +345,71 @@ void main() {
 
       // What a catalog entry looks like: the shell reads the package and
       // leaves the rest for whoever owns it.
-      shell.go(Address.parse('fw://repo/a.two/packages%2Fapp/demo.dart%23x'));
+      shell.go(Address.parse('fw:///~/a.two/packages%2Fapp/demo.dart%23x'));
 
       expect(shell.selectedPluginId, 'a.two');
       expect(shell.selectedChildId, 'packages/app');
       expect(shell.address.segments, ['packages/app', 'demo.dart#x']);
     });
 
-    test('a worktree that is not open is refused, not opened', () async {
+    test('a worktree that is not open is opened, not refused', () async {
       var shell = _controller();
       await shell.start('/repo');
-      var before = shell.address;
 
-      shell.go(Address.parse('fw://repo-explorer/a.one'));
+      expect(shell.go(Address.parse('fw:///repo-explorer/a.one')), GoResult.ok);
 
-      expect(shell.address, before, reason: 'opening has a cost; go is a move');
-      expect(shell.openWorktrees, hasLength(1));
+      // Opening is the navigation. Landing on the home screen instead would be
+      // the same silent not-where-you-said the refusal used to be.
+      expect(shell.address.toString(), 'fw:///repo-explorer/a.one');
+      expect(shell.openWorktrees.map((w) => w.name), ['~', 'repo-explorer']);
+    });
+
+    test('the tab and the address are there before the config is', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      var explorer = shell.closedWorktrees.first;
+
+      // Synchronous: no await between the write and these reads.
+      shell.go(Address(worktree: explorer.name, plugin: 'a.one'));
+
+      expect(shell.isOpen(explorer), isTrue);
+      expect(shell.isLoading(explorer), isTrue, reason: 'no session yet');
+      expect(shell.selected, explorer);
+
+      // And the panel arrives without a second navigation.
+      await pumpEventQueue();
+      expect(shell.isLoading(explorer), isFalse);
+      expect(shell.selectedPluginId, 'a.one');
+    });
+
+    test('a load that blows up leaves a tab that says why', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      // `go` opens without awaiting, so nothing downstream is left to catch a
+      // throw from the disk. A tab with no session and no reason is a worktree
+      // that looks like it opened and then does nothing.
+      shell.go(Address(worktree: 'repo-explorer'));
+      await pumpEventQueue();
+
+      var explorer = shell.worktreeNamed('repo-explorer')!;
+      expect(shell.isOpen(explorer), isTrue);
+      expect(
+        shell.sessionFor(explorer) != null || shell.errorFor(explorer) != null,
+        isTrue,
+        reason: 'a tab ends up with a session or with an explanation',
+      );
+    });
+
+    test('selecting a closed worktree opens it too', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      var explorer = shell.closedWorktrees.first;
+
+      shell.select(explorer);
+
+      expect(shell.isOpen(explorer), isTrue);
+      expect(shell.address.worktree, explorer.name);
     });
 
     test('closing the selected tab moves the address to a live one', () async {
@@ -371,7 +420,7 @@ void main() {
 
       expect(shell.close(shell.worktrees[1]), isTrue);
 
-      expect(shell.address.worktree, 'repo');
+      expect(shell.address.worktree, '~');
       expect(shell.selected!.branch, 'main');
     });
 
@@ -384,7 +433,66 @@ void main() {
       await shell.open(shell.closedWorktrees.first);
       shell.select(main);
 
-      expect(shell.address.toString(), 'fw://repo/a.two/packages%2Fapp');
+      expect(shell.address.toString(), 'fw:///~/a.two/packages%2Fapp');
+    });
+  });
+
+  group('a branch is input, never identity', () {
+    test('an address naming a branch lands', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      await shell.open(shell.closedWorktrees.first);
+
+      // Nothing ever *writes* this — a branch moves between worktrees, so an
+      // address holding one would silently retarget. But a branch is what the
+      // tab shows, so it is what someone types.
+      expect(
+        shell.go(Address(worktree: 'feature/explorer', plugin: 'a.one')),
+        GoResult.ok,
+      );
+      expect(shell.selected!.path, '/repo-explorer');
+    });
+
+    test('what comes back out is the identity, not what was typed', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      await shell.open(shell.closedWorktrees.first);
+
+      shell.go(Address(worktree: 'feature/explorer', plugin: 'a.one'));
+
+      // Rewritten on the way in. Keeping the branch would put a name that moves
+      // with `git checkout` into the remembered address and into every artifact
+      // minted from where the shell is.
+      expect(shell.address.worktree, 'repo-explorer');
+      expect(shell.address.toString(), 'fw:///repo-explorer/a.one');
+    });
+
+    test('identity wins over another worktree that has it as a branch', () async {
+      _currentListing =
+          'worktree /repo\nbranch refs/heads/main\n\n'
+          'worktree /wt/alpha\nbranch refs/heads/beta\n\n'
+          'worktree /wt/beta\nbranch refs/heads/gamma\n';
+      addTearDown(() => _currentListing = _listing);
+
+      var shell = _controller();
+      await shell.start('/repo');
+      for (var closed in shell.closedWorktrees.toList()) {
+        await shell.open(closed);
+      }
+
+      // `beta` is /wt/beta's name and /wt/alpha's branch. The name wins, so the
+      // canonical form always resolves to itself.
+      shell.go(Address(worktree: 'beta', plugin: 'a.one'));
+      expect(shell.selected!.path, '/wt/beta');
+    });
+
+    test('a name that is neither is unknown, not merely closed', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      expect(
+        shell.go(Address(worktree: 'no-such-thing', plugin: 'a.one')),
+        GoResult.worktreeUnknown,
+      );
     });
   });
 }

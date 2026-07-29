@@ -95,6 +95,12 @@ class _DependenciesPanelState extends State<_DependenciesPanel> {
       );
     }
 
-    return DependenciesScreen(_core.serviceFor(path), key: ValueKey(path));
+    // The package goes down with the service because everything below writes
+    // whole plugin-level segment lists, and every one of them starts with it.
+    return DependenciesScreen(
+      _core.serviceFor(path),
+      package: path,
+      key: ValueKey(path),
+    );
   }
 }

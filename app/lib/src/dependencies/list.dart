@@ -1,7 +1,8 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import '../address/address_scope.dart';
+import '../plugins/native/dependencies_address.dart';
 import 'package:pub_scores/pub_scores.dart';
-import '../app/ui/breadcrumb.dart';
 import '../ui/theme.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
@@ -15,7 +16,15 @@ import 'utils.dart';
 class DependenciesScreen extends StatefulWidget {
   final DependenciesService dependencies;
 
-  const DependenciesScreen(this.dependencies, {super.key});
+  /// The package this panel is showing — the first plugin-level segment, and
+  /// the head of every segment list written from here.
+  final String package;
+
+  const DependenciesScreen(
+    this.dependencies, {
+    required this.package,
+    super.key,
+  });
 
   @override
   State<DependenciesScreen> createState() => _DependenciesScreenState();
@@ -30,15 +39,19 @@ class _DependenciesScreenState extends State<DependenciesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return PageStorage(
-      bucket: _scrollBucket,
-      child: RouterOutlet({
-        '': (_) => _DependencyListScreen(this),
-        'upgrade': (_) => DependenciesUpgradeScreen(),
-        'packages/:packageName': (args) =>
-            DependencyDetailScreen(widget.dependencies, args['packageName']),
-      }),
-    );
+    return PageStorage(bucket: _scrollBucket, child: _screen(context));
+  }
+
+  /// Reading the segments subscribes to the segments, so an axis or a knob
+  /// moving does not rebuild this.
+  Widget _screen(BuildContext context) {
+    var place = dependencyPlace(AddressScope.segments(context));
+    if (place == null) return _DependencyListScreen(this);
+    if (place.upgrade) return DependenciesUpgradeScreen();
+    if (place.dependency case var dependency?) {
+      return DependencyDetailScreen(widget.dependencies, dependency);
+    }
+    return _DependencyListScreen(this);
   }
 
   @override
@@ -97,7 +110,6 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
             vertical: FwSpacing.lg,
           ),
           children: [
-            Breadcrumb(children: [BreadcrumbEntry.overview]),
             Row(
               children: [
                 Expanded(
@@ -286,7 +298,12 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
             for (var dependency in sortedDependencies)
               DataRow(
                 onSelectChanged: (selected) {
-                  context.router.go('packages/${dependency.name}');
+                  AddressScope.write(context).setSegments(
+                    dependencySegments(
+                      widget.parent.widget.package,
+                      dependency: dependency.name,
+                    ),
+                  );
                 },
                 cells: [
                   DataCell(

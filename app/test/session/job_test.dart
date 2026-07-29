@@ -121,7 +121,7 @@ void main() {
     var artifact = Artifact(
       kind: 'image/png',
       path: '.flutterware/artifacts/x.png',
-      address: Address(plugin: 'a.one', segments: const ['x']),
+      address: Address(worktree: 'wt', plugin: 'a.one', segments: const ['x']),
     );
     var result = await _one(result: artifact).invoke('one', 'go').done;
 
@@ -153,7 +153,11 @@ void main() {
       var artifact = Artifact(
         kind: 'image/png',
         path: 'x.png',
-        address: Address(plugin: 'a.one', segments: const ['x']),
+        address: Address(
+          worktree: 'wt',
+          plugin: 'a.one',
+          segments: const ['x'],
+        ),
       );
       var job = _one(result: artifact).invoke('one', 'go');
       await job.done;

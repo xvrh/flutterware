@@ -138,7 +138,7 @@ class UiCatalogCore extends PluginCore {
   /// Where an entry *is*, as the one identifier every surface carries.
   ///
   /// ```
-  /// fw://<worktree>/flutterware.ui_catalog/<package>/<file…>/<file.dart%23symbol>
+  /// fw:///<worktree>/flutterware.ui_catalog/<package>/<file…>/<file.dart%23symbol>
   /// ```
   ///
   /// The package comes first because two packages may legitimately declare the

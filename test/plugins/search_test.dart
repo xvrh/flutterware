@@ -83,7 +83,7 @@ void main() {
     });
 
     test('nothing for an empty query', () {
-      expect(searchReport(_report(), '   '), isEmpty);
+      expect(searchReport(_report(), '   ', worktree: 'main'), isEmpty);
     });
   });
 
@@ -91,21 +91,21 @@ void main() {
     test('an action, however well it matches', () {
       // "Screenshot" is a verb. Offering it beside a list of places is a
       // category error, and some actions are declared `danger`.
-      expect(searchReport(_report(), 'screenshot'), isEmpty);
+      expect(searchReport(_report(), 'screenshot', worktree: 'main'), isEmpty);
       // Its description, too — "Render one entry to a PNG".
-      expect(searchReport(_report(), 'render'), isEmpty);
+      expect(searchReport(_report(), 'render', worktree: 'main'), isEmpty);
     });
 
     test('free text, such as a diagnostic', () {
-      expect(searchReport(_report(), '1 error'), isEmpty);
+      expect(searchReport(_report(), '1 error', worktree: 'main'), isEmpty);
     });
 
     test('a field', () {
-      expect(searchReport(_report(), 'entrypoint'), isEmpty);
+      expect(searchReport(_report(), 'entrypoint', worktree: 'main'), isEmpty);
     });
 
     test('a table row, which has nowhere to put an address', () {
-      expect(searchReport(_report(), 'collection'), isEmpty);
+      expect(searchReport(_report(), 'collection', worktree: 'main'), isEmpty);
     });
 
     test('an item that declares no address', () {
@@ -116,19 +116,19 @@ void main() {
           ViewItems([ViewItem('Orphan', detail: 'nowhere to go')]),
         ]),
       );
-      expect(searchReport(report, 'orphan'), isEmpty);
+      expect(searchReport(report, 'orphan', worktree: 'main'), isEmpty);
     });
 
     test('a section heading, which is a heading and not a place', () {
       // 'Diagnostics' titles a section; selecting it would mean nothing. Its
       // children are still walked.
-      expect(searchReport(_report(), 'diagnostics'), isEmpty);
+      expect(searchReport(_report(), 'diagnostics', worktree: 'main'), isEmpty);
     });
   });
 
   group('ranking', () {
     test('a name beats the same letters in a detail', () {
-      var hits = searchReport(_report(), 'counter');
+      var hits = searchReport(_report(), 'counter', worktree: 'main');
       expect(hits.first.title, 'Counter');
       expect(
         hits.first.matched,
@@ -143,6 +143,7 @@ void main() {
       var hit = searchReport(
         _report(),
         'broken',
+        worktree: 'main',
       ).firstWhere((h) => h.title == 'Does not compile');
 
       expect(hit.subtitle, 'demo/broken.dart#broken');
@@ -153,22 +154,28 @@ void main() {
       // 'dmo' is a subsequence of the detail "demo/dashboard.dart#dashboard"
       // and of no title — matching it is how a palette fills with noise. A
       // real substring of the same detail still lands.
-      expect(searchReport(_report(), 'dashboard.dart'), isNotEmpty);
-      expect(searchReport(_report(), 'dmo'), isEmpty);
+      expect(
+        searchReport(_report(), 'dashboard.dart', worktree: 'main'),
+        isNotEmpty,
+      );
+      expect(searchReport(_report(), 'dmo', worktree: 'main'), isEmpty);
     });
 
     test('the plugin outranks an entry matching as well', () {
-      var hits = searchReport(_report(), 'ca');
+      var hits = searchReport(_report(), 'ca', worktree: 'main');
       expect(hits.first.reason, SearchReason.plugin);
     });
 
     test('but a better match beats the weight', () {
-      var hits = searchReport(_report(), 'dash');
+      var hits = searchReport(_report(), 'dash', worktree: 'main');
       expect(hits.first.title, 'Dashboard');
     });
 
     test('hits come back sorted', () {
-      var scores = [for (var hit in searchReport(_report(), 'a')) hit.score];
+      var scores = [
+        for (var hit in searchReport(_report(), 'a', worktree: 'main'))
+          hit.score,
+      ];
       expect(scores, isNotEmpty);
       expect(scores, orderedEquals(scores.toList()..sort((a, b) => b - a)));
     });
@@ -181,7 +188,7 @@ void main() {
       expect(hit.address.segments, ['app', 'demo/dashboard.dart#dashboard']);
       expect(
         hit.address.toString(),
-        'fw://main/flutterware.ui_catalog/app/demo%2Fdashboard.dart%23dashboard',
+        'fw:///main/flutterware.ui_catalog/app/demo%2Fdashboard.dart%23dashboard',
       );
     });
 
@@ -201,7 +208,7 @@ void main() {
 
   group('grouping and deduplication', () {
     test('every hit is grouped under the plugin label', () {
-      var hits = searchReport(_report(), 'a');
+      var hits = searchReport(_report(), 'a', worktree: 'main');
       expect(hits.map((h) => h.group).toSet(), {'UI catalog'});
     });
 
@@ -220,7 +227,7 @@ void main() {
         ]),
       );
 
-      expect(searchReport(report, 'dash'), hasLength(1));
+      expect(searchReport(report, 'dash', worktree: 'main'), hasLength(1));
     });
   });
 

@@ -4,7 +4,7 @@ import 'package:collection/collection.dart';
 /// all carry.
 ///
 /// ```
-/// fw://<worktree>/<plugin>/<plugin-specific segments…>?<axes>
+/// fw://<project>/<worktree>/<plugin>/<plugin-specific segments…>?<axes>
 /// ```
 ///
 /// The framework parses up to and including the plugin segment. **Everything
@@ -16,12 +16,34 @@ import 'package:collection/collection.dart';
 /// in dark mode is the same entry seen differently, so `theme` is a query
 /// parameter — which is what makes an address with its axes resolved a complete
 /// capture spec rather than an under-specified one.
+///
+/// **Only [project] is the URI authority; everything else is a path segment.**
+/// That is what lets `Uri.parse` agree with this parser instead of contradicting
+/// it — an authority is lowercased and a worktree name may have capitals. There
+/// is a test that asserts the agreement.
+///
+/// One exception, recorded because it cannot be fixed: a segment consisting
+/// only of dots is a relative-path operator, and Dart's `Uri` decodes before it
+/// normalises, so `..` is resolved away however it is escaped. Nothing can
+/// produce such a segment — git sanitises worktree names, and no plugin id or
+/// entry id is only dots — so this is a note rather than a hazard.
 class Address {
   static const scheme = 'fw';
 
-  /// The worktree directory name, or null when the address is relative to
-  /// whichever session resolves it. Git guarantees these are distinct within a
-  /// repo, which is why the name is enough and a path is not needed.
+  /// Which project this address belongs to, or null for "the one the session
+  /// reading it was launched in" — which is every address anything emits today,
+  /// since a shell is opened on one repo and discovers that repo's worktrees.
+  ///
+  /// Reserved rather than used. It exists because a `fw://` link followed from
+  /// a browser or a chat window arrives at *an* installed flutterware knowing
+  /// nothing about which checkout it is for, and that is precisely the question
+  /// a URI authority answers. Adding the slot later would have meant reparsing
+  /// every address ever written down.
+  final String? project;
+
+  /// Git's own name for the worktree (see `Worktree.name`), or null when the
+  /// address names no worktree at all — which is where the shell sits before
+  /// the first one opens.
   final String? worktree;
 
   /// The declared plugin id — `flutterware.ui_catalog`. Null addresses the
@@ -38,6 +60,7 @@ class Address {
   final Map<String, String> axes;
 
   Address({
+    this.project,
     this.worktree,
     this.plugin,
     List<String> segments = const [],
@@ -46,8 +69,19 @@ class Address {
        axes = Map.unmodifiable({
          for (var key in axes.keys.toList()..sort()) key: axes[key]!,
        }) {
+    if (project != null && project!.isEmpty) {
+      throw ArgumentError.value(project, 'project', 'Must not be empty.');
+    }
     if (worktree != null && worktree!.isEmpty) {
       throw ArgumentError.value(worktree, 'worktree', 'Must not be empty.');
+    }
+    if (worktree == null && plugin != null) {
+      throw ArgumentError.value(
+        plugin,
+        'plugin',
+        'A plugin is reached through a worktree; an address naming one must '
+            'name a worktree.',
+      );
     }
     if (plugin != null && plugin!.isEmpty) {
       throw ArgumentError.value(plugin, 'plugin', 'Must not be empty.');
@@ -61,30 +95,23 @@ class Address {
     }
   }
 
-  /// True when this address does not name a worktree and has to be resolved
-  /// against the session reading it.
-  bool get isRelative => worktree == null;
-
   /// The plugin's remainder as a single slash-joined string, for plugins whose
   /// addressing is naturally a path.
   String get path => segments.join('/');
 
   Address copyWith({
+    String? project,
     String? worktree,
     String? plugin,
     List<String>? segments,
     Map<String, String>? axes,
   }) => Address(
+    project: project ?? this.project,
     worktree: worktree ?? this.worktree,
     plugin: plugin ?? this.plugin,
     segments: segments ?? this.segments,
     axes: axes ?? this.axes,
   );
-
-  /// The same address resolved against [worktree]. What a session does to a
-  /// relative address the moment it reads one.
-  Address resolveIn(String worktree) =>
-      isRelative ? copyWith(worktree: worktree) : this;
 
   /// The same address one segment deeper.
   Address child(String segment) => copyWith(segments: [...segments, segment]);
@@ -95,8 +122,12 @@ class Address {
 
   /// The same address with no axes applied — the identity of the thing, which
   /// is what a tree or a list keys on.
-  Address get bare =>
-      Address(worktree: worktree, plugin: plugin, segments: segments);
+  Address get bare => Address(
+    project: project,
+    worktree: worktree,
+    plugin: plugin,
+    segments: segments,
+  );
 
   static Address parse(String source) =>
       tryParse(source) ??
@@ -130,20 +161,26 @@ class Address {
       axes = parsed;
     }
 
-    // Deliberately not `Uri.parse`: it lowercases the authority, and a worktree
-    // directory may legitimately have capitals.
+    // Hand-parsed rather than `Uri.parse`, to keep the percent-encoding
+    // deliberately sparse — `_encode` escapes only what would be read as
+    // structure, so `team.dart%23TeamList` stays legible where `Uri` would
+    // escape more. The two agree on everything they both decide, and
+    // `address_test.dart` asserts it.
     var parts = rest.split('/');
-    var worktree = parts.first;
-    var tail = parts.skip(1).toList();
-    // `fw://wt/` and `fw://wt` name the same worktree.
-    if (tail.length == 1 && tail.single.isEmpty) tail = [];
-    if (tail.any((s) => s.isEmpty)) return null;
+    // The authority. Empty is the normal case and means "this session's
+    // project"; it is not a segment and never was one.
+    var project = parts.first;
+    var path = parts.skip(1).toList();
+    // `fw:///wt/` and `fw:///wt` name the same worktree.
+    if (path.isNotEmpty && path.last.isEmpty) path.removeLast();
+    if (path.any((s) => s.isEmpty)) return null;
 
     try {
       return Address(
-        worktree: worktree.isEmpty ? null : Uri.decodeComponent(worktree),
-        plugin: tail.isEmpty ? null : Uri.decodeComponent(tail.first),
-        segments: [for (var s in tail.skip(1)) Uri.decodeComponent(s)],
+        project: project.isEmpty ? null : Uri.decodeComponent(project),
+        worktree: path.isEmpty ? null : Uri.decodeComponent(path.first),
+        plugin: path.length < 2 ? null : Uri.decodeComponent(path[1]),
+        segments: [for (var s in path.skip(2)) Uri.decodeComponent(s)],
         axes: axes,
       );
     } on ArgumentError {
@@ -155,11 +192,20 @@ class Address {
 
   @override
   String toString() {
-    var out = StringBuffer('$scheme://${_encode(worktree ?? '')}');
-    if (plugin != null) {
-      out.write('/${_encode(plugin!)}');
-      for (var segment in segments) {
-        out.write('/${_encode(segment)}');
+    // `//` even when the project is empty. It is what makes the whole thing get
+    // linkified when pasted, and what an OS registers to route a click back
+    // here; `fw:/…` would be equally correct per RFC and recognised by nothing.
+    var out = StringBuffer('$scheme://${_encode(project ?? '')}');
+    // Always the leading slash, so `fw:///` names nothing and reads as an empty
+    // authority rather than as a truncated address.
+    out.write('/');
+    if (worktree != null) {
+      out.write(_encode(worktree!));
+      if (plugin != null) {
+        out.write('/${_encode(plugin!)}');
+        for (var segment in segments) {
+          out.write('/${_encode(segment)}');
+        }
       }
     }
     if (axes.isNotEmpty) {
@@ -181,6 +227,8 @@ class Address {
   /// Percent-encodes only what would otherwise be read as structure. A catalog
   /// entry stays legible — `team.dart%23TeamList`, not an unreadable blob.
   static String _encode(String segment) => segment
+      // `%` first: it is the escape character, so escaping it after anything
+      // else would escape the escapes.
       .replaceAll('%', '%25')
       .replaceAll('/', '%2F')
       .replaceAll('?', '%3F')
@@ -190,6 +238,7 @@ class Address {
   @override
   bool operator ==(Object other) =>
       other is Address &&
+      other.project == project &&
       other.worktree == worktree &&
       other.plugin == plugin &&
       const ListEquality<String>().equals(other.segments, segments) &&
@@ -197,6 +246,7 @@ class Address {
 
   @override
   int get hashCode => Object.hash(
+    project,
     worktree,
     plugin,
     const ListEquality<String>().hash(segments),

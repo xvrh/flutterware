@@ -80,7 +80,7 @@ Widget counter() => const Placeholder();
       var address = subject.addressFor('.', 'demo/counter.dart#counter');
       expect(
         address.toString(),
-        'fw://${p.basename(root.path)}/flutterware.ui_catalog'
+        'fw:///${p.basename(root.path)}/flutterware.ui_catalog'
         '/./demo/counter.dart%23counter',
       );
     });
@@ -224,7 +224,7 @@ Widget broken() => const Placeholder();
     expect(entries.map((e) => e.id), contains('demo/counter.dart#counter'));
     expect(
       entries.first.address,
-      startsWith('fw://'),
+      startsWith('fw:///'),
       reason: 'an agent should be able to take this straight to screenshot',
     );
     // The wire form is generated from those fields, so it cannot disagree
@@ -261,7 +261,7 @@ Widget added() => const Placeholder();
     expect(described.package, '.');
     expect(described.file, 'demo/counter.dart');
     expect(described.symbol, 'counter');
-    expect(described.address, startsWith('fw://'));
+    expect(described.address, startsWith('fw:///'));
     // Knobs are a runtime fact and cost a build, so they are absent until
     // asked for by name — null, not empty, because "none declared" is a
     // different answer from "we did not look".

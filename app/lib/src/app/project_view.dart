@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutterware/devbar.dart';
 import '../about/screen.dart';
-import '../dependencies/list.dart';
 import '../drawing/menu.dart';
 import '../drawing/screen.dart';
 import '../icon/image_provider.dart';
@@ -87,8 +86,10 @@ class ProjectView extends StatelessWidget {
         Expanded(
           child: RouterOutlet({
             paths.home: (route) => OverviewScreen(project),
-            paths.dependencies: (route) =>
-                DependenciesScreen(project.dependencies),
+            // No dependencies route. That screen reads the shell's address for
+            // which package it is on and where inside itself it is, and this
+            // pre-shell view has no address to give it. It lives in the
+            // `flutterware.dependencies` plugin now.
             paths.tests: (route) => TestRunnerScreen(project),
             paths.uiCatalog: (route) => UICatalogScreen(project),
             paths.icon: (route) => IconScreen(project),

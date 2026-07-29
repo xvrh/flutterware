@@ -200,7 +200,7 @@ void main() {
 
     shell.go(
       Address(
-        worktree: 'repo',
+        worktree: '~',
         plugin: 'a.deps',
         segments: ['app', 'demo/avatar.dart#members'],
       ),

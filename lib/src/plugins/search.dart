@@ -101,7 +101,11 @@ const _weights = {SearchReason.plugin: 30, SearchReason.package: 20};
 List<SearchHit> searchReport(
   PluginReport report,
   String query, {
-  String? worktree,
+
+  /// Which worktree the report came from. Required, because a hit exists to be
+  /// gone to and a place cannot be reached without one — the same reason
+  /// `2de5004` stopped offering results that named no destination.
+  required String worktree,
 }) {
   var trimmed = query.trim();
   if (trimmed.isEmpty) return const [];

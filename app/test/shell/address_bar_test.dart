@@ -90,12 +90,12 @@ void main() {
       tester,
     ) async {
       var shell = await _pumpShell(tester);
-      expect(find.text('fw://'), findsOneWidget);
-      expect(find.text('repo'), findsOneWidget);
+      expect(find.text('fw:///'), findsOneWidget);
+      expect(find.text('~'), findsOneWidget);
 
       shell.go(
         Address(
-          worktree: 'repo',
+          worktree: '~',
           plugin: 'a.deps',
           segments: ['app', 'tool/demos', 'avatar.dart#members'],
         ),
@@ -115,7 +115,7 @@ void main() {
 
       shell.go(
         Address(
-          worktree: 'repo',
+          worktree: '~',
           plugin: 'a.deps',
           axes: {'axis.theme': 'dark', 'knob.count': '3'},
         ),
@@ -144,7 +144,7 @@ void main() {
 
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
-        'fw://repo/a.deps/packages%2Fapp',
+        'fw:///~/a.deps/packages%2Fapp',
       );
     });
   });
@@ -154,7 +154,7 @@ void main() {
       await _pumpShell(tester);
       await _expand(tester);
 
-      await _type(tester, 'fw://repo/a.deps/packages%2Fapp');
+      await _type(tester, 'fw:///~/a.deps/packages%2Fapp');
 
       expect(find.text('panel:a.deps/packages/app'), findsOneWidget);
       expect(find.text('packages/app'), findsOneWidget);
@@ -172,27 +172,26 @@ void main() {
       expect(find.byType(TextField), findsOneWidget);
     });
 
-    testWidgets('a worktree that exists but is closed explains itself', (
+    testWidgets('a worktree that exists but is closed is opened', (
       tester,
     ) async {
-      await _pumpShell(tester);
+      var shell = await _pumpShell(tester);
       await _expand(tester);
 
-      await _type(tester, 'fw://repo-explorer/a.deps');
+      await _type(tester, 'fw:///repo-explorer/a.deps');
 
-      expect(
-        find.textContaining('is not open'),
-        findsOneWidget,
-        reason:
-            'refusing in silence is what makes a pasted address feel broken',
-      );
+      // Typing an address is naming a destination, and opening the worktree is
+      // how you get there. Explaining a refusal was the second-best answer.
+      expect(shell.address.toString(), 'fw:///repo-explorer/a.deps');
+      expect(shell.openWorktrees.map((w) => w.name), ['~', 'repo-explorer']);
+      expect(find.textContaining('is not open'), findsNothing);
     });
 
     testWidgets('a worktree this repo has never heard of', (tester) async {
       await _pumpShell(tester);
       await _expand(tester);
 
-      await _type(tester, 'fw://nowhere/a.deps');
+      await _type(tester, 'fw:///nowhere/a.deps');
 
       expect(find.textContaining('No worktree named'), findsOneWidget);
     });

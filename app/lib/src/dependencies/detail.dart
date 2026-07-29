@@ -3,11 +3,11 @@ import 'dart:ui';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import '../address/address_scope.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:pub_scores/pub_scores.dart';
-import '../app/ui/breadcrumb.dart';
 import '../utils.dart';
 import '../utils/async_value.dart';
 import '../utils/value_stream_builder.dart';
@@ -81,19 +81,6 @@ class _DetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Breadcrumb(
-              onBack: () {
-                context.router.go('/project/dependencies');
-              },
-              children: [
-                BreadcrumbEntry.overview,
-                BreadcrumbEntry(
-                  title: Text('Dependencies'),
-                  url: '/project/dependencies',
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
@@ -149,9 +136,7 @@ class _DetailScreen extends StatelessWidget {
               ),
             ),
             InkWell(
-              onTap: () {
-                context.router.go('/project/dependencies');
-              },
+              onTap: () => _backToList(context),
               child: Row(
                 children: [
                   Icon(Icons.arrow_back, size: 18),
@@ -164,6 +149,16 @@ class _DetailScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Drops this screen's own segments, keeping the package the panel is on.
+  ///
+  /// Read off the address rather than passed in: the package is already there —
+  /// it is what put this screen on screen — and threading it down would be a
+  /// second copy of something the address holds.
+  void _backToList(BuildContext context) {
+    var handle = AddressScope.write(context);
+    handle.setSegments([?handle.segment(0)]);
   }
 }
 

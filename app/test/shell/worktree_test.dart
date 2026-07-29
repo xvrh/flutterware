@@ -112,5 +112,110 @@ branch refs/heads/x
         'dev',
       ]);
     });
+
+    test('names each linked worktree the way git does', () async {
+      // `--force` lets two worktrees share a directory name; git still keeps
+      // its own names apart, which is the whole reason they are the identity.
+      var discovery = WorktreeDiscovery(
+        runProcess: (_, _, {workingDirectory}) async => ProcessResult(
+          0,
+          0,
+          'worktree /repo\nbranch refs/heads/main\n\n'
+              'worktree /a/feature\nbranch refs/heads/feature\n\n'
+              'worktree /b/feature\nbranch refs/heads/other\n',
+          '',
+        ),
+        readGitPointer: (path) => switch (path) {
+          '/a/feature' => 'gitdir: /repo/.git/worktrees/feature\n',
+          '/b/feature' => 'gitdir: /repo/.git/worktrees/feature1\n',
+          _ => null,
+        },
+      );
+
+      expect((await discovery.discover('.')).map((w) => w.name), [
+        '~',
+        'feature',
+        'feature1',
+      ]);
+    });
+
+    test(
+      'a worktree whose pointer cannot be read keeps its directory',
+      () async {
+        var discovery = WorktreeDiscovery(
+          runProcess: (_, _, {workingDirectory}) async => ProcessResult(
+            0,
+            0,
+            'worktree /repo\nbranch refs/heads/main\n\n'
+                'worktree /a/feature\nbranch refs/heads/feature\n',
+            '',
+          ),
+          readGitPointer: (_) => null,
+        );
+        expect((await discovery.discover('.')).last.name, 'feature');
+      },
+    );
+  });
+
+  group('gitNameFrom', () {
+    test('reads the name off an absolute pointer', () {
+      expect(
+        gitNameFrom('gitdir: /Users/x/proj/.git/worktrees/my-feature\n'),
+        'my-feature',
+      );
+    });
+
+    test('reads it off a relative one too', () {
+      // `git worktree add --relative-paths` writes these; the name is still the
+      // last component, so nothing has to resolve the path.
+      expect(
+        gitNameFrom('gitdir: ../../.git/worktrees/my-feature'),
+        'my-feature',
+      );
+    });
+
+    test('is null for anything that is not a linked worktree pointer', () {
+      expect(gitNameFrom(null), isNull);
+      expect(gitNameFrom(''), isNull);
+      expect(gitNameFrom('ref: refs/heads/main'), isNull);
+      // The main checkout: `.git` is a directory, so there is nothing to read.
+      expect(gitNameFrom('gitdir: /repo/.git'), isNull);
+    });
+  });
+
+  group('a worktree is named the way git names it', () {
+    test('the main checkout is ~', () {
+      // It has no admin directory, and no ordinary token is safe: git will give
+      // a *linked* worktree the name `main` if its directory is called that.
+      var main = const Worktree(path: '/x/repo', isMain: true);
+      expect(main.name, '~');
+      expect(main.name, Worktree.mainName);
+    });
+
+    test(
+      'a linked one is called what git calls it, not what the folder is',
+      () {
+        var worktree = const Worktree(
+          path: '/somewhere/totally-different',
+          gitName: 'feature',
+        );
+        // Survives `git worktree move`, which the directory name does not.
+        expect(worktree.name, 'feature');
+        expect(worktree.directoryName, 'totally-different');
+      },
+    );
+
+    test('displayName shows the folder, never the ~', () {
+      // A detached main checkout has no title and no branch, and `~` on a tab
+      // would tell you nothing about which checkout you are looking at.
+      var detached = const Worktree(path: '/x/repo', head: 'abc', isMain: true);
+      expect(detached.name, '~');
+      expect(detached.displayName, 'repo');
+    });
+
+    test('a title survives being renamed', () {
+      var worktree = const Worktree(path: '/x/wt', gitName: 'feature1');
+      expect(worktree.withTitle('Fix the thing').name, 'feature1');
+    });
   });
 }

@@ -83,9 +83,6 @@ class _AddressBarState extends State<AddressBar> {
     setState(() {
       _problem = switch (result) {
         GoResult.ok || GoResult.unchanged => null,
-        GoResult.worktreeNotOpen =>
-          'Worktree "${parsed.worktree}" is not open. '
-              'Open it from the switcher first.',
         GoResult.worktreeUnknown =>
           parsed.worktree == null
               ? 'That address names no worktree.'
@@ -186,7 +183,11 @@ class _Readout extends StatelessWidget {
       child: part('/', colors.mut3),
     );
 
-    var head = <Widget>[part('fw://', lit ? colors.mut2 : colors.mut3)];
+    // `fw://` then the empty project then the leading slash — drawn as one
+    // piece because there is nothing to click or read in the middle of it.
+    var head = <Widget>[
+      part('fw://${address.project ?? ''}/', lit ? colors.mut2 : colors.mut3),
+    ];
     if (address.worktree case var worktree?) {
       head.add(part(worktree, lit ? colors.ink2 : colors.mut));
     }

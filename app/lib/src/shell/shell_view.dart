@@ -10,7 +10,6 @@ import '../plugins/native_plugin.dart';
 import '../ui/theme.dart';
 import 'address_bar.dart';
 import '../utils/hot_reload.dart';
-import '../utils/router_outlet.dart';
 import '../utils/value_stream_builder.dart';
 import 'shell_controller.dart';
 import 'shell_search.dart';
@@ -55,7 +54,7 @@ class ShellApp extends StatelessWidget {
       darkTheme: appDarkTheme,
       themeMode: ThemeMode.system,
       debugShowCheckedModeBanner: false,
-      home: RouterOutlet.root(child: ShellView(shell)),
+      home: ShellView(shell),
     );
   }
 }
