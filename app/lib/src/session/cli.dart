@@ -91,10 +91,15 @@ const fwCommands = [
   ),
   FwCommand(
     'app',
-    usage: 'app [--release]',
+    usage: 'app [--release] [--json]',
     summary: 'open the flutterware GUI',
     details:
         'What `dart run flutterware` with no arguments does, spelled out.\n'
+        '\n'
+        "The first run builds the GUI. That build's output goes to\n"
+        '`app/build/gui-build.log` rather than to the terminal; a failure\n'
+        'prints the end of it and where the rest is, and `--json` reports the\n'
+        'same thing as data.\n'
         '\n'
         'The GUI is one renderer of the plugin contract and this is one\n'
         'command of the CLI — it is not a separate program, and there is no\n'
@@ -177,6 +182,7 @@ class FwCli {
         'app' => await _app(
           forceBuild: rest.remove('--$forceCompileOption'),
           release: rest.remove('--release'),
+          json: json,
         ),
         'help' || '--help' || '-h' => _help(rest.firstOrNull),
         _ => fail('unknown command "$command". Try `fw help`.'),
@@ -231,7 +237,11 @@ class FwCli {
   /// cannot be found by walking up from it. The launcher ran under `dart run`
   /// and therefore knew — which is the same "record, do not discover" rule the
   /// adoption story applies to `.flutterware/sdk`.
-  Future<int> _app({required bool forceBuild, required bool release}) async {
+  Future<int> _app({
+    required bool forceBuild,
+    required bool release,
+    required bool json,
+  }) async {
     if (launchGui case var launch?) return launch(forceBuild: forceBuild);
 
     var appToolPath = Platform.environment[appPathEnvironmentKey];
@@ -260,6 +270,7 @@ class FwCli {
       err: err,
       editableSources:
           Platform.environment[editableSourcesEnvironmentKey] == 'true',
+      json: json,
     ).run(forceBuild: forceBuild, release: release);
   }
 

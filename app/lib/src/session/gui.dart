@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
+// ignore: implementation_imports
+import 'package:flutterware/src/build_output.dart';
 import 'package:path/path.dart' as p;
 
 import '../constants.dart';
@@ -23,7 +26,9 @@ class GuiLauncher {
     required this.out,
     required this.err,
     this.editableSources = false,
-  });
+    this.json = false,
+    bool? interactive,
+  }) : interactive = interactive ?? outputIsInteractive;
 
   /// The `app/` directory the GUI is built from — the working copy under
   /// `~/.flutterware`, or the checkout itself when running in place.
@@ -40,6 +45,15 @@ class GuiLauncher {
 
   /// True when `app/` is the checkout being edited rather than a copy.
   final bool editableSources;
+
+  /// Report a failed build as JSON on [out] instead of prose on [err].
+  ///
+  /// A build failure is the one thing here an agent cannot act on from a tail
+  /// of Xcode output, and `--json` is already how every other command answers.
+  final bool json;
+
+  /// Whether the terminal is being watched. See [outputIsInteractive].
+  final bool interactive;
 
   String get _flutter =>
       p.join(flutterSdk, 'bin', 'flutter${Platform.isWindows ? '.bat' : ''}');
@@ -110,20 +124,47 @@ class GuiLauncher {
     flutterSdkDefineKey: flutterSdk,
   };
 
+  /// Builds the GUI, with the build's own output in a file rather than in the
+  /// terminal.
+  ///
+  /// Twenty-three seconds of Xcode is identical on every successful run, so
+  /// forwarding it spends the user's whole first impression on output nobody
+  /// reads. What they need is that it started, roughly how long it takes, and —
+  /// on the run that fails — the end of it.
   Future<int> _build() async {
-    out.writeln('Building the flutterware GUI (~25s, first run only)…');
-    var process = await Process.start(
-      _flutter,
-      ['build', Platform.operatingSystem, '--release'],
-      workingDirectory: appToolPath,
-      mode: ProcessStartMode.inheritStdio,
-    );
+    var log = File(p.join(appToolPath, 'build', 'gui-build.log'));
+    var result =
+        await Step(
+          'Building the flutterware GUI',
+          out: out,
+          interactive: interactive,
+          budget: const Duration(seconds: 25),
+          note: 'first run only',
+        ).run(
+          () => runLogged(
+            _flutter,
+            ['build', Platform.operatingSystem, '--release'],
+            workingDirectory: appToolPath,
+            log: log,
+          ),
+          ok: (result) => result.ok,
+        );
 
-    var code = await process.exitCode;
-    if (code != 0) {
-      err.writeln('fw: the GUI build failed ($code).');
+    if (result.ok) return 0;
+
+    if (json) {
+      out.writeln(
+        const JsonEncoder.withIndent('  ').convert({
+          'error': 'gui_build_failed',
+          'exitCode': result.exitCode,
+          'log': log.path,
+          'tail': result.tail(),
+        }),
+      );
+    } else {
+      describeFailure(err, 'the GUI build failed.', result);
     }
-    return code;
+    return result.exitCode;
   }
 
   String _exePathForPlatform() {

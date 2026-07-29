@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'package:crypto/crypto.dart';
+import 'package:flutterware/src/build_output.dart';
 import 'package:flutterware/src/constants.dart';
 import 'package:flutterware/src/utils/list_files.dart';
 import 'package:path/path.dart' as p;
@@ -48,7 +49,7 @@ void main(List<String> arguments) async {
       : await _workingCopy(packageRoot, force: force);
 
   var appPath = p.join(root, 'app');
-  var cli = await _ensureCli(appPath, force: force);
+  var cli = await _ensureCli(appPath, force: force, resolved: editable);
 
   var process = await Process.start(
     cli,
@@ -92,13 +93,20 @@ Future<String> _workingCopy(String packageRoot, {required bool force}) async {
     return destination;
   }
 
-  stdout.writeln('Unpacking flutterware…');
-  var files = listFilesInDirectory(packageRoot);
-  for (var file in files) {
-    var target = p.join(destination, p.relative(file.path, from: packageRoot));
-    File(target).createSync(recursive: true);
-    await file.copy(target);
-  }
+  await Step(
+    'Unpacking flutterware',
+    out: stdout,
+    interactive: outputIsInteractive,
+  ).run(() async {
+    for (var file in listFilesInDirectory(packageRoot)) {
+      var target = p.join(
+        destination,
+        p.relative(file.path, from: packageRoot),
+      );
+      File(target).createSync(recursive: true);
+      await file.copy(target);
+    }
+  });
   stampFile.writeAsStringSync(stamp);
   return destination;
 }
@@ -110,32 +118,64 @@ Future<String> _workingCopy(String packageRoot, {required bool force}) async {
 /// via `path_provider`. `dart build cli` runs the hooks and emits a bundle —
 /// the executable beside the dylibs it needs — which is why the answer is a
 /// path into `bundle/bin` and not a lone file.
-Future<String> _ensureCli(String appPath, {required bool force}) async {
+///
+/// [resolved] says the tree has already been resolved, in which case the
+/// `pub get` is skipped. This process reached `main` through
+/// `dart run flutterware`, which resolves the whole workspace — and `app/` is a
+/// member of it, so getting it again re-resolves the same workspace a second
+/// time for nothing. It is only false for a fresh copy under `~/.flutterware`,
+/// which really has never been resolved.
+///
+/// That second resolution was also the loudest thing in the terminal, and the
+/// reason is worth writing down: pub run from a *member* prints ``Resolving
+/// dependencies in `<workspace root>`…`` while the same command from the root
+/// prints a bare `Resolving dependencies…`. So output that looked like the
+/// launcher resolving itself was in fact this function, and reading the path in
+/// that message is how to tell those apart.
+Future<String> _ensureCli(
+  String appPath, {
+  required bool force,
+  required bool resolved,
+}) async {
   var output = p.join(appPath, 'build', 'cli');
   var executable = p.join(output, 'bundle', 'bin', 'fw');
 
   if (!force && _isFresh(executable, appPath)) return executable;
 
-  stdout.writeln('Building the flutterware CLI (~10s, first run only)…');
-  var pubGet = await Process.run(Platform.resolvedExecutable, [
-    'pub',
-    'get',
-  ], workingDirectory: appPath);
-  if (pubGet.exitCode != 0) {
-    stderr.writeln('flutterware: pub get failed\n${pubGet.stderr}');
-    exit(70);
-  }
+  // Beside the artifact it explains, rather than in the project: at this point
+  // nothing has established that the working directory *is* a project, and a
+  // failed build must not be the thing that creates `.flutterware/`.
+  var log = File(p.join(appPath, 'build', 'cli-build.log'));
+  var step = Step(
+    'Building the flutterware CLI',
+    out: stdout,
+    interactive: outputIsInteractive,
+    budget: const Duration(seconds: 10),
+    note: 'first run only',
+  );
 
-  var built = await Process.run(Platform.resolvedExecutable, [
-    'build',
-    'cli',
-    '-t',
-    p.join('bin', 'fw.dart'),
-    '-o',
-    output,
-  ], workingDirectory: appPath);
-  if (built.exitCode != 0) {
-    stderr.writeln('flutterware: could not build the CLI\n${built.stderr}');
+  var result = await step.run(() async {
+    if (!resolved) {
+      var pubGet = await runLogged(
+        Platform.resolvedExecutable,
+        ['pub', 'get'],
+        workingDirectory: appPath,
+        log: log,
+      );
+      if (!pubGet.ok) return pubGet;
+    }
+
+    return runLogged(
+      Platform.resolvedExecutable,
+      ['build', 'cli', '-t', p.join('bin', 'fw.dart'), '-o', output],
+      workingDirectory: appPath,
+      log: log,
+      append: !resolved,
+    );
+  }, ok: (result) => result.ok);
+
+  if (!result.ok) {
+    describeFailure(stderr, 'could not build the CLI.', result);
     exit(70);
   }
   return executable;

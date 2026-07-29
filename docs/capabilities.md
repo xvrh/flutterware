@@ -24,7 +24,7 @@ cd app && dart run bin/fw.dart <command>
 | `actions [--json]` | what can be invoked, and with what |
 | `run <plugin> <action> [--k=v]` | invoke one action |
 | `init` | record what this project needs, once |
-| `app [--release]` | open the flutterware GUI |
+| `app [--release] [--json]` | open the flutterware GUI |
 | `help [<command>]` | this, or one command in detail |
 
 Run `fw help <command>` for detail, or `fw actions` for what this project can do.
