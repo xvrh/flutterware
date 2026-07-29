@@ -22,12 +22,16 @@ import 'package:path/path.dart' as p;
 /// position is a **`TypeLiteral`**, not a `SimpleIdentifier`. The class element
 /// hangs off `literal.type.element`. Everything else is walking fields.
 class ShapeExtractor {
-  ShapeExtractor({required this.packageRoot, String? sdkPath})
+  ShapeExtractor({required this.packageRoots, String? sdkPath})
     : sdkPath = sdkPath ?? findDartSdk();
 
-  /// The package whose plugin sources are read — resolution needs the whole
-  /// package, not just the files named.
-  final String packageRoot;
+  /// The packages whose sources are read — resolution needs whole packages,
+  /// not just the files named.
+  ///
+  /// Plural because the result classes are not all in one: the plugins declare
+  /// their own, and `Artifact` — the most returned of all — lives in
+  /// `package:flutterware` beside the other pure-data plugin types.
+  final List<String> packageRoots;
 
   /// Where the Dart SDK is.
   ///
@@ -62,28 +66,48 @@ class ShapeExtractor {
   /// looks it up with `PluginAction.returnsName`.
   Future<Map<String, ResultShape>> extract(List<String> sources) async {
     var collection = AnalysisContextCollection(
-      includedPaths: [packageRoot],
+      // Normalised: the analyzer rejects a path with a `..` in it, and the
+      // sibling package is most naturally written as one.
+      includedPaths: [for (var root in packageRoots) p.normalize(root)],
       sdkPath: sdkPath,
     );
     var shapes = <String, ResultShape>{};
+    var units = <ResolvedUnitResult>[];
 
     for (var source in sources) {
+      var path = p.normalize(source);
       var resolved = await collection
-          .contextFor(source)
+          .contextFor(path)
           .currentSession
-          .getResolvedUnit(source);
+          .getResolvedUnit(path);
       if (resolved is! ResolvedUnitResult) {
         throw StateError('could not resolve $source: $resolved');
       }
+      units.add(resolved);
+    }
 
+    // Two passes, and the order matters. A hand-written `toJson` is described
+    // by reading its map literal, which needs the *syntax* — and the class may
+    // be reached as a field of something else long before its own file comes
+    // up. So every map is collected before any shape is built.
+    for (var unit in units) {
+      var maps = _MapLiteralFinder();
+      unit.unit.accept(maps);
+      _handWritten.addAll(maps.byClassName);
+    }
+
+    for (var unit in units) {
       var finder = _ReturnsFinder();
-      resolved.unit.accept(finder);
+      unit.unit.accept(finder);
       for (var type in finder.returnTypes) {
         _shapeOf(type, shapes, seen: {});
       }
     }
     return shapes;
   }
+
+  /// `toJson` map literals, by the class that wrote one.
+  final _handWritten = <String, _HandWrittenJson>{};
 
   /// Adds [type]'s shape to [shapes], and every nested one it reaches.
   ResultShape? _shapeOf(
@@ -94,13 +118,36 @@ class ShapeExtractor {
     var name = type.name;
     if (name == null) return null;
     if (shapes.containsKey(name)) return shapes[name];
-    // The same rule at the top of the tree as inside it. Without this check
-    // here, `Artifact` — whose `toJson` is hand-written and turns an `Address`
-    // into a string — published `address: Address`, which is the exact lie the
-    // rule exists to prevent.
-    if (!_isJsonSerializable(type)) return null;
     // A class that contains itself is legal; a shape tree that does is not.
     if (!seen.add(name)) return null;
+
+    // A hand-written `toJson` is described by what it writes rather than by
+    // what the class holds. Reading the fields there would publish
+    // `address: Address` for `Artifact`, which sends a string — the exact lie
+    // the `@JsonSerializable` rule exists to prevent. Reading the map says
+    // `address: String`, which is true.
+    if (_handWritten[name] case var written? when !_isJsonSerializable(type)) {
+      var entries = [
+        for (var entry in written.entries)
+          ResultField(
+            entry.key,
+            _withoutNullability(entry.type),
+            optional: entry.optional,
+            doc: entry.doc,
+            shape: switch (entry.nested) {
+              var nested? => _shapeOf(nested, shapes, seen: seen),
+              null => null,
+            },
+          ),
+      ];
+      seen.remove(name);
+      return shapes[name] = ResultShape(name, entries);
+    }
+
+    if (!_isJsonSerializable(type)) {
+      seen.remove(name);
+      return null;
+    }
 
     var fields = <ResultField>[];
     for (var field in type.fields) {
@@ -109,7 +156,7 @@ class ShapeExtractor {
       fields.add(
         ResultField(
           _wireName(field),
-          field.type.getDisplayString().replaceAll('?', ''),
+          _withoutNullability(field.type.getDisplayString()),
           optional: field.type.nullabilitySuffix == NullabilitySuffix.question,
           doc: _summaryDoc(field),
           shape: nested == null ? null : _shapeOf(nested, shapes, seen: seen),
@@ -124,11 +171,12 @@ class ShapeExtractor {
   /// The class behind a field's type, when we can honestly claim to know its
   /// wire shape — following `List<T>` into `T`.
   ///
-  /// **Only `@JsonSerializable` classes qualify.** There the keys are generated
-  /// from the fields, so reading the fields describes what is actually sent.
-  /// A class with a hand-written `toJson` may map a field to anything —
-  /// `Artifact` turns an `Address` into a string — and walking its fields would
-  /// publish a shape nobody sends, which is worse than publishing none.
+  /// Two ways to qualify, and both describe what is *sent*. A
+  /// `@JsonSerializable` class generates its keys from its fields, so reading
+  /// the fields is honest. A class with a hand-written `toJson` is read from
+  /// that method's map literal instead — `Artifact` turns an `Address` into a
+  /// string, and only the map says so. A class with neither gets nothing,
+  /// which is still better than a shape nobody sends.
   ClassElement? _walkable(DartType type) {
     if (type is! InterfaceType) return null;
     if (type.element.name == 'List' && type.typeArguments.isNotEmpty) {
@@ -139,6 +187,11 @@ class ShapeExtractor {
     if ('${element.library.uri}'.startsWith('dart:')) return null;
     return element;
   }
+
+  /// The trailing `?` only — `Map<String, Object?>` keeps its inner one, which
+  /// `replaceAll` used to eat.
+  static String _withoutNullability(String type) =>
+      type.endsWith('?') ? type.substring(0, type.length - 1) : type;
 
   static bool _isJsonSerializable(ClassElement element) {
     for (var annotation in element.metadata.annotations) {
@@ -210,6 +263,139 @@ class _ReturnsFinder extends RecursiveAstVisitor<void> {
           returnTypes.add(element);
         }
       }
+    }
+  }
+}
+
+/// One hand-written `toJson`, read as what it writes.
+class _HandWrittenJson {
+  _HandWrittenJson(this.entries);
+
+  final List<_JsonEntry> entries;
+}
+
+class _JsonEntry {
+  _JsonEntry({
+    required this.key,
+    required this.type,
+    required this.optional,
+    this.doc,
+    this.nested,
+  });
+
+  final String key;
+  final String type;
+
+  /// True when the entry sits behind an `if` in the literal — which is what
+  /// `if (path != null) 'path': path` means on the wire.
+  final bool optional;
+  final String? doc;
+  final ClassElement? nested;
+}
+
+/// Collects `Map<String, Object?> toJson() => {…}` bodies, by class.
+///
+/// Only a **map literal** counts. A `toJson` that builds its map some other way
+/// is not described rather than guessed at, which is the same standard the
+/// `@JsonSerializable` rule applies: publish what is provably sent, or publish
+/// nothing.
+///
+/// Reached through `MethodDeclaration` and the element model rather than
+/// through `ClassDeclaration`, whose shape the analyzer rearranged — a method
+/// knows which class it belongs to, and asking it is both shorter and stable
+/// across that.
+class _MapLiteralFinder extends RecursiveAstVisitor<void> {
+  final byClassName = <String, _HandWrittenJson>{};
+
+  @override
+  void visitMethodDeclaration(MethodDeclaration node) {
+    super.visitMethodDeclaration(node);
+    if (node.name.lexeme != 'toJson') return;
+    var owner = node.declaredFragment?.element.enclosingElement;
+    if (owner is! ClassElement) return;
+    var name = owner.name;
+    if (name == null) return;
+
+    var literal = _literalOf(node.body);
+    if (literal == null) return;
+
+    var entries = <_JsonEntry>[];
+    for (var element in literal.elements) {
+      var entry = _entryOf(element, optional: false);
+      if (entry != null) entries.add(entry);
+    }
+    if (entries.isNotEmpty) byClassName[name] = _HandWrittenJson(entries);
+  }
+
+  /// The map literal a `toJson` returns, from either body form.
+  static SetOrMapLiteral? _literalOf(FunctionBody body) => switch (body) {
+    ExpressionFunctionBody(expression: SetOrMapLiteral literal) => literal,
+    BlockFunctionBody(:var block) => switch (block.statements) {
+      [ReturnStatement(expression: SetOrMapLiteral literal)] => literal,
+      _ => null,
+    },
+    _ => null,
+  };
+
+  static _JsonEntry? _entryOf(
+    CollectionElement element, {
+    required bool optional,
+  }) => switch (element) {
+    // `if (path != null) 'path': path` — the condition is what makes the key
+    // optional, and the entry under it is the one that gets written.
+    IfElement(:var thenElement) => _entryOf(thenElement, optional: true),
+    MapLiteralEntry(key: SimpleStringLiteral key, :var value) => _JsonEntry(
+      key: key.value,
+      type: value.staticType?.getDisplayString() ?? 'Object',
+      optional:
+          optional ||
+          value.staticType?.nullabilitySuffix == NullabilitySuffix.question,
+      doc: _docOf(value),
+      nested: _walkableType(value.staticType),
+    ),
+    _ => null,
+  };
+
+  /// The dartdoc of the field the value reads, when it reads one.
+  ///
+  /// `'kind': kind` names a field directly; `'address': address.toString()`
+  /// names one and then converts it. Both should carry the field's own
+  /// documentation, since that is what the reader wants explained.
+  static String? _docOf(Expression value) {
+    var finder = _FirstFieldFinder();
+    value.accept(finder);
+    var field = finder.field;
+    return field == null ? null : ShapeExtractor._summaryDoc(field);
+  }
+
+  static ClassElement? _walkableType(DartType? type) {
+    if (type is! InterfaceType) return null;
+    if (type.element.name == 'List' && type.typeArguments.isNotEmpty) {
+      return _walkableType(type.typeArguments.first);
+    }
+    var element = type.element;
+    if (element is! ClassElement) return null;
+    if ('${element.library.uri}'.startsWith('dart:')) return null;
+    return element;
+  }
+}
+
+/// The first identifier in an expression that resolves to a field.
+class _FirstFieldFinder extends RecursiveAstVisitor<void> {
+  FieldElement? field;
+
+  @override
+  void visitSimpleIdentifier(SimpleIdentifier node) {
+    if (field != null) return;
+    var element = node.element;
+    if (element is FieldElement) {
+      field = element;
+      return;
+    }
+    // A field read resolves to its implicit getter, not to the field.
+    if (element is GetterElement) {
+      var variable = element.variable;
+      if (variable is FieldElement) field = variable;
     }
   }
 }

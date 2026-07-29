@@ -245,17 +245,23 @@ void main() {
   // before the shell that reads them has built — so this has to be up before
   // anything renders, not merely before the first question.
   CatalogAxes.instance.registerExtensions();
-  // Framework errors, on stdout, always.
+  // Reads the demo's own subtree rather than the whole app, which is what
+  // CatalogGuest.demoRoot marks. Null until the first build, and that is an
+  // answer: a headless host draws nothing until a frame is asked for.
+  GuestInspector(
+    rootOf: () => CatalogGuest.demoRoot,
+    entryIdOf: () => CatalogParameters.instance.entryId,
+  ).registerExtensions();
+  // Framework errors, on stdout *and* kept where they can be asked for.
   //
   // A demo that throws while building paints Flutter's red ErrorWidget in the
   // guest and nothing else changes: the compile succeeded, the reload
   // succeeded, and every check that asserts on those passes while the user
-  // looks at an error. This is what makes such a failure observable to
-  // anything that is not a pair of eyes.
-  FlutterError.onError = (details) {
-    print('FW-ERROR: \${details.exceptionAsString()}');
-    FlutterError.presentError(details);
-  };
+  // looks at an error. The stdout line makes that visible to a human watching
+  // a terminal; the buffer makes it visible to `fw`, to MCP and to a panel,
+  // which read stdout for nothing but the VM service URI.
+  GuestErrors.instance.install();
+  GuestErrors.instance.registerExtensions();
   runApp(const _CatalogHost());
 ${emitProbe ? _probe : ''}}
 

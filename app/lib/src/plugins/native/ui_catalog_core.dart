@@ -3,6 +3,16 @@ import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:flutterware/plugins.dart';
+// The tree types, not the umbrella: same rule as `headless_catalog.dart`, and
+// for the same reason — `node.dart` is plain Dart and `ui_catalog.dart` is not.
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/error.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/ui_catalog/axis.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/ui_catalog/knob.dart';
 import 'package:path/path.dart' as p;
 
 import '../../catalog/catalog_entry.dart';
@@ -29,6 +39,31 @@ const _projectedEntries = 20;
 /// Entry ids spelled out inline as action options. Beyond this the caller reads
 /// them from the view, which is what `optionsFrom` says.
 const _inlinedOptions = 50;
+
+/// What `--knobs` is, written once because five actions take it.
+///
+/// `optionsFrom` cannot help here the way it does for `entry`: a knob's names
+/// depend on the entry, so there is no one list to point at. What an agent can
+/// be given instead is where the names come from and how to ask.
+const _knobsDoc =
+    'Values to turn before this runs: `name=value,name=value`, or a JSON '
+    'object. A knob is whatever the demo asked for while it built — a demo '
+    'calling `context.uiCatalog.parameters.string("label", "Hello")` declares '
+    'one named `label` — so the names come from the demo itself and differ per '
+    'entry. Read them with `describe --entry=<id> --knobs=true`. Each value is '
+    'coerced to the kind the demo declared, and a picker takes one of its '
+    'option labels; a name the entry does not declare is an error listing the '
+    'ones it does.';
+
+/// What `--axes` is. The distinction from a knob is the whole content.
+const _axesDoc =
+    'Values for the shell *around* the demo — theme, locale, flavour. Same '
+    'syntax as knobs: `name=value,name=value` or a JSON object. The difference '
+    'is who declares it and how long it lasts: a knob is asked for by the demo '
+    'and travels with the entry, an axis is declared by the `CatalogShell` '
+    'wrapping it and stays put as you move between entries. Read them with '
+    '`describe --entry=<id> --axes=true`, which also names the shell; an entry '
+    'whose wrapper is not a shell offers none.';
 
 /// The UI catalog's entries, per declared package — everything but the panel.
 ///
@@ -243,9 +278,23 @@ class UiCatalogCore extends PluginCore {
             required: false,
             defaultValue: 'false',
             description:
-                'Compile the entry and run it to read the knobs it declares. '
+                'Compile the entry and run it to read the knobs it declares — '
+                'the names and kinds every other action takes as `--knobs`. '
                 'Off by default because it costs a build; without it the '
                 'answer is what the scan knows.',
+          ),
+          ActionParameter(
+            'axes',
+            'Read the axes',
+            kind: ActionParameterKind.boolean,
+            required: false,
+            defaultValue: 'false',
+            description:
+                'Run it and read what the shell around it offers — the names '
+                'and kinds every other action takes as `--axes`, plus which '
+                'shell declared them. Costs a build for the same reason knobs '
+                'do: an axis is declared by a shell asking for it while it '
+                'builds.',
           ),
         ],
       ),
@@ -280,9 +329,7 @@ class UiCatalogCore extends PluginCore {
             'Knobs',
             required: false,
             description:
-                'Values to turn before the frame is taken, as `name=value` '
-                'pairs or a JSON object. Ask `describe --knobs` what an entry '
-                'offers. Recorded on the address, so two settings are two '
+                '$_knobsDoc Recorded on the address, so two settings are two '
                 'artifacts rather than one file written twice.',
           ),
           ActionParameter(
@@ -321,6 +368,221 @@ class UiCatalogCore extends PluginCore {
             kind: ActionParameterKind.integer,
             required: false,
             defaultValue: '$_defaultHeight',
+          ),
+          const ActionParameter(
+            'axes',
+            'Axes',
+            required: false,
+            description: _axesDoc,
+          ),
+          const ActionParameter(
+            'node',
+            'Crop to',
+            required: false,
+            description:
+                'Cut the picture down to one node, by the id `tree` gave. Cut '
+                'out of the real frame rather than re-rendered alone, so the '
+                'widget is still in its surroundings.',
+          ),
+          const ActionParameter(
+            'annotate',
+            'Draw the ids',
+            kind: ActionParameterKind.boolean,
+            required: false,
+            defaultValue: 'false',
+            description:
+                'Draw a box and its node id over every widget, so a tree read '
+                'and a picture of it can be laid side by side',
+          ),
+        ],
+      ),
+      const PluginAction(
+        'tree',
+        'Widget tree',
+        returns: CatalogTreeResult,
+        description:
+            'The widget tree one entry builds, scoped to the demo rather than '
+            'the catalog around it',
+        parameters: [
+          ActionParameter(
+            'entry',
+            'Entry',
+            kind: ActionParameterKind.choice,
+            description: 'The id of the entry to read',
+            optionsFrom: 'entries',
+          ),
+          ActionParameter(
+            'node',
+            'Subtree',
+            required: false,
+            description:
+                'Report only this node and below, by the id a previous read '
+                'gave. Ids come from tree shape, so one taken in another '
+                'process still names this node.',
+          ),
+          ActionParameter(
+            'depth',
+            'Depth',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description: 'Stop this many levels below the root',
+          ),
+          ActionParameter(
+            'knobs',
+            'Knobs',
+            required: false,
+            description:
+                '$_knobsDoc A tree is of one build, and a knob can change '
+                'which widgets there are.',
+          ),
+          ActionParameter(
+            'axes',
+            'Axes',
+            required: false,
+            description: _axesDoc,
+          ),
+        ],
+      ),
+      const PluginAction(
+        'find',
+        'Find widgets',
+        returns: CatalogTreeResult,
+        description:
+            'The nodes in one entry matching a type, a key or some text — for '
+            'when the answer is a handful of nodes rather than a whole tree',
+        parameters: [
+          ActionParameter(
+            'entry',
+            'Entry',
+            kind: ActionParameterKind.choice,
+            description: 'The id of the entry to search',
+            optionsFrom: 'entries',
+          ),
+          ActionParameter(
+            'query',
+            'Query',
+            description:
+                'Matched case-insensitively against the type of each node '
+                'and against the words it puts on screen — `ElevatedButton`, '
+                '`Save`, `SizedBox`',
+          ),
+          ActionParameter(
+            'knobs',
+            'Knobs',
+            required: false,
+            description: _knobsDoc,
+          ),
+          ActionParameter(
+            'axes',
+            'Axes',
+            required: false,
+            description: _axesDoc,
+          ),
+        ],
+      ),
+      const PluginAction(
+        'errors',
+        'Does it render',
+        returns: CatalogRenderResult,
+        description:
+            'Render one entry and report what the framework said — build '
+            'failures, layout overflows. `check` answers whether it compiles, '
+            'which is a different question.',
+        parameters: [
+          ActionParameter(
+            'entry',
+            'Entry',
+            kind: ActionParameterKind.choice,
+            description: 'The id of the entry to render',
+            optionsFrom: 'entries',
+          ),
+          ActionParameter(
+            'knobs',
+            'Knobs',
+            required: false,
+            description: _knobsDoc,
+          ),
+          ActionParameter(
+            'axes',
+            'Axes',
+            required: false,
+            description: _axesDoc,
+          ),
+        ],
+      ),
+      const PluginAction(
+        'at',
+        'What is here',
+        returns: CatalogTreeResult,
+        description:
+            'The widgets under one point, outermost first — the chain, since '
+            'the thing under a cursor is usually a Text and the thing meant is '
+            'the button around it',
+        parameters: [
+          ActionParameter(
+            'entry',
+            'Entry',
+            kind: ActionParameterKind.choice,
+            description: 'The id of the entry to probe',
+            optionsFrom: 'entries',
+          ),
+          ActionParameter(
+            'x',
+            'X',
+            kind: ActionParameterKind.integer,
+            description:
+                'In the same coordinates a screenshot is taken in, so a point '
+                'read off one lands here without a transform',
+          ),
+          ActionParameter(
+            'y',
+            'Y',
+            kind: ActionParameterKind.integer,
+            description: 'See x',
+          ),
+          ActionParameter(
+            'knobs',
+            'Knobs',
+            required: false,
+            description: _knobsDoc,
+          ),
+          ActionParameter(
+            'axes',
+            'Axes',
+            required: false,
+            description: _axesDoc,
+          ),
+        ],
+      ),
+      PluginAction(
+        'audit',
+        'Audit every entry',
+        returns: CatalogAuditResult,
+        description:
+            'Render the whole catalog and report everything that does not '
+            'compile or does not render — one warm guest, one answer for the '
+            'repo',
+        parameters: [
+          ActionParameter(
+            'package',
+            'Package',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'Which declared package; all of them when omitted',
+            options: [
+              for (var path in packages)
+                ActionOption(path, label: path == '.' ? 'root' : path),
+            ],
+          ),
+          const ActionParameter(
+            'path',
+            'Narrow to',
+            required: false,
+            description:
+                'A directory or one file — `demo/settings`, '
+                '`demo/settings/tile.dart`. Either package-relative or '
+                'worktree-relative; both are accepted because an entry id is '
+                'the first and a shell tab-completes the second.',
           ),
         ],
       ),
@@ -433,6 +695,16 @@ class UiCatalogCore extends PluginCore {
         return _describe(arguments);
       case 'screenshot':
         return _screenshot(arguments);
+      case 'tree':
+        return _tree(arguments);
+      case 'find':
+        return _find(arguments);
+      case 'at':
+        return _at(arguments);
+      case 'errors':
+        return _errors(arguments);
+      case 'audit':
+        return _audit(arguments);
       default:
         return super.invoke(actionId, arguments: arguments);
     }
@@ -560,41 +832,206 @@ class UiCatalogCore extends PluginCore {
     var packagePath = _packageHolding(entryId);
     var entry = _scans[packagePath]!.entries.firstWhere((e) => e.id == entryId);
 
-    CatalogEntryDescription describe({List<CatalogKnob>? knobs}) =>
-        CatalogEntryDescription(
-          id: entry.id,
-          name: entry.name,
-          group: entry.group,
-          formFactor: entry.formFactor,
-          package: packagePath,
-          file: entry.path,
-          symbol: entry.symbol,
-          annotation: entry.annotation,
-          address: '${addressFor(packagePath, entryId)}',
-          knobs: knobs,
-        );
+    CatalogEntryDescription describe({
+      List<CatalogKnob>? knobs,
+      List<CatalogKnob>? axes,
+      String? shell,
+    }) => CatalogEntryDescription(
+      id: entry.id,
+      name: entry.name,
+      group: entry.group,
+      formFactor: entry.formFactor,
+      package: packagePath,
+      file: entry.path,
+      symbol: entry.symbol,
+      annotation: entry.annotation,
+      address: '${addressFor(packagePath, entryId)}',
+      knobs: knobs,
+      axes: axes,
+      shell: shell,
+    );
 
-    if (arguments['knobs'] != true) return describe();
+    var wantsKnobs = arguments['knobs'] == true;
+    var wantsAxes = arguments['axes'] == true;
+    if (!wantsKnobs && !wantsAxes) return describe();
 
-    var report = await _headlessFor(packagePath).knobs(entryId: entryId);
+    // One guest for both when both are asked for: each costs a compile and a
+    // frame, and running the pipeline twice to answer two questions about the
+    // same build is the cost with none of the benefit.
+    var headless = _headlessFor(packagePath);
+    var axisReport = wantsAxes
+        ? await headless.axes(entryId: entryId)
+        : AxisReport.empty;
+    if (!wantsKnobs) {
+      return describe(
+        axes: [for (var axis in axisReport.axes) _asKnob(axis)],
+        shell: axisReport.shellId,
+      );
+    }
+
+    var report = await headless.knobs(entryId: entryId);
     // An entry that declares none answers with an empty list: "it has no
     // knobs" and "we did not look" are different questions, and only one of
     // them was asked. Which is why the field is nullable and this is a list.
     return describe(
-      knobs: [
-        for (var knob in report.knobs)
-          CatalogKnob(
-            name: knob.name,
-            kind: knob.kind.name,
-            value: knob.value,
-            defaultValue: knob.defaultValue,
-            min: knob.min,
-            max: knob.max,
-            options: knob.options,
-          ),
-      ],
+      knobs: [for (var knob in report.knobs) _asKnob(knob)],
+      axes: wantsAxes
+          ? [for (var axis in axisReport.axes) _asKnob(axis)]
+          : null,
+      shell: axisReport.shellId,
     );
   }
+
+  /// One entry, rendered.
+  Future<CatalogRenderResult> _errors(Map<String, Object?> arguments) async {
+    var entryId = arguments['entry'];
+    if (entryId is! String || entryId.isEmpty) {
+      throw ArgumentError.value(entryId, 'entry', 'required');
+    }
+    if (_scans.isEmpty && _failures.isEmpty) await computeAll();
+
+    var packagePath = _packageHolding(entryId);
+    var knobs = parseKnobs(arguments['knobs']);
+    var axes = parseKnobs(arguments['axes']);
+    var report = await _headlessFor(
+      packagePath,
+    ).errors(entryId: entryId, knobs: knobs, axes: axes);
+
+    return CatalogRenderResult(
+      entry: entryId,
+      address:
+          '${addressFor(packagePath, entryId, axes: {for (var k in knobs.entries) 'knob.${k.key}': k.value, for (var a in axes.entries) 'axis.${a.key}': a.value})}',
+      ok: report.isEmpty,
+      errors: [for (var error in report.errors) _asRenderError(error)],
+    );
+  }
+
+  /// Every entry in every requested package, compiled and rendered.
+  Future<CatalogAuditResult> _audit(Map<String, Object?> arguments) async {
+    var paths = _requestedPackages(arguments);
+    await Future.wait([for (var path in paths) _scan(path)]);
+
+    var narrowTo = arguments['path'];
+    if (narrowTo != null && narrowTo is! String) {
+      throw ArgumentError.value(narrowTo, 'path', 'must be a path');
+    }
+
+    // Resolved before anything is compiled, so a typo costs no build. An empty
+    // match is refused rather than audited: `checked: 0, broken: 0` is what a
+    // clean run looks like, and a flag that silently matched nothing would
+    // report a repo green on the strength of a misspelling.
+    Map<String, List<String>>? selected;
+    if (narrowTo is String) {
+      selected = {for (var path in paths) path: _entryIdsUnder(path, narrowTo)};
+      if (selected.values.every((ids) => ids.isEmpty)) {
+        throw ArgumentError.value(
+          narrowTo,
+          'path',
+          'matches no entry in ${paths.join(', ')}. Ask `entries` what there '
+              'is; a path names a directory or a file, not an entry id.',
+        );
+      }
+    }
+
+    var checked = 0;
+    var rows = <CatalogAuditEntry>[];
+    var unreachable = <CatalogAuditFailure>[];
+    // One package at a time: each may build a host binary, and two cold builds
+    // racing helps nobody. The same reason `check` gives.
+    for (var path in paths) {
+      var only = selected?[path];
+      // Nothing under this package matched, and another package's did — so
+      // there is nothing to do here rather than everything.
+      if (only != null && only.isEmpty) continue;
+      CatalogAudit audit;
+      try {
+        audit = await _headlessFor(path).auditAll(entryIds: only);
+      } catch (e) {
+        // Per package, exactly as `check` does it: one package that cannot
+        // host a daemon must not decide the answer for the others.
+        unreachable.add(CatalogAuditFailure(package: path, error: '$e'));
+        continue;
+      }
+      checked += audit.entries.length + audit.quarantined.length;
+
+      for (var broken in audit.quarantined) {
+        rows.add(
+          CatalogAuditEntry(
+            id: broken.entry.id,
+            address: '${addressFor(path, broken.entry.id)}',
+            compiles: false,
+            compileError: broken.error,
+          ),
+        );
+      }
+      for (var entry in audit.entries) {
+        var report = audit.rendered[entry.id];
+        if (report == null || report.isEmpty) continue;
+        rows.add(
+          CatalogAuditEntry(
+            id: entry.id,
+            address: '${addressFor(path, entry.id)}',
+            compiles: true,
+            errors: [for (var e in report.errors) _asRenderError(e)],
+          ),
+        );
+      }
+    }
+
+    return CatalogAuditResult(
+      checked: checked,
+      broken: rows.length,
+      entries: rows,
+      unreachable: unreachable,
+    );
+  }
+
+  /// The ids in [packagePath] whose file sits at or under [narrowTo].
+  ///
+  /// An entry id is `<package-relative file>#<symbol>`, so narrowing to a
+  /// directory or a file is a prefix test on the part before the `#`. Matched
+  /// on whole segments — `demo/set` must not select `demo/settings/` — and
+  /// tolerant of a worktree-relative path, since `app/demo/x.dart` is what a
+  /// shell completes and `demo/x.dart` is what the id says.
+  List<String> _entryIdsUnder(String packagePath, String narrowTo) {
+    var wanted = p.normalize(narrowTo);
+    var prefix = packagePath == '.' ? '' : '$packagePath/';
+    if (prefix.isNotEmpty && wanted.startsWith(prefix)) {
+      wanted = wanted.substring(prefix.length);
+    }
+    return [
+      for (var entry in _scans[packagePath]?.entries ?? const <CatalogEntry>[])
+        if (_isAtOrUnder(entry.path, wanted)) entry.id,
+    ];
+  }
+
+  static bool _isAtOrUnder(String file, String directoryOrFile) {
+    var target = p.normalize(directoryOrFile);
+    if (target == '.' || target.isEmpty) return true;
+    var normalized = p.normalize(file);
+    return normalized == target || p.isWithin(target, normalized);
+  }
+
+  static CatalogRenderError _asRenderError(InspectError error) =>
+      CatalogRenderError(
+        exception: error.exception,
+        library: error.library,
+        context: error.context,
+        count: error.count,
+      );
+
+  /// A declared control, flattened for the wire. Axes are [KnobDescriptor]s
+  /// too — the same kind of thing with a different lifetime — so they flatten
+  /// through here as well.
+  static CatalogKnob _asKnob(KnobDescriptor knob) => CatalogKnob(
+    name: knob.name,
+    kind: knob.kind.name,
+    value: knob.value,
+    defaultValue: knob.defaultValue,
+    min: knob.min,
+    max: knob.max,
+    options: knob.options,
+  );
 
   /// Which declared package holds [entryId].
   String _packageHolding(String entryId) => packages.firstWhere(
@@ -607,6 +1044,207 @@ class UiCatalogCore extends PluginCore {
           '${entries.length > 10 ? ', …' : ''}',
     ),
   );
+
+  /// The widget tree one entry builds.
+  ///
+  /// Scoped to the demo rather than the whole guest: the generated host puts
+  /// thirteen framework widgets above it, and none of them is what anybody
+  /// asked about.
+  Future<CatalogTreeResult> _tree(Map<String, Object?> arguments) async {
+    var (packagePath, entryId, tree, applied) = await _readTree(arguments);
+
+    var root = arguments['node'];
+    var nodes = tree.nodes;
+    var depthOffset = 0;
+    if (root is String && root.isNotEmpty) {
+      var subtree = tree.nodeAt(root);
+      if (subtree == null) {
+        throw ArgumentError.value(
+          root,
+          'node',
+          'no node with that id in $entryId. An id names a position in the '
+              'tree, so one from before an edit may no longer name anything — '
+              'read the tree again.',
+        );
+      }
+      nodes = InspectTree(entryId: tree.entryId, root: subtree).nodes;
+      depthOffset = _depthOf(subtree.id);
+    }
+
+    return _asResult(
+      packagePath: packagePath,
+      entryId: entryId,
+      applied: applied,
+      nodes: [
+        for (var node in nodes)
+          if (switch (arguments['depth']) {
+            int max => _depthOf(node.id) - depthOffset <= max,
+            _ => true,
+          })
+            node,
+      ],
+    );
+  }
+
+  /// The nodes of one entry matching [query].
+  ///
+  /// Exists so that "where is the submit button" costs a handful of nodes
+  /// rather than a whole tree — which for a real demo is thousands of tokens.
+  Future<CatalogTreeResult> _find(Map<String, Object?> arguments) async {
+    var query = arguments['query'];
+    if (query is! String || query.isEmpty) {
+      throw ArgumentError.value(query, 'query', 'required');
+    }
+    var (packagePath, entryId, tree, applied) = await _readTree(arguments);
+    var needle = query.toLowerCase();
+
+    return _asResult(
+      packagePath: packagePath,
+      entryId: entryId,
+      applied: applied,
+      nodes: [
+        for (var node in tree.nodes)
+          if (node.type.toLowerCase().contains(needle) ||
+              (node.description?.toLowerCase().contains(needle) ?? false))
+            node,
+      ],
+    );
+  }
+
+  /// The widgets under one point.
+  ///
+  /// The tree and the hit come from one guest and one build, because an id
+  /// names a position in a particular tree — resolving a hit against a second
+  /// reading would answer about a tree nobody was shown.
+  Future<CatalogTreeResult> _at(Map<String, Object?> arguments) async {
+    var entryId = arguments['entry'];
+    if (entryId is! String || entryId.isEmpty) {
+      throw ArgumentError.value(entryId, 'entry', 'required');
+    }
+    var x = arguments['x'];
+    var y = arguments['y'];
+    if (x is! int || y is! int) {
+      throw ArgumentError.value(x ?? y, x is! int ? 'x' : 'y', 'required');
+    }
+    if (_scans.isEmpty && _failures.isEmpty) await computeAll();
+
+    var packagePath = _packageHolding(entryId);
+    var knobs = parseKnobs(arguments['knobs']);
+    var axes = parseKnobs(arguments['axes']);
+    var (tree, ids) = await _headlessFor(packagePath).hitTest(
+      entryId: entryId,
+      x: x.toDouble(),
+      y: y.toDouble(),
+      knobs: knobs,
+      axes: axes,
+    );
+
+    // An empty chain is an answer — there is nothing of the demo's under that
+    // point — so it returns an empty result rather than an error. A caller
+    // that probed outside the viewport wants to see that it missed.
+    return _asResult(
+      packagePath: packagePath,
+      entryId: entryId,
+      applied: {
+        ...{for (var k in knobs.entries) 'knob.${k.key}': k.value},
+        ...{for (var a in axes.entries) 'axis.${a.key}': a.value},
+        'x': '$x',
+        'y': '$y',
+      },
+      nodes: [for (var id in ids) ?tree.nodeAt(id)],
+    );
+  }
+
+  /// The shared half of [_tree] and [_find]: resolve the entry, turn the
+  /// knobs, read the tree.
+  Future<(String, String, InspectTree, Map<String, String>)> _readTree(
+    Map<String, Object?> arguments,
+  ) async {
+    var entryId = arguments['entry'];
+    if (entryId is! String || entryId.isEmpty) {
+      throw ArgumentError.value(entryId, 'entry', 'required');
+    }
+    if (_scans.isEmpty && _failures.isEmpty) await computeAll();
+
+    var packagePath = _packageHolding(entryId);
+    var knobs = parseKnobs(arguments['knobs']);
+    var axes = parseKnobs(arguments['axes']);
+    var tree = await _headlessFor(
+      packagePath,
+    ).tree(entryId: entryId, knobs: knobs, axes: axes);
+    return (
+      packagePath,
+      entryId,
+      tree,
+      {
+        ...{for (var k in knobs.entries) 'knob.${k.key}': k.value},
+        ...{for (var a in axes.entries) 'axis.${a.key}': a.value},
+      },
+    );
+  }
+
+  /// [applied] is the address axes already prefixed — `knob.count`,
+  /// `axis.theme` — because two things that both change the pixels have to be
+  /// told apart on the identity, and a shell may well declare an axis with the
+  /// same name as one of the demo's knobs.
+  CatalogTreeResult _asResult({
+    required String packagePath,
+    required String entryId,
+    required Map<String, String> applied,
+    required List<InspectNode> nodes,
+  }) {
+    // Project-relative, because an absolute URI in a terminal is mostly the
+    // same forty characters over and over — and the consumer's file tools are
+    // scoped to the worktree anyway.
+    var worktree = host.worktree.path;
+    return CatalogTreeResult(
+      entry: entryId,
+      address: '${addressFor(packagePath, entryId, axes: applied)}',
+      nodeCount: nodes.length,
+      nodes: [
+        for (var node in nodes)
+          CatalogTreeNode(
+            id: node.id,
+            type: node.type,
+            depth: _depthOf(node.id),
+            description: node.description,
+            source: node.source?.describe(relativeTo: worktree),
+            local: node.createdByLocalProject,
+            // Formatted here rather than carried as four numbers: the consumer
+            // is a terminal or a model, and `12.0,40.0 200.0×48.0` is one
+            // glance where four fields are four.
+            rect: switch (node.layout) {
+              var l? => '${_n(l.x)},${_n(l.y)} ${_n(l.width)}×${_n(l.height)}',
+              null => null,
+            },
+            constraints: node.layout?.constraints?.describe(),
+            flex: switch (node.layout?.flex) {
+              var f? => [
+                f.direction,
+                ?f.mainAxisAlignment,
+                ?f.crossAxisAlignment,
+                ?f.mainAxisSize,
+              ].join(', '),
+              null => null,
+            },
+            flexChild: switch (node.layout) {
+              InspectLayout(flexFactor: var factor?, :var flexFit) =>
+                flexFit == null ? 'flex $factor' : 'flex $factor ($flexFit)',
+              _ => null,
+            },
+          ),
+      ],
+    );
+  }
+
+  /// A node's depth, read off its id — `0/1/2` is three below the root.
+  static int _depthOf(String id) => id.isEmpty ? 0 : id.split('/').length;
+
+  /// Layout arrives as doubles and is nearly always whole pixels, so `48` beats
+  /// `48.0` and `47.5` still says so.
+  static String _n(double value) => value == value.roundToDouble()
+      ? '${value.round()}'
+      : value.toStringAsFixed(1);
 
   /// The headless pipeline for one declared package.
   HeadlessCatalog _headlessFor(String packagePath) {
@@ -676,6 +1314,12 @@ class UiCatalogCore extends PluginCore {
     );
 
     var knobs = parseKnobs(arguments['knobs']);
+    var axes = parseKnobs(arguments['axes']);
+    var node = arguments['node'];
+    if (node != null && node is! String) {
+      throw ArgumentError.value(node, 'node', 'must be a node id');
+    }
+    var annotate = arguments['annotate'] == true;
 
     var address = addressFor(
       packagePath,
@@ -697,6 +1341,15 @@ class UiCatalogCore extends PluginCore {
         'height': '${viewport.height}',
         'formFactor': ?entry.formFactor,
         for (var knob in knobs.entries) 'knob.${knob.key}': knob.value,
+        // Prefixed for the same reason knobs are: a shell may declare an axis
+        // called `width`, and an address where it overwrote the viewport would
+        // name a picture nobody took.
+        for (var axis in axes.entries) 'axis.${axis.key}': axis.value,
+        // Both change the pixels, so both belong on the identity — a crop of
+        // one node and a crop of another are two artifacts, not one file
+        // written twice.
+        'node': ?node as String?,
+        if (annotate) 'annotate': 'true',
       },
     );
 
@@ -715,6 +1368,9 @@ class UiCatalogCore extends PluginCore {
       output: output,
       viewport: viewport,
       knobs: knobs,
+      axes: axes,
+      node: node,
+      annotate: annotate,
     );
 
     return Artifact(

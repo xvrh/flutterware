@@ -22,6 +22,11 @@ jobs:
       - run: flutter analyze
       - run: flutter test
         working-directory: app
+      # The root package's own tests. Separate because a pub workspace does not
+      # run its members' suites — without this line `test/` here is analyzed
+      # and never executed, which is how the inspection wire format sat
+      # unguarded while looking covered.
+      - run: flutter test
       - run: flutter pub run tool/prepare_submit.dart
       - name: "check for uncommitted changes"
         run: |
@@ -30,3 +35,20 @@ jobs:
                    "and check in all changes" \
               && exit 1)
         shell: bash
+      - name: "catalog loop, end to end"
+        # Last on purpose: it writes and deletes demo fixtures to test
+        # them, so a crash mid-run can leave one behind — and the
+        # uncommitted-changes check above would then fail for a reason
+        # that has nothing to do with formatting.
+        #
+        # The one thing that exercises the inspection actions against a real
+        # compiler daemon and a real embedder guest. Everything else is either
+        # a unit test or a fake.
+        #
+        # Not blocking yet, and the reason is honest rather than cautious: the
+        # guest composites through Metal, and whether a runner VM offers it is
+        # not answerable from a desk. Delete `continue-on-error` the first time
+        # this is seen green — a check nobody can fail is not a check.
+        continue-on-error: true
+        run: dart run tool/catalog/headless_check.dart
+        working-directory: app

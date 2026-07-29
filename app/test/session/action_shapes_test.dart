@@ -6,7 +6,7 @@ import 'package:flutterware_app/src/session/shape_extractor.dart';
 import 'package:path/path.dart' as p;
 
 import '../../tool/generate_capabilities.dart'
-    show renderShapes, shapeSources, shapesPath;
+    show renderShapes, shapeRoots, shapeSources, shapesPath;
 
 /// The published shape of every action result has to be the shape the classes
 /// actually have.
@@ -25,7 +25,7 @@ void main() {
     'action_shapes.generated.dart matches the result classes',
     () async {
       var extracted = await ShapeExtractor(
-        packageRoot: p.absolute('lib'),
+        packageRoots: [for (var root in shapeRoots) p.absolute(root)],
       ).extract([for (var source in shapeSources) p.absolute(source)]);
 
       expect(
@@ -72,9 +72,47 @@ void main() {
     expect(knob.fields.map((f) => f.name), isNot(contains('defaultValue')));
   });
 
-  test('a hand-written toJson publishes no shape', () {
-    // `Artifact` maps an `Address` to a string, so its fields are not its
-    // keys. Publishing them would be a schema for a response nobody sends.
-    expect(resultShapes.containsKey('Artifact'), isFalse);
+  group('a hand-written toJson', () {
+    // `Artifact` is the most-returned result of all and writes its own map, so
+    // for a while it published nothing. It is described now by reading that
+    // map rather than its fields — which is the only honest way, since the two
+    // disagree.
+    var artifact = resultShapes['Artifact'];
+
+    test('publishes the shape it writes', () {
+      expect(artifact, isNotNull);
+      expect(
+        artifact!.fields.map((f) => f.name),
+        containsAll(['kind', 'address', 'path', 'text', 'meta']),
+      );
+    });
+
+    test('describes the key it sends, not the field it holds', () {
+      // The whole reason the old rule refused to look: the field is an
+      // `Address` and the wire carries `address.toString()`. Publishing
+      // `address: Address` would be a schema for a response nobody sends.
+      var address = artifact!.fields.firstWhere((f) => f.name == 'address');
+      expect(address.type, 'String');
+    });
+
+    test('reads optionality off the `if`, not off the field type', () {
+      // `if (path != null) 'path': path` — the condition is what decides
+      // whether the key appears at all.
+      expect(
+        artifact!.fields.firstWhere((f) => f.name == 'path').optional,
+        isTrue,
+      );
+      expect(
+        artifact.fields.firstWhere((f) => f.name == 'kind').optional,
+        isFalse,
+      );
+    });
+
+    test('still refuses a toJson it cannot read', () {
+      // The standard is unchanged; only the reach is. A `toJson` that builds
+      // its map some other way is described by nothing rather than guessed at,
+      // which is what `Address` — no `toJson` at all — demonstrates.
+      expect(resultShapes.containsKey('Address'), isFalse);
+    });
   });
 }

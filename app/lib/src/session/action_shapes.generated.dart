@@ -10,6 +10,176 @@ import 'package:flutterware/plugins.dart';
 
 /// Result shapes by class name — look one up with `PluginAction.returnsName`.
 final resultShapes = <String, ResultShape>{
+  'Artifact': ResultShape.fromJson(<String, Object?>{
+    'type': 'Artifact',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'kind',
+        'type': 'String',
+        'doc': 'A MIME type where one fits — see the constants above.',
+      },
+      <String, Object?>{
+        'name': 'address',
+        'type': 'String',
+        'doc': 'What this is an artifact of, axes included.',
+      },
+      <String, Object?>{
+        'name': 'path',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Where it was written, when it was written.',
+      },
+      <String, Object?>{
+        'name': 'text',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.',
+      },
+      <String, Object?>{
+        'name': 'meta',
+        'type': 'Map<String, Object?>',
+        'optional': true,
+        'doc':
+            'Anything the producer wants the reader to know: timings, compile stats, exit codes.',
+      },
+    ],
+  }),
+  'CatalogAuditEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'CatalogAuditEntry',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'id', 'type': 'String'},
+      <String, Object?>{'name': 'address', 'type': 'String'},
+      <String, Object?>{
+        'name': 'compiles',
+        'type': 'bool',
+        'doc': 'False when the compiler quarantined it.',
+      },
+      <String, Object?>{
+        'name': 'compileError',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The compiler\'s diagnostics, verbatim.',
+      },
+      <String, Object?>{
+        'name': 'errors',
+        'type': 'List<CatalogRenderError>',
+        'shape': <String, Object?>{
+          'type': 'CatalogRenderError',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'exception', 'type': 'String'},
+            <String, Object?>{
+              'name': 'library',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
+            },
+            <String, Object?>{
+              'name': 'context',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'What the framework was doing: `during layout`, `while painting`.',
+            },
+            <String, Object?>{
+              'name': 'count',
+              'type': 'int',
+              'doc': 'How many times this exact error was reported.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'CatalogAuditFailure': ResultShape.fromJson(<String, Object?>{
+    'type': 'CatalogAuditFailure',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{'name': 'error', 'type': 'String'},
+    ],
+  }),
+  'CatalogAuditResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'CatalogAuditResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'checked',
+        'type': 'int',
+        'doc': 'How many entries were looked at.',
+      },
+      <String, Object?>{
+        'name': 'broken',
+        'type': 'int',
+        'doc':
+            'How many of them are broken — the number the whole thing exists to produce, so that a caller has an answer before it has read a list.',
+      },
+      <String, Object?>{
+        'name': 'entries',
+        'type': 'List<CatalogAuditEntry>',
+        'doc': 'Only the ones with something to say.',
+        'shape': <String, Object?>{
+          'type': 'CatalogAuditEntry',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'id', 'type': 'String'},
+            <String, Object?>{'name': 'address', 'type': 'String'},
+            <String, Object?>{
+              'name': 'compiles',
+              'type': 'bool',
+              'doc': 'False when the compiler quarantined it.',
+            },
+            <String, Object?>{
+              'name': 'compileError',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The compiler\'s diagnostics, verbatim.',
+            },
+            <String, Object?>{
+              'name': 'errors',
+              'type': 'List<CatalogRenderError>',
+              'shape': <String, Object?>{
+                'type': 'CatalogRenderError',
+                'fields': <Object?>[
+                  <String, Object?>{'name': 'exception', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'library',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
+                  },
+                  <String, Object?>{
+                    'name': 'context',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'What the framework was doing: `during layout`, `while painting`.',
+                  },
+                  <String, Object?>{
+                    'name': 'count',
+                    'type': 'int',
+                    'doc': 'How many times this exact error was reported.',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'unreachable',
+        'type': 'List<CatalogAuditFailure>',
+        'doc':
+            'Packages that could not be audited at all, which is not the same as a package whose entries are fine.',
+        'shape': <String, Object?>{
+          'type': 'CatalogAuditFailure',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'package', 'type': 'String'},
+            <String, Object?>{'name': 'error', 'type': 'String'},
+          ],
+        },
+      },
+    ],
+  }),
   'CatalogBrokenEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'CatalogBrokenEntry',
     'fields': <Object?>[
@@ -212,6 +382,54 @@ final resultShapes = <String, ResultShape>{
           ],
         },
       },
+      <String, Object?>{
+        'name': 'axes',
+        'type': 'List<CatalogKnob>',
+        'optional': true,
+        'doc': 'What the shell around the entry offers — theme, locale.',
+        'shape': <String, Object?>{
+          'type': 'CatalogKnob',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'kind',
+              'type': 'String',
+              'doc': '`string`, `boolean`, `integer`, `number`, `picker`.',
+            },
+            <String, Object?>{
+              'name': 'value',
+              'type': 'Object',
+              'optional': true,
+              'doc': 'What it is currently set to.',
+            },
+            <String, Object?>{
+              'name': 'default',
+              'type': 'Object',
+              'optional': true,
+              'doc':
+                  'What the demo renders with when nothing is set — also what it shows outside the catalog.',
+            },
+            <String, Object?>{
+              'name': 'min',
+              'type': 'num',
+              'optional': true,
+              'doc': 'Bounds, when the demo gave any.',
+            },
+            <String, Object?>{'name': 'max', 'type': 'num', 'optional': true},
+            <String, Object?>{
+              'name': 'options',
+              'type': 'List<String>',
+              'doc': 'A picker\'s labels, in declaration order.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'shell',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Which shell declared [axes].',
+      },
     ],
   }),
   'CatalogEntrySummary': ResultShape.fromJson(<String, Object?>{
@@ -374,6 +592,224 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc':
             'Set when the scan failed, in which case [entries] is empty and means nothing.',
+      },
+    ],
+  }),
+  'CatalogRenderError': ResultShape.fromJson(<String, Object?>{
+    'type': 'CatalogRenderError',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'exception', 'type': 'String'},
+      <String, Object?>{
+        'name': 'library',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
+      },
+      <String, Object?>{
+        'name': 'context',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What the framework was doing: `during layout`, `while painting`.',
+      },
+      <String, Object?>{
+        'name': 'count',
+        'type': 'int',
+        'doc': 'How many times this exact error was reported.',
+      },
+    ],
+  }),
+  'CatalogRenderResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'CatalogRenderResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'entry', 'type': 'String'},
+      <String, Object?>{'name': 'address', 'type': 'String'},
+      <String, Object?>{
+        'name': 'ok',
+        'type': 'bool',
+        'doc': 'Whether it rendered without the framework reporting anything.',
+      },
+      <String, Object?>{
+        'name': 'errors',
+        'type': 'List<CatalogRenderError>',
+        'shape': <String, Object?>{
+          'type': 'CatalogRenderError',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'exception', 'type': 'String'},
+            <String, Object?>{
+              'name': 'library',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
+            },
+            <String, Object?>{
+              'name': 'context',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'What the framework was doing: `during layout`, `while painting`.',
+            },
+            <String, Object?>{
+              'name': 'count',
+              'type': 'int',
+              'doc': 'How many times this exact error was reported.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'CatalogTreeNode': ResultShape.fromJson(<String, Object?>{
+    'type': 'CatalogTreeNode',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'id',
+        'type': 'String',
+        'doc':
+            'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
+      },
+      <String, Object?>{
+        'name': 'type',
+        'type': 'String',
+        'doc': 'The widget\'s runtime type.',
+      },
+      <String, Object?>{
+        'name': 'depth',
+        'type': 'int',
+        'doc':
+            'How deep below the demo\'s root, so a flat list still reads as a tree.',
+      },
+      <String, Object?>{
+        'name': 'description',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
+      },
+      <String, Object?>{
+        'name': 'source',
+        'type': 'String',
+        'optional': true,
+        'doc': '`path/to/file.dart:12:5`, project-relative.',
+      },
+      <String, Object?>{
+        'name': 'local',
+        'type': 'bool',
+        'doc':
+            'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+      },
+      <String, Object?>{
+        'name': 'rect',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Where it ended up: `x,y w×h`.',
+      },
+      <String, Object?>{
+        'name': 'constraints',
+        'type': 'String',
+        'optional': true,
+        'doc': 'What the parent allowed: `w 0.0..900.0, h 0.0..∞`.',
+      },
+      <String, Object?>{
+        'name': 'flex',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
+      },
+      <String, Object?>{
+        'name': 'flexChild',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
+      },
+    ],
+  }),
+  'CatalogTreeResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'CatalogTreeResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'entry', 'type': 'String'},
+      <String, Object?>{'name': 'address', 'type': 'String'},
+      <String, Object?>{
+        'name': 'nodeCount',
+        'type': 'int',
+        'doc':
+            'How many nodes [nodes] holds, so a caller reading a truncated rendering still knows what it is a rendering of.',
+      },
+      <String, Object?>{
+        'name': 'nodes',
+        'type': 'List<CatalogTreeNode>',
+        'doc': 'Depth-first, root first.',
+        'shape': <String, Object?>{
+          'type': 'CatalogTreeNode',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'id',
+              'type': 'String',
+              'doc':
+                  'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
+            },
+            <String, Object?>{
+              'name': 'type',
+              'type': 'String',
+              'doc': 'The widget\'s runtime type.',
+            },
+            <String, Object?>{
+              'name': 'depth',
+              'type': 'int',
+              'doc':
+                  'How deep below the demo\'s root, so a flat list still reads as a tree.',
+            },
+            <String, Object?>{
+              'name': 'description',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
+            },
+            <String, Object?>{
+              'name': 'source',
+              'type': 'String',
+              'optional': true,
+              'doc': '`path/to/file.dart:12:5`, project-relative.',
+            },
+            <String, Object?>{
+              'name': 'local',
+              'type': 'bool',
+              'doc':
+                  'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+            },
+            <String, Object?>{
+              'name': 'rect',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Where it ended up: `x,y w×h`.',
+            },
+            <String, Object?>{
+              'name': 'constraints',
+              'type': 'String',
+              'optional': true,
+              'doc': 'What the parent allowed: `w 0.0..900.0, h 0.0..∞`.',
+            },
+            <String, Object?>{
+              'name': 'flex',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
+            },
+            <String, Object?>{
+              'name': 'flexChild',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
+            },
+          ],
+        },
       },
     ],
   }),

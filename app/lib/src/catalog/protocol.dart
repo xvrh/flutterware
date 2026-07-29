@@ -357,6 +357,7 @@ class DaemonConfig {
     this.roots = const ['demo'],
     this.previewAnnotations = const ['Preview', 'Demo'],
     this.emitProbe = false,
+    this.trackWidgetCreation = true,
     this.daemonRevision = '',
   });
 
@@ -384,6 +385,24 @@ class DaemonConfig {
   /// live entry and the text it renders. Used by the headless check.
   final bool emitProbe;
 
+  /// Compiles with `--track-widget-creation`, which stamps every widget with
+  /// the source location that built it.
+  ///
+  /// On by default. Without it the inspector's *summary* tree is not a smaller
+  /// tree — it is byte-for-byte the full one, because "created by user code" is
+  /// exactly the creation location it has no way to read. Measured on this
+  /// repo's demos: `dashboard` is 695 nodes either way with it off, and 51 with
+  /// it on, ~82% of them resolving into the demo's own source.
+  ///
+  /// The cost was measured before this defaulted to true: +4% on a cold
+  /// compile, +0.7% on the kernel, and **no measurable change to a hot reload**
+  /// — the first-pass median was identical to the millisecond over 19 entry
+  /// switches. See `2026-07-29-ui-catalog-inspection-design.md`.
+  ///
+  /// It is a field rather than a constant so the daemon address forks on it: a
+  /// kernel compiled one way must never prime a compiler running the other.
+  final bool trackWidgetCreation;
+
   /// Identifies the daemon *build*. Set by the client, never by a caller.
   ///
   /// A daemon outlives the session that started it, and nothing restarts one
@@ -408,6 +427,7 @@ class DaemonConfig {
     roots: roots,
     previewAnnotations: previewAnnotations,
     emitProbe: emitProbe,
+    trackWidgetCreation: trackWidgetCreation,
     daemonRevision: revision,
   );
 

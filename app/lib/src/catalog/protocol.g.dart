@@ -142,6 +142,7 @@ DaemonConfig _$DaemonConfigFromJson(Map<String, dynamic> json) => DaemonConfig(
           .toList() ??
       const ['Preview', 'Demo'],
   emitProbe: json['emitProbe'] as bool? ?? false,
+  trackWidgetCreation: json['trackWidgetCreation'] as bool? ?? true,
   daemonRevision: json['daemonRevision'] as String? ?? '',
 );
 
@@ -154,5 +155,6 @@ Map<String, dynamic> _$DaemonConfigToJson(DaemonConfig instance) =>
       'roots': instance.roots,
       'previewAnnotations': instance.previewAnnotations,
       'emitProbe': instance.emitProbe,
+      'trackWidgetCreation': instance.trackWidgetCreation,
       'daemonRevision': instance.daemonRevision,
     };

@@ -7,6 +7,7 @@ import 'package:collection/collection.dart';
 
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/compiler_daemon_client.dart';
+import 'package:flutterware_app/src/catalog/headless_catalog.dart';
 import 'package:flutterware_app/src/catalog/package_config_locator.dart';
 import 'package:flutterware_app/src/catalog/protocol.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
@@ -666,10 +667,10 @@ Future<void> main(List<String> args) async {
         'the knobs it read while building are the knobs it reports — $declared',
       );
 
-      var set = await vmService.callExtension(
-        'ext.flutterware.setParameter',
+      var set = await vmService.requireExtension(
+        'ext.flutterware.setParameters',
         args: {
-          'payload': jsonEncode({'name': 'label', 'value': 'Turned'}),
+          'payload': jsonEncode({'label': 'Turned'}),
         },
       );
       check(set?['applied'] == true, 'setting a declared knob is accepted');
@@ -681,17 +682,6 @@ Future<void> main(List<String> args) async {
       check(
         turned.contains('KNOB Turned x2 roomy'),
         'and the demo rebuilds with it — $turned',
-      );
-
-      var refused = await vmService.callExtension(
-        'ext.flutterware.setParameter',
-        args: {
-          'payload': jsonEncode({'name': 'nope', 'value': 1}),
-        },
-      );
-      check(
-        refused?['applied'] == false,
-        'a knob the build never declared is refused, not invented',
       );
 
       /// The knob names the guest reports right now, in declaration order.
@@ -711,14 +701,30 @@ Future<void> main(List<String> args) async {
       /// so a set that answers before the rebuild leaves the panel a read
       /// behind — showing the controls of the build it just replaced.
       Future<String> setAndDescribe(String name, Object? value) async {
-        await vmService.callExtension(
-          'ext.flutterware.setParameter',
+        await vmService.requireExtension(
+          'ext.flutterware.setParameters',
           args: {
-            'payload': jsonEncode({'name': name, 'value': value}),
+            'payload': jsonEncode({name: value}),
           },
         );
         return describeNow();
       }
+
+      // A name the build never declared invents nothing. It cannot be
+      // "refused" either — a write is the whole state, and `applyAll` walks
+      // what the *build* declared rather than what the payload names, so an
+      // unknown key is simply not looked at. What matters is that it does not
+      // appear afterwards, which is what this asks.
+      await vmService.requireExtension(
+        'ext.flutterware.setParameters',
+        args: {
+          'payload': jsonEncode({'nope': 1}),
+        },
+      );
+      check(
+        await describeNow() == 'label,count,dense',
+        'a knob the build never declared is not invented by asking for it',
+      );
 
       check(
         await setAndDescribe('dense', true) == 'label,count,dense,spacing',
@@ -1106,6 +1112,13 @@ Widget addedWhileOpen() => const Center(child: Text('ADDED LATE'));
   await server.close();
   if (socketFile.existsSync()) socketFile.deleteSync();
 
+  await _checkInspection(
+    config: config,
+    dartExecutable: p.join(cache.flutterRoot, 'bin', 'dart'),
+    packageRoot: packageRoot,
+    check: check,
+  );
+
   stdout.writeln(
     failures.isEmpty
         ? '\n[check] PASSED — the loop works without the GUI'
@@ -1113,6 +1126,221 @@ Widget addedWhileOpen() => const Center(child: Text('ADDED LATE'));
   );
   exit(failures.isEmpty ? 0 : 1);
 }
+
+/// The inspection surface, against a demo written for the purpose.
+///
+/// Driven through [HeadlessCatalog] rather than the daemon directly, because
+/// that is the object `fw`, MCP and the panel all reach — a check one layer
+/// below it would pass while the thing anybody actually calls was broken.
+///
+/// The fixture is written and deleted like every other demo this file needs,
+/// rather than living in `demos/` forever: a permanently broken entry would
+/// make the repo's own catalog report failures that are not failures.
+Future<void> _checkInspection({
+  required DaemonConfig config,
+  required String dartExecutable,
+  required String packageRoot,
+  required void Function(bool, String) check,
+}) async {
+  stdout.writeln('[check] inspecting a demo');
+  var source = File(
+    p.join(packageRoot, 'tool', 'catalog', 'demos', 'inspect_probe.dart'),
+  );
+  source.writeAsStringSync(_inspectProbeSource());
+
+  var catalog = HeadlessCatalog(dartExecutable: dartExecutable, config: config);
+  const base = 'tool/catalog/demos/inspect_probe.dart';
+  try {
+    // The daemon is already up and its entry list is from before this file
+    // existed. `HeadlessCatalog` attaches to that daemon and reads the list out
+    // of the handshake, so without a rescan the fixture is invisible — the same
+    // path the panel takes when somebody adds a demo while the catalog is open.
+    var (rescan, _) = await CompilerDaemonClient.connect(
+      dartExecutable: dartExecutable,
+      config: config,
+    );
+    var appeared = rescan.catalogChanges.first.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => throw StateError('the daemon never saw the fixture'),
+    );
+    rescan.refresh();
+    await appeared;
+    await rescan.close();
+
+    var tree = await catalog.tree(entryId: '$base#inspectProbe');
+    var nodes = tree.nodes.toList();
+
+    check(tree.root != null, 'a rendered entry has a tree');
+    check(
+      nodes.any((n) => n.type == 'InspectProbeBody'),
+      'and it contains widgets the demo declared — '
+      '${nodes.map((n) => n.type).take(6).join(', ')}',
+    );
+    // The catalog host puts thirteen framework widgets above the demo. None of
+    // them is what anybody asked about, and the marker that finds the demo is
+    // ours and should not report itself either.
+    check(
+      !nodes.any((n) => n.type == '_CatalogHost'),
+      'and not the catalog chrome above it',
+    );
+    check(
+      nodes.every((n) => n.source?.file.contains('/flutter/') != true),
+      'and only what the project created, not the framework',
+    );
+
+    var probeNode = nodes.firstWhere(
+      (n) => n.type == 'InspectProbeBody',
+      orElse: () => nodes.first,
+    );
+    check(
+      probeNode.source?.file.endsWith('inspect_probe.dart') ?? false,
+      'each node says which file built it — ${probeNode.source?.file}',
+    );
+
+    // The one thing an id has to do: mean the same node to a process that has
+    // never seen the previous read. Two reads is the cheapest test of that.
+    var again = await catalog.tree(entryId: '$base#inspectProbe');
+    check(
+      again.nodes.map((n) => n.id).join(',') ==
+          nodes.map((n) => n.id).join(','),
+      'and reading it twice gives the same ids',
+    );
+
+    // Regression: the summary tree describes a Text as "Text", so searching by
+    // the words on screen matched nothing until the preview was read off the
+    // widget. Which is the first thing anybody would try.
+    var found = await catalog.tree(entryId: '$base#inspectProbe');
+    check(
+      found.nodes.any((n) => n.description?.contains('MARKER TEXT') ?? false),
+      'a Text node carries the words it puts on screen',
+    );
+
+    // Regression: an unbounded maxWidth is what most of a real tree is laid out
+    // under, and jsonEncode throws on infinity — so the first entry with a
+    // Column in it used to fail to encode at all.
+    var unbounded = found.nodes.where(
+      (n) => n.layout?.constraints?.maxWidth.isInfinite ?? false,
+    );
+    check(
+      unbounded.isNotEmpty,
+      'an unbounded constraint survives the wire rather than throwing',
+    );
+
+    var sized = found.nodes.where(
+      (n) => n.layout?.width == 120 && n.layout?.height == 40,
+    );
+    check(sized.isNotEmpty, 'a node reports the box it was actually given');
+
+    var (_, chain) = await catalog.hitTest(
+      entryId: '$base#inspectProbe',
+      // Inside the marker box, which the fixture pins to a known place.
+      x: 60,
+      y: 20,
+    );
+    check(chain.isNotEmpty, 'a point on the demo hits something');
+    check(
+      chain.length > 1,
+      'and answers with the chain, not only the innermost — ${chain.length} deep',
+    );
+    var offCanvas = await catalog.hitTest(
+      entryId: '$base#inspectProbe',
+      x: 5000,
+      y: 5000,
+    );
+    check(
+      offCanvas.$2.isEmpty,
+      'and a point outside it is an answer rather than an error',
+    );
+
+    var clean = await catalog.errors(entryId: '$base#inspectProbe');
+    check(clean.isEmpty, 'a demo that renders reports nothing');
+
+    var thrown = await catalog.errors(entryId: '$base#inspectThrows');
+    check(
+      thrown.errors.any((e) => e.exception.contains('meant to blow up')),
+      'a demo that throws is caught — ${thrown.errors.map((e) => e.exception).join('; ')}',
+    );
+
+    // Two traps this fixture exists to keep: a SizedBox under a tight-
+    // constrained root is not narrow, and RenderFlex.paint returns early when
+    // its size is empty — *before* it reports. Either one makes an overflowing
+    // demo overflow silently.
+    var overflowed = await catalog.errors(entryId: '$base#inspectOverflows');
+    check(
+      overflowed.errors.any((e) => e.exception.contains('overflowed')),
+      'and an overflow is caught — ${overflowed.errors.map((e) => e.exception).join('; ')}',
+    );
+
+    var audit = await catalog.auditAll(
+      entryIds: [
+        '$base#inspectProbe',
+        '$base#inspectThrows',
+        '$base#inspectOverflows',
+      ],
+    );
+    check(audit.entries.length == 3, 'an audit sees every entry it was given');
+    check(
+      audit.rendered['$base#inspectProbe']?.isEmpty ?? false,
+      'and reports the healthy one as healthy',
+    );
+    check(
+      (audit.rendered['$base#inspectThrows']?.errors.length ?? 0) +
+              (audit.rendered['$base#inspectOverflows']?.errors.length ?? 0) ==
+          2,
+      'and both broken ones as broken',
+    );
+  } finally {
+    source.deleteSync();
+  }
+}
+
+/// Three demos: one that renders, one that throws, one that overflows.
+///
+/// Deliberately shaped around two traps. The overflowing `Row` sits under a
+/// `Center` because a `SizedBox` under a tight-constrained root keeps the
+/// root's width, and its children have a height because `RenderFlex.paint`
+/// returns before reporting when its own size is empty. Both cost a false
+/// negative when this was first written.
+String _inspectProbeSource() => '''
+import 'package:flutter/material.dart';
+
+import 'package:flutterware/ui_catalog.dart';
+
+import 'shell.dart';
+
+@Demo(name: 'Inspect probe', wrapper: wrapInApp)
+Widget inspectProbe() => const InspectProbeBody();
+
+class InspectProbeBody extends StatelessWidget {
+  const InspectProbeBody({super.key});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(width: 120, height: 40, child: Container(color: Colors.teal)),
+      const Text('MARKER TEXT'),
+    ],
+  );
+}
+
+@Demo(name: 'Inspect throws', wrapper: wrapInApp)
+Widget inspectThrows() => Builder(
+  builder: (context) => throw StateError('this demo is meant to blow up'),
+);
+
+@Demo(name: 'Inspect overflows', wrapper: wrapInApp)
+Widget inspectOverflows() => Center(
+  child: SizedBox(
+    width: 50,
+    child: Row(
+      children: [
+        for (var i = 0; i < 12; i++) const SizedBox(width: 40, height: 20),
+      ],
+    ),
+  ),
+);
+''';
 
 /// Puts [entry] on the guest's screen and waits until the probe says so.
 /// The knobs demo, with [label] as the name of its first knob and [extra]

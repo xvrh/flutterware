@@ -10,10 +10,17 @@ import 'package:path/path.dart' as p;
 // demo annotations, which reach `package:flutter/widgets.dart` and would make
 // `fw` unlinkable. `knob.dart` is plain Dart by design and says so.
 // ignore: implementation_imports
+import 'package:flutterware/src/inspect/error.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/ui_catalog/axis.dart';
+// ignore: implementation_imports
 import 'package:flutterware/src/ui_catalog/knob.dart';
 
 import '../embedder/protocol.dart';
 import '../embedder/raw_frame.dart';
+import 'catalog_params.dart';
 import 'devices.dart';
 import 'catalog_entry.dart';
 import '../embedder/guest_vm_service.dart';
@@ -54,8 +61,15 @@ class HeadlessCatalog {
     required String output,
     CaptureViewport viewport = CaptureViewport.panel,
     Map<String, String> knobs = const {},
+    Map<String, String> axes = const {},
+
+    /// Cut the picture down to this node, by the id a tree read gave.
+    String? node,
+
+    /// Draw every node of the tree over the picture, id and all.
+    bool annotate = false,
   }) async {
-    if (knobs.isEmpty) {
+    if (knobs.isEmpty && axes.isEmpty && node == null && !annotate) {
       var results = await captureAll(
         entryIds: [entryId],
         outputFor: (_) => output,
@@ -64,9 +78,51 @@ class HeadlessCatalog {
       return CatalogCapture(file: results.values.single, knobs: const []);
     }
     return _withGuest(entryId: entryId, viewport: viewport, (guest) async {
-      var applied = await guest.applyKnobs(entryId, knobs);
+      // Axes first: they belong to the shell *around* the demo, and a shell
+      // rebuild can change what the demo is handed. Turning the knobs after
+      // means the knob report describes the build that was actually captured.
+      if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
+      var applied = knobs.isEmpty
+          ? await guest.settledKnobs(entryId)
+          : await guest.applyKnobs(entryId, knobs);
+
+      // Read after the knobs and axes have landed: a crop is a rect, and a rect
+      // measured against a different build is a picture of the wrong thing.
+      InspectLayout? crop;
+      var boxes = const <InspectNode>[];
+      if (node != null || annotate) {
+        var tree = await guest.settledTree(entryId);
+        if (node != null) {
+          var found = tree.nodeAt(node);
+          if (found == null) {
+            throw ArgumentError.value(
+              node,
+              'node',
+              'no node with that id in $entryId. An id names a position in the '
+                  'tree, so one from before an edit may no longer name '
+                  'anything — read the tree again.',
+            );
+          }
+          crop = found.layout;
+          if (crop == null) {
+            throw ArgumentError.value(
+              node,
+              'node',
+              '${found.type} has no box of its own to crop to. Providers and '
+                  'builders lay nothing out; ask for one of its children.',
+            );
+          }
+        }
+        if (annotate) boxes = tree.nodes.toList();
+      }
+
       return CatalogCapture(
-        file: await guest.capture(output),
+        file: await guest.capture(
+          output,
+          crop: crop,
+          annotate: boxes,
+          pixelRatio: viewport.pixelRatio,
+        ),
         knobs: applied.knobs,
       );
     });
@@ -220,6 +276,131 @@ class HeadlessCatalog {
     viewport: viewport,
     (guest) => guest.settledKnobs(entryId),
   );
+
+  /// The axes the shell around [entryId] offers, read from a live guest.
+  ///
+  /// Like [knobs], and runtime for the same reason: a shell declares an axis by
+  /// *asking* for it while it builds.
+  Future<AxisReport> axes({
+    required String entryId,
+    CaptureViewport viewport = CaptureViewport.panel,
+  }) => _withGuest(
+    entryId: entryId,
+    viewport: viewport,
+    (guest) => guest.settledAxes(entryId),
+  );
+
+  /// What [entryId] reports when it is actually rendered.
+  ///
+  /// `check` answers whether an entry *compiles*, which is a different
+  /// question and the only one anything could ask before now.
+  Future<InspectErrors> errors({
+    required String entryId,
+    CaptureViewport viewport = CaptureViewport.panel,
+    Map<String, String> knobs = const {},
+    Map<String, String> axes = const {},
+  }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
+    if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
+    if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
+    return guest.settledErrors(entryId);
+  });
+
+  /// Renders **every** entry against one warm guest and reports what each said.
+  ///
+  /// The economics of [captureAll], which is the reason this is affordable at
+  /// all: the first entry pays a cold compile and a guest launch, and every one
+  /// after it is a hot reload and a frame. Measured on this repo at ~120ms per
+  /// entry after the first.
+  ///
+  /// Entries the compiler refused never get a guest — they are in the
+  /// handshake, and an entry that does not build cannot be rendered to find out
+  /// what it would have said.
+  Future<CatalogAudit> auditAll({List<String>? entryIds}) async {
+    var (daemon, ready) = await CompilerDaemonClient.connect(
+      dartExecutable: dartExecutable,
+      config: config,
+    );
+    _GuestSession? guest;
+    try {
+      // Both halves filtered. Leaving the quarantine unfiltered would report a
+      // compile failure from a file nobody asked about, under a flag whose
+      // whole purpose is to narrow what is looked at.
+      var quarantined = [
+        for (var broken in ready.quarantined)
+          if (entryIds == null || entryIds.contains(broken.entry.id)) broken,
+      ];
+      var servable = [
+        for (var entry in ready.entries)
+          if (entryIds == null || entryIds.contains(entry.id)) entry,
+      ];
+
+      var rendered = <String, InspectErrors>{};
+      for (var entry in servable) {
+        if (guest == null) {
+          var compiled = await daemon.select(entry.id, full: true);
+          if (!compiled.ok) continue;
+          guest = await _GuestSession.start(
+            hostPath: ready.hostPath,
+            assetsDir: ready.assetsDir,
+            icuData: ready.icuData,
+            workDir: p.join(config.appPackageRoot, 'build', 'catalog'),
+            viewport: CaptureViewport.panel,
+          );
+        } else {
+          var compiled = await daemon.select(entry.id);
+          if (!compiled.ok) continue;
+          await guest.reload(compiled.dill!);
+        }
+        rendered[entry.id] = await guest.settledErrors(entry.id);
+      }
+      return CatalogAudit(
+        entries: servable,
+        quarantined: quarantined,
+        rendered: rendered,
+      );
+    } finally {
+      await guest?.close();
+      await daemon.close();
+    }
+  }
+
+  /// The widget tree [entryId] builds, read from a live guest.
+  ///
+  /// Same shape as [knobs] and for the same reason: a tree is what a build
+  /// produced, so it takes a compile, a guest and a frame. [knobs] are applied
+  /// first when given, because a tree is of one particular build and turning a
+  /// knob can change which widgets there are.
+  Future<InspectTree> tree({
+    required String entryId,
+    CaptureViewport viewport = CaptureViewport.panel,
+    Map<String, String> knobs = const {},
+    Map<String, String> axes = const {},
+  }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
+    if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
+    if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
+    return guest.settledTree(entryId);
+  });
+
+  /// The tree, and the ids under one point of it.
+  ///
+  /// Both from one guest, because they have to agree: an id means a position
+  /// in a particular tree, and a hit resolved against a second reading of it
+  /// would be answering about a tree the caller was never shown.
+  Future<(InspectTree, List<String>)> hitTest({
+    required String entryId,
+    required double x,
+    required double y,
+    CaptureViewport viewport = CaptureViewport.panel,
+    Map<String, String> knobs = const {},
+    Map<String, String> axes = const {},
+  }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
+    if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
+    if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
+    return (
+      await guest.settledTree(entryId),
+      await guest.settledHitTest(entryId, x, y),
+    );
+  });
 }
 
 /// Turns a knob value written as text into whatever kind the demo declared.
@@ -261,6 +442,25 @@ class CatalogCapture {
   /// What the entry reported *after* the values were applied — so a clamped or
   /// ignored value is visible rather than assumed.
   final List<KnobDescriptor> knobs;
+}
+
+/// Every entry, and what each one said when it was rendered.
+class CatalogAudit {
+  CatalogAudit({
+    required this.entries,
+    required this.quarantined,
+    required this.rendered,
+  });
+
+  /// The entries the compiler accepted, in scan order.
+  final List<CatalogEntry> entries;
+
+  /// The ones it refused, with the compiler's own diagnostics.
+  final List<QuarantinedEntry> quarantined;
+
+  /// What each rendered entry reported, keyed by id. An entry missing from
+  /// here is one that failed to compile on its own after the handshake.
+  final Map<String, InspectErrors> rendered;
 }
 
 /// What the compiler could and could not build.
@@ -411,6 +611,140 @@ class _GuestSession {
     return KnobReport.empty;
   }
 
+  /// The tree [entryId] built, once it has actually built.
+  ///
+  /// The same frame-first, retry-until-it-names-the-entry dance as
+  /// [settledKnobs], for the same two reasons: a headless host draws nothing
+  /// until a frame is asked for, and a read landing between the reload and the
+  /// frame describes whatever was on screen before.
+  Future<InspectTree> settledTree(String entryId) async {
+    await _renderScratchFrame();
+    for (var attempt = 0; attempt < 20; attempt++) {
+      var json = await _vmService.callExtension('ext.flutterware.tree');
+      // A guest from before the extension existed: not an error, no tree.
+      if (json == null) return InspectTree.empty;
+      var tree = InspectTree.fromJson(json);
+      if (tree.entryId == entryId) return tree;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return InspectTree.empty;
+  }
+
+  /// The node ids under a point, outermost first.
+  ///
+  /// Reads the tree first for the same settling reason [settledTree] does, and
+  /// then asks — so a hit landing between a reload and its frame cannot answer
+  /// about the entry that was on screen before.
+  Future<List<String>> settledHitTest(
+    String entryId,
+    double x,
+    double y,
+  ) async {
+    var tree = await settledTree(entryId);
+    if (tree.root == null) return const [];
+    var json = await _vmService.callExtension(
+      'ext.flutterware.hitTest',
+      args: {'x': '$x', 'y': '$y'},
+    );
+    return [for (var id in json?['ids'] as List? ?? const []) '$id'];
+  }
+
+  /// What the shell around [entryId] offers, once it has built.
+  ///
+  /// Empty when the entry's wrapper is not a shell — an answer, not something
+  /// to keep waiting for, which is why this settles on the *entry* rather than
+  /// on a shell ever appearing.
+  Future<AxisReport> settledAxes(String entryId) async {
+    await _renderScratchFrame();
+    for (var attempt = 0; attempt < 20; attempt++) {
+      var json = await _vmService.callExtension('ext.flutterware.axes');
+      if (json == null) return AxisReport.empty;
+      var report = AxisReport.fromJson(json);
+      if (report.entryId == entryId) return report;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return AxisReport.empty;
+  }
+
+  /// Turns the shell's axes, and reports what it says afterwards.
+  ///
+  /// The mirror of [applyKnobs], down to the whole-state rule — but filed under
+  /// the shell rather than the entry, because that is the lifetime an axis has:
+  /// a knob belongs to the entry and goes with it, an axis belongs to the shell
+  /// and does not.
+  ///
+  /// Values arrive as text and are resolved against what the shell *declared*,
+  /// so `theme=dark` works whether the shell spelled the option `dark` or
+  /// `Dark` — a slug and a label both land, and a name the shell does not offer
+  /// is an error naming the ones it does.
+  Future<AxisReport> applyAxes(
+    String entryId,
+    Map<String, String> values,
+  ) async {
+    var declared = await settledAxes(entryId);
+    var shellId = declared.shellId;
+    if (values.isEmpty) return declared;
+    if (shellId == null) {
+      throw ArgumentError.value(
+        values.keys.join(', '),
+        'axes',
+        'this entry has no shell, so it offers no axes. Axes are declared by a '
+            'CatalogShell around the demo.',
+      );
+    }
+
+    var known = {for (var axis in declared.axes) axis.name: axis};
+    var payload = <String, Object?>{};
+    for (var axis in declared.axes) {
+      var raw = values[axis.name];
+      payload[axis.name] = raw == null
+          ? null
+          : paramOptionFor(axis, paramSlug(raw)) ??
+                paramOptionFor(axis, raw) ??
+                (throw ArgumentError.value(
+                  raw,
+                  axis.name,
+                  axis.options.isEmpty
+                      ? 'not a ${axis.kind.name}'
+                      : 'no such option. Declared: ${axis.options.join(', ')}',
+                ));
+    }
+    for (var name in values.keys) {
+      if (known.containsKey(name)) continue;
+      throw ArgumentError.value(
+        name,
+        'axes',
+        'no such axis on this shell. Declared: ${known.keys.join(', ')}',
+      );
+    }
+
+    var json = await _vmService.requireExtension(
+      'ext.flutterware.setAxes',
+      args: {
+        'payload': jsonEncode({shellId: payload}),
+      },
+    );
+    return json == null ? declared : AxisReport.fromJson(json);
+  }
+
+  /// What [entryId] reported while building and painting.
+  ///
+  /// Frame-first like every other runtime read, and here it is the whole point
+  /// rather than a precondition: a build error needs a build, and a layout
+  /// overflow is reported from `paint`, so an entry nobody has drawn has
+  /// nothing to confess.
+  Future<InspectErrors> settledErrors(String entryId) async {
+    await _renderScratchFrame();
+    for (var attempt = 0; attempt < 20; attempt++) {
+      var json = await _vmService.callExtension('ext.flutterware.errors');
+      if (json == null) return InspectErrors.empty;
+      var report = InspectErrors.fromJson(json);
+      if (report.entryId == entryId) return report;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return InspectErrors.empty;
+  }
+
   /// Draws one frame nobody looks at, so the demo has built.
   Future<void> _renderScratchFrame() async {
     var scratch = p.join(_workDir, 'knobs.scratch.png');
@@ -431,27 +765,33 @@ class _GuestSession {
     var declared = await settledKnobs(entryId);
     var known = {for (var knob in declared.knobs) knob.name: knob};
 
-    for (var entry in values.entries) {
-      var knob = known[entry.key];
-      if (knob == null) {
-        throw ArgumentError.value(
-          entry.key,
-          'knob',
-          known.isEmpty
-              ? 'this entry declares no knobs'
-              : 'no such knob on $entryId. Declared: ${known.keys.join(', ')}',
-        );
-      }
-      await _vmService.callExtension(
-        'ext.flutterware.setParameter',
-        args: {
-          'payload': jsonEncode({
-            'name': entry.key,
-            'value': coerceKnob(knob, entry.value),
-          }),
-        },
+    for (var name in values.keys) {
+      if (known.containsKey(name)) continue;
+      throw ArgumentError.value(
+        name,
+        'knob',
+        known.isEmpty
+            ? 'this entry declares no knobs'
+            : 'no such knob on $entryId. Declared: ${known.keys.join(', ')}',
       );
     }
+
+    // One call carrying every declared knob, not one call per knob: a write is
+    // the whole state, and a name absent from the payload is what says "leave
+    // this at its default". The panel builds the same shape in
+    // `paramPayloadFor`.
+    await _vmService.requireExtension(
+      'ext.flutterware.setParameters',
+      args: {
+        'payload': jsonEncode({
+          for (var knob in declared.knobs)
+            knob.name: switch (values[knob.name]) {
+              var raw? => coerceKnob(knob, raw),
+              null => null,
+            },
+        }),
+      },
+    );
 
     // Read once at the end: a demo's build decides what knobs exist, so
     // turning one can reveal or retire another, and only the settled set is
@@ -460,7 +800,20 @@ class _GuestSession {
   }
 
   /// Asks the guest to write its next frame, and waits for the ack.
-  Future<File> capture(String output) async {
+  Future<File> capture(
+    String output, {
+
+    /// Crop to this rect, in the guest's logical coordinates — the same space
+    /// [InspectLayout] reports, which is why a node's rect crops its own
+    /// picture without a transform.
+    InspectLayout? crop,
+
+    /// Draw a box and a node id over each of these.
+    List<InspectNode> annotate = const [],
+
+    /// Logical-to-physical, for turning either of the above into pixels.
+    double pixelRatio = 1,
+  }) async {
     var rawFrame = p.join(_workDir, 'screenshot.rawframe');
     var raw = File(rawFrame);
     if (raw.existsSync()) raw.deleteSync();
@@ -471,11 +824,108 @@ class _GuestSession {
     await done.future.timeout(const Duration(seconds: 30));
 
     var image = decodeRawFrame(raw.readAsBytesSync());
+    // Annotate before cropping, so a box on a node partly outside the crop is
+    // clipped with the picture rather than drawn against its edge.
+    if (annotate.isNotEmpty) image = _annotate(image, annotate, pixelRatio);
+    if (crop != null) image = _crop(image, crop, pixelRatio);
     var file = File(output);
     file.parent.createSync(recursive: true);
     file.writeAsBytesSync(img.encodePng(image));
     raw.deleteSync();
     return file;
+  }
+
+  /// One node per distinct box, outermost kept.
+  ///
+  /// Most of a summary tree lays nothing out of its own: a provider, a builder
+  /// and the widget under them share one rect, so drawing every node draws the
+  /// same rectangle six times and stacks six labels on one corner. The first
+  /// version did exactly that and was unreadable — which is the difference
+  /// between a feature that exists and one that answers the question.
+  ///
+  /// Outermost wins because it is the shorter id and the one a caller is more
+  /// likely to have meant; the inner ones are still in the tree for anyone who
+  /// wants them.
+  static List<InspectNode> _distinctBoxes(List<InspectNode> nodes) {
+    var seen = <String>{};
+    return [
+      for (var node in nodes)
+        if (node.layout case var l?)
+          if (seen.add('${l.x},${l.y},${l.width},${l.height}')) node,
+    ];
+  }
+
+  /// The frame, cut to one node's box.
+  ///
+  /// Cropped out of the real composited frame rather than re-rendered in
+  /// isolation, which is what `ext.flutter.inspector.screenshot` would do: a
+  /// widget photographed away from its surroundings is a different picture, and
+  /// usually not the one the question was about.
+  ///
+  /// Clamped to the frame, because a node may legitimately sit partly outside
+  /// it — that is what an overflow *is* — and a crop that threw would refuse to
+  /// show the one case worth looking at.
+  static img.Image _crop(img.Image image, InspectLayout rect, double ratio) {
+    var x = (rect.x * ratio).round().clamp(0, image.width - 1);
+    var y = (rect.y * ratio).round().clamp(0, image.height - 1);
+    return img.copyCrop(
+      image,
+      x: x,
+      y: y,
+      width: (rect.width * ratio).round().clamp(1, image.width - x),
+      height: (rect.height * ratio).round().clamp(1, image.height - y),
+    );
+  }
+
+  /// A box and an id over each node.
+  ///
+  /// The point is the id: an agent reads a tree, gets `0/1/2`, and then gets a
+  /// picture with `0/1/2` written on the thing it names. Without that the tree
+  /// and the screenshot are two observations of the same frame with nothing
+  /// joining them.
+  static img.Image _annotate(
+    img.Image image,
+    List<InspectNode> nodes,
+    double ratio,
+  ) {
+    for (var node in _distinctBoxes(nodes)) {
+      if (node.layout case var layout?) {
+        var x = (layout.x * ratio).round();
+        var y = (layout.y * ratio).round();
+        var w = (layout.width * ratio).round();
+        var h = (layout.height * ratio).round();
+        img.drawRect(
+          image,
+          x1: x,
+          y1: y,
+          x2: x + w - 1,
+          y2: y + h - 1,
+          color: img.ColorRgb8(255, 0, 128),
+        );
+        var label = node.id.isEmpty ? 'root' : node.id;
+        // A filled strip behind it: these are drawn over a rendered UI, and
+        // magenta-on-whatever-was-there is not always legible.
+        var labelX = x + 2;
+        var labelY = y < 16 ? y + 2 : y - 15;
+        img.fillRect(
+          image,
+          x1: labelX - 1,
+          y1: labelY - 1,
+          x2: labelX + label.length * 8,
+          y2: labelY + 14,
+          color: img.ColorRgb8(255, 0, 128),
+        );
+        img.drawString(
+          image,
+          label,
+          font: img.arial14,
+          x: labelX,
+          y: labelY,
+          color: img.ColorRgb8(255, 255, 255),
+        );
+      }
+    }
+    return image;
   }
 
   Future<void> close() async {

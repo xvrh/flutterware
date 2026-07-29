@@ -157,7 +157,7 @@ packages: List<CatalogPackageCheck>
 One entry: what it is, where it is, and the knobs it declares
 
 ```sh
-fw run ui_catalog describe --entry=<choice> [--knobs=…]
+fw run ui_catalog describe --entry=<choice> [--knobs=…] [--axes=…]
 ```
 
 Returns `CatalogEntryDescription`:
@@ -180,30 +180,213 @@ knobs: List<CatalogKnob>?   # Present only when `--knobs` asked for them: readin
   min: num?   # Bounds, when the demo gave any.
   max: num?
   options: List<String>   # A picker's labels, in declaration order.
+axes: List<CatalogKnob>?   # What the shell around the entry offers — theme, locale.
+  name: String
+  kind: String   # `string`, `boolean`, `integer`, `number`, `picker`.
+  value: Object?   # What it is currently set to.
+  default: Object?   # What the demo renders with when nothing is set — also what it shows outside the catalog.
+  min: num?   # Bounds, when the demo gave any.
+  max: num?
+  options: List<String>   # A picker's labels, in declaration order.
+shell: String?   # Which shell declared [axes].
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `entry` | choice (from `entries`) | yes | — | The id of the entry to describe |
-| `knobs` | boolean | no | false | Compile the entry and run it to read the knobs it declares. Off by default because it costs a build; without it the answer is what the scan knows. |
+| `knobs` | boolean | no | false | Compile the entry and run it to read the knobs it declares — the names and kinds every other action takes as `--knobs`. Off by default because it costs a build; without it the answer is what the scan knows. |
+| `axes` | boolean | no | false | Run it and read what the shell around it offers — the names and kinds every other action takes as `--axes`, plus which shell declared them. Costs a build for the same reason knobs do: an axis is declared by a shell asking for it while it builds. |
 
 #### `screenshot` — Screenshot
 
 Render one entry to a PNG
 
 ```sh
-fw run ui_catalog screenshot --entry=<choice> [--output=…] [--knobs=…] [--device=…] [--width=…] [--height=…]
+fw run ui_catalog screenshot --entry=<choice> [--output=…] [--knobs=…] [--device=…] [--width=…] [--height=…] [--axes=…] [--node=…] [--annotate=…]
 ```
 
 Returns `Artifact`:
 
-Shape not published: `Artifact` writes its own `toJson`, so its fields are not its keys.
+```
+kind: String   # A MIME type where one fits — see the constants above.
+address: String   # What this is an artifact of, axes included.
+path: String?   # Where it was written, when it was written.
+text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
+meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
+```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `entry` | choice (from `entries`) | yes | — | The id of the entry to render |
 | `output` | string | no | — | Where to write the PNG; a build path when omitted |
-| `knobs` | string | no | — | Values to turn before the frame is taken, as `name=value` pairs or a JSON object. Ask `describe --knobs` what an entry offers. Recorded on the address, so two settings are two artifacts rather than one file written twice. |
+| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the demo asked for while it built — a demo calling `context.uiCatalog.parameters.string("label", "Hello")` declares one named `label` — so the names come from the demo itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the demo declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. Recorded on the address, so two settings are two artifacts rather than one file written twice. |
 | `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the demo reads the phone from `MediaQuery` rather than a rectangle. Omitted means the panel. The same value the GUI writes as `?device=`, so an address captured here reopens framed the way it was shot. |
 | `width` | integer | no | 900 | — |
 | `height` | integer | no | 700 | — |
+| `axes` | string | no | — | Values for the shell *around* the demo — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the demo and travels with the entry, an axis is declared by the `CatalogShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
+| `node` | string | no | — | Cut the picture down to one node, by the id `tree` gave. Cut out of the real frame rather than re-rendered alone, so the widget is still in its surroundings. |
+| `annotate` | boolean | no | false | Draw a box and its node id over every widget, so a tree read and a picture of it can be laid side by side |
+
+#### `tree` — Widget tree
+
+The widget tree one entry builds, scoped to the demo rather than the catalog around it
+
+```sh
+fw run ui_catalog tree --entry=<choice> [--node=…] [--depth=…] [--knobs=…] [--axes=…]
+```
+
+Returns `CatalogTreeResult`:
+
+```
+entry: String
+address: String
+nodeCount: int   # How many nodes [nodes] holds, so a caller reading a truncated rendering still knows what it is a rendering of.
+nodes: List<CatalogTreeNode>   # Depth-first, root first.
+  id: String   # The child-index path from the demo's root — `''`, `0`, `0/1`.
+  type: String   # The widget's runtime type.
+  depth: int   # How deep below the demo's root, so a flat list still reads as a tree.
+  description: String?   # The framework's one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.
+  source: String?   # `path/to/file.dart:12:5`, project-relative.
+  local: bool   # Whether the framework counts this as the user's code rather than `package:flutter`'s.
+  rect: String?   # Where it ended up: `x,y w×h`.
+  constraints: String?   # What the parent allowed: `w 0.0..900.0, h 0.0..∞`.
+  flex: String?   # For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.
+  flexChild: String?   # For a *child* of one: `flex 2 (tight)`, read off the parent data.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `entry` | choice (from `entries`) | yes | — | The id of the entry to read |
+| `node` | string | no | — | Report only this node and below, by the id a previous read gave. Ids come from tree shape, so one taken in another process still names this node. |
+| `depth` | integer | no | — | Stop this many levels below the root |
+| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the demo asked for while it built — a demo calling `context.uiCatalog.parameters.string("label", "Hello")` declares one named `label` — so the names come from the demo itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the demo declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. A tree is of one build, and a knob can change which widgets there are. |
+| `axes` | string | no | — | Values for the shell *around* the demo — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the demo and travels with the entry, an axis is declared by the `CatalogShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
+
+#### `find` — Find widgets
+
+The nodes in one entry matching a type, a key or some text — for when the answer is a handful of nodes rather than a whole tree
+
+```sh
+fw run ui_catalog find --entry=<choice> --query=<string> [--knobs=…] [--axes=…]
+```
+
+Returns `CatalogTreeResult`:
+
+```
+entry: String
+address: String
+nodeCount: int   # How many nodes [nodes] holds, so a caller reading a truncated rendering still knows what it is a rendering of.
+nodes: List<CatalogTreeNode>   # Depth-first, root first.
+  id: String   # The child-index path from the demo's root — `''`, `0`, `0/1`.
+  type: String   # The widget's runtime type.
+  depth: int   # How deep below the demo's root, so a flat list still reads as a tree.
+  description: String?   # The framework's one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.
+  source: String?   # `path/to/file.dart:12:5`, project-relative.
+  local: bool   # Whether the framework counts this as the user's code rather than `package:flutter`'s.
+  rect: String?   # Where it ended up: `x,y w×h`.
+  constraints: String?   # What the parent allowed: `w 0.0..900.0, h 0.0..∞`.
+  flex: String?   # For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.
+  flexChild: String?   # For a *child* of one: `flex 2 (tight)`, read off the parent data.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `entry` | choice (from `entries`) | yes | — | The id of the entry to search |
+| `query` | string | yes | — | Matched case-insensitively against the type of each node and against the words it puts on screen — `ElevatedButton`, `Save`, `SizedBox` |
+| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the demo asked for while it built — a demo calling `context.uiCatalog.parameters.string("label", "Hello")` declares one named `label` — so the names come from the demo itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the demo declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. |
+| `axes` | string | no | — | Values for the shell *around* the demo — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the demo and travels with the entry, an axis is declared by the `CatalogShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
+
+#### `errors` — Does it render
+
+Render one entry and report what the framework said — build failures, layout overflows. `check` answers whether it compiles, which is a different question.
+
+```sh
+fw run ui_catalog errors --entry=<choice> [--knobs=…] [--axes=…]
+```
+
+Returns `CatalogRenderResult`:
+
+```
+entry: String
+address: String
+ok: bool   # Whether it rendered without the framework reporting anything.
+errors: List<CatalogRenderError>
+  exception: String
+  library: String?   # `widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.
+  context: String?   # What the framework was doing: `during layout`, `while painting`.
+  count: int   # How many times this exact error was reported.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `entry` | choice (from `entries`) | yes | — | The id of the entry to render |
+| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the demo asked for while it built — a demo calling `context.uiCatalog.parameters.string("label", "Hello")` declares one named `label` — so the names come from the demo itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the demo declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. |
+| `axes` | string | no | — | Values for the shell *around* the demo — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the demo and travels with the entry, an axis is declared by the `CatalogShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
+
+#### `at` — What is here
+
+The widgets under one point, outermost first — the chain, since the thing under a cursor is usually a Text and the thing meant is the button around it
+
+```sh
+fw run ui_catalog at --entry=<choice> --x=<integer> --y=<integer> [--knobs=…] [--axes=…]
+```
+
+Returns `CatalogTreeResult`:
+
+```
+entry: String
+address: String
+nodeCount: int   # How many nodes [nodes] holds, so a caller reading a truncated rendering still knows what it is a rendering of.
+nodes: List<CatalogTreeNode>   # Depth-first, root first.
+  id: String   # The child-index path from the demo's root — `''`, `0`, `0/1`.
+  type: String   # The widget's runtime type.
+  depth: int   # How deep below the demo's root, so a flat list still reads as a tree.
+  description: String?   # The framework's one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.
+  source: String?   # `path/to/file.dart:12:5`, project-relative.
+  local: bool   # Whether the framework counts this as the user's code rather than `package:flutter`'s.
+  rect: String?   # Where it ended up: `x,y w×h`.
+  constraints: String?   # What the parent allowed: `w 0.0..900.0, h 0.0..∞`.
+  flex: String?   # For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.
+  flexChild: String?   # For a *child* of one: `flex 2 (tight)`, read off the parent data.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `entry` | choice (from `entries`) | yes | — | The id of the entry to probe |
+| `x` | integer | yes | — | In the same coordinates a screenshot is taken in, so a point read off one lands here without a transform |
+| `y` | integer | yes | — | See x |
+| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the demo asked for while it built — a demo calling `context.uiCatalog.parameters.string("label", "Hello")` declares one named `label` — so the names come from the demo itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the demo declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. |
+| `axes` | string | no | — | Values for the shell *around* the demo — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the demo and travels with the entry, an axis is declared by the `CatalogShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
+
+#### `audit` — Audit every entry
+
+Render the whole catalog and report everything that does not compile or does not render — one warm guest, one answer for the repo
+
+```sh
+fw run ui_catalog audit [--package=…] [--path=…]
+```
+
+Returns `CatalogAuditResult`:
+
+```
+checked: int   # How many entries were looked at.
+broken: int   # How many of them are broken — the number the whole thing exists to produce, so that a caller has an answer before it has read a list.
+entries: List<CatalogAuditEntry>   # Only the ones with something to say.
+  id: String
+  address: String
+  compiles: bool   # False when the compiler quarantined it.
+  compileError: String?   # The compiler's diagnostics, verbatim.
+  errors: List<CatalogRenderError>
+    exception: String
+    library: String?   # `widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.
+    context: String?   # What the framework was doing: `during layout`, `while painting`.
+    count: int   # How many times this exact error was reported.
+unreachable: List<CatalogAuditFailure>   # Packages that could not be audited at all, which is not the same as a package whose entries are fine.
+  package: String
+  error: String
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+| `path` | string | no | — | A directory or one file — `demo/settings`, `demo/settings/tile.dart`. Either package-relative or worktree-relative; both are accepted because an entry id is the first and a shell tab-completes the second. |

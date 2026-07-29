@@ -22,7 +22,7 @@ import 'package:path/path.dart' as p;
 /// change a result class and have the published shape stay wrong.
 Future<void> main() async {
   var extracted = await ShapeExtractor(
-    packageRoot: p.absolute('lib'),
+    packageRoots: [for (var root in shapeRoots) p.absolute(root)],
   ).extract([for (var source in shapeSources) p.absolute(source)]);
 
   File(shapesPath)
@@ -36,11 +36,25 @@ Future<void> main() async {
   stdout.writeln('Wrote $capabilitiesPath');
 }
 
+/// The packages the sources below live in. Resolution needs whole packages.
+///
+/// Two of them because the result classes are not all in one: the plugins
+/// declare most, and `Artifact` — the most returned of all — lives in
+/// `package:flutterware` beside the other pure-data plugin types.
+///
+/// Named here rather than at the call site so the freshness test resolves the
+/// same thing the generator did. A test that re-derives from a *different*
+/// input is not a freshness test.
+const shapeRoots = ['lib', '../lib'];
+
 /// Where actions are declared. Resolution needs the package, but only these
 /// files are scanned for `PluginAction(..., returns: …)`.
 const shapeSources = [
   'lib/src/plugins/native/ui_catalog_core.dart',
   'lib/src/plugins/native/dependencies_core.dart',
+  // Not for its actions — it declares none — but for its hand-written
+  // `toJson`, which is read as the shape of every artifact any action returns.
+  '../lib/src/plugins/artifact.dart',
 ];
 
 /// Relative to the `app/` package, which is where the generator and both tests

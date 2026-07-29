@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/widgets.dart';
 
+import '../inspect/guest_errors.dart';
 import 'axes.dart';
 import 'knob.dart';
 import 'parameters.dart';
@@ -45,6 +46,14 @@ class CatalogParameters {
   /// What the entry that declared the current knobs was, so switching entries
   /// starts from nothing rather than from the last demo's controls.
   String? _entryId;
+
+  /// Which entry the guest is currently showing.
+  ///
+  /// Public because anything else reporting on the live build has the same
+  /// reason to name it that [describe] does: a read that landed before an
+  /// entry switch describes the wrong demo, and only the id makes that
+  /// detectable.
+  String? get entryId => _entryId;
 
   void _bump() => revision.value++;
 
@@ -223,6 +232,18 @@ class CatalogParameters {
 class CatalogGuest extends StatefulWidget {
   const CatalogGuest({super.key, required this.entryId, required this.child});
 
+  /// Marks where the demo starts, so inspection can report the demo rather
+  /// than the catalog chrome standing above it.
+  ///
+  /// A [GlobalKey] rather than a held [Element]: the subtree is remounted on
+  /// every entry switch, so anything holding an element would be holding the
+  /// previous entry's. This one sits on the wrapper *around* the changing
+  /// subtree and so survives the switch.
+  static final demoKey = GlobalKey(debugLabel: 'flutterware.demo');
+
+  /// The demo's root element, or null before the first build.
+  static Element? get demoRoot => demoKey.currentContext as Element?;
+
   final String entryId;
   final Widget child;
 
@@ -240,6 +261,9 @@ class _CatalogGuestState extends State<CatalogGuest> {
   void _reset() {
     _parameters.resetFor(widget.entryId);
     CatalogAxes.instance.resetFor(widget.entryId);
+    // The same boundary, for the same reason: carrying one entry's failures
+    // into the next reports a demo as broken because the one before it was.
+    GuestErrors.instance.resetFor(widget.entryId);
   }
 
   @override
@@ -267,7 +291,7 @@ class _CatalogGuestState extends State<CatalogGuest> {
           // dependents by identity, and the demo *is* a dependent — reading a
           // knob is what subscribed it.
           state: _GuestCatalogState(_parameters.editable, revision),
-          child: widget.child,
+          child: KeyedSubtree(key: CatalogGuest.demoKey, child: widget.child),
         );
       },
     );

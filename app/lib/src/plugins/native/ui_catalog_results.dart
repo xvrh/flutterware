@@ -174,6 +174,8 @@ class CatalogEntryDescription implements PluginResult {
     this.group,
     this.formFactor,
     this.knobs,
+    this.axes,
+    this.shell,
   });
 
   final String id;
@@ -199,6 +201,17 @@ class CatalogEntryDescription implements PluginResult {
   /// compile and a frame, so absent means "not looked at" while an empty list
   /// means "this entry declares none".
   final List<CatalogKnob>? knobs;
+
+  /// What the shell around the entry offers — theme, locale. Same nullability
+  /// rule as [knobs], and the same cost.
+  ///
+  /// An axis is a knob with a different lifetime: a knob belongs to the entry
+  /// and goes with it, an axis belongs to the shell and does not.
+  final List<CatalogKnob>? axes;
+
+  /// Which shell declared [axes]. Null when the entry's wrapper is not a shell,
+  /// which is an answer rather than a failure.
+  final String? shell;
 
   @override
   Map<String, Object?> toJson() => _$CatalogEntryDescriptionToJson(this);
@@ -242,4 +255,251 @@ class CatalogKnob {
   final List<String> options;
 
   Map<String, Object?> toJson() => _$CatalogKnobToJson(this);
+}
+
+/// `tree` — the widget tree one entry builds.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class CatalogTreeResult implements PluginResult {
+  CatalogTreeResult({
+    required this.entry,
+    required this.address,
+    required this.nodeCount,
+    required this.nodes,
+  });
+
+  final String entry;
+  final String address;
+
+  /// How many nodes [nodes] holds, so a caller reading a truncated rendering
+  /// still knows what it is a rendering of.
+  final int nodeCount;
+
+  /// Depth-first, root first. Flat rather than nested: every node names its
+  /// own [CatalogTreeNode.depth], which reads the same in JSON and in a
+  /// terminal, and lets a caller slice the list without rebuilding a tree.
+  final List<CatalogTreeNode> nodes;
+
+  @override
+  Map<String, Object?> toJson() => _$CatalogTreeResultToJson(this);
+}
+
+/// One widget in the tree.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class CatalogTreeNode {
+  CatalogTreeNode({
+    required this.id,
+    required this.type,
+    required this.depth,
+    this.description,
+    this.source,
+    this.local = false,
+    this.rect,
+    this.constraints,
+    this.flex,
+    this.flexChild,
+  });
+
+  /// The child-index path from the demo's root — `''`, `0`, `0/1`.
+  ///
+  /// Derived from the tree's shape and never assigned, because every `fw`
+  /// invocation and every MCP call is a fresh process: an id minted by one of
+  /// them means nothing to the next. Pass it back to `screenshot --node` or
+  /// `tree --node`.
+  final String id;
+
+  /// The widget's runtime type.
+  final String type;
+
+  /// How deep below the demo's root, so a flat list still reads as a tree.
+  final int depth;
+
+  /// The framework's one-line description when it says more than [type] does
+  /// — `Text("Save")` rather than `Text`.
+  final String? description;
+
+  /// `path/to/file.dart:12:5`, project-relative.
+  ///
+  /// Absent for a widget the compiler did not stamp. That is the whole of what
+  /// `DaemonConfig.trackWidgetCreation` buys, and why it is on.
+  final String? source;
+
+  /// Whether the framework counts this as the user's code rather than
+  /// `package:flutter`'s.
+  final bool local;
+
+  /// Where it ended up: `x,y w×h`.
+  ///
+  /// Absent for a widget with no box of its own — a provider, a builder —
+  /// which is most of a summary tree. Absent and "zero-sized" are different
+  /// answers and only one of them is a bug, which is why this is nullable
+  /// rather than zero-filled.
+  final String? rect;
+
+  /// What the parent allowed: `w 0.0..900.0, h 0.0..∞`.
+  ///
+  /// The other half of every layout question. A box that is 0 wide because it
+  /// was handed `maxWidth: 0` is a different bug from one that chose to be,
+  /// and the size alone cannot tell them apart.
+  final String? constraints;
+
+  /// For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.
+  final String? flex;
+
+  /// For a *child* of one: `flex 2 (tight)`, read off the parent data.
+  final String? flexChild;
+
+  Map<String, Object?> toJson() => _$CatalogTreeNodeToJson(this);
+}
+
+/// `errors` — what one entry reported while it rendered.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class CatalogRenderResult implements PluginResult {
+  CatalogRenderResult({
+    required this.entry,
+    required this.address,
+    required this.ok,
+    required this.errors,
+  });
+
+  final String entry;
+  final String address;
+
+  /// Whether it rendered without the framework reporting anything.
+  ///
+  /// Stated rather than left to be inferred from an empty list, because the
+  /// question people ask is "is this one broken" and a caller should not have
+  /// to know that zero errors is the same as fine.
+  final bool ok;
+
+  final List<CatalogRenderError> errors;
+
+  @override
+  Map<String, Object?> toJson() => _$CatalogRenderResultToJson(this);
+}
+
+/// One thing the framework reported.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class CatalogRenderError {
+  CatalogRenderError({
+    required this.exception,
+    this.library,
+    this.context,
+    this.count = 1,
+  });
+
+  final String exception;
+
+  /// `widgets library`, `rendering library` — which tells a layout overflow
+  /// from a failed image load without reading the message.
+  final String? library;
+
+  /// What the framework was doing: `during layout`, `while painting`.
+  final String? context;
+
+  /// How many times this exact error was reported. An error thrown from
+  /// `paint` fires once per frame.
+  final int count;
+
+  Map<String, Object?> toJson() => _$CatalogRenderErrorToJson(this);
+}
+
+/// `audit` — every entry, and whether it compiles and renders.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class CatalogAuditResult implements PluginResult {
+  CatalogAuditResult({
+    required this.checked,
+    required this.broken,
+    required this.entries,
+    this.unreachable = const [],
+  });
+
+  /// How many entries were looked at.
+  final int checked;
+
+  /// How many of them are broken — the number the whole thing exists to
+  /// produce, so that a caller has an answer before it has read a list.
+  final int broken;
+
+  /// Only the ones with something to say.
+  ///
+  /// A passing entry contributes to [checked] and nothing else: an audit of a
+  /// healthy repo should be a line, not a page, or nobody runs it twice.
+  final List<CatalogAuditEntry> entries;
+
+  /// Packages that could not be audited at all, which is not the same as a
+  /// package whose entries are fine.
+  ///
+  /// Kept separate from [entries] and out of [checked] deliberately: an audit
+  /// that quietly counted an unreachable package as clean would report a green
+  /// repo on the strength of not having looked.
+  final List<CatalogAuditFailure> unreachable;
+
+  @override
+  Map<String, Object?> toJson() => _$CatalogAuditResultToJson(this);
+}
+
+/// One entry that did not come through clean.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class CatalogAuditEntry {
+  CatalogAuditEntry({
+    required this.id,
+    required this.address,
+    required this.compiles,
+    this.compileError,
+    this.errors = const [],
+  });
+
+  final String id;
+  final String address;
+
+  /// False when the compiler quarantined it. A quarantined entry has no
+  /// [errors] — it never ran, and inventing an empty list would read as
+  /// "rendered fine".
+  final bool compiles;
+
+  /// The compiler's diagnostics, verbatim.
+  final String? compileError;
+
+  final List<CatalogRenderError> errors;
+
+  Map<String, Object?> toJson() => _$CatalogAuditEntryToJson(this);
+}
+
+/// A package the audit could not reach.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class CatalogAuditFailure {
+  CatalogAuditFailure({required this.package, required this.error});
+
+  final String package;
+  final String error;
+
+  Map<String, Object?> toJson() => _$CatalogAuditFailureToJson(this);
 }

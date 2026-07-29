@@ -69,21 +69,75 @@ class GuestVmService {
   /// the extension existed, or one whose first frame has not run yet. That is
   /// an answer, not a failure: a panel asking what knobs a demo has, of a demo
   /// that has not built, should show nothing rather than an error.
+  ///
+  /// Use it only where "not registered" is genuinely one of the answers. For a
+  /// call that has no meaning if it did not land — anything that *writes* —
+  /// use [requireExtension], which is the same call without the excuse.
   Future<Map<String, dynamic>?> callExtension(
     String method, {
     Map<String, String>? args,
   }) async {
     try {
-      var response = await service.callServiceExtension(
-        method,
-        isolateId: isolateId,
-        args: args,
-      );
-      return response.json;
+      return await _call(method, args);
     } on RPCError catch (e) {
-      // 32601: method not found, which is what an unregistered extension is.
-      if (e.code == 32601 || e.code == -32601) return null;
+      if (_isMethodNotFound(e)) return null;
       rethrow;
+    }
+  }
+
+  /// Calls an extension that must exist, and throws when it does not.
+  ///
+  /// The counterpart to [callExtension], and it exists because of a bug it
+  /// would have caught. `setParameter` was renamed to `setParameters`; two
+  /// callers were missed; and because every call went through the tolerant form
+  /// the misses were invisible — `--knobs` on a screenshot applied nothing and
+  /// reported success, and the harness assertion that should have caught it
+  /// compared `null != true` and passed.
+  ///
+  /// A guest too old to have the extension is a real case, which is why the
+  /// tolerant form stays. It is just not the right form for a write.
+  Future<Map<String, dynamic>?> requireExtension(
+    String method, {
+    Map<String, String>? args,
+  }) async {
+    try {
+      return await _call(method, args);
+    } on RPCError catch (e) {
+      if (!_isMethodNotFound(e)) rethrow;
+      throw StateError(
+        'the guest has no $method. It registers: '
+        '${(await _registeredExtensions()).join(', ')}',
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>?> _call(
+    String method,
+    Map<String, String>? args,
+  ) async {
+    var response = await service.callServiceExtension(
+      method,
+      isolateId: isolateId,
+      args: args,
+    );
+    return response.json;
+  }
+
+  /// 32601 is JSON-RPC's "method not found", which is what an unregistered
+  /// extension is. Sign varies with who wrapped it.
+  static bool _isMethodNotFound(RPCError e) => e.code.abs() == 32601;
+
+  /// What the isolate does register, for the error above — an extension that is
+  /// missing is nearly always one that was renamed.
+  Future<List<String>> _registeredExtensions() async {
+    try {
+      var isolate = await service.getIsolate(isolateId);
+      return [
+        for (var rpc in isolate.extensionRPCs ?? const <String>[])
+          if (rpc.startsWith('ext.flutterware.')) rpc,
+      ]..sort();
+    } catch (_) {
+      return const ['(could not read the isolate)'];
     }
   }
 

@@ -72,6 +72,13 @@ class ResidentCompiler {
     /// assumption: the cached kernel must have been produced by the same SDK
     /// against the same package config. The daemon owns that decision.
     String? warmDill,
+
+    /// Stamp every widget with the source location that built it.
+    ///
+    /// See `DaemonConfig.trackWidgetCreation` for why this is on and what it
+    /// was measured to cost. A caller that changes it must not hand the
+    /// compiler a [warmDill] produced under the other setting.
+    bool trackWidgetCreation = true,
   }) async {
     File(outputDill).parent.createSync(recursive: true);
     var warm = warmDill != null && File(warmDill).existsSync()
@@ -91,6 +98,7 @@ class ResidentCompiler {
       sdkRoot: cache.flutterPatchedSdkDir,
       platformDill: cache.platformDill,
       initializeFromDill: warm,
+      extraArguments: [if (trackWidgetCreation) '--track-widget-creation'],
     );
     return ResidentCompiler._(server, outputDill, warmDill);
   }

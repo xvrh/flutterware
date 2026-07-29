@@ -716,6 +716,7 @@ class _Daemon {
     packageConfig: config.packageConfig,
     cache: _cache,
     warmDill: _warmDill,
+    trackWidgetCreation: config.trackWidgetCreation,
   );
 
   late final String? _warmDill = _resolveWarmDill();
@@ -733,6 +734,9 @@ class _Daemon {
       _cache.engineRevision,
       config.packageConfig,
       '${File(config.packageConfig).statSync().modified.millisecondsSinceEpoch}',
+      // A kernel is compiled with creation locations or without them, and the
+      // two are not interchangeable starting points.
+      'twc:${config.trackWidgetCreation}',
     ].join(' ');
 
     if (stamp.existsSync() && stamp.readAsStringSync() == current) return dill;
