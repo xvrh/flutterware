@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 // ignore: implementation_imports
-import 'package:flutterware/src/logs/remote_log_client.dart';
+import 'package:flutterware/src/log_client.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 

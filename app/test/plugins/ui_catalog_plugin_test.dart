@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
-import 'package:flutterware/src/logs/remote_log_client.dart';
+import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/ui_catalog_core.dart';
 import 'package:flutterware_app/src/plugins/native/ui_catalog_results.dart';

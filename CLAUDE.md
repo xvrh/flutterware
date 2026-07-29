@@ -14,21 +14,18 @@ Versions in `pubspec.yaml` (`flutterware`) and `app/pubspec.yaml` (`flutterware_
 
 ## How the CLI/GUI launch flow works
 
-`dart run flutterware` from a user's Flutter project executes `bin/flutterware.dart`. That bootstrapper:
+`dart run flutterware` from a user's Flutter project executes `bin/flutterware.dart` — the launcher. It resolves its own package via `Isolate.resolvePackageUri`, works out everything that has to exist before `fw` can run, and narrates the lot as a `LaunchPlan` (`lib/src/launch_plan.dart`):
 
-1. Resolves the installed `flutterware` package via `Isolate.resolvePackageUri`, then copies the package + `app/` directory into `~/.flutterware/<sha1(packageRoot)>/` (Windows: `%APPDATA%`).
-2. Runs `dart pub get` and `dart compile exe app/bin/flutterware.dart -o app/build/compiled_cli` in that copy (only on first run or with `--force-compile`).
-3. Spawns the compiled CLI, passing context through env vars: `DART_EXECUTABLE_PATH`, `APP_TOOL_PATH`, `REMOTE_LOGGER_URL` (see `lib/src/constants.dart`).
+1. **Unpack**, for a hosted dependency only: copy the package + `app/` into `~/.flutterware/<sha1(packageRoot)>/` (Windows: `%APPDATA%`). A path dependency — i.e. this checkout — runs in place, so there is no copy and no flag to remember.
+2. **Resolve**, for a fresh copy only (`dart pub get` in `app/`).
+3. **Build the CLI** (`dart build cli -t bin/fw.dart -o app/build/cli`) **and build the GUI** (`flutter build <os> --release`), *concurrently*. The GUI build does not consume the CLI binary, and overlapping them is ~10s off a ~44s first run. `DesktopGui` (`lib/src/desktop_gui.dart`) is the one place that knows where the binary lands and which command produces it; the launcher and `GuiLauncher` both call it.
+4. Spawn the CLI with `ProcessStartMode.inheritStdio`, passing context in env vars: `DART_EXECUTABLE_PATH`, `APP_TOOL_PATH`, `FW_EDITABLE_SOURCES`, and `FW_GUI_BUILD_RESULT` when it did the GUI build (see `lib/src/constants.dart` and `lib/src/desktop_gui.dart`).
 
-The compiled CLI (`app/bin/flutterware.dart`) then:
+The CLI (`app/bin/fw.dart` → `FwCli`) treats the GUI as one command among `status`, `actions`, `run`, `init`. `fw app` locates the Flutter SDK from the dart executable, builds the GUI if the launcher did not, and spawns it with `FW_PROJECT_PATH`, `FW_APP_TOOL_PATH`, `FW_FLUTTER_SDK_PATH` (see `app/lib/src/constants.dart`).
 
-1. Locates the Flutter SDK by walking up from the dart executable path.
-2. Runs `flutter build <os> --release` inside the copied `app/` if the platform binary isn't present.
-3. Spawns the built Flutter desktop binary, again passing context via env vars: `FW_PROJECT_PATH`, `FW_APP_TOOL_PATH`, `FW_FLUTTER_SDK_PATH`, `FW_REMOTE_LOGGER_URL` (see `app/lib/src/constants.dart`).
+**Nothing forwards logs.** Every stage inherits or pipes stdio directly, so output arrives in the terminal that ran `dart run flutterware` without a transport. `RemoteLogServer`/`RemoteLogClient` and the 2800-line `lib/src/logs/` tree they lived in are deleted; `lib/src/log_client.dart` is what remains, and it is a `Logger.root` listener that calls `print`. In release mode `fw app` pipes the GUI's stdio so it can keep a `LiveRegion` (`lib/src/live_region.dart`) pinned below it; under `flutter run` (path dependency) stdio is inherited so `r`/`R`/`q` keep working.
 
-Logs flow back from each stage through `RemoteLogServer`/`RemoteLogClient` (`lib/src/logs/`) so the user sees them in the terminal that ran `dart run flutterware`.
-
-When changing CLI behavior, remember the user-installed copy is cached under `~/.flutterware/`. Pass `--force-compile` to rebuild it, or delete that directory.
+When changing CLI behavior, remember a *hosted* install is cached under `~/.flutterware/`. Pass `--force-compile` to rebuild it, or delete that directory. Working on this checkout needs neither.
 
 ## Developing the GUI without the CLI bootstrap
 

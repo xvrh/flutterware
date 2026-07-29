@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 // ignore: implementation_imports
-import 'package:flutterware/src/logs/remote_log_client.dart';
+import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/project.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';

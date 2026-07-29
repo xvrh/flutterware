@@ -38,7 +38,6 @@ String entryPointCode(
   Project project,
   List<TestFile> files, {
   required Uri serverUri,
-  required Uri? loggerUri,
 }) {
   var code = StringBuffer()
     ..writeln('''
@@ -65,7 +64,6 @@ final _cliServer = Uri.parse('${serverUri.toString()}');
 void main() {
   runTests(_cliServer, allTests, 
     flutterBinPath: ${escapeDartString(project.flutterSdkPath.flutter)},
-    loggerUri: ${loggerUri == null ? 'null' : 'Uri.parse(${escapeDartString(loggerUri.toString())})'},
   );
 }
 ''');

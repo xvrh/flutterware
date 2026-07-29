@@ -4,10 +4,13 @@ import 'dart:isolate';
 import 'package:crypto/crypto.dart';
 import 'package:flutterware/src/build_output.dart';
 import 'package:flutterware/src/constants.dart';
+import 'package:flutterware/src/desktop_gui.dart';
+import 'package:flutterware/src/launch_plan.dart';
+import 'package:flutterware/src/live_region.dart';
 import 'package:flutterware/src/utils/list_files.dart';
 import 'package:path/path.dart' as p;
 
-/// The launcher: find the CLI, build it if it is missing, get out of the way.
+/// The launcher: make sure the artifacts are current, then get out of the way.
 ///
 /// Reached three ways and always the same code — `dart run flutterware`, and
 /// (later) a global `fw` that execs exactly that. It does no real work; every
@@ -17,6 +20,14 @@ import 'package:path/path.dart' as p;
 /// child owns the terminal, so a `flutter run` further down the chain keeps its
 /// own interactive console and its logs arrive without a websocket to carry
 /// them.
+///
+/// The one thing it does that looks like real work is **starting the GUI build
+/// beside the CLI build**. Measured, cold: 5.6s then 38.4s serially against
+/// 34s together, because `flutter build` spends most of its wall time in Xcode
+/// rather than on a core the Dart compiler wants. It does not learn how to
+/// build the GUI to do that — [DesktopGui] is the one place that knows — but it
+/// does have to *predict* whether the CLI is about to want one. See
+/// [_willBuildGui] for why that prediction is allowed to exist.
 void main(List<String> arguments) async {
   var pubPackage = await Isolate.resolvePackageUri(
     Uri.parse('package:flutterware/lib'),
@@ -50,18 +61,29 @@ void main(List<String> arguments) async {
       // remembering a flag, and why its own CLI was developed by a loop that
       // never ran it.
       ? packageRoot
-      : await _workingCopy(packageRoot, force: force, verbose: verbose);
+      : _workingCopyPath(packageRoot);
 
   var appPath = p.join(root, 'app');
-  var cli = await _ensureCli(
-    appPath,
+  var cliExecutable = p.join(appPath, 'build', 'cli', 'bundle', 'bin', 'fw');
+  var sdkRoot = findFlutterSdkRoot(Platform.resolvedExecutable);
+  var gui = sdkRoot == null
+      ? null
+      : DesktopGui(appPath: appPath, flutterSdk: sdkRoot);
+
+  var guiBuild = await _work(
+    arguments,
+    packageRoot: packageRoot,
+    root: root,
+    appPath: appPath,
+    cliExecutable: cliExecutable,
+    gui: gui,
+    editable: editable,
     force: force,
-    resolved: editable,
     verbose: verbose,
   );
 
   var process = await Process.start(
-    cli,
+    cliExecutable,
     arguments,
     environment: {
       dartExecutableEnvironmentKey: Platform.resolvedExecutable,
@@ -70,10 +92,177 @@ void main(List<String> arguments) async {
       // both whether to copy and, downstream, whether the GUI runs under
       // `flutter run` or as a built binary.
       editableSourcesEnvironmentKey: '$editable',
+      if (guiBuild != null)
+        guiBuildResultEnvironmentKey: '${guiBuild.exitCode}',
     },
     mode: ProcessStartMode.inheritStdio,
   );
   exit(await process.exitCode);
+}
+
+/// Everything that has to exist before `fw` can run, narrated as a plan.
+///
+/// Returns the GUI build's result, or null when there was no GUI build — which
+/// is the whole contract with [guiBuildResultEnvironmentKey].
+///
+/// **The stages are decided before any of them runs.** That is the reason this
+/// function exists rather than each `_ensure…` narrating itself: listing what
+/// is going to happen is the only thing that answers "how much is left", and
+/// nothing can list what it has not yet decided.
+Future<ProcessLog?> _work(
+  List<String> arguments, {
+  required String packageRoot,
+  required String root,
+  required String appPath,
+  required String cliExecutable,
+  required DesktopGui? gui,
+  required bool editable,
+  required bool force,
+  required bool verbose,
+}) async {
+  var stamp = editable ? null : _sourceStamp(packageRoot);
+  var stampFile = File(p.join(root, '.source_stamp'));
+  var unpacks =
+      stamp != null &&
+      (force ||
+          !stampFile.existsSync() ||
+          stampFile.readAsStringSync() != stamp);
+
+  // A fresh copy has never been resolved. Everything else reached `main`
+  // through `dart run flutterware`, which resolved the whole workspace — and
+  // `app/` is a member of it, so getting it again resolves the same thing
+  // twice for nothing.
+  var resolves = unpacks;
+  var buildsCli = force || !_isFresh(cliExecutable, appPath);
+  var buildsGui =
+      gui != null &&
+      _willBuildGui(arguments, editable: editable) &&
+      (force || !gui.binary.existsSync());
+
+  var unpack = unpacks
+      ? LaunchStage('unpack flutterware', budget: const Duration(seconds: 3))
+      : null;
+  var resolve = resolves
+      ? LaunchStage('resolve dependencies', budget: const Duration(seconds: 5))
+      : null;
+  var buildCli = buildsCli
+      ? LaunchStage('build the CLI', budget: const Duration(seconds: 10))
+      : null;
+  var buildGui = buildsGui
+      ? LaunchStage('build the GUI', budget: const Duration(seconds: 30))
+      : null;
+
+  var stages = [?unpack, ?resolve, ?buildCli, ?buildGui];
+  // The warm path, which is every run but a handful: say nothing, cost nothing.
+  if (stages.isEmpty) return null;
+
+  var log = File(p.join(appPath, 'build', 'cli-build.log'));
+  var plan = LaunchPlan(
+    stages,
+    out: stdout,
+    // A live panel and a firehose cannot both own the bottom of the terminal,
+    // so `-v` gets the plain rendering: one line per stage saying what is about
+    // to make all the noise below it.
+    interactive: outputIsInteractive && !verbose,
+    title: 'flutterware · ${p.basename(Directory.current.path)}',
+    subtitle: buildGui == null
+        ? null
+        : 'Building the tools — once per flutterware version.',
+  )..start();
+
+  if (unpack != null) {
+    await plan.run(unpack, () async => _copyInto(packageRoot, root, stamp!));
+  }
+
+  if (resolve != null) {
+    var result = await plan.run(
+      resolve,
+      () => runLogged(
+        Platform.resolvedExecutable,
+        ['pub', 'get'],
+        workingDirectory: appPath,
+        log: log,
+        verbose: verbose,
+      ),
+      ok: (result) => result.ok,
+    );
+    if (!result.ok) {
+      plan.finish();
+      describeFailure(stderr, 'could not resolve the flutterware app.', result);
+      exit(70);
+    }
+  }
+
+  // The overlap. Both are CPU-bound in bursts and neither reads the other's
+  // output, so the only thing they contend for is the machine — and the
+  // measurement says that costs the CLI build 0.2s.
+  var cliFuture = buildCli == null
+      ? null
+      : plan.run(
+          buildCli,
+          () => runLogged(
+            Platform.resolvedExecutable,
+            [
+              'build',
+              'cli',
+              '-t',
+              p.join('bin', 'fw.dart'),
+              '-o',
+              p.join(appPath, 'build', 'cli'),
+            ],
+            workingDirectory: appPath,
+            log: log,
+            append: resolve != null,
+            verbose: verbose,
+          ),
+          ok: (result) => result.ok,
+        );
+  var guiFuture = buildGui == null
+      ? null
+      : plan.run(
+          buildGui,
+          () => gui!.build(verbose: verbose),
+          ok: (result) => result.ok,
+        );
+
+  await Future.wait([?cliFuture, ?guiFuture]);
+  var cliResult = await cliFuture;
+  var guiResult = await guiFuture;
+
+  if (cliResult != null && !cliResult.ok) {
+    plan.finish();
+    describeFailure(stderr, 'could not build the CLI.', cliResult);
+    exit(70);
+  }
+
+  // A failed GUI build is not reported here — see
+  // [guiBuildResultEnvironmentKey]. The plan still shows which stage failed,
+  // and the CLI writes the error a moment later.
+  plan.finish(
+    closing: guiResult == null || guiResult.ok
+        ? '${Ansi.style('ready', Ansi.ok)} in ${plan.elapsed.inSeconds}s'
+        : null,
+  );
+  return guiResult;
+}
+
+/// Whether the command about to run is going to want a built GUI.
+///
+/// A prediction, and therefore a duplicate of the first few lines of
+/// `FwCli.run` and of `GuiLauncher.run`'s mode test. It is allowed because
+/// being wrong is cheap in one direction and impossible in the other: predict
+/// *no* and the CLI builds it exactly as it always did, one stage later.
+/// Predicting *yes* wrongly would spend 38 seconds on a window nobody asked
+/// for, which is why the test is the literal one — no arguments or `app`, and
+/// a path dependency only when it is `--release`, because otherwise the GUI
+/// runs under `flutter run` and there is nothing to build.
+bool _willBuildGui(List<String> arguments, {required bool editable}) {
+  var argv = arguments
+      .where((a) => a != '--json' && a != '--verbose' && a != '-v')
+      .toList();
+  var command = argv.isEmpty ? 'app' : argv.first;
+  if (command != 'app') return false;
+  return !editable || argv.contains('--release');
 }
 
 /// True when the package was resolved out of the pub cache — i.e. an ordinary
@@ -85,119 +274,27 @@ bool _inPubCache(String packageRoot) {
   return p.isWithin(p.canonicalize(cache), p.canonicalize(packageRoot));
 }
 
-/// Mirrors a pub-cache package into `~/.flutterware/<hash>` so there is a
-/// writable tree to resolve and build in.
+/// Where a pub-cache package is mirrored so there is a writable tree to resolve
+/// and build in.
 ///
 /// The hash is of the *flutterware package root*, which for a hosted dependency
 /// already contains the version — so this is one copy per flutterware version
 /// per machine, shared across every project that uses it, not one per project.
-Future<String> _workingCopy(
-  String packageRoot, {
-  required bool force,
-  required bool verbose,
-}) async {
-  var destination = p.join(_userHomePath(), '.flutterware', _hash(packageRoot));
+///
+/// Split from the copy itself because the plan has to be decided before
+/// anything runs, and deciding it means knowing this path first: whether the
+/// CLI and the GUI need building are questions about files inside it.
+String _workingCopyPath(String packageRoot) =>
+    p.join(_userHomePath(), '.flutterware', _hash(packageRoot));
 
-  var stampFile = File(p.join(destination, '.source_stamp'));
-  var stamp = _sourceStamp(packageRoot);
-  if (!force &&
-      stampFile.existsSync() &&
-      stampFile.readAsStringSync() == stamp) {
-    return destination;
+void _copyInto(String packageRoot, String destination, String stamp) {
+  for (var file in listFilesInDirectory(packageRoot)) {
+    var target = p.join(destination, p.relative(file.path, from: packageRoot));
+    File(target).createSync(recursive: true);
+    file.copySync(target);
   }
-
-  await Step(
-    'Unpacking flutterware',
-    out: stdout,
-    interactive: outputIsInteractive && !verbose,
-  ).run(() async {
-    for (var file in listFilesInDirectory(packageRoot)) {
-      var target = p.join(
-        destination,
-        p.relative(file.path, from: packageRoot),
-      );
-      File(target).createSync(recursive: true);
-      await file.copy(target);
-    }
-  });
-  stampFile.writeAsStringSync(stamp);
-  return destination;
-}
-
-/// Returns the CLI executable, building it when it is missing or out of date.
-///
-/// `dart build cli` rather than `dart compile exe`: the latter refuses outright
-/// once anything in the resolution has a build hook, and `objective_c` arrives
-/// via `path_provider`. `dart build cli` runs the hooks and emits a bundle —
-/// the executable beside the dylibs it needs — which is why the answer is a
-/// path into `bundle/bin` and not a lone file.
-///
-/// [resolved] says the tree has already been resolved, in which case the
-/// `pub get` is skipped. This process reached `main` through
-/// `dart run flutterware`, which resolves the whole workspace — and `app/` is a
-/// member of it, so getting it again re-resolves the same workspace a second
-/// time for nothing. It is only false for a fresh copy under `~/.flutterware`,
-/// which really has never been resolved.
-///
-/// That second resolution was also the loudest thing in the terminal, and the
-/// reason is worth writing down: pub run from a *member* prints ``Resolving
-/// dependencies in `<workspace root>`…`` while the same command from the root
-/// prints a bare `Resolving dependencies…`. So output that looked like the
-/// launcher resolving itself was in fact this function, and reading the path in
-/// that message is how to tell those apart.
-Future<String> _ensureCli(
-  String appPath, {
-  required bool force,
-  required bool resolved,
-  required bool verbose,
-}) async {
-  var output = p.join(appPath, 'build', 'cli');
-  var executable = p.join(output, 'bundle', 'bin', 'fw');
-
-  if (!force && _isFresh(executable, appPath)) return executable;
-
-  // Beside the artifact it explains, rather than in the project: at this point
-  // nothing has established that the working directory *is* a project, and a
-  // failed build must not be the thing that creates `.flutterware/`.
-  var log = File(p.join(appPath, 'build', 'cli-build.log'));
-  var step = Step(
-    'Building the flutterware CLI',
-    out: stdout,
-    // A live line and a firehose cannot both own the last row of the terminal,
-    // so `-v` gets the plain rendering: one line saying what is about to make
-    // all the noise below it.
-    interactive: outputIsInteractive && !verbose,
-    budget: const Duration(seconds: 10),
-    note: 'first run only',
-  );
-
-  var result = await step.run(() async {
-    if (!resolved) {
-      var pubGet = await runLogged(
-        Platform.resolvedExecutable,
-        ['pub', 'get'],
-        workingDirectory: appPath,
-        log: log,
-        verbose: verbose,
-      );
-      if (!pubGet.ok) return pubGet;
-    }
-
-    return runLogged(
-      Platform.resolvedExecutable,
-      ['build', 'cli', '-t', p.join('bin', 'fw.dart'), '-o', output],
-      workingDirectory: appPath,
-      log: log,
-      append: !resolved,
-      verbose: verbose,
-    );
-  }, ok: (result) => result.ok);
-
-  if (!result.ok) {
-    describeFailure(stderr, 'could not build the CLI.', result);
-    exit(70);
-  }
-  return executable;
+  // Last, so an interrupted copy is not recorded as a complete one.
+  File(p.join(destination, '.source_stamp')).writeAsStringSync(stamp);
 }
 
 /// Whether the built CLI is newer than every source that goes into it.

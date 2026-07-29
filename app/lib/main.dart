@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutterware/src/logs/remote_log_adapter.dart';
-import 'package:flutterware/src/logs/remote_log_client.dart';
+import 'package:flutterware/src/log_client.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'src/constants.dart';
@@ -30,15 +29,8 @@ void main() async {
     );
   }
 
-  var remoteLoggerUrl = Platform.environment[remoteLoggerUrlKey];
-  Uri? loggerUri;
-  RemoteLogClient? remoteLoggerClient;
-  if (remoteLoggerUrl != null && remoteLoggerUrl.isNotEmpty) {
-    loggerUri = Uri.parse(remoteLoggerUrl);
-    remoteLoggerClient = RemoteLogClient(loggerUri);
-  }
   var appContext = AppContext(
-    logger: remoteLoggerClient ?? LogClient.print(),
+    logger: LogClient.print(),
     // Where `native/`, `tool/catalog/` and the build directory live — the
     // copy under `~/.flutterware/`, not the user's project. The catalog needs
     // it, and only once its panel is opened.
@@ -62,17 +54,10 @@ void main() async {
 
   runApp(ShellApp(shell));
 
-  appContext.logger.printBox(
-    '''
-Tools are declared in tool/flutterware.dart:
-- Pub dependencies manager
-- UI catalog, rendered in an embedded engine
-
-Contribute your ideas: https://github.com/xvrh/flutterware
-'''
-        .trim(),
-    title: 'Flutterware GUI is ready',
-  );
+  // No welcome banner. It used to be printed here, and this process has no
+  // terminal to print it to — `fw` owns the one it inherits, knows the plugin
+  // list before the window exists, and says it there instead. What is left on
+  // this stream is what belongs on it: the app's own logs.
 
   // After the first frame: discovery runs a subprocess, and the shell renders
   // its empty state until it resolves rather than holding up the window.

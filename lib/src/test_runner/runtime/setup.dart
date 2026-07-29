@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import '../../logs/remote_log_adapter.dart';
-import '../../logs/remote_log_client.dart';
+import '../../log_client.dart';
 import 'runner.dart';
 import 'setup_io.dart' if (dart.library.html) 'setup_web.dart';
 
@@ -9,7 +8,6 @@ void runTests(
   Uri serverUri,
   Map<String, void Function()> Function() tests, {
   required String flutterBinPath,
-  Uri? loggerUri,
   bool Function(String)? translationPredicate,
   String? projectName,
   List<String>? supportedLanguages,
@@ -17,7 +15,7 @@ void runTests(
   String? projectPackageName,
   Brightness? defaultStatusBarBrightness,
 }) async {
-  _setupLogger(loggerUri);
+  _setupLogger();
   var bundleParams = BundleParameters(
     flutterBinPath: flutterBinPath,
     translationPredicate: translationPredicate,
@@ -50,15 +48,14 @@ class BundleParameters {
       key.endsWith('.json') && key.contains('translations');
 }
 
-void _setupLogger(Uri? loggerUri) {
-  LogClient logger;
-  if (loggerUri != null) {
-    logger = RemoteLogClient(loggerUri);
-  } else {
-    logger = LogClient.print();
-  }
-
+/// Sends this test process's log records to its stdout.
+///
+/// It used to choose between stdout and a websocket back to the GUI, off a
+/// `loggerUri` threaded from `PackageRef` through `Project` and into the
+/// generated entry point. Nothing ever set it, so the branch was dead the whole
+/// way down and the plumbing has gone with it.
+void _setupLogger() {
   Logger.root
     ..level = Level.ALL
-    ..onRecord.listen(logger.printLogRecord);
+    ..onRecord.listen(LogClient.print().printLogRecord);
 }

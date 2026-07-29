@@ -16,13 +16,12 @@ import 'utils/flutter_sdk.dart';
 /// Distinct from `Pkg` in `package:flutterware`: `Pkg` is what
 /// `tool/flutterware.dart` *declares*, this is the resolved runtime handle.
 class PackageRef {
-  PackageRef(this.context, String path, this.flutterSdkPath, {this.loggerUri})
+  PackageRef(this.context, String path, this.flutterSdkPath)
     : directory = Directory(path);
 
   final AppContext context;
   final Directory directory;
   final FlutterSdkPath flutterSdkPath;
-  final Uri? loggerUri;
 
   String get absolutePath => directory.absolute.path;
 

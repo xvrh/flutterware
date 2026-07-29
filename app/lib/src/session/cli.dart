@@ -291,7 +291,45 @@ class FwCli {
           Platform.environment[editableSourcesEnvironmentKey] == 'true',
       json: json,
       verbose: verbose,
+      // Null unless the launcher built the GUI beside the CLI, which is the
+      // ordinary first run. Non-null settles the question either way: there is
+      // nothing left to build, and a failure is reported from its log rather
+      // than by running it again.
+      alreadyBuilt: int.tryParse(
+        Platform.environment[guiBuildResultEnvironmentKey] ?? '',
+      ),
+      describeProject: _describeProject,
     ).run(forceBuild: forceBuild, release: release);
+  }
+
+  /// What this project has, for the terminal the GUI is running in.
+  ///
+  /// The banner `main.dart` used to print itself, from the process that can
+  /// actually answer it. The GUI had to hard-code the list — "Pub dependencies
+  /// manager, UI catalog" — because a `runApp` has no session to ask; here it
+  /// is read from the same reports `fw status` prints, so a project that
+  /// declares something else says so.
+  ///
+  /// Labels only. This runs beside a window the user is already looking at, and
+  /// the detail is one `fw status` away.
+  Future<List<String>> _describeProject() async {
+    var session = await openSession();
+    try {
+      if (session.reports.isEmpty) {
+        return const [
+          'No plugins declared in tool/flutterware.dart.',
+          '`fw help init` to see what that file is for.',
+        ];
+      }
+      return [
+        'Tools declared in tool/flutterware.dart:',
+        for (var report in session.reports) '  · ${report.label}',
+        '',
+        '`fw status` for what each one says · `fw actions` for what they do.',
+      ];
+    } finally {
+      session.dispose();
+    }
   }
 
   /// Everything every plugin says about itself.

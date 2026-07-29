@@ -1,7 +1,7 @@
 import 'package:flutterware/plugins.dart';
 
 // ignore: implementation_imports
-import 'package:flutterware/src/logs/remote_log_client.dart';
+import 'package:flutterware/src/log_client.dart';
 
 import '../context.dart';
 import '../plugins/plugin_core.dart';

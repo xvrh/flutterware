@@ -140,12 +140,7 @@ class DaemonStarter {
   }
 
   Future<void> writeEntryPoint(List<TestFile> testFiles) async {
-    var code = entryPointCode(
-      project,
-      testFiles,
-      serverUri: server.socketUri!,
-      loggerUri: project.loggerUri,
-    );
+    var code = entryPointCode(project, testFiles, serverUri: server.socketUri!);
     await _entryPoint.writeAsString(code);
   }
 

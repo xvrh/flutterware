@@ -1,6 +1,6 @@
 import 'dart:io';
 // ignore: implementation_imports
-import 'package:flutterware/src/logs/remote_log_client.dart';
+import 'package:flutterware/src/log_client.dart';
 import 'utils/resource_cleaner.dart';
 
 class AppContext {

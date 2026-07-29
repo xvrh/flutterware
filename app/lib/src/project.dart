@@ -36,7 +36,7 @@ class Project extends PackageRef {
   late final drawing = DrawingService(this);
   late final uiCatalog = UICatalogService(this);
 
-  Project(super.context, super.path, super.flutterSdkPath, {super.loggerUri});
+  Project(super.context, super.path, super.flutterSdkPath);
 
   static Future<bool> isValid(String path) async {
     if (await FileSystemEntity.isDirectory(path)) {
