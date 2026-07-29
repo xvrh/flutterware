@@ -22,6 +22,19 @@ const addressBarHeight = 24.0;
 /// Along the bottom rather than in the band because the band is worth more.
 /// Tabs are aimed at; this is glanced at, and a full-width strip also means the
 /// address rarely needs shortening at all.
+///
+/// **The whole strip is one tap target, and that is the thing to change next.**
+/// It works while the bar is a readout with one exception — the worktree
+/// chevron, which has to draw itself as a control to escape it. A second
+/// interactive part would not be so lucky: clicking the plugin to jump to it, or
+/// a segment to truncate the address there, is a breadcrumb, and a breadcrumb
+/// cannot live inside a button.
+///
+/// The move is to give editing its own affordance — the `click to edit` hint at
+/// the right is already sitting where that button goes — and let the readout be
+/// a row of independently live parts. Deliberately not done for one control: the
+/// gain is in the second one, and building the general shape before there is a
+/// second is how you get a shape that fits nothing.
 class AddressBar extends StatefulWidget {
   const AddressBar(this.shell, {super.key});
 
@@ -195,14 +208,9 @@ class _Readout extends StatelessWidget {
       part('fw://${address.project ?? ''}/', lit ? colors.mut2 : colors.mut3),
     ];
     if (address.worktree case var worktree?) {
-      head.add(
-        _WorktreeSwitcher(
-          shell: shell,
-          current: worktree,
-          style: mono,
-          lit: lit,
-        ),
-      );
+      head
+        ..add(part(worktree, lit ? colors.ink2 : colors.mut))
+        ..add(_WorktreeSwitcher(shell: shell, current: worktree, style: mono));
     }
     if (address.plugin case var plugin?) {
       head
@@ -245,25 +253,24 @@ class _Readout extends StatelessWidget {
   }
 }
 
-/// The worktree segment, which is also the control that changes it.
+/// The one control inside the readout: switch which checkout the address names.
 ///
-/// **On the segment rather than beside it.** A picker somewhere else would be a
-/// second way to say the same thing; here the part of the address you are about
-/// to rewrite is the thing you click, so what it does needs no label. It is the
-/// only part of the readout that opens something other than the editor — the
-/// rest of an address is typed, but *which checkout* is a choice between a
-/// known handful.
+/// **A chevron rather than the segment itself.** The bar is one tap target that
+/// opens the editor, so anything inside it that behaves differently has to *look*
+/// different or it is a mode you discover by being surprised. Drawn as its own
+/// small affordance, there is exactly one thing here that is not text, and it is
+/// the one thing that does not open the editor. The worktree stays text, and
+/// clicking it edits the address like everything else.
 ///
-/// Labelled by [Worktree.displayName] and not by what goes in the address: a
-/// branch is what you recognise, and the identity underneath is git's own name
-/// for the checkout. Both are shown, because the address bar is where you learn
-/// what the address is made of.
-class _WorktreeSwitcher extends StatelessWidget {
+/// Quiet on purpose. The bar is glanced at far more often than it is used, so
+/// the chevron is mut3 until the pointer is on it and its hit box is padded well
+/// past the glyph — the worktree may be a single `~`, and a control you have to
+/// aim at is worse than one you cannot see.
+class _WorktreeSwitcher extends StatefulWidget {
   const _WorktreeSwitcher({
     required this.shell,
     required this.current,
     required this.style,
-    required this.lit,
   });
 
   final ShellController shell;
@@ -271,13 +278,21 @@ class _WorktreeSwitcher extends StatelessWidget {
   /// The worktree the address names, which may not be one that exists.
   final String current;
 
+  /// The readout's type, so the identities in the menu line up with the bar.
   final TextStyle style;
-  final bool lit;
+
+  @override
+  State<_WorktreeSwitcher> createState() => _WorktreeSwitcherState();
+}
+
+class _WorktreeSwitcherState extends State<_WorktreeSwitcher> {
+  var _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var others = shell.worktrees;
+    var shell = widget.shell;
+    var here = shell.worktreeNamed(widget.current);
 
     return MenuAnchor(
       alignmentOffset: const Offset(0, -4),
@@ -292,10 +307,10 @@ class _WorktreeSwitcher extends StatelessWidget {
         ),
       ),
       menuChildren: [
-        for (var worktree in others)
+        for (var worktree in shell.worktrees)
           MenuItemButton(
             leadingIcon: Icon(
-              worktree.name == current ? Icons.check : null,
+              worktree.name == widget.current ? Icons.check : null,
               size: 14,
               color: colors.accent,
             ),
@@ -303,9 +318,15 @@ class _WorktreeSwitcher extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // The branch, because that is what a checkout is known by, with
+                // git's name for it alongside, because that is what the address
+                // will say once you have picked it.
                 Text(worktree.displayName, style: context.type.bodySmall),
                 const Gap(FwSpacing.sm),
-                Text(worktree.name, style: style.copyWith(color: colors.mut3)),
+                Text(
+                  worktree.name,
+                  style: widget.style.copyWith(color: colors.mut3),
+                ),
                 // Choosing it opens it, which costs a config subprocess and a
                 // cold compile. Cheap enough to be worth doing and dear enough
                 // to be worth knowing about first.
@@ -320,18 +341,34 @@ class _WorktreeSwitcher extends StatelessWidget {
             ),
           ),
       ],
-      builder: (context, controller, child) => MouseRegion(
-        cursor: SystemMouseCursors.click,
-        // Its own gesture detector, so a tap here opens this rather than the
-        // editor the whole bar sits under. The inner one wins the arena.
-        child: GestureDetector(
-          onTap: () =>
-              controller.isOpen ? controller.close() : controller.open(),
-          behavior: HitTestBehavior.opaque,
-          child: Text(
-            current,
-            style: style.copyWith(color: lit ? colors.ink2 : colors.mut),
-            softWrap: false,
+      builder: (context, controller, child) => Tooltip(
+        // Says what `~` means, which the address deliberately does not, and says
+        // how this differs from the switcher in the band above: that one takes
+        // you to where a worktree was left, this brings where you are to it.
+        message: here == null
+            ? 'Show this in another worktree'
+            : 'On ${here.displayName} — show this in another worktree',
+        waitDuration: const Duration(milliseconds: 400),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          // Its own detector, so a tap here opens this rather than the editor
+          // the whole bar sits under: the inner one wins the arena.
+          child: GestureDetector(
+            onTap: controller.isOpen ? controller.close : controller.open,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              // Most of the target, and none of the weight.
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+              child: Icon(
+                Icons.expand_more,
+                size: 11,
+                color: _hovered || controller.isOpen
+                    ? colors.ink2
+                    : colors.mut3,
+              ),
+            ),
           ),
         ),
       ),

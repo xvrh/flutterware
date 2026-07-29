@@ -233,7 +233,7 @@ void main() {
   testWidgets('the switcher lists worktrees that are not open', (tester) async {
     await _pumpShell(tester);
 
-    await tester.tap(find.byIcon(Icons.expand_more));
+    await tester.tap(find.byTooltip('Switch worktree'));
     await tester.pumpAndSettle();
 
     expect(find.text('OPEN · 1'), findsOneWidget);
@@ -245,7 +245,7 @@ void main() {
   testWidgets('opening from the switcher adds a tab', (tester) async {
     var shell = await _pumpShell(tester);
 
-    await tester.tap(find.byIcon(Icons.expand_more));
+    await tester.tap(find.byTooltip('Switch worktree'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('feature/explorer'));
     await tester.pumpAndSettle();

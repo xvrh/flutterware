@@ -78,9 +78,15 @@ Future<void> _expand(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Taps the worktree segment, which is the switcher.
-Future<void> _openSwitcher(WidgetTester tester, String worktree) async {
-  await tester.tap(find.text(worktree));
+/// Taps the chevron beside the worktree, which is the switcher.
+Future<void> _openSwitcher(WidgetTester tester) async {
+  // Scoped: the band above has its own chevron.
+  await tester.tap(
+    find.descendant(
+      of: find.byType(AddressBar),
+      matching: find.byIcon(Icons.expand_more),
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -209,7 +215,7 @@ void main() {
     ) async {
       await _pumpShell(tester);
 
-      await _openSwitcher(tester, '~');
+      await _openSwitcher(tester);
 
       // Branches, because that is what a human knows a checkout by — with the
       // identity that actually goes in the address beside it. Scoped to the
@@ -232,7 +238,7 @@ void main() {
       shell.go(Address.parse('fw:///~/a.deps/packages%2Fapp?axis.theme=dark'));
       await tester.pumpAndSettle();
 
-      await _openSwitcher(tester, '~');
+      await _openSwitcher(tester);
       await tester.tap(find.widgetWithText(MenuItemButton, 'feature/explorer'));
       await tester.pumpAndSettle();
 
@@ -243,14 +249,27 @@ void main() {
       );
     });
 
-    testWidgets('it opens instead of the editor', (tester) async {
+    testWidgets('the chevron opens it, and not the editor', (tester) async {
       await _pumpShell(tester);
 
-      await _openSwitcher(tester, '~');
+      await _openSwitcher(tester);
 
-      // The bar underneath is one big tap target for the editor; the segment
+      // The bar underneath is one big tap target for the editor; the chevron
       // has to win the arena or the switcher can never be reached.
       expect(find.byType(TextField), findsNothing);
+    });
+
+    testWidgets('the worktree text still edits, like the rest of the bar', (
+      tester,
+    ) async {
+      await _pumpShell(tester);
+
+      await tester.tap(find.text('~'));
+      await tester.pumpAndSettle();
+
+      // Exactly one thing in the readout behaves differently, and it is the one
+      // thing drawn differently. The text is text.
+      expect(find.byType(TextField), findsOneWidget);
     });
   });
 }
