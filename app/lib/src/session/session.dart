@@ -9,12 +9,14 @@ import 'package:path/path.dart' as p;
 
 import '../constants.dart';
 import '../context.dart';
+import '../plugins/manifest_diff.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/native/assets_core.dart';
 import '../plugins/native/dependencies_core.dart';
 import '../plugins/native/splash_core.dart';
 import '../plugins/native/ui_catalog_core.dart';
 import '../plugins/plugin_core.dart';
+import '../plugins/plugin_host.dart';
 import '../shell/workspace.dart';
 import '../shell/worktree.dart';
 import '../shell/worktree_discovery.dart';
@@ -41,9 +43,9 @@ class Session {
     this.root,
     this.worktree,
     this.workspace,
-    this.cores,
+    List<PluginCore> cores,
     this._ownsWorkspace,
-  );
+  ) : _cores = cores;
 
   /// Builds a session over pieces the caller has already resolved.
   ///
@@ -79,7 +81,12 @@ class Session {
   final Workspace workspace;
 
   /// One core per declared plugin, in the order the config declared them.
-  final List<PluginCore> cores;
+  ///
+  /// Unmodifiable to callers: [reconcile] is the only thing that writes it, so
+  /// a plugin set can only change by re-running the config.
+  List<PluginCore> get cores => List.unmodifiable(_cores);
+
+  List<PluginCore> _cores;
 
   /// flutterware's own `app/` install, for the cores that need to find the
   /// machinery shipped beside them — the catalog daemon and its native host.
@@ -188,6 +195,78 @@ class Session {
       );
     }
     return found;
+  }
+
+  /// Swaps [cores] to match [manifest], disposing and rebuilding only what
+  /// [diff] says moved, and returns the ids that were rebuilt.
+  ///
+  /// **The correctness bias lives here.** An affected plugin is disposed and
+  /// reconstructed — never reconfigured in place — because that is the only
+  /// behaviour that is correct without cooperation from the plugin. Losing
+  /// whatever a rebuilt plugin held is the expected price of having changed the
+  /// declaration that started it; what must not happen is an unrelated plugin
+  /// paying for it.
+  ///
+  /// [onRelease] runs for each core about to be disposed, *before* it is. That
+  /// is how a renderer tears down whatever it built over a core without this
+  /// method knowing what a panel is — the same "panels first, then the
+  /// behaviour under them" rule as [dispose], kept in one place rather than
+  /// restated in two.
+  ///
+  /// Never called for a diff that `needsFullRebuild`: a new [Workspace] makes
+  /// every host stale, so there is nothing to reuse and the caller builds a
+  /// fresh session instead.
+  List<String> reconcile(
+    PluginManifest manifest,
+    ManifestDiff diff, {
+    void Function(PluginCore core)? onRelease,
+    PluginCoreRegistry? registry,
+  }) {
+    assert(
+      !diff.needsFullRebuild,
+      'a changed packages list invalidates every host; rebuild the session',
+    );
+    if (diff.isEmpty) return const [];
+
+    var affected = diff.affected.toSet();
+    var surviving = {
+      for (var core in _cores)
+        if (!affected.contains(core.id)) core.id: core,
+    };
+    var factory = registry ?? defaultCoreRegistry();
+
+    // Built in full before anything is disposed, so a factory that throws
+    // leaves the session exactly as it was.
+    var next = [
+      for (var declaration in manifest.plugins)
+        surviving[declaration.id] ??
+            factory.create(
+              PluginHost(
+                id: declaration.id,
+                label: declaration.label,
+                worktree: worktree,
+                workspace: workspace,
+                config: declaration.config,
+              ),
+            ),
+    ];
+
+    var kept = next.toSet();
+    var released = [
+      for (var core in _cores)
+        if (!kept.contains(core)) core,
+    ];
+    _cores = next;
+
+    for (var core in released) {
+      onRelease?.call(core);
+      core.dispose();
+    }
+
+    return [
+      for (var core in next)
+        if (!surviving.containsKey(core.id)) core.id,
+    ];
   }
 
   PluginCore? coreById(String id) =>

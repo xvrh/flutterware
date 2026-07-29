@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutterware_app/src/plugins/manifest_diff.dart';
 import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/shell/repo_layout.dart';
 import 'package:path/path.dart' as p;
@@ -83,6 +84,40 @@ void main() {
         hasLength(named.length),
         reason: 'a package named by two plugins should be reported once',
       );
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
+    'a warm load is cheap enough for a reload to be invisible',
+    () async {
+      var root = findRepoRoot('..')!;
+      var loader = ManifestLoader(dartExecutable: Platform.resolvedExecutable);
+
+      // First one may pay `dart compile kernel`; the rest are the real reload
+      // cost, and the number the phase-1 findings quote.
+      await loader.load(root);
+
+      var samples = <int>[];
+      for (var i = 0; i < 5; i++) {
+        var watch = Stopwatch()..start();
+        var manifest = await loader.load(root);
+        samples.add(watch.elapsedMilliseconds);
+        expect(manifest, isNotNull);
+      }
+      // Printed rather than asserted tightly: this is a measurement, and a CI
+      // machine is not the machine the number was quoted from.
+      print('warm manifest loads (ms): $samples');
+
+      // Comparing two manifests is not allowed to be a term in that cost.
+      var a = (await loader.load(root))!;
+      var b = (await loader.load(root))!;
+      var watch = Stopwatch()..start();
+      for (var i = 0; i < 1000; i++) {
+        ManifestDiff.between(a, b);
+      }
+      print('1000 diffs (ms): ${watch.elapsedMilliseconds}');
+      expect(ManifestDiff.between(a, b).isEmpty, isTrue);
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );

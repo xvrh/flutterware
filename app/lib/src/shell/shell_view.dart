@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutterware/plugins.dart';
 
 import '../address/address_scope.dart';
+import '../plugins/manifest_loader.dart';
 import '../plugins/native_plugin.dart';
 import '../ui/theme.dart';
 import 'address_bar.dart';
+import 'config_load.dart';
 import '../utils/hot_reload.dart';
 import '../utils/value_stream_builder.dart';
 import 'shell_controller.dart';
@@ -16,6 +18,12 @@ import 'shell_search.dart';
 import 'sidebar_row.dart';
 import 'worktree.dart';
 import 'worktree_home.dart';
+
+/// The transient "what the last reload did" line in the band.
+const configLoadLineKey = Key('config-load-line');
+
+/// The sticky config-failure banner under the band.
+const configErrorBannerKey = Key('config-error-banner');
 
 /// Width the macOS traffic lights occupy; band content insets past them.
 const _trafficLightInset = 78.0;
@@ -116,6 +124,11 @@ class ShellView extends StatelessWidget {
               body: Column(
                 children: [
                   _Band(shell),
+                  // Above the rail and the panel both, because it is a fact
+                  // about the worktree rather than about whatever is mounted —
+                  // and a config that failed no longer takes the panel down
+                  // with it, so this is the only thing that would say so.
+                  _ConfigErrorBanner(shell),
                   Expanded(
                     child: Row(
                       children: [
@@ -173,6 +186,7 @@ class _Band extends StatelessWidget {
             onTap: () => unawaited(showShellSearch(context, shell)),
           ),
           const Gap(FwSpacing.md),
+          _ConfigLoadLine(shell),
           _ReloadButton(shell),
           const _HotReloadButtons(),
           const Gap(FwSpacing.md),
@@ -202,6 +216,184 @@ class _SidebarButton extends StatelessWidget {
           '${shell.sidebarVisible ? 'Hide' : 'Show'} the sidebar '
           '(${Platform.isMacOS ? '⌘B' : 'Ctrl+B'})',
       onPressed: shell.toggleSidebar,
+    );
+  }
+}
+
+/// The selected worktree's config failure, until a load succeeds.
+///
+/// **Not dismissible, and collapsible rather than closable.** It is a fact about
+/// a file on disk, so hiding it would hide a real problem — and unlike before,
+/// there is no other symptom to notice: the plugins built from the last good
+/// config are all still running behind it.
+class _ConfigErrorBanner extends StatefulWidget {
+  const _ConfigErrorBanner(this.shell);
+
+  final ShellController shell;
+
+  @override
+  State<_ConfigErrorBanner> createState() => _ConfigErrorBannerState();
+}
+
+class _ConfigErrorBannerState extends State<_ConfigErrorBanner> {
+  var _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var worktree = widget.shell.selected;
+    var error = worktree == null ? null : widget.shell.errorFor(worktree);
+    if (error == null || worktree == null) return const SizedBox.shrink();
+
+    // The first line is the headline the loader wrote; the rest is the
+    // compiler's own output, which is worth reading and not worth occupying the
+    // window.
+    var lines = error.message.trimRight().split('\n');
+    var detail = lines.skip(1).join('\n').trim();
+
+    return Container(
+      key: configErrorBannerKey,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.lg,
+        vertical: FwSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: colors.red.withValues(alpha: 0.08),
+        border: Border(bottom: BorderSide(color: colors.red)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.error_outline, size: 14, color: colors.red),
+              const Gap(FwSpacing.sm),
+              Expanded(
+                child: Text(
+                  lines.first,
+                  style: context.type.caption.copyWith(color: colors.red),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (detail.isNotEmpty)
+                _BannerAction(
+                  _expanded ? 'Less' : 'More',
+                  () => setState(() => _expanded = !_expanded),
+                ),
+            ],
+          ),
+          if (_expanded) ...[
+            const Gap(FwSpacing.sm),
+            SelectableText(
+              '${worktree.path}/$configFilePath',
+              style: context.type.caption.copyWith(color: colors.mut2),
+            ),
+            const Gap(FwSpacing.xs),
+            SelectableText(
+              detail,
+              style: context.type.caption.copyWith(fontFamily: 'monospace'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BannerAction extends StatelessWidget {
+  const _BannerAction(this.label, this.onTap);
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => TextButton(
+    onPressed: onTap,
+    style: TextButton.styleFrom(
+      minimumSize: Size.zero,
+      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    ),
+    child: Text(
+      label,
+      style: context.type.caption.copyWith(color: context.colors.red),
+    ),
+  );
+}
+
+/// What the last config load did, for a few seconds after it did it.
+///
+/// **The `unchanged` case is the reason this exists.** A reload that matched and
+/// a reload that never happened are the same absence of feedback, and that
+/// ambiguity is what makes reloading feel unreliable — so a load always says
+/// something, even when the answer is "nothing moved". The duration rides along
+/// so a drift from ~100ms to seconds is visible without anyone going looking.
+///
+/// Opening a worktree is deliberately silent: the tab appearing is already the
+/// feedback, and announcing it would make every switch chatty.
+class _ConfigLoadLine extends StatefulWidget {
+  const _ConfigLoadLine(this.shell);
+
+  final ShellController shell;
+
+  @override
+  State<_ConfigLoadLine> createState() => _ConfigLoadLineState();
+}
+
+class _ConfigLoadLineState extends State<_ConfigLoadLine> {
+  static const _linger = Duration(seconds: 4);
+
+  ConfigLoad? _showing;
+  Timer? _hide;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.shell.addListener(_check);
+  }
+
+  @override
+  void dispose() {
+    widget.shell.removeListener(_check);
+    _hide?.cancel();
+    super.dispose();
+  }
+
+  void _check() {
+    var worktree = widget.shell.selected;
+    var load = worktree == null ? null : widget.shell.lastLoad(worktree);
+    if (load == null ||
+        load == _showing ||
+        load.outcome == ConfigLoadOutcome.built) {
+      return;
+    }
+    setState(() => _showing = load);
+    _hide?.cancel();
+    _hide = Timer(_linger, () {
+      if (mounted) setState(() => _showing = null);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var load = _showing;
+    return AnimatedOpacity(
+      opacity: load == null ? 0 : 1,
+      duration: const Duration(milliseconds: 200),
+      child: load == null
+          ? const SizedBox.shrink()
+          : Padding(
+              key: configLoadLineKey,
+              padding: const EdgeInsets.only(right: FwSpacing.sm),
+              child: Text(
+                '${load.summary} · ${load.duration.inMilliseconds}ms',
+                style: context.type.caption.copyWith(
+                  color: load.succeeded ? colors.mut : colors.red,
+                ),
+              ),
+            ),
     );
   }
 }

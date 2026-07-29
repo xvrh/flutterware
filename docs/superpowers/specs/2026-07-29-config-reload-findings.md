@@ -256,6 +256,42 @@ note asks for is built; `config.reload` has an obvious home in `Session.invoke`.
 Steps 1 and 2 are worth doing against the manual reload alone, before any
 callback exists.
 
+## Phase 1, as built (2026-07-30)
+
+Measured on this repo's own config (three packages, two plugins), by
+`app/integration_test/shell/config_exec_test.dart`:
+
+| | measured |
+|---|---|
+| warm manifest load, five samples | **45, 49, 48, 45, 45 ms** |
+| `ManifestDiff.between`, ×1000 | **22 ms** — 0.02ms each |
+
+So a reconciled reload lands well inside the ~150ms this doc predicted, and the
+comparison is not a term in the cost at all. Nothing here argues for revisiting
+the spawn-then-swap decision, and the case for hot-reloading the config process
+is weaker still than § "Hot reload or respawn?" already made it.
+
+Two things the build settled that the design did not:
+
+- **A failed load on a *first* open still needs an empty session.** Preserving
+  "a failure changes nothing" naively left a worktree with no session at all,
+  which `isLoading` reads as *still loading* — a permanent spinner instead of an
+  error. There is nothing to preserve on a first load, so it gets the empty
+  session it always got and the shell can explain itself. The empty manifest is
+  deliberately *not* retained as the comparison baseline, or fixing the config
+  would look like an ordinary reload that added every plugin.
+- **`ManifestDiff.orderChanged` has to be separate from `affected`.** Reordering
+  `fw.use(...)` calls must move the rail without rebuilding anything, so a diff
+  that is not empty can still have nothing to rebuild. Collapsing the two would
+  make a reorder either invisible or expensive.
+
+**Not verified interactively.** The plan's smoke steps became widget tests over
+the real `ShellView` — they cover the three surfaces, the no-op line, the sticky
+banner and the log. What they cannot cover is the thing the whole diff exists
+for: a live `CatalogSession` guest engine surviving an unrelated config edit.
+That needs the GUI driven by hand, and it is the one claim in this document with
+no evidence behind it yet.
+
 ## Still open
 
 - Whether the config compile joins the shared catalog daemon or spawns its own

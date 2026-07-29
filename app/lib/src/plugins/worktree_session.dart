@@ -5,6 +5,7 @@ import '../session/job.dart';
 import '../session/session.dart';
 import '../shell/workspace.dart';
 import '../shell/worktree.dart';
+import 'manifest_diff.dart';
 import 'native_plugin.dart';
 import 'plugin_core.dart';
 import 'registry.dart';
@@ -28,9 +29,14 @@ import 'registry.dart';
 /// Worktrees that are known but not open have no session at all; anything the
 /// switcher shows for them has to come from somewhere cheaper.
 class WorktreeSession extends ChangeNotifier {
-  WorktreeSession({required this.session, required List<NativePlugin> plugins})
-    : plugins = List.unmodifiable(plugins) {
-    for (var plugin in this.plugins) {
+  // An initializing formal would have to be named `_plugins`, and a named
+  // parameter cannot be private.
+  WorktreeSession({
+    required this.session,
+    required List<NativePlugin> plugins,
+    // ignore: prefer_initializing_formals
+  }) : _plugins = plugins {
+    for (var plugin in _plugins) {
       plugin.addListener(notifyListeners);
     }
   }
@@ -64,7 +70,53 @@ class WorktreeSession extends ChangeNotifier {
   Worktree get worktree => session.worktree;
 
   /// The resolved panels, in the order `tool/flutterware.dart` declared them.
-  final List<NativePlugin> plugins;
+  ///
+  /// Unmodifiable to callers; [reconcile] is the only writer.
+  List<NativePlugin> get plugins => List.unmodifiable(_plugins);
+
+  List<NativePlugin> _plugins;
+
+  /// Re-runs the plugin graph against a new manifest, keeping everything the
+  /// edit did not touch.
+  ///
+  /// **This is where a guest engine survives a reload.** `UiCatalogPlugin`
+  /// holds a `CatalogSession` per package — the compile loop and the texture
+  /// live in the *panel*, not the core — so keeping the core while rebuilding
+  /// the panel over it would still cost the device. A retained core keeps its
+  /// panel, by identity.
+  ///
+  /// Ordering is [session]'s to enforce: `onRelease` disposes a panel before
+  /// the core beneath it goes, which is the same rule [dispose] follows, stated
+  /// once instead of twice.
+  List<String> reconcile(
+    PluginManifest manifest,
+    ManifestDiff diff, {
+    required PluginRegistry registry,
+    PluginCoreRegistry? coreRegistry,
+  }) {
+    if (diff.isEmpty) return const [];
+
+    var panels = {for (var plugin in _plugins) plugin.core: plugin};
+
+    var rebuilt = session.reconcile(
+      manifest,
+      diff,
+      registry: coreRegistry,
+      onRelease: (core) {
+        panels.remove(core)
+          ?..removeListener(notifyListeners)
+          ..dispose();
+      },
+    );
+
+    _plugins = [
+      for (var core in session.cores)
+        panels[core] ?? (registry.create(core)..addListener(notifyListeners)),
+    ];
+
+    notifyListeners();
+    return rebuilt;
+  }
 
   bool get isDisposed => _disposed;
   var _disposed = false;
@@ -119,8 +171,9 @@ class WorktreeSession extends ChangeNotifier {
     if (_disposed) return;
     _disposed = true;
     // Panels first, then the behaviour under them: a panel disposing after its
-    // core would be drawing something already torn down.
-    for (var plugin in plugins) {
+    // core would be drawing something already torn down. [reconcile] honours
+    // the same order through its `onRelease`, so the two paths cannot drift.
+    for (var plugin in _plugins) {
       plugin.removeListener(notifyListeners);
       plugin.dispose();
     }

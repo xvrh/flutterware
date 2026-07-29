@@ -10,6 +10,7 @@ import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/plugins/native_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/plugins/registry.dart';
+import 'package:flutterware_app/src/shell/config_load.dart';
 import 'package:flutterware_app/src/shell/shell_controller.dart';
 import 'package:flutterware_app/src/shell/worktree_discovery.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
@@ -56,18 +57,23 @@ PluginRegistry _panels(Iterable<String> ids) =>
 /// Mutable so a test can change what git reports between calls.
 var _currentListing = _listing;
 
+/// The loader the most recent [_controller] was built with, so a test can
+/// change what the config prints between loads.
+late _StubLoader _loader;
+
 ShellController _controller({
   String manifest = _manifestJson,
   int manifestExit = 0,
   Map<String, PluginCoreFactory>? cores,
 }) {
   cores ??= {'a.one': _FakeCore.new, 'a.two': _FakeCore.new};
+  _loader = _StubLoader(manifest, manifestExit);
   return ShellController(
     appContext: AppContext(logger: LogClient.print()),
     flutterSdk: FlutterSdkPath('/tmp/flutter'),
     registry: _panels(cores.keys),
     coreRegistry: PluginCoreRegistry(cores),
-    manifestLoader: _StubLoader(manifest, manifestExit),
+    manifestLoader: _loader,
     discovery: WorktreeDiscovery(
       runProcess: (_, _, {workingDirectory}) async =>
           ProcessResult(0, 0, _currentListing, ''),
@@ -76,14 +82,19 @@ ShellController _controller({
 }
 
 /// Bypasses the config-file existence check so tests need no fixtures.
+///
+/// Mutable: a reload test has to change what the config "prints" between two
+/// loads, which is the whole thing being exercised.
 class _StubLoader implements ManifestLoader {
   _StubLoader(this.manifest, this.exitCode);
 
-  final String manifest;
-  final int exitCode;
+  String manifest;
+  int exitCode;
+  var loads = 0;
 
   @override
   Future<PluginManifest?> load(String worktreePath) async {
+    loads++;
     if (exitCode != 0) {
       throw ManifestLoadException('config failed', details: 'boom');
     }
@@ -175,22 +186,158 @@ void main() {
     expect(shell.selectedPluginId, 'a.two');
   });
 
-  test('reloading the config rebuilds the plugins in place', () async {
+  test('reloading an unchanged config disposes nothing at all', () async {
     var shell = _controller();
     await shell.start('/repo');
     shell.selectPlugin('a.two');
-    var before = shell.selectedSession!.plugins.first;
+    var main = shell.selected!;
+    var session = shell.selectedSession!;
+    var panel = session.plugins.first;
+    _disposedIds = [];
 
     expect(await shell.reloadConfig(), isTrue);
 
-    expect(shell.openWorktrees.map((w) => w.branch), ['main']);
-    expect(_disposedIds, ['/repo:a.one', '/repo:a.two']);
-    expect(identical(shell.selectedSession!.plugins.first, before), isFalse);
-    // Where you were survives the reload; the plugin is still declared.
+    expect(_loader.loads, 2, reason: 'the config really was re-run');
+    expect(_disposedIds, isEmpty);
+    expect(identical(shell.selectedSession, session), isTrue);
+    expect(identical(shell.selectedSession!.plugins.first, panel), isTrue);
     expect(shell.selectedPluginId, 'a.two');
+    // Reported, not inferred from silence: a no-op reload and a reload that
+    // never fired are otherwise indistinguishable.
+    expect(shell.lastLoad(main)!.outcome, ConfigLoadOutcome.unchanged);
+    expect(shell.lastLoad(main)!.summary, 'no changes');
   });
 
-  test('a blocking guard refuses the reload too', () async {
+  test('a changed declaration rebuilds only that plugin', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var main = shell.selected!;
+    var kept = shell.selectedSession!.plugins.first;
+    _disposedIds = [];
+
+    _loader.manifest =
+        '{"version":1,"plugins":[{"id":"a.one","label":"One"},'
+        '{"id":"a.two","label":"Two","config":{"dir":"unit"}}]}';
+    await shell.reloadConfig();
+
+    expect(_disposedIds, ['/repo:a.two']);
+    expect(identical(shell.selectedSession!.plugins.first, kept), isTrue);
+    var load = shell.lastLoad(main)!;
+    expect(load.outcome, ConfigLoadOutcome.reconciled);
+    expect(load.rebuilt, ['a.two']);
+    expect(load.reasons, {'a.two': 'dir changed'});
+    expect(load.summary, 'two rebuilt');
+  });
+
+  test('a removed plugin goes; the survivor keeps its panel', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var kept = shell.selectedSession!.plugins.first;
+    _disposedIds = [];
+
+    _loader.manifest = '{"version":1,"plugins":[{"id":"a.one","label":"One"}]}';
+    await shell.reloadConfig();
+
+    expect(_disposedIds, ['/repo:a.two']);
+    expect(shell.selectedSession!.plugins.map((p) => p.id), ['a.one']);
+    expect(identical(shell.selectedSession!.plugins.first, kept), isTrue);
+  });
+
+  test('an added plugin arrives without disposing anything', () async {
+    var shell = _controller(
+      manifest: '{"version":1,"plugins":[{"id":"a.one","label":"One"}]}',
+    );
+    await shell.start('/repo');
+    var kept = shell.selectedSession!.plugins.first;
+    _disposedIds = [];
+
+    _loader.manifest = _manifestJson;
+    await shell.reloadConfig();
+
+    expect(_disposedIds, isEmpty);
+    expect(shell.selectedSession!.plugins.map((p) => p.id), ['a.one', 'a.two']);
+    expect(identical(shell.selectedSession!.plugins.first, kept), isTrue);
+    expect(shell.lastLoad(shell.selected!)!.reasons, {
+      'a.two': 'newly declared',
+    });
+  });
+
+  test('a broken config tears nothing down', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var main = shell.selected!;
+    var session = shell.selectedSession!;
+    _disposedIds = [];
+
+    _loader.exitCode = 1;
+    expect(await shell.reloadConfig(), isTrue);
+
+    expect(_disposedIds, isEmpty, reason: 'the running plugins are untouched');
+    expect(identical(shell.selectedSession, session), isTrue);
+    expect(shell.errorFor(main), isNotNull);
+    expect(shell.lastLoad(main)!.outcome, ConfigLoadOutcome.failed);
+
+    // And the fix diffs against the last *good* config, so restoring the
+    // original file rebuilds nothing.
+    _loader.exitCode = 0;
+    await shell.reloadConfig();
+    expect(_disposedIds, isEmpty);
+    expect(shell.errorFor(main), isNull);
+    expect(shell.lastLoad(main)!.outcome, ConfigLoadOutcome.unchanged);
+  });
+
+  test('a changed packages list rebuilds everything', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var main = shell.selected!;
+    _disposedIds = [];
+
+    _loader.manifest =
+        '{"version":1,"packages":[{"path":"app"}],'
+        '"plugins":[{"id":"a.one","label":"One"},{"id":"a.two","label":"Two"}]}';
+    await shell.reloadConfig();
+
+    expect(_disposedIds, ['/repo:a.one', '/repo:a.two']);
+    var load = shell.lastLoad(main)!;
+    expect(load.outcome, ConfigLoadOutcome.rebuilt);
+    expect(load.reasons, {
+      'a.one': 'packages changed',
+      'a.two': 'packages changed',
+    });
+  });
+
+  test('a reorder moves the rail without rebuilding a thing', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var one = shell.selectedSession!.plugins[0];
+    var two = shell.selectedSession!.plugins[1];
+    _disposedIds = [];
+
+    _loader.manifest =
+        '{"version":1,"plugins":[{"id":"a.two","label":"Two"},'
+        '{"id":"a.one","label":"One"}]}';
+    await shell.reloadConfig();
+
+    expect(_disposedIds, isEmpty);
+    expect(shell.selectedSession!.plugins.map((p) => p.id), ['a.two', 'a.one']);
+    expect(identical(shell.selectedSession!.plugins[0], two), isTrue);
+    expect(identical(shell.selectedSession!.plugins[1], one), isTrue);
+    expect(shell.lastLoad(shell.selected!)!.summary, 'reordered');
+  });
+
+  test('a reload that drops the selected plugin falls back home', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    shell.selectPlugin('a.two');
+    expect(shell.selectedPluginId, 'a.two');
+
+    _loader.manifest = '{"version":1,"plugins":[{"id":"a.one","label":"One"}]}';
+    await shell.reloadConfig();
+
+    expect(shell.selectedPluginId, isNull, reason: 'not a gone plugin');
+  });
+
+  test('a blocking guard refuses the reload, and logs nothing', () async {
     var shell = _controller(
       cores: {
         'a.one': (host) =>
@@ -199,9 +346,35 @@ void main() {
       },
     );
     await shell.start('/repo');
+    var main = shell.selected!;
+    var loadsBefore = _loader.loads;
 
     expect(await shell.reloadConfig(), isFalse);
     expect(_disposedIds, isEmpty);
+    expect(_loader.loads, loadsBefore, reason: 'the config never ran');
+    expect(shell.lastLoad(main)!.outcome, ConfigLoadOutcome.built);
+  });
+
+  test('opening logs a build rather than a rebuild', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var load = shell.lastLoad(shell.selected!)!;
+
+    expect(load.outcome, ConfigLoadOutcome.built);
+    expect(load.summary, 'opened, 2 plugins');
+    expect(load.reasons, isEmpty, reason: 'nothing was lost to lose');
+  });
+
+  test('closing forgets the reload history', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var explorer = shell.closedWorktrees.first;
+    await shell.open(explorer);
+    expect(shell.lastLoad(explorer), isNotNull);
+
+    shell.close(explorer);
+    expect(shell.lastLoad(explorer), isNull);
+    expect(shell.loadLog(explorer), isEmpty);
   });
 
   test('opening a second worktree gives it its own plugin instances', () async {
@@ -265,6 +438,30 @@ void main() {
     expect(shell.errorFor(shell.worktrees[0])!.message, contains('boom'));
     // Open but empty — the shell can explain rather than showing nothing.
     expect(shell.sessionFor(shell.worktrees[0])!.plugins, isEmpty);
+    expect(
+      shell.isLoading(shell.worktrees[0]),
+      isFalse,
+      reason: 'not spinning',
+    );
+  });
+
+  test('fixing a config that never loaded builds its plugins', () async {
+    var shell = _controller(manifestExit: 1);
+    await shell.start('/repo');
+    var main = shell.worktrees[0];
+    expect(shell.sessionFor(main)!.plugins, isEmpty);
+
+    _loader.exitCode = 0;
+    await shell.reloadConfig();
+
+    // The empty session it was given to explain itself is not a config it can
+    // be diffed against, so this is a build and not a two-plugin "reload".
+    expect(shell.sessionFor(main)!.plugins.map((p) => p.id), [
+      'a.one',
+      'a.two',
+    ]);
+    expect(shell.errorFor(main), isNull);
+    expect(shell.lastLoad(main)!.outcome, ConfigLoadOutcome.built);
   });
 
   test('rescanning closes worktrees git no longer reports', () async {
