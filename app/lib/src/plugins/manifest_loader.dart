@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
@@ -115,7 +116,17 @@ class ManifestLoader {
   ///
   /// Keyed on the config file, the package resolution, and which `dart` is
   /// doing the compiling. The first two are what change the output; the third
-  /// is there because an fvm switch changes the SDK without touching either.
+  /// is there because an fvm switch changes the SDK without touching either —
+  /// `package_config.json` names a `flutterRoot`, but only as of whenever pub
+  /// last ran, so switching without resolving would otherwise go unnoticed.
+  ///
+  /// **Keyed on content, not mtime.** `pub get` rewrites
+  /// `package_config.json` whether or not resolution moved, and the
+  /// Dependencies plugin runs `pub get` itself — so a stat-based key made
+  /// *using* flutterware invalidate flutterware's own cache, and every
+  /// following command paid the ~450ms compile again. Content survives that,
+  /// and survives a checkout or a stash that restores a file byte for byte.
+  /// Hashing ~50KB to protect ~450ms is not a trade that needs measuring.
   Future<String?> _kernel(String worktreePath, File configFile) async {
     var packageConfig = File(
       p.join(worktreePath, '.dart_tool', 'package_config.json'),
@@ -123,9 +134,8 @@ class ManifestLoader {
     if (!packageConfig.existsSync()) return null;
 
     var stamp = [
-      configFile.statSync().modified.millisecondsSinceEpoch,
-      configFile.statSync().size,
-      packageConfig.statSync().modified.millisecondsSinceEpoch,
+      sha1.convert(configFile.readAsBytesSync()),
+      sha1.convert(packageConfig.readAsBytesSync()),
       dartExecutable,
     ].join('|');
 
