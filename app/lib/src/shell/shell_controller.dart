@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
+import 'package:watcher/watcher.dart';
 
 import '../context.dart';
 import '../plugins/manifest_diff.dart';
@@ -12,6 +13,7 @@ import '../plugins/registry.dart';
 import '../plugins/worktree_session.dart';
 import '../utils/flutter_sdk.dart';
 import 'config_load.dart';
+import 'config_watcher.dart';
 import 'workspace.dart';
 import 'worktree.dart';
 import 'worktree_discovery.dart';
@@ -41,11 +43,21 @@ class ShellController extends ChangeNotifier {
     this.coreRegistry,
     WorktreeDiscovery? discovery,
     DateTime Function()? now,
+    Stream<WatchEvent> Function(String directory)? watchEvents,
+    Duration? watchDebounce,
   }) : _discovery = discovery ?? WorktreeDiscovery(),
-       _now = now ?? DateTime.now;
+       _now = now ?? DateTime.now,
+       // ignore: prefer_initializing_formals
+       _watchEvents = watchEvents,
+       // ignore: prefer_initializing_formals
+       _watchDebounce = watchDebounce;
 
   /// Injectable so the reload log is deterministic under test.
   final DateTime Function() _now;
+
+  /// Injectable so a test can drive a save without a filesystem.
+  final Stream<WatchEvent> Function(String directory)? _watchEvents;
+  final Duration? _watchDebounce;
 
   final AppContext appContext;
   final FlutterSdkPath flutterSdk;
@@ -91,6 +103,87 @@ class ShellController extends ChangeNotifier {
 
   /// Reload history per worktree, newest first, capped.
   final _log = <String, List<ConfigLoad>>{};
+
+  final _watchers = <String, ConfigWatcher>{};
+
+  /// Paths whose config changed while a plugin was hard-blocking teardown.
+  ///
+  /// **A watcher may not silently do nothing.** Refusing is the right answer for
+  /// a button — you pressed it, you get told — but a save that quietly failed to
+  /// take effect is indistinguishable from a watcher that is not working, which
+  /// is the whole failure mode this feature has to avoid. So the change is held
+  /// and applied the moment the guard clears.
+  final _pending = <String>{};
+
+  /// Whether saving `tool/flutterware.dart` reloads it.
+  ///
+  /// On by default — realtime reload is the point. The switch exists because a
+  /// filesystem that does not deliver native watch events would otherwise leave
+  /// a watcher that looks armed and is not, and turning it off says so.
+  bool get watchEnabled => _watchEnabled;
+  var _watchEnabled = true;
+
+  set watchEnabled(bool value) {
+    if (_watchEnabled == value) return;
+    _watchEnabled = value;
+    if (value) {
+      for (var path in _openPaths) {
+        if (_worktreeAt(path) case var worktree?) _startWatching(worktree);
+      }
+    } else {
+      for (var watcher in _watchers.values) {
+        unawaited(watcher.dispose());
+      }
+      _watchers.clear();
+      _pending.clear();
+    }
+    notifyListeners();
+  }
+
+  /// True when [worktree]'s config changed but a guard is holding the reload.
+  bool isReloadPending(Worktree worktree) => _pending.contains(worktree.path);
+
+  /// The directory whose changes reach [worktree], or null when nothing is
+  /// watched — the honest answer to "why did it not notice my edit".
+  String? watchingFor(Worktree worktree) => _watchers[worktree.path]?.watching;
+
+  void _startWatching(Worktree worktree) {
+    if (!_watchEnabled || _watchers.containsKey(worktree.path)) return;
+    var watcher = ConfigWatcher(
+      worktreePath: worktree.path,
+      onChanged: () => _onConfigChanged(worktree),
+      watch: _watchEvents,
+      debounce: _watchDebounce ?? const Duration(milliseconds: 250),
+    );
+    _watchers[worktree.path] = watcher;
+    unawaited(watcher.start());
+  }
+
+  void _onConfigChanged(Worktree worktree) {
+    var path = worktree.path;
+    // Closed between the save and the debounce settling.
+    if (!_openPaths.contains(path)) return;
+
+    if (_sessions[path]?.isBlocked ?? false) {
+      _pending.add(path);
+      notifyListeners();
+      return;
+    }
+    _pending.remove(path);
+    unawaited(_load(worktree));
+  }
+
+  /// A session notification, which is also the only moment a guard is known to
+  /// have cleared.
+  void _onSessionChanged(String path) {
+    notifyListeners();
+    if (!_pending.contains(path)) return;
+    if (_sessions[path]?.isBlocked ?? true) return;
+    if (_worktreeAt(path) case var worktree?) {
+      _pending.remove(path);
+      unawaited(_load(worktree));
+    }
+  }
 
   static const _logLimit = 20;
 
@@ -311,6 +404,7 @@ class ShellController extends ChangeNotifier {
   /// this is separate from either.
   Future<void> _openTab(Worktree worktree) {
     _openPaths.add(worktree.path);
+    _startWatching(worktree);
     // The tab is on screen before the manifest subprocess starts; everything
     // below it draws a loader until the session lands.
     notifyListeners();
@@ -502,7 +596,7 @@ class ShellController extends ChangeNotifier {
         registry: registry,
         workspace: workspace,
         coreRegistry: coreRegistry,
-      )..addListener(notifyListeners);
+      )..addListener(() => _onSessionChanged(path));
       _manifests[path] = manifest;
     } catch (e) {
       _errors.putIfAbsent(path, () => WorktreeError(worktree, '$e'));
@@ -535,6 +629,10 @@ class ShellController extends ChangeNotifier {
     // whose plugins are long gone.
     _manifests.remove(path);
     _log.remove(path);
+    _pending.remove(path);
+    // A watcher outliving its tab is exactly the leak the open/close lifecycle
+    // exists to prevent.
+    unawaited(_watchers.remove(path)?.dispose());
     if (wasSelected) {
       var fallback = _openPaths.lastOrNull;
       _address.value =
@@ -552,9 +650,7 @@ class ShellController extends ChangeNotifier {
   /// Drops everything a load produced, keeping the tab and its selection. What
   /// a reload starts from, and what a close finishes.
   void _releaseAt(String path) {
-    _sessions.remove(path)
-      ?..removeListener(notifyListeners)
-      ..dispose();
+    _sessions.remove(path)?.dispose();
     _workspaces.remove(path)?.dispose();
     _errors.remove(path);
   }

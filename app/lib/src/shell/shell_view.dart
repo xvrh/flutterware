@@ -382,10 +382,16 @@ class _ConfigButton extends StatelessWidget {
     var colors = context.colors;
     var worktree = shell.selected;
     var failing = worktree != null && shell.errorFor(worktree) != null;
+    // Amber, not red: the file is fine, the reload is merely waiting. Silence
+    // here would look exactly like a watcher that is not working.
+    var pending = worktree != null && shell.isReloadPending(worktree);
+    var dot = failing ? colors.red : (pending ? colors.amber : null);
 
     return Tooltip(
       message: failing
           ? 'This worktree’s config did not load'
+          : pending
+          ? 'The config changed; a plugin is busy'
           : 'Config — what tool/flutterware.dart resolved to',
       child: IconButton(
         key: configButtonKey,
@@ -398,17 +404,14 @@ class _ConfigButton extends StatelessWidget {
               size: 16,
               color: shell.isConfigScreen ? colors.accent : colors.mut,
             ),
-            if (failing)
+            if (dot != null)
               Positioned(
                 right: -1,
                 top: -1,
                 child: Container(
                   width: 6,
                   height: 6,
-                  decoration: BoxDecoration(
-                    color: colors.red,
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
                 ),
               ),
           ],

@@ -699,6 +699,23 @@ void main() {
       expect(inConfig('no changes'), findsOneWidget);
     });
 
+    testWidgets('the screen names the directory it watches', (tester) async {
+      var shell = await _pumpShell(tester);
+      await openConfig(tester);
+
+      // This harness's worktree path is not a real directory, so there is
+      // genuinely nothing to watch — and saying so is the point. "It did not
+      // notice my edit" is the standard complaint about file watching, and the
+      // standard cause is a watched set that does not contain what you edited.
+      expect(inConfig('Nothing to watch'), findsOneWidget);
+      expect(find.byType(Switch), findsOneWidget);
+
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(shell.watchEnabled, isFalse);
+      expect(inConfig('Reload on save is off'), findsOneWidget);
+    });
+
     testWidgets('the screen says what the config resolved to', (tester) async {
       await _pumpShell(tester);
       await openConfig(tester);

@@ -60,6 +60,9 @@ class ConfigScreen extends StatelessWidget {
           ],
         ),
 
+        const Gap(FwSpacing.lg),
+        _Watch(shell, worktree),
+
         if (error != null) ...[
           const Gap(FwSpacing.xxl),
           _Failure(error.message),
@@ -121,6 +124,67 @@ class _ReloadAction extends StatelessWidget {
         icon: const Icon(Icons.refresh, size: 14),
         label: const Text('Reload'),
       ),
+    );
+  }
+}
+
+/// Whether saving the file reloads it, and what is actually being watched.
+///
+/// **Naming the directory is the point**, not decoration. "It did not notice my
+/// edit" is the standard complaint about file watching, and the standard cause is
+/// that the thing you edited was not in the watched set. Saying which directory
+/// is watched turns that from a mystery into a fact — and today the answer is
+/// only the config's own directory, so an edit to a file it imports really does
+/// need the button until the import closure arrives with the resident compiler.
+class _Watch extends StatelessWidget {
+  const _Watch(this.shell, this.worktree);
+
+  final ShellController shell;
+  final Worktree worktree;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var watching = shell.watchingFor(worktree);
+    var pending = shell.isReloadPending(worktree);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Switch(
+              value: shell.watchEnabled,
+              onChanged: (value) => shell.watchEnabled = value,
+            ),
+            const Gap(FwSpacing.sm),
+            Expanded(
+              child: Text(switch ((shell.watchEnabled, watching)) {
+                (false, _) => 'Reload on save is off',
+                (true, null) =>
+                  'Nothing to watch — this worktree has no $configFilePath',
+                (true, var dir) => 'Reloads on save · watching $dir',
+              }, style: context.type.caption.copyWith(color: colors.mut)),
+            ),
+          ],
+        ),
+        if (pending) ...[
+          const Gap(FwSpacing.sm),
+          Row(
+            children: [
+              Icon(Icons.schedule, size: 12, color: colors.amber),
+              const Gap(FwSpacing.sm),
+              Expanded(
+                child: Text(
+                  'The file changed, but a plugin is busy. It will reload as '
+                  'soon as the guard clears.',
+                  style: context.type.caption.copyWith(color: colors.amber),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }
