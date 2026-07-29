@@ -468,17 +468,35 @@ notification when any worktree's Claude flips to waiting / tests go red).
 
 ## config.dart lifecycle
 
-Each worktree's `config.dart` is compiled and run by the daemon as the
-per-worktree config process; edits reflect in the GUI within ~0.5–0.8s.
+> **Amended 2026-07-29** — see `2026-07-29-config-reload-findings.md`. The
+> decisions below stand; four of the mechanisms do not, and are corrected
+> inline. What this section never covered is what a swap does to **native**
+> plugin state in the GUI, which the findings doc answers with a projection
+> diff.
 
-- **Compile** — a *non-resident* `frontend_server` (via
-  `package:frontend_server_client`), spawned per change and seeded with
+Each worktree's `config.dart` is compiled and run by the daemon as the
+per-worktree config process. ~~edits reflect in the GUI within ~0.5–0.8s~~ —
+conservative by roughly 5×: a kernel-cached config run measures 70–80ms against
+a 70ms bare-VM floor (2026-07-28), so a swap should land near 100–150ms plus
+handshake.
+
+- **Compile** — a `frontend_server` spawned per change and seeded with
   `--initialize-from-dill` from a cached `.dill`, so it recompiles only changed
-  libraries then exits. No resident compiler is held in memory (it would cost
-  ~50–150 MB per open worktree).
+  libraries then exits. ~~via `package:frontend_server_client`~~ — abandoned
+  2026-07-27: its `Platform.resolvedExecutable` spawn relaunches the app
+  recursively inside Flutter, and its hard-coded argument list made
+  `--initialize-from-dill` unreachable. Use `FrontendServer`
+  (`app/lib/src/embedder/frontend_server.dart`), which speaks the same line
+  protocol and takes its executable as a parameter. Two further corrections:
+  the flag is worth ~25ms, not the seconds once credited; and *non-resident* is
+  no longer the obvious choice, since the compiler daemon is now **shared**
+  across clients (`DaemonAddress`, 19ms for a second client) rather than one
+  per worktree.
 - **Run** — the config process runs JIT against the produced `.dill`. On change,
   **spawn-then-swap**: the new process warms its sources before the old one is
-  killed, so panels and policy queries never go dark.
+  killed, so panels and policy queries never go dark. The old process **drains**
+  its in-flight jobs before it is killed, on a deadline — "kill+replace" as
+  originally written drops running work silently.
 - **No hot reload.** `reloadSources()` was considered and rejected: with the
   compile path above the restart loop is already sub-second, and hot reload
   would re-impose a resident compiler plus reassemble/diff complexity and
@@ -491,7 +509,10 @@ per-worktree config process; edits reflect in the GUI within ~0.5–0.8s.
   `pubspec.lock` route to a slower `pub get` + cold-restart path. A compile
   error keeps the last-good config serving and surfaces file+line in the GUI. A
   manual "Reload config" affordance + a `config.reload` RPC covers filesystems
-  that do not deliver native watch events.
+  that do not deliver native watch events. **The closure is refreshed only on
+  *successful* recompiles**, so a fix living in a file that entered the closure
+  in the broken version produces no event; watch the config file and its own
+  directory as a floor underneath it.
 
 ## Transport
 
@@ -531,9 +552,11 @@ The explorer ships useful early and gains capability as the lower layers arrive.
   data point. Sources compose (combine / map / `when:`).
 - Demand-driven execution; two subscription levels (status vs panel);
   `background: true` opt-out.
-- config.dart lifecycle: non-resident `frontend_server` + `--initialize-from-dill`,
-  JIT spawn-then-swap on change, **no hot reload**; watch set = the
-  compiler-reported import closure of `config.dart`.
+- config.dart lifecycle: `frontend_server` + `--initialize-from-dill`, JIT
+  spawn-then-swap on change, **no hot reload**; watch set = the
+  compiler-reported import closure of `config.dart`. (Mechanisms amended
+  2026-07-29 — the client package, the flag's value, and *non-resident* are all
+  superseded; the decisions are not.)
 - Declarative, interactive panel kit for all headless-config-process plugins.
 - Two plugin tiers: **declarative** (headless config process) and **native**
   (compiled into the GUI). A native plugin is a pure-Dart `Plugin` subclass + a
