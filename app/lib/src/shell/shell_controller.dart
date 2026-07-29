@@ -484,6 +484,41 @@ class ShellController extends ChangeNotifier {
     go(Address(worktree: name, plugin: pluginId, segments: [childId]));
   }
 
+  /// **The same place, in another checkout.**
+  ///
+  /// Everything except the worktree rides along — the plugin, the package, the
+  /// entry, the device, the theme, the knobs — because all of it is in the one
+  /// value being copied. That is what makes this a *comparison* rather than a
+  /// navigation: the same demo, framed the same way, on another branch.
+  ///
+  /// Distinct from [select], which is the other thing you might mean. Switching
+  /// tabs takes you to where that worktree was left; this brings where you are
+  /// to that worktree. Both are wanted and they are not the same move.
+  ///
+  /// A worktree that does not have what the address names is *not* handled
+  /// here. The panel reports it — the catalog already refuses to quietly repair
+  /// an address naming an entry it has never heard of — and that complaint is
+  /// the answer to "was this only ever on my branch?".
+  GoResult goToWorktree(Worktree worktree) =>
+      go(address.copyWith(worktree: worktree.name));
+
+  /// Flicks to the next open worktree, keeping the address. Negative goes back.
+  ///
+  /// **Open ones only**, which is the difference between this and picking from
+  /// the switcher. A keystroke that spawned a config subprocess would be a
+  /// keystroke you learn not to press; the ones already open are free, and with
+  /// two of them this is the A/B flick the whole feature is for. Opening a
+  /// third is a deliberate act, and it joins the rotation once it is done.
+  GoResult cycleWorktree(int delta) {
+    var open = openWorktrees;
+    if (open.length < 2) return GoResult.unchanged;
+    var current = selected;
+    var index = current == null ? -1 : open.indexOf(current);
+    // Dart's `%` is never negative for a positive divisor, so stepping back
+    // from the first wraps to the last without a special case.
+    return goToWorktree(open[(index + delta) % open.length]);
+  }
+
   @override
   void dispose() {
     for (var path in _openPaths.toList()) {

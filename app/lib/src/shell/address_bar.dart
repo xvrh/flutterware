@@ -143,6 +143,7 @@ class _AddressBarState extends State<AddressBar> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
               child: _Readout(
+                shell: widget.shell,
                 address: address,
                 lit: _hovered || controller.isOpen,
               ),
@@ -162,8 +163,13 @@ class _AddressBarState extends State<AddressBar> {
 /// window is narrow. A single `Text` with an ellipsis would drop the tail,
 /// which is the one part worth keeping.
 class _Readout extends StatelessWidget {
-  const _Readout({required this.address, required this.lit});
+  const _Readout({
+    required this.shell,
+    required this.address,
+    required this.lit,
+  });
 
+  final ShellController shell;
   final Address address;
   final bool lit;
 
@@ -189,7 +195,14 @@ class _Readout extends StatelessWidget {
       part('fw://${address.project ?? ''}/', lit ? colors.mut2 : colors.mut3),
     ];
     if (address.worktree case var worktree?) {
-      head.add(part(worktree, lit ? colors.ink2 : colors.mut));
+      head.add(
+        _WorktreeSwitcher(
+          shell: shell,
+          current: worktree,
+          style: mono,
+          lit: lit,
+        ),
+      );
     }
     if (address.plugin case var plugin?) {
       head
@@ -228,6 +241,100 @@ class _Readout extends StatelessWidget {
         const Spacer(),
         if (lit) part('click to edit', colors.mut3),
       ],
+    );
+  }
+}
+
+/// The worktree segment, which is also the control that changes it.
+///
+/// **On the segment rather than beside it.** A picker somewhere else would be a
+/// second way to say the same thing; here the part of the address you are about
+/// to rewrite is the thing you click, so what it does needs no label. It is the
+/// only part of the readout that opens something other than the editor — the
+/// rest of an address is typed, but *which checkout* is a choice between a
+/// known handful.
+///
+/// Labelled by [Worktree.displayName] and not by what goes in the address: a
+/// branch is what you recognise, and the identity underneath is git's own name
+/// for the checkout. Both are shown, because the address bar is where you learn
+/// what the address is made of.
+class _WorktreeSwitcher extends StatelessWidget {
+  const _WorktreeSwitcher({
+    required this.shell,
+    required this.current,
+    required this.style,
+    required this.lit,
+  });
+
+  final ShellController shell;
+
+  /// The worktree the address names, which may not be one that exists.
+  final String current;
+
+  final TextStyle style;
+  final bool lit;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var others = shell.worktrees;
+
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, -4),
+      style: MenuStyle(
+        alignment: Alignment.topLeft,
+        backgroundColor: WidgetStatePropertyAll(colors.bg),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(context.radii.radius),
+            side: BorderSide(color: colors.line),
+          ),
+        ),
+      ),
+      menuChildren: [
+        for (var worktree in others)
+          MenuItemButton(
+            leadingIcon: Icon(
+              worktree.name == current ? Icons.check : null,
+              size: 14,
+              color: colors.accent,
+            ),
+            onPressed: () => shell.goToWorktree(worktree),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(worktree.displayName, style: context.type.bodySmall),
+                const Gap(FwSpacing.sm),
+                Text(worktree.name, style: style.copyWith(color: colors.mut3)),
+                // Choosing it opens it, which costs a config subprocess and a
+                // cold compile. Cheap enough to be worth doing and dear enough
+                // to be worth knowing about first.
+                if (!shell.isOpen(worktree)) ...[
+                  const Gap(FwSpacing.sm),
+                  Text(
+                    'opens',
+                    style: context.type.caption.copyWith(color: colors.mut3),
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
+      builder: (context, controller, child) => MouseRegion(
+        cursor: SystemMouseCursors.click,
+        // Its own gesture detector, so a tap here opens this rather than the
+        // editor the whole bar sits under. The inner one wins the arena.
+        child: GestureDetector(
+          onTap: () =>
+              controller.isOpen ? controller.close() : controller.open(),
+          behavior: HitTestBehavior.opaque,
+          child: Text(
+            current,
+            style: style.copyWith(color: lit ? colors.ink2 : colors.mut),
+            softWrap: false,
+          ),
+        ),
+      ),
     );
   }
 }

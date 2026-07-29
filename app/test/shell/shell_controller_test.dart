@@ -437,6 +437,64 @@ void main() {
     });
   });
 
+  group('the same place in another checkout', () {
+    test('everything but the worktree rides along', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      shell.go(
+        Address.parse(
+          'fw:///~/a.two/packages%2Fapp/demo.dart%23x?axis.theme=dark',
+        ),
+      );
+
+      shell.goToWorktree(shell.closedWorktrees.first);
+
+      // The demo, the package and the theme are what make it a comparison
+      // rather than a navigation.
+      expect(
+        shell.address.toString(),
+        'fw:///repo-explorer/a.two/packages%2Fapp/demo.dart%23x?axis.theme=dark',
+      );
+    });
+
+    test('it opens the checkout it is comparing against', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      var explorer = shell.closedWorktrees.first;
+
+      expect(shell.goToWorktree(explorer), GoResult.ok);
+      expect(shell.isOpen(explorer), isTrue);
+    });
+
+    test('cycling flicks between the open ones and wraps', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      await shell.open(shell.closedWorktrees.first);
+      shell.select(shell.worktrees.first);
+      shell.selectPlugin('a.two');
+
+      shell.cycleWorktree(1);
+      expect(shell.address.worktree, 'repo-explorer');
+      expect(shell.selectedPluginId, 'a.two', reason: 'the place is kept');
+
+      shell.cycleWorktree(1);
+      expect(shell.address.worktree, '~', reason: 'two open, so it is a flick');
+
+      shell.cycleWorktree(-1);
+      expect(shell.address.worktree, 'repo-explorer', reason: 'and back');
+    });
+
+    test('cycling never opens anything', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      // A keystroke that spawned a config subprocess is a keystroke you learn
+      // not to press. With one worktree open there is nowhere to flick to.
+      expect(shell.cycleWorktree(1), GoResult.unchanged);
+      expect(shell.openWorktrees, hasLength(1));
+    });
+  });
+
   group('a branch is input, never identity', () {
     test('an address naming a branch lands', () async {
       var shell = _controller();

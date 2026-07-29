@@ -78,6 +78,12 @@ Future<void> _expand(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Taps the worktree segment, which is the switcher.
+Future<void> _openSwitcher(WidgetTester tester, String worktree) async {
+  await tester.tap(find.text(worktree));
+  await tester.pumpAndSettle();
+}
+
 Future<void> _type(WidgetTester tester, String address) async {
   await tester.enterText(find.byType(TextField), address);
   await tester.testTextInput.receiveAction(TextInputAction.done);
@@ -194,6 +200,57 @@ void main() {
       await _type(tester, 'fw:///nowhere/a.deps');
 
       expect(find.textContaining('No worktree named'), findsOneWidget);
+    });
+  });
+
+  group('the worktree segment switches checkout', () {
+    testWidgets('it offers the others by the name you would recognise', (
+      tester,
+    ) async {
+      await _pumpShell(tester);
+
+      await _openSwitcher(tester, '~');
+
+      // Branches, because that is what a human knows a checkout by — with the
+      // identity that actually goes in the address beside it. Scoped to the
+      // menu: a branch name is also on a tab and in the rail above.
+      expect(find.widgetWithText(MenuItemButton, 'main'), findsOneWidget);
+      expect(
+        find.widgetWithText(MenuItemButton, 'feature/explorer'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(MenuItemButton, 'repo-explorer'),
+        findsOneWidget,
+      );
+      // Picking it will open it, and says so first.
+      expect(find.widgetWithText(MenuItemButton, 'opens'), findsOneWidget);
+    });
+
+    testWidgets('picking one keeps the place and the axes', (tester) async {
+      var shell = await _pumpShell(tester);
+      shell.go(Address.parse('fw:///~/a.deps/packages%2Fapp?axis.theme=dark'));
+      await tester.pumpAndSettle();
+
+      await _openSwitcher(tester, '~');
+      await tester.tap(find.widgetWithText(MenuItemButton, 'feature/explorer'));
+      await tester.pumpAndSettle();
+
+      // The whole point: same package, same theme, other checkout.
+      expect(
+        shell.address.toString(),
+        'fw:///repo-explorer/a.deps/packages%2Fapp?axis.theme=dark',
+      );
+    });
+
+    testWidgets('it opens instead of the editor', (tester) async {
+      await _pumpShell(tester);
+
+      await _openSwitcher(tester, '~');
+
+      // The bar underneath is one big tap target for the editor; the segment
+      // has to win the arena or the switcher can never be reached.
+      expect(find.byType(TextField), findsNothing);
     });
   });
 }

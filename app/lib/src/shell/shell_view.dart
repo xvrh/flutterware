@@ -78,6 +78,33 @@ class ShellView extends StatelessWidget {
               unawaited(showShellSearch(context, shell)),
           const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
               unawaited(showShellSearch(context, shell)),
+          // The same screen in the next checkout, and back. The bracket pair is
+          // what every editor uses for cycling, and with two worktrees open it
+          // is the A/B flick that makes a visual comparison possible at all.
+          const SingleActivator(
+            LogicalKeyboardKey.bracketRight,
+            meta: true,
+            shift: true,
+          ): () =>
+              shell.cycleWorktree(1),
+          const SingleActivator(
+            LogicalKeyboardKey.bracketLeft,
+            meta: true,
+            shift: true,
+          ): () =>
+              shell.cycleWorktree(-1),
+          const SingleActivator(
+            LogicalKeyboardKey.bracketRight,
+            control: true,
+            shift: true,
+          ): () =>
+              shell.cycleWorktree(1),
+          const SingleActivator(
+            LogicalKeyboardKey.bracketLeft,
+            control: true,
+            shift: true,
+          ): () =>
+              shell.cycleWorktree(-1),
         },
         // Key events dispatch from whatever holds primary focus and bubble to
         // its *ancestors*. With nothing focused that is the root scope, which
