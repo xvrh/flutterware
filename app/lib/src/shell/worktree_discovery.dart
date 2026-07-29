@@ -16,8 +16,11 @@ class WorktreeDiscovery {
     })?
     runProcess,
     String? Function(String worktreePath)? readGitPointer,
-  }) : _run = runProcess ?? Process.run,
-       _readGitPointer = readGitPointer ?? _readPointerFile;
+  }) : // The field is private and the parameter is not, so an initializing
+       // formal would name the parameter `_readGitPointer` at every call site.
+       // ignore: prefer_initializing_formals
+       _readGitPointer = readGitPointer,
+       _run = runProcess ?? Process.run;
 
   /// Reads a linked worktree's `.git` file, which is where git records the
   /// worktree's real name. A file read rather than a `git rev-parse` per
@@ -30,7 +33,18 @@ class WorktreeDiscovery {
   /// forever — every test touching the shell would have to remember to stub
   /// this. One small read, after a subprocess spawn we already waited on, is
   /// not worth that.
-  final String? Function(String worktreePath) _readGitPointer;
+  ///
+  /// **Null means the real file**, resolved at the call rather than defaulted in
+  /// the constructor. A hot reload leaves new fields null on objects that
+  /// already exist, and this one is built once when the shell is — so defaulting
+  /// at construction meant reloading a change to this file threw
+  /// `type 'Null' is not a subtype of type '(String) => String?'` out of the
+  /// next rescan. Flutterware is developed by hot-reloading itself; surviving
+  /// one is worth resolving a default two lines later than usual.
+  final String? Function(String worktreePath)? _readGitPointer;
+
+  String? _pointerFor(String path) =>
+      (_readGitPointer ?? _readPointerFile)(path);
 
   final Future<ProcessResult> Function(
     String executable,
@@ -63,7 +77,7 @@ class WorktreeDiscovery {
   /// file — its `.git` is a directory — and is named [Worktree.mainName].
   Worktree _named(Worktree worktree) {
     if (worktree.isMain) return worktree;
-    var gitName = gitNameFrom(_readGitPointer(worktree.path));
+    var gitName = gitNameFrom(_pointerFor(worktree.path));
     return gitName == null
         ? worktree
         : Worktree(

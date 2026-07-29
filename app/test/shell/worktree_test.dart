@@ -139,6 +139,26 @@ branch refs/heads/x
       ]);
     });
 
+    test('no pointer reader given still reads the real file', () async {
+      // Null means "the real one", resolved at the call. If that default moved
+      // back into the constructor this would throw on a hot reload, because a
+      // reload leaves new fields null on the instance the shell already holds.
+      var discovery = WorktreeDiscovery(
+        runProcess: (_, _, {workingDirectory}) async => ProcessResult(
+          0,
+          0,
+          'worktree /repo\nbranch refs/heads/main\n\n'
+              'worktree /no/such/worktree\nbranch refs/heads/x\n',
+          '',
+        ),
+      );
+
+      // The path does not exist, so the real reader throws and is caught and
+      // the name falls back — the point being that it got there at all.
+      var worktrees = await discovery.discover('.');
+      expect(worktrees.map((w) => w.name), ['~', 'worktree']);
+    });
+
     test(
       'a worktree whose pointer cannot be read keeps its directory',
       () async {
