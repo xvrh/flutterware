@@ -27,6 +27,9 @@ cd app && dart run bin/fw.dart <command>
 | `app [--release] [--json]` | open the flutterware GUI |
 | `help [<command>]` | this, or one command in detail |
 
+`-v` on any command shows the output of whatever it has to build, instead of
+capturing it to a log.
+
 Run `fw help <command>` for detail, or `fw actions` for what this project can do.
 
 Exit codes:

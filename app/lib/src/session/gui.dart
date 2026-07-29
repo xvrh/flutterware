@@ -27,6 +27,7 @@ class GuiLauncher {
     required this.err,
     this.editableSources = false,
     this.json = false,
+    this.verbose = false,
     bool? interactive,
   }) : interactive = interactive ?? outputIsInteractive;
 
@@ -54,6 +55,9 @@ class GuiLauncher {
 
   /// Whether the terminal is being watched. See [outputIsInteractive].
   final bool interactive;
+
+  /// `-v`: give the build the terminal instead of capturing it to a log.
+  final bool verbose;
 
   String get _flutter =>
       p.join(flutterSdk, 'bin', 'flutter${Platform.isWindows ? '.bat' : ''}');
@@ -137,7 +141,9 @@ class GuiLauncher {
         await Step(
           'Building the flutterware GUI',
           out: out,
-          interactive: interactive,
+          // Under `-v` the build owns the terminal, so the step announces
+          // itself on one line and stops drawing.
+          interactive: interactive && !verbose,
           budget: const Duration(seconds: 25),
           note: 'first run only',
         ).run(
@@ -146,6 +152,7 @@ class GuiLauncher {
             ['build', Platform.operatingSystem, '--release'],
             workingDirectory: appToolPath,
             log: log,
+            verbose: verbose,
           ),
           ok: (result) => result.ok,
         );
@@ -157,7 +164,7 @@ class GuiLauncher {
         const JsonEncoder.withIndent('  ').convert({
           'error': 'gui_build_failed',
           'exitCode': result.exitCode,
-          'log': log.path,
+          'log': result.file?.path,
           'tail': result.tail(),
         }),
       );

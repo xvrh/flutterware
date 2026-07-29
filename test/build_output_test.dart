@@ -197,6 +197,42 @@ void main() {
     });
   });
 
+  group('under -v, nothing is captured', () {
+    test('a log-less result has no tail to quote', () {
+      expect(ProcessLog(1, null).tail(), isEmpty);
+    });
+
+    test('describeFailure says only what happened', () {
+      // The output the tail would quote already went past on its way to the
+      // screen, and there is no file to point at.
+      var err = StringBuffer();
+      describeFailure(err, 'the GUI build failed.', ProcessLog(1, null));
+
+      expect(err.toString(), 'fw: the GUI build failed.\n');
+    });
+
+    test(
+      'the child really gets the terminal, and no file is written',
+      () async {
+        var directory = Directory.systemTemp.createTempSync('fw_log');
+        addTearDown(() => directory.deleteSync(recursive: true));
+        var log = File('${directory.path}/build.log');
+
+        var result = await runLogged(
+          Platform.resolvedExecutable,
+          ['--version'],
+          log: log,
+          verbose: true,
+        );
+
+        expect(result.ok, isTrue);
+        expect(result.file, isNull);
+        // Not written, so a later failure cannot quote a stale one by mistake.
+        expect(log.existsSync(), isFalse);
+      },
+    );
+  });
+
   test('describeFailure gives both the evidence and where the rest is', () {
     var directory = Directory.systemTemp.createTempSync('fw_log');
     addTearDown(() => directory.deleteSync(recursive: true));

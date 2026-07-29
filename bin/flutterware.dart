@@ -38,6 +38,10 @@ void main(List<String> arguments) async {
   }
 
   var force = arguments.contains('--$forceCompileOption');
+  // Read here and also passed on: this process builds the CLI and the CLI
+  // builds the GUI, so both ends of the chain need to know before either can
+  // ask the other.
+  var verbose = arguments.contains('--verbose') || arguments.contains('-v');
   var editable = !_inPubCache(packageRoot);
   var root = editable
       // A checkout is already a writable tree, so there is nothing to copy
@@ -46,10 +50,15 @@ void main(List<String> arguments) async {
       // remembering a flag, and why its own CLI was developed by a loop that
       // never ran it.
       ? packageRoot
-      : await _workingCopy(packageRoot, force: force);
+      : await _workingCopy(packageRoot, force: force, verbose: verbose);
 
   var appPath = p.join(root, 'app');
-  var cli = await _ensureCli(appPath, force: force, resolved: editable);
+  var cli = await _ensureCli(
+    appPath,
+    force: force,
+    resolved: editable,
+    verbose: verbose,
+  );
 
   var process = await Process.start(
     cli,
@@ -82,7 +91,11 @@ bool _inPubCache(String packageRoot) {
 /// The hash is of the *flutterware package root*, which for a hosted dependency
 /// already contains the version — so this is one copy per flutterware version
 /// per machine, shared across every project that uses it, not one per project.
-Future<String> _workingCopy(String packageRoot, {required bool force}) async {
+Future<String> _workingCopy(
+  String packageRoot, {
+  required bool force,
+  required bool verbose,
+}) async {
   var destination = p.join(_userHomePath(), '.flutterware', _hash(packageRoot));
 
   var stampFile = File(p.join(destination, '.source_stamp'));
@@ -96,7 +109,7 @@ Future<String> _workingCopy(String packageRoot, {required bool force}) async {
   await Step(
     'Unpacking flutterware',
     out: stdout,
-    interactive: outputIsInteractive,
+    interactive: outputIsInteractive && !verbose,
   ).run(() async {
     for (var file in listFilesInDirectory(packageRoot)) {
       var target = p.join(
@@ -136,6 +149,7 @@ Future<String> _ensureCli(
   String appPath, {
   required bool force,
   required bool resolved,
+  required bool verbose,
 }) async {
   var output = p.join(appPath, 'build', 'cli');
   var executable = p.join(output, 'bundle', 'bin', 'fw');
@@ -149,7 +163,10 @@ Future<String> _ensureCli(
   var step = Step(
     'Building the flutterware CLI',
     out: stdout,
-    interactive: outputIsInteractive,
+    // A live line and a firehose cannot both own the last row of the terminal,
+    // so `-v` gets the plain rendering: one line saying what is about to make
+    // all the noise below it.
+    interactive: outputIsInteractive && !verbose,
     budget: const Duration(seconds: 10),
     note: 'first run only',
   );
@@ -161,6 +178,7 @@ Future<String> _ensureCli(
         ['pub', 'get'],
         workingDirectory: appPath,
         log: log,
+        verbose: verbose,
       );
       if (!pubGet.ok) return pubGet;
     }
@@ -171,6 +189,7 @@ Future<String> _ensureCli(
       workingDirectory: appPath,
       log: log,
       append: !resolved,
+      verbose: verbose,
     );
   }, ok: (result) => result.ok);
 

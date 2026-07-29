@@ -62,6 +62,43 @@ void main() {
     expect(out.toString(), contains('Every parameter kind at once'));
   });
 
+  test('-v is a flag, not the name of a plugin', () async {
+    // One dash, so `_run`'s "does not start with -- , therefore positional"
+    // test would take it for the plugin name and refuse the command it was
+    // meant to make louder.
+    expect(await cli().run(['run', '-v', 'fake']), 0);
+    expect(out.toString(), contains('test.fake'));
+    expect(err.toString(), isEmpty);
+  });
+
+  test('a global flag works before the command, where one is typed', () async {
+    // `fw -v run …` reads better than `fw run … -v`, and used to be answered
+    // with `unknown command "-v"`.
+    for (var argv in const [
+      ['-v', 'run', 'fake'],
+      ['--verbose', 'run', 'fake'],
+      ['--json', 'run', 'fake'],
+    ]) {
+      out.clear();
+      err.clear();
+      expect(await cli().run(argv), 0, reason: '$argv');
+      expect(out.toString(), contains('test.fake'), reason: '$argv');
+    }
+  });
+
+  test('a global flag alone still means the default command', () async {
+    // Reaches `app`, which in a test has no launcher and refuses for its own
+    // reason. What matters is which refusal: not `unknown command "-v"`.
+    await cli().run(['-v']);
+    expect(err.toString(), isNot(contains('unknown command')));
+    expect(err.toString(), contains('dart run flutterware'));
+  });
+
+  test('the help footer says what -v does, once', () async {
+    expect(await cli().run(['help']), 0);
+    expect(out.toString(), contains('`-v` on any command'));
+  });
+
   test(
     'run <plugin> <action> --help describes it without running it',
     () async {

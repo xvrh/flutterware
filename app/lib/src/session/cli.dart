@@ -99,7 +99,8 @@ const fwCommands = [
         "The first run builds the GUI. That build's output goes to\n"
         '`app/build/gui-build.log` rather than to the terminal; a failure\n'
         'prints the end of it and where the rest is, and `--json` reports the\n'
-        'same thing as data.\n'
+        'same thing as data. `-v` hands the build the terminal instead, which\n'
+        'is the only way to watch it as it goes.\n'
         '\n'
         'The GUI is one renderer of the plugin contract and this is one\n'
         'command of the CLI — it is not a separate program, and there is no\n'
@@ -119,6 +120,9 @@ const fwCommands = [
 
 /// Closes `fw help`, and the document's CLI section.
 const fwHelpFooter =
+    '`-v` on any command shows the output of whatever it has to build, '
+    'instead of\ncapturing it to a log.\n'
+    '\n'
     'Run `fw help <command>` for detail, or `fw actions` for what this '
     'project can do.';
 
@@ -160,12 +164,25 @@ class FwCli {
   final Future<int> Function({required bool forceBuild})? launchGui;
 
   Future<int> run(List<String> arguments) async {
+    // The global flags come out of the whole line before anything reads it,
+    // rather than out of what follows the command. They are global, so they
+    // have to work where one is naturally typed — `fw -v run …` reads better
+    // than `fw run … -v` and was an unknown command until this stopped
+    // slicing the command off first.
+    //
+    // `-v` needs it twice over: one dash, so `_run`'s "does not start with
+    // --, therefore positional" test would otherwise take it for a plugin
+    // name. The cost is that an action can no longer have a parameter spelled
+    // `--verbose` or `--json`, which is the trade `--json` already made.
+    var argv = arguments.toList();
+    var json = argv.remove('--json');
+    var verbose = argv.remove('--verbose') | argv.remove('-v');
+
     // No arguments opens the GUI, because that is what `dart run flutterware`
     // has always done and the point of this CLI is that it is the same
     // program, not a different one with different habits.
-    var command = arguments.isEmpty ? 'app' : arguments.first;
-    var rest = arguments.skip(1).toList();
-    var json = rest.remove('--json');
+    var command = argv.isEmpty ? 'app' : argv.first;
+    var rest = argv.skip(1).toList();
 
     try {
       // Initializing is not a step someone should have to be told about: this
@@ -183,6 +200,7 @@ class FwCli {
           forceBuild: rest.remove('--$forceCompileOption'),
           release: rest.remove('--release'),
           json: json,
+          verbose: verbose,
         ),
         'help' || '--help' || '-h' => _help(rest.firstOrNull),
         _ => fail('unknown command "$command". Try `fw help`.'),
@@ -241,6 +259,7 @@ class FwCli {
     required bool forceBuild,
     required bool release,
     required bool json,
+    required bool verbose,
   }) async {
     if (launchGui case var launch?) return launch(forceBuild: forceBuild);
 
@@ -271,6 +290,7 @@ class FwCli {
       editableSources:
           Platform.environment[editableSourcesEnvironmentKey] == 'true',
       json: json,
+      verbose: verbose,
     ).run(forceBuild: forceBuild, release: release);
   }
 

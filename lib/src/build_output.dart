@@ -141,6 +141,13 @@ class Step {
 /// Deliberately not used for `flutter run`, which owns the terminal on purpose:
 /// its `r`/`R`/`q` console is the dev loop, and capturing it would be capturing
 /// a UI.
+///
+/// [verbose] hands the child the terminal instead, and captures nothing — the
+/// `-v` escape hatch. Not "capture and also print": a captured child sees a
+/// pipe and stops colouring and animating its output, so teeing would show a
+/// degraded copy of the very thing being asked for. Handing the terminal over
+/// gives it back exactly as the tool meant it, at the cost of the log — which
+/// is the affordance for the case where nobody was watching anyway.
 Future<ProcessLog> runLogged(
   String executable,
   List<String> arguments, {
@@ -148,7 +155,21 @@ Future<ProcessLog> runLogged(
   String? workingDirectory,
   Map<String, String>? environment,
   bool append = false,
+  bool verbose = false,
 }) async {
+  if (verbose) {
+    var process = await Process.start(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      environment: environment,
+      mode: ProcessStartMode.inheritStdio,
+    );
+    // No file: whatever `log` holds is from an earlier run, and reporting a
+    // stale tail as this failure's evidence is worse than reporting none.
+    return ProcessLog(await process.exitCode, null);
+  }
+
   log.parent.createSync(recursive: true);
   var sink = log.openWrite(mode: append ? FileMode.append : FileMode.write);
   try {
@@ -178,7 +199,10 @@ class ProcessLog {
   ProcessLog(this.exitCode, this.file);
 
   final int exitCode;
-  final File file;
+
+  /// Where the output went, or null when the child was given the terminal and
+  /// nothing was captured.
+  final File? file;
 
   bool get ok => exitCode == 0;
 
@@ -188,12 +212,14 @@ class ProcessLog {
   /// undecodable has still failed, and refusing to read its log would replace a
   /// real error with a decoding one.
   List<String> tail([int lines = 20]) {
-    if (!file.existsSync()) return const [];
-    var all = const LineSplitter()
-        .convert(utf8.decode(file.readAsBytesSync(), allowMalformed: true))
-        .where((line) => line.trim().isNotEmpty)
-        .toList();
-    return all.length <= lines ? all : all.sublist(all.length - lines);
+    if (file case var file? when file.existsSync()) {
+      var all = const LineSplitter()
+          .convert(utf8.decode(file.readAsBytesSync(), allowMalformed: true))
+          .where((line) => line.trim().isNotEmpty)
+          .toList();
+      return all.length <= lines ? all : all.sublist(all.length - lines);
+    }
+    return const [];
   }
 }
 
@@ -201,10 +227,15 @@ class ProcessLog {
 ///
 /// One function so that every failure has both halves. The tail alone is
 /// truncated evidence and the path alone is homework.
+///
+/// Under `-v` there is neither, and that is right: the output the tail would
+/// quote already went past on its way to the screen.
 void describeFailure(StringSink err, String message, ProcessLog log) {
   err.writeln('fw: $message');
-  for (var line in log.tail()) {
-    err.writeln('  $line');
+  if (log.file case var file?) {
+    for (var line in log.tail()) {
+      err.writeln('  $line');
+    }
+    err.writeln('  full log: ${file.path}');
   }
-  err.writeln('  full log: ${log.file.path}');
 }
