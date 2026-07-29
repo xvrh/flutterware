@@ -21,6 +21,7 @@ import 'package:flutterware/src/ui_catalog/knob.dart';
 import '../embedder/protocol.dart';
 import '../embedder/raw_frame.dart';
 import 'catalog_params.dart';
+import 'debug_flags.dart';
 import 'devices.dart';
 import 'catalog_entry.dart';
 import '../embedder/guest_vm_service.dart';
@@ -62,6 +63,7 @@ class HeadlessCatalog {
     CaptureViewport viewport = CaptureViewport.panel,
     Map<String, String> knobs = const {},
     Map<String, String> axes = const {},
+    Map<String, String> debug = const {},
 
     /// Cut the picture down to this node, by the id a tree read gave.
     String? node,
@@ -69,7 +71,11 @@ class HeadlessCatalog {
     /// Draw every node of the tree over the picture, id and all.
     bool annotate = false,
   }) async {
-    if (knobs.isEmpty && axes.isEmpty && node == null && !annotate) {
+    if (knobs.isEmpty &&
+        axes.isEmpty &&
+        debug.isEmpty &&
+        node == null &&
+        !annotate) {
       var results = await captureAll(
         entryIds: [entryId],
         outputFor: (_) => output,
@@ -82,6 +88,7 @@ class HeadlessCatalog {
       // rebuild can change what the demo is handed. Turning the knobs after
       // means the knob report describes the build that was actually captured.
       if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
+      await guest.applyDebug(debug);
       var applied = knobs.isEmpty
           ? await guest.settledKnobs(entryId)
           : await guest.applyKnobs(entryId, knobs);
@@ -375,9 +382,13 @@ class HeadlessCatalog {
     CaptureViewport viewport = CaptureViewport.panel,
     Map<String, String> knobs = const {},
     Map<String, String> axes = const {},
+    Map<String, String> debug = const {},
   }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
     if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
     if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
+    // Before the read, not after: `platform` and `brightness` change what the
+    // demo *builds*, not only how it is painted.
+    await guest.applyDebug(debug);
     return guest.settledTree(entryId);
   });
 
@@ -743,6 +754,21 @@ class _GuestSession {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
     return InspectErrors.empty;
+  }
+
+  /// Sets the framework's debug switches, once the guest can hear them.
+  ///
+  /// **Renders a frame first**, and it is not the usual reason. Knobs and the
+  /// tree need a frame because a demo declares them by building; these are
+  /// registered by the binding whether anything builds or not — but the *VM
+  /// service* learns about them asynchronously, and a call that lands between
+  /// connect and registration comes back "method not found". Measured: every
+  /// flag failed that way until a frame went first, and the spike missed it
+  /// only because it happened to render before asking.
+  Future<void> applyDebug(Map<String, String> values) async {
+    if (values.isEmpty) return;
+    await _renderScratchFrame();
+    await applyDebugFlags(_vmService, values);
   }
 
   /// Draws one frame nobody looks at, so the demo has built.

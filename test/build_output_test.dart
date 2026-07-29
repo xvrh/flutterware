@@ -1,7 +1,32 @@
 import 'dart:io';
 
 import 'package:flutterware/src/build_output.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+
+/// The real `dart`, which is not always the executable running the test.
+///
+/// Under `flutter test` `Platform.resolvedExecutable` is `flutter_tester`:
+/// `--version` exits 1 with "Dart kernel file not specified", so every check
+/// below that ran a process saw a failure that had nothing to do with the code
+/// under test. Under `dart test` it is the real thing, which is why these
+/// passed until CI began running the root package the other way.
+///
+/// Found by walking up for a `dart-sdk` directory, which works from both:
+/// `flutter_tester` sits at `<flutter>/bin/cache/artifacts/engine/<host>/` and
+/// the SDK at `<flutter>/bin/cache/dart-sdk/`. The same trick, and the same
+/// reason, as `ShapeExtractor.findDartSdk`.
+final _dart = () {
+  var directory = File(Platform.resolvedExecutable).parent;
+  while (true) {
+    var candidate = File(p.join(directory.path, 'dart-sdk', 'bin', 'dart'));
+    if (candidate.existsSync()) return candidate.path;
+    var parent = directory.parent;
+    // Already the Dart SDK's own `dart`, or something we cannot improve on.
+    if (parent.path == directory.path) return Platform.resolvedExecutable;
+    directory = parent;
+  }
+}();
 
 /// The output policy, and the two things it protects.
 ///
@@ -143,9 +168,7 @@ void main() {
     tearDown(() => directory.deleteSync(recursive: true));
 
     test('captures both streams instead of the terminal', () async {
-      var result = await runLogged(Platform.resolvedExecutable, [
-        '--version',
-      ], log: log);
+      var result = await runLogged(_dart, ['--version'], log: log);
 
       expect(result.ok, isTrue);
       expect(result.exitCode, 0);
@@ -155,18 +178,13 @@ void main() {
     });
 
     test('records the command, so a two-command log is readable', () async {
-      await runLogged(Platform.resolvedExecutable, ['--version'], log: log);
+      await runLogged(_dart, ['--version'], log: log);
       expect(log.readAsStringSync(), startsWith(r'$ '));
     });
 
     test('appending keeps the first command in the same file', () async {
-      await runLogged(Platform.resolvedExecutable, ['--version'], log: log);
-      await runLogged(
-        Platform.resolvedExecutable,
-        ['--help'],
-        log: log,
-        append: true,
-      );
+      await runLogged(_dart, ['--version'], log: log);
+      await runLogged(_dart, ['--help'], log: log, append: true);
 
       var written = log.readAsStringSync();
       expect(r'$ '.allMatches(written).length, greaterThanOrEqualTo(2));
@@ -175,7 +193,7 @@ void main() {
     });
 
     test('a failure carries its exit code and the end of the log', () async {
-      var result = await runLogged(Platform.resolvedExecutable, [
+      var result = await runLogged(_dart, [
         'run',
         'no_such_file_anywhere.dart',
       ], log: log);
@@ -219,7 +237,7 @@ void main() {
         var log = File('${directory.path}/build.log');
 
         var result = await runLogged(
-          Platform.resolvedExecutable,
+          _dart,
           ['--version'],
           log: log,
           verbose: true,

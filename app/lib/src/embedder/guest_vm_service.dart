@@ -132,9 +132,13 @@ class GuestVmService {
   Future<List<String>> _registeredExtensions() async {
     try {
       var isolate = await service.getIsolate(isolateId);
+      // Both namespaces: a missing extension is usually one of ours that was
+      // renamed, but it can equally be one of the framework's that the VM
+      // service has not been told about yet — and a list showing neither says
+      // nothing about which.
       return [
         for (var rpc in isolate.extensionRPCs ?? const <String>[])
-          if (rpc.startsWith('ext.flutterware.')) rpc,
+          if (rpc.startsWith('ext.flutter')) rpc,
       ]..sort();
     } catch (_) {
       return const ['(could not read the isolate)'];

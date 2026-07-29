@@ -16,6 +16,7 @@ import 'package:flutterware/src/ui_catalog/knob.dart';
 import 'package:path/path.dart' as p;
 
 import '../../catalog/catalog_entry.dart';
+import '../../catalog/debug_flags.dart';
 import '../../catalog/devices.dart';
 import '../../catalog/discovery.dart';
 import '../../catalog/package_config_locator.dart';
@@ -54,6 +55,19 @@ const _knobsDoc =
     'coerced to the kind the demo declared, and a picker takes one of its '
     'option labels; a name the entry does not declare is an error listing the '
     'ones it does.';
+
+/// What `--debug` is. Third of a family, and the distinction is who owns it.
+const _debugDoc =
+    'The debug switches the framework itself registers, as '
+    '`name=value,name=value`. These '
+    'belong to neither the demo nor its shell but to the guest process, and '
+    'the framework registers them whether anything asks or not — so unlike '
+    'knobs and axes the set is fixed and listed in `--help`. '
+    '`paint=true` draws the layout guides, `brightness=dark` moves '
+    '`MediaQuery.platformBrightness` (dark mode without a shell axis for it), '
+    '`banner=false` drops the DEBUG ribbon, `platform=iOS` changes what '
+    '`defaultTargetPlatform` reports, `timeDilation=5` slows animations enough '
+    'to photograph. Only what you name is set; the rest are left as they are.';
 
 /// What `--axes` is. The distinction from a knob is the whole content.
 const _axesDoc =
@@ -375,6 +389,16 @@ class UiCatalogCore extends PluginCore {
             required: false,
             description: _axesDoc,
           ),
+          ActionParameter(
+            'debug',
+            'Debug switches',
+            required: false,
+            description: _debugDoc,
+            options: [
+              for (var flag in debugFlags)
+                ActionOption(flag.name, label: flag.description),
+            ],
+          ),
           const ActionParameter(
             'node',
             'Crop to',
@@ -440,6 +464,12 @@ class UiCatalogCore extends PluginCore {
             'Axes',
             required: false,
             description: _axesDoc,
+          ),
+          ActionParameter(
+            'debug',
+            'Debug switches',
+            required: false,
+            description: _debugDoc,
           ),
         ],
       ),
@@ -1315,6 +1345,7 @@ class UiCatalogCore extends PluginCore {
 
     var knobs = parseKnobs(arguments['knobs']);
     var axes = parseKnobs(arguments['axes']);
+    var debug = parseKnobs(arguments['debug']);
     var node = arguments['node'];
     if (node != null && node is! String) {
       throw ArgumentError.value(node, 'node', 'must be a node id');
@@ -1345,6 +1376,9 @@ class UiCatalogCore extends PluginCore {
         // called `width`, and an address where it overwrote the viewport would
         // name a picture nobody took.
         for (var axis in axes.entries) 'axis.${axis.key}': axis.value,
+        // Prefixed like the other two, and on the address for the same reason:
+        // a picture taken with the guides drawn is not the same picture.
+        for (var flag in debug.entries) 'debug.${flag.key}': flag.value,
         // Both change the pixels, so both belong on the identity — a crop of
         // one node and a crop of another are two artifacts, not one file
         // written twice.
@@ -1369,6 +1403,7 @@ class UiCatalogCore extends PluginCore {
       viewport: viewport,
       knobs: knobs,
       axes: axes,
+      debug: debug,
       node: node,
       annotate: annotate,
     );

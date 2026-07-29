@@ -205,7 +205,7 @@ shell: String?   # Which shell declared [axes].
 Render one entry to a PNG
 
 ```sh
-fw run ui_catalog screenshot --entry=<choice> [--output=…] [--knobs=…] [--device=…] [--width=…] [--height=…] [--axes=…] [--node=…] [--annotate=…]
+fw run ui_catalog screenshot --entry=<choice> [--output=…] [--knobs=…] [--device=…] [--width=…] [--height=…] [--axes=…] [--debug=…] [--node=…] [--annotate=…]
 ```
 
 Returns `Artifact`:
@@ -227,6 +227,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 | `width` | integer | no | 900 | — |
 | `height` | integer | no | 700 | — |
 | `axes` | string | no | — | Values for the shell *around* the demo — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the demo and travels with the entry, an axis is declared by the `CatalogShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
+| `debug` | string | no | — | The debug switches the framework itself registers, as `name=value,name=value`. These belong to neither the demo nor its shell but to the guest process, and the framework registers them whether anything asks or not — so unlike knobs and axes the set is fixed and listed in `--help`. `paint=true` draws the layout guides, `brightness=dark` moves `MediaQuery.platformBrightness` (dark mode without a shell axis for it), `banner=false` drops the DEBUG ribbon, `platform=iOS` changes what `defaultTargetPlatform` reports, `timeDilation=5` slows animations enough to photograph. Only what you name is set; the rest are left as they are. |
 | `node` | string | no | — | Cut the picture down to one node, by the id `tree` gave. Cut out of the real frame rather than re-rendered alone, so the widget is still in its surroundings. |
 | `annotate` | boolean | no | false | Draw a box and its node id over every widget, so a tree read and a picture of it can be laid side by side |
 
@@ -235,7 +236,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 The widget tree one entry builds, scoped to the demo rather than the catalog around it
 
 ```sh
-fw run ui_catalog tree --entry=<choice> [--node=…] [--depth=…] [--knobs=…] [--axes=…]
+fw run ui_catalog tree --entry=<choice> [--node=…] [--depth=…] [--knobs=…] [--axes=…] [--debug=…]
 ```
 
 Returns `CatalogTreeResult`:
@@ -264,6 +265,7 @@ nodes: List<CatalogTreeNode>   # Depth-first, root first.
 | `depth` | integer | no | — | Stop this many levels below the root |
 | `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the demo asked for while it built — a demo calling `context.uiCatalog.parameters.string("label", "Hello")` declares one named `label` — so the names come from the demo itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the demo declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. A tree is of one build, and a knob can change which widgets there are. |
 | `axes` | string | no | — | Values for the shell *around* the demo — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the demo and travels with the entry, an axis is declared by the `CatalogShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
+| `debug` | string | no | — | The debug switches the framework itself registers, as `name=value,name=value`. These belong to neither the demo nor its shell but to the guest process, and the framework registers them whether anything asks or not — so unlike knobs and axes the set is fixed and listed in `--help`. `paint=true` draws the layout guides, `brightness=dark` moves `MediaQuery.platformBrightness` (dark mode without a shell axis for it), `banner=false` drops the DEBUG ribbon, `platform=iOS` changes what `defaultTargetPlatform` reports, `timeDilation=5` slows animations enough to photograph. Only what you name is set; the rest are left as they are. |
 
 #### `find` — Find widgets
 
