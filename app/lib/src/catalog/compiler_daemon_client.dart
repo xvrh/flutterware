@@ -246,7 +246,7 @@ class CompilerDaemonClient {
         '/bin/sh',
         [
           '-c',
-          'exec "\$@" >> "\$FW_DAEMON_LOG" 2>&1',
+          r'exec "$@" >> "$FW_DAEMON_LOG" 2>&1',
           'sh',
           launch.executable,
           ...launch.arguments,

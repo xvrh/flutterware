@@ -16,6 +16,7 @@ void main() => Flutterware.configure((fw) {
   fw.use(
     Dependencies(packages: DependenciesPackage.each([root, app, example])),
   );
+  fw.use(Assets(packages: AssetsPackage.each([root, app, example])));
   fw.use(
     UiCatalog(
       packages: [

@@ -298,6 +298,47 @@ void main() {
       ),
     );
 
+    testWidgets('a long status cannot squeeze out the name', (tester) async {
+      var shell = ShellController(
+        appContext: AppContext(logger: LogClient.print()),
+        flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        registry: _panels(const ['a.deps', 'a.tests']),
+        coreRegistry: PluginCoreRegistry({
+          'a.deps': (h) => _FakeCore(
+            h,
+            children: const [
+              PluginChild(
+                id: 'examples/example',
+                label: 'examples/example',
+                status: Status.warn('10 assets · 347 kB · 2 problems'),
+              ),
+            ],
+          ),
+          'a.tests': _FakeCore.new,
+        }),
+        manifestLoader: _StubLoader(),
+        discovery: WorktreeDiscovery(
+          runProcess: (_, _, {workingDirectory}) async =>
+              ProcessResult(0, 0, _listing, ''),
+        ),
+      );
+      await shell.start('/repo');
+      await tester.pumpWidget(ShellApp(shell));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Dependencies'));
+      await tester.pumpAndSettle();
+
+      // The row used to give the status all the width it asked for, leaving
+      // the `Expanded` label at zero — a row that says how much and not *what*.
+      var label = find.descendant(
+        of: find.byKey(sidebarKey),
+        matching: find.text('examples/example'),
+      );
+      expect(label, findsOneWidget);
+      expect(tester.getSize(label).width, greaterThan(0));
+    });
+
     testWidgets('expands under the selected plugin only', (tester) async {
       var shell = childShell();
       await shell.start('/repo');

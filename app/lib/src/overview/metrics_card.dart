@@ -6,8 +6,6 @@ import '../utils.dart';
 import '../utils/async_value.dart';
 import '../utils/value_stream_builder.dart';
 import '../utils/cloc/cloc.dart';
-import '../utils/utils.dart';
-import 'model/assets.dart';
 import 'model/code_metrics.dart';
 
 class MetricsCard extends StatelessWidget {
@@ -81,23 +79,6 @@ class MetricsCard extends StatelessWidget {
                     child: Text(
                       '${numberFormat.format(data.sum.lines)} (Dart)',
                     ),
-                  );
-                },
-              ),
-            ),
-            _InfoRow(
-              label: Text('Assets'),
-              value: ValueStreamBuilder<Snapshot<AssetsReport>>(
-                stream: project.info.assetsMetrics,
-                builder: (context, snapshot, child) {
-                  var data = snapshot.data;
-                  if (data == null) {
-                    return Text('');
-                  }
-
-                  return Text(
-                    '${data.fileCount} file${data.fileCount > 1 ? 's' : ''}, '
-                    '${getSizeAsMB(data.totalBytes)}',
                   );
                 },
               ),

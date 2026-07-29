@@ -49,9 +49,21 @@ const shapeRoots = ['lib', '../lib'];
 
 /// Where actions are declared. Resolution needs the package, but only these
 /// files are scanned for `PluginAction(..., returns: …)`.
-const shapeSources = [
-  'lib/src/plugins/native/ui_catalog_core.dart',
-  'lib/src/plugins/native/dependencies_core.dart',
+List<String> get shapeSources => [
+  // Every core, found rather than listed. A hand-maintained list is a step a
+  // new plugin can forget, and forgetting it does not fail: the document says
+  // "Shape not published", which reads as a decision instead of an omission —
+  // which is exactly what the asset plugin's three actions did on the day they
+  // landed.
+  //
+  // Sorted, so the generated file does not shuffle with the filesystem.
+  ...(Directory('lib/src/plugins/native')
+      .listSync()
+      .whereType<File>()
+      .map((file) => file.path)
+      .where((path) => path.endsWith('_core.dart'))
+      .toList()
+    ..sort()),
   // Not for its actions — it declares none — but for its hand-written
   // `toJson`, which is read as the shape of every artifact any action returns.
   '../lib/src/plugins/artifact.dart',

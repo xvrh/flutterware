@@ -33,7 +33,6 @@ import 'package:path/path.dart' as p;
 /// ```
 Future<void> main(List<String> args) async {
   var packageRoot = p.dirname(p.dirname(p.dirname(p.fromUri(Platform.script))));
-  var repoRoot = p.dirname(packageRoot);
   var cache = FlutterCache.fromRunningSdk();
   var buildDir = p.join(packageRoot, 'build', 'catalog');
   Directory(buildDir).createSync(recursive: true);

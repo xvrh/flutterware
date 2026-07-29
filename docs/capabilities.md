@@ -70,6 +70,120 @@ Run one plugin action. Argument keys are the parameter ids reported by flutterwa
 
 ## Plugins
 
+### `flutterware.assets`
+
+#### `list` — List
+
+Every key a package's bundle resolves to — the whole list, not the projection the report carries
+
+```sh
+fw run assets list [--package=…] [--dependencies=…]
+```
+
+Returns `AssetListResult`:
+
+```
+packages: List<AssetListPackage>
+  path: String
+  own: int   # Counts are always both, even when only the package's own assets are listed: a list that silently dropped 340 dependency assets would read as "this bundle has nine things in it".
+  fromPackages: int
+  bytes: int   # Every byte in the bundle, dependencies included, whatever was listed.
+  assets: List<AssetEntry>
+    key: String   # What `Image.asset` is given.
+    kind: String
+    bytes: int   # The asset and its density variants together.
+    address: String   # Where it is, so a caller can act on it without a second lookup.
+    package: String?   # The package that declared it; absent for the bundle's own.
+    densities: List<double>   # Which densities exist beside the main file — `[2.0, 3.0]`.
+  error: String?   # Set when the package could not be scanned, in which case the counts mean nothing.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+| `dependencies` | boolean | no | false | List the assets dependencies contribute as well. They are in the bundle either way, and counted either way. |
+
+#### `describe` — Describe
+
+One asset in full: where it came from, what its densities are, what the file itself says, and the Dart that loads it
+
+```sh
+fw run assets describe --asset=<string> [--package=…]
+```
+
+Returns `AssetDescription`:
+
+```
+key: String
+kind: String
+address: String
+declaration: String   # The pubspec entry that pulled it in — for a directory declaration this is the only answer to "why is this in my bundle".
+file: String   # Where the main file is, relative to its package.
+bytes: int   # The main file, and then every density together.
+totalBytes: int
+code: String   # The Dart that loads it.
+package: String?
+densities: List<AssetDensity>
+  scale: double?   # Null for the main asset, which serves whatever no variant covers.
+  file: String
+  bytes: int
+raster: RasterFactsResult?   # Present for a raster whose header could be read.
+  width: int
+  height: int
+  frames: int   # Above one for an animated GIF or WebP.
+animation: AnimationFactsResult?   # Present for a `.json` that turned out to be an animation.
+  width: int
+  height: int
+  frameRate: double
+  frames: int
+  durationMs: int
+  version: String?
+  layers: List<AnimationLayerResult>   # Outermost first, the order the document lists them.
+    name: String
+    type: String
+  markers: List<String>   # Named points an exporter left behind — what a caller would seek to.
+font: FontFactsResult?   # Present for a file a `fonts:` entry named.
+  family: String   # The family the pubspec declared, package prefix included where there is one.
+  weight: int?   # What the pubspec *claims*.
+  style: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `asset` | string | yes | — | The key as the engine knows it — `assets/logo.png`, or `packages/<name>/…` for one a dependency contributes. Read them with `list`. |
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+
+#### `audit` — Audit
+
+Everything wrong with a bundle that can be found without running the app: declarations that resolve to nothing, files a directory declaration does not reach, gaps in a density ladder, duplicates, and weight
+
+```sh
+fw run assets audit [--package=…] [--maxEdge=…] [--budget=…]
+```
+
+Returns `AssetAuditResult`:
+
+```
+checked: int   # How many keys were looked at — the denominator, so an empty findings list means "nothing wrong" rather than "nothing examined".
+bytes: int   # Every byte in the audited bundles.
+findings: List<AssetFinding>   # Only what is wrong.
+  kind: String   # A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `density-gap`, `duplicate`, `oversized`, `over-budget`.
+  summary: String   # One line, for a human reading a list.
+  detail: String   # What was found, specifically — the sizes, the paths, the densities.
+  package: String?   # The package whose bundle this is about.
+  key: String?   # The asset key, where the finding is about one.
+  address: String?   # Where to look, where there is somewhere.
+  path: String?   # A path relative to the package, for findings about a file rather than a key.
+unreadable: List<String>   # Packages that could not be scanned at all, which is not the same as a package with nothing wrong.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+| `maxEdge` | integer | no | 2048 | Report a raster longer than this on either side. A phone never draws one that big; something was exported at print size. |
+| `budget` | integer | no | — | Bytes the bundle may weigh before it is a finding. Omitted, weight is reported and never complained about. |
+
+
 ### `flutterware.dependencies`
 
 #### `list` — List

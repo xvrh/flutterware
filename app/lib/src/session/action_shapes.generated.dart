@@ -10,6 +10,42 @@ import 'package:flutterware/plugins.dart';
 
 /// Result shapes by class name — look one up with `PluginAction.returnsName`.
 final resultShapes = <String, ResultShape>{
+  'AnimationFactsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'AnimationFactsResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'width', 'type': 'int'},
+      <String, Object?>{'name': 'height', 'type': 'int'},
+      <String, Object?>{'name': 'frameRate', 'type': 'double'},
+      <String, Object?>{'name': 'frames', 'type': 'int'},
+      <String, Object?>{'name': 'durationMs', 'type': 'int'},
+      <String, Object?>{'name': 'version', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'layers',
+        'type': 'List<AnimationLayerResult>',
+        'doc': 'Outermost first, the order the document lists them.',
+        'shape': <String, Object?>{
+          'type': 'AnimationLayerResult',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{'name': 'type', 'type': 'String'},
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'markers',
+        'type': 'List<String>',
+        'doc':
+            'Named points an exporter left behind — what a caller would seek to.',
+      },
+    ],
+  }),
+  'AnimationLayerResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'AnimationLayerResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{'name': 'type', 'type': 'String'},
+    ],
+  }),
   'Artifact': ResultShape.fromJson(<String, Object?>{
     'type': 'Artifact',
     'fields': <Object?>[
@@ -42,6 +78,447 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc':
             'Anything the producer wants the reader to know: timings, compile stats, exit codes.',
+      },
+    ],
+  }),
+  'AssetAuditResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'AssetAuditResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'checked',
+        'type': 'int',
+        'doc':
+            'How many keys were looked at — the denominator, so an empty findings list means "nothing wrong" rather than "nothing examined".',
+      },
+      <String, Object?>{
+        'name': 'bytes',
+        'type': 'int',
+        'doc': 'Every byte in the audited bundles.',
+      },
+      <String, Object?>{
+        'name': 'findings',
+        'type': 'List<AssetFinding>',
+        'doc': 'Only what is wrong.',
+        'shape': <String, Object?>{
+          'type': 'AssetFinding',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'kind',
+              'type': 'String',
+              'doc':
+                  'A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `density-gap`, `duplicate`, `oversized`, `over-budget`.',
+            },
+            <String, Object?>{
+              'name': 'summary',
+              'type': 'String',
+              'doc': 'One line, for a human reading a list.',
+            },
+            <String, Object?>{
+              'name': 'detail',
+              'type': 'String',
+              'doc':
+                  'What was found, specifically — the sizes, the paths, the densities.',
+            },
+            <String, Object?>{
+              'name': 'package',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The package whose bundle this is about.',
+            },
+            <String, Object?>{
+              'name': 'key',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The asset key, where the finding is about one.',
+            },
+            <String, Object?>{
+              'name': 'address',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Where to look, where there is somewhere.',
+            },
+            <String, Object?>{
+              'name': 'path',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'A path relative to the package, for findings about a file rather than a key.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'unreadable',
+        'type': 'List<String>',
+        'doc':
+            'Packages that could not be scanned at all, which is not the same as a package with nothing wrong.',
+      },
+    ],
+  }),
+  'AssetDensity': ResultShape.fromJson(<String, Object?>{
+    'type': 'AssetDensity',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'scale',
+        'type': 'double',
+        'optional': true,
+        'doc':
+            'Null for the main asset, which serves whatever no variant covers.',
+      },
+      <String, Object?>{'name': 'file', 'type': 'String'},
+      <String, Object?>{'name': 'bytes', 'type': 'int'},
+    ],
+  }),
+  'AssetDescription': ResultShape.fromJson(<String, Object?>{
+    'type': 'AssetDescription',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'key', 'type': 'String'},
+      <String, Object?>{'name': 'kind', 'type': 'String'},
+      <String, Object?>{'name': 'address', 'type': 'String'},
+      <String, Object?>{
+        'name': 'declaration',
+        'type': 'String',
+        'doc':
+            'The pubspec entry that pulled it in — for a directory declaration this is the only answer to "why is this in my bundle".',
+      },
+      <String, Object?>{
+        'name': 'file',
+        'type': 'String',
+        'doc': 'Where the main file is, relative to its package.',
+      },
+      <String, Object?>{
+        'name': 'bytes',
+        'type': 'int',
+        'doc': 'The main file, and then every density together.',
+      },
+      <String, Object?>{'name': 'totalBytes', 'type': 'int'},
+      <String, Object?>{
+        'name': 'code',
+        'type': 'String',
+        'doc': 'The Dart that loads it.',
+      },
+      <String, Object?>{'name': 'package', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'densities',
+        'type': 'List<AssetDensity>',
+        'shape': <String, Object?>{
+          'type': 'AssetDensity',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'scale',
+              'type': 'double',
+              'optional': true,
+              'doc':
+                  'Null for the main asset, which serves whatever no variant covers.',
+            },
+            <String, Object?>{'name': 'file', 'type': 'String'},
+            <String, Object?>{'name': 'bytes', 'type': 'int'},
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'raster',
+        'type': 'RasterFactsResult',
+        'optional': true,
+        'doc': 'Present for a raster whose header could be read.',
+        'shape': <String, Object?>{
+          'type': 'RasterFactsResult',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'width', 'type': 'int'},
+            <String, Object?>{'name': 'height', 'type': 'int'},
+            <String, Object?>{
+              'name': 'frames',
+              'type': 'int',
+              'doc': 'Above one for an animated GIF or WebP.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'animation',
+        'type': 'AnimationFactsResult',
+        'optional': true,
+        'doc': 'Present for a `.json` that turned out to be an animation.',
+        'shape': <String, Object?>{
+          'type': 'AnimationFactsResult',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'width', 'type': 'int'},
+            <String, Object?>{'name': 'height', 'type': 'int'},
+            <String, Object?>{'name': 'frameRate', 'type': 'double'},
+            <String, Object?>{'name': 'frames', 'type': 'int'},
+            <String, Object?>{'name': 'durationMs', 'type': 'int'},
+            <String, Object?>{
+              'name': 'version',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'layers',
+              'type': 'List<AnimationLayerResult>',
+              'doc': 'Outermost first, the order the document lists them.',
+              'shape': <String, Object?>{
+                'type': 'AnimationLayerResult',
+                'fields': <Object?>[
+                  <String, Object?>{'name': 'name', 'type': 'String'},
+                  <String, Object?>{'name': 'type', 'type': 'String'},
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'markers',
+              'type': 'List<String>',
+              'doc':
+                  'Named points an exporter left behind — what a caller would seek to.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'font',
+        'type': 'FontFactsResult',
+        'optional': true,
+        'doc': 'Present for a file a `fonts:` entry named.',
+        'shape': <String, Object?>{
+          'type': 'FontFactsResult',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'family',
+              'type': 'String',
+              'doc':
+                  'The family the pubspec declared, package prefix included where there is one.',
+            },
+            <String, Object?>{
+              'name': 'weight',
+              'type': 'int',
+              'optional': true,
+              'doc': 'What the pubspec *claims*.',
+            },
+            <String, Object?>{
+              'name': 'style',
+              'type': 'String',
+              'optional': true,
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'AssetEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'AssetEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'key',
+        'type': 'String',
+        'doc': 'What `Image.asset` is given.',
+      },
+      <String, Object?>{'name': 'kind', 'type': 'String'},
+      <String, Object?>{
+        'name': 'bytes',
+        'type': 'int',
+        'doc': 'The asset and its density variants together.',
+      },
+      <String, Object?>{
+        'name': 'address',
+        'type': 'String',
+        'doc':
+            'Where it is, so a caller can act on it without a second lookup.',
+      },
+      <String, Object?>{
+        'name': 'package',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The package that declared it; absent for the bundle\'s own.',
+      },
+      <String, Object?>{
+        'name': 'densities',
+        'type': 'List<double>',
+        'doc': 'Which densities exist beside the main file — `[2.0, 3.0]`.',
+      },
+    ],
+  }),
+  'AssetFinding': ResultShape.fromJson(<String, Object?>{
+    'type': 'AssetFinding',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'kind',
+        'type': 'String',
+        'doc':
+            'A stable slug, so a caller can filter without matching prose: `declared-missing`, `unreachable-file`, `density-gap`, `duplicate`, `oversized`, `over-budget`.',
+      },
+      <String, Object?>{
+        'name': 'summary',
+        'type': 'String',
+        'doc': 'One line, for a human reading a list.',
+      },
+      <String, Object?>{
+        'name': 'detail',
+        'type': 'String',
+        'doc':
+            'What was found, specifically — the sizes, the paths, the densities.',
+      },
+      <String, Object?>{
+        'name': 'package',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The package whose bundle this is about.',
+      },
+      <String, Object?>{
+        'name': 'key',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The asset key, where the finding is about one.',
+      },
+      <String, Object?>{
+        'name': 'address',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Where to look, where there is somewhere.',
+      },
+      <String, Object?>{
+        'name': 'path',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'A path relative to the package, for findings about a file rather than a key.',
+      },
+    ],
+  }),
+  'AssetListPackage': ResultShape.fromJson(<String, Object?>{
+    'type': 'AssetListPackage',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'path', 'type': 'String'},
+      <String, Object?>{
+        'name': 'own',
+        'type': 'int',
+        'doc':
+            'Counts are always both, even when only the package\'s own assets are listed: a list that silently dropped 340 dependency assets would read as "this bundle has nine things in it".',
+      },
+      <String, Object?>{'name': 'fromPackages', 'type': 'int'},
+      <String, Object?>{
+        'name': 'bytes',
+        'type': 'int',
+        'doc':
+            'Every byte in the bundle, dependencies included, whatever was listed.',
+      },
+      <String, Object?>{
+        'name': 'assets',
+        'type': 'List<AssetEntry>',
+        'shape': <String, Object?>{
+          'type': 'AssetEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'key',
+              'type': 'String',
+              'doc': 'What `Image.asset` is given.',
+            },
+            <String, Object?>{'name': 'kind', 'type': 'String'},
+            <String, Object?>{
+              'name': 'bytes',
+              'type': 'int',
+              'doc': 'The asset and its density variants together.',
+            },
+            <String, Object?>{
+              'name': 'address',
+              'type': 'String',
+              'doc':
+                  'Where it is, so a caller can act on it without a second lookup.',
+            },
+            <String, Object?>{
+              'name': 'package',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The package that declared it; absent for the bundle\'s own.',
+            },
+            <String, Object?>{
+              'name': 'densities',
+              'type': 'List<double>',
+              'doc':
+                  'Which densities exist beside the main file — `[2.0, 3.0]`.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'error',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Set when the package could not be scanned, in which case the counts mean nothing.',
+      },
+    ],
+  }),
+  'AssetListResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'AssetListResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'packages',
+        'type': 'List<AssetListPackage>',
+        'shape': <String, Object?>{
+          'type': 'AssetListPackage',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'path', 'type': 'String'},
+            <String, Object?>{
+              'name': 'own',
+              'type': 'int',
+              'doc':
+                  'Counts are always both, even when only the package\'s own assets are listed: a list that silently dropped 340 dependency assets would read as "this bundle has nine things in it".',
+            },
+            <String, Object?>{'name': 'fromPackages', 'type': 'int'},
+            <String, Object?>{
+              'name': 'bytes',
+              'type': 'int',
+              'doc':
+                  'Every byte in the bundle, dependencies included, whatever was listed.',
+            },
+            <String, Object?>{
+              'name': 'assets',
+              'type': 'List<AssetEntry>',
+              'shape': <String, Object?>{
+                'type': 'AssetEntry',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'key',
+                    'type': 'String',
+                    'doc': 'What `Image.asset` is given.',
+                  },
+                  <String, Object?>{'name': 'kind', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'bytes',
+                    'type': 'int',
+                    'doc': 'The asset and its density variants together.',
+                  },
+                  <String, Object?>{
+                    'name': 'address',
+                    'type': 'String',
+                    'doc':
+                        'Where it is, so a caller can act on it without a second lookup.',
+                  },
+                  <String, Object?>{
+                    'name': 'package',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The package that declared it; absent for the bundle\'s own.',
+                  },
+                  <String, Object?>{
+                    'name': 'densities',
+                    'type': 'List<double>',
+                    'doc':
+                        'Which densities exist beside the main file — `[2.0, 3.0]`.',
+                  },
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'error',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Set when the package could not be scanned, in which case the counts mean nothing.',
+            },
+          ],
+        },
       },
     ],
   }),
@@ -1194,6 +1671,36 @@ final resultShapes = <String, ResultShape>{
             },
           ],
         },
+      },
+    ],
+  }),
+  'FontFactsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'FontFactsResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'family',
+        'type': 'String',
+        'doc':
+            'The family the pubspec declared, package prefix included where there is one.',
+      },
+      <String, Object?>{
+        'name': 'weight',
+        'type': 'int',
+        'optional': true,
+        'doc': 'What the pubspec *claims*.',
+      },
+      <String, Object?>{'name': 'style', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RasterFactsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RasterFactsResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'width', 'type': 'int'},
+      <String, Object?>{'name': 'height', 'type': 'int'},
+      <String, Object?>{
+        'name': 'frames',
+        'type': 'int',
+        'doc': 'Above one for an animated GIF or WebP.',
       },
     ],
   }),

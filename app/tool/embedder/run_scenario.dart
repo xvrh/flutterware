@@ -264,7 +264,11 @@ Future<bool> _hotCycle({
       '[hot] incremental compile ${compileMs}ms · reload ${reloadMs}ms',
     );
 
-    return _runOnce(control, lines, outDir, 'run-1-hot');
+    // Awaited so the restore below happens after the run rather than during
+    // it. `_runOnce` only drives the guest over the control socket and never
+    // re-reads the scene, so this changes when the file goes back, not what
+    // the run measures.
+    return await _runOnce(control, lines, outDir, 'run-1-hot');
   } finally {
     file.writeAsStringSync(original);
   }

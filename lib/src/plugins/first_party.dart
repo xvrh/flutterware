@@ -41,6 +41,31 @@ class DependenciesPackage extends PluginPackage {
   ];
 }
 
+/// Everything a package's bundle resolves to — declared assets, the density
+/// variants beside them, the fonts, and whatever its dependencies contribute.
+class Assets extends Plugin {
+  Assets({this.packages = const [], String? label})
+    : super('flutterware.assets', label: label ?? 'Assets');
+
+  final List<AssetsPackage> packages;
+
+  @override
+  Map<String, Object?> get config => {
+    'packages': [for (var p in packages) p.toJson()],
+  };
+}
+
+class AssetsPackage extends PluginPackage {
+  const AssetsPackage(super.pkg);
+
+  /// Every package. Offered because there is nothing to configure per package
+  /// here — the pubspec is the declaration — so naming them one at a time buys
+  /// only the chance to forget one.
+  static List<AssetsPackage> each(List<Pkg> packages) => [
+    for (var pkg in packages) AssetsPackage(pkg),
+  ];
+}
+
 /// The UI catalog — entries rendered in the embedded engine.
 class UiCatalog extends Plugin {
   UiCatalog({this.packages = const [], String? label})

@@ -198,7 +198,7 @@ void main() {
       expect(paramDisplayValue(count, const {'count': 'lots'}), 1);
     });
 
-    test('the payload carries the demo\'s own types', () {
+    test("the payload carries the demo's own types", () {
       expect(
         paramPayloadFor(
           const [count, ratio, title],

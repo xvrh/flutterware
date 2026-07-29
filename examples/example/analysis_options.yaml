@@ -1,0 +1,21 @@
+include: ../../analysis_options.yaml
+
+analyzer:
+  errors:
+    # `assets/images/missing.png` is declared and absent on purpose — it is the
+    # fixture for the asset inspector's "declared, not on disk" finding. See
+    # assets/README.md. The analyzer spotting it is the correct behaviour; it
+    # just must not fail the build.
+    #
+    # Worth knowing: this rule covers `assets:` only. The equally deliberate
+    # missing font file beside it (`assets/fonts/Roboto-Italic.ttf`) produces no
+    # diagnostic at all, which is a good part of why that one is easy to ship.
+    asset_does_not_exist: ignore
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**

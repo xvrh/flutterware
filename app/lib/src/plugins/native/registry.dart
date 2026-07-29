@@ -1,5 +1,6 @@
 import '../native_plugin.dart';
 import '../registry.dart';
+import 'assets_plugin.dart';
 import 'dependencies_plugin.dart';
 import 'ui_catalog_plugin.dart';
 
@@ -14,6 +15,7 @@ import 'ui_catalog_plugin.dart';
 /// over a core, so registering one without the other gets the plugin a
 /// [MissingPlugin] and says why.
 PluginRegistry buildNativeRegistry() => PluginRegistry({
+  assetsPluginId: panelFor<AssetsCore>(AssetsPlugin.new),
   dependenciesPluginId: panelFor<DependenciesCore>(DependenciesPlugin.new),
   uiCatalogPluginId: panelFor<UiCatalogCore>(UiCatalogPlugin.new),
 });

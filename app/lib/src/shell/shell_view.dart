@@ -931,10 +931,19 @@ class _ChildRow extends StatelessWidget {
             ),
             if (!child.status.isEmpty) ...[
               const Gap(FwSpacing.sm),
-              Text(
-                child.status.message,
-                style: context.type.micro.copyWith(
-                  color: toneColor(colors, child.status.tone),
+              // Flexible, so a long status cannot take the whole row and leave
+              // the `Expanded` label with nothing — a row that says
+              // "10 assets · 347 kB · 2 problems" and not *which package* is
+              // worse than one that says neither. Loose fit: a short status
+              // still takes only what it needs and the label keeps the rest.
+              Flexible(
+                child: Text(
+                  child.status.message,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.type.micro.copyWith(
+                    color: toneColor(colors, child.status.tone),
+                  ),
                 ),
               ),
             ],

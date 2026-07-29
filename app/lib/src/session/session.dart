@@ -8,6 +8,7 @@ import 'package:flutterware/src/log_client.dart';
 
 import '../context.dart';
 import '../plugins/manifest_loader.dart';
+import '../plugins/native/assets_core.dart';
 import '../plugins/native/dependencies_core.dart';
 import '../plugins/native/ui_catalog_core.dart';
 import '../plugins/plugin_core.dart';
@@ -353,6 +354,7 @@ class Session {
 /// its behaviour is separable from its panel; until then it resolves to a
 /// [MissingPluginCore] and `fw` says so out loud rather than omitting it.
 PluginCoreRegistry defaultCoreRegistry() => PluginCoreRegistry({
+  assetsPluginId: assetsCoreFactory,
   dependenciesPluginId: dependenciesCoreFactory,
   uiCatalogPluginId: uiCatalogCoreFactory,
 });

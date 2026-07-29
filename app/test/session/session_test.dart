@@ -36,12 +36,13 @@ void main() {
   test('resolves a core per declared plugin, in declared order', () {
     expect(session.cores.map((c) => c.id), [
       'flutterware.dependencies',
+      'flutterware.assets',
       'flutterware.ui_catalog',
     ]);
   });
 
   test('a plugin with no core registered is visible, not omitted', () async {
-    // Both real plugins have cores, so this needs a build that lacks one.
+    // Every real plugin has a core, so this needs a build that lacks one.
     // The honest failure mode it guards: `fw` printing nothing for a declared
     // plugin would read as "this project has fewer plugins than it does".
     var bare = await Session.open(
@@ -50,7 +51,7 @@ void main() {
     );
     try {
       expect(bare.cores, everyElement(isA<MissingPluginCore>()));
-      expect(bare.cores, hasLength(2));
+      expect(bare.cores, hasLength(3));
       for (var core in bare.cores) {
         expect(core.report.status.isEmpty, isFalse);
       }
@@ -72,7 +73,7 @@ void main() {
   test('reports are readable without any subscriber', () {
     // The rule that makes it safe for the sidebar, `fw` and an agent to call
     // this for every plugin: a pure read of cached state.
-    expect(session.reports, hasLength(2));
+    expect(session.reports, hasLength(3));
     expect(session.reports.first.id, dependenciesPluginId);
   });
 

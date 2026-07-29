@@ -90,7 +90,7 @@ void main() {
         worktree: 'test',
         plugin: 'flutterware.ui_catalog',
         axes: {
-          if (device != null) 'device': device,
+          'device': ?device,
           for (var axis in axes.entries) 'axis.${axis.key}': axis.value,
           for (var knob in knobs.entries) 'knob.${knob.key}': knob.value,
         },

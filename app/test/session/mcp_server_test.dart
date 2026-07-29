@@ -77,6 +77,7 @@ void main() {
     var plugins = (payload['plugins']! as List).cast<Map<String, Object?>>();
     expect(plugins.map((p) => p['id']), [
       'flutterware.dependencies',
+      'flutterware.assets',
       'flutterware.ui_catalog',
     ]);
     // An MCP call starts cold, so a status that reported only cached state
@@ -119,7 +120,7 @@ void main() {
       ),
     );
     var plugins = (payload['plugins']! as List).cast<Map<String, Object?>>();
-    expect(plugins, hasLength(2));
+    expect(plugins, hasLength(3));
     for (var plugin in plugins) {
       expect(
         (plugin['status']! as Map)['message'],

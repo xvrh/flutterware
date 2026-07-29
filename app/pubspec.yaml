@@ -59,6 +59,7 @@ dependencies:
   io:
   json_annotation:
   logging:
+  lottie:
   markdown:
   meta:
   more:
@@ -81,6 +82,7 @@ dependencies:
   shelf:
   shelf_router:
   shelf_web_socket:
+  standard_message_codec: ^0.0.1+5
   stream_channel:
   stream_transform:
   # Backs FwTable's virtualization and pinned rows/columns. See
@@ -88,12 +90,11 @@ dependencies:
   two_dimensional_scrollables:
   url_launcher:
   vector_math:
+  vm_service: ^15.0.0
   watcher:
   web:
-  vm_service: ^15.0.0
   web_socket_channel:
   win32:
-  standard_message_codec: ^0.0.1+5
   yaml:
 
 dev_dependencies:
