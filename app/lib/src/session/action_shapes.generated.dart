@@ -463,6 +463,327 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'CatalogInspectResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'CatalogInspectResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'entry', 'type': 'String'},
+      <String, Object?>{'name': 'address', 'type': 'String'},
+      <String, Object?>{
+        'name': 'readFrom',
+        'type': 'String',
+        'doc':
+            'Where this reading came from: `live` when it was taken from a session somebody has open — the demo in whatever state they left it, including anything they reached by clicking — and `render` when this call built and drew its own copy.',
+      },
+      <String, Object?>{
+        'name': 'ok',
+        'type': 'bool',
+        'doc': 'Whether it rendered without the framework reporting anything.',
+      },
+      <String, Object?>{
+        'name': 'errors',
+        'type': 'List<CatalogRenderError>',
+        'shape': <String, Object?>{
+          'type': 'CatalogRenderError',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'exception', 'type': 'String'},
+            <String, Object?>{
+              'name': 'library',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
+            },
+            <String, Object?>{
+              'name': 'context',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'What the framework was doing: `during layout`, `while painting`.',
+            },
+            <String, Object?>{
+              'name': 'count',
+              'type': 'int',
+              'doc': 'How many times this exact error was reported.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'tree',
+        'type': 'List<CatalogTreeNode>',
+        'optional': true,
+        'doc': 'The tree, when `--tree` asked for it.',
+        'shape': <String, Object?>{
+          'type': 'CatalogTreeNode',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'id',
+              'type': 'String',
+              'doc':
+                  'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
+            },
+            <String, Object?>{
+              'name': 'type',
+              'type': 'String',
+              'doc': 'The widget\'s runtime type.',
+            },
+            <String, Object?>{
+              'name': 'depth',
+              'type': 'int',
+              'doc':
+                  'How deep below the demo\'s root, so a flat list still reads as a tree.',
+            },
+            <String, Object?>{
+              'name': 'description',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
+            },
+            <String, Object?>{
+              'name': 'source',
+              'type': 'String',
+              'optional': true,
+              'doc': '`path/to/file.dart:12:5`, project-relative.',
+            },
+            <String, Object?>{
+              'name': 'local',
+              'type': 'bool',
+              'doc':
+                  'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+            },
+            <String, Object?>{
+              'name': 'rect',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Where it ended up: `x,y w×h`.',
+            },
+            <String, Object?>{
+              'name': 'constraints',
+              'type': 'String',
+              'optional': true,
+              'doc': 'What the parent allowed: `w 0.0..900.0, h 0.0..∞`.',
+            },
+            <String, Object?>{
+              'name': 'flex',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
+            },
+            <String, Object?>{
+              'name': 'flexChild',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'matches',
+        'type': 'List<CatalogTreeNode>',
+        'optional': true,
+        'doc': 'The nodes matching `--find`.',
+        'shape': <String, Object?>{
+          'type': 'CatalogTreeNode',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'id',
+              'type': 'String',
+              'doc':
+                  'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
+            },
+            <String, Object?>{
+              'name': 'type',
+              'type': 'String',
+              'doc': 'The widget\'s runtime type.',
+            },
+            <String, Object?>{
+              'name': 'depth',
+              'type': 'int',
+              'doc':
+                  'How deep below the demo\'s root, so a flat list still reads as a tree.',
+            },
+            <String, Object?>{
+              'name': 'description',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
+            },
+            <String, Object?>{
+              'name': 'source',
+              'type': 'String',
+              'optional': true,
+              'doc': '`path/to/file.dart:12:5`, project-relative.',
+            },
+            <String, Object?>{
+              'name': 'local',
+              'type': 'bool',
+              'doc':
+                  'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+            },
+            <String, Object?>{
+              'name': 'rect',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Where it ended up: `x,y w×h`.',
+            },
+            <String, Object?>{
+              'name': 'constraints',
+              'type': 'String',
+              'optional': true,
+              'doc': 'What the parent allowed: `w 0.0..900.0, h 0.0..∞`.',
+            },
+            <String, Object?>{
+              'name': 'flex',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
+            },
+            <String, Object?>{
+              'name': 'flexChild',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'at',
+        'type': 'List<CatalogTreeNode>',
+        'optional': true,
+        'doc':
+            'The chain under `--at`, outermost first — the thing under a cursor is usually a `Text` and the thing meant is the button around it.',
+        'shape': <String, Object?>{
+          'type': 'CatalogTreeNode',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'id',
+              'type': 'String',
+              'doc':
+                  'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
+            },
+            <String, Object?>{
+              'name': 'type',
+              'type': 'String',
+              'doc': 'The widget\'s runtime type.',
+            },
+            <String, Object?>{
+              'name': 'depth',
+              'type': 'int',
+              'doc':
+                  'How deep below the demo\'s root, so a flat list still reads as a tree.',
+            },
+            <String, Object?>{
+              'name': 'description',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
+            },
+            <String, Object?>{
+              'name': 'source',
+              'type': 'String',
+              'optional': true,
+              'doc': '`path/to/file.dart:12:5`, project-relative.',
+            },
+            <String, Object?>{
+              'name': 'local',
+              'type': 'bool',
+              'doc':
+                  'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+            },
+            <String, Object?>{
+              'name': 'rect',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Where it ended up: `x,y w×h`.',
+            },
+            <String, Object?>{
+              'name': 'constraints',
+              'type': 'String',
+              'optional': true,
+              'doc': 'What the parent allowed: `w 0.0..900.0, h 0.0..∞`.',
+            },
+            <String, Object?>{
+              'name': 'flex',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
+            },
+            <String, Object?>{
+              'name': 'flexChild',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'logs',
+        'type': 'List<String>',
+        'optional': true,
+        'doc': 'What the demo printed, when `--logs` asked.',
+      },
+      <String, Object?>{
+        'name': 'logsDropped',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'How many earlier lines fell off the guest\'s buffer, when any did.',
+      },
+      <String, Object?>{
+        'name': 'screenshot',
+        'type': 'Artifact',
+        'optional': true,
+        'doc': 'The picture, when `--screenshot` asked for one.',
+        'shape': <String, Object?>{
+          'type': 'Artifact',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'kind',
+              'type': 'String',
+              'doc': 'A MIME type where one fits — see the constants above.',
+            },
+            <String, Object?>{
+              'name': 'address',
+              'type': 'String',
+              'doc': 'What this is an artifact of, axes included.',
+            },
+            <String, Object?>{
+              'name': 'path',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Where it was written, when it was written.',
+            },
+            <String, Object?>{
+              'name': 'text',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.',
+            },
+            <String, Object?>{
+              'name': 'meta',
+              'type': 'Map<String, Object?>',
+              'optional': true,
+              'doc':
+                  'Anything the producer wants the reader to know: timings, compile stats, exit codes.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
   'CatalogKnob': ResultShape.fromJson(<String, Object?>{
     'type': 'CatalogKnob',
     'fields': <Object?>[
@@ -620,47 +941,6 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
-  'CatalogRenderResult': ResultShape.fromJson(<String, Object?>{
-    'type': 'CatalogRenderResult',
-    'fields': <Object?>[
-      <String, Object?>{'name': 'entry', 'type': 'String'},
-      <String, Object?>{'name': 'address', 'type': 'String'},
-      <String, Object?>{
-        'name': 'ok',
-        'type': 'bool',
-        'doc': 'Whether it rendered without the framework reporting anything.',
-      },
-      <String, Object?>{
-        'name': 'errors',
-        'type': 'List<CatalogRenderError>',
-        'shape': <String, Object?>{
-          'type': 'CatalogRenderError',
-          'fields': <Object?>[
-            <String, Object?>{'name': 'exception', 'type': 'String'},
-            <String, Object?>{
-              'name': 'library',
-              'type': 'String',
-              'optional': true,
-              'doc':
-                  '`widgets library`, `rendering library` — which tells a layout overflow from a failed image load without reading the message.',
-            },
-            <String, Object?>{
-              'name': 'context',
-              'type': 'String',
-              'optional': true,
-              'doc':
-                  'What the framework was doing: `during layout`, `while painting`.',
-            },
-            <String, Object?>{
-              'name': 'count',
-              'type': 'int',
-              'doc': 'How many times this exact error was reported.',
-            },
-          ],
-        },
-      },
-    ],
-  }),
   'CatalogTreeNode': ResultShape.fromJson(<String, Object?>{
     'type': 'CatalogTreeNode',
     'fields': <Object?>[
@@ -725,91 +1005,6 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc':
             'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
-      },
-    ],
-  }),
-  'CatalogTreeResult': ResultShape.fromJson(<String, Object?>{
-    'type': 'CatalogTreeResult',
-    'fields': <Object?>[
-      <String, Object?>{'name': 'entry', 'type': 'String'},
-      <String, Object?>{'name': 'address', 'type': 'String'},
-      <String, Object?>{
-        'name': 'nodeCount',
-        'type': 'int',
-        'doc':
-            'How many nodes [nodes] holds, so a caller reading a truncated rendering still knows what it is a rendering of.',
-      },
-      <String, Object?>{
-        'name': 'nodes',
-        'type': 'List<CatalogTreeNode>',
-        'doc': 'Depth-first, root first.',
-        'shape': <String, Object?>{
-          'type': 'CatalogTreeNode',
-          'fields': <Object?>[
-            <String, Object?>{
-              'name': 'id',
-              'type': 'String',
-              'doc':
-                  'The child-index path from the demo\'s root — `\'\'`, `0`, `0/1`.',
-            },
-            <String, Object?>{
-              'name': 'type',
-              'type': 'String',
-              'doc': 'The widget\'s runtime type.',
-            },
-            <String, Object?>{
-              'name': 'depth',
-              'type': 'int',
-              'doc':
-                  'How deep below the demo\'s root, so a flat list still reads as a tree.',
-            },
-            <String, Object?>{
-              'name': 'description',
-              'type': 'String',
-              'optional': true,
-              'doc':
-                  'The framework\'s one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.',
-            },
-            <String, Object?>{
-              'name': 'source',
-              'type': 'String',
-              'optional': true,
-              'doc': '`path/to/file.dart:12:5`, project-relative.',
-            },
-            <String, Object?>{
-              'name': 'local',
-              'type': 'bool',
-              'doc':
-                  'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
-            },
-            <String, Object?>{
-              'name': 'rect',
-              'type': 'String',
-              'optional': true,
-              'doc': 'Where it ended up: `x,y w×h`.',
-            },
-            <String, Object?>{
-              'name': 'constraints',
-              'type': 'String',
-              'optional': true,
-              'doc': 'What the parent allowed: `w 0.0..900.0, h 0.0..∞`.',
-            },
-            <String, Object?>{
-              'name': 'flex',
-              'type': 'String',
-              'optional': true,
-              'doc':
-                  'For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.',
-            },
-            <String, Object?>{
-              'name': 'flexChild',
-              'type': 'String',
-              'optional': true,
-              'doc':
-                  'For a *child* of one: `flex 2 (tight)`, read off the parent data.',
-            },
-          ],
-        },
       },
     ],
   }),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:device_frame/device_frame.dart';
 import 'package:flutterware/ui_catalog.dart';
@@ -15,6 +16,7 @@ import 'catalog_devices.dart';
 import 'catalog_entry.dart';
 import 'catalog_session.dart';
 import 'catalog_tree.dart';
+import 'inspect_panel.dart';
 
 /// The catalog loop: entries on the left, the live guest on the right.
 /// Selecting an entry hot-reloads the running guest rather than restarting it.
@@ -58,6 +60,17 @@ class _CatalogViewState extends State<CatalogView> {
     Duration(milliseconds: 1500),
   ];
 
+  /// The node the pointer is over, drawn on the preview and nowhere else.
+  ///
+  /// A notifier rather than session state or a `setState`, and the granularity
+  /// is the reason: this changes on every mouse move across a tree row, and
+  /// rebuilding the entry list and the top bar sixty times a second to move one
+  /// rectangle would be absurd. Only the overlay listens.
+  final _highlight = ValueNotifier<String?>(null);
+
+  /// Whether a click on the preview picks a widget instead of reaching the demo.
+  final _picking = ValueNotifier<bool>(false);
+
   final FocusNode _focusNode = FocusNode();
   Timer? _poll;
   final _settling = <Timer>[];
@@ -83,11 +96,19 @@ class _CatalogViewState extends State<CatalogView> {
     );
     _startPolling();
 
+    // The one thing on screen whose rect has to keep up with a demo that is
+    // moving. Everything else the tree says goes slightly stale and looks
+    // slightly wrong; a rectangle drawn over the wrong place looks *broken*,
+    // and it is the reason the watch exists at all.
+    _highlight.addListener(_trackHighlighted);
+
     // And coming back to the *panel*: the shell rebuilds it from scratch when
     // you switch plugins, so a mount is the other half of the same signal.
     // After the frame, because this runs during a build.
     WidgetsBinding.instance.addPostFrameCallback((_) => _reloadIfChanged());
   }
+
+  void _trackHighlighted() => _session.watchedNode = _highlight.value;
 
   @override
   void dispose() {
@@ -95,6 +116,10 @@ class _CatalogViewState extends State<CatalogView> {
     _stopSettling();
     _lifecycle.dispose();
     _focusNode.dispose();
+    _highlight
+      ..removeListener(_trackHighlighted)
+      ..dispose();
+    _picking.dispose();
     super.dispose();
   }
 
@@ -116,7 +141,20 @@ class _CatalogViewState extends State<CatalogView> {
 
   void _startPolling() {
     _poll?.cancel();
-    _poll = Timer.periodic(_pollInterval, (_) => _session.refresh());
+    _poll = Timer.periodic(_pollInterval, (_) {
+      _session.refresh();
+      // Errors are not a fact about the build, they are a stream. A read fired
+      // once after a reload gets a 300ms window, and a cold start can spend
+      // seconds getting to its first frame — so the answer was "waiting for
+      // the entry to render…" for ever, on a demo that was visibly painting
+      // Flutter's overflow stripes. Worse, an error thrown from `paint`
+      // arrives *whenever it is painted*, which can be long after any build
+      // this could have hung a read on.
+      //
+      // Cheap: a handful of deduped errors over a connection that is already
+      // open, and only while somebody has the panel on screen.
+      unawaited(_session.readErrors());
+    });
   }
 
   void _stopPolling() {
@@ -216,11 +254,51 @@ class _CatalogViewState extends State<CatalogView> {
                   children: [
                     _TopBar(session: _session),
                     const Divider(height: 1),
-                    Expanded(child: _buildCanvas(context)),
-                    if (_session.knobs.knobs.isNotEmpty) ...[
-                      const Divider(height: 1),
-                      _KnobPanel(session: _session),
-                    ],
+                    // Wrapped so the panel can be told how much room there is,
+                    // and wrapped *here* rather than higher so the number is
+                    // the canvas and the panel and nothing else — a reserve
+                    // that had to guess at the bars above and below would be
+                    // wrong the moment either changed height.
+                    //
+                    // It cannot measure this itself: a `Column` hands a
+                    // non-flex child an unbounded main axis, so a
+                    // `LayoutBuilder` down there reads infinity and clamps
+                    // against nothing.
+                    Expanded(
+                      // `inspect` covers the canvas and the panel and
+                      // nothing else, because those are its two writers: the
+                      // tree writes a selection when you click a row, the
+                      // picker writes one when you click the *preview*.
+                      // Wrapped any higher and it would swallow the top
+                      // bar's writes too — a device picked from up there
+                      // would land as `inspect.device`, which is nobody's
+                      // parameter.
+                      child: AddressScope(
+                        namespace: 'inspect',
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(child: _buildCanvas(context)),
+                              // Always mounted, unlike the knob drawer it
+                              // replaced: that one was absent rather than empty
+                              // when an entry declared no knobs, so anybody who
+                              // had not happened to open a demo with knobs never
+                              // learned the feature existed. The tab is there now
+                              // and says so.
+                              InspectPanel(
+                                session: _session,
+                                available: constraints.maxHeight,
+                                highlight: _highlight,
+                                picking: _picking,
+                                controls: (context) =>
+                                    _KnobPanel(session: _session),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                     const Divider(height: 1),
                     _StatusBar(session: _session, onReload: _reload),
                   ],
@@ -346,9 +424,85 @@ class _CatalogViewState extends State<CatalogView> {
     });
   }
 
+  /// Picks the widget under a point instead of letting the demo have the click.
+  ///
+  /// Two hit tests, and the split is deliberate. The highlight has already
+  /// followed the mouse here from [InspectTree.nodeAtPoint], which knows only
+  /// rectangles; the commit asks the guest, which runs the framework's own
+  /// hit test and therefore knows about transforms, clips and `IgnorePointer`.
+  /// So the box you were shown is a guess and the node you get is not — and
+  /// when they disagree, the tree jumps to the right one.
+  Future<void> _pick(BuildContext context, Offset point) async {
+    var handle = AddressScope.write(context);
+    var id = await _session.nodeUnder(point.dx, point.dy);
+    if (!mounted) return;
+    // Nothing under the point is a miss, not a selection to clear: you clicked
+    // the margin, and losing what you had chosen for that would be a punishment
+    // for a slip.
+    if (id != null) handle.setParam('node', id);
+    // One pick per arming, as Chrome does. Staying armed means the next click
+    // anywhere is also a pick, which is how you end up fighting the tool to
+    // press a button in your own demo.
+    _picking.value = false;
+    _highlight.value = null;
+  }
+
   /// Everything the guest needs to be driven: keys, hover, and pointers, in
   /// [dpr] — the panel's when it fills the panel, the device's when it is one.
+  ///
+  /// While [_picking] the guest is given **nothing**: not the click, which
+  /// would tap the button you were trying to inspect, and not the hover, which
+  /// would light the demo's own hover states underneath the thing you are
+  /// trying to see.
   Widget _guestInput(EmbeddedEngine engine, double dpr, Widget sizedBox) {
+    // The guest's picture, built once and handed to whichever mode is on. Built
+    // per-mode it is easy to pass the placeholder to one of them, which is what
+    // happened: arming the picker replaced the demo with an empty box, so the
+    // preview vanished the moment you went to point at it.
+    var picture = engine.textureId == null
+        ? sizedBox
+        : Texture(textureId: engine.textureId!);
+    return ValueListenableBuilder(
+      valueListenable: _picking,
+      builder: (context, picking, _) => picking
+          ? _pickerInput(context, picture)
+          : _demoInput(engine, dpr, picture),
+    );
+  }
+
+  Widget _pickerInput(BuildContext context, Widget picture) {
+    // Its own focus, because the demo's is not mounted while picking — and a
+    // mode you can only leave by finding the button again is a trap.
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey != LogicalKeyboardKey.escape) {
+          return KeyEventResult.ignored;
+        }
+        _picking.value = false;
+        _highlight.value = null;
+        return KeyEventResult.handled;
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.precise,
+        // Local coordinates are the guest's own: the box is sized to the guest's
+        // logical size in both staging modes, so a point here needs no transform
+        // — and neither does the rect that comes back.
+        onHover: (e) => _highlight.value = _session.treeForSelection
+            ?.nodeAtPoint(e.localPosition.dx, e.localPosition.dy)
+            ?.id,
+        onExit: (_) => _highlight.value = null,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (e) => unawaited(_pick(context, e.localPosition)),
+          child: _withOverlay(picture),
+        ),
+      ),
+    );
+  }
+
+  Widget _demoInput(EmbeddedEngine engine, double dpr, Widget picture) {
     return Focus(
       focusNode: _focusNode,
       onKeyEvent: (node, event) {
@@ -410,13 +564,131 @@ class _CatalogViewState extends State<CatalogView> {
             x: e.localPosition.dx * dpr,
             y: e.localPosition.dy * dpr,
           ),
-          child: engine.textureId == null
-              ? sizedBox
-              : Texture(textureId: engine.textureId!),
+          child: _withOverlay(picture),
         ),
       ),
     );
   }
+
+  /// The guest's picture with the highlight drawn over it.
+  ///
+  /// **Inside the texture's own box**, which is the whole trick: node rects
+  /// are in the guest's logical coordinates and this box *is* the guest's
+  /// logical size, so the painter needs no transform — and it inherits the
+  /// `FittedBox` and the `DeviceFrame` above it, so the highlight stays put
+  /// when the preview is staged as a phone. Drawn over the canvas instead, it
+  /// would need the scale, the offset and the frame's own inset, and would be
+  /// wrong on every device change until each was found again.
+  Widget _withOverlay(Widget picture) {
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        picture,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: ValueListenableBuilder(
+              valueListenable: _highlight,
+              builder: (context, hovered, _) {
+                // **Hover only, never the selection.** A box that stayed put
+                // after you chose something is a box you then have to find a
+                // way to dismiss — which is the state this was in, with no way
+                // out at all. Chrome draws it while you point and stops when
+                // you stop; what a selection leaves behind is a row in the
+                // tree, not a rectangle on the picture.
+                var node = hovered == null
+                    ? null
+                    : _session.treeForSelection?.nodeAt(hovered);
+                return ValueListenableBuilder(
+                  valueListenable: _session.watchedBox,
+                  builder: (context, live, _) => CustomPaint(
+                    painter: _HighlightPainter(
+                      node: node,
+                      // The guest's own last frame, when it is about this node.
+                      // The tree's rect is of the build it was read from, which
+                      // on anything animating is already wrong — and a
+                      // rectangle in the wrong place does not read as slightly
+                      // stale, it reads as broken.
+                      live: live?.id == hovered ? live : null,
+                      color: context.colors.accent,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Draws a box around one node, and its type above it.
+class _HighlightPainter extends CustomPainter {
+  _HighlightPainter({required this.node, required this.color, this.live});
+
+  final InspectNode? node;
+
+  /// The same node's box as of the guest's last frame, when the watch is
+  /// reporting it. Wins over the tree's, which is of the build it was read
+  /// from — correct the instant it arrives and wrong for as long as anything
+  /// on screen is moving.
+  final WatchBox? live;
+
+  final Color color;
+
+  /// Where to draw: the live box if there is one, else what the tree said.
+  Rect? get _rect {
+    if (live case var box?) {
+      return Rect.fromLTWH(box.x, box.y, box.width, box.height);
+    }
+    if (node?.layout case var layout?) {
+      return Rect.fromLTWH(layout.x, layout.y, layout.width, layout.height);
+    }
+    return null;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // The node is still what names the box — a live rect with no node behind
+    // it would draw a rectangle labelled nothing.
+    if (node == null) return;
+    var rect = _rect;
+    if (rect == null) return;
+    canvas
+      ..drawRect(rect, Paint()..color = color.withValues(alpha: 0.18))
+      ..drawRect(
+        rect,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+
+    // The type, because a rectangle alone does not say which of the four boxes
+    // stacked at this corner you have got.
+    var label = TextPainter(
+      text: TextSpan(
+        text: ' ${node!.type} ',
+        style: const TextStyle(color: Colors.white, fontSize: 10),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    // Above the box, or inside it when there is no room above — a label off
+    // the top of the picture names nothing.
+    var top = rect.top >= label.height ? rect.top - label.height : rect.top;
+    var left = rect.left
+        .clamp(0.0, math.max(0.0, size.width - label.width))
+        .toDouble();
+    canvas.drawRect(
+      Rect.fromLTWH(left, top, label.width, label.height),
+      Paint()..color = color,
+    );
+    label.paint(canvas, Offset(left, top));
+  }
+
+  @override
+  bool shouldRepaint(_HighlightPainter old) =>
+      old.node?.id != node?.id || old._rect != _rect || old.color != color;
 }
 
 /// The controls the entry declared while it built.
@@ -431,9 +703,23 @@ class _KnobPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (session.knobs.knobs.isEmpty) {
+      return Container(
+        color: context.colors.panel,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(FwSpacing.lg),
+        child: Text(
+          // Says what a knob *is*, because this is the state most entries are
+          // in and it is the only moment anybody reads this pane.
+          'This entry declares no knobs.\nA demo gets one by asking while it '
+          'builds — context.uiCatalog.parameters.string("label", "Hello").',
+          textAlign: TextAlign.center,
+          style: context.type.caption.copyWith(color: context.colors.mut),
+        ),
+      );
+    }
     return Container(
       color: context.colors.panel,
-      constraints: const BoxConstraints(maxHeight: 140),
       width: double.infinity,
       // The entry's knobs own `knob.*`, and only this panel. Nested below the
       // level that owns the entry segment, which is what says a knob dies with

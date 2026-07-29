@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutterware/ui_catalog.dart';
@@ -11,10 +12,41 @@ import 'catalog_params.dart';
 import 'devices.dart';
 import 'catalog_entry.dart';
 import 'compiler_daemon_client.dart';
+import 'inspect_client.dart';
+import 'live_session.dart';
 import 'package_config_locator.dart';
 import 'protocol.dart';
 
 enum CatalogSessionPhase { starting, ready, error }
+
+/// Which pane of the inspection panel is showing.
+///
+/// Lives here rather than beside the widget because the session outlives the
+/// panel — the shell rebuilds it from scratch whenever you come back to it, and
+/// returning to the tab you had open is the same courtesy as returning to the
+/// entry you had selected.
+///
+/// **Deliberately not on the address**, unlike the node selection beside it.
+/// `inspect.*` is dropped when the entry segment changes — it must be, since a
+/// node id names a position in one particular tree and would otherwise name
+/// some unrelated widget of the next demo with complete confidence. A tab
+/// dropped with it would flip back to Elements on every click through the entry
+/// list, which is exactly when you least want it to.
+///
+/// **Controls is first and is the default.** It is the everyday loop — turn a
+/// knob, watch the demo — where the tree is what you go to when something is
+/// wrong. Opening straight onto a wall of widget rows reads as the panel having
+/// an opinion about what you came here to do.
+enum InspectTab {
+  controls('Controls'),
+  elements('Elements'),
+  problems('Problems'),
+  console('Console');
+
+  const InspectTab(this.label);
+
+  final String label;
+}
 
 /// What the guest is being rendered *as*, which the top bar owns.
 ///
@@ -138,6 +170,7 @@ class CatalogSession extends ChangeNotifier {
     required this.appPackageRoot,
     required this.flutterSdkRoot,
     required this.projectRoot,
+    this.worktreeRoot,
     this.roots = const ['demo'],
   }) {
     // Forwarded, so a renderer has one thing to listen to.
@@ -174,6 +207,18 @@ class CatalogSession extends ChangeNotifier {
 
   /// Root the entries' paths are relative to.
   final String projectRoot;
+
+  /// The worktree the project sits in, for shortening what is shown.
+  ///
+  /// An absolute URI is the truth and a relative path is what anybody reading
+  /// it wants — and worktree-relative rather than package-relative so a source
+  /// location read off the panel is byte-identical to the one `fw run
+  /// ui_catalog inspect --tree` prints, which is what lets you paste one where
+  /// the other was expected. Falls back to [projectRoot] when nothing said.
+  final String? worktreeRoot;
+
+  /// What a path shown in the panel is measured against.
+  String get displayRoot => worktreeRoot ?? projectRoot;
 
   /// Directories to scan, relative to [projectRoot].
   final List<String> roots;
@@ -257,6 +302,387 @@ class CatalogSession extends ChangeNotifier {
   /// report and from nowhere else.
   AxisReport axes = AxisReport.empty;
 
+  /// The widget tree the guest last reported, whichever entry it was of.
+  ///
+  /// Read from the **live** guest rather than through a `PluginAction`, which
+  /// is the point: an action renders its own headless copy, and a copy has
+  /// none of the state a person put this one into. Prefer [treeForSelection]
+  /// for anything that draws.
+  InspectTree? tree;
+
+  /// The tree, but only when it describes what is selected.
+  ///
+  /// A tree naming another entry is a read from before the switch, not an
+  /// empty one — the same rule `KnobReport.entryId` follows. Drawing it under
+  /// a selection it does not belong to is how you end up wondering why your
+  /// edit did nothing, which is the mistake `_CompileError` exists to avoid
+  /// one pane over.
+  InspectTree? get treeForSelection =>
+      tree?.entryId == (selected ?? active)?.id ? tree : null;
+
+  /// What the entry on screen reported while building and painting.
+  ///
+  /// **Read after every build regardless of which tab is open**, unlike the
+  /// tree. A badge exists to tell you about something you did not ask about,
+  /// and one that only appears once you open the tab it is on would be telling
+  /// you what you had just gone and looked up. It is also a much smaller answer
+  /// than a tree: a handful of distinct errors, counted rather than repeated.
+  InspectErrors? renderErrors;
+
+  /// The errors, but only when they describe what is selected — the same rule
+  /// [treeForSelection] follows, and for the same reason.
+  InspectErrors? get errorsForSelection =>
+      renderErrors?.entryId == (selected ?? active)?.id ? renderErrors : null;
+
+  /// Which pane of the panel is showing. See [InspectTab] for why it is here
+  /// and not on the address.
+  InspectTab inspectTab = InspectTab.controls;
+
+  /// Whether the tree is **on screen** — the Elements tab showing, and the
+  /// panel not collapsed.
+  ///
+  /// Deliberately narrower than "the panel is mounted". A tree nobody is
+  /// looking at is a round trip on every entry switch, paid by everyone who
+  /// never opens that tab; and since the panel now opens on Controls, tying it
+  /// to the mount would have meant every session reading trees for a pane
+  /// nobody had asked to see.
+  /// **Does not notify.** Nothing draws this flag, and the panel turns it off
+  /// from `dispose` — where notifying would rebuild listeners around a widget
+  /// on its way out. Turning it on notifies soon enough, when the tree lands.
+  bool get inspecting => _inspecting;
+  var _inspecting = false;
+  set inspecting(bool value) {
+    if (value == _inspecting) return;
+    _inspecting = value;
+    // Opening the panel is itself a request — the entry on screen arrived
+    // before anybody asked for its tree.
+    if (value) unawaited(readTree());
+  }
+
+  /// What the entry on screen has printed, oldest first.
+  ///
+  /// **Its own notifier**, for the reason [watchedBox] is: a demo printing from
+  /// `build` prints on every frame, and rebuilding the entry list and the top
+  /// bar to append a line would be absurd. Only the console listens.
+  final guestLogs = ValueNotifier<List<InspectLogLine>>(const []);
+
+  /// How many lines the guest dropped off the front of its buffer, so the
+  /// console can say the scrollback is not the beginning.
+  int get logsDropped => _logsDropped;
+  var _logsDropped = 0;
+
+  /// The highest sequence already held, which is what makes taking the buffer
+  /// and subscribing at the same moment safe. The two overlap by however long
+  /// the round trip took; the overlap is dropped by number.
+  var _lastLogSequence = 0;
+
+  StreamSubscription<InspectLogLine>? _logStream;
+
+  /// Bounded here as well as in the guest. The guest keeps 500; this keeps the
+  /// same, so a session left open for a day holds a screenful of scrollback
+  /// rather than a day of it.
+  static const _logLimit = 500;
+
+  /// Empties both ends — the console's clear button.
+  ///
+  /// The guest's buffer too, and not only this one: clearing the host alone
+  /// would put every line straight back on the next read.
+  Future<void> clearLogs() async {
+    var inspect = _inspect;
+    guestLogs.value = const [];
+    _logsDropped = 0;
+    if (inspect == null) return;
+    await inspect.clearLogs();
+    // Not reset to zero: the guest goes on counting from where it was, and a
+    // host that started again from nothing would discard every line until the
+    // guest's counter caught back up.
+  }
+
+  /// Reads the guest's buffer, then keeps up with it.
+  void _startLogs() {
+    var inspect = _inspect;
+    if (inspect == null || _logStream != null) return;
+    // Subscribed before the read, so nothing printed while the read is in
+    // flight falls between the two.
+    _logStream = inspect.logLines.listen(_onLogLine);
+    unawaited(readLogs());
+  }
+
+  void _stopLogs() {
+    unawaited(_logStream?.cancel());
+    _logStream = null;
+  }
+
+  void _onLogLine(InspectLogLine line) {
+    if (_disposed || line.sequence <= _lastLogSequence) return;
+    _hold([...guestLogs.value, line]);
+  }
+
+  /// Keeps the last [_logLimit] of [lines], in order, and remembers how far it
+  /// has got.
+  ///
+  /// One place, because the cap and the high-water mark were written twice —
+  /// once for a pushed line and once for a pulled buffer — and a cap enforced
+  /// in two places is a cap that will eventually be two different caps.
+  void _hold(List<InspectLogLine> lines) {
+    lines.sort((a, b) => a.sequence.compareTo(b.sequence));
+    if (lines.length > _logLimit) {
+      lines = lines.sublist(lines.length - _logLimit);
+    }
+    _lastLogSequence = lines.isEmpty ? _lastLogSequence : lines.last.sequence;
+    guestLogs.value = lines;
+  }
+
+  /// Takes whatever the guest is holding that this has not seen.
+  ///
+  /// Called on open and after a reload, which is when the stream alone is not
+  /// enough: a reload prints before anything here has subscribed.
+  Future<void> readLogs() async {
+    var inspect = _inspect;
+    var entry = selected ?? active;
+    if (inspect == null || entry == null) return;
+    var report = await inspect.logs(entry.id);
+    if (report == null || _disposed) return;
+    _logsDropped = report.dropped;
+
+    // **Merged and re-sorted, not appended.** The obvious version took
+    // everything newer than the highest sequence held — and lost the entire
+    // scrollback on open, because the stream is subscribed first and one line
+    // arriving during the round trip would push the mark past every line the
+    // buffer was about to deliver. What the buffer holds is history; history
+    // does not go on the end.
+    var known = {for (var line in guestLogs.value) line.sequence};
+    var fresh = [
+      for (var line in report.lines)
+        if (!known.contains(line.sequence)) line,
+    ];
+    if (fresh.isEmpty) return;
+    _hold([...guestLogs.value, ...fresh]);
+  }
+
+  /// Whether the panel is mounted at all — which is the watch's lifetime.
+  ///
+  /// **Deliberately wider than [inspecting].** The watch costs the guest
+  /// 0.3ms a frame on the largest tree in the repo, measured, and nothing at
+  /// all on a frame that is not drawn; what is expensive is the *tree read* it
+  /// can ask for, and that stays behind [inspecting]. Tying the watch to the
+  /// Elements tab instead would have left the Problems tab — the one place
+  /// where resizing the preview genuinely changes the answer, because that is
+  /// what makes a `Row` overflow or stop overflowing — with no way to know the
+  /// preview had been resized at all.
+  ///
+  /// **Does not notify**, for the reason [inspecting] does not: the panel
+  /// clears it from `dispose`.
+  bool get panelOpen => _panelOpen;
+  var _panelOpen = false;
+  set panelOpen(bool value) {
+    if (value == _panelOpen) return;
+    _panelOpen = value;
+    if (value) {
+      _startWatch();
+      _startLogs();
+    } else {
+      _stopWatch();
+      _stopLogs();
+    }
+  }
+
+  /// The box the guest last reported for [watchedNode], live.
+  ///
+  /// **A notifier of its own, not a field behind [notifyListeners].** This
+  /// arrives sixty times a second on an animating demo, and rebuilding the
+  /// whole catalog view at that rate — entry list, panel, tree and all — to
+  /// move one rectangle would cost far more than the watch saves. Only the
+  /// painter listens.
+  final watchedBox = ValueNotifier<WatchBox?>(null);
+
+  /// The node whose box the guest should report.
+  ///
+  /// Whatever the pointer is over, which is the only thing that draws a
+  /// rectangle — see the overlay's own note on why a *selection* deliberately
+  /// draws nothing.
+  ///
+  /// **Debounced, and this is the whole reason it is a setter rather than a
+  /// call.** Resolving an id costs the guest a full summary-tree walk — 8ms on
+  /// the largest tree in the repo, measured — so sweeping the pointer down
+  /// fifty rows would spend half a second of guest time resolving forty-nine
+  /// nodes nobody stopped on. Highlighting stays instant regardless: it is
+  /// drawn from the tree already in hand. What waits is only the *tracking*,
+  /// which matters exactly when you have come to rest.
+  String? get watchedNode => _watchedNode;
+  String? _watchedNode;
+  Timer? _watchSettle;
+  set watchedNode(String? id) {
+    if (id == _watchedNode) return;
+    _watchedNode = id;
+    // The old box named the old node. Kept for the moment it takes to resolve
+    // the new one, it would draw the previous row's rectangle around this one.
+    watchedBox.value = null;
+    _watchSettle?.cancel();
+    _watchSettle = Timer(const Duration(milliseconds: 120), () {
+      if (_disposed || !_panelOpen) return;
+      unawaited(_inspect?.watch(nodeId: _watchedNode));
+    });
+  }
+
+  StreamSubscription<WatchPush>? _watch;
+
+  /// Subscribes, then turns the guest's watch on.
+  ///
+  /// That order matters: the guest starts pushing the moment the extension
+  /// returns, and a subscription taken afterwards misses whatever landed in
+  /// between.
+  void _startWatch() {
+    var inspect = _inspect;
+    if (inspect == null || _watch != null) return;
+    _watch = inspect.watches.listen(_onWatch);
+    unawaited(inspect.watch(nodeId: _watchedNode));
+  }
+
+  void _stopWatch() {
+    _watchSettle?.cancel();
+    _watchSettle = null;
+    _resizeSettle?.cancel();
+    _resizeSettle = null;
+    unawaited(_watch?.cancel());
+    _watch = null;
+    watchedBox.value = null;
+    // Fire and forget: a guest going away is the common case here, and the
+    // tolerant form is what makes that a non-event.
+    unawaited(_inspect?.unwatch());
+  }
+
+  void _onWatch(WatchPush push) {
+    if (_disposed) return;
+    // A push from before a switch describes a demo that is no longer on
+    // screen. Not dropped in the guest, so that this can tell the difference
+    // between "nothing moved" and "you are a switch behind".
+    if (push.entryId != (selected ?? active)?.id) return;
+    if (push.geometry case var box?) watchedBox.value = box;
+    // Promptly, because a shape change is rare by nature — an animation moves
+    // geometry, not structure — so there is nothing here to smooth out.
+    if (push.structureChanged && _inspecting) unawaited(_rereadTree());
+    if (push.resized) _settleResize();
+  }
+
+  Timer? _resizeSettle;
+
+  /// Catches up after the preview has been given a different box.
+  ///
+  /// Waited out rather than acted on, because a resize is a **drag**: the size
+  /// changes on every frame of it, and each one would otherwise queue a tree
+  /// read and a round of error clearing for a layout the pointer has already
+  /// left behind.
+  ///
+  /// The errors go with it, and that is the half worth explaining. The record
+  /// is of what the framework *said*, and nothing ever arrives to say an
+  /// overflow stopped — so a `Row` that overflowed at one width went on being
+  /// listed under Problems at every width after it, including the ones where it
+  /// fits. Dragging the panel divider is precisely how you make that happen,
+  /// and was how it was found.
+  void _settleResize() {
+    _resizeSettle?.cancel();
+    _resizeSettle = Timer(const Duration(milliseconds: 250), () {
+      if (_disposed || !_panelOpen) return;
+      if (_inspecting) unawaited(_rereadTree());
+      unawaited(forgetErrors());
+    });
+  }
+
+  var _treeReading = false;
+  var _treeReadPending = false;
+
+  /// Re-reads the tree, at most one read at a time.
+  ///
+  /// The guest's structure push is a flag and costs it nothing; the read it
+  /// asks for costs **17ms on the largest tree in the repo**, measured. So a
+  /// demo whose shape moves on every frame — a list ticking, a menu animating
+  /// open — would queue reads faster than they complete and never catch up.
+  /// Coalescing here rather than debouncing in the guest keeps the decision
+  /// where the cost is: the guest cannot know this reader is still busy.
+  Future<void> _rereadTree() async {
+    if (_treeReading) {
+      _treeReadPending = true;
+      return;
+    }
+    _treeReading = true;
+    try {
+      do {
+        _treeReadPending = false;
+        await readTree();
+      } while (_treeReadPending && !_disposed && _inspecting);
+    } finally {
+      _treeReading = false;
+    }
+  }
+
+  /// What the guest says is under a point, innermost last.
+  ///
+  /// The authoritative half of the picker. [InspectTree.nodeAtPoint] answers
+  /// the same question from rectangles alone and answers it every frame, which
+  /// is what the highlight follows; this runs the framework's own `hitTest`
+  /// over the real render tree and is what a *click* commits to. Optimistic
+  /// while you move, correct when you choose.
+  ///
+  /// Null when there is no guest or nothing of the demo is under the point —
+  /// which is an answer, not a failure.
+  Future<String?> nodeUnder(double x, double y) async {
+    var inspect = _inspect;
+    if (inspect == null) return null;
+    var ids = await inspect.hitTest(x, y);
+    return ids.isEmpty ? null : ids.last;
+  }
+
+  /// Forgets what the entry has reported, then reads it back.
+  ///
+  /// What the panel's refresh does, and what a reload does before it rebuilds.
+  /// Nothing ever arrives to say a problem *stopped* — an overflow that a
+  /// resize fixed goes on being reported, because the record is of what was
+  /// said rather than of what is true now — so forgetting has to be somebody's
+  /// decision, and it belongs to whoever asked for the rebuild.
+  ///
+  /// The read that follows will usually come back empty and fill again on the
+  /// next poll, which is honest: the frame that would re-report has not been
+  /// painted yet.
+  Future<void> forgetErrors() async {
+    var inspect = _inspect;
+    if (inspect == null) return;
+    await inspect.clearErrors();
+    if (_disposed) return;
+    renderErrors = null;
+    notifyListeners();
+    await readErrors();
+  }
+
+  /// Asks the guest what the entry on screen reported.
+  ///
+  /// The guest forgets the previous entry's errors when it switches, so this
+  /// describes this demo rather than the one before it.
+  Future<void> readErrors() async {
+    var inspect = _inspect;
+    var entry = selected ?? active;
+    if (inspect == null || entry == null) return;
+    var report = await inspect.errors(entry.id);
+    if (report == null || _disposed) return;
+    renderErrors = report;
+    notifyListeners();
+  }
+
+  /// Asks the guest for the tree of the entry on screen.
+  ///
+  /// Public because the panel offers a refresh: a demo's own state moves
+  /// without anything here being told — you tapped, a menu opened — and until
+  /// the watch lands (S5e) pressing the button is how the tree catches up.
+  Future<void> readTree() async {
+    var inspect = _inspect;
+    var entry = selected ?? active;
+    if (inspect == null || entry == null) return;
+    var read = await inspect.tree(entry.id);
+    if (read == null || _disposed) return;
+    tree = read;
+    notifyListeners();
+  }
+
   /// What the address asks each of the shell's axes to be, as slugs.
   ///
   /// A **request**, like [wantedEntryId], and for the same reason: which axes
@@ -317,8 +743,23 @@ class CatalogSession extends ChangeNotifier {
     for (var broken in quarantined) {
       if (broken.entry.id == entry.id) return broken.error;
     }
+    // Still broken as far as anybody knows. Asking for a quarantined entry
+    // *is* the retry, so the daemon drops it from the quarantine and announces
+    // that **before it has compiled anything** — which left the row looking
+    // healthy for the several seconds the compile took, and then changing its
+    // mind. Not a flicker: a claim, held long enough to read, that we had no
+    // reason to make.
+    //
+    // So the last known error stands until the retry has actually decided. If
+    // it compiles, nothing re-quarantines it and the marker goes for good; if
+    // it does not, the announcement arrives before the switch returns and the
+    // list above answers again.
+    if (_retrying?.$1 == entry.id) return _retrying?.$2;
     return null;
   }
+
+  /// The entry whose quarantine is being retried, and the error it had.
+  (String, String)? _retrying;
 
   /// Why [selected] is not what the guest is showing, or null when it is.
   ///
@@ -341,6 +782,16 @@ class CatalogSession extends ChangeNotifier {
 
   CompilerDaemonClient? _daemon;
   GuestVmService? _vmService;
+
+  /// The inspection reads and writes, shared with the headless path that `fw`
+  /// and MCP go through — see [InspectClient]. Impatient compared with that
+  /// one: this session drove the reload itself, so it is waiting only on the
+  /// frame after it rather than on a whole cold build.
+  InspectClient? _inspect;
+
+  /// Whether this session announced itself — so a teardown that never got as
+  /// far as a guest does not delete a handle belonging to another window.
+  var _published = false;
   StreamSubscription<CatalogChanged>? _changes;
   Future<void> _queue = Future.value();
   bool _disposed = false;
@@ -451,7 +902,33 @@ class CatalogSession extends ChangeNotifier {
       await engine.start(width: width, height: height);
       if (_disposed) return;
 
-      _vmService = await GuestVmService.connect(await engine.vmServiceUri);
+      var vmService = _vmService = await GuestVmService.connect(
+        await engine.vmServiceUri,
+      );
+      _inspect = InspectClient(
+        vmService,
+        patience: InspectPatience.live,
+        abandoned: () => _disposed,
+      );
+      // The panel usually mounts *before* this — a cold start puts it on screen
+      // with a spinner while the daemon compiles — and both of these need a
+      // client to attach to. Asked for once at mount and once here, because
+      // either can be the one that comes second; both are idempotent.
+      if (_panelOpen) {
+        _startWatch();
+        _startLogs();
+      }
+      // Announced only now: a URI published before the service answers is a
+      // URI that fails to connect. From here on `fw` and an agent can read the
+      // entry on screen rather than rendering their own copy of it.
+      LiveSession.publish(
+        LiveSession(
+          projectRoot: projectRoot,
+          vmServiceUri: await engine.vmServiceUri,
+          pid: pid,
+        ),
+      );
+      _published = true;
       if (_disposed) return;
 
       selected = first;
@@ -495,7 +972,41 @@ class CatalogSession extends ChangeNotifier {
     // landed on the last entry you had open, but only when the panel was not
     // already mounted.
     var previous = selected;
+    // Remembered before anything moves: selecting a quarantined entry is how
+    // you ask the daemon to try again, and the row must go on saying so until
+    // it has. See [compileErrorFor].
+    if (compileErrorFor(entry) case var error?) _retrying = (entry.id, error);
     selected = entry;
+    // **And this is now what the address wants**, said here rather than waited
+    // for. The panel writes the address back from a *post-frame callback*, so
+    // between a click and the next frame boundary `_wantedEntryId` still names
+    // the entry you came from — and anything that calls [_applyWanted] in that
+    // window switches you back to it.
+    //
+    // Which is a race the daemon is unusually good at winning. Asking for a
+    // **quarantined** entry *is* the retry, so the daemon drops it from the
+    // quarantine and announces the change immediately, before it has compiled
+    // anything (`compiler_daemon.dart:550`). That announcement arrives as a
+    // `CatalogChanged`, `_onCatalogChanged` calls `_applyWanted`, and if the
+    // frame has not turned over yet your click is undone. Whether it has is a
+    // coin toss, which is exactly how it presented: clicking the entry that
+    // does not compile takes somewhere between four and eight goes, at random.
+    //
+    // Selecting *is* wanting. Saying so closes the window without changing
+    // what any of it means, and the address write that follows sets the same
+    // value, which the setter already treats as nothing.
+    _wantedEntryId = entry.id;
+    // **And say so now.** Setting the field without this left the click
+    // invisible until the queue reached [_switchTo] and `_busy` notified —
+    // which for an entry the daemon has quarantined means waiting out a *fresh
+    // compile attempt*, seconds of it. Nothing moved, so you clicked again,
+    // which queued another compile behind the first. Five clicks, five
+    // compiles, and the selection finally appearing looked like the fifth one
+    // having worked.
+    //
+    // The comment above was already right that `selected` is what the user
+    // asked for and that asking happens here. It just never told anybody.
+    notifyListeners();
     _queue = _queue
         .then((_) => _switchTo(entry, previous: previous, ifChanged: ifChanged))
         .catchError((Object e) {
@@ -523,22 +1034,23 @@ class CatalogSession extends ChangeNotifier {
     try {
       String? sent;
       while (true) {
-        var vmService = _vmService;
-        if (vmService == null) return;
+        var inspect = _inspect;
+        if (inspect == null) return;
         var payload = jsonEncode(paramPayloadFor(knobs.knobs, _knobSelections));
         if (payload == sent || payload == _pushedKnobs) break;
         sent = payload;
         _pushedKnobs = payload;
-        await vmService.callExtension(
-          'ext.flutterware.setParameters',
-          args: {'payload': payload},
-        );
+        await inspect.setKnobs(payload);
         if (_disposed) return;
       }
       // Once, after the last one: a demo's build decides what knobs exist, so
       // turning one can reveal or retire another — but only the settled state
       // is worth drawing.
       await _readKnobs();
+      // And which *widgets* exist, which is the same fact one layer down —
+      // and whether the build that produced them complained.
+      await readErrors();
+      if (_inspecting) await readTree();
     } finally {
       _pushingKnobs = false;
     }
@@ -564,9 +1076,9 @@ class CatalogSession extends ChangeNotifier {
   /// the first time now shows its defaults for one frame and is corrected as
   /// soon as it says what it declares.
   Future<void> _pushAxes() async {
-    var vmService = _vmService;
+    var inspect = _inspect;
     var shellId = axes.shellId;
-    if (vmService == null || shellId == null) return;
+    if (inspect == null || shellId == null) return;
     // Compared encoded rather than with [mapEquals], which is shallow: the
     // payload is a map of maps, and a fresh copy of an unchanged one is a
     // different object every time.
@@ -575,10 +1087,7 @@ class CatalogSession extends ChangeNotifier {
     });
     if (payload == _pushed) return;
     _pushed = payload;
-    await vmService.callExtension(
-      'ext.flutterware.setAxes',
-      args: {'payload': payload},
-    );
+    await inspect.setAxes(payload);
   }
 
   /// Asks the guest what the shell on screen offers.
@@ -590,26 +1099,20 @@ class CatalogSession extends ChangeNotifier {
   /// whose wrapper is not a shell settle — it reports no shell and no axes, and
   /// that is an answer rather than something to keep waiting for.
   Future<void> _readAxes() async {
-    var vmService = _vmService;
+    var inspect = _inspect;
     var entryId = (selected ?? active)?.id;
-    if (vmService == null || entryId == null) return;
-    for (var attempt = 0; attempt < 10; attempt++) {
-      var json = await vmService.callExtension('ext.flutterware.axes');
-      if (_disposed) return;
-      if (json == null) return; // A guest from before the extension existed.
-      var report = AxisReport.fromJson(json);
-      if (report.entryId == entryId) {
-        axes = report;
-        notifyListeners();
-        // The shell may only just have said who it is. Nothing could be pushed
-        // before that — [_pushAxes] needs a shell id — so a selection made
-        // while the previous entry was on screen would otherwise never reach
-        // this one. Self-dedupes when there is nothing new to send.
-        await _pushAxes();
-        return;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 30));
-    }
+    if (inspect == null || entryId == null) return;
+    var report = await inspect.axes(entryId);
+    // The guest never named this entry, or has no such extension. Either way
+    // what is held describes a build nobody has replaced, so leave it.
+    if (report == null || _disposed) return;
+    axes = report;
+    notifyListeners();
+    // The shell may only just have said who it is. Nothing could be pushed
+    // before that — [_pushAxes] needs a shell id — so a selection made while
+    // the previous entry was on screen would otherwise never reach this one.
+    // Self-dedupes when there is nothing new to send.
+    await _pushAxes();
   }
 
   /// Asks the guest what the entry on screen offers.
@@ -619,21 +1122,13 @@ class CatalogSession extends ChangeNotifier {
   /// describes the entry that was there before. Giving up quietly after a few
   /// tries beats a panel that spins.
   Future<void> _readKnobs() async {
-    var vmService = _vmService;
+    var inspect = _inspect;
     var entry = selected;
-    if (vmService == null || entry == null) return;
-    for (var attempt = 0; attempt < 10; attempt++) {
-      var json = await vmService.callExtension('ext.flutterware.parameters');
-      if (_disposed) return;
-      if (json == null) return; // A guest without the extension: no knobs.
-      var report = KnobReport.fromJson(json);
-      if (report.entryId == entry.id) {
-        knobs = report;
-        notifyListeners();
-        return;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 30));
-    }
+    if (inspect == null || entry == null) return;
+    var report = await inspect.knobs(entry.id);
+    if (report == null || _disposed) return;
+    knobs = report;
+    notifyListeners();
   }
 
   /// Rebuilds what is on screen from the files as they are now.
@@ -645,9 +1140,15 @@ class CatalogSession extends ChangeNotifier {
   ///
   /// Explicit rather than automatic on save: nothing watches the project yet,
   /// and a catalog that reloads itself mid-refactor is its own annoyance.
-  Future<void> reload() {
+  Future<void> reload() async {
     var entry = selected ?? active;
-    return entry == null ? Future.value() : switchTo(entry);
+    if (entry == null) return;
+    // Forgotten first, because the guest only resets its own record when the
+    // *entry* changes — a reload of the one already on screen would otherwise
+    // keep reporting the problem you have just been fixing. You edit, reload,
+    // and the fixed overflow is still in the list.
+    await forgetErrors();
+    await switchTo(entry);
   }
 
   /// Asks the daemon whether entries have appeared or disappeared.
@@ -710,6 +1211,9 @@ class CatalogSession extends ChangeNotifier {
         ifChanged: ifChanged,
       );
     } finally {
+      // Whatever it decided, the answer is in [quarantined] now — the daemon
+      // re-files a failure before the request it came from returns.
+      if (_retrying?.$1 == entry.id) _retrying = null;
       _idle();
     }
   }
@@ -771,6 +1275,21 @@ class CatalogSession extends ChangeNotifier {
     active = entry;
     unawaited(_readKnobs());
     unawaited(_readAxes());
+    // Not gated on the panel: this is what puts a badge on the Problems tab,
+    // and a demo that throws should say so whether or not you were looking.
+    unawaited(readErrors());
+    if (_inspecting) unawaited(readTree());
+    // The guest cleared its own buffer on the switch, so this one has to go
+    // too — otherwise the console reads as the new demo having printed what the
+    // old one did. The sequence mark is deliberately *not* reset: the guest
+    // goes on counting, and starting again from nothing here would discard
+    // every line until its counter caught back up.
+    guestLogs.value = const [];
+    _logsDropped = 0;
+    // A reload prints before anything has had a chance to hear it — the stream
+    // is live, but the lines the demo wrote while starting are already in the
+    // buffer and nowhere else.
+    if (_panelOpen) unawaited(readLogs());
     lastSwitch = SwitchReport(
       entry: entry,
       compile: compiled.compile,
@@ -832,6 +1351,12 @@ class CatalogSession extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _ticker?.cancel();
+    _watchSettle?.cancel();
+    _resizeSettle?.cancel();
+    unawaited(_watch?.cancel());
+    unawaited(_logStream?.cancel());
+    watchedBox.dispose();
+    guestLogs.dispose();
     browsing
       ..removeListener(notifyListeners)
       ..dispose();
@@ -840,6 +1365,11 @@ class CatalogSession extends ChangeNotifier {
       ..dispose();
     _engine?.removeListener(_onEngineChanged);
     _engine?.dispose();
+    // Withdraw the invitation before the guest goes. A handle left behind is
+    // not fatal — the next reader fails to connect and deletes it — but it
+    // costs that reader a timeout, and this session is the one thing that
+    // knows for certain the guest is going away.
+    if (_published) LiveSession.clear(projectRoot);
     unawaited(_vmService?.close());
     unawaited(_changes?.cancel());
     unawaited(_daemon?.close());

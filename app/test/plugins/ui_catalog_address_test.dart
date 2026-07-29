@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 /// navigates, nothing throws, and you end up on the wrong demo — which is
 /// exactly the failure this pair was extracted to make impossible.
 void main() {
+  _addressMovedTests();
   const ids = [
     'demo/dashboard.dart#dashboard',
     'tool/catalog/demos/avatar_tile.dart#avatarTileMembers',
@@ -62,5 +63,61 @@ void main() {
       'demos',
       'avatar.dart#members',
     ]);
+  });
+}
+
+void _addressMovedTests() {
+  group('addressMoved', () {
+    test('a first call always hands over, including a null', () {
+      expect(
+        addressMoved(
+          hasFollowed: false,
+          sessionChanged: false,
+          followed: null,
+          place: null,
+        ),
+        isTrue,
+      );
+    });
+
+    test('restating the same address does not', () {
+      // The bug. `didChangeDependencies` fires for its own reasons, and the
+      // address lags a local selection by a frame — so this is the *old* entry
+      // being pushed onto a session that has already moved on.
+      expect(
+        addressMoved(
+          hasFollowed: true,
+          sessionChanged: false,
+          followed: 'demo/a.dart#alpha',
+          place: 'demo/a.dart#alpha',
+        ),
+        isFalse,
+      );
+    });
+
+    test('a genuine move does', () {
+      expect(
+        addressMoved(
+          hasFollowed: true,
+          sessionChanged: false,
+          followed: 'demo/a.dart#alpha',
+          place: 'demo/b.dart#beta',
+        ),
+        isTrue,
+      );
+    });
+
+    test('and a new session is told even when the address stood still', () {
+      // It has been told nothing at all, so "unchanged" means nothing to it.
+      expect(
+        addressMoved(
+          hasFollowed: true,
+          sessionChanged: true,
+          followed: 'demo/a.dart#alpha',
+          place: 'demo/a.dart#alpha',
+        ),
+        isTrue,
+      );
+    });
   });
 }

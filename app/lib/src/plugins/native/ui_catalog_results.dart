@@ -257,36 +257,6 @@ class CatalogKnob {
   Map<String, Object?> toJson() => _$CatalogKnobToJson(this);
 }
 
-/// `tree` — the widget tree one entry builds.
-@JsonSerializable(
-  explicitToJson: true,
-  includeIfNull: false,
-  createFactory: false,
-)
-class CatalogTreeResult implements PluginResult {
-  CatalogTreeResult({
-    required this.entry,
-    required this.address,
-    required this.nodeCount,
-    required this.nodes,
-  });
-
-  final String entry;
-  final String address;
-
-  /// How many nodes [nodes] holds, so a caller reading a truncated rendering
-  /// still knows what it is a rendering of.
-  final int nodeCount;
-
-  /// Depth-first, root first. Flat rather than nested: every node names its
-  /// own [CatalogTreeNode.depth], which reads the same in JSON and in a
-  /// terminal, and lets a caller slice the list without rebuilding a tree.
-  final List<CatalogTreeNode> nodes;
-
-  @override
-  Map<String, Object?> toJson() => _$CatalogTreeResultToJson(this);
-}
-
 /// One widget in the tree.
 @JsonSerializable(
   explicitToJson: true,
@@ -359,36 +329,6 @@ class CatalogTreeNode {
   Map<String, Object?> toJson() => _$CatalogTreeNodeToJson(this);
 }
 
-/// `errors` — what one entry reported while it rendered.
-@JsonSerializable(
-  explicitToJson: true,
-  includeIfNull: false,
-  createFactory: false,
-)
-class CatalogRenderResult implements PluginResult {
-  CatalogRenderResult({
-    required this.entry,
-    required this.address,
-    required this.ok,
-    required this.errors,
-  });
-
-  final String entry;
-  final String address;
-
-  /// Whether it rendered without the framework reporting anything.
-  ///
-  /// Stated rather than left to be inferred from an empty list, because the
-  /// question people ask is "is this one broken" and a caller should not have
-  /// to know that zero errors is the same as fine.
-  final bool ok;
-
-  final List<CatalogRenderError> errors;
-
-  @override
-  Map<String, Object?> toJson() => _$CatalogRenderResultToJson(this);
-}
-
 /// One thing the framework reported.
 @JsonSerializable(
   explicitToJson: true,
@@ -417,6 +357,113 @@ class CatalogRenderError {
   final int count;
 
   Map<String, Object?> toJson() => _$CatalogRenderErrorToJson(this);
+}
+
+/// `inspect` — one rendered build, and every projection of it that was asked
+/// for.
+///
+/// **The one result shape that replaced four.** `tree`, `find`, `at` and
+/// `errors` were not four capabilities; they were four questions about the same
+/// frame, each paying its own compile, guest launch and render to answer one of
+/// them. Three questions was three renders, and for an agent in a UI edit loop
+/// that was the dominant per-iteration cost.
+///
+/// Every section is **absent unless it was asked for**, which is what keeps the
+/// default answer small. `includeIfNull: false` does that in the JSON;
+/// [nodeCount] and friends are nullable for the same reason. Zero nodes and no
+/// tree requested are different answers.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class CatalogInspectResult implements PluginResult {
+  CatalogInspectResult({
+    required this.entry,
+    required this.address,
+    required this.readFrom,
+    required this.ok,
+    required this.errors,
+    this.tree,
+    this.matches,
+    this.at,
+    this.logs,
+    this.logsDropped,
+    this.screenshot,
+  });
+
+  final String entry;
+  final String address;
+
+  /// Where this reading came from: `live` when it was taken from a session
+  /// somebody has open — the demo in whatever state they left it, including
+  /// anything they reached by clicking — and `render` when this call built and
+  /// drew its own copy.
+  ///
+  /// **Always present, not only on the interesting case.** A caller that gets
+  /// two different answers to the same invocation has to be able to see why,
+  /// and an absent field is not an answer.
+  ///
+  /// It reads `render` unless `live: true` was asked for and a session happened
+  /// to be open on this entry. Attaching is opt-in precisely because it makes
+  /// the same command answer differently depending on what window is open.
+  ///
+  /// It matters most for the errors and the logs: `live` means these are what
+  /// the demo has reported **since somebody opened it**, so a throw reached by
+  /// clicking is in the list. No fresh render can produce that one, because no
+  /// fresh render ever performs the click.
+  final String readFrom;
+
+  /// Whether it rendered without the framework reporting anything.
+  ///
+  /// **Present on every answer, whatever else was asked**, because it is the
+  /// question behind asking at all — and because with no flags at all it *is*
+  /// the answer. Stated rather than left to be inferred from an empty list: the
+  /// question people ask is "is this one broken", and a caller should not have
+  /// to know that zero errors means fine.
+  final bool ok;
+
+  final List<CatalogRenderError> errors;
+
+  /// The tree, when `--tree` asked for it. Depth-first, root first.
+  final List<CatalogTreeNode>? tree;
+
+  /// The nodes matching `--find`.
+  ///
+  /// Its own section rather than sharing [tree], because they answer different
+  /// questions and a caller that asked both should get both labelled. Merging
+  /// them into one list would make "the tree" and "the three nodes I searched
+  /// for" indistinguishable in the reply.
+  final List<CatalogTreeNode>? matches;
+
+  /// The chain under `--at`, outermost first — the thing under a cursor is
+  /// usually a `Text` and the thing meant is the button around it.
+  ///
+  /// An empty list is an answer: nothing of the demo's is at that point.
+  final List<CatalogTreeNode>? at;
+
+  /// What the demo printed, when `--logs` asked.
+  final List<String>? logs;
+
+  /// How many earlier lines fell off the guest's buffer, when any did.
+  ///
+  /// Said rather than silently begun in the middle: a scrollback that quietly
+  /// starts partway reads as one that has everything.
+  final int? logsDropped;
+
+  /// The picture, when `--screenshot` asked for one.
+  ///
+  /// An [Artifact] rather than a path, because a PNG produced here is the same
+  /// kind of thing `screenshot` produces: it has an identity — the address
+  /// records the device, the size, the knobs, the axes, the debug flags, the
+  /// crop and whether it was annotated — so asking twice with the same flags
+  /// overwrites one file and asking with different flags does not. A bare path
+  /// would have made this the one place in the surface where a picture is less
+  /// than an artifact.
+  final Artifact? screenshot;
+
+  @override
+  Map<String, Object?> toJson() => _$CatalogInspectResultToJson(this);
 }
 
 /// `audit` — every entry, and whether it compiles and renders.

@@ -5,9 +5,14 @@ import 'dart:io';
 import 'package:async/async.dart';
 import 'package:collection/collection.dart';
 
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/compiler_daemon_client.dart';
+import 'package:flutterware_app/src/catalog/devices.dart';
 import 'package:flutterware_app/src/catalog/headless_catalog.dart';
+import 'package:flutterware_app/src/catalog/inspect_client.dart';
+import 'package:flutterware_app/src/catalog/live_session.dart';
 import 'package:flutterware_app/src/catalog/package_config_locator.dart';
 import 'package:flutterware_app/src/catalog/protocol.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
@@ -211,7 +216,16 @@ Future<void> main(List<String> args) async {
   );
 
   // 3. Switch through every entry, then revisit one.
+  //
+  // Errors are attributed to the entry that was on screen when they arrived,
+  // because one standing entry reports one *on purpose* — `overflows.dart`
+  // exists so the render-error path has a fixture at all. A flat "nothing was
+  // reported" assertion cannot tell that apart from a demo that broke, and the
+  // choice is between deleting the fixture and being precise. Precise is also
+  // stronger: this now says which entry said what.
+  var errorsBy = <String, List<String>>{};
   for (var entry in [...entries.skip(1), entries.first]) {
+    var before = guestErrors.length;
     var compiled = await daemon.select(entry.id);
     if (!compiled.ok) {
       check(false, 'compiling ${entry.name}: ${compiled.error}');
@@ -235,6 +249,7 @@ Future<void> main(List<String> args) async {
       '+${compiled.newSourceCount} libs',
     );
     check(probe.contains(entry.id), 'switched to ${entry.name} by hot reload');
+    (errorsBy[entry.id] ??= []).addAll(guestErrors.skip(before));
     if (probing && entry.name == 'Members') {
       check(
         probe.contains('Dr. Sarah Chen'),
@@ -251,10 +266,27 @@ Future<void> main(List<String> args) async {
     'revisiting the first entry renders it again',
   );
   check(frames > 0, 'the guest composited frames ($frames)');
+  var unexpected = {
+    for (var entry in errorsBy.entries)
+      if (!entry.key.endsWith('overflows.dart#overflows') &&
+          entry.value.isNotEmpty)
+        entry.key: entry.value,
+  };
   check(
-    guestErrors.isEmpty,
-    'the guest reported no framework errors'
-    '${guestErrors.isEmpty ? '' : ':\n    ${guestErrors.join('\n    ')}'}',
+    unexpected.isEmpty,
+    'no entry reported a framework error except the one written to'
+    '${unexpected.isEmpty ? '' : ':\n    ${unexpected.entries.map((e) => '${e.key}: ${e.value.join(', ')}').join('\n    ')}'}',
+  );
+  // The other half, and the half a permissive check would have lost: the
+  // fixture has to go on failing. A deliberately broken demo that quietly
+  // started working would take the render-error path's only coverage with it.
+  check(
+    errorsBy.entries.any(
+      (e) =>
+          e.key.endsWith('overflows.dart#overflows') &&
+          e.value.any((line) => line.contains('overflowed')),
+    ),
+    'and the one written to overflow still does',
   );
 
   // 3b. An edit to a demo, put on screen by a reload of the entry already
@@ -1101,6 +1133,20 @@ Widget addedWhileOpen() => const Center(child: Text('ADDED LATE'));
     }
   }
 
+  await _checkWatch(vmService: vmService, check: check);
+
+  await _checkLiveAttach(
+    vmService: vmService,
+    vmServiceUri: await vmServiceUri.future,
+    // Not the real project root: a developer with the GUI open on this repo has
+    // a handle published there, and this check would overwrite it and then
+    // delete it — leaving their own session undiscoverable for no reason. The
+    // key is a hash of the path, so a path that does not exist is a perfectly
+    // good namespace.
+    projectRoot: p.join(config.projectRoot, '.headless-check-live'),
+    check: check,
+  );
+
   await second.close();
   await daemon.close();
   connected.add(encodeMessage(const ShutdownMessage()));
@@ -1125,6 +1171,106 @@ Widget addedWhileOpen() => const Center(child: Text('ADDED LATE'));
         : '\n[check] FAILED:\n${failures.map((f) => '  - $f').join('\n')}',
   );
   exit(failures.isEmpty ? 0 : 1);
+}
+
+/// The watch, against a guest that is genuinely running.
+///
+/// What it is for is narrow and worth naming: **that the extension is there and
+/// answers under the name the host calls it by.** Everything about *when* the
+/// watch decides to speak is unit-tested against a pumped tree, and the cost
+/// and cadence are measured in `watch_spike.dart`. Neither of those would
+/// notice `ext.flutterware.watch` being renamed, which is precisely the bug
+/// `requireExtension` exists because of — `setParameter` survived a week after
+/// being renamed, applying nothing and reporting success.
+///
+/// Nothing here asserts on pushes. The guest is holding whatever entry the
+/// checks above left on screen, and a static demo draws no frames at all — so a
+/// silent watch is the correct behaviour rather than a failure, and a check
+/// that demanded pushes would be a flake waiting for an animation.
+Future<void> _checkWatch({
+  required GuestVmService vmService,
+  required void Function(bool, String) check,
+}) async {
+  stdout.writeln('[check] the watch');
+  var inspect = InspectClient(vmService, patience: InspectPatience.glance);
+
+  var started = await inspect.watch();
+  check(started != null, 'the guest registers ext.flutterware.watch');
+  check(started?.watching ?? false, 'and turns it on when asked');
+
+  var stats = await inspect.watchStats();
+  check(
+    stats?.watching ?? false,
+    'and the cost can be read without subscribing',
+  );
+
+  await inspect.unwatch();
+  var stopped = await inspect.watchStats();
+  check(
+    stopped?.watching == false,
+    'and it stops, so a guest nobody is inspecting pays nothing',
+  );
+}
+
+/// The live-session attach, against a guest that is genuinely running.
+///
+/// Everything else about it is unit-tested — the derived key, the stale handle,
+/// the refusals. What no unit test can reach is whether a handle published for
+/// a real guest connects and answers, which is the entire claim: that `fw` and
+/// an agent can read the demo a person is looking at instead of building their
+/// own copy of it.
+///
+/// The guest here stands in for the GUI's. Nothing about the attach knows the
+/// difference — it is a VM service URI at a derived path either way, which is
+/// exactly why this substitution is legitimate rather than a shortcut.
+Future<void> _checkLiveAttach({
+  required GuestVmService vmService,
+  required String vmServiceUri,
+  required String projectRoot,
+  required void Function(bool, String) check,
+}) async {
+  stdout.writeln('[check] attaching to a live session');
+
+  // What this guest is holding, read the ordinary way — so the assertions below
+  // do not depend on which entry the checks above happened to leave on screen.
+  var json = await vmService.callExtension('ext.flutterware.tree');
+  var entryId = json == null ? null : InspectTree.fromJson(json).entryId;
+  check(entryId != null, 'the running guest says which entry it is holding');
+  if (entryId == null) return;
+
+  LiveSession.publish(
+    LiveSession(projectRoot: projectRoot, vmServiceUri: vmServiceUri, pid: pid),
+  );
+  try {
+    var attached = await attachToLiveSession(projectRoot);
+    check(attached != null, 'a published handle connects');
+    if (attached == null) return;
+    try {
+      var inspect = InspectClient(attached, patience: InspectPatience.glance);
+
+      var tree = await inspect.tree(entryId);
+      check(tree != null, 'the attached guest answers about $entryId');
+      check(tree?.root != null, 'and the tree it answers with has a root');
+
+      // The refusal that keeps a person's window safe. Asking about an entry
+      // this session is not showing must decline — so the caller renders its
+      // own — rather than switching the guest to it.
+      var elsewhere = await inspect.tree('$entryId~not~an~entry');
+      check(
+        elsewhere == null,
+        'an entry it is not showing is declined, not switched to',
+      );
+
+      // Still on the entry it was on. The check above would also pass if the
+      // guest had simply failed, so this is the half that says it declined.
+      var again = await inspect.tree(entryId);
+      check(again?.root != null, 'and the guest is still holding $entryId');
+    } finally {
+      await attached.close();
+    }
+  } finally {
+    LiveSession.clear(projectRoot);
+  }
 }
 
 /// The inspection surface, against a demo written for the purpose.
@@ -1255,6 +1401,25 @@ Future<void> _checkInspection({
     var clean = await catalog.errors(entryId: '$base#inspectProbe');
     check(clean.isEmpty, 'a demo that renders reports nothing');
 
+    // The capture, end to end and from inside a build. See the fixture's own
+    // note: this is the assertion that catches the zone being installed one
+    // line too late, which nothing cheaper can see.
+    var printed = await catalog.logs(entryId: '$base#inspectProbe');
+    check(
+      printed.lines.any((l) => l.text.contains('MARKER LOG from build')),
+      'what a demo prints is captured where it can be asked for — '
+      '${printed.lines.map((l) => l.text).take(3).join(' | ')}',
+    );
+    check(
+      printed.lines.every((l) => !l.text.startsWith('FW-PROBE:')),
+      'and the harness talking to itself is not filed as the demo printing',
+    );
+    check(
+      printed.lines.map((l) => l.sequence).toSet().length ==
+          printed.lines.length,
+      'and every line has its own number, so a reader can merge two sources',
+    );
+
     var thrown = await catalog.errors(entryId: '$base#inspectThrows');
     check(
       thrown.errors.any((e) => e.exception.contains('meant to blow up')),
@@ -1269,6 +1434,90 @@ Future<void> _checkInspection({
     check(
       overflowed.errors.any((e) => e.exception.contains('overflowed')),
       'and an overflow is caught — ${overflowed.errors.map((e) => e.exception).join('; ')}',
+    );
+
+    // **The collapse, measured against what it replaced.** The economy argument
+    // was made in the spec and never checked, which is the kind of claim that
+    // quietly turns out to be wrong: the daemon stays warm between calls, so it
+    // was not obvious up front how much of the cost was really per-call. Both
+    // halves are timed here, the same five questions each way, and printed
+    // rather than asserted — a threshold would fail on a loaded laptop and
+    // teach nobody anything.
+    var separate = Stopwatch()..start();
+    await catalog.tree(entryId: '$base#inspectProbe');
+    await catalog.hitTest(entryId: '$base#inspectProbe', x: 60, y: 20);
+    await catalog.errors(entryId: '$base#inspectProbe');
+    await catalog.logs(entryId: '$base#inspectProbe');
+    await catalog.capture(
+      entryId: '$base#inspectProbe',
+      output: p.join(packageRoot, 'build', 'catalog', 'inspect_separate.png'),
+      annotate: true,
+    );
+    var separateMs = separate.elapsedMilliseconds;
+
+    var single = Stopwatch()..start();
+    var one = await catalog.observe(
+      entryId: '$base#inspectProbe',
+      wantTree: true,
+      wantLogs: true,
+      at: (60, 20),
+      screenshot: p.join(packageRoot, 'build', 'catalog', 'inspect_one.png'),
+      annotate: true,
+    );
+    var oneMs = single.elapsedMilliseconds;
+    stdout.writeln(
+      '  [inspect] five separate calls ${separateMs}ms · '
+      'one render ${oneMs}ms · '
+      '${(separateMs / (oneMs == 0 ? 1 : oneMs)).toStringAsFixed(1)}×',
+    );
+
+    check(one.tree?.root != null, 'one render answers about the tree');
+    check(
+      one.hits?.isNotEmpty ?? false,
+      'and about a point in the same breath — ${one.hits?.join(' > ')}',
+    );
+    check(one.errors.isEmpty, 'and whether it complained');
+    check(
+      one.logs?.lines.any((l) => l.text.contains('MARKER LOG')) ?? false,
+      'and what it printed',
+    );
+    check(
+      one.screenshot?.existsSync() ?? false,
+      'and hands back a picture of that same frame',
+    );
+    // **The consistency half, which was the deciding argument for collapsing.**
+    // `screenshot --annotate` used to read its own tree, so a caller running
+    // `tree` and then `screenshot --annotate` got two trees from two processes;
+    // the ids agreed because the build is deterministic, not because they were
+    // the same object. Now the hit resolves against the very tree that was
+    // reported and the very tree the boxes were drawn from.
+    check(
+      one.hits!.every((id) => one.tree!.nodeAt(id) != null),
+      'and every id it reports names a node in the tree it reported — '
+      'the assumption --annotate used to rest on',
+    );
+
+    // **The gap that made the economy claim false for the case people care
+    // about.** `inspect` rendered at the panel viewport and nothing else, so
+    // "why does this look wrong on a phone" — which needs the picture *and* the
+    // constraints — was two renders and two trees again, exactly what the
+    // collapse existed to remove.
+    var framed = await catalog.observe(
+      entryId: '$base#inspectProbe',
+      viewport: CaptureViewport.of(deviceById('iphone-13')!),
+      wantTree: true,
+      screenshot: p.join(packageRoot, 'build', 'catalog', 'inspect_framed.png'),
+    );
+    var panelWidth = one.tree?.root?.layout?.width;
+    var framedWidth = framed.tree?.root?.layout?.width;
+    check(
+      framedWidth != null && framedWidth != panelWidth,
+      'a device reframes what inspect reports, not only what it draws — '
+      'panel ${panelWidth}, phone ${framedWidth}',
+    );
+    check(
+      framed.screenshot?.existsSync() ?? false,
+      'and the picture is of that framed build',
     );
 
     var audit = await catalog.auditAll(
@@ -1315,13 +1564,22 @@ class InspectProbeBody extends StatelessWidget {
   const InspectProbeBody({super.key});
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      SizedBox(width: 120, height: 40, child: Container(color: Colors.teal)),
-      const Text('MARKER TEXT'),
-    ],
-  );
+  Widget build(BuildContext context) {
+    // Printed from `build`, which is the case the whole capture exists for and
+    // the one no unit test can reach: a build callback runs in the zone the
+    // *binding* was initialised in, so this line is only recorded if the
+    // generated entrypoint put `ensureInitialized` inside the zone rather than
+    // before it. Get that wrong and every test still passes while the console
+    // stays empty for ever.
+    print('MARKER LOG from build');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 120, height: 40, child: Container(color: Colors.teal)),
+        const Text('MARKER TEXT'),
+      ],
+    );
+  }
 }
 
 @Demo(name: 'Inspect throws', wrapper: wrapInApp)

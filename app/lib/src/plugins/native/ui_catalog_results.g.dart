@@ -77,14 +77,6 @@ Map<String, dynamic> _$CatalogKnobToJson(CatalogKnob instance) =>
       'options': instance.options,
     };
 
-Map<String, dynamic> _$CatalogTreeResultToJson(CatalogTreeResult instance) =>
-    <String, dynamic>{
-      'entry': instance.entry,
-      'address': instance.address,
-      'nodeCount': instance.nodeCount,
-      'nodes': instance.nodes.map((e) => e.toJson()).toList(),
-    };
-
 Map<String, dynamic> _$CatalogTreeNodeToJson(CatalogTreeNode instance) =>
     <String, dynamic>{
       'id': instance.id,
@@ -99,15 +91,6 @@ Map<String, dynamic> _$CatalogTreeNodeToJson(CatalogTreeNode instance) =>
       'flexChild': ?instance.flexChild,
     };
 
-Map<String, dynamic> _$CatalogRenderResultToJson(
-  CatalogRenderResult instance,
-) => <String, dynamic>{
-  'entry': instance.entry,
-  'address': instance.address,
-  'ok': instance.ok,
-  'errors': instance.errors.map((e) => e.toJson()).toList(),
-};
-
 Map<String, dynamic> _$CatalogRenderErrorToJson(CatalogRenderError instance) =>
     <String, dynamic>{
       'exception': instance.exception,
@@ -115,6 +98,22 @@ Map<String, dynamic> _$CatalogRenderErrorToJson(CatalogRenderError instance) =>
       'context': ?instance.context,
       'count': instance.count,
     };
+
+Map<String, dynamic> _$CatalogInspectResultToJson(
+  CatalogInspectResult instance,
+) => <String, dynamic>{
+  'entry': instance.entry,
+  'address': instance.address,
+  'readFrom': instance.readFrom,
+  'ok': instance.ok,
+  'errors': instance.errors.map((e) => e.toJson()).toList(),
+  'tree': ?instance.tree?.map((e) => e.toJson()).toList(),
+  'matches': ?instance.matches?.map((e) => e.toJson()).toList(),
+  'at': ?instance.at?.map((e) => e.toJson()).toList(),
+  'logs': ?instance.logs,
+  'logsDropped': ?instance.logsDropped,
+  'screenshot': ?instance.screenshot?.toJson(),
+};
 
 Map<String, dynamic> _$CatalogAuditResultToJson(CatalogAuditResult instance) =>
     <String, dynamic>{

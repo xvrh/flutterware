@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/widgets.dart';
 
 import '../inspect/guest_errors.dart';
+import '../inspect/guest_logs.dart';
 import 'axes.dart';
 import 'knob.dart';
 import 'parameters.dart';
@@ -264,6 +265,10 @@ class _CatalogGuestState extends State<CatalogGuest> {
     // The same boundary, for the same reason: carrying one entry's failures
     // into the next reports a demo as broken because the one before it was.
     GuestErrors.instance.resetFor(widget.entryId);
+    // And what it printed, which is the same argument once more: every other
+    // pane of the panel is scoped to the selected entry, and a console that was
+    // not would be the one showing another demo's words under this demo's name.
+    GuestLogs.instance.resetFor(widget.entryId);
   }
 
   @override

@@ -8,6 +8,8 @@ import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/error.dart';
 // ignore: implementation_imports
+import 'package:flutterware/src/inspect/log.dart';
+// ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/ui_catalog/axis.dart';
@@ -19,6 +21,8 @@ import '../../catalog/catalog_entry.dart';
 import '../../catalog/debug_flags.dart';
 import '../../catalog/devices.dart';
 import '../../catalog/discovery.dart';
+import '../../catalog/inspect_client.dart';
+import '../../catalog/live_session.dart';
 import '../../catalog/package_config_locator.dart';
 import '../../catalog/protocol.dart';
 import '../../catalog/headless_catalog.dart';
@@ -78,6 +82,22 @@ const _axesDoc =
     'wrapping it and stays put as you move between entries. Read them with '
     '`describe --entry=<id> --axes=true`, which also names the shell; an entry '
     'whose wrapper is not a shell offers none.';
+
+/// What `--live` is, on every read that can be answered by a window somebody
+/// already has open.
+const _liveDoc =
+    'Read the entry from a GUI session that is already showing it, instead of '
+    'building a fresh guest. **Off unless you ask.** What it buys is real: '
+    'attached, the answer describes the demo *as the person left it* — the '
+    'dropdown they opened, the tab they switched to, the row they scrolled to, '
+    'and anything their clicking made it print or throw. No fresh render can '
+    'reach that, because no fresh render performs the clicks. What it costs is '
+    'determinism: the same command answers differently depending on whether a '
+    'window happens to be open, which is a poor default for CI and for an agent '
+    'that did not know to look. So it is opt-in, and `readFrom` says which one '
+    'you got either way. Even switched on it declines unless a session is open '
+    'on this exact entry and nothing here would change what is drawn, and it '
+    'never switches what that window is showing.';
 
 /// The UI catalog's entries, per declared package — everything but the panel.
 ///
@@ -420,36 +440,172 @@ class UiCatalogCore extends PluginCore {
           ),
         ],
       ),
-      const PluginAction(
-        'tree',
-        'Widget tree',
-        returns: CatalogTreeResult,
+      PluginAction(
+        'inspect',
+        'Inspect',
+        returns: CatalogInspectResult,
         description:
-            'The widget tree one entry builds, scoped to the demo rather than '
-            'the catalog around it',
+            'One rendered build, and whatever you ask about it — whether it '
+            'renders, its widget tree, the nodes matching a query, what is '
+            'under a point, what it printed, a picture. With no flags it '
+            'answers the only question worth asking first: did it render '
+            'without the framework complaining. Everything heavier is opt-in, '
+            'and every flag you add is answered off the **same** frame rather '
+            'than costing another compile-and-render.',
         parameters: [
           ActionParameter(
             'entry',
             'Entry',
             kind: ActionParameterKind.choice,
-            description: 'The id of the entry to read',
+            description: 'The id of the entry to inspect',
             optionsFrom: 'entries',
+          ),
+          ActionParameter(
+            'tree',
+            'Widget tree',
+            kind: ActionParameterKind.boolean,
+            required: false,
+            defaultValue: 'false',
+            description:
+                'Report the widget tree, scoped to the demo rather than the '
+                'catalog around it. Off by default because a real demo is '
+                'thousands of tokens of tree — try `find` first.',
+          ),
+          ActionParameter(
+            'find',
+            'Find',
+            required: false,
+            description:
+                'Report only the nodes matching this, case-insensitively '
+                'against each node\'s type and against the words it puts on '
+                'screen — `ElevatedButton`, `Save`, `SizedBox`. What you want '
+                'instead of `tree` when the question is "where is the submit '
+                'button".',
+          ),
+          ActionParameter(
+            'at',
+            'At a point',
+            required: false,
+            description:
+                'Report the widgets under this point as `x,y`, outermost '
+                'first — the chain, because the thing under a cursor is '
+                'usually a Text and the thing you meant is the button around '
+                'it. In the same coordinates a screenshot is taken in, so a '
+                'point read off one lands here without a transform.',
+          ),
+          ActionParameter(
+            'errors',
+            'What it reported',
+            kind: ActionParameterKind.boolean,
+            required: false,
+            defaultValue: 'true',
+            description:
+                'Report build failures and layout overflows. On by default, '
+                'and with no other flag it is the whole answer. `check` says '
+                'whether an entry *compiles*, which is a different question.',
+          ),
+          ActionParameter(
+            'logs',
+            'What it printed',
+            kind: ActionParameterKind.boolean,
+            required: false,
+            defaultValue: 'false',
+            description:
+                'Report what the demo printed while it built and painted. '
+                'Attached to an open session this is everything it has printed '
+                'since the person opened it, including whatever their clicking '
+                'caused — output no fresh render can produce.',
           ),
           ActionParameter(
             'node',
             'Subtree',
             required: false,
             description:
-                'Report only this node and below, by the id a previous read '
-                'gave. Ids come from tree shape, so one taken in another '
-                'process still names this node.',
+                'Narrow `tree` to this node and below, and crop `screenshot` '
+                'to it, by the id a previous read gave. Ids come from tree '
+                'shape, so one taken in another process still names this node.',
           ),
           ActionParameter(
             'depth',
             'Depth',
             kind: ActionParameterKind.integer,
             required: false,
-            description: 'Stop this many levels below the root',
+            description: 'Stop `tree` this many levels below its root',
+          ),
+          ActionParameter(
+            'screenshot',
+            'Screenshot',
+            kind: ActionParameterKind.boolean,
+            required: false,
+            defaultValue: 'false',
+            description:
+                'Write a PNG of the same frame everything else is reported '
+                'from, and hand back an artifact for it — the path, and the '
+                'address recording everything that changed the pixels, so two '
+                'settings are two artifacts rather than one file written '
+                'twice. Give `output` to choose where. **Forces a fresh '
+                'render**: a picture has to come from a frame this call '
+                'composited, and an attached session only offers a VM service.',
+          ),
+          ActionParameter(
+            'output',
+            'Output file',
+            required: false,
+            description:
+                'Where to write the PNG; a build path derived from the address '
+                'when omitted, the same as `screenshot` uses',
+          ),
+          ActionParameter(
+            'annotate',
+            'Annotate',
+            kind: ActionParameterKind.boolean,
+            required: false,
+            defaultValue: 'false',
+            description:
+                'Draw a box and its node id over every widget of the '
+                'screenshot. Now genuinely the same tree as the one reported '
+                'rather than a second reading that happened to agree, which '
+                'was the point of having it.',
+          ),
+          ActionParameter(
+            'device',
+            'Device',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description:
+                'Render as a device: its screen, its pixel ratio and its safe '
+                'areas, so the demo reads the phone from `MediaQuery` rather '
+                'than a rectangle. Omitted means the panel. **This is what '
+                'makes "why does it look wrong on a phone" one render**: the '
+                'tree, the constraints and the picture all describe the same '
+                'framed build. Forces a render, like any other change to what '
+                'is drawn.',
+            options: [
+              for (var id in deviceIds)
+                ActionOption(
+                  id,
+                  label: id == fitDeviceId
+                      ? 'Fit'
+                      : catalogDevices.firstWhere((d) => d.id == id).label,
+                ),
+            ],
+          ),
+          const ActionParameter(
+            'width',
+            'Width',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description:
+                'Override the viewport width — how to ask for a size no device '
+                'has, and on a device it stretches the screen rather than '
+                'dropping its ratio and its notch',
+          ),
+          ActionParameter(
+            'height',
+            'Height',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description: 'See width',
           ),
           ActionParameter(
             'knobs',
@@ -471,116 +627,13 @@ class UiCatalogCore extends PluginCore {
             required: false,
             description: _debugDoc,
           ),
-        ],
-      ),
-      const PluginAction(
-        'find',
-        'Find widgets',
-        returns: CatalogTreeResult,
-        description:
-            'The nodes in one entry matching a type, a key or some text — for '
-            'when the answer is a handful of nodes rather than a whole tree',
-        parameters: [
           ActionParameter(
-            'entry',
-            'Entry',
-            kind: ActionParameterKind.choice,
-            description: 'The id of the entry to search',
-            optionsFrom: 'entries',
-          ),
-          ActionParameter(
-            'query',
-            'Query',
-            description:
-                'Matched case-insensitively against the type of each node '
-                'and against the words it puts on screen — `ElevatedButton`, '
-                '`Save`, `SizedBox`',
-          ),
-          ActionParameter(
-            'knobs',
-            'Knobs',
+            'live',
+            'Read what is open',
+            kind: ActionParameterKind.boolean,
             required: false,
-            description: _knobsDoc,
-          ),
-          ActionParameter(
-            'axes',
-            'Axes',
-            required: false,
-            description: _axesDoc,
-          ),
-        ],
-      ),
-      const PluginAction(
-        'errors',
-        'Does it render',
-        returns: CatalogRenderResult,
-        description:
-            'Render one entry and report what the framework said — build '
-            'failures, layout overflows. `check` answers whether it compiles, '
-            'which is a different question.',
-        parameters: [
-          ActionParameter(
-            'entry',
-            'Entry',
-            kind: ActionParameterKind.choice,
-            description: 'The id of the entry to render',
-            optionsFrom: 'entries',
-          ),
-          ActionParameter(
-            'knobs',
-            'Knobs',
-            required: false,
-            description: _knobsDoc,
-          ),
-          ActionParameter(
-            'axes',
-            'Axes',
-            required: false,
-            description: _axesDoc,
-          ),
-        ],
-      ),
-      const PluginAction(
-        'at',
-        'What is here',
-        returns: CatalogTreeResult,
-        description:
-            'The widgets under one point, outermost first — the chain, since '
-            'the thing under a cursor is usually a Text and the thing meant is '
-            'the button around it',
-        parameters: [
-          ActionParameter(
-            'entry',
-            'Entry',
-            kind: ActionParameterKind.choice,
-            description: 'The id of the entry to probe',
-            optionsFrom: 'entries',
-          ),
-          ActionParameter(
-            'x',
-            'X',
-            kind: ActionParameterKind.integer,
-            description:
-                'In the same coordinates a screenshot is taken in, so a point '
-                'read off one lands here without a transform',
-          ),
-          ActionParameter(
-            'y',
-            'Y',
-            kind: ActionParameterKind.integer,
-            description: 'See x',
-          ),
-          ActionParameter(
-            'knobs',
-            'Knobs',
-            required: false,
-            description: _knobsDoc,
-          ),
-          ActionParameter(
-            'axes',
-            'Axes',
-            required: false,
-            description: _axesDoc,
+            defaultValue: 'false',
+            description: _liveDoc,
           ),
         ],
       ),
@@ -725,14 +778,8 @@ class UiCatalogCore extends PluginCore {
         return _describe(arguments);
       case 'screenshot':
         return _screenshot(arguments);
-      case 'tree':
-        return _tree(arguments);
-      case 'find':
-        return _find(arguments);
-      case 'at':
-        return _at(arguments);
-      case 'errors':
-        return _errors(arguments);
+      case 'inspect':
+        return _inspect(arguments);
       case 'audit':
         return _audit(arguments);
       default:
@@ -912,30 +959,6 @@ class UiCatalogCore extends PluginCore {
     );
   }
 
-  /// One entry, rendered.
-  Future<CatalogRenderResult> _errors(Map<String, Object?> arguments) async {
-    var entryId = arguments['entry'];
-    if (entryId is! String || entryId.isEmpty) {
-      throw ArgumentError.value(entryId, 'entry', 'required');
-    }
-    if (_scans.isEmpty && _failures.isEmpty) await computeAll();
-
-    var packagePath = _packageHolding(entryId);
-    var knobs = parseKnobs(arguments['knobs']);
-    var axes = parseKnobs(arguments['axes']);
-    var report = await _headlessFor(
-      packagePath,
-    ).errors(entryId: entryId, knobs: knobs, axes: axes);
-
-    return CatalogRenderResult(
-      entry: entryId,
-      address:
-          '${addressFor(packagePath, entryId, axes: {for (var k in knobs.entries) 'knob.${k.key}': k.value, for (var a in axes.entries) 'axis.${a.key}': a.value})}',
-      ok: report.isEmpty,
-      errors: [for (var error in report.errors) _asRenderError(error)],
-    );
-  }
-
   /// Every entry in every requested package, compiled and rendered.
   Future<CatalogAuditResult> _audit(Map<String, Object?> arguments) async {
     var paths = _requestedPackages(arguments);
@@ -1075,22 +1098,218 @@ class UiCatalogCore extends PluginCore {
     ),
   );
 
-  /// The widget tree one entry builds.
+  /// One rendered build, and every projection of it that was asked for.
   ///
-  /// Scoped to the demo rather than the whole guest: the generated host puts
-  /// thirteen framework widgets above it, and none of them is what anybody
-  /// asked about.
-  Future<CatalogTreeResult> _tree(Map<String, Object?> arguments) async {
-    var (packagePath, entryId, tree, applied) = await _readTree(arguments);
+  /// **This replaced `tree`, `find`, `at` and `errors`, and the argument was
+  /// never mainly about tidiness.** They had the same inputs, the same
+  /// precondition — the entry must be rendered first — and each paid a full
+  /// compile, guest launch and render to answer one question about a frame the
+  /// others also had to produce. Three questions was three renders. For an
+  /// agent in a UI edit loop that is the dominant per-iteration cost, and a
+  /// sixth (`logs`) and a seventh (`semantics`) were queued up to be added to
+  /// the list by reflex.
+  ///
+  /// The second argument is consistency, and it is the deciding one.
+  /// `screenshot --annotate` read its **own** tree, so a caller that ran `tree`
+  /// and then `screenshot --annotate` got two trees out of two processes: the
+  /// ids on the picture matched the ids in the tree because the build is
+  /// deterministic, not because they were the same object. Closing that loop
+  /// was the entire point of `--annotate`. Now one render produces one tree and
+  /// every projection comes off it, and the assumption is gone rather than
+  /// merely reliable.
+  ///
+  /// **No flags is the "is it OK" answer** — render, report what the framework
+  /// said, nothing else. Everything heavier is opt-in, which is what the token
+  /// measurements in the prior design already concluded: summary always,
+  /// details on request, `find` before `tree`.
+  Future<CatalogInspectResult> _inspect(Map<String, Object?> arguments) async {
+    // Read and checked before anything is scanned or compiled. A typo in a flag
+    // should cost nothing, and a compile-and-render is the most expensive thing
+    // here.
+    var want = _InspectRequest.of(arguments);
+    if (_scans.isEmpty && _failures.isEmpty) await computeAll();
+    var packagePath = _packageHolding(want.entryId);
 
-    var root = arguments['node'];
+    var address = _pixelAddress(
+      packagePath: packagePath,
+      entryId: want.entryId,
+      deviceId: want.deviceId,
+      viewport: want.viewport,
+      knobs: want.knobs,
+      axes: want.axes,
+      debug: want.debug,
+      node: want.node,
+      annotate: want.annotate,
+    );
+
+    var observed = await _observe(want, packagePath, address);
+    return _project(want, observed.$1, live: observed.$2, address: address);
+  }
+
+  /// Reads the entry, from the session a person is driving when they asked for
+  /// that and it is showing this entry, and from a guest of its own otherwise.
+  Future<(CatalogObservation, bool)> _observe(
+    _InspectRequest want,
+    String packagePath,
+    Address address,
+  ) async {
+    var open = await _withLiveGuest(
+      packagePath,
+      want.entryId,
+      live: want.mayAttach,
+      body: (inspect, tree) async => CatalogObservation(
+        // Handed over rather than read again: `_withLiveGuest` reads it to
+        // decide the session is showing this entry at all, and a second read
+        // would be a second build's worth of truth.
+        tree: tree,
+        errors: await inspect.errors(want.entryId) ?? InspectErrors.empty,
+        logs: want.logs ? await inspect.logs(want.entryId) : null,
+        hits: want.at == null
+            ? null
+            : await inspect.hitTest(
+                want.at!.$1.toDouble(),
+                want.at!.$2.toDouble(),
+              ),
+      ),
+    );
+    if (open != null) return (open, true);
+
+    return (
+      await _headlessFor(packagePath).observe(
+        entryId: want.entryId,
+        viewport: want.viewport,
+        knobs: want.knobs,
+        axes: want.axes,
+        debug: want.debug,
+        // The tree is read whenever anything needs it — a query, a hit, a crop,
+        // an annotation — and `observe` works that out for itself rather than
+        // being told twice.
+        wantTree: want.tree || want.query != null,
+        wantLogs: want.logs,
+        at: want.at == null
+            ? null
+            : (want.at!.$1.toDouble(), want.at!.$2.toDouble()),
+        screenshot: want.picture
+            ? _outputFor(want, packagePath, address)
+            : null,
+        annotate: want.annotate,
+        cropNode: want.node,
+      ),
+      false,
+    );
+  }
+
+  /// Where the PNG goes: what was asked for, or a path derived from the address.
+  ///
+  /// Derived exactly as `screenshot` derives it, so asking twice with the same
+  /// flags overwrites one file and asking with different flags does not.
+  String _outputFor(
+    _InspectRequest want,
+    String packagePath,
+    Address address,
+  ) => switch (want.output) {
+    var given? when given.isNotEmpty =>
+      p.isAbsolute(given) ? given : p.join(host.worktree.path, given),
+    _ => p.join(
+      host.worktree.path,
+      packagePath,
+      'build',
+      'catalog',
+      'screenshots',
+      _defaultFileName(address),
+    ),
+  };
+
+  /// One observation, projected into whatever was asked about it.
+  CatalogInspectResult _project(
+    _InspectRequest want,
+    CatalogObservation observed, {
+    required bool live,
+    required Address address,
+  }) {
+    var tree = observed.tree;
+    return CatalogInspectResult(
+      entry: want.entryId,
+      address: '$address',
+      readFrom: live ? 'live' : 'render',
+      ok: observed.errors.isEmpty,
+      // `ok` is answered whatever else was asked, so the list that explains it
+      // is too — a caller told `ok: false` with no list has been told nothing it
+      // can act on. Suppressed only when explicitly switched off.
+      errors: want.errors
+          ? [for (var error in observed.errors.errors) _asRenderError(error)]
+          : const [],
+      tree: want.tree && tree != null
+          ? _asNodes(_scoped(tree, want.node, want.depth, want.entryId))
+          : null,
+      matches: want.query == null || tree == null
+          ? null
+          : _asNodes(_matching(tree, want.query!)),
+      // Present-and-empty when the point missed, which is an answer: there is
+      // nothing of the demo's there. A caller that probed outside the viewport
+      // wants to see that it missed rather than that it did not ask.
+      at: observed.hits == null
+          ? null
+          : _asNodes([for (var id in observed.hits!) ?tree?.nodeAt(id)]),
+      logs: switch (observed.logs) {
+        var report? => [for (var line in report.lines) line.text],
+        null => null,
+      },
+      logsDropped: switch (observed.logs) {
+        InspectLogs(dropped: var n) when n > 0 => n,
+        _ => null,
+      },
+      // **An artifact, not a path.** `screenshot` has always handed back one,
+      // and a picture produced here is the same kind of thing: it has an
+      // identity, and something downstream will want to file it. Handing back a
+      // bare string would have made this the one place in the surface where a
+      // PNG is less than an artifact.
+      screenshot: switch (observed.screenshot) {
+        var file? => Artifact(
+          kind: Artifact.png,
+          address: address,
+          // Worktree-relative, so the value survives being read on another
+          // machine and an agent whose tools are scoped to the repo can open it.
+          path: p.relative(file.path, from: host.worktree.path),
+        ),
+        null => null,
+      },
+    );
+  }
+
+  /// The nodes whose type or on-screen words contain [query].
+  ///
+  /// [query] is folded once. The first version lowercased it twice per node,
+  /// which on the largest tree here is seventeen hundred throwaway strings to
+  /// answer one question.
+  static List<InspectNode> _matching(InspectTree tree, String query) {
+    var needle = query.toLowerCase();
+    return [
+      for (var node in tree.nodes)
+        if (node.type.toLowerCase().contains(needle) ||
+            (node.description?.toLowerCase().contains(needle) ?? false))
+          node,
+    ];
+  }
+
+  /// `tree` narrowed by `--node` and `--depth`.
+  ///
+  /// The depth is counted from the *reported* root rather than from the demo's,
+  /// so `--node=0/1 --depth=1` means one level below that node — which is what
+  /// anybody asking for both would mean by it.
+  List<InspectNode> _scoped(
+    InspectTree tree,
+    String? node,
+    Object? depth,
+    String entryId,
+  ) {
     var nodes = tree.nodes;
-    var depthOffset = 0;
-    if (root is String && root.isNotEmpty) {
-      var subtree = tree.nodeAt(root);
+    var offset = 0;
+    if (node != null) {
+      var subtree = tree.nodeAt(node);
       if (subtree == null) {
         throw ArgumentError.value(
-          root,
+          node,
           'node',
           'no node with that id in $entryId. An id names a position in the '
               'tree, so one from before an edit may no longer name anything — '
@@ -1098,173 +1317,81 @@ class UiCatalogCore extends PluginCore {
         );
       }
       nodes = InspectTree(entryId: tree.entryId, root: subtree).nodes;
-      depthOffset = _depthOf(subtree.id);
+      offset = _depthOf(subtree.id);
     }
-
-    return _asResult(
-      packagePath: packagePath,
-      entryId: entryId,
-      applied: applied,
-      nodes: [
-        for (var node in nodes)
-          if (switch (arguments['depth']) {
-            int max => _depthOf(node.id) - depthOffset <= max,
-            _ => true,
-          })
-            node,
-      ],
-    );
+    return [
+      for (var found in nodes)
+        if (switch (depth) {
+          int max => _depthOf(found.id) - offset <= max,
+          _ => true,
+        })
+          found,
+    ];
   }
 
-  /// The nodes of one entry matching [query].
+  /// `--at=120,300`.
   ///
-  /// Exists so that "where is the submit button" costs a handful of nodes
-  /// rather than a whole tree — which for a real demo is thousands of tokens.
-  Future<CatalogTreeResult> _find(Map<String, Object?> arguments) async {
-    var query = arguments['query'];
-    if (query is! String || query.isEmpty) {
-      throw ArgumentError.value(query, 'query', 'required');
+  /// One parameter rather than the `--x`/`--y` pair it replaced: a point is one
+  /// thing, and two required integers that are only meaningful together are two
+  /// ways to get it half-wrong.
+  static (int, int)? _parsePoint(Object? value) {
+    if (value == null) return null;
+    if (value is! String || value.isEmpty) {
+      throw ArgumentError.value(value, 'at', 'a point, written `x,y`');
     }
-    var (packagePath, entryId, tree, applied) = await _readTree(arguments);
-    var needle = query.toLowerCase();
-
-    return _asResult(
-      packagePath: packagePath,
-      entryId: entryId,
-      applied: applied,
-      nodes: [
-        for (var node in tree.nodes)
-          if (node.type.toLowerCase().contains(needle) ||
-              (node.description?.toLowerCase().contains(needle) ?? false))
-            node,
-      ],
-    );
+    var parts = value.split(',');
+    var x = parts.length == 2 ? int.tryParse(parts[0].trim()) : null;
+    var y = parts.length == 2 ? int.tryParse(parts[1].trim()) : null;
+    if (x == null || y == null) {
+      throw ArgumentError.value(
+        value,
+        'at',
+        'a point, written `x,y` — two whole numbers in the coordinates a '
+            'screenshot is taken in, as `120,300`',
+      );
+    }
+    return (x, y);
   }
 
-  /// The widgets under one point.
-  ///
-  /// The tree and the hit come from one guest and one build, because an id
-  /// names a position in a particular tree — resolving a hit against a second
-  /// reading would answer about a tree nobody was shown.
-  Future<CatalogTreeResult> _at(Map<String, Object?> arguments) async {
-    var entryId = arguments['entry'];
-    if (entryId is! String || entryId.isEmpty) {
-      throw ArgumentError.value(entryId, 'entry', 'required');
-    }
-    var x = arguments['x'];
-    var y = arguments['y'];
-    if (x is! int || y is! int) {
-      throw ArgumentError.value(x ?? y, x is! int ? 'x' : 'y', 'required');
-    }
-    if (_scans.isEmpty && _failures.isEmpty) await computeAll();
-
-    var packagePath = _packageHolding(entryId);
-    var knobs = parseKnobs(arguments['knobs']);
-    var axes = parseKnobs(arguments['axes']);
-    var (tree, ids) = await _headlessFor(packagePath).hitTest(
-      entryId: entryId,
-      x: x.toDouble(),
-      y: y.toDouble(),
-      knobs: knobs,
-      axes: axes,
-    );
-
-    // An empty chain is an answer — there is nothing of the demo's under that
-    // point — so it returns an empty result rather than an error. A caller
-    // that probed outside the viewport wants to see that it missed.
-    return _asResult(
-      packagePath: packagePath,
-      entryId: entryId,
-      applied: {
-        ...{for (var k in knobs.entries) 'knob.${k.key}': k.value},
-        ...{for (var a in axes.entries) 'axis.${a.key}': a.value},
-        'x': '$x',
-        'y': '$y',
-      },
-      nodes: [for (var id in ids) ?tree.nodeAt(id)],
-    );
-  }
-
-  /// The shared half of [_tree] and [_find]: resolve the entry, turn the
-  /// knobs, read the tree.
-  Future<(String, String, InspectTree, Map<String, String>)> _readTree(
-    Map<String, Object?> arguments,
-  ) async {
-    var entryId = arguments['entry'];
-    if (entryId is! String || entryId.isEmpty) {
-      throw ArgumentError.value(entryId, 'entry', 'required');
-    }
-    if (_scans.isEmpty && _failures.isEmpty) await computeAll();
-
-    var packagePath = _packageHolding(entryId);
-    var knobs = parseKnobs(arguments['knobs']);
-    var axes = parseKnobs(arguments['axes']);
-    var tree = await _headlessFor(
-      packagePath,
-    ).tree(entryId: entryId, knobs: knobs, axes: axes);
-    return (
-      packagePath,
-      entryId,
-      tree,
-      {
-        ...{for (var k in knobs.entries) 'knob.${k.key}': k.value},
-        ...{for (var a in axes.entries) 'axis.${a.key}': a.value},
-      },
-    );
-  }
-
-  /// [applied] is the address axes already prefixed — `knob.count`,
-  /// `axis.theme` — because two things that both change the pixels have to be
-  /// told apart on the identity, and a shell may well declare an axis with the
-  /// same name as one of the demo's knobs.
-  CatalogTreeResult _asResult({
-    required String packagePath,
-    required String entryId,
-    required Map<String, String> applied,
-    required List<InspectNode> nodes,
-  }) {
+  /// Every node in the reply's shape, layout formatted for a reader.
+  List<CatalogTreeNode> _asNodes(List<InspectNode> nodes) {
     // Project-relative, because an absolute URI in a terminal is mostly the
     // same forty characters over and over — and the consumer's file tools are
     // scoped to the worktree anyway.
     var worktree = host.worktree.path;
-    return CatalogTreeResult(
-      entry: entryId,
-      address: '${addressFor(packagePath, entryId, axes: applied)}',
-      nodeCount: nodes.length,
-      nodes: [
-        for (var node in nodes)
-          CatalogTreeNode(
-            id: node.id,
-            type: node.type,
-            depth: _depthOf(node.id),
-            description: node.description,
-            source: node.source?.describe(relativeTo: worktree),
-            local: node.createdByLocalProject,
-            // Formatted here rather than carried as four numbers: the consumer
-            // is a terminal or a model, and `12.0,40.0 200.0×48.0` is one
-            // glance where four fields are four.
-            rect: switch (node.layout) {
-              var l? => '${_n(l.x)},${_n(l.y)} ${_n(l.width)}×${_n(l.height)}',
-              null => null,
-            },
-            constraints: node.layout?.constraints?.describe(),
-            flex: switch (node.layout?.flex) {
-              var f? => [
-                f.direction,
-                ?f.mainAxisAlignment,
-                ?f.crossAxisAlignment,
-                ?f.mainAxisSize,
-              ].join(', '),
-              null => null,
-            },
-            flexChild: switch (node.layout) {
-              InspectLayout(flexFactor: var factor?, :var flexFit) =>
-                flexFit == null ? 'flex $factor' : 'flex $factor ($flexFit)',
-              _ => null,
-            },
-          ),
-      ],
-    );
+    return [
+      for (var node in nodes)
+        CatalogTreeNode(
+          id: node.id,
+          type: node.type,
+          depth: _depthOf(node.id),
+          description: node.description,
+          source: node.source?.describe(relativeTo: worktree),
+          local: node.createdByLocalProject,
+          // Formatted here rather than carried as four numbers: the consumer
+          // is a terminal or a model, and `12.0,40.0 200.0×48.0` is one
+          // glance where four fields are four.
+          rect: switch (node.layout) {
+            var l? => '${_n(l.x)},${_n(l.y)} ${_n(l.width)}×${_n(l.height)}',
+            null => null,
+          },
+          constraints: node.layout?.constraints?.describe(),
+          flex: switch (node.layout?.flex) {
+            var f? => [
+              f.direction,
+              ?f.mainAxisAlignment,
+              ?f.crossAxisAlignment,
+              ?f.mainAxisSize,
+            ].join(', '),
+            null => null,
+          },
+          flexChild: switch (node.layout) {
+            InspectLayout(flexFactor: var factor?, :var flexFit) =>
+              flexFit == null ? 'flex $factor' : 'flex $factor ($flexFit)',
+            _ => null,
+          },
+        ),
+    ];
   }
 
   /// A node's depth, read off its id — `0/1/2` is three below the root.
@@ -1275,6 +1402,70 @@ class UiCatalogCore extends PluginCore {
   static String _n(double value) => value == value.roundToDouble()
       ? '${value.round()}'
       : value.toStringAsFixed(1);
+
+  /// Whether this call may read the session a person is driving, rather than
+  /// rendering its own copy.
+  static bool _mayAttach({
+    required Object? live,
+    required Map<String, String> knobs,
+    required Map<String, String> axes,
+    required Map<String, String> debug,
+    required bool wantsPicture,
+    required bool reframed,
+  }) =>
+      // Opt-in. Reading a window somebody is using answers questions nothing
+      // else can, and it makes the same command answer differently depending on
+      // whether that window is open — which is the wrong default for CI and for
+      // a caller that did not know to look.
+      live == true &&
+      // Everything below is a refusal even when asked, because each of these
+      // would reach past this call's business and change what the person is
+      // looking at: knobs and axes are pushed into whichever guest answers, a
+      // debug flag changes the guest process, and a different device or size
+      // reframes the window. A picture is refused for the opposite reason —
+      // there is nothing to take one from, since an attached session offers a VM
+      // service and no frames.
+      knobs.isEmpty &&
+      axes.isEmpty &&
+      debug.isEmpty &&
+      !wantsPicture &&
+      !reframed;
+
+  /// Runs [body] against the guest a person has open, when there is one and it
+  /// is **already showing** [entryId].
+  ///
+  /// Null means "render your own", and every path to it is a deliberate
+  /// refusal rather than a failure: [live] is off; nothing is published for
+  /// this package; the published handle will not connect, in which case it is
+  /// deleted on the way past; or the session is showing a different entry.
+  ///
+  /// **It never switches the guest**, which is the whole safety property. This
+  /// reads what is on screen or it declines — it does not put something on
+  /// screen. A person watching their own window sees nothing happen.
+  ///
+  /// The tree that decided all this is handed to [body] rather than read
+  /// again: it is both the liveness check and the answer, and a second read
+  /// would be a second build's worth of truth.
+  Future<T?> _withLiveGuest<T>(
+    String packagePath,
+    String entryId, {
+    required bool live,
+    required Future<T> Function(InspectClient inspect, InspectTree tree) body,
+  }) async {
+    if (!live) return null;
+    var vmService = await attachToLiveSession(
+      p.join(host.worktree.path, packagePath),
+    );
+    if (vmService == null) return null;
+    try {
+      var inspect = InspectClient(vmService, patience: InspectPatience.glance);
+      var tree = await inspect.tree(entryId);
+      if (tree == null || tree.root == null) return null;
+      return await body(inspect, tree);
+    } finally {
+      await vmService.close();
+    }
+  }
 
   /// The headless pipeline for one declared package.
   HeadlessCatalog _headlessFor(String packagePath) {
@@ -1316,32 +1507,7 @@ class UiCatalogCore extends PluginCore {
     var packageRoot = p.join(host.worktree.path, packagePath);
     var entry = _scans[packagePath]!.entries.firstWhere((e) => e.id == entryId);
 
-    // Named rather than defaulted, and refused rather than approximated. A
-    // device this build does not know is the one failure that has to be loud:
-    // quietly framing as the panel produces a PNG that is wrong without looking
-    // wrong, and something downstream files it as evidence.
-    var deviceId = arguments['device'];
-    if (deviceId != null && (deviceId is! String || !isDeviceId(deviceId))) {
-      throw ArgumentError.value(
-        deviceId,
-        'device',
-        'no such device. Accepted: ${deviceIds.join(', ')}',
-      );
-    }
-
-    // Width and height still win where they are given: they are how you ask for
-    // a size no device has, and on a device they stretch its screen rather than
-    // dropping its ratio and its notch.
-    // `fit` names the panel and resolves to no device, which is the same
-    // viewport by a different route.
-    var device = deviceId is String ? deviceById(deviceId) : null;
-    var viewport = device == null
-        ? CaptureViewport.panel
-        : CaptureViewport.of(device);
-    viewport = viewport.resized(
-      width: _intArgument(arguments, 'width'),
-      height: _intArgument(arguments, 'height'),
-    );
+    var (deviceId, viewport) = _framing(arguments);
 
     var knobs = parseKnobs(arguments['knobs']);
     var axes = parseKnobs(arguments['axes']);
@@ -1352,39 +1518,17 @@ class UiCatalogCore extends PluginCore {
     }
     var annotate = arguments['annotate'] == true;
 
-    var address = addressFor(
-      packagePath,
-      entryId,
-      // Every axis that changed the pixels, resolved. Recording the size the
-      // capture actually ran at — rather than only a size someone asked for —
-      // is what lets the same frame be requested again.
-      //
-      // Knobs are axes too, and prefixed: a demo may declare a knob called
-      // `width`, and an address where a knob quietly overwrote the viewport
-      // would name a picture that was never taken.
-      axes: {
-        // The word the GUI reads, so an address that came out of a capture
-        // reopens framed the way it was shot. Without it the two surfaces
-        // describe the same picture in different vocabularies and the
-        // round-trip silently loses the framing.
-        'device': ?deviceId as String?,
-        'width': '${viewport.width}',
-        'height': '${viewport.height}',
-        'formFactor': ?entry.formFactor,
-        for (var knob in knobs.entries) 'knob.${knob.key}': knob.value,
-        // Prefixed for the same reason knobs are: a shell may declare an axis
-        // called `width`, and an address where it overwrote the viewport would
-        // name a picture nobody took.
-        for (var axis in axes.entries) 'axis.${axis.key}': axis.value,
-        // Prefixed like the other two, and on the address for the same reason:
-        // a picture taken with the guides drawn is not the same picture.
-        for (var flag in debug.entries) 'debug.${flag.key}': flag.value,
-        // Both change the pixels, so both belong on the identity — a crop of
-        // one node and a crop of another are two artifacts, not one file
-        // written twice.
-        'node': ?node as String?,
-        if (annotate) 'annotate': 'true',
-      },
+    var address = _pixelAddress(
+      packagePath: packagePath,
+      entryId: entryId,
+      deviceId: deviceId,
+      viewport: viewport,
+      knobs: knobs,
+      axes: axes,
+      debug: debug,
+      node: node as String?,
+      annotate: annotate,
+      formFactor: entry.formFactor,
     );
 
     var output =
@@ -1499,6 +1643,94 @@ class UiCatalogCore extends PluginCore {
       value.replaceAll(RegExp('[^A-Za-z0-9]+'), '_');
 
   /// Accepts an `int` or the string a CLI flag arrives as.
+  /// The identity of one **picture**: everything that changed the pixels.
+  ///
+  /// Shared by `screenshot` and `inspect`, and it has to be. They can now
+  /// produce the same PNG from the same flags, and the default output path is
+  /// derived from this address — so two builders means the same picture lands in
+  /// two filenames. Which is not hypothetical: `inspect` was written with its
+  /// own copy and it omitted `formFactor`, so the two disagreed the moment both
+  /// could take a `--device`.
+  ///
+  /// Recording the size the capture actually *ran* at — rather than only a size
+  /// someone asked for — is what lets the same frame be requested again.
+  ///
+  /// Every family is prefixed. A demo may declare a knob called `width`, and a
+  /// shell an axis called `width`; an address where either quietly overwrote the
+  /// viewport would name a picture nobody took.
+  Address _pixelAddress({
+    required String packagePath,
+    required String entryId,
+    required String? deviceId,
+    required CaptureViewport viewport,
+    required Map<String, String> knobs,
+    required Map<String, String> axes,
+    required Map<String, String> debug,
+    required String? node,
+    required bool annotate,
+    String? formFactor,
+  }) => addressFor(
+    packagePath,
+    entryId,
+    axes: {
+      // The word the GUI reads, so an address that came out of a capture reopens
+      // framed the way it was shot. Without it the two surfaces describe the
+      // same picture in different vocabularies and the round-trip silently
+      // loses the framing.
+      'device': ?deviceId,
+      'width': '${viewport.width}',
+      'height': '${viewport.height}',
+      'formFactor': ?formFactor,
+      for (var knob in knobs.entries) 'knob.${knob.key}': knob.value,
+      for (var axis in axes.entries) 'axis.${axis.key}': axis.value,
+      // On the address for the same reason as the rest: a picture taken with the
+      // layout guides drawn is not the same picture.
+      for (var flag in debug.entries) 'debug.${flag.key}': flag.value,
+      // Both change the pixels, so both belong on the identity — a crop of one
+      // node and a crop of another are two artifacts, not one file written
+      // twice.
+      'node': ?node,
+      if (annotate) 'annotate': 'true',
+    },
+  );
+
+  /// How `--device`, `--width` and `--height` become a viewport.
+  ///
+  /// Shared by `screenshot` and `inspect` so the two cannot disagree about what
+  /// `iphone15` means — which they would eventually, being two copies of a table
+  /// lookup and a pair of overrides.
+  ///
+  /// Named rather than defaulted, and refused rather than approximated. A device
+  /// this build does not know is the one failure that has to be loud: quietly
+  /// framing as the panel produces a PNG that is wrong without looking wrong,
+  /// and something downstream files it as evidence.
+  static (String?, CaptureViewport) _framing(Map<String, Object?> arguments) {
+    var deviceId = arguments['device'];
+    if (deviceId != null && (deviceId is! String || !isDeviceId(deviceId))) {
+      throw ArgumentError.value(
+        deviceId,
+        'device',
+        'no such device. Accepted: ${deviceIds.join(', ')}',
+      );
+    }
+    // Width and height still win where they are given: they are how you ask for
+    // a size no device has, and on a device they stretch its screen rather than
+    // dropping its ratio and its notch.
+    // `fit` names the panel and resolves to no device, which is the same
+    // viewport by a different route.
+    var device = deviceId is String ? deviceById(deviceId) : null;
+    var viewport = device == null
+        ? CaptureViewport.panel
+        : CaptureViewport.of(device);
+    return (
+      deviceId as String?,
+      viewport.resized(
+        width: _intArgument(arguments, 'width'),
+        height: _intArgument(arguments, 'height'),
+      ),
+    );
+  }
+
   static int? _intArgument(Map<String, Object?> arguments, String key) {
     var value = arguments[key];
     if (value is int) return value;
@@ -1508,3 +1740,109 @@ class UiCatalogCore extends PluginCore {
 }
 
 PluginCore uiCatalogCoreFactory(PluginHost host) => UiCatalogCore(host);
+
+/// What one `inspect` call asked for, read and checked once.
+///
+/// **Its own type because the handler had fifteen locals**, and a function that
+/// parses arguments, chooses a source and projects a result in one breath is a
+/// function nobody can review — which is how `--debug` came to be declared and
+/// passed nowhere.
+///
+/// Everything here is validated in the constructor, before the caller's request
+/// has cost a scan or a compile. A typo in a flag should cost nothing.
+class _InspectRequest {
+  _InspectRequest._({
+    required this.entryId,
+    required this.tree,
+    required this.logs,
+    required this.errors,
+    required this.query,
+    required this.at,
+    required this.node,
+    required this.depth,
+    required this.picture,
+    required this.annotate,
+    required this.output,
+    required this.deviceId,
+    required this.viewport,
+    required this.knobs,
+    required this.axes,
+    required this.debug,
+    required this.mayAttach,
+  });
+
+  factory _InspectRequest.of(Map<String, Object?> arguments) {
+    var entryId = arguments['entry'];
+    if (entryId is! String || entryId.isEmpty) {
+      throw ArgumentError.value(entryId, 'entry', 'required');
+    }
+    var knobs = UiCatalogCore.parseKnobs(arguments['knobs']);
+    var axes = UiCatalogCore.parseKnobs(arguments['axes']);
+    var debug = UiCatalogCore.parseKnobs(arguments['debug']);
+    var (deviceId, viewport) = UiCatalogCore._framing(arguments);
+    var picture = arguments['screenshot'] == true;
+
+    return _InspectRequest._(
+      entryId: entryId,
+      tree: arguments['tree'] == true,
+      logs: arguments['logs'] == true,
+      errors: arguments['errors'] != false,
+      query: switch (arguments['find']) {
+        String q when q.isNotEmpty => q,
+        null || '' => null,
+        var other => throw ArgumentError.value(other, 'find', 'must be text'),
+      },
+      at: UiCatalogCore._parsePoint(arguments['at']),
+      node: switch (arguments['node']) {
+        String id when id.isNotEmpty => id,
+        _ => null,
+      },
+      depth: arguments['depth'],
+      picture: picture,
+      annotate: arguments['annotate'] == true,
+      output: arguments['output'] as String?,
+      deviceId: deviceId,
+      viewport: viewport,
+      knobs: knobs,
+      axes: axes,
+      debug: debug,
+      mayAttach: UiCatalogCore._mayAttach(
+        live: arguments['live'],
+        knobs: knobs,
+        axes: axes,
+        debug: debug,
+        wantsPicture: picture,
+        reframed: deviceId != null || viewport != CaptureViewport.panel,
+      ),
+    );
+  }
+
+  final String entryId;
+
+  /// Which projections were asked for. `errors` is the one that defaults on:
+  /// with no flags at all it is the whole answer.
+  final bool tree;
+  final bool logs;
+  final bool errors;
+  final bool picture;
+
+  final String? query;
+  final (int, int)? at;
+  final String? node;
+  final Object? depth;
+  final bool annotate;
+
+  /// Where to write the picture, as the caller wrote it. Resolving it needs the
+  /// worktree and the address, so that happens on the core.
+  final String? output;
+
+  final String? deviceId;
+  final CaptureViewport viewport;
+  final Map<String, String> knobs;
+  final Map<String, String> axes;
+  final Map<String, String> debug;
+
+  /// Whether this call may read a window somebody has open — decided here so
+  /// that the reasons sit beside the flags they are about.
+  final bool mayAttach;
+}

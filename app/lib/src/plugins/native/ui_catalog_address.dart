@@ -61,3 +61,29 @@ CatalogPlace? catalogPlace(List<String> segments) {
   var entry = segments.skip(1).join('/');
   return CatalogPlace(segments.first, entryId: entry.isEmpty ? null : entry);
 }
+
+/// Whether the address has *moved*, and so has something new to ask of the
+/// session.
+///
+/// The whole of a bug that took three attempts to find, so it is named rather
+/// than left inline. `didChangeDependencies` fires for its own reasons, not
+/// only when the address changes; and the address lags a local selection by a
+/// frame, because its write-back is a post-frame callback. Handing it over
+/// unconditionally therefore pushes the entry you came *from* onto a session
+/// that has already moved on, and the session dutifully switches back to it —
+/// a click silently undone.
+///
+/// It was harmless for as long as nothing else wrote the session's wanted
+/// entry, because the setter absorbed the repeat. The moment selecting also
+/// counted as wanting, the repeat became a real change and undid every click
+/// rather than an unlucky half of them.
+///
+/// [followed] is what was last handed over; [hasFollowed] tells a first call
+/// apart from one that handed over null, and [sessionChanged] forces it because
+/// a session that has just been created has been told nothing at all.
+bool addressMoved({
+  required bool hasFollowed,
+  required bool sessionChanged,
+  required String? followed,
+  required String? place,
+}) => !hasFollowed || sessionChanged || place != followed;

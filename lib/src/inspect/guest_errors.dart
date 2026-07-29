@@ -39,16 +39,26 @@ class GuestErrors {
   void install() {
     var previous = FlutterError.onError;
     FlutterError.onError = (details) {
-      _record(details);
+      var first = _record(details);
       // Kept, and kept first: `headless_check` greps for this line, and a
       // human watching the terminal is still the fastest reader there is.
-      // ignore: avoid_print
-      print('FW-ERROR: ${details.exceptionAsString()}');
+      //
+      // **Only the first of each**, which the buffer has always known and the
+      // print did not. An error thrown from `paint` fires once per frame, so
+      // against a host that draws continuously this printed sixty lines a
+      // second, for ever — through the embedder's log handler and out to the
+      // GUI's own console. One overflowing demo was enough to drown the
+      // process it was being inspected from.
+      if (first) {
+        // ignore: avoid_print
+        print('FW-ERROR: ${details.exceptionAsString()}');
+      }
       (previous ?? FlutterError.presentError)(details);
     };
   }
 
-  void _record(FlutterErrorDetails details) {
+  /// Whether this is the first time this exact error has been seen.
+  bool _record(FlutterErrorDetails details) {
     var error = InspectError(
       exception: details.exceptionAsString(),
       library: details.library,
@@ -62,10 +72,13 @@ class GuestErrors {
         context: existing.context,
         count: existing.count + 1,
       );
-      return;
+      return false;
     }
-    if (_errors.length >= _limit) return;
+    // Full: not recorded and not new, so it does not print either. A buffer
+    // that has stopped listening should not go on shouting.
+    if (_errors.length >= _limit) return false;
     _errors[error.key] = error;
+    return true;
   }
 
   /// Forgets the previous entry's errors.
@@ -73,11 +86,30 @@ class GuestErrors {
   /// Called from the same place the knobs and axes reset, and for the same
   /// reason: carrying one entry's failures into the next reports a demo as
   /// broken because the one before it was.
+  ///
+  /// **Only on a change of entry**, because this runs from `didUpdateWidget`
+  /// and therefore on every rebuild — turning a knob would otherwise wipe the
+  /// record of the throw the previous knob caused. Which leaves reloading *the
+  /// same* entry with nothing to clear it, and that is what [clear] is for.
   void resetFor(String entryId) {
     if (_entryId == entryId) return;
     _entryId = entryId;
     _errors.clear();
   }
+
+  /// Forgets everything, keeping the entry.
+  ///
+  /// **The host decides when, because only the host knows what it just asked
+  /// for.** This is a record of what has been reported, not a reading of what
+  /// is wrong now — nothing arrives to say an overflow *stopped*, so a demo
+  /// that overflowed once goes on saying so until somebody forgets it. That is
+  /// right for a log and wrong for a panel headed Problems: you fix the
+  /// overflow, reload, and the fixed problem is still listed.
+  ///
+  /// So a reload clears first and collects again. Doing it in the guest on
+  /// every frame instead would make a transient layout error flicker in and
+  /// out of the list, which is worse than either.
+  void clear() => _errors.clear();
 
   InspectErrors describe() =>
       InspectErrors(entryId: _entryId, errors: [..._errors.values]);
@@ -87,6 +119,12 @@ class GuestErrors {
     developer.registerExtension('ext.flutterware.errors', (_, _) async {
       return developer.ServiceExtensionResponse.result(
         jsonEncode(describe().toJson()),
+      );
+    });
+    developer.registerExtension('ext.flutterware.clearErrors', (_, _) async {
+      clear();
+      return developer.ServiceExtensionResponse.result(
+        jsonEncode({'cleared': true}),
       );
     });
   }

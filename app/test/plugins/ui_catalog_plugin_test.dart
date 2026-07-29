@@ -342,4 +342,108 @@ Widget added() => const Placeholder();
       throwsArgumentError,
     );
   });
+
+  /// The collapse: `tree`, `find`, `at` and `errors` became projections of one
+  /// `inspect`, because they had the same inputs and the same precondition and
+  /// each paid a whole render to answer one question about a frame the others
+  /// also had to produce.
+  ///
+  /// What is asserted here is the *surface* — that the four are gone, that one
+  /// action offers all of it, and that a caller who gets a flag wrong is told so
+  /// before anything is compiled. What the projections actually contain needs a
+  /// guest, and is asserted in `tool/catalog/headless_check.dart`.
+  group('inspect — one render, every projection', () {
+    test('replaced the four actions rather than joining them', () {
+      var ids = [for (var a in catalog().report.actions) a.id];
+
+      expect(ids, contains('inspect'));
+      expect(
+        ids,
+        isNot(anyElement(isIn(['tree', 'find', 'at', 'errors']))),
+        reason: 'a collapse that left the originals would be an addition',
+      );
+      // Kept, deliberately: many entries and a different cost model, and "give
+      // me a picture" should not require flags.
+      expect(
+        ids,
+        containsAll(['entries', 'check', 'describe', 'screenshot', 'audit']),
+      );
+    });
+
+    test('offers every projection, and errors is the one that is on', () {
+      var action = catalog().report.actions.firstWhere(
+        (a) => a.id == 'inspect',
+      );
+      var byId = {for (var p in action.parameters) p.id: p};
+
+      expect(
+        byId.keys,
+        containsAll(['tree', 'find', 'at', 'errors', 'logs', 'screenshot']),
+      );
+      // No flags is the "is it OK" answer — so this one defaults on and the
+      // rest default off. That asymmetry is the design, not an oversight.
+      expect(byId['errors']!.defaultValue, 'true');
+      for (var off in ['tree', 'logs', 'annotate', 'screenshot']) {
+        expect(byId[off]!.defaultValue, 'false', reason: '$off is opt-in');
+      }
+      // Pinned deliberately. Reading the window somebody has open answers
+      // questions nothing else can, and it makes the same command answer
+      // differently depending on whether that window is open — which is the
+      // wrong default for CI and for a caller that did not know to look.
+      expect(
+        byId['live']!.defaultValue,
+        'false',
+        reason: 'attaching to an open session is opt-in',
+      );
+      expect(byId['entry']!.required, isTrue);
+      for (var optional in ['tree', 'find', 'at', 'logs', 'screenshot']) {
+        expect(byId[optional]!.required, isFalse);
+      }
+    });
+
+    test('refuses a missing or unknown entry', () async {
+      var subject = catalog()..track('.');
+      await scanned(subject);
+
+      expect(subject.invoke('inspect'), throwsArgumentError);
+      expect(
+        subject.invoke('inspect', arguments: {'entry': 'nope#nope'}),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+      'refuses a point that is not one, before it compiles anything',
+      () async {
+        var subject = catalog()..track('.');
+        await scanned(subject);
+
+        // Checked ahead of the guest on purpose: a typo in a flag should cost
+        // nothing, and a compile-and-render is the most expensive thing here.
+        for (var bad in ['nonsense', '120', '120,', 'a,b', '120,300,5', '']) {
+          expect(
+            subject.invoke(
+              'inspect',
+              arguments: {'entry': 'demo/counter.dart#counter', 'at': bad},
+            ),
+            throwsArgumentError,
+            reason: '"$bad" is not a point',
+          );
+        }
+      },
+    );
+
+    test('refuses a find that is not text', () async {
+      var subject = catalog()..track('.');
+      await scanned(subject);
+
+      expect(
+        subject.invoke(
+          'inspect',
+          arguments: {'entry': 'demo/counter.dart#counter', 'find': 12},
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
 }

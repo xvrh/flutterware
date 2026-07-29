@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:flutterware/plugins.dart';
+import 'package:path/path.dart' as p;
 
 import 'src/address/address_scope.dart';
 import 'src/catalog/catalog_session.dart';
@@ -80,6 +81,10 @@ class _HarnessState extends State<_Harness> {
     // Defaults to the app package, where flutterware's own demos live;
     // override to drive a different project through the same widget.
     projectRoot: _projectDefine.isEmpty ? _appRootDefine : _projectDefine,
+    // The app package sits one level inside the repo, which is what the shell
+    // would call the worktree — so a path shown here matches what `fw` prints
+    // from the same checkout.
+    worktreeRoot: p.dirname(_appRootDefine),
     flutterSdkRoot: widget.flutterSdkRoot,
     roots: _rootsDefine.split(','),
   );

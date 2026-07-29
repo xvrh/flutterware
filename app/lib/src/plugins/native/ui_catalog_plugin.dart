@@ -43,6 +43,9 @@ class UiCatalogPlugin extends NativePlugin<UiCatalogCore> {
       appPackageRoot: host.workspace.appContext.appToolDirectory.path,
       flutterSdkRoot: host.workspace.flutterSdk.root,
       projectRoot: p.join(host.worktree.path, path),
+      // So a `file:line` in the panel reads the same as one from `fw`, which
+      // shortens against the worktree too.
+      worktreeRoot: host.worktree.path,
       roots: [_rootFor(path)],
     )..addListener(core.notifyChanged);
     unawaited(session.start());
@@ -112,6 +115,23 @@ class _CatalogPanelState extends State<_CatalogPanel> {
   CatalogSession? _session;
   var _writeScheduled = false;
 
+  /// The entry this last handed to the session, so the same one is not handed
+  /// over twice.
+  ///
+  /// [didChangeDependencies] fires for its own reasons, not only when the
+  /// address moves, and the address lags a local selection by a frame — its
+  /// write-back is a post-frame callback. Restating it unconditionally
+  /// therefore pushes the *previous* entry back onto a session that has already
+  /// moved on, and `_applyWanted` dutifully switches back to it. That is a
+  /// click silently undone.
+  ///
+  /// This used to be harmless by accident: nothing else wrote `wantedEntryId`,
+  /// so the setter's own no-op absorbed the repeat. The moment selecting also
+  /// counted as wanting, the repeat became a real change and undid every click
+  /// rather than merely some of them.
+  String? _followed;
+  var _hasFollowed = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -131,7 +151,8 @@ class _CatalogPanelState extends State<_CatalogPanel> {
   void _follow(CatalogPlace? place) {
     var package = place?.package ?? widget.plugin.packages.firstOrNull;
 
-    if (package != _package) {
+    var sessionChanged = package != _package;
+    if (sessionChanged) {
       _release();
       _package = package;
       if (package != null) {
@@ -142,12 +163,25 @@ class _CatalogPanelState extends State<_CatalogPanel> {
 
     // A request rather than a call: on a cold start the daemon has not reported
     // anything yet, and clicking the link is what starts the compile it would
-    // otherwise be waiting for. The setter is already a no-op when unchanged,
-    // which is why this needs no guard of its own.
-    _session?.wantedEntryId = place?.entryId;
+    // otherwise be waiting for.
+    //
+    // Applied only when the *address* has moved — see [_followed]. A fresh
+    // session always gets it, since it has never been told anything.
+    if (addressMoved(
+      hasFollowed: _hasFollowed,
+      sessionChanged: sessionChanged,
+      followed: _followed,
+      place: place?.entryId,
+    )) {
+      _hasFollowed = true;
+      _followed = place?.entryId;
+      _session?.wantedEntryId = place?.entryId;
+    }
   }
 
   void _release() {
+    _hasFollowed = false;
+    _followed = null;
     if (_package case var previous?) widget.plugin.core.untrack(previous);
     _session?.removeListener(_settled);
     _session = null;
@@ -194,7 +228,14 @@ class _CatalogPanelState extends State<_CatalogPanel> {
         // meaningless against the next one, and carrying them would leave an
         // address accumulating settings for demos it no longer names. Axes
         // belong to the shell and are deliberately untouched.
-        drop: listEquals(segments, handle.segments) ? const {} : const {'knob'},
+        //
+        // `inspect` goes with it, and more sharply: a node id is a *position in
+        // one tree*, so carried across a switch it would not merely be stale,
+        // it would name some unrelated widget of the next demo with complete
+        // confidence.
+        drop: listEquals(segments, handle.segments)
+            ? const {}
+            : const {'knob', 'inspect'},
       );
     });
   }

@@ -111,6 +111,27 @@ class GuestVmService {
     }
   }
 
+  /// The guest's `postEvent` calls of one kind, decoded.
+  ///
+  /// The other direction of the extension channel, and the reason this wrapper
+  /// is built on `package:vm_service` rather than the hand-rolled JSON-RPC the
+  /// spike started with: these arrive as server-initiated notifications with no
+  /// request id, which a request/response client drops on the floor.
+  ///
+  /// The `streamListen` is per-connection rather than per-subscriber, and the
+  /// VM answers a repeat with "already subscribed" — an error that means the
+  /// thing the caller wanted is true, so it is swallowed rather than reported.
+  Stream<Map<String, Object?>> extensionEvents(String kind) async* {
+    try {
+      await service.streamListen(EventStreams.kExtension);
+    } on RPCError catch (e) {
+      if (!e.message.contains('already subscribed')) rethrow;
+    }
+    yield* service.onExtensionEvent
+        .where((event) => event.extensionKind == kind)
+        .map((event) => event.extensionData?.data ?? const {});
+  }
+
   Future<Map<String, dynamic>?> _call(
     String method,
     Map<String, String>? args,

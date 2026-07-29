@@ -201,4 +201,103 @@ void main() {
       expect(report.entryId, 'x');
     });
   });
+
+  group('nodeAtPoint', () {
+    InspectNode box(
+      String id,
+      String type,
+      double x,
+      double y,
+      double w,
+      double h, {
+      List<InspectNode> children = const [],
+    }) => InspectNode(
+      id: id,
+      type: type,
+      layout: InspectLayout(x: x, y: y, width: w, height: h),
+      children: children,
+    );
+
+    // Column(0,0 200x100) > [ Padding(0,0 200x50) > Text(8,8 40x16),
+    //                         Button(0,50 80x50) ]
+    var tree = InspectTree(
+      entryId: 'e',
+      root: box(
+        '',
+        'Column',
+        0,
+        0,
+        200,
+        100,
+        children: [
+          box(
+            '0',
+            'Padding',
+            0,
+            0,
+            200,
+            50,
+            children: [box('0/0', 'Text', 8, 8, 40, 16)],
+          ),
+          box('1', 'Button', 0, 50, 80, 50),
+        ],
+      ),
+    );
+
+    test('takes the deepest box over the point', () {
+      expect(tree.nodeAtPoint(10, 10)?.type, 'Text');
+    });
+
+    test('and its ancestor where the child does not reach', () {
+      expect(tree.nodeAtPoint(100, 10)?.type, 'Padding');
+    });
+
+    test('a point outside everything is null, not the root', () {
+      expect(tree.nodeAtPoint(500, 500), isNull);
+    });
+
+    test('boxes are half-open, so an edge lands in exactly one', () {
+      // Text spans x 8..48. The left edge is inside it and the right edge is
+      // not, which is the rule everywhere else a rectangle is tested.
+      expect(tree.nodeAtPoint(8, 10)?.type, 'Text');
+      expect(tree.nodeAtPoint(47.9, 10)?.type, 'Text');
+      expect(tree.nodeAtPoint(48, 10)?.type, 'Padding');
+    });
+
+    test('a node with no box is skipped, and its child is found', () {
+      // A provider or a builder lays nothing out; the thing under the cursor
+      // is its child.
+      var withBuilder = InspectTree(
+        entryId: 'e',
+        root: InspectNode(
+          id: '',
+          type: 'Builder',
+          children: [box('0', 'Text', 0, 0, 20, 20)],
+        ),
+      );
+      expect(withBuilder.nodeAtPoint(5, 5)?.type, 'Text');
+    });
+
+    test('a child laid out beyond its parent is still found', () {
+      // Which is what an overflow is — and an overflowing widget is exactly
+      // the one somebody is pointing at.
+      var overflowing = InspectTree(
+        entryId: 'e',
+        root: box(
+          '',
+          'Row',
+          0,
+          0,
+          50,
+          20,
+          children: [box('0', 'Wide', 0, 0, 500, 20)],
+        ),
+      );
+      expect(overflowing.nodeAtPoint(300, 10)?.type, 'Wide');
+    });
+
+    test('an empty tree answers nothing', () {
+      expect(InspectTree.empty.nodeAtPoint(0, 0), isNull);
+    });
+  });
 }

@@ -236,7 +236,15 @@ Preview get _preview => fw$activeIndex.fwDemo.transform();
 Widget Function() get _builder => fw$activeIndex.fwBuilder;
 String get _entryId => r'${active.id}';
 
-void main() {
+// **The whole of main runs inside the log-capturing zone, binding and all.**
+//
+// Not a stylistic choice and not reversible: `PlatformDispatcher.onBeginFrame`
+// captures `Zone.current` when it is *set*, and the binding sets it in
+// `initInstances`. So a zone that started after `ensureInitialized` would have
+// every build, layout and paint callback running in the zone that came before
+// it — and a demo printing from `build`, which is the case this exists for,
+// would print into the root zone and be captured by nothing at all.
+void main() => GuestLogs.instance.install(() {
   WidgetsFlutterBinding.ensureInitialized();
   // Before runApp, and once: the panel may ask what knobs exist before the
   // first frame, and the extensions have to outlive every entry switch.
@@ -248,7 +256,15 @@ void main() {
   // Reads the demo's own subtree rather than the whole app, which is what
   // CatalogGuest.demoRoot marks. Null until the first build, and that is an
   // answer: a headless host draws nothing until a frame is asked for.
-  GuestInspector(
+  var inspector = GuestInspector(
+    rootOf: () => CatalogGuest.demoRoot,
+    entryIdOf: () => CatalogParameters.instance.entryId,
+  )..registerExtensions();
+  // Off until something asks. The extension has to exist from the start for
+  // the same reason the others do, but the per-frame work behind it costs
+  // nothing until a panel turns it on.
+  GuestWatch(
+    inspector: inspector,
     rootOf: () => CatalogGuest.demoRoot,
     entryIdOf: () => CatalogParameters.instance.entryId,
   ).registerExtensions();
@@ -262,8 +278,12 @@ void main() {
   // which read stdout for nothing but the VM service URI.
   GuestErrors.instance.install();
   GuestErrors.instance.registerExtensions();
+  // And what the demo prints, which reached the *host's* console and nowhere
+  // else: the GUI could not show it, `fw` could not return it, and an agent
+  // driving a demo could not read the first thing a developer reaches for.
+  GuestLogs.instance.registerExtensions();
   runApp(const _CatalogHost());
-${emitProbe ? _probe : ''}}
+${emitProbe ? _probe : ''}});
 
 class _CatalogHost extends StatelessWidget {
   const _CatalogHost();

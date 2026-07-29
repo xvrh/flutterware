@@ -111,6 +111,25 @@ class GuestInspector {
     return ids.reversed.toList();
   }
 
+  /// The render object [id] names, or null when this tree has no such node.
+  ///
+  /// The expensive direction, and deliberately not offered as something to call
+  /// often: it costs a whole summary-tree walk, because an id *is* a position
+  /// in the summary tree and nothing cheaper knows where that is. [GuestWatch]
+  /// calls it once when the selection changes and holds the result — which is
+  /// only safe because it also drops it whenever the shape moves.
+  ///
+  /// The map is keyed the other way round because the hit test needs it that
+  /// way, and inverting a few dozen entries here beats building both.
+  RenderObject? renderObjectFor(String id) {
+    var (:tree, :byRenderObject) = _build();
+    if (tree.root == null) return null;
+    for (var entry in byRenderObject.entries) {
+      if (entry.value == id) return entry.key;
+    }
+    return null;
+  }
+
   ({InspectTree tree, Map<RenderObject, String> byRenderObject}) _build() {
     var entryId = entryIdOf();
     var byRenderObject = <RenderObject, String>{};

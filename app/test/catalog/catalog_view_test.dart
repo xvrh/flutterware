@@ -75,7 +75,16 @@ void main() {
     String? device,
     Map<String, String> axes = const {},
     Map<String, String> knobs = const {},
+    // The knobs are a tab now rather than a drawer that is always there, so a
+    // test that wants them has to be looking at them — which is the same thing
+    // a person has to do.
+    //
+    // Null leaves the tab alone rather than defaulting it, because a second
+    // `pump` in one test means "the panel rebuilt", and a rebuild that flipped
+    // you back to another tab would be testing the opposite of what is true.
+    InspectTab? tab,
   }) {
+    if (tab != null) session.inspectTab = tab;
     address = ValueNotifier(
       Address(
         worktree: 'test',
@@ -121,6 +130,50 @@ void main() {
           .first,
     );
     expect(row.onTap, isNotNull);
+  });
+
+  testWidgets('a click shows as selected before anything is compiled', (
+    tester,
+  ) async {
+    // `switchTo` sets `selected` and queues the compile. Without a notify at
+    // the moment of asking, the row did not light until the queue reached it —
+    // and for a quarantined entry that means waiting out a fresh compile
+    // attempt, seconds of it. Nothing moved, so you clicked again, and queued
+    // another. It took about five before one landed.
+    // *Both* broken, and starting on the other one. A compiling entry sends
+    // the canvas to the texture, which a widget test has no guest for — the
+    // reason every case in this file keeps its selection on something that
+    // does not build.
+    var session =
+        CatalogSession(
+            appPackageRoot: '/app',
+            flutterSdkRoot: '/sdk',
+            projectRoot: '/project',
+          )
+          ..phase = CatalogSessionPhase.ready
+          ..entries = const [gamma]
+          ..quarantined = const [
+            QuarantinedEntry(entry: alpha, error: 'boom'),
+            QuarantinedEntry(entry: beta, error: 'boom'),
+          ]
+          ..selected = alpha
+          ..active = alpha;
+    await pump(tester, session);
+
+    Color? colourOf(String name) => tester
+        .widgetList<Container>(
+          find.ancestor(of: find.text(name), matching: find.byType(Container)),
+        )
+        .map((c) => c.color)
+        .firstWhere((c) => c != null, orElse: () => null);
+    var unselected = colourOf('Beta');
+
+    await tester.tap(find.text('Beta'));
+    // One pump, not `pumpAndSettle`: the claim is that it lands on the very
+    // next frame rather than at the far end of a queue.
+    await tester.pump();
+
+    expect(colourOf('Beta'), isNot(unselected));
   });
 
   testWidgets('the filter narrows the tree', (tester) async {
@@ -443,10 +496,29 @@ void main() {
     KnobReport report(List<KnobDescriptor> knobs) =>
         KnobReport(entryId: beta.id, knobs: knobs);
 
-    testWidgets('is absent when the entry declares none', (tester) async {
-      await pump(tester, sessionWithBroken(beta, 'boom'));
+    testWidgets('says so when the entry declares none, rather than vanishing', (
+      tester,
+    ) async {
+      // The drawer this replaced was *absent* when an entry had no knobs,
+      // which meant anybody who had not happened to open a demo with knobs
+      // never learned they existed. Empty and explaining itself beats gone.
+      await pump(
+        tester,
+        sessionWithBroken(beta, 'boom'),
+        tab: InspectTab.controls,
+      );
       expect(find.byType(Slider), findsNothing);
       expect(toggles, findsNothing);
+      expect(find.textContaining('declares no knobs'), findsOneWidget);
+    });
+
+    testWidgets('is what the panel opens on', (tester) async {
+      // Not Elements: the everyday loop is turning a knob and watching the
+      // demo, and a panel that opens onto a wall of widget rows has an opinion
+      // about what you came here to do.
+      await pump(tester, sessionWithBroken(beta, 'boom'));
+      expect(find.text('Controls'), findsOneWidget);
+      expect(find.textContaining('declares no knobs'), findsOneWidget);
     });
 
     testWidgets('renders a control per kind', (tester) async {
@@ -473,7 +545,7 @@ void main() {
             defaultValue: false,
           ),
         ]);
-      await pump(tester, session);
+      await pump(tester, session, tab: InspectTab.controls);
 
       expect(find.text('label'), findsOneWidget);
       expect(find.text('count'), findsOneWidget);
@@ -495,7 +567,7 @@ void main() {
             defaultValue: 1.5,
           ),
         ]);
-      await pump(tester, session);
+      await pump(tester, session, tab: InspectTab.controls);
 
       expect(find.byType(Slider), findsNothing);
       expect(find.text('1.5'), findsOneWidget);
@@ -521,7 +593,12 @@ void main() {
         ]);
       // Moved because the *address* says so. The report's own `value` is the
       // demo's confirmation and does not decide what is drawn.
-      await pump(tester, session, knobs: const {'moved': 'changed'});
+      await pump(
+        tester,
+        session,
+        knobs: const {'moved': 'changed'},
+        tab: InspectTab.controls,
+      );
 
       Color colorOf(String name) =>
           tester.widget<Text>(find.text(name)).style!.color!;
@@ -549,7 +626,7 @@ void main() {
             defaultValue: false,
           ),
         ]);
-      await pump(tester, session);
+      await pump(tester, session, tab: InspectTab.controls);
 
       await tester.enterText(find.widgetWithText(TextField, '1.5'), '12');
       session.knobs = report(const [
@@ -694,7 +771,7 @@ void main() {
       tester,
     ) async {
       var session = sessionWithBroken(beta, 'boom')..knobs = report([title]);
-      await pump(tester, session);
+      await pump(tester, session, tab: InspectTab.controls);
 
       await tester.enterText(find.byType(TextField).last, 'Bonjour');
       // The field debounces, so a burst of typing is one write rather than one
@@ -716,7 +793,12 @@ void main() {
       // what somebody chose — and what made the top bar stick when a stale
       // confirmed value was used as the fallback instead.
       var session = sessionWithBroken(beta, 'boom')..knobs = report([title]);
-      await pump(tester, session, knobs: const {'title': 'Bonjour'});
+      await pump(
+        tester,
+        session,
+        knobs: const {'title': 'Bonjour'},
+        tab: InspectTab.controls,
+      );
 
       await tester.enterText(find.byType(TextField).last, 'Hello');
       await tester.pump(const Duration(milliseconds: 350));

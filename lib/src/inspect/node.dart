@@ -346,6 +346,47 @@ class InspectTree {
 
   int get length => nodes.length;
 
+  /// The deepest node whose box contains ([x], [y]), in the guest's own
+  /// coordinates.
+  ///
+  /// **An approximation of a hit test, and deliberately one.** It knows only
+  /// rectangles: not transforms, not clips, not opacity, not `IgnorePointer`,
+  /// and of two overlapping boxes at the same depth it takes the later, which
+  /// is a guess at paint order rather than knowledge of it.
+  ///
+  /// That is the right trade for a *pointer*. Following the mouse means
+  /// answering every frame, where a round trip per move would stutter and being
+  /// one node out for a moment costs nothing. Anything that has to be right —
+  /// what a click actually selected — asks the guest, which runs the
+  /// framework's own `hitTest` over the real render tree.
+  ///
+  /// Nodes with no box are skipped rather than treated as empty: a provider or
+  /// a builder lays nothing out, and its child is the thing under the cursor.
+  /// Every node is considered rather than only the children of one that
+  /// contains the point, because a child can be laid out beyond its parent —
+  /// which is what an overflow *is*, and overflowing widgets are exactly the
+  /// ones somebody is pointing at.
+  InspectNode? nodeAtPoint(double x, double y) {
+    InspectNode? best;
+    var bestDepth = -1;
+    for (var node in nodes) {
+      var layout = node.layout;
+      if (layout == null) continue;
+      if (x < layout.x || y < layout.y) continue;
+      if (x >= layout.x + layout.width || y >= layout.y + layout.height) {
+        continue;
+      }
+      // `>=` rather than `>`: depth-first order visits later siblings last, so
+      // ties go to whichever was drawn on top.
+      var depth = node.id.isEmpty ? 0 : node.id.split('/').length;
+      if (depth >= bestDepth) {
+        best = node;
+        bestDepth = depth;
+      }
+    }
+    return best;
+  }
+
   /// The node with [id], or null.
   ///
   /// Null rather than a nearest match on purpose. A structural id points at a

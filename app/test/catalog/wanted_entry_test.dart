@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/catalog_session.dart';
 import 'package:flutterware_app/src/catalog/protocol.dart';
@@ -20,6 +22,7 @@ CatalogSession _session() => CatalogSession(
 );
 
 void main() {
+  _retryMarkerTests();
   group('the address names an entry before the daemon has reported', () {
     test('and the request is held rather than dropped', () {
       var session = _session();
@@ -117,6 +120,97 @@ void main() {
       expect(session.wantedEntry, isNull);
       expect(session.missingEntryId, isNull);
 
+      session.dispose();
+    });
+  });
+
+  group('a click is a request too', () {
+    test('so what the address is taken to want follows the selection', () {
+      // The panel writes the address back from a post-frame callback, so
+      // between a click and the next frame boundary this still named the entry
+      // you came from. Anything calling `_applyWanted` in that window — and a
+      // `CatalogChanged` from the daemon does — switched you straight back.
+      var session = _session()
+        ..entries = [
+          _entry('demo/a.dart', 'alpha'),
+          _entry('demo/b.dart', 'beta'),
+        ]
+        ..phase = CatalogSessionPhase.ready;
+
+      session.wantedEntryId = 'demo/a.dart#alpha';
+      unawaited(session.switchTo(_entry('demo/b.dart', 'beta')));
+
+      expect(session.selected?.id, 'demo/b.dart#beta');
+      expect(
+        session.wantedEntryId,
+        'demo/b.dart#beta',
+        reason: 'or the next change event puts you back on alpha',
+      );
+
+      session.dispose();
+    });
+
+    test('and a quarantined entry is wanted like any other', () {
+      // The one this was actually reported on. Asking for a quarantined entry
+      // *is* the retry, so the daemon announces the change before it has
+      // compiled anything — which is why this race was so easy to lose here
+      // and nowhere else.
+      var broken = _entry('demo/broken.dart', 'nope');
+      var session = _session()
+        ..entries = [_entry('demo/a.dart', 'alpha')]
+        ..quarantined = [QuarantinedEntry(entry: broken, error: 'boom')]
+        ..phase = CatalogSessionPhase.ready;
+
+      session.wantedEntryId = 'demo/a.dart#alpha';
+      unawaited(session.switchTo(broken));
+
+      expect(session.wantedEntryId, broken.id);
+      expect(session.wantedEntry?.id, broken.id);
+      expect(session.missingEntryId, isNull);
+
+      session.dispose();
+    });
+  });
+}
+
+void _retryMarkerTests() {
+  group('retrying a quarantined entry', () {
+    var broken = _entry('demo/broken.dart', 'nope');
+
+    test('keeps saying it is broken until the retry has decided', () {
+      var session = _session()
+        ..entries = [_entry('demo/a.dart', 'alpha')]
+        ..quarantined = [QuarantinedEntry(entry: broken, error: 'boom')]
+        ..phase = CatalogSessionPhase.ready;
+      expect(session.compileErrorFor(broken), 'boom');
+
+      unawaited(session.switchTo(broken));
+      // What the daemon announces the instant it is asked: the entry is out of
+      // the quarantine and back among the buildable ones, before a single line
+      // has been compiled.
+      session
+        ..entries = [_entry('demo/a.dart', 'alpha'), broken]
+        ..quarantined = [];
+
+      expect(
+        session.compileErrorFor(broken),
+        'boom',
+        reason: 'the row must not claim to be healthy while it is being tried',
+      );
+
+      session.dispose();
+    });
+
+    test('and says nothing about an entry nobody asked about', () {
+      var session = _session()
+        ..entries = [_entry('demo/a.dart', 'alpha')]
+        ..quarantined = [QuarantinedEntry(entry: broken, error: 'boom')]
+        ..phase = CatalogSessionPhase.ready;
+
+      unawaited(session.switchTo(_entry('demo/a.dart', 'alpha')));
+      session.quarantined = [];
+
+      expect(session.compileErrorFor(broken), isNull);
       session.dispose();
     });
   });
