@@ -154,6 +154,12 @@ void main() {
   testWidgets('compatibility is built from the pub.dev tags', (tester) async {
     await pumpDetail(tester, 'path_provider');
 
+    // Scrolled to first, unlike the sections above it. The page is a `ListView`,
+    // so a child below the fold has no element at all — and `find` searches the
+    // element tree, not the widget list it was built from. This is the sixth
+    // section down, which is why it is the only one that needed this.
+    await tester.scrollUntilVisible(find.text('Compatibility'), 200);
+
     expect(find.text('Compatibility'), findsOneWidget);
     expect(find.text('bsd-3-clause'), findsOneWidget);
     expect(find.text('android'), findsOneWidget);

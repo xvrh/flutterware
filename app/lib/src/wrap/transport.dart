@@ -15,7 +15,10 @@ Future<int> runIntercepted({
   required IOSink captureSink,
   String? workingDirectory,
 }) async {
-  if (stdin.hasTerminal) {
+  // `stdinIsInteractive` rather than `hasTerminal`: the latter is true for
+  // `/dev/null`, which would send a non-interactive run down the PTY path and
+  // straight into the ENODEV crash. See its own note.
+  if (stdinIsInteractive) {
     return runUnderPty(
       executable: executable,
       arguments: arguments,
