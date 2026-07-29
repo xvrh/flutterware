@@ -101,6 +101,13 @@ class ShellController extends ChangeNotifier {
   List<ConfigLoad> loadLog(Worktree worktree) =>
       List.unmodifiable(_log[worktree.path] ?? const []);
 
+  /// What [worktree]'s config resolved to — the manifest its plugins were built
+  /// from, and what the next load is compared against.
+  ///
+  /// Null when no load has succeeded yet, which is not the same as a worktree
+  /// with no plugins: that one has an empty manifest.
+  PluginManifest? manifestFor(Worktree worktree) => _manifests[worktree.path];
+
   void _record(String path, ConfigLoad load) {
     var rows = _log.putIfAbsent(path, () => []);
     rows.insert(0, load);
@@ -189,10 +196,25 @@ class ShellController extends ChangeNotifier {
     return path == null ? null : _sessions[path];
   }
 
-  /// The plugin whose panel is mounted, or null when the home screen is.
+  /// True while the address names the shell's own config screen.
+  ///
+  /// It occupies the plugin slot but is not a plugin, so it is neither
+  /// [selectedPluginId] nor [isHome] — a third place, and the only one the
+  /// shell itself owns.
+  bool get isConfigScreen => address.plugin == Address.shellConfig;
+
+  /// Moves to `fw://<worktree>/config`.
+  void selectConfig() {
+    if (address.worktree case var name?) {
+      go(Address(worktree: name, plugin: Address.shellConfig));
+    }
+  }
+
+  /// The plugin whose panel is mounted, or null when the home or config screen
+  /// is.
   String? get selectedPluginId {
     var id = address.plugin;
-    if (id == null) return null;
+    if (id == null || id == Address.shellConfig) return null;
     // A reloaded config may no longer declare it; fall back to home rather than
     // to a panel that cannot be built.
     var session = selectedSession;
@@ -209,7 +231,7 @@ class ShellController extends ChangeNotifier {
       selectedPluginId == null ? null : address.segments.firstOrNull;
 
   /// True while the selected worktree is showing its home screen.
-  bool get isHome => selectedPluginId == null;
+  bool get isHome => !isConfigScreen && selectedPluginId == null;
 
   /// Whether the plugin rail is showing.
   ///

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'address.dart';
 import 'package.dart';
 import 'plugin.dart';
 
@@ -101,6 +102,15 @@ class FlutterwareConfig {
     if (_plugins.any((p) => p.id == plugin.id)) {
       throw StateError(
         'Duplicate plugin id "${plugin.id}". Give one of them a distinct id.',
+      );
+    }
+    // Refused rather than merely discouraged: `fw://<worktree>/config` is the
+    // shell's own screen for this file, and a plugin able to take that address
+    // could hide the one place that explains why the file did not load.
+    if (plugin.id == Address.shellConfig) {
+      throw StateError(
+        'Plugin id "${Address.shellConfig}" is reserved for the shell\'s own '
+        'config screen. Give the plugin a dotted, globally unique id.',
       );
     }
     _plugins.add(plugin);

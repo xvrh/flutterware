@@ -19,7 +19,8 @@ import 'package:flutterware_app/src/shell/shell_search.dart';
 import 'package:flutterware_app/src/shell/shell_view.dart';
 import 'package:flutterware_app/src/ui/command_palette.dart';
 import 'package:flutterware_app/src/shell/worktree_discovery.dart';
-import 'package:flutterware_app/src/shell/worktree_home.dart';
+import 'package:flutterware_app/src/shell/config_load.dart';
+import 'package:flutterware_app/src/shell/config_screen.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 
 const _listing =
@@ -636,10 +637,14 @@ void main() {
       of: find.byKey(configErrorBannerKey),
       matching: find.textContaining(text),
     );
-    Finder inLog(String text) => find.descendant(
-      of: find.byKey(configLogKey),
+    Finder inConfig(String text) => find.descendant(
+      of: find.byKey(configScreenKey),
       matching: find.textContaining(text),
     );
+    Future<void> openConfig(WidgetTester tester) async {
+      await tester.tap(find.byKey(configButtonKey));
+      await tester.pumpAndSettle();
+    }
 
     const changedTests =
         '{"version":1,"plugins":['
@@ -654,7 +659,64 @@ void main() {
       // The tab appearing is already the feedback; announcing it would make
       // every worktree switch chatty.
       expect(find.byKey(configLoadLineKey), findsNothing);
-      expect(inLog('opened, 2 plugins'), findsOneWidget);
+      // And the home screen stays thin — the log lives on the config screen.
+      expect(find.byKey(configScreenKey), findsNothing);
+
+      await openConfig(tester);
+      expect(inConfig('opened, 2 plugins'), findsOneWidget);
+    });
+
+    testWidgets('the band button navigates rather than reloading', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+      var loadsBefore = shell.loadLog(shell.selected!).length;
+
+      await openConfig(tester);
+
+      expect(shell.isConfigScreen, isTrue);
+      expect(shell.isHome, isFalse);
+      expect(shell.selectedPluginId, isNull, reason: 'config is not a plugin');
+      expect(shell.address.plugin, 'config');
+      expect(
+        shell.loadLog(shell.selected!).length,
+        loadsBefore,
+        reason: 'clicking it must not re-run the config any more',
+      );
+    });
+
+    testWidgets('Reload on the screen re-runs the config', (tester) async {
+      var shell = await _pumpShell(tester);
+      await openConfig(tester);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Reload'));
+      await tester.pumpAndSettle();
+
+      expect(
+        shell.lastLoad(shell.selected!)!.outcome,
+        ConfigLoadOutcome.unchanged,
+      );
+      expect(inConfig('no changes'), findsOneWidget);
+    });
+
+    testWidgets('the screen says what the config resolved to', (tester) async {
+      await _pumpShell(tester);
+      await openConfig(tester);
+
+      expect(inConfig('Resolved'), findsOneWidget);
+      expect(inConfig('a.deps'), findsOneWidget);
+      expect(inConfig('a.tests'), findsOneWidget);
+    });
+
+    testWidgets('an address naming the config screen lands on it', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+
+      shell.go(Address(worktree: shell.selected!.name, plugin: 'config'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(configScreenKey), findsOneWidget);
     });
 
     testWidgets('a reload that changed nothing still says so', (tester) async {
@@ -698,16 +760,37 @@ void main() {
       // Still there, still the same objects — the banner is the only symptom.
       expect(identical(shell.selectedSession!.plugins.first, before), isTrue);
 
-      // The compiler's own output is behind one tap, not on screen by default.
+      // The compiler's own output is not duplicated into the band; Details
+      // goes to the one screen that renders it.
       expect(inBanner("Expected ';'"), findsNothing);
       await tester.tap(
         find.descendant(
           of: find.byKey(configErrorBannerKey),
-          matching: find.text('More'),
+          matching: find.text('Details'),
         ),
       );
       await tester.pumpAndSettle();
-      expect(inBanner("Expected ';'"), findsOneWidget);
+
+      expect(shell.isConfigScreen, isTrue);
+      expect(inConfig("Expected ';'"), findsOneWidget);
+      // And it is redundant while you are looking at the explanation.
+      expect(find.byKey(configErrorBannerKey), findsNothing);
+    });
+
+    testWidgets('the band button shows a dot while the config is failing', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+      _loader.broken = true;
+      await shell.reloadConfig();
+      await tester.pumpAndSettle();
+
+      var button = find.byKey(configButtonKey);
+      expect(
+        find.descendant(of: button, matching: find.byType(Stack)),
+        findsOneWidget,
+      );
+      expect(shell.errorFor(shell.selected!), isNotNull);
     });
 
     testWidgets('the banner clears when a load succeeds', (tester) async {
@@ -728,14 +811,13 @@ void main() {
       var shell = await _pumpShell(tester);
       _loader.manifest = changedTests;
       await shell.reloadConfig();
-      await tester.pumpAndSettle();
+      await openConfig(tester);
 
-      // Home is where the shell already lands, so the log is on screen.
-      expect(inLog('tests rebuilt'), findsOneWidget);
+      expect(inConfig('tests rebuilt'), findsOneWidget);
       // The diff, made visible: which key moved, not merely that one did.
-      expect(inLog('a.tests — dir changed'), findsOneWidget);
+      expect(inConfig('a.tests — dir changed'), findsOneWidget);
       // Newest first, and the open is still there under it.
-      expect(inLog('opened, 2 plugins'), findsOneWidget);
+      expect(inConfig('opened, 2 plugins'), findsOneWidget);
     });
   });
 }

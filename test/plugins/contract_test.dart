@@ -158,6 +158,19 @@ Tests  3 failing
       );
     });
 
+    test('refuses the id the shell reserves for its own config screen', () {
+      // `fw://<worktree>/config` is the one place that explains why this file
+      // did not load. A plugin able to take that address could hide it — so the
+      // reservation is enforced here rather than documented and hoped for.
+      expect(
+        () => Flutterware.configure(
+          (fw) => fw.use(_BarePlugin(Address.shellConfig)),
+          emit: (_) {},
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+
     test('refuses a manifest from a future version', () {
       var future = jsonEncode({'version': manifestVersion + 1, 'plugins': []});
       expect(() => PluginManifest.parse(future), throwsFormatException);

@@ -6,11 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutterware/plugins.dart';
 
 import '../address/address_scope.dart';
-import '../plugins/manifest_loader.dart';
 import '../plugins/native_plugin.dart';
 import '../ui/theme.dart';
 import 'address_bar.dart';
 import 'config_load.dart';
+import 'config_screen.dart';
 import '../utils/hot_reload.dart';
 import '../utils/value_stream_builder.dart';
 import 'shell_controller.dart';
@@ -24,6 +24,9 @@ const configLoadLineKey = Key('config-load-line');
 
 /// The sticky config-failure banner under the band.
 const configErrorBannerKey = Key('config-error-banner');
+
+/// The band button that opens the config screen.
+const configButtonKey = Key('config-button');
 
 /// Width the macOS traffic lights occupy; band content insets past them.
 const _trafficLightInset = 78.0;
@@ -187,7 +190,7 @@ class _Band extends StatelessWidget {
           ),
           const Gap(FwSpacing.md),
           _ConfigLoadLine(shell),
-          _ReloadButton(shell),
+          _ConfigButton(shell),
           const _HotReloadButtons(),
           const Gap(FwSpacing.md),
         ],
@@ -222,34 +225,27 @@ class _SidebarButton extends StatelessWidget {
 
 /// The selected worktree's config failure, until a load succeeds.
 ///
-/// **Not dismissible, and collapsible rather than closable.** It is a fact about
-/// a file on disk, so hiding it would hide a real problem — and unlike before,
-/// there is no other symptom to notice: the plugins built from the last good
-/// config are all still running behind it.
-class _ConfigErrorBanner extends StatefulWidget {
+/// **Not dismissible.** It is a fact about a file on disk, so hiding it would
+/// hide a real problem — and unlike before, there is no other symptom to notice:
+/// the plugins built from the last config that loaded are all still running
+/// behind it.
+///
+/// Says one line and offers the screen. The compiler's own output lives on
+/// `fw://<worktree>/config`, where the reload button and the history of previous
+/// reloads are, and rendering it in two places would mean maintaining it in two
+/// places.
+class _ConfigErrorBanner extends StatelessWidget {
   const _ConfigErrorBanner(this.shell);
 
   final ShellController shell;
 
   @override
-  State<_ConfigErrorBanner> createState() => _ConfigErrorBannerState();
-}
-
-class _ConfigErrorBannerState extends State<_ConfigErrorBanner> {
-  var _expanded = false;
-
-  @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var worktree = widget.shell.selected;
-    var error = worktree == null ? null : widget.shell.errorFor(worktree);
-    if (error == null || worktree == null) return const SizedBox.shrink();
-
-    // The first line is the headline the loader wrote; the rest is the
-    // compiler's own output, which is worth reading and not worth occupying the
-    // window.
-    var lines = error.message.trimRight().split('\n');
-    var detail = lines.skip(1).join('\n').trim();
+    var worktree = shell.selected;
+    var error = worktree == null ? null : shell.errorFor(worktree);
+    // Redundant while you are looking at the screen that explains it.
+    if (error == null || shell.isConfigScreen) return const SizedBox.shrink();
 
     return Container(
       key: configErrorBannerKey,
@@ -262,64 +258,33 @@ class _ConfigErrorBannerState extends State<_ConfigErrorBanner> {
         color: colors.red.withValues(alpha: 0.08),
         border: Border(bottom: BorderSide(color: colors.red)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(Icons.error_outline, size: 14, color: colors.red),
-              const Gap(FwSpacing.sm),
-              Expanded(
-                child: Text(
-                  lines.first,
-                  style: context.type.caption.copyWith(color: colors.red),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (detail.isNotEmpty)
-                _BannerAction(
-                  _expanded ? 'Less' : 'More',
-                  () => setState(() => _expanded = !_expanded),
-                ),
-            ],
+          Icon(Icons.error_outline, size: 14, color: colors.red),
+          const Gap(FwSpacing.sm),
+          Expanded(
+            child: Text(
+              error.message.trimRight().split('\n').first,
+              style: context.type.caption.copyWith(color: colors.red),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          if (_expanded) ...[
-            const Gap(FwSpacing.sm),
-            SelectableText(
-              '${worktree.path}/$configFilePath',
-              style: context.type.caption.copyWith(color: colors.mut2),
+          TextButton(
+            onPressed: shell.selectConfig,
+            style: TextButton.styleFrom(
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            const Gap(FwSpacing.xs),
-            SelectableText(
-              detail,
-              style: context.type.caption.copyWith(fontFamily: 'monospace'),
+            child: Text(
+              'Details',
+              style: context.type.caption.copyWith(color: colors.red),
             ),
-          ],
+          ),
         ],
       ),
     );
   }
-}
-
-class _BannerAction extends StatelessWidget {
-  const _BannerAction(this.label, this.onTap);
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => TextButton(
-    onPressed: onTap,
-    style: TextButton.styleFrom(
-      minimumSize: Size.zero,
-      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    ),
-    child: Text(
-      label,
-      style: context.type.caption.copyWith(color: context.colors.red),
-    ),
-  );
 }
 
 /// What the last config load did, for a few seconds after it did it.
@@ -398,12 +363,17 @@ class _ConfigLoadLineState extends State<_ConfigLoadLine> {
   }
 }
 
-/// Re-runs the selected worktree's `tool/flutterware.dart`.
+/// Opens `fw://<worktree>/config`.
 ///
-/// Worktree discovery is *not* what this does — the switcher rescans itself
-/// when it opens, which is the only moment that list is looked at.
-class _ReloadButton extends StatelessWidget {
-  const _ReloadButton(this.shell);
+/// **This used to reload on click**, which put the action in the chrome and its
+/// result nowhere: a reload that rebuilt one plugin, or refused because a plugin
+/// was busy, had no place to say so. Now the button is navigation and the Reload
+/// button lives on the screen, next to the log of what previous reloads did.
+///
+/// It carries the config's state, because that is the one thing about this file
+/// worth a permanent pixel in the band: a dot when the config is failing.
+class _ConfigButton extends StatelessWidget {
+  const _ConfigButton(this.shell);
 
   final ShellController shell;
 
@@ -411,17 +381,38 @@ class _ReloadButton extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var worktree = shell.selected;
-    var blocked =
-        worktree != null && (shell.sessionFor(worktree)?.isBlocked ?? false);
-    var enabled = worktree != null && !blocked && !shell.isLoading(worktree);
+    var failing = worktree != null && shell.errorFor(worktree) != null;
 
     return Tooltip(
-      message: blocked
-          ? 'A plugin is busy; reloading would tear it down'
-          : 'Reload this worktree’s config',
+      message: failing
+          ? 'This worktree’s config did not load'
+          : 'Config — what tool/flutterware.dart resolved to',
       child: IconButton(
-        onPressed: enabled ? () => shell.reloadConfig() : null,
-        icon: Icon(Icons.refresh, size: 16, color: colors.mut),
+        key: configButtonKey,
+        onPressed: worktree == null ? null : shell.selectConfig,
+        icon: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(
+              Icons.tune,
+              size: 16,
+              color: shell.isConfigScreen ? colors.accent : colors.mut,
+            ),
+            if (failing)
+              Positioned(
+                right: -1,
+                top: -1,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
+        ),
         disabledColor: colors.mut3,
         constraints: const BoxConstraints.tightFor(width: 28, height: 28),
         padding: EdgeInsets.zero,
@@ -438,8 +429,8 @@ class _ReloadButton extends StatelessWidget {
 /// that is correct rather than a degraded experience: there is no compiler
 /// present to produce new code.
 ///
-/// Distinct from [_ReloadButton] beside it, which reloads the *worktree's
-/// config*. That one is for using flutterware; this pair is for working on it.
+/// Distinct from [_ConfigButton] beside it, which opens the *worktree's config*
+/// screen. That one is for using flutterware; this pair is for working on it.
 class _HotReloadButtons extends StatefulWidget {
   const _HotReloadButtons();
 
@@ -1085,6 +1076,8 @@ class _Panel extends StatelessWidget {
       body = const _Message(title: 'No worktree open');
     } else if (session == null) {
       body = _Loading(worktree.displayName);
+    } else if (shell.isConfigScreen) {
+      body = ConfigScreen(shell, worktree);
     } else {
       var plugin = shell.selectedPluginId == null
           ? null
