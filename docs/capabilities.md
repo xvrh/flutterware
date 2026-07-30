@@ -310,6 +310,48 @@ fw run server sql [--name=…] [--top=…]
 | `top` | integer | no | 20 | — |
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 
+#### `run` — Run
+
+Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured just before it.
+
+```sh
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…]
+```
+
+Returns `ScenarioRunResult`:
+
+```
+packages: List<ScenarioRunPackage>
+  path: String
+  output: String   # Where this run's artifacts were written.
+  ms: int   # Whole-run wall time inside the harness.
+  scenarios: List<ScenarioRunOutcome>
+    file: String
+    name: String
+    ok: bool
+    ms: int
+    steps: List<ScenarioRunStep>
+      index: int   # 1-based position in the scenario's capture sequence.
+      name: String?   # The `Shot`'s name; null for an automatic capture.
+      auto: bool   # True when nothing named this capture — a collapsible detail step.
+      tags: List<String>
+      png: String   # Path to the captured PNG.
+      tree: String   # Path to the widget-tree JSON captured at the same moment.
+      texts: List<String>   # The visible texts — the projection an agent reads next to the pixels.
+      address: String   # The step's `fw://` address.
+    errors: List<ScenarioRunError>   # The failure, when [ok] is false.
+      error: String
+      stack: String?
+  error: String?   # Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+| `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it |
+| `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
+| `output` | string | no | — | Where step artifacts are written; a fresh directory under the package's build/ when omitted |
+
 
 ### `flutterware.splash`
 

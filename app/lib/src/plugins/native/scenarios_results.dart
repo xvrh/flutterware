@@ -72,3 +72,135 @@ class ScenarioListEntry {
 
   Map<String, Object?> toJson() => _$ScenarioListEntryToJson(this);
 }
+
+/// `run` — scenarios executed in the runner's `flutter_tester`, with one
+/// artifact triple (PNG, widget tree, texts) per captured step.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioRunResult implements PluginResult {
+  ScenarioRunResult({required this.packages});
+
+  final List<ScenarioRunPackage> packages;
+
+  @override
+  Map<String, Object?> toJson() => _$ScenarioRunResultToJson(this);
+}
+
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioRunPackage {
+  ScenarioRunPackage({
+    required this.path,
+    required this.output,
+    this.ms = 0,
+    this.scenarios = const [],
+    this.error,
+  });
+
+  final String path;
+
+  /// Where this run's artifacts were written.
+  final String output;
+
+  /// Whole-run wall time inside the harness.
+  final int ms;
+
+  final List<ScenarioRunOutcome> scenarios;
+
+  /// Set when the package could not be run at all — the harness did not
+  /// compile, the tester did not start — in which case [scenarios] is empty.
+  final String? error;
+
+  Map<String, Object?> toJson() => _$ScenarioRunPackageToJson(this);
+}
+
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioRunOutcome {
+  ScenarioRunOutcome({
+    required this.file,
+    required this.name,
+    required this.ok,
+    this.ms = 0,
+    this.steps = const [],
+    this.errors = const [],
+  });
+
+  final String file;
+  final String name;
+  final bool ok;
+  final int ms;
+  final List<ScenarioRunStep> steps;
+
+  /// The failure, when [ok] is false. The last captured step is the frame
+  /// just before it.
+  final List<ScenarioRunError> errors;
+
+  Map<String, Object?> toJson() => _$ScenarioRunOutcomeToJson(this);
+}
+
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioRunStep {
+  ScenarioRunStep({
+    required this.index,
+    required this.auto,
+    required this.png,
+    required this.tree,
+    required this.texts,
+    required this.address,
+    this.name,
+    this.tags = const [],
+  });
+
+  /// 1-based position in the scenario's capture sequence.
+  final int index;
+
+  /// The `Shot`'s name; null for an automatic capture.
+  final String? name;
+
+  /// True when nothing named this capture — a collapsible detail step.
+  final bool auto;
+
+  final List<String> tags;
+
+  /// Path to the captured PNG.
+  final String png;
+
+  /// Path to the widget-tree JSON captured at the same moment.
+  final String tree;
+
+  /// The visible texts — the projection an agent reads next to the pixels.
+  final List<String> texts;
+
+  /// The step's `fw://` address.
+  final String address;
+
+  Map<String, Object?> toJson() => _$ScenarioRunStepToJson(this);
+}
+
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioRunError {
+  ScenarioRunError({required this.error, this.stack});
+
+  final String error;
+  final String? stack;
+
+  Map<String, Object?> toJson() => _$ScenarioRunErrorToJson(this);
+}

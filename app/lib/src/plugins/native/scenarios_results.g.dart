@@ -27,3 +27,42 @@ Map<String, dynamic> _$ScenarioListEntryToJson(ScenarioListEntry instance) =>
       'file': instance.file,
       'line': instance.line,
     };
+
+Map<String, dynamic> _$ScenarioRunResultToJson(ScenarioRunResult instance) =>
+    <String, dynamic>{
+      'packages': instance.packages.map((e) => e.toJson()).toList(),
+    };
+
+Map<String, dynamic> _$ScenarioRunPackageToJson(ScenarioRunPackage instance) =>
+    <String, dynamic>{
+      'path': instance.path,
+      'output': instance.output,
+      'ms': instance.ms,
+      'scenarios': instance.scenarios.map((e) => e.toJson()).toList(),
+      'error': ?instance.error,
+    };
+
+Map<String, dynamic> _$ScenarioRunOutcomeToJson(ScenarioRunOutcome instance) =>
+    <String, dynamic>{
+      'file': instance.file,
+      'name': instance.name,
+      'ok': instance.ok,
+      'ms': instance.ms,
+      'steps': instance.steps.map((e) => e.toJson()).toList(),
+      'errors': instance.errors.map((e) => e.toJson()).toList(),
+    };
+
+Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
+    <String, dynamic>{
+      'index': instance.index,
+      'name': ?instance.name,
+      'auto': instance.auto,
+      'tags': instance.tags,
+      'png': instance.png,
+      'tree': instance.tree,
+      'texts': instance.texts,
+      'address': instance.address,
+    };
+
+Map<String, dynamic> _$ScenarioRunErrorToJson(ScenarioRunError instance) =>
+    <String, dynamic>{'error': instance.error, 'stack': ?instance.stack};

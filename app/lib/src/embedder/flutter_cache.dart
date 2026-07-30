@@ -79,4 +79,22 @@ class FlutterCache {
   /// matching `FlutterEmbedder.framework` from Flutter's artifact storage.
   String get engineRevision =>
       File(p.join(cacheDir, 'engine.stamp')).readAsStringSync().trim();
+
+  /// The host platform's engine artifact directory — unlike [icuData] this is
+  /// not embedder-specific, so it covers the three desktop hosts.
+  String get _hostEngineDir => p.join(
+    _engine,
+    Platform.isMacOS
+        ? 'darwin-x64'
+        : Platform.isLinux
+        ? 'linux-x64'
+        : 'windows-x64',
+  );
+
+  /// The headless test shell `flutter test` runs — and the scenario runner
+  /// spawns directly (S4, `2026-07-30-s4-flutter-tester-findings.md`).
+  String get flutterTester => p.join(_hostEngineDir, 'flutter_tester$_exe');
+
+  /// ICU data beside [flutterTester], for its `--icu-data-file-path`.
+  String get testerIcuData => p.join(_hostEngineDir, 'icudtl.dat');
 }

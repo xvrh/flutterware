@@ -6,6 +6,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meta/meta.dart';
 
+import 'run_listener.dart';
+
 /// A scenario: a widget test with per-step screenshots.
 ///
 /// `scenario` is `testWidgets` plus a [ScenarioTester] — so every scenario is
@@ -116,29 +118,60 @@ class ScenarioTester {
     };
   }
 
-  /// Captures one step. Standalone (bare `flutter test`), a screenshot is
-  /// written only when a destination is configured — via
+  /// Captures one step.
+  ///
+  /// Under the flutterware runner the harness listens and receives the bytes.
+  /// Standalone (bare `flutter test`), a screenshot is written only when a
+  /// destination is configured — via
   /// `--dart-define=screenshots-destination=…` or the
   /// `SCREENSHOTS_DESTINATION` environment variable — and skipped otherwise,
   /// so plain CI runs pay nothing for it.
   Future<void> _capture(Shot? shot) async {
     _stepCount++;
+    var listener = scenarioRunListener;
     var destination = _screenshotsDestination;
-    if (destination == null) return;
-    var label = shot?.name ?? 'step $_stepCount';
+    if (listener == null && destination == null) return;
     await tester.runAsync(() async {
       var view = tester.binding.renderViews.single;
       var layer = view.debugLayer! as OffsetLayer;
       var image = await layer.toImage(Offset.zero & view.size);
       var data = (await image.toByteData(format: ui.ImageByteFormat.png))!;
       image.dispose();
+      var png = data.buffer.asUint8List();
+      if (listener != null) {
+        listener(
+          ScenarioStepCapture(
+            index: _stepCount,
+            name: shot?.name,
+            tags: shot?.tags ?? const [],
+            png: png,
+            texts: visibleTexts(),
+          ),
+        );
+        return;
+      }
+      var label = shot?.name ?? 'step $_stepCount';
       var directory = Directory('$destination/${_fileSafe(_description)}')
         ..createSync(recursive: true);
       File(
         '${directory.path}/$_stepCount-${_fileSafe(label)}.png',
-      ).writeAsBytesSync(data.buffer.asUint8List());
+      ).writeAsBytesSync(png);
     });
   }
+
+  /// The visible text, in tree order — the projection an agent reads next to
+  /// the screenshot. `EditableText` too, or what the user just typed into a
+  /// `TextField` would be pixels only.
+  List<String> visibleTexts() => [
+    for (var widget in tester.widgetList(
+      find.byWidgetPredicate((w) => w is Text || w is EditableText),
+    ))
+      switch (widget) {
+        Text(:var data, :var textSpan) => data ?? textSpan?.toPlainText() ?? '',
+        EditableText(:var controller) => controller.text,
+        _ => '',
+      },
+  ];
 
   static String _fileSafe(String name) =>
       name.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');

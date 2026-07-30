@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:flutterware/plugins.dart';
+import 'package:path/path.dart' as p;
 
 import '../../scenarios/discovery.dart';
+import '../../scenarios/runner.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
 import 'scenarios_address.dart';
@@ -26,6 +29,10 @@ class ScenariosCore extends PluginCore {
   final _scans = <String, Future<void>>{};
   final _results = <String, ScenarioScanResult>{};
   final _errors = <String, Object>{};
+
+  /// One warm runner per package, created by the first `run` and kept — a
+  /// second run reuses the compiled harness and the live tester.
+  final _runners = <String, ScenarioRunner>{};
 
   /// Declared packages, filtered to those the workspace knows about.
   late final List<String> packages = [
@@ -118,6 +125,57 @@ class ScenariosCore extends PluginCore {
             ),
           ],
         ),
+        PluginAction(
+          'run',
+          'Run',
+          returns: ScenarioRunResult,
+          description:
+              'Runs scenarios under FakeAsync in a directly-spawned '
+              'flutter_tester, capturing a PNG, a widget tree and the visible '
+              'texts per step. The paths in the result point at the '
+              'artifacts; a failing scenario reports its error with the frame '
+              'captured just before it.',
+          parameters: [
+            ActionParameter(
+              'package',
+              'Package',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'Which declared package; all of them when omitted',
+              options: [
+                for (var path in packages)
+                  ActionOption(path, label: path == '.' ? 'root' : path),
+              ],
+            ),
+            const ActionParameter(
+              'file',
+              'File',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Run only this scenario file, package-relative — as `list` '
+                  'reports it',
+            ),
+            const ActionParameter(
+              'scenario',
+              'Scenario',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Run only this scenario, by name. Needs `file` too — names '
+                  'are unique per file, not per package.',
+            ),
+            const ActionParameter(
+              'output',
+              'Output directory',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Where step artifacts are written; a fresh directory under '
+                  "the package's build/ when omitted",
+            ),
+          ],
+        ),
       ],
       view: _view(),
     );
@@ -182,10 +240,11 @@ class ScenariosCore extends PluginCore {
     String actionId, {
     Map<String, Object?> arguments = const {},
   }) async {
-    if (actionId != 'list') {
-      return super.invoke(actionId, arguments: arguments);
-    }
-    return _list(arguments);
+    return switch (actionId) {
+      'list' => _list(arguments),
+      'run' => _run(arguments),
+      _ => super.invoke(actionId, arguments: arguments),
+    };
   }
 
   /// The scenarios of one package, or of every declared package.
@@ -240,6 +299,127 @@ class ScenariosCore extends PluginCore {
     );
   }
 
+  /// Runs scenarios in the runner's `flutter_tester`.
+  ///
+  /// The runner per package is created on first use and **kept warm** — in
+  /// the GUI a second run reuses the compiled harness and the live tester; in
+  /// a one-shot `fw` process it lives for the request and dies with the
+  /// session.
+  Future<ScenarioRunResult> _run(Map<String, Object?> arguments) async {
+    var requested = arguments['package'];
+    if (requested != null && requested is! String) {
+      throw ArgumentError.value(requested, 'package', 'must be a package path');
+    }
+    var paths = requested == null ? packages : [requested as String];
+    for (var path in paths) {
+      if (!packages.contains(path)) {
+        throw ArgumentError.value(
+          path,
+          'package',
+          'not declared for this plugin. Declared: ${packages.join(', ')}',
+        );
+      }
+    }
+    var file = arguments['file'] as String?;
+    var scenario = arguments['scenario'] as String?;
+    if (scenario != null && file == null) {
+      throw ArgumentError(
+        '`scenario` needs `file` too — names are unique per file, '
+        'not per package.',
+      );
+    }
+    var output = arguments['output'] as String?;
+
+    var results = <ScenarioRunPackage>[];
+    for (var path in paths) {
+      var packageRoot = host.workspace.packageFor(path).directory.path;
+      var outDir =
+          output ??
+          p.join(
+            packageRoot,
+            'build',
+            'flutterware',
+            'scenario_runs',
+            '${DateTime.now().millisecondsSinceEpoch}',
+          );
+      try {
+        var report = await _runnerFor(
+          path,
+        ).run(outDir: outDir, file: file, scenario: scenario);
+        results.add(_describeRun(path, outDir, report));
+      } catch (error) {
+        results.add(
+          ScenarioRunPackage(path: path, output: outDir, error: '$error'),
+        );
+      }
+    }
+    return ScenarioRunResult(packages: results);
+  }
+
+  ScenarioRunner _runnerFor(String path) => _runners.putIfAbsent(
+    path,
+    () => ScenarioRunner(
+      packageRoot: host.workspace.packageFor(path).directory.path,
+      directory: directoryFor(path),
+      flutterSdkRoot: host.workspace.flutterSdk.root,
+    ),
+  );
+
+  /// The harness's report, in the declared result shape and with each step
+  /// given its `fw://` address.
+  ScenarioRunPackage _describeRun(
+    String path,
+    String outDir,
+    Map<String, Object?> report,
+  ) {
+    return ScenarioRunPackage(
+      path: path,
+      output: outDir,
+      ms: report['ms'] as int? ?? 0,
+      scenarios: [
+        for (var outcome
+            in (report['scenarios']! as List).cast<Map<String, dynamic>>())
+          ScenarioRunOutcome(
+            file: outcome['file']! as String,
+            name: outcome['name']! as String,
+            ok: outcome['ok'] == true,
+            ms: outcome['ms'] as int? ?? 0,
+            steps: [
+              for (var step
+                  in (outcome['steps']! as List).cast<Map<String, dynamic>>())
+                ScenarioRunStep(
+                  index: step['index']! as int,
+                  name: step['name'] as String?,
+                  auto: step['auto'] == true,
+                  tags: (step['tags'] as List?)?.cast<String>() ?? const [],
+                  png: step['png']! as String,
+                  tree: step['tree']! as String,
+                  texts: (step['texts']! as List).cast<String>(),
+                  address: Address(
+                    worktree: host.worktree.name,
+                    plugin: host.id,
+                    segments: scenarioSegments(
+                      path,
+                      file: outcome['file']! as String,
+                      scenario: outcome['name']! as String,
+                    ),
+                  ).child('${step['index']}').toString(),
+                ),
+            ],
+            errors: [
+              for (var error
+                  in (outcome['errors'] as List? ?? const [])
+                      .cast<Map<String, dynamic>>())
+                ScenarioRunError(
+                  error: error['error']! as String,
+                  stack: error['stack'] as String?,
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+
   /// Scans every declared package and waits — what `fw` does for the duration
   /// of one request.
   @override
@@ -248,6 +428,15 @@ class ScenariosCore extends PluginCore {
       track(path);
     }
     await Future.wait(_scans.values);
+  }
+
+  @override
+  void dispose() {
+    for (var runner in _runners.values) {
+      unawaited(runner.dispose());
+    }
+    _runners.clear();
+    super.dispose();
   }
 }
 
