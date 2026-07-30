@@ -1,3 +1,12 @@
+## 0.5.2
+
+- New entry model: declare demos with `@Demo(...)` (extends Flutter's
+  `Preview`), and declare axes with `CatalogShell` / `TopBarState`.
+- `ui_catalog.dart` exports only what a project writes: `Demo`, `FormFactor`,
+  `Figma`, `UICatalog*`, `CatalogShell`, `TopBarState`. The guest-side
+  machinery the flutterware GUI drives lives in `ui_catalog_guest.dart`,
+  which only generated code imports.
+
 ## 0.5.1
 
 - Upgrade dependencies
