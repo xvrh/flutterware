@@ -542,12 +542,26 @@ class ShellController extends ChangeNotifier {
       }
 
       if (!diff.needsFullRebuild) {
-        var rebuilt = existing.reconcile(
-          manifest,
-          diff,
-          registry: registry,
-          coreRegistry: coreRegistry,
-        );
+        List<String> rebuilt;
+        try {
+          rebuilt = existing.reconcile(
+            manifest,
+            diff,
+            registry: registry,
+            coreRegistry: coreRegistry,
+          );
+        } catch (e) {
+          // A core or panel constructor that throws on the new declaration.
+          // `reconcile` builds before it disposes, so the session is intact —
+          // this is the same shape as a config that would not compile, and it
+          // gets the same answer: nothing is torn down and the reason is shown.
+          // Without this the exception escapes an unawaited `_load` and the
+          // worktree silently keeps its old plugins with nothing to say why.
+          _errors[path] = WorktreeError(worktree, '$e');
+          record(ConfigLoadOutcome.failed, error: '$e');
+          notifyListeners();
+          return;
+        }
         _manifests[path] = manifest;
         record(
           ConfigLoadOutcome.reconciled,

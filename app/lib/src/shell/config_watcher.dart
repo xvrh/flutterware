@@ -131,7 +131,15 @@ class ConfigWatcher {
     }
     _confirmingEmpty = false;
 
-    var hash = _hash();
+    String? hash;
+    try {
+      hash = _hash();
+    } on FileSystemException {
+      // Being written right now, despite the debounce. Try again rather than
+      // guess, and never just drop it.
+      _arm();
+      return;
+    }
     if (hash == _lastFired) return;
     _lastFired = hash;
 
@@ -152,16 +160,16 @@ class ConfigWatcher {
 
   /// Null when the file is absent — which is itself a change worth firing for,
   /// since a config that disappears means a worktree with no plugins.
+  ///
+  /// Throws [FileSystemException] when it cannot be read, which [_fire] answers
+  /// by waiting another cycle. Returning the previous hash instead would have
+  /// been quieter and wrong: with no further event to come, the save would be
+  /// dropped without a word, which is the one thing this whole surface exists
+  /// to avoid.
   String? _hash() {
     var file = File(configPath);
     if (!file.existsSync()) return null;
-    try {
-      return '${sha1.convert(file.readAsBytesSync())}';
-    } on FileSystemException {
-      // Observed mid-write despite the debounce. Leaving the hash alone means
-      // the next event still looks like a change, which is the safe direction.
-      return _lastFired;
-    }
+    return '${sha1.convert(file.readAsBytesSync())}';
   }
 
   Future<void> dispose() async {
