@@ -1,0 +1,111 @@
+import 'package:collection/collection.dart';
+import 'package:flutter/material.dart';
+
+import '../../address/address_scope.dart';
+import '../../splash/model/surface.dart';
+import '../../splash/screen.dart';
+import '../native_plugin.dart';
+import 'splash_address.dart';
+import 'splash_core.dart';
+
+export 'splash_core.dart' show SplashCore, splashPluginId;
+
+/// The GUI half of the splash previewer: a panel, and nothing else.
+///
+/// What the plugin *knows* — what each surface resolves to, which key won, what
+/// the generator would refuse — is all in [SplashCore], so `fw` and an agent
+/// reach the same answers. This class exists because `buildPanel` returns a
+/// `Widget`.
+class SplashPlugin extends NativePlugin<SplashCore> {
+  SplashPlugin(super.core);
+
+  @override
+  Widget buildPanel(BuildContext context) => _SplashPanel(this);
+}
+
+/// Owns the subscription: mounting starts the scan, and only the package the
+/// address names is tracked.
+class _SplashPanel extends StatefulWidget {
+  const _SplashPanel(this.plugin);
+
+  final SplashPlugin plugin;
+
+  @override
+  State<_SplashPanel> createState() => _SplashPanelState();
+}
+
+class _SplashPanelState extends State<_SplashPanel> {
+  String? _tracked;
+  SplashPlace? _place;
+
+  SplashCore get _core => widget.plugin.core;
+
+  /// Where the address points, or the first declared package when it names
+  /// none — which is where selecting the plugin off the rail leaves you.
+  ///
+  /// Read at the grain the panel needs: the package decides what to scan, and
+  /// the axes only decide which tile is outlined, so a change of surface must
+  /// not re-track anything.
+  SplashPlace? _resolve() {
+    var segment = AddressScope.segment(context, 0);
+    var package = segment ?? _core.packages.firstOrNull;
+    if (package == null) return null;
+    return SplashPlace(
+      package,
+      flavor: AddressScope.segment(context, 1),
+      surface: SplashSurface.byName(
+        AddressScope.param(context, 'surface') ?? '',
+      ),
+      theme: SplashTheme.byName(AddressScope.param(context, 'theme') ?? ''),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _place = _resolve();
+    _retrack();
+  }
+
+  @override
+  void didUpdateWidget(_SplashPanel old) {
+    super.didUpdateWidget(old);
+    _place = _resolve();
+    _retrack();
+  }
+
+  void _retrack() {
+    var wanted = _place?.package;
+    if (wanted == _tracked) return;
+    _tracked = wanted;
+    if (wanted != null) _core.track(wanted);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var place = _place ?? _resolve();
+    if (place == null) {
+      return Center(
+        child: Text(
+          'No packages configured for this plugin.\n'
+          'Add them in tool/flutterware.dart.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      );
+    }
+
+    // Rebuilds when a scan lands: the core notifies, the plugin forwards.
+    return AnimatedBuilder(
+      animation: widget.plugin,
+      builder: (context, _) => SplashScreen(
+        _core,
+        key: ValueKey(place.package),
+        package: place.package,
+        flavor: place.flavor,
+        surface: place.surface,
+        theme: place.theme,
+      ),
+    );
+  }
+}

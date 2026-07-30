@@ -9,6 +9,8 @@ import 'package:flutterware_app/src/dependencies/model/service.dart';
 import 'package:flutterware_app/src/package_ref.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 
+import '../support/declared_dependencies.dart';
+
 /// The live end-to-end check: really shells out to `dart pub deps --json`
 /// against this repo, which is a three-member pub workspace.
 ///
@@ -41,14 +43,30 @@ void main() {
       var service = serviceAt('../examples/example');
       var dependencies = await service.dependencies.refreshOrThrow();
 
-      // The member declares 14 dependencies and 4 dev dependencies; the
-      // workspace resolves 174 packages. Before the fix this reported every
-      // resolved package as direct, because `PubspecLock.load(<member dir>)`
-      // found nothing — a workspace keeps its one lockfile at the root.
-      expect(dependencies.directs, hasLength(14));
-      expect(dependencies.devs, hasLength(4));
+      // The classification has to match what *this member* declares, not what
+      // the workspace resolves — before the fix every one of the ~174 resolved
+      // packages came back as direct, because `PubspecLock.load(<member dir>)`
+      // found nothing and a workspace keeps its one lockfile at the root.
+      //
+      // Read off the member's pubspec rather than written down here: name sets
+      // say which packages were misclassified, where a count only says that
+      // some were.
+      var declared = DeclaredDependencies.of(
+        '../examples/example/pubspec.yaml',
+      );
+      expect(
+        dependencies.directs.map((d) => d.name).toSet(),
+        declared.dependencies,
+      );
+      expect(dependencies.devs.map((d) => d.name).toSet(), declared.devs);
+
+      // And the resolution really is bigger than the declarations, so the two
+      // assertions above are not passing because everything is empty.
       expect(dependencies.transitives, isNotEmpty);
-      expect(dependencies.directs.map((d) => d.name), contains('flutterware'));
+      expect(
+        dependencies.transitives.length,
+        greaterThan(dependencies.directs.length),
+      );
 
       // Reachability, live: `file_picker` is flutterware_app's, not this
       // member's, even though both resolve from the same lockfile.
