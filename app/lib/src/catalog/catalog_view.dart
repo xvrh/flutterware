@@ -20,6 +20,15 @@ import 'catalog_session.dart';
 import 'catalog_tree.dart';
 import 'inspect_panel.dart';
 
+/// The namespace covering the canvas and the panel below it — see where it is
+/// installed in [_CatalogViewState._buildBody] for why it stops there.
+///
+/// Named once because both sides of that boundary have to agree: what is
+/// written under it is `inspect.*`, and a reader on the other side has to say
+/// so. Two of them did not, in opposite directions — see [_deviceOf] and
+/// [_croppedNode].
+const _inspectNamespace = 'inspect';
+
 /// The catalog loop: entries on the left, the live guest on the right.
 /// Selecting an entry hot-reloads the running guest rather than restarting it.
 ///
@@ -301,30 +310,45 @@ class _CatalogViewState extends State<CatalogView> {
                       // bar's writes too — a device picked from up there
                       // would land as `inspect.device`, which is nobody's
                       // parameter.
-                      child: AddressScope(
-                        namespace: 'inspect',
-                        child: LayoutBuilder(
-                          builder: (context, constraints) => Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(child: _buildCanvas(context)),
-                              // Always mounted, unlike the knob drawer it
-                              // replaced: that one was absent rather than empty
-                              // when an entry declared no knobs, so anybody who
-                              // had not happened to open a demo with knobs never
-                              // learned the feature existed. The tab is there now
-                              // and says so.
-                              InspectPanel(
-                                session: _session,
-                                available: constraints.maxHeight,
-                                highlight: _highlight,
-                                picking: _picking,
-                                controls: (context) =>
-                                    _KnobPanel(session: _session),
+                      //
+                      // Which cuts both ways, and the read is the half that
+                      // is easy to miss: `device` is the top bar's,
+                      // un-namespaced, so it is resolved *here* — above the
+                      // scope — and handed down. Read from inside, it asked
+                      // for `inspect.device` and got nothing, and the canvas
+                      // framed every entry as the panel however the picker
+                      // was set.
+                      child: Builder(
+                        builder: (context) {
+                          var device = _deviceOf(context, _session);
+                          return AddressScope(
+                            namespace: _inspectNamespace,
+                            child: LayoutBuilder(
+                              builder: (context, constraints) => Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(
+                                    child: _buildCanvas(context, device),
+                                  ),
+                                  // Always mounted, unlike the knob drawer it
+                                  // replaced: that one was absent rather than
+                                  // empty when an entry declared no knobs, so
+                                  // anybody who had not happened to open a demo
+                                  // with knobs never learned the feature
+                                  // existed. The tab is there now and says so.
+                                  InspectPanel(
+                                    session: _session,
+                                    available: constraints.maxHeight,
+                                    highlight: _highlight,
+                                    picking: _picking,
+                                    controls: (context) =>
+                                        _KnobPanel(session: _session),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const Divider(height: 1),
@@ -339,7 +363,7 @@ class _CatalogViewState extends State<CatalogView> {
     );
   }
 
-  Widget _buildCanvas(BuildContext context) {
+  Widget _buildCanvas(BuildContext context, CatalogDevice? device) {
     switch (_session.phase) {
       case CatalogSessionPhase.starting:
         return Center(
@@ -379,7 +403,7 @@ class _CatalogViewState extends State<CatalogView> {
             onRetry: _session.busyWith == null ? _reload : null,
           );
         }
-        return _buildTexture(context, _session.engine!);
+        return _buildTexture(context, _session.engine!, device);
     }
   }
 
@@ -390,8 +414,11 @@ class _CatalogViewState extends State<CatalogView> {
   /// reads from `MediaQuery` is what it would read on the phone. Rendering at
   /// the device's resolution and scaling the result down is also the only way
   /// the texture stays sharp.
-  Widget _buildTexture(BuildContext context, EmbeddedEngine engine) {
-    var device = _deviceOf(context, _session);
+  Widget _buildTexture(
+    BuildContext context,
+    EmbeddedEngine engine,
+    CatalogDevice? device,
+  ) {
     if (device == null) {
       var dpr = MediaQuery.of(context).devicePixelRatio;
       return LayoutBuilder(
@@ -1259,11 +1286,7 @@ Future<Uint8List?> _capturePreview(
   if (engine == null || engine.phase != EmbeddedEnginePhase.running) {
     return null;
   }
-  // Only when the tree still describes what is on screen: a rect from a read
-  // taken before the last switch would crop this frame to a box measured in
-  // another one.
-  var id = AddressScope.params(context)['node'];
-  var node = id == null ? null : session.treeForSelection?.nodeAt(id);
+  var node = _croppedNode(context, session);
   return engine.capturePng(
     crop: node?.layout,
     // A crop arrives in the guest's logical coordinates; its pixels are in the
@@ -1273,9 +1296,16 @@ Future<Uint8List?> _capturePreview(
 }
 
 /// The node the Elements tab has selected, when its tree still describes what
-/// is on screen.
+/// is on screen — a rect read before the last switch would crop this frame to a
+/// box measured in another one.
+///
+/// `node` is named as `inspect`'s rather than read plainly, because every caller
+/// is in the top bar: one level *above* the scope that owns it, where a plain
+/// read asks for an un-namespaced `node` nobody writes. The buttons then
+/// photographed the whole frame however the tree was set — the same boundary
+/// [_deviceOf] falls off in the other direction.
 InspectNode? _croppedNode(BuildContext context, CatalogSession session) {
-  var id = AddressScope.params(context)['node'];
+  var id = AddressScope.params(context, namespace: _inspectNamespace)['node'];
   return id == null ? null : session.treeForSelection?.nodeAt(id);
 }
 
@@ -1370,7 +1400,10 @@ class _CaptureButtonsState extends State<_CaptureButtons> {
     var base = entry == null
         ? 'catalog'
         : entry.id.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-');
-    var node = AddressScope.params(context)['node'];
+    var node = AddressScope.params(
+      context,
+      namespace: _inspectNamespace,
+    )['node'];
     return '$base${node == null ? '' : '-node-${node.replaceAll('/', '-')}'}.png';
   }
 
@@ -2287,8 +2320,24 @@ class _StatusBar extends StatelessWidget {
 /// Read at every point of use rather than stored anywhere. Subscribes to the
 /// one parameter, so choosing a device rebuilds what draws the frame and
 /// nothing above it.
-CatalogDevice? _deviceOf(BuildContext context, CatalogSession session) =>
-    resolveDevice(
-      AddressScope.param(context, 'device'),
-      formFactor: session.selected?.formFactor,
-    );
+///
+/// `device` is un-namespaced, so [context] has to be one no [AddressScope] has
+/// given a namespace to — from under `inspect` this asks for `inspect.device`
+/// and quietly gets nothing.
+///
+/// Asserted rather than left to be noticed, because the failure is a picture
+/// that is wrong without looking wrong: the canvas framed every entry as the
+/// panel while the picker beside it named a phone. `write` rather than `of` —
+/// this is a check, and a check that subscribed would rebuild on every address
+/// change in debug and on none in release.
+CatalogDevice? _deviceOf(BuildContext context, CatalogSession session) {
+  assert(
+    AddressScope.write(context).view.namespace == null,
+    'device is un-namespaced: read it above any namespaced scope, or it asks '
+    'for <namespace>.device and nobody writes that.',
+  );
+  return resolveDevice(
+    AddressScope.param(context, 'device'),
+    formFactor: session.selected?.formFactor,
+  );
+}
