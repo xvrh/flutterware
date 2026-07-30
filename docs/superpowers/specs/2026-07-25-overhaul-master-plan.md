@@ -299,6 +299,17 @@ correct `Preview`, our guest reads the full instance. Evidence and measurements:
 
 ### M4 — scenario runner (replaces test_runner) — *shape settled by S1*
 
+> **Amended 2026-07-30 — the `LiveWidgetController` shape is superseded.** See
+> `2026-07-30-scenarios-design.md`. S1's recommendation argued against
+> dev_studio's vendored-fork architecture, not against entering through
+> `testWidgets` — which the 2026-05 port had already shown needs no fork. The
+> owner's requirements (FakeAsync instantaneity, flutter_test compatibility,
+> user CI, artifact-driven inspection and auto-write) all point back to the
+> test harness. M4 is now: the `flutter_test` harness under
+> `AutomatedTestWidgetsFlutterBinding`, in a `flutter_tester` binary spawned
+> directly by our daemon and fed by the catalog's resident compiler (spike S4
+> pending). The paragraph below is kept for the record.
+
 A **rewrite** on `LiveWidgetController`, not a port of dev_studio. Take
 dev_studio's GUI / protocol / authoring ergonomics (~8,200 lines, reusable);
 rewrite its ~1,400-line `WidgetTester`-coupled runtime, which today depends on a
