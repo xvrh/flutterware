@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
@@ -9,6 +11,7 @@ import 'package:flutterware_app/src/session/session.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+import 'package:path/path.dart' as p;
 
 /// End to end against this repo's own `tool/flutterware.dart`, with no stubs.
 ///
@@ -33,6 +36,26 @@ void main() {
     // nested app would silently open the wrong project.
     expect(findRepoRoot('../examples/example'), endsWith('examples/example'));
     expect(findRepoRoot('../examples/example'), isNot(findRepoRoot('..')));
+  });
+
+  test('the walk stops at the repository', () async {
+    // A config file *above* the checkout belongs to some other project — a
+    // sibling app under a shared parent, or one someone left in their home
+    // directory. Following it up there opens a repo the user never named.
+    var parent = await Directory.systemTemp.createTemp('fw_layout');
+    addTearDown(() => parent.delete(recursive: true));
+    var repo = Directory(p.join(parent.path, 'repo'));
+    Directory(p.join(parent.path, 'tool')).createSync();
+    File(p.join(parent.path, configFileName)).writeAsStringSync('// decoy');
+    Directory(p.join(repo.path, '.git')).createSync(recursive: true);
+    Directory(
+      p.join(repo.path, 'packages', 'admin'),
+    ).createSync(recursive: true);
+
+    expect(
+      findRepoRoot(p.join(repo.path, 'packages', 'admin')),
+      p.canonicalize(repo.path),
+    );
   });
 
   test('discovery reads the workspace members', () {

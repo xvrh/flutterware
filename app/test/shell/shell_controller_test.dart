@@ -152,6 +152,51 @@ void main() {
     // on whichever plugin happens to be declared first.
     expect(shell.isHome, isTrue);
     expect(shell.selectedPluginId, isNull);
+    expect(shell.launchFallback, isNull);
+  });
+
+  test('start opens the worktree the launch directory is inside', () async {
+    var shell = _controller();
+    // The repro: `dart run flutterware` in a nested project of a *linked*
+    // worktree. `examples/example` equals no worktree path, and matching by
+    // equality opened the main checkout — a plausible-looking window onto
+    // somebody else's branch.
+    await shell.start('/repo-explorer/examples/example');
+
+    expect(shell.openWorktrees.map((w) => w.branch), ['feature/explorer']);
+    expect(shell.launchFallback, isNull);
+  });
+
+  test('containment is component-wise, not a prefix', () async {
+    var shell = _controller();
+    // `/repo` is a string prefix of `/repo-explorer` and contains none of it.
+    await shell.start('/repo-explorer/app');
+
+    expect(shell.openWorktrees.map((w) => w.branch), ['feature/explorer']);
+  });
+
+  test('a worktree nested inside another opens itself', () async {
+    _currentListing =
+        'worktree /repo\nbranch refs/heads/main\n\n'
+        'worktree /repo/vendor/widgets\nbranch refs/heads/widgets\n';
+    var shell = _controller();
+    await shell.start('/repo/vendor/widgets/lib/src');
+
+    expect(shell.openWorktrees.map((w) => w.branch), ['widgets']);
+  });
+
+  test('a launch directory in no worktree is opened, and said so', () async {
+    var shell = _controller();
+    await shell.start('/elsewhere/project');
+
+    // Something still opens — the shell has to show a window — but it no
+    // longer claims to be where you started.
+    expect(shell.openWorktrees.map((w) => w.branch), ['main']);
+    var fallback = shell.launchFallback;
+    expect(fallback, isNotNull);
+    expect(fallback!.launchDirectory, '/elsewhere/project');
+    expect(fallback.opened.path, '/repo');
+    expect(fallback.message, contains('/elsewhere/project'));
   });
 
   test('the tab exists before the config finishes running', () async {
