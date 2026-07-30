@@ -12,15 +12,22 @@ import 'plugin_host.dart';
 /// because `buildPanel` returns a `Widget` and a `Widget` cannot be linked into
 /// `fw`.
 ///
-/// **There is deliberately no `report` and no `invoke` on this class.** Callers
-/// read `plugin.core.report` and dispatch `session.invoke(plugin, action,
-/// args)`. Dart cannot seal a member, so the only way to stop a panel
-/// overriding the report — becoming a second, disagreeing answer to what the
-/// sidebar shows — is not to give it one to override; and a panel that could
-/// run an action directly would be a fourth door into behaviour the CLI and
-/// MCP reach through `Session.invoke`, which is exactly the drift this split
-/// exists to prevent. A panel widget with business logic in `onPressed` is a
-/// bug.
+/// **There is deliberately no `report` on this class.** Callers read
+/// `plugin.core.report`. Dart cannot seal a member, so the only way to stop a
+/// panel overriding the report — becoming a second, disagreeing answer to what
+/// the sidebar shows — is not to give it one to override.
+///
+/// **A panel calls its core directly, and no panel invokes an action.**
+/// `Session.invoke` has two callers, `fw` and MCP; a dialog that configures a
+/// run, streams its output for tens of seconds and then offers to open the
+/// result is not a shape that method can express — `JobEvent` has no log or
+/// progress case, and `PluginCore.invoke` has no sink to report one through.
+///
+/// What the split does forbid is a capability that exists *only* here.
+/// `web_build_dialog.dart` calls `core.buildWeb`, and `build-web` is a declared
+/// action the other two surfaces reach on their own — which is also why that
+/// dialog can print the equivalent command. A panel holding behaviour its core
+/// does not have is the drift this arrangement exists to prevent.
 abstract class NativePlugin<C extends PluginCore> extends ChangeNotifier {
   NativePlugin(this.core) {
     // `skip(1)` drops the replay. A ValueStream hands every new subscriber the
