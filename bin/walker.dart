@@ -29,17 +29,20 @@ import 'package:flutterware/src/walker.dart';
 Future<void> main(List<String> arguments) async {
   var root = findInitializedRoot(Directory.current);
   if (root == null) {
+    // Help must not be gated on setup — it is how someone finds out what the
+    // setup is. Anything else keeps the message: bare `fw` opens the GUI
+    // inside a project, so outside one the setup steps are the honest answer.
+    if (const {'help', '--help', '-h'}.contains(arguments.firstOrNull)) {
+      stdout.writeln(noProjectHelp);
+      exit(0);
+    }
     stderr.writeln(noProjectMessage);
     exit(64);
   }
 
   var dart = '${root.path}/$sdkLinkPath/bin/dart';
   if (!File(dart).existsSync()) {
-    stderr.writeln(
-      'fw: $root/$sdkLinkPath does not lead to a Flutter SDK.\n'
-      'It may point at an SDK that has been removed. Re-record it with:\n\n'
-      '    dart run flutterware init',
-    );
+    stderr.writeln(brokenSdkMessage(root.path));
     exit(64);
   }
 

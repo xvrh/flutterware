@@ -12,6 +12,21 @@ This is a pub workspace (`workspace:` in root `pubspec.yaml`) with two member pa
 
 Versions in `pubspec.yaml` (`flutterware`) and `app/pubspec.yaml` (`flutterware_app`) must stay in sync — see the comment in the root pubspec.
 
+## Toolchain: fvm-pinned Flutter SDK
+
+The SDK is pinned in `.fvmrc` and managed by [fvm](https://fvm.app). The `flutter`/`dart` on PATH are typically older than the pin (the workspace requires a recent beta) and **fail the SDK constraint check** — always use `fvm flutter ...` / `fvm dart ...`, or equivalently `.fvm/flutter_sdk/bin/flutter` / `.fvm/flutter_sdk/bin/dart`.
+
+One-time setup in a fresh clone or worktree (`.fvm/` is gitignored, so it starts absent):
+
+```sh
+fvm use --skip-pub-get   # reads .fvmrc, no prompt; creates .fvm/flutter_sdk (fvm install first if the SDK isn't cached)
+fvm flutter pub get
+```
+
+`flutter_version` at the repo root is an existence-checked marker file for the wrap feature, not the SDK pin — `.fvmrc` is authoritative.
+
+Note: `.gitignore` starts with `.*`, so dot-directories like `.claude/` are silently unaddable — `git add` no-ops on them.
+
 ## How the CLI/GUI launch flow works
 
 `dart run flutterware` from a user's Flutter project executes `bin/flutterware.dart` — the launcher. It resolves its own package via `Isolate.resolvePackageUri`, works out everything that has to exist before `fw` can run, and narrates the lot as a `LaunchPlan` (`lib/src/launch_plan.dart`):
@@ -42,38 +57,41 @@ The pre-overhaul "test visualizer" still exists in-tree but is unreachable from 
 
 ## Common commands
 
-All commands run from the repo root unless noted.
+All commands run from the repo root unless noted. Always via fvm — see the toolchain section above.
 
 ```sh
 # Static analysis (workspace-wide; CI uses the beta channel)
-flutter analyze
+fvm flutter analyze
 
 # Tests for the GUI app
-cd app && flutter test
+cd app && fvm flutter test
 # Run a single test file
-cd app && flutter test test/dependencies_test.dart
+cd app && fvm flutter test test/dependencies_test.dart
 
 # Pure-Dart tests for the root package
-dart test test/router_outlet/path_test.dart
+fvm dart test test/router_outlet/path_test.dart
 
 # Format the whole workspace (this is what CI checks)
-dart tool/prepare_submit.dart
+fvm dart tool/prepare_submit.dart
 
-# Refresh pubspecs across all workspace members
-dart tool/pub_get_all_projects.dart
-dart tool/pub_upgrade_all_projects.dart
+# Refresh pubspecs across all workspace members (workspace resolves from the root)
+fvm flutter pub get
 
 # Regenerate built_value / json_serializable code
-cd app && dart run build_runner build --delete-conflicting-outputs
+cd app && fvm dart run build_runner build --delete-conflicting-outputs
 # (run from the package whose .g.dart files you're regenerating)
 
 # Run the CLI end-to-end against examples/example, forcing a fresh compile
-cd examples/example && dart run flutterware --force-compile -v
+cd examples/example && fvm dart run flutterware --force-compile -v
 ```
+
+## Formatting
+
+The only sanctioned formatter is `fvm dart tool/prepare_submit.dart` (or letting the pre-commit hook format staged files). **Never run bare `dart format`** — it uses whatever dart_style ships with the invoking SDK and infers language versions per file, both of which diverge from what CI checks and produce spurious diffs.
 
 ## CI expectations
 
-`.github/workflows/analyze-and-test.yaml` runs on the Flutter `beta` channel and will fail if `dart tool/prepare_submit.dart` produces any diff (excluding `pubspec.lock`). Always run that formatter before committing.
+`.github/workflows/analyze-and-test.yaml` runs on the Flutter `beta` channel and will fail if `tool/prepare_submit.dart` produces any diff (excluding `pubspec.lock`). Always run that formatter before committing.
 
 ## Lint rules worth knowing
 
