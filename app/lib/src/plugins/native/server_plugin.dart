@@ -289,11 +289,12 @@ class _SqlView extends StatelessWidget {
         ),
         const Divider(height: 1),
         for (var shape in stats)
-          InkWell(
+          Tappable.builder(
             onTap: () => AddressScope.write(
               context,
             ).setSegments(sqlSegments(server.handle.name, queryKey: shape.key)),
-            child: Padding(
+            builder: (context, hovered) => Container(
+              color: hovered ? context.colors.hoverOverlay : null,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Row(
                 children: [
@@ -598,13 +599,15 @@ class _RequestRow extends StatelessWidget {
     var theme = Theme.of(context);
     var p = request.payload;
     var failed = _failed(request);
-    return InkWell(
+    return Tappable.builder(
       onTap: () => AddressScope.write(
         context,
       ).setSegments(serverSegments(server.handle.name, requestId: request.id)),
-      child: Container(
+      builder: (context, hovered) => Container(
         color: selected
             ? theme.colorScheme.primary.withValues(alpha: 0.08)
+            : hovered
+            ? context.colors.hoverOverlay
             : null,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
@@ -1170,9 +1173,7 @@ class _Waterfall extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall!.copyWith(
-                  fontFamily: 'monospace',
-                ),
+                style: _mono(context),
               ),
             ),
             const SizedBox(width: 8),
@@ -1219,15 +1220,33 @@ class _Waterfall extends StatelessWidget {
           Colors.blue.shade300,
         ),
         for (var span in spans)
-          row(
-            _summary(span),
-            ((span.time.millisecondsSinceEpoch - (span.payload['ms']! as num)) -
-                    start)
-                .toDouble(),
-            (span.payload['ms']! as num).toDouble(),
-            span.channel == 'sql'
-                ? Colors.teal.shade400
-                : Colors.purple.shade300,
+          // A sql span is a door into its shape's detail — same query, seen
+          // from the aggregate side.
+          Tappable.builder(
+            onTap: span.channel != 'sql' || span.payload['query'] is! String
+                ? null
+                : () => AddressScope.write(context).setSegments(
+                    sqlSegments(
+                      server.handle.name,
+                      queryKey: queryShapeKey(
+                        normalizeSql(span.payload['query']! as String),
+                      ),
+                    ),
+                  ),
+            builder: (context, hovered) => Container(
+              color: hovered ? context.colors.hoverOverlay : null,
+              child: row(
+                _summary(span),
+                ((span.time.millisecondsSinceEpoch -
+                            (span.payload['ms']! as num)) -
+                        start)
+                    .toDouble(),
+                (span.payload['ms']! as num).toDouble(),
+                span.channel == 'sql'
+                    ? Colors.teal.shade400
+                    : Colors.purple.shade300,
+              ),
+            ),
           ),
       ],
     );
