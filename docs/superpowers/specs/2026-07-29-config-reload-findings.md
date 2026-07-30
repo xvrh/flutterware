@@ -75,6 +75,36 @@ pointers. Keeping callbacks reachable *only* through `Session.invoke`
 (`app/lib/src/session/session.dart`) is what makes the config process
 disposable, and it is already how the code is shaped.
 
+## Superseded 2026-07-30: the diff is gone
+
+Everything in the two sections below — the per-plugin reconciliation, the
+four-tier table, the preconditions about workspace identity — was built, shipped
+and then **deleted**, on a decision that reframes the problem:
+
+> Losing state on a real config change is acceptable. Paying for a change that
+> did not happen is not.
+
+That removes the only reason the reload had to be surgical. A config that
+declares something different rebuilds the whole graph; a config that declares
+the same thing does nothing. `Session.declares(manifest)` — one deep comparison
+— replaced `ManifestDiff`, both `reconcile` methods, the `prepare`/`onRelease`
+pair, the panel-identity map and the `provisional` session, for a net 1,100
+lines deleted.
+
+**What survives from the analysis below is the part that was never about the
+diff:** load-before-swap, the kernel cache keyed on the compiled closure, the
+config subprocess timeout, and the watcher's rules. Read the rest as the
+reasoning that led here, not as the design.
+
+Worth recording *why* the surgical version looked necessary: the argument was
+that a live `CatalogSession` must survive an unrelated edit. It is a real cost —
+seconds of recompile — but it was being paid for by machinery that would have
+stopped working anyway. Once declarations carry callbacks, any executable change
+rebuilds every callback-carrying plugin, so the preservation degrades exactly as
+phase 2 arrives. Keeping an expensive resource alive belongs in a pool keyed by
+content, next to the compiler daemon that already works that way — not in the
+shape of the reload.
+
 ## Correctness first, and an exact no-op
 
 The bias is **correctness, not preservation**. An edit that changes what a
