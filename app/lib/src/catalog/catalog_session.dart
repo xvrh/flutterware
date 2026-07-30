@@ -520,7 +520,7 @@ class CatalogSession extends ChangeNotifier {
     _watchSettle?.cancel();
     _watchSettle = Timer(const Duration(milliseconds: 120), () {
       if (_disposed || !_panelOpen) return;
-      unawaited(_inspect?.watch(nodeId: _watchedNode));
+      if (_inspect case var inspect?) _armWatch(inspect, 'tracking a node');
     });
   }
 
@@ -535,7 +535,25 @@ class CatalogSession extends ChangeNotifier {
     var inspect = _inspect;
     if (inspect == null || _watch != null) return;
     _watch = inspect.watches.listen(_onWatch);
-    unawaited(inspect.watch(nodeId: _watchedNode));
+    _armWatch(inspect, 'starting the watch');
+  }
+
+  /// Turns the guest's watch on, and turns it straight back off if the panel
+  /// went away while the call was in flight.
+  ///
+  /// Which it can be for a while at startup. `watch` is one of the *required*
+  /// extensions, and [GuestVmService.requireExtension] waits for a guest that
+  /// has not registered yet rather than calling it missing — so this can be
+  /// mid-wait when the panel closes, and [_stopWatch]'s own `unwatch` has run
+  /// and returned by the time the watch actually starts. A guest left watching
+  /// for nobody pays for it every frame.
+  void _armWatch(InspectClient inspect, String what) {
+    _fireAndForget(
+      inspect.watch(nodeId: _watchedNode).then((_) {
+        if (_disposed || !_panelOpen) unawaited(inspect.unwatch());
+      }),
+      what,
+    );
   }
 
   void _stopWatch() {
@@ -705,7 +723,7 @@ class CatalogSession extends ChangeNotifier {
     //
     // Read back afterwards, like a knob: a shell's build decides what axes
     // exist, and setting one can reveal or retire another.
-    unawaited(_pushAxes().then((_) => _readAxes()));
+    _fireAndForget(_pushAxes().then((_) => _readAxes()), 'setting an axis');
   }
 
   /// What the address asks each of the entry's knobs to be, as slugs.
@@ -721,7 +739,7 @@ class CatalogSession extends ChangeNotifier {
     if (mapEquals(value, _knobSelections)) return;
     _knobSelections = Map.unmodifiable(value);
     // Silent, and read back afterwards — see [axisSelections].
-    unawaited(_pushKnobs());
+    _fireAndForget(_pushKnobs(), 'turning a knob');
   }
 
   /// The last payload sent, encoded, so a switch that changes nothing costs no
@@ -1340,6 +1358,30 @@ class CatalogSession extends ChangeNotifier {
     } else {
       notifyListeners();
     }
+  }
+
+  /// Runs [work] with nobody waiting on it, and says so if it fails.
+  ///
+  /// The panel drives the guest from setters and timers — an address changing,
+  /// a pointer coming to rest — where there is no caller left to hand a failure
+  /// to. `unawaited` alone hands it to the zone instead, which prints
+  /// `Unhandled Exception` and a stack trace; and since these are the *required*
+  /// writes rather than the tolerant reads (see [InspectClient.watch] for why
+  /// they are required), throwing is something they genuinely do.
+  ///
+  /// Reported rather than swallowed, which is the whole point of those calls
+  /// being strict: a watch that never started looks exactly like a demo that is
+  /// not moving, and this is the line that tells the two apart.
+  void _fireAndForget(Future<void> work, String what) {
+    unawaited(
+      work.then<void>(
+        (_) {},
+        onError: (Object e) {
+          if (_disposed) return;
+          debugPrint('[catalog] $what: $e');
+        },
+      ),
+    );
   }
 
   void _fail(String message) {
