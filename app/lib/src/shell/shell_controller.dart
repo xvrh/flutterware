@@ -28,6 +28,28 @@ class WorktreeError {
   final String message;
 }
 
+/// The shell opened a checkout other than the one it was launched in.
+///
+/// Not an error — [ShellController.start] has to open *something*, and the list
+/// git reports is all it has to choose from. But it has to be *said*. Every
+/// surface downstream is convincing: the tab is a real branch, the panels are
+/// real code, and a screenshot minted from any of it looks exactly like the
+/// answer to the question you asked and is about a different checkout.
+class LaunchFallback {
+  const LaunchFallback({required this.launchDirectory, required this.opened});
+
+  /// Where flutterware was actually run.
+  final String launchDirectory;
+
+  /// What was opened instead: git's first worktree, which is always the main
+  /// checkout.
+  final Worktree opened;
+
+  String get message =>
+      'Opened ${opened.path}, which is not where flutterware was started. '
+      'No worktree git reports contains $launchDirectory.';
+}
+
 /// What a worktree's sidebar is pointed at. A null [pluginId] is the worktree's
 /// home screen, which is where a freshly opened worktree lands.
 /// Owns the shell's state: which worktrees exist, which are open, and what is
@@ -289,24 +311,68 @@ class ShellController extends ChangeNotifier {
   Worktree? _worktreeAt(String path) =>
       _worktrees.where((w) => w.path == path).firstOrNull;
 
+  /// The checkout that was not where we were launched, when [start] had to give
+  /// up and open one anyway. Null in the ordinary case.
+  LaunchFallback? get launchFallback => _launchFallback;
+  LaunchFallback? _launchFallback;
+
   /// Discovers the project's worktrees and opens **only** the one the app was
   /// launched in. Everything else is opened deliberately from the switcher.
   ///
-  /// The launch directory is first walked **up** to its repo root, so starting
-  /// in `packages/admin/lib` opens the one window for the whole repo rather
-  /// than failing to match any worktree.
+  /// **The launch worktree is the one that *contains* the launch directory**,
+  /// not the one whose path equals it. A launch directory is hardly ever a
+  /// checkout root: it is a package, or a nested project with a config of its
+  /// own, and `findRepoRoot` deliberately stops at that nested config rather
+  /// than at the checkout. An equality test therefore matched nothing and fell
+  /// through to "git's first worktree" — the main checkout, always, from every
+  /// linked worktree. That is a wrong window that looks entirely right, and it
+  /// is the reason this resolves by containment.
+  ///
+  /// The deepest containing worktree wins, so a checkout parked inside another
+  /// opens itself rather than its host.
   Future<void> start(String launchDirectory) async {
+    // Still walked up: this is what [WorktreeDiscovery] runs git in, and in a
+    // directory that is not a repository at all it is the single worktree the
+    // discovery falls back to — so it wants the project root, not `lib/src`.
     var root = findRepoRoot(launchDirectory) ?? launchDirectory;
     _worktrees = await _discovery.discover(root);
     notifyListeners();
 
-    var rootPath = p.canonicalize(root);
-    var launch =
-        _worktrees
-            .where((w) => p.canonicalize(w.path) == rootPath)
-            .firstOrNull ??
-        _worktrees.firstOrNull;
+    var launch = _worktreeContaining(launchDirectory);
+    if (launch == null) {
+      launch = _worktrees.firstOrNull;
+      if (launch != null) {
+        var fallback = LaunchFallback(
+          launchDirectory: p.normalize(p.absolute(launchDirectory)),
+          opened: launch,
+        );
+        _launchFallback = fallback;
+        _logger.warning(fallback.message);
+      }
+    }
     if (launch != null) await open(launch);
+  }
+
+  /// The worktree holding [directory], deepest first.
+  ///
+  /// Deepest rather than first because containment nests: a vendored repo, or a
+  /// worktree someone parked under the main checkout, is inside another
+  /// worktree and is still the one you launched from.
+  Worktree? _worktreeContaining(String directory) {
+    var target = p.canonicalize(directory);
+    Worktree? best;
+    var bestDepth = -1;
+    for (var worktree in _worktrees) {
+      var candidate = p.canonicalize(worktree.path);
+      // Component-wise, so `/repo` does not claim `/repo-explorer/lib`.
+      if (candidate != target && !p.isWithin(candidate, target)) continue;
+      var depth = p.split(candidate).length;
+      if (depth > bestDepth) {
+        best = worktree;
+        bestDepth = depth;
+      }
+    }
+    return best;
   }
 
   /// Re-reads `git worktree list`. Open worktrees that disappeared are closed.

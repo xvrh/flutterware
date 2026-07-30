@@ -12,21 +12,28 @@ const configFileName = 'tool/flutterware.dart';
 /// `.git`. Launching from `packages/admin/lib` therefore opens the one window
 /// for the whole repo — the same idiom the distribution design uses to find
 /// `flutter_version`.
+///
+/// **The walk stops at the repository.** A `tool/flutterware.dart` in some
+/// ancestor of the checkout belongs to a different project — a sibling app
+/// parked under a shared parent directory, someone's `~/tool/flutterware.dart`
+/// — and letting it win over the `.git` right here would open a project the
+/// user never named. Below the repository a nested config still wins, which is
+/// what makes a workspace member with its own config a project in its own
+/// right.
 String? findRepoRoot(String start) {
   var dir = Directory(p.normalize(p.absolute(start)));
-  String? gitRoot;
   while (true) {
     if (File(p.join(dir.path, configFileName)).existsSync()) return dir.path;
-    if (gitRoot == null &&
-        (Directory(p.join(dir.path, '.git')).existsSync() ||
-            File(p.join(dir.path, '.git')).existsSync())) {
-      gitRoot = dir.path;
+    // A linked worktree's `.git` is a file, the main checkout's a directory.
+    if (Directory(p.join(dir.path, '.git')).existsSync() ||
+        File(p.join(dir.path, '.git')).existsSync()) {
+      return dir.path;
     }
     var parent = dir.parent;
     if (parent.path == dir.path) break;
     dir = parent;
   }
-  return gitRoot;
+  return null;
 }
 
 /// Finds the repo's packages: the `workspace:` members when the root pubspec

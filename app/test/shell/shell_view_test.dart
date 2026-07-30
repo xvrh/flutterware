@@ -191,6 +191,31 @@ void main() {
     expect(find.text('main checkout'), findsOneWidget);
     // No plugin panel is mounted until you pick one.
     expect(find.textContaining('panel:'), findsNothing);
+    // Launched where it opened, so nothing to say.
+    expect(find.byKey(launchFallbackBannerKey), findsNothing);
+  });
+
+  testWidgets('a checkout opened in place of the launch directory says so', (
+    tester,
+  ) async {
+    var shell = _controller();
+    await shell.start('/elsewhere/project');
+    await tester.pumpWidget(ShellApp(shell));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(launchFallbackBannerKey),
+        matching: find.textContaining('/elsewhere/project'),
+      ),
+      findsOneWidget,
+    );
+
+    // Only on the checkout it is about: opening another one is a deliberate
+    // act, and warning there would be warning about the wrong thing.
+    await shell.open(shell.closedWorktrees.first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(launchFallbackBannerKey), findsNothing);
   });
 
   testWidgets('the sidebar shows each plugin with its status', (tester) async {

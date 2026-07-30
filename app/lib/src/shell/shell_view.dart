@@ -27,6 +27,9 @@ const configLoadLineKey = Key('config-load-line');
 /// The sticky config-failure banner under the band.
 const configErrorBannerKey = Key('config-error-banner');
 
+/// The sticky "this is not where you launched" banner under the band.
+const launchFallbackBannerKey = Key('launch-fallback-banner');
+
 /// The band button that opens the config screen.
 const configButtonKey = Key('config-button');
 
@@ -158,6 +161,11 @@ class ShellView extends StatelessWidget {
                   // about the worktree rather than about whatever is mounted —
                   // and a config that failed no longer takes the panel down
                   // with it, so this is the only thing that would say so.
+                  // Above the config banner, because it is the more
+                  // fundamental complaint: that one is about the checkout you
+                  // are looking at, this one says the checkout itself is not
+                  // the one you asked for.
+                  _LaunchFallbackBanner(shell),
                   _ConfigErrorBanner(shell),
                   Expanded(
                     child: Row(
@@ -257,6 +265,58 @@ class _SidebarButton extends StatelessWidget {
 /// the plugins built from the last config that loaded are all still running
 /// behind it.
 ///
+/// **The shell is not where you started it.**
+///
+/// Shown on the checkout that was opened in place of a launch directory no
+/// worktree contains, and only on that one — switching tabs is a deliberate act
+/// and nothing to warn about.
+///
+/// Not dismissible and not transient, unlike the reload line. Everything else
+/// on screen is convincing: the tab is a real branch, the panels are real code,
+/// and a `fw capture` minted from any of it looks exactly like the answer you
+/// asked for. The only thing that makes it wrong is this sentence.
+class _LaunchFallbackBanner extends StatelessWidget {
+  const _LaunchFallbackBanner(this.shell);
+
+  final ShellController shell;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var fallback = shell.launchFallback;
+    if (fallback == null || fallback.opened != shell.selected) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      key: launchFallbackBannerKey,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.lg,
+        vertical: FwSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: colors.warning.withValues(alpha: 0.08),
+        border: Border(bottom: BorderSide(color: colors.warning)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_outlined, size: 14, color: colors.amber),
+          const Gap(FwSpacing.sm),
+          Expanded(
+            child: Text(
+              'Not the checkout flutterware was started in — launched in '
+              '${fallback.launchDirectory}, which no worktree contains.',
+              style: context.type.caption.copyWith(color: colors.warningText),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Says one line and offers the screen. The compiler's own output lives on
 /// `fw://<worktree>/config`, where the reload button and the history of previous
 /// reloads are, and rendering it in two places would mean maintaining it in two
