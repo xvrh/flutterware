@@ -219,6 +219,7 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       invertColors: args['invertColors'] == 'true',
     ),
     captureScale: number('captureScale'),
+    captureRaw: args['captureRaw'] == 'true',
   );
   var untouched =
       runArgs.size == null &&
@@ -229,7 +230,8 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       runArgs.textScale == null &&
       runArgs.brightness == null &&
       runArgs.accessibility.isDefault &&
-      runArgs.captureScale == null;
+      runArgs.captureScale == null &&
+      !runArgs.captureRaw;
   return untouched ? null : runArgs;
 }
 
@@ -302,7 +304,8 @@ Future<Map<String, Object?>> _runOne(
     var base =
         '${directory.path}/${capture.index}-'
         '${_fileSafe(capture.name ?? 'step ${capture.index}')}';
-    File('$base.png').writeAsBytesSync(capture.png);
+    var imagePath = '$base.${capture.format == 'raw' ? 'raw' : 'png'}';
+    File(imagePath).writeAsBytesSync(capture.bytes);
     // The tree next to the pixels — the step triple's third leg. Written to a
     // file rather than inlined: a run's response stays readable, and the tree
     // is fetched per step by whoever wants it.
@@ -313,9 +316,14 @@ Future<Map<String, Object?>> _runOne(
       if (capture.name != null) 'name': capture.name,
       'auto': capture.name == null,
       if (capture.tags.isNotEmpty) 'tags': capture.tags,
-      'png': '$base.png',
+      'image': imagePath,
+      'format': capture.format,
+      'width': capture.width,
+      'height': capture.height,
       'tree': '$base.tree.json',
       'texts': capture.texts,
+      'statusBrightness': ?capture.statusBrightness,
+      'navBrightness': ?capture.navBrightness,
     };
     steps.add(step);
     // Announced the moment it exists — the artifacts are already on disk —

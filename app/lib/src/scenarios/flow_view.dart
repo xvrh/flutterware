@@ -22,12 +22,16 @@ class ScenarioFlowView extends StatefulWidget {
     required this.device,
     required this.transform,
     required this.onOpenStep,
+    this.statusFallback = Brightness.dark,
   });
 
   final List<ScenarioRunStep> steps;
 
   /// The device the run was framed as, or null for the bare surface.
   final CatalogDevice? device;
+
+  /// Status-chrome tint when a step declared no overlay style.
+  final Brightness statusFallback;
 
   /// Owned by the page, not this widget, so pushing a step's detail and
   /// coming back lands exactly where the canvas was.
@@ -133,6 +137,7 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
             builder: (context, node) => _StepNode(
               byId[node.id]!,
               device: widget.device,
+              statusFallback: widget.statusFallback,
               onTap: () => widget.onOpenStep(byId[node.id]!),
             ),
             paintBuilder: (edge) => Paint()
@@ -156,10 +161,16 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
 }
 
 class _StepNode extends StatelessWidget {
-  const _StepNode(this.step, {required this.device, required this.onTap});
+  const _StepNode(
+    this.step, {
+    required this.device,
+    required this.statusFallback,
+    required this.onTap,
+  });
 
   final ScenarioRunStep step;
   final CatalogDevice? device;
+  final Brightness statusFallback;
   final VoidCallback onTap;
 
   @override
@@ -183,7 +194,11 @@ class _StepNode extends StatelessWidget {
           Expanded(
             child: FittedBox(
               fit: BoxFit.contain,
-              child: FramedShot(png: step.png, device: device),
+              child: FramedShot(
+                step: step,
+                device: device,
+                fallbackBrightness: statusFallback,
+              ),
             ),
           ),
         ],

@@ -163,12 +163,17 @@ class ScenarioRunStep {
   ScenarioRunStep({
     required this.index,
     required this.auto,
-    required this.png,
+    required this.image,
+    required this.format,
+    required this.width,
+    required this.height,
     required this.tree,
     required this.texts,
     required this.address,
     this.name,
     this.tags = const [],
+    this.statusBrightness,
+    this.navBrightness,
   });
 
   /// 1-based position in the scenario's capture sequence.
@@ -182,8 +187,17 @@ class ScenarioRunStep {
 
   final List<String> tags;
 
-  /// Path to the captured PNG.
-  final String png;
+  /// Path to the captured image, in [format].
+  final String image;
+
+  /// `png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes. Raw is
+  /// the fast capture (~5× at 1×, ~25× at device resolution) for hosts that
+  /// can display pixels directly; `png` is the portable default the `run`
+  /// action serves.
+  final String format;
+
+  final int width;
+  final int height;
 
   /// Path to the widget-tree JSON captured at the same moment.
   final String tree;
@@ -193,6 +207,12 @@ class ScenarioRunStep {
 
   /// The step's `fw://` address.
   final String address;
+
+  /// The `SystemUiOverlayStyle` icon brightness the app had declared at
+  /// capture time (`light`/`dark`), if any — what the fake status bar and
+  /// home indicator tint themselves with.
+  final String? statusBrightness;
+  final String? navBrightness;
 
   Map<String, Object?> toJson() => _$ScenarioRunStepToJson(this);
 }

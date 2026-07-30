@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meta/meta.dart';
@@ -216,20 +217,35 @@ class ScenarioTester {
         Offset.zero & (view.size * dpr),
         pixelRatio: scale / dpr,
       );
-      // PNG, knowingly: encode is ~80% of a 1× capture's cost (56ms/step vs
-      // 11.5ms raw) and ~96% at 3×. The raw-frame pipeline dev_studio ran —
-      // raw to disk, PNG only on demand — is the measured next win here.
-      var data = (await image.toByteData(format: ui.ImageByteFormat.png))!;
+      // Raw when the host asked for it: PNG *encoding* is ~80% of a 1×
+      // capture's cost (56ms/step vs 11.5ms raw) and ~96% at 3× — the
+      // rasterization itself is nearly free. Standalone runs always get PNG,
+      // which everything can open.
+      var raw = listener != null && (scenarioRunArgs?.captureRaw ?? false);
+      var data = (await image.toByteData(
+        format: raw ? ui.ImageByteFormat.rawRgba : ui.ImageByteFormat.png,
+      ))!;
+      var (width, height) = (image.width, image.height);
       image.dispose();
-      var png = data.buffer.asUint8List();
+      var bytes = data.buffer.asUint8List();
       if (listener != null) {
+        // The overlay style the app last declared — what the GUI's fake
+        // status bar tints itself with. Visible-for-testing is exactly what
+        // this is: scenario code only ever runs under the test binding.
+        // ignore: invalid_use_of_visible_for_testing_member
+        var style = SystemChrome.latestStyle;
         listener(
           ScenarioStepCapture(
             index: _stepCount,
             name: shot?.name,
             tags: shot?.tags ?? const [],
-            png: png,
+            bytes: bytes,
+            format: raw ? 'raw' : 'png',
+            width: width,
+            height: height,
             texts: visibleTexts(),
+            statusBrightness: style?.statusBarIconBrightness?.name,
+            navBrightness: style?.systemNavigationBarIconBrightness?.name,
           ),
         );
         return;
@@ -239,7 +255,7 @@ class ScenarioTester {
         ..createSync(recursive: true);
       File(
         '${directory.path}/$_stepCount-${_fileSafe(label)}.png',
-      ).writeAsBytesSync(png);
+      ).writeAsBytesSync(bytes);
     });
   }
 

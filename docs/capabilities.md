@@ -315,7 +315,7 @@ fw run server sql [--name=…] [--top=…]
 Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured just before it.
 
 ```sh
-fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…]
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--format=…]
 ```
 
 Returns `ScenarioRunResult`:
@@ -335,10 +335,15 @@ packages: List<ScenarioRunPackage>
       name: String?   # The `Shot`'s name; null for an automatic capture.
       auto: bool   # True when nothing named this capture — a collapsible detail step.
       tags: List<String>
-      png: String   # Path to the captured PNG.
+      image: String   # Path to the captured image, in [format].
+      format: String   # `png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.
+      width: int
+      height: int
       tree: String   # Path to the widget-tree JSON captured at the same moment.
       texts: List<String>   # The visible texts — the projection an agent reads next to the pixels.
       address: String   # The step's `fw://` address.
+      statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
+      navBrightness: String?
     errors: List<ScenarioRunError>   # The failure, when [ok] is false.
       error: String
       stack: String?
@@ -360,6 +365,7 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `high-contrast` | choice | no | — | The high-contrast accessibility switch |
 | `invert-colors` | choice | no | — | The invert-colors accessibility switch |
 | `capture-scale` | string | no | — | Screenshot pixels per logical pixel, 1 (the default) to 4. The device's own ratio gives a true screenshot; 1 is ~10× faster and smaller, which is what keeps a long FakeAsync run instantaneous. Not an axis: it changes the artifact, never what the app sees. |
+| `format` | choice | no | — | `png` (the default) is what everything opens. `raw` — bare rgba8888 rows, width×height×4 bytes as the result reports them — skips PNG encoding, which is ~80% of a capture's cost; for pipelines that consume pixels directly. |
 
 #### `restart` — Restart
 

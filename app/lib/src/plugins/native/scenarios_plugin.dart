@@ -405,6 +405,11 @@ class _ScenarioPageState extends State<_ScenarioPage> {
         ? null
         : deviceById(run!.axes.device!);
 
+    // Dark runs default to light chrome, like a real phone would show.
+    var statusFallback = run?.axes.brightness == 'dark'
+        ? Brightness.light
+        : Brightness.dark;
+
     // The pushed page: a step, with its back button. Full page — the flow is
     // exactly one back-tap away, per the reference GUI.
     var steps = run?.steps ?? const <ScenarioRunStep>[];
@@ -417,6 +422,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
           device: device,
           onBack: _closeStep,
           onOpenStep: _openStep,
+          statusFallback: statusFallback,
         );
       }
     }
@@ -438,7 +444,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
             'No device "$bad" — running as $defaultScenarioDeviceId. '
             'Accepted: ${deviceIds.join(', ')}.',
           ),
-        Expanded(child: _body(context, run, device)),
+        Expanded(child: _body(context, run, device, statusFallback)),
       ],
     );
   }
@@ -491,26 +497,16 @@ class _ScenarioPageState extends State<_ScenarioPage> {
             ),
           ],
           const Gap(FwSpacing.lg),
-          // The escape hatch, for the changes no incremental lane can see:
-          // drops the warm harness and cold-starts — fresh bundle, fresh
-          // kernel, fresh process.
-          Tooltip(
-            message: 'Full restart: rebuild assets and kernel, then run',
-            child: Tappable(
-              onTap: running
-                  ? null
-                  : () {
-                      widget.core.restartRunner(widget.package);
-                      _start();
-                    },
-              child: Icon(Icons.restart_alt, size: 18, color: colors.mut),
-            ),
-          ),
-          const Gap(FwSpacing.lg),
-          ElevatedButton.icon(
-            onPressed: running ? null : _start,
-            icon: const Icon(Icons.play_arrow, size: 16),
-            label: const Text('Run'),
+          _RunSplitButton(
+            enabled: !running,
+            onRun: _start,
+            // The escape hatch, for the changes no incremental lane can see:
+            // drops the warm harness and cold-starts — fresh bundle, fresh
+            // kernel, fresh process.
+            onFullRestart: () {
+              widget.core.restartRunner(widget.package);
+              _start();
+            },
           ),
         ],
       ),
@@ -521,6 +517,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     BuildContext context,
     ScenarioPanelRun? run,
     CatalogDevice? device,
+    Brightness statusFallback,
   ) {
     var steps = run?.steps ?? const <ScenarioRunStep>[];
     var running = run?.running ?? false;
@@ -572,9 +569,75 @@ class _ScenarioPageState extends State<_ScenarioPage> {
             device: device,
             transform: _flowTransform,
             onOpenStep: _openStep,
+            statusFallback: statusFallback,
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The primary Run with its overflow: the main segment runs, the arrow opens
+/// the rarer choices — today just "Full restart".
+class _RunSplitButton extends StatelessWidget {
+  const _RunSplitButton({
+    required this.enabled,
+    required this.onRun,
+    required this.onFullRestart,
+  });
+
+  final bool enabled;
+  final VoidCallback onRun;
+  final VoidCallback onFullRestart;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var fg = colors.onPrimary;
+    return Container(
+      height: 32,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: enabled ? colors.accent : colors.mut3,
+        borderRadius: BorderRadius.circular(context.radii.radius),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tappable(
+            onTap: enabled ? onRun : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.play_arrow, size: 16, color: fg),
+                  const Gap(FwSpacing.xs),
+                  Text('Run', style: context.type.button.copyWith(color: fg)),
+                ],
+              ),
+            ),
+          ),
+          Container(width: 1, color: fg.withValues(alpha: 0.3)),
+          Menu(
+            align: PopoverAlign.end,
+            entries: [
+              MenuItem(
+                'Full restart',
+                icon: Icons.restart_alt,
+                onSelected: enabled ? onFullRestart : null,
+              ),
+            ],
+            builder: (context, controller) => Tappable(
+              onTap: enabled ? controller.toggle : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: FwSpacing.xs),
+                child: Icon(Icons.arrow_drop_down, size: 18, color: fg),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

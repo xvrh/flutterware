@@ -186,6 +186,7 @@ class _FakeRunner extends ScenarioRunner {
     String? scenario,
     ScenarioAxes axes = const ScenarioAxes(),
     double? captureScale,
+    bool captureRaw = false,
   }) async {
     runs++;
     seenAxes.add(axes);
@@ -197,7 +198,10 @@ class _FakeRunner extends ScenarioRunner {
         'index': index,
         'name': name,
         'auto': false,
-        'png': png,
+        'image': png,
+        'format': 'png',
+        'width': 1,
+        'height': 1,
         'tree': '$outDir/$index-$name.tree.json',
         'texts': [text],
       };

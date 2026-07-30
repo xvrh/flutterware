@@ -226,9 +226,15 @@ class ScenariosCore extends PluginCore {
       'panel-${DateTime.now().millisecondsSinceEpoch}',
     );
     try {
-      var report = await _runnerFor(
-        package,
-      ).run(outDir: outDir, file: file, scenario: scenario, axes: axes);
+      // Raw pixels for the panel: it displays them natively, and skipping
+      // PNG encoding is what makes a 50-step run feel instantaneous.
+      var report = await _runnerFor(package).run(
+        outDir: outDir,
+        file: file,
+        scenario: scenario,
+        axes: axes,
+        captureRaw: true,
+      );
       var outcome = _describeRun(package, outDir, report, axes: axes).scenarios
           .where((s) => s.file == file && s.name == scenario)
           .firstOrNull;
@@ -462,6 +468,19 @@ class ScenariosCore extends PluginCore {
                   '~10× faster and smaller, which is what keeps a long '
                   'FakeAsync run instantaneous. Not an axis: it changes the '
                   'artifact, never what the app sees.',
+            ),
+            const ActionParameter(
+              'format',
+              'Image format',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  '`png` (the default) is what everything opens. `raw` — '
+                  'bare rgba8888 rows, width×height×4 bytes as the result '
+                  'reports them — skips PNG encoding, which is ~80% of a '
+                  "capture's cost; for pipelines that consume pixels "
+                  'directly.',
+              options: [ActionOption('png'), ActionOption('raw')],
             ),
           ],
         ),
@@ -735,6 +754,10 @@ class ScenariosCore extends PluginCore {
         throw ArgumentError.value(raw, 'capture-scale', 'a number in (0, 4]');
       }
     }
+    var format = arguments['format'];
+    if (format != null && format != 'png' && format != 'raw') {
+      throw ArgumentError.value(format, 'format', 'accepted: png, raw');
+    }
 
     var results = <ScenarioRunPackage>[];
     for (var path in paths) {
@@ -755,6 +778,7 @@ class ScenariosCore extends PluginCore {
           scenario: scenario,
           axes: axes,
           captureScale: captureScale,
+          captureRaw: format == 'raw',
         );
         results.add(_describeRun(path, outDir, report, axes: axes));
       } catch (error) {
@@ -832,9 +856,14 @@ class ScenariosCore extends PluginCore {
       name: step['name'] as String?,
       auto: step['auto'] == true,
       tags: (step['tags'] as List?)?.cast<String>() ?? const [],
-      png: step['png']! as String,
+      image: step['image']! as String,
+      format: step['format'] as String? ?? 'png',
+      width: step['width'] as int? ?? 0,
+      height: step['height'] as int? ?? 0,
       tree: step['tree']! as String,
       texts: (step['texts']! as List).cast<String>(),
+      statusBrightness: step['statusBrightness'] as String?,
+      navBrightness: step['navBrightness'] as String?,
       address: Address(
         worktree: host.worktree.name,
         plugin: host.id,

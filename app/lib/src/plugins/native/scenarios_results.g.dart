@@ -59,10 +59,15 @@ Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
       'name': ?instance.name,
       'auto': instance.auto,
       'tags': instance.tags,
-      'png': instance.png,
+      'image': instance.image,
+      'format': instance.format,
+      'width': instance.width,
+      'height': instance.height,
       'tree': instance.tree,
       'texts': instance.texts,
       'address': instance.address,
+      'statusBrightness': ?instance.statusBrightness,
+      'navBrightness': ?instance.navBrightness,
     };
 
 Map<String, dynamic> _$ScenarioRunErrorToJson(ScenarioRunError instance) =>

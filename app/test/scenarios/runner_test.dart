@@ -60,9 +60,10 @@ void main() {
         for (var s in steps) s['name'],
       ], containsAll(['Counted to two', 'Labelled']));
       for (var step in steps) {
-        var png = File(step['png']! as String);
+        var png = File(step['image']! as String);
         expect(png.existsSync(), isTrue);
         expect(png.lengthSync(), greaterThan(1000));
+        expect(step['format'], 'png');
         var tree =
             jsonDecode(File(step['tree']! as String).readAsStringSync())
                 as Map<String, dynamic>;
@@ -180,6 +181,23 @@ void main() {
           captureScale: 2,
         );
         expect(_pngSize(_lastPng(sharp)), (750, 1334));
+
+        // Raw skips PNG encoding — ~80% of a capture's cost — and writes
+        // bare rgba8888, width×height×4, exactly as the step reports.
+        var raw = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/axes_probe_test.dart',
+          scenario: 'Probe',
+          axes: const ScenarioAxes(device: 'iphone-se'),
+          captureRaw: true,
+        );
+        var rawStep =
+            (((raw['scenarios']! as List).single as Map)['steps']! as List).last
+                as Map;
+        expect(rawStep['format'], 'raw');
+        expect(rawStep['image'] as String, endsWith('.raw'));
+        expect((rawStep['width'], rawStep['height']), (375, 667));
+        expect(File(rawStep['image']! as String).lengthSync(), 375 * 667 * 4);
       } finally {
         probe.deleteSync();
       }
@@ -246,10 +264,10 @@ void main() {
 }
 ''';
 
-/// The last step's PNG path of a single-scenario run report.
+/// The last step's image path of a single-scenario run report.
 String _lastPng(Map<String, Object?> report) {
   var steps = ((report['scenarios']! as List).single as Map)['steps']! as List;
-  return (steps.last as Map)['png']! as String;
+  return (steps.last as Map)['image']! as String;
 }
 
 /// Width and height from the PNG's IHDR chunk — no decoder needed.

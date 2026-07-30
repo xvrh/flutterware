@@ -1877,10 +1877,18 @@ final resultShapes = <String, ResultShape>{
             },
             <String, Object?>{'name': 'tags', 'type': 'List<String>'},
             <String, Object?>{
-              'name': 'png',
+              'name': 'image',
               'type': 'String',
-              'doc': 'Path to the captured PNG.',
+              'doc': 'Path to the captured image, in [format].',
             },
+            <String, Object?>{
+              'name': 'format',
+              'type': 'String',
+              'doc':
+                  '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
+            },
+            <String, Object?>{'name': 'width', 'type': 'int'},
+            <String, Object?>{'name': 'height', 'type': 'int'},
             <String, Object?>{
               'name': 'tree',
               'type': 'String',
@@ -1897,6 +1905,18 @@ final resultShapes = <String, ResultShape>{
               'name': 'address',
               'type': 'String',
               'doc': 'The step\'s `fw://` address.',
+            },
+            <String, Object?>{
+              'name': 'statusBrightness',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+            },
+            <String, Object?>{
+              'name': 'navBrightness',
+              'type': 'String',
+              'optional': true,
             },
           ],
         },
@@ -1969,10 +1989,18 @@ final resultShapes = <String, ResultShape>{
                   },
                   <String, Object?>{'name': 'tags', 'type': 'List<String>'},
                   <String, Object?>{
-                    'name': 'png',
+                    'name': 'image',
                     'type': 'String',
-                    'doc': 'Path to the captured PNG.',
+                    'doc': 'Path to the captured image, in [format].',
                   },
+                  <String, Object?>{
+                    'name': 'format',
+                    'type': 'String',
+                    'doc':
+                        '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
+                  },
+                  <String, Object?>{'name': 'width', 'type': 'int'},
+                  <String, Object?>{'name': 'height', 'type': 'int'},
                   <String, Object?>{
                     'name': 'tree',
                     'type': 'String',
@@ -1989,6 +2017,18 @@ final resultShapes = <String, ResultShape>{
                     'name': 'address',
                     'type': 'String',
                     'doc': 'The step\'s `fw://` address.',
+                  },
+                  <String, Object?>{
+                    'name': 'statusBrightness',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+                  },
+                  <String, Object?>{
+                    'name': 'navBrightness',
+                    'type': 'String',
+                    'optional': true,
                   },
                 ],
               },
@@ -2081,10 +2121,18 @@ final resultShapes = <String, ResultShape>{
                           'type': 'List<String>',
                         },
                         <String, Object?>{
-                          'name': 'png',
+                          'name': 'image',
                           'type': 'String',
-                          'doc': 'Path to the captured PNG.',
+                          'doc': 'Path to the captured image, in [format].',
                         },
+                        <String, Object?>{
+                          'name': 'format',
+                          'type': 'String',
+                          'doc':
+                              '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
+                        },
+                        <String, Object?>{'name': 'width', 'type': 'int'},
+                        <String, Object?>{'name': 'height', 'type': 'int'},
                         <String, Object?>{
                           'name': 'tree',
                           'type': 'String',
@@ -2101,6 +2149,18 @@ final resultShapes = <String, ResultShape>{
                           'name': 'address',
                           'type': 'String',
                           'doc': 'The step\'s `fw://` address.',
+                        },
+                        <String, Object?>{
+                          'name': 'statusBrightness',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+                        },
+                        <String, Object?>{
+                          'name': 'navBrightness',
+                          'type': 'String',
+                          'optional': true,
                         },
                       ],
                     },
@@ -2165,10 +2225,18 @@ final resultShapes = <String, ResultShape>{
       },
       <String, Object?>{'name': 'tags', 'type': 'List<String>'},
       <String, Object?>{
-        'name': 'png',
+        'name': 'image',
         'type': 'String',
-        'doc': 'Path to the captured PNG.',
+        'doc': 'Path to the captured image, in [format].',
       },
+      <String, Object?>{
+        'name': 'format',
+        'type': 'String',
+        'doc':
+            '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
+      },
+      <String, Object?>{'name': 'width', 'type': 'int'},
+      <String, Object?>{'name': 'height', 'type': 'int'},
       <String, Object?>{
         'name': 'tree',
         'type': 'String',
@@ -2184,6 +2252,18 @@ final resultShapes = <String, ResultShape>{
         'name': 'address',
         'type': 'String',
         'doc': 'The step\'s `fw://` address.',
+      },
+      <String, Object?>{
+        'name': 'statusBrightness',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+      },
+      <String, Object?>{
+        'name': 'navBrightness',
+        'type': 'String',
+        'optional': true,
       },
     ],
   }),

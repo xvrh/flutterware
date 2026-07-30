@@ -19,6 +19,7 @@ class ScenarioStepPage extends StatelessWidget {
     required this.device,
     required this.onBack,
     required this.onOpenStep,
+    this.statusFallback = Brightness.dark,
   });
 
   final List<ScenarioRunStep> steps;
@@ -26,6 +27,9 @@ class ScenarioStepPage extends StatelessWidget {
   final CatalogDevice? device;
   final VoidCallback onBack;
   final void Function(ScenarioRunStep) onOpenStep;
+
+  /// Status-chrome tint when the step declared no overlay style.
+  final Brightness statusFallback;
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +79,11 @@ class ScenarioStepPage extends StatelessWidget {
                         padding: const EdgeInsets.all(FwSpacing.xl),
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
-                          child: FramedShot(png: step.png, device: device),
+                          child: FramedShot(
+                            step: step,
+                            device: device,
+                            fallbackBrightness: statusFallback,
+                          ),
                         ),
                       ),
                     ),

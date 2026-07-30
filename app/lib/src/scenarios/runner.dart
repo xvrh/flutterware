@@ -445,6 +445,7 @@ class ScenarioRunner {
     String? scenario,
     ScenarioAxes axes = const ScenarioAxes(),
     double? captureScale,
+    bool captureRaw = false,
   }) => _exclusive(() async {
     var wasWarm = _starting != null;
     await start();
@@ -457,6 +458,7 @@ class ScenarioRunner {
         'file': ?file,
         'scenario': ?scenario,
         if (captureScale != null) 'captureScale': '$captureScale',
+        if (captureRaw) 'captureRaw': 'true',
         ...axes.harnessArgs(),
       },
     );

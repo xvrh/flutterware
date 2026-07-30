@@ -16,6 +16,7 @@ class ScenarioRunArgs {
     this.brightness,
     this.accessibility = const ScenarioRunAccessibility(),
     this.captureScale,
+    this.captureRaw = false,
   });
 
   final ScenarioRunAccessibility accessibility;
@@ -40,6 +41,11 @@ class ScenarioRunArgs {
   /// the device's own ratio (a real screenshot's resolution). Not an axis —
   /// it changes the artifact, never what the app sees.
   final double? captureScale;
+
+  /// Capture raw rgba8888 instead of PNG. PNG *encoding* is ~80% of a 1×
+  /// capture's cost (and ~96% at 3×); a host that can display raw pixels —
+  /// the GUI can — skips it entirely.
+  final bool captureRaw;
 }
 
 /// The accessibility features a run can turn on — the platform switches a
