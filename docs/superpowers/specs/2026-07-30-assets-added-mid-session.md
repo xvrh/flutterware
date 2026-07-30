@@ -1,8 +1,8 @@
 # Assets added mid-session: the rebundle that must not delete
 
 **Date:** 2026-07-30
-**Status:** Spike findings, measured end-to-end. Recommends wiring the
-existing refresh path; not yet implemented.
+**Status:** Implemented, same day — see the addendum at the end. The findings
+below are the spike that shaped it.
 **Spike:** the driver lived at `app/build/midsession_spike/spike.dart`
 (gitignored build output); every number below is from running it against
 `examples/example`.
@@ -72,3 +72,33 @@ Against the workaround: a daemon restart is seconds, kills guest state
 (knobs, navigation, everything a reload preserves), and asks the user to know
 *why* their image is missing. The refresh path is two orders of magnitude
 cheaper and reuses machinery that exists.
+
+## Addendum: what was implemented (2026-07-30, later)
+
+The recommendation above, plus one case the spike had not measured:
+
+- `AssetBundleBuilder.build` is **in-place**: manifests rewritten only when
+  their bytes moved, links only when their target moved, previous builds'
+  leftovers pruned, `kernel_blob.bin` never touched, the directory inode
+  never replaced. It reports `(changed, fontsChanged)` so callers know
+  whether anyone needs telling. `test/catalog/asset_bundle_test.dart` pins
+  each clause.
+- The daemon rebundles wherever it rescans — the refresh request and every
+  select, so the reload button and an entry switch both notice — and, when
+  something differed, reconciles each session's top-level mirror (a first
+  `packages/` asset creates a top-level entry older mirrors lack) and
+  broadcasts `AssetsChanged(fontsChanged:)` to every client.
+  `integration_test/daemon_assets_test.dart` covers announce-on-change,
+  silence-on-no-change, and the mirror.
+- `CatalogSession` answers the broadcast with the evict + reassemble pair.
+- **Fonts: eviction provably does nothing.** The engine registers
+  `FontManifest.json` at guest startup; evicting it and reassembling leaves
+  the text band byte-identical, and a relaunched guest renders the new
+  family — both measured in `integration_test/asset_refresh_test.dart`,
+  which walks edit, add, remove and fonts against one live guest. That is
+  what `fontsChanged` carries: the session does *not* auto-relaunch (that
+  trades the user's guest state for a font, a decision worth its own
+  moment), so a font change applies on the next guest launch.
+
+The user-visible contract: **edit or add or remove, one reload press, ~60ms.
+Fonts, next guest launch.**

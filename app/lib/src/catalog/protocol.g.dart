@@ -93,6 +93,12 @@ Map<String, dynamic> _$CatalogChangedToJson(CatalogChanged instance) =>
       'quarantined': instance.quarantined.map((e) => e.toJson()).toList(),
     };
 
+AssetsChanged _$AssetsChangedFromJson(Map<String, dynamic> json) =>
+    AssetsChanged(fontsChanged: json['fontsChanged'] as bool);
+
+Map<String, dynamic> _$AssetsChangedToJson(AssetsChanged instance) =>
+    <String, dynamic>{'fontsChanged': instance.fontsChanged};
+
 DaemonCompiled _$DaemonCompiledFromJson(Map<String, dynamic> json) =>
     DaemonCompiled(
       requestId: (json['requestId'] as num).toInt(),

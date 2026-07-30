@@ -517,9 +517,13 @@ class _Daemon {
     diagnostics: _diagnostics,
   );
 
-  /// Looks for entries that appeared or disappeared. Compiles nothing.
+  /// Looks for entries or assets that appeared or disappeared. Compiles
+  /// nothing.
   Future<void> refresh() {
-    var result = _queue.then((_) => _rescanIfNeeded());
+    var result = _queue.then((_) async {
+      _rescanIfNeeded();
+      await _refreshAssets();
+    });
     _queue = result.then((_) {}, onError: (_) {});
     return result;
   }
@@ -549,8 +553,11 @@ class _Daemon {
     required bool ifChanged,
   }) async {
     // Before the id is resolved: it may be an entry that only exists now, or
-    // one that has just stopped existing.
+    // one that has just stopped existing. Assets for the same reason — a
+    // select is how a reload arrives, and a reload is when a user expects the
+    // file they just added to exist.
     _rescanIfNeeded();
+    await _refreshAssets();
     var rescanned = _pending.toList();
     _pending.clear();
     var entry = _entryById(id);
@@ -811,8 +818,8 @@ class _Daemon {
   /// symlinked. Milliseconds, against seconds for `flutter build bundle` —
   /// see [AssetBundleBuilder]. Rebuilt every start, since it is cheap and a
   /// stale manifest is worse than a rebuild.
-  Future<void> _ensureAssetBundle() async {
-    await AssetBundleBuilder(
+  Future<BundleSync> _ensureAssetBundle() {
+    return AssetBundleBuilder(
       cache: _cache,
       // The *project's* package owns the unprefixed asset keys: a demo saying
       // `AssetImage('assets/logo.png')` means its own project's file, not the
@@ -821,6 +828,54 @@ class _Daemon {
       rootPackageRoot: config.projectRoot,
       packageConfigPath: config.packageConfig,
     ).build(_sharedAssetsDir);
+  }
+
+  /// Rebuilds the bundle mid-session and tells clients when it moved.
+  ///
+  /// Runs wherever a rescan runs — the refresh request and every select —
+  /// because they answer the same question about different halves of the
+  /// project: a rescan notices the demos moved, this notices the assets did.
+  /// ~30ms measured when nothing changed, against a picture that is wrong.
+  Future<void> _refreshAssets() async {
+    if (!_prepared.isCompleted) return;
+    var sync = await _ensureAssetBundle();
+    if (!sync.changed) return;
+    _refreshSessionMirrors();
+    var message = AssetsChanged(fontsChanged: sync.fontsChanged);
+    for (var session in [..._sessions]) {
+      session.send(message);
+    }
+  }
+
+  /// Reconciles every session's top-level mirror with the shared bundle.
+  ///
+  /// A session dir is made once, at attach — see `_prepareAssetsDir` — so a
+  /// top-level entry that appears later (the first `packages/` asset, say)
+  /// has no link in it, and the session's guest would miss what the shared
+  /// bundle plainly has. The kernel is the one name never touched: it is the
+  /// session's own, whether still the shared link or a compiled file.
+  void _refreshSessionMirrors() {
+    var shared = <String>{
+      for (var entity in Directory(_sharedAssetsDir).listSync())
+        p.basename(entity.path),
+    };
+    for (var session in [..._sessions]) {
+      var dir = Directory(session.assetsDir);
+      if (!dir.existsSync()) continue;
+      for (var entity in dir.listSync(followLinks: false)) {
+        var name = p.basename(entity.path);
+        if (name == 'kernel_blob.bin') continue;
+        if (entity is Link && !shared.contains(name)) entity.deleteSync();
+      }
+      for (var name in shared) {
+        if (name == 'kernel_blob.bin') continue;
+        var at = p.join(session.assetsDir, name);
+        if (FileSystemEntity.typeSync(at, followLinks: false) ==
+            FileSystemEntityType.notFound) {
+          Link(at).createSync(p.join(_sharedAssetsDir, name));
+        }
+      }
+    }
   }
 }
 

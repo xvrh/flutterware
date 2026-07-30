@@ -144,6 +144,7 @@ sealed class DaemonResponse implements ProtocolMessage {
         DaemonReady.wireName => DaemonReady.fromJson(json),
         DaemonCompiled.wireName => DaemonCompiled.fromJson(json),
         CatalogChanged.wireName => CatalogChanged.fromJson(json),
+        AssetsChanged.wireName => AssetsChanged.fromJson(json),
         DaemonFailed.wireName => DaemonFailed.fromJson(json),
         var unknown => throw FormatException('unknown response "$unknown"'),
       };
@@ -256,6 +257,33 @@ class CatalogChanged extends DaemonResponse {
 
   @override
   Map<String, dynamic> toJson() => _$CatalogChangedToJson(this);
+}
+
+/// The shared asset bundle was rebuilt and something actually differed.
+///
+/// Broadcast like [CatalogChanged], and for the same reason: assets belong to
+/// the project, not to the client whose refresh noticed them move. A session
+/// hearing this evicts its guest's cached `AssetManifest.bin` and
+/// reassembles, which is all an added or removed asset needs. [fontsChanged]
+/// is the exception a client must treat differently: the engine registers
+/// fonts once at startup, so no eviction reaches a running guest — only a
+/// relaunch does.
+@JsonSerializable()
+class AssetsChanged extends DaemonResponse {
+  const AssetsChanged({required this.fontsChanged});
+
+  factory AssetsChanged.fromJson(Map<String, dynamic> json) =>
+      _$AssetsChangedFromJson(json);
+
+  static const wireName = 'assets-changed';
+
+  final bool fontsChanged;
+
+  @override
+  String get type => wireName;
+
+  @override
+  Map<String, dynamic> toJson() => _$AssetsChangedToJson(this);
 }
 
 /// The result of compiling one entry into the accumulating entrypoint.
