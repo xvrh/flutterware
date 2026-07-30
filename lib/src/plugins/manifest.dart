@@ -82,10 +82,32 @@ class PluginManifest {
         '(this build understands $manifestVersion).',
       );
     }
-    return PluginManifest([
+    var plugins = [
       for (var p in (json['plugins']! as List).cast<Map<String, Object?>>())
         PluginDeclaration.fromJson(p),
-    ], version: version);
+    ];
+
+    // Checked on the way *in*, not only on the way out. `FlutterwareConfig.use`
+    // refuses both of these, but a manifest does not have to have come from
+    // `Flutterware.configure` — and a reservation enforced on one side only is
+    // a convention, which is not what [Address.shellConfig] claims to be. The
+    // failure without this is silent either way: a duplicate id resolves one
+    // plugin and drops another, and an id of `config` is shadowed by the
+    // shell's own screen with the plugin simply unreachable.
+    var seen = <String>{};
+    for (var plugin in plugins) {
+      if (!seen.add(plugin.id)) {
+        throw FormatException('Plugin id "${plugin.id}" is declared twice.');
+      }
+      if (plugin.id == Address.shellConfig) {
+        throw FormatException(
+          'Plugin id "${Address.shellConfig}" is reserved for the shell\'s own '
+          'config screen.',
+        );
+      }
+    }
+
+    return PluginManifest(plugins, version: version);
   }
 
   static PluginManifest parse(String source) =>

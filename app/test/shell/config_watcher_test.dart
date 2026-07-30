@@ -189,6 +189,66 @@ void main() {
     expect(calls.last, contains('print(3)'));
   });
 
+  test('disposing during a reload cancels the follow-up', () async {
+    var running = Completer<void>();
+    var calls = 0;
+    var slow = ConfigWatcher(
+      worktreePath: root.path,
+      onChanged: () async {
+        calls++;
+        await running.future;
+      },
+      debounce: _debounce,
+      watch: (_) => events.stream,
+    );
+    await slow.start();
+
+    await save('void main() { print(1); }');
+    expect(calls, 1);
+
+    // A second save coalesced behind the one in flight, then the user turns the
+    // watch off. The queued follow-up must not land afterwards.
+    config.writeAsStringSync('void main() { print(2); }');
+    events.add(WatchEvent(ChangeType.MODIFY, config.path));
+    await Future<void>.delayed(_debounce * 2);
+    await slow.dispose();
+    running.complete();
+    await Future<void>.delayed(_debounce * 6);
+
+    expect(calls, 1);
+  });
+
+  test(
+    'a reload that throws leaves the same bytes able to fire again',
+    () async {
+      var attempts = 0;
+      var reported = <Object>[];
+      var angry = ConfigWatcher(
+        worktreePath: root.path,
+        onChanged: () async {
+          attempts++;
+          throw StateError('reload blew up');
+        },
+        onError: reported.add,
+        debounce: _debounce,
+        watch: (_) => events.stream,
+      );
+      addTearDown(angry.dispose);
+      await angry.start();
+
+      // Both saves are the *same* content. Without rewinding the hash the second
+      // is indistinguishable from a no-op save and the file stays unreloadable.
+      await save('void main() { print(1); }');
+      config.setLastModifiedSync(DateTime.now());
+      events.add(WatchEvent(ChangeType.MODIFY, config.path));
+      await Future<void>.delayed(_debounce * 4);
+
+      expect(attempts, 2);
+      // Reported, not swallowed: a timer callback has nobody to rethrow to.
+      expect(reported, hasLength(2));
+    },
+  );
+
   test('disposing stops it firing', () async {
     await watcher.start();
     await watcher.dispose();

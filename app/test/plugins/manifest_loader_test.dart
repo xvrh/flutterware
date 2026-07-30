@@ -10,6 +10,10 @@ const _manifest = '{"version":1,"plugins":[]}';
 /// Counts compiles, and writes a stand-in kernel so [ManifestLoader] sees the
 /// artifact it expects without a real compiler being present.
 class _Runs {
+  _Runs(this.depfileInputs);
+
+  /// The sources the fake compiler claims to have read.
+  List<String> depfileInputs;
   var compiles = 0;
 
   Future<ProcessResult> call(
@@ -23,6 +27,13 @@ class _Runs {
       File(out)
         ..createSync(recursive: true)
         ..writeAsStringSync('kernel');
+      // What the real compiler writes: everything the config reached. The
+      // stamp is derived from this, so a test that omits it is testing a
+      // cache that trusts nothing.
+      var deps = arguments[arguments.indexOf('--depfile') + 1];
+      File(deps)
+        ..createSync(recursive: true)
+        ..writeAsStringSync('$out: ${depfileInputs.join(' ')}\n');
       return ProcessResult(0, 0, '', '');
     }
     // Either `dart run tool/flutterware.dart` or `dart <kernel>` — both print
@@ -46,7 +57,7 @@ void main() {
     packageConfig = File(p.join(root.path, '.dart_tool', 'package_config.json'))
       ..createSync(recursive: true)
       ..writeAsStringSync('{"configVersion":2,"packages":[]}');
-    runs = _Runs();
+    runs = _Runs([config.path]);
     loader = ManifestLoader(dartExecutable: '/sdk/dart', runProcess: runs.call);
   });
 
@@ -92,6 +103,48 @@ void main() {
       expect(runs.compiles, 1);
     },
   );
+
+  test('an edit to an imported file recompiles', () async {
+    // `dart compile kernel` bundles the whole program, so a declaration can
+    // move in a file the config imports without the config itself changing a
+    // byte. Keying on the config alone served a stale kernel — and a stale
+    // manifest reads as "no changes", which is the one wrong answer the reload
+    // machinery cannot recover from.
+    var imported = File(p.join(root.path, 'tool', 'plugins.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('const label = "One";');
+    runs.depfileInputs = [config.path, imported.path];
+
+    await loader.load(root.path);
+    expect(runs.compiles, 1);
+
+    await loader.load(root.path);
+    expect(runs.compiles, 1, reason: 'nothing moved');
+
+    imported.writeAsStringSync('const label = "Two";');
+    await loader.load(root.path);
+    expect(
+      runs.compiles,
+      2,
+      reason: 'the closure moved, so the kernel is stale',
+    );
+  });
+
+  test('a missing dependency list is not trusted', () async {
+    await loader.load(root.path);
+    expect(runs.compiles, 1);
+
+    File(
+      p.join(root.path, '.dart_tool', 'flutterware', 'manifest.deps'),
+    ).deleteSync();
+
+    await loader.load(root.path);
+    expect(
+      runs.compiles,
+      2,
+      reason: 'unknown inputs means recompile, not reuse',
+    );
+  });
 
   test('changed config content recompiles', () async {
     await loader.load(root.path);

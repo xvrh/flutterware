@@ -39,6 +39,7 @@ class ConfigWatcher {
     required this.worktreePath,
     required this.onChanged,
     this.debounce = const Duration(milliseconds: 250),
+    this.onError,
     Stream<WatchEvent> Function(String directory)? watch,
   }) : _watch = watch ?? ((dir) => DirectoryWatcher(dir).events);
 
@@ -51,6 +52,11 @@ class ConfigWatcher {
   final Future<void> Function() onChanged;
 
   final Duration debounce;
+
+  /// Reports a reload that threw. There is nobody to rethrow *to* — [_fire]
+  /// runs from a timer — so an unreported failure here would be genuinely
+  /// silent, which is the one outcome this class must not produce.
+  final void Function(Object error)? onError;
 
   final Stream<WatchEvent> Function(String directory) _watch;
 
@@ -85,11 +91,16 @@ class ConfigWatcher {
   /// — watching the worktree root to catch it would mean a recursive watch over
   /// `.git` and every build directory, which is a real cost for a rare moment.
   /// The Reload button covers it.
+  /// Throws if the config cannot be read at all. The caller must not leave a
+  /// watcher in place that failed here: [watching] answers from the filesystem,
+  /// so it would keep naming a directory nothing is listening to — the "looks
+  /// armed and is not" state the enable switch exists to make visible.
   Future<void> start() async {
-    if (_events != null) return;
+    if (_events != null || _disposed) return;
     var dir = watching;
     if (dir == null) return;
 
+    // Before the subscription, so a failure leaves nothing half-started.
     _lastFired = _hash();
     _events = _watch(dir).listen(_onEvent, onError: (Object _) {});
   }
@@ -109,7 +120,10 @@ class ConfigWatcher {
   var _running = false;
   var _againWhenDone = false;
 
+  var _disposed = false;
+
   Future<void> _fire() async {
+    if (_disposed) return;
     if (_running) {
       _againWhenDone = true;
       return;
@@ -146,9 +160,18 @@ class ConfigWatcher {
     _running = true;
     try {
       await onChanged();
+    } catch (e) {
+      // Rewound, so the *same* bytes can fire again — otherwise a save that
+      // blew up leaves the file looking already-handled and re-saving it does
+      // nothing at all.
+      _lastFired = null;
+      onError?.call(e);
     } finally {
       _running = false;
-      if (_againWhenDone) {
+      // Disposed while the reload ran: `dispose` cannot cancel an awaited call,
+      // so the follow-up has to check. Without this, switching the watch off
+      // mid-reload still landed one more reload afterwards.
+      if (_againWhenDone && !_disposed) {
         _againWhenDone = false;
         // Straight to the check: the debounce already elapsed for that event.
         unawaited(_fire());
@@ -173,6 +196,8 @@ class ConfigWatcher {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
+    _againWhenDone = false;
     _settle?.cancel();
     var events = _events;
     _events = null;

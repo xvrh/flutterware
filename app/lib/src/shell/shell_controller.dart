@@ -131,14 +131,24 @@ class ShellController extends ChangeNotifier {
     _watchEnabled = value;
     if (value) {
       for (var path in _openPaths) {
-        if (_worktreeAt(path) case var worktree?) _startWatching(worktree);
+        if (_worktreeAt(path) case var worktree?) {
+          _startWatching(worktree);
+          // **Catch up on whatever was missed.** A fresh watcher takes the
+          // current file as its baseline, so an edit made while watching was off
+          // would never fire — the switch would silently eat it, which is the
+          // rule this class states in bold two fields up. Re-running costs one
+          // load and answers `no changes` when there is nothing to catch up on.
+          unawaited(_load(worktree));
+        }
       }
     } else {
       for (var watcher in _watchers.values) {
         unawaited(watcher.dispose());
       }
       _watchers.clear();
-      _pending.clear();
+      // `_pending` is deliberately *not* cleared: the change it stands for is
+      // still unapplied, and dropping the marker would be the same silent loss
+      // by another route. Re-enabling catches up; the Reload button does too.
     }
     notifyListeners();
   }
@@ -155,11 +165,25 @@ class ShellController extends ChangeNotifier {
     var watcher = ConfigWatcher(
       worktreePath: worktree.path,
       onChanged: () => _onConfigChanged(worktree),
+      onError: (e) => _logger.severe('config reload failed: $e'),
       watch: _watchEvents,
       debounce: _watchDebounce ?? const Duration(milliseconds: 250),
     );
     _watchers[worktree.path] = watcher;
-    unawaited(watcher.start());
+    // A watcher that failed to start must not stay in the map: `watchingFor`
+    // reads the directory off the filesystem, so it would keep reporting the
+    // config as watched while nothing was listening — and `_startWatching`
+    // refuses to retry an id it already holds, so the state would be permanent.
+    unawaited(
+      watcher.start().catchError((Object e) {
+        _logger.warning('config watch failed for ${worktree.path}: $e');
+        if (identical(_watchers[worktree.path], watcher)) {
+          _watchers.remove(worktree.path);
+        }
+        unawaited(watcher.dispose());
+        notifyListeners();
+      }),
+    );
   }
 
   Future<void> _onConfigChanged(Worktree worktree) async {
@@ -563,10 +587,18 @@ class ShellController extends ChangeNotifier {
           return;
         }
         _manifests[path] = manifest;
+        // `diff.affected`, not `reconcile`'s return: that reports what was
+        // *built*, so a plugin that was only removed came back as an empty list
+        // and got logged as "reordered" — wrong on the one surface this feature
+        // exists to make trustworthy.
         record(
           ConfigLoadOutcome.reconciled,
-          rebuilt: rebuilt,
-          reasons: {for (var id in rebuilt) id: ?diff.reasonFor(id)},
+          rebuilt: diff.affected,
+          reasons: {for (var id in diff.affected) id: ?diff.reasonFor(id)},
+        );
+        assert(
+          rebuilt.every(diff.affected.contains),
+          'reconcile built something the diff did not name',
         );
         notifyListeners();
         return;
@@ -577,7 +609,11 @@ class ShellController extends ChangeNotifier {
     // from nothing; only the second one cost anything.
     var opening = previous == null || existing == null;
     _releaseAt(path);
-    _build(worktree, manifest);
+    if (_build(worktree, manifest) case var failure?) {
+      record(ConfigLoadOutcome.failed, error: failure);
+      notifyListeners();
+      return;
+    }
     record(
       opening ? ConfigLoadOutcome.built : ConfigLoadOutcome.rebuilt,
       rebuilt: [for (var p in manifest.plugins) p.id],
@@ -594,7 +630,8 @@ class ShellController extends ChangeNotifier {
   /// awaiting the load, there is no caller left to catch what it throws. A tab
   /// with no session and no reason is a worktree that looks like it opened and
   /// then does nothing.
-  void _build(Worktree worktree, PluginManifest manifest) {
+  /// Returns null on success, or the failure to report.
+  String? _build(Worktree worktree, PluginManifest manifest) {
     var path = worktree.path;
     try {
       var workspace = Workspace(
@@ -627,8 +664,14 @@ class ShellController extends ChangeNotifier {
         coreRegistry: coreRegistry,
       )..addListener(() => _onSessionChanged(path));
       _manifests[path] = manifest;
+      return null;
     } catch (e) {
+      // Returned rather than only recorded. `Workspace` and `discoverPackages`
+      // both touch disk, so this is reachable — and a caller that logged
+      // "opened, 3 plugins" over it would be claiming a session that does not
+      // exist, leaving `isLoading` true and the panel drawing a loader forever.
       _errors.putIfAbsent(path, () => WorktreeError(worktree, '$e'));
+      return '$e';
     }
   }
 
@@ -652,7 +695,10 @@ class ShellController extends ChangeNotifier {
     _releaseAt(path);
     _openPaths.remove(path);
     _remembered.remove(path);
-    _loads.remove(path);
+    // `_loads` is deliberately *not* cleared. It is a monotonic generation per
+    // path, and resetting it lets a load started before this close collide with
+    // one started after a reopen — both holding generation 1, both passing the
+    // guard, the older one committing its stale manifest last.
     // The retained manifest and the reload history belong to an *open*
     // worktree; keeping either would have a reopened tab diff against a config
     // whose plugins are long gone.

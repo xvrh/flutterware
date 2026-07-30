@@ -97,11 +97,40 @@ class WorktreeSession extends ChangeNotifier {
     if (diff.isEmpty) return const [];
 
     var panels = {for (var plugin in _plugins) plugin.core: plugin};
+    List<NativePlugin>? staged;
 
     var rebuilt = session.reconcile(
       manifest,
       diff,
       registry: coreRegistry,
+      // **Built before anything is disposed.** Building afterwards meant a panel
+      // factory that throws left `session.cores` already swapped while
+      // `_plugins` still held panels for cores that had just been disposed — a
+      // sidebar drawing dead panels, and a double-dispose when the worktree
+      // closed. There is no rolling back from there, so it has to fail earlier.
+      prepare: (next) {
+        var built = <NativePlugin>[];
+        try {
+          for (var core in next) {
+            built.add(
+              panels[core] ??
+                  (registry.create(core)..addListener(notifyListeners)),
+            );
+          }
+        } catch (_) {
+          // Only what this attempt created; the retained ones are still
+          // `_plugins`' and are still on screen.
+          for (var plugin in built) {
+            if (!panels.containsKey(plugin.core)) {
+              plugin
+                ..removeListener(notifyListeners)
+                ..dispose();
+            }
+          }
+          rethrow;
+        }
+        staged = built;
+      },
       onRelease: (core) {
         panels.remove(core)
           ?..removeListener(notifyListeners)
@@ -109,10 +138,7 @@ class WorktreeSession extends ChangeNotifier {
       },
     );
 
-    _plugins = [
-      for (var core in session.cores)
-        panels[core] ?? (registry.create(core)..addListener(notifyListeners)),
-    ];
+    _plugins = staged!;
 
     notifyListeners();
     return rebuilt;

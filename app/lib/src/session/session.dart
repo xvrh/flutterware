@@ -216,9 +216,16 @@ class Session {
   /// Never called for a diff that `needsFullRebuild`: a new [Workspace] makes
   /// every host stale, so there is nothing to reuse and the caller builds a
   /// fresh session instead.
+  /// [prepare] sees the new core list while **nothing has been swapped or
+  /// disposed yet**, so a renderer can build whatever it draws over those cores
+  /// and throw safely. It is the other half of [onRelease]: together they let a
+  /// caller keep its own list in step with [cores] through a failure, which a
+  /// caller building afterwards cannot do — by then the old cores are gone and
+  /// there is nothing to roll back to.
   List<String> reconcile(
     PluginManifest manifest,
     ManifestDiff diff, {
+    void Function(List<PluginCore> next)? prepare,
     void Function(PluginCore core)? onRelease,
     PluginCoreRegistry? registry,
   }) {
@@ -236,20 +243,31 @@ class Session {
     var factory = registry ?? defaultCoreRegistry();
 
     // Built in full before anything is disposed, so a factory that throws
-    // leaves the session exactly as it was.
-    var next = [
-      for (var declaration in manifest.plugins)
-        surviving[declaration.id] ??
-            factory.create(
-              PluginHost(
-                id: declaration.id,
-                label: declaration.label,
-                worktree: worktree,
-                workspace: workspace,
-                config: declaration.config,
+    // leaves the session exactly as it was — and the ones this attempt already
+    // built are disposed on the way out rather than left subscribed to nothing.
+    var next = <PluginCore>[];
+    try {
+      for (var declaration in manifest.plugins) {
+        next.add(
+          surviving[declaration.id] ??
+              factory.create(
+                PluginHost(
+                  id: declaration.id,
+                  label: declaration.label,
+                  worktree: worktree,
+                  workspace: workspace,
+                  config: declaration.config,
+                ),
               ),
-            ),
-    ];
+        );
+      }
+      prepare?.call(next);
+    } catch (_) {
+      for (var core in next) {
+        if (!surviving.containsKey(core.id)) core.dispose();
+      }
+      rethrow;
+    }
 
     var kept = next.toSet();
     var released = [

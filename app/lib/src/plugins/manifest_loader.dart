@@ -126,25 +126,37 @@ class ManifestLoader {
   /// *using* flutterware invalidate flutterware's own cache, and every
   /// following command paid the ~450ms compile again. Content survives that,
   /// and survives a checkout or a stash that restores a file byte for byte.
-  /// Hashing ~50KB to protect ~450ms is not a trade that needs measuring.
+  ///
+  /// **Keyed on the whole compiled closure, not just the config file.**
+  /// `dart compile kernel` bundles every library the config reaches, so a key
+  /// naming only `tool/flutterware.dart` went stale the moment a declaration
+  /// moved in a file it imports — and the config would then keep reporting the
+  /// old manifest, which the reload machinery reads as "no changes". A stale
+  /// answer that says *nothing changed* is the one failure this whole feature
+  /// cannot tolerate, and content keying made it permanent rather than
+  /// transient: nothing else would ever invalidate it.
+  ///
+  /// `--depfile` is the compiler's own answer to "what did this depend on", so
+  /// the key is derived from the build rather than guessed alongside it.
+  /// Measured on this repo: 46 inputs, 0.7ms to hash.
   Future<String?> _kernel(String worktreePath, File configFile) async {
     var packageConfig = File(
       p.join(worktreePath, '.dart_tool', 'package_config.json'),
     );
     if (!packageConfig.existsSync()) return null;
 
-    var stamp = [
-      sha1.convert(configFile.readAsBytesSync()),
-      sha1.convert(packageConfig.readAsBytesSync()),
-      dartExecutable,
-    ].join('|');
-
     var dill = File(p.join(_cacheDir(worktreePath), 'manifest.dill'));
     var stampFile = File(p.join(_cacheDir(worktreePath), 'manifest.stamp'));
-    if (dill.existsSync() &&
-        stampFile.existsSync() &&
-        stampFile.readAsStringSync() == stamp) {
-      return dill.path;
+    var depFile = File(p.join(_cacheDir(worktreePath), 'manifest.deps'));
+
+    // The previous compile's own dependency list. A closure that *grew* — a new
+    // import — is caught anyway, because adding the import changed the config
+    // file, which is in the list.
+    if (dill.existsSync() && stampFile.existsSync() && depFile.existsSync()) {
+      var stamp = _stamp(worktreePath, packageConfig, depFile);
+      if (stamp != null && stampFile.readAsStringSync() == stamp) {
+        return dill.path;
+      }
     }
 
     Directory(_cacheDir(worktreePath)).createSync(recursive: true);
@@ -153,12 +165,70 @@ class ManifestLoader {
       'kernel',
       '-o',
       dill.path,
+      '--depfile',
+      depFile.path,
       configFilePath,
     ], workingDirectory: worktreePath);
     if (compiled.exitCode != 0) return null;
 
+    var stamp = _stamp(worktreePath, packageConfig, depFile);
+    if (stamp == null) return dill.path; // Usable now, recompiled next time.
     stampFile.writeAsStringSync(stamp);
     return dill.path;
+  }
+
+  /// A hash over every source the last compile read, plus the resolution and
+  /// the compiler. Null when the dependency list cannot be read, which means
+  /// "do not trust the cache" rather than "the cache is fine".
+  String? _stamp(String worktreePath, File packageConfig, File depFile) {
+    List<String> inputs;
+    try {
+      inputs = _depfileInputs(depFile.readAsStringSync());
+    } on FileSystemException {
+      return null;
+    }
+    if (inputs.isEmpty) return null;
+
+    var parts = <String>[];
+    for (var input in inputs..sort()) {
+      var file = File(
+        p.isAbsolute(input) ? input : p.join(worktreePath, input),
+      );
+      if (!file.existsSync()) return null;
+      parts.add('$input ${sha1.convert(file.readAsBytesSync())}');
+    }
+    parts
+      ..add('${sha1.convert(packageConfig.readAsBytesSync())}')
+      ..add(dartExecutable);
+    return '${sha1.convert(utf8.encode(parts.join('\n')))}';
+  }
+
+  /// The inputs from a Ninja depfile: `output: in1 in2 \<newline> in3`, with
+  /// spaces in paths backslash-escaped.
+  static List<String> _depfileInputs(String source) {
+    var colon = source.indexOf(':');
+    if (colon < 0) return const [];
+    var body = source
+        .substring(colon + 1)
+        .replaceAll('\\\n', ' ')
+        .replaceAll('\n', ' ');
+
+    var inputs = <String>[];
+    var current = StringBuffer();
+    for (var i = 0; i < body.length; i++) {
+      var char = body[i];
+      if (char == r'\' && i + 1 < body.length && body[i + 1] == ' ') {
+        current.write(' ');
+        i++;
+      } else if (char == ' ') {
+        if (current.isNotEmpty) inputs.add(current.toString());
+        current = StringBuffer();
+      } else {
+        current.write(char);
+      }
+    }
+    if (current.isNotEmpty) inputs.add(current.toString());
+    return inputs;
   }
 
   void _invalidate(String worktreePath) {
