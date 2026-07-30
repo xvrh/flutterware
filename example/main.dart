@@ -1,26 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/flutter_test.dart';
 
 void main() {
-  testWidgets('Checkout flow', CheckoutTest().call);
-}
+  scenario('Checkout flow', (s) async {
+    await s.pumpWidget(const MyApp());
 
-class CheckoutTest extends AppTest {
-  @override
-  Future<void> run() async {
-    await pumpWidget(MyApp());
-    await screenshot(name: 'Home page');
+    await s.tap(Icons.shopping_cart);
+    await s.enterText(TextField, '4334', shot: Shot('Coupon code entered'));
+    await s.tap(translations.checkoutButton, shot: Shot.skip);
+    await s.screen('Order confirmed');
 
-    await tap(find.byIcon(Icons.shopping_cart));
-    await screenshot(name: 'Cart');
-
-    await enterText(TextField, '4334');
-    await screenshot(name: 'Enter coupon code');
-
-    await tap(translations.checkoutButton);
-    await screenshot();
-  }
+    expect(find.text('Thank you!'), findsOneWidget);
+  });
 }
 
 // == App code (for example purpose)

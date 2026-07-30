@@ -96,12 +96,14 @@ class UiCatalogPackage extends PluginPackage {
   ];
 }
 
-/// The scenario runner.
-class TestRunner extends Plugin {
-  TestRunner({this.packages = const [], String? label})
-    : super('flutterware.tests', label: label ?? 'Tests');
+/// Scenarios — app tests with per-step screenshots, run under FakeAsync in a
+/// directly-spawned `flutter_tester`. See
+/// `docs/superpowers/specs/2026-07-30-scenarios-design.md`.
+class Scenarios extends Plugin {
+  Scenarios({this.packages = const [], String? label})
+    : super('flutterware.scenarios', label: label ?? 'Scenarios');
 
-  final List<TestsPackage> packages;
+  final List<ScenariosPackage> packages;
 
   @override
   Map<String, Object?> get config => {
@@ -109,10 +111,11 @@ class TestRunner extends Plugin {
   };
 }
 
-class TestsPackage extends PluginPackage {
-  const TestsPackage(super.pkg, {this.directory});
+class ScenariosPackage extends PluginPackage {
+  const ScenariosPackage(super.pkg, {this.directory});
 
-  /// Test directory relative to the package; `test` when null.
+  /// Where this package keeps its scenarios, relative to the package;
+  /// `test/scenarios` when null.
   final String? directory;
 
   @override
@@ -121,8 +124,8 @@ class TestsPackage extends PluginPackage {
     if (directory != null) 'directory': directory,
   };
 
-  static List<TestsPackage> each(List<Pkg> packages) => [
-    for (var pkg in packages) TestsPackage(pkg),
+  static List<ScenariosPackage> each(List<Pkg> packages) => [
+    for (var pkg in packages) ScenariosPackage(pkg),
   ];
 }
 

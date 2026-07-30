@@ -18,4 +18,6 @@ void main() => Flutterware.configure((fw) {
   // Zero config: servers announce themselves at runtime — see
   // bin/example_server.dart.
   fw.use(ServerInspection());
+  // No `directory:` — scenarios live in `test/scenarios/`.
+  fw.use(Scenarios(packages: [.new(app)]));
 });

@@ -1727,6 +1727,107 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'ScenarioListEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioListEntry',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{
+        'name': 'file',
+        'type': 'String',
+        'doc': 'Package-relative source file.',
+      },
+      <String, Object?>{'name': 'line', 'type': 'int'},
+    ],
+  }),
+  'ScenarioListPackage': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioListPackage',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'path', 'type': 'String'},
+      <String, Object?>{
+        'name': 'directory',
+        'type': 'String',
+        'doc': 'The scanned directory, relative to the package.',
+      },
+      <String, Object?>{
+        'name': 'scenarios',
+        'type': 'List<ScenarioListEntry>',
+        'shape': <String, Object?>{
+          'type': 'ScenarioListEntry',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'file',
+              'type': 'String',
+              'doc': 'Package-relative source file.',
+            },
+            <String, Object?>{'name': 'line', 'type': 'int'},
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'diagnostics',
+        'type': 'List<String>',
+        'doc':
+            'What the scan noticed but could not act on — non-literal names, duplicates.',
+      },
+      <String, Object?>{
+        'name': 'error',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Set when the package could not be scanned, in which case [scenarios] means nothing.',
+      },
+    ],
+  }),
+  'ScenarioListResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioListResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'packages',
+        'type': 'List<ScenarioListPackage>',
+        'shape': <String, Object?>{
+          'type': 'ScenarioListPackage',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'path', 'type': 'String'},
+            <String, Object?>{
+              'name': 'directory',
+              'type': 'String',
+              'doc': 'The scanned directory, relative to the package.',
+            },
+            <String, Object?>{
+              'name': 'scenarios',
+              'type': 'List<ScenarioListEntry>',
+              'shape': <String, Object?>{
+                'type': 'ScenarioListEntry',
+                'fields': <Object?>[
+                  <String, Object?>{'name': 'name', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'file',
+                    'type': 'String',
+                    'doc': 'Package-relative source file.',
+                  },
+                  <String, Object?>{'name': 'line', 'type': 'int'},
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'diagnostics',
+              'type': 'List<String>',
+              'doc':
+                  'What the scan noticed but could not act on — non-literal names, duplicates.',
+            },
+            <String, Object?>{
+              'name': 'error',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Set when the package could not be scanned, in which case [scenarios] means nothing.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
   'SplashArtifactEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'SplashArtifactEntry',
     'fields': <Object?>[
