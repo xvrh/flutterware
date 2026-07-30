@@ -350,8 +350,10 @@ Widget added() => const Placeholder();
   ///
   /// What is asserted here is the *surface* — that the four are gone, that one
   /// action offers all of it, and that a caller who gets a flag wrong is told so
-  /// before anything is compiled. What the projections actually contain needs a
-  /// guest, and is asserted in `tool/catalog/headless_check.dart`.
+  /// before anything is compiled. What the projections actually *contain* needs
+  /// a rendering guest, and is asserted nowhere: `headless_check.dart` covered
+  /// it and was deleted, because a guest composites through Metal and a check
+  /// that needs one cannot block CI.
   group('inspect — one render, every projection', () {
     test('replaced the four actions rather than joining them', () {
       var ids = [for (var a in catalog().report.actions) a.id];

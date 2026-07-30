@@ -40,8 +40,9 @@ class GuestErrors {
     var previous = FlutterError.onError;
     FlutterError.onError = (details) {
       var first = _record(details);
-      // Kept, and kept first: `headless_check` greps for this line, and a
-      // human watching the terminal is still the fastest reader there is.
+      // Kept, and kept first, for a human watching the terminal — still the
+      // fastest reader there is. Nothing greps for it any more: the check that
+      // did needed a rendering guest, and went when `headless_check` did.
       //
       // **Only the first of each**, which the buffer has always known and the
       // print did not. An error thrown from `paint` fires once per frame, so

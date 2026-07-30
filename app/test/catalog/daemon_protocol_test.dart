@@ -13,7 +13,8 @@ import 'package:test/test.dart';
 /// is *reachable* from an ordinary JSON line (so it is not theoretical).
 ///
 /// The survival of the process itself needs a real one; that check lives in
-/// `tool/catalog/headless_check.dart`, step 4c.
+/// `integration_test/compiler_daemon_test.dart`, which pokes a running daemon
+/// from a raw socket.
 void main() {
   group('reading a request', () {
     test('an unknown type is a FormatException, not a crash-shaped null', () {

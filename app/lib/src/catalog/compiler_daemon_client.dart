@@ -68,9 +68,11 @@ class CompilerDaemonClient {
   /// Injecting it into [catalogChanges] instead was tried and was worse: the
   /// generator that did it subscribed to the live stream one microtask after the
   /// caller listened, so a change arriving inside *that* window went to the held
-  /// value and was never delivered to the stream already waiting for it. Four
-  /// checks in `headless_check` caught it. A stream that is only a stream, and a
-  /// value that is only a value, has no such window.
+  /// value and was never delivered to the stream already waiting for it. Only a
+  /// real daemon caught it — the announcement checks in
+  /// `integration_test/compiler_daemon_test.dart` are what stand there now. A
+  /// stream that is only a stream, and a value that is only a value, has no such
+  /// window.
   CatalogChanged? get lastChange => _lastChange;
   CatalogChanged? _lastChange;
 

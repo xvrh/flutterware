@@ -32,9 +32,10 @@ const _pureEntryPoints = [
   // which starts a session, which asks for a compiler. Each generation
   // doubles. This entry is the one that must never regress.
   'tool/catalog/compiler_daemon.dart',
-  // Drives the daemon and a real guest with no GUI — the headless proof that
-  // "screenshot an entry" is a job and not a viewer capability.
-  'tool/catalog/headless_check.dart',
+  // Drives that daemon as a process. Listed because it is run by `dart test`
+  // rather than `flutter test`, which is what lets it spawn one — an import
+  // that reached Flutter would make it unloadable rather than merely slow.
+  'integration_test/compiler_daemon_test.dart',
 ];
 
 /// `dart:ui` is listed as well as `package:flutter` because it is the thing

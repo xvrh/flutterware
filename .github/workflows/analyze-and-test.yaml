@@ -60,20 +60,21 @@ jobs:
         run: dart run ../../app/bin/fw.dart run ui_catalog check
         working-directory: examples/example
 
-      - name: "catalog loop, end to end"
-        # Last on purpose: it writes and deletes demo fixtures to test
-        # them, so a crash mid-run can leave one behind — and the
-        # uncommitted-changes check above would then fail for a reason
-        # that has nothing to do with formatting.
+      - name: "the compiler daemon, as a process"
+        # Everything in `app/integration_test/` that needs no GPU: the daemon
+        # starting, quarantining a demo it cannot compile, noticing an edit on
+        # disk, sharing one warm compiler between two clients without letting
+        # either decide what the other gets, announcing the servable set to a
+        # client that did not ask, and surviving a line it cannot read.
         #
-        # The one thing that exercises the inspection actions against a real
-        # compiler daemon and a real embedder guest. Everything else is either
-        # a unit test or a fake.
+        # `dart test`, not `flutter test`: anything under `integration_test/`
+        # makes `flutter test` demand a device and `package:integration_test`,
+        # and these are plain VM tests that spawn processes.
         #
-        # Not blocking yet, and the reason is honest rather than cautious: the
-        # guest composites through Metal, and whether a runner VM offers it is
-        # not answerable from a desk. Delete `continue-on-error` the first time
-        # this is seen green — a check nobody can fail is not a check.
-        continue-on-error: true
-        run: dart run tool/catalog/headless_check.dart
+        # `--exclude-tags gpu` leaves out the checks that spawn the embedder
+        # guest, which composites through Metal — see `app/dart_test.yaml`. That
+        # is what lets this step block: a check nobody can fail is not a check,
+        # and the step it replaces was `continue-on-error` from the day it was
+        # written to the day it was deleted.
+        run: dart test integration_test --exclude-tags gpu
         working-directory: app

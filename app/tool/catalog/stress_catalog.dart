@@ -15,8 +15,9 @@ import 'package:vm_service/vm_service.dart';
 /// Switches entries as fast as the pipeline allows, and says what the guest
 /// actually had when a reload is refused.
 ///
-/// `headless_check` switches once per entry and stops; this does it in a loop,
-/// which is what a person clicking around does. When `reloadSources` refuses,
+/// Nothing in CI switches entries against a live guest any more, and this is
+/// where that is still done by hand: in a loop, which is what a person clicking
+/// around does. When `reloadSources` refuses,
 /// the message is of the form
 ///
 ///     lookup Failed: <name> in @method in file:///.../shell.dart

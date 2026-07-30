@@ -271,8 +271,9 @@ class GuestWatch {
     // `attached` as well as `hasSize`: a render object held across a rebuild
     // can be detached rather than replaced, and asking a detached box where it
     // is on screen walks a parent chain that no longer reaches a view.
-    if (render is! RenderBox || !render.attached || !render.hasSize)
+    if (render is! RenderBox || !render.attached || !render.hasSize) {
       return null;
+    }
     var origin = render.localToGlobal(Offset.zero);
     return origin & render.size;
   }

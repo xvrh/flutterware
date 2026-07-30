@@ -1,6 +1,7 @@
-// A fixture, not a demo. `headless_check.dart` asserts that this entry is
-// quarantined rather than fatal, that the quarantine carries the compiler's
-// error, and that repairing the file brings the entry back with no restart.
+// A fixture, not a demo. `integration_test/compiler_daemon_test.dart` asserts
+// that this entry is quarantined rather than fatal, and that the quarantine
+// carries the compiler's error. Repair is asserted against a fixture that test
+// writes itself, so this file can stay permanently broken.
 //
 // It is excluded from analysis in the root `analysis_options.yaml`, because the
 // whole point of it is that it does not compile.

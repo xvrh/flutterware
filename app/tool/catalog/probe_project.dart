@@ -9,11 +9,11 @@ import 'package:path/path.dart' as p;
 /// Brings a catalog up against **someone else's project** and reports what it
 /// found, without the GUI.
 ///
-/// `headless_check.dart` points the daemon at the app package itself, so
-/// `appPackageRoot` and `projectRoot` are the same directory there and every
-/// path that conflates the two still works. This is the case that separates
-/// them: the GUI owns `native/` and the build directory, the project owns the
-/// demos, the package config and the assets.
+/// `integration_test/compiler_daemon_test.dart` points the daemon at the app
+/// package itself, so `appPackageRoot` and `projectRoot` are the same directory
+/// for most of it and every path that conflates the two still works. This is the
+/// case that separates them: the GUI owns `native/` and the build directory, the
+/// project owns the demos, the package config and the assets.
 ///
 /// ```sh
 /// cd app && dart run tool/catalog/probe_project.dart ../examples/example

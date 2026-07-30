@@ -481,7 +481,7 @@ class UiCatalogCore extends PluginCore {
             required: false,
             description:
                 'Report only the nodes matching this, case-insensitively '
-                'against each node\'s type and against the words it puts on '
+                "against each node's type and against the words it puts on "
                 'screen — `ElevatedButton`, `Save`, `SizedBox`. What you want '
                 'instead of `tree` when the question is "where is the submit '
                 'button".',

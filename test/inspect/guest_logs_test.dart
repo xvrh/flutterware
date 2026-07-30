@@ -73,7 +73,7 @@ void main() {
       expect(printed, ['FW-PROBE: some rendered text', 'mine']);
     });
 
-    test('a switch of entry forgets the previous demo\'s words', () {
+    test("a switch of entry forgets the previous demo's words", () {
       GuestLogs.instance.resetFor('demo.dart#one');
       _capturing([], () => print('from one'));
 

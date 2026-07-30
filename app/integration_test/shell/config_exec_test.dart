@@ -27,9 +27,18 @@ void main() {
         'examples/example',
       ]);
       expect(manifest.packages.first.tags, ['lib']);
-      expect(manifest.plugins.single.id, 'flutterware.dependencies');
-      var declared = manifest.plugins.single.config['packages']! as List;
-      expect(declared, hasLength(3));
+      // Every `fw.use` in the config, in the order it was written — so a plugin
+      // added to the repo's own config has to be added here too, which is the
+      // point: this is the one test that runs that file.
+      expect(manifest.plugins.map((p) => p.id), [
+        'flutterware.dependencies',
+        'flutterware.assets',
+        'flutterware.ui_catalog',
+      ]);
+      var dependencies = manifest.plugins.firstWhere(
+        (p) => p.id == 'flutterware.dependencies',
+      );
+      expect(dependencies.config['packages'], hasLength(3));
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );
