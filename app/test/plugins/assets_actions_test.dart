@@ -19,6 +19,7 @@ import 'package:path/path.dart' as p;
 /// reach. Everything asserted here is reached by name through `invoke`, the
 /// same door the CLI and MCP go through.
 void main() {
+  late Directory scratch;
   late Directory root;
 
   AssetsCore core() {
@@ -54,13 +55,19 @@ void main() {
       write(relative, content.codeUnits);
 
   setUp(() {
-    root = Directory.systemTemp.createTempSync('fw_assets_actions_test');
+    // The worktree sits inside a directory of its own, so that a test writing a
+    // sibling of the worktree — a path dependency, below — writes it somewhere
+    // only this test owns.
+    scratch = Directory.systemTemp.createTempSync('fw_assets_actions_test');
+    root = Directory(p.join(scratch.path, 'app'))..createSync();
     writeText(
       '.dart_tool/package_config.json',
       '{"configVersion":2,"packages":[]}',
     );
   });
-  tearDown(() => root.deleteSync(recursive: true));
+  tearDown(() {
+    if (scratch.existsSync()) scratch.deleteSync(recursive: true);
+  });
 
   group('list', () {
     test('names every key, with where it is', () async {
@@ -107,8 +114,9 @@ dependencies:
   ]
 }
 ''');
+      // A sibling of the worktree root; it goes with the scratch directory in
+      // tearDown.
       var brand = Directory(p.join(p.dirname(root.path), 'brand'));
-      addTearDown(() => brand.deleteSync(recursive: true));
       File(p.join(brand.path, 'pubspec.yaml'))
         ..createSync(recursive: true)
         ..writeAsStringSync('''

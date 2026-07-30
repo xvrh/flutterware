@@ -16,6 +16,7 @@ import 'package:path/path.dart' as p;
 /// sidebar, `fw` and an agent see. The subject is the core, because a fact that
 /// only reaches the panel is a fact the other two surfaces do not have.
 void main() {
+  late Directory scratch;
   late Directory root;
 
   AssetsCore core({List<String> packages = const ['.']}) {
@@ -58,10 +59,16 @@ void main() {
   }
 
   setUp(() {
-    root = Directory.systemTemp.createTempSync('fw_assets_core_test');
+    // The worktree sits inside a directory of its own, so that a test writing a
+    // sibling of the worktree — a path dependency, below — writes it somewhere
+    // only this test owns.
+    scratch = Directory.systemTemp.createTempSync('fw_assets_core_test');
+    root = Directory(p.join(scratch.path, 'app'))..createSync();
     writePackageConfig();
   });
-  tearDown(() => root.deleteSync(recursive: true));
+  tearDown(() {
+    if (scratch.existsSync()) scratch.deleteSync(recursive: true);
+  });
 
   test('reading the report starts no work', () {
     write('pubspec.yaml', '''
@@ -217,9 +224,8 @@ dependencies:
 }
 ''');
     // A sibling of the worktree root, reached the way pub reaches a path
-    // dependency.
+    // dependency. It goes with the scratch directory in tearDown.
     var brand = Directory(p.join(p.dirname(root.path), 'brand'));
-    addTearDown(() => brand.deleteSync(recursive: true));
     File(p.join(brand.path, 'pubspec.yaml'))
       ..createSync(recursive: true)
       ..writeAsStringSync('''
