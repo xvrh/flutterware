@@ -21,6 +21,12 @@ class DependenciesPlugin extends NativePlugin<DependenciesCore> {
 
   List<String> get packages => core.packages;
 
+  /// Resolution is a `pub deps` subprocess, so the panel draws an empty table
+  /// under the word "loading…" for a moment. Long enough that the first
+  /// generated screenshot of it caught exactly that.
+  @override
+  String? get busyWith => core.isLoading ? 'resolving dependencies' : null;
+
   @override
   Widget buildPanel(BuildContext context) => _DependenciesPanel(this);
 }

@@ -87,6 +87,33 @@ class UiCatalogPlugin extends NativePlugin<UiCatalogCore> {
     return session;
   });
 
+  /// Not worth photographing while any open catalog is still working.
+  ///
+  /// Three conditions, and the third is the one that is easy to miss: a session
+  /// can be `ready` with nothing in flight while the guest is still showing the
+  /// *previous* entry, because [CatalogSession.selected] is what was asked for
+  /// and `active` is what the guest managed to load. A capture taken in that
+  /// window is a correct picture of the wrong demo, which is the single worst
+  /// thing a screenshot tool can produce.
+  ///
+  /// A compile error settles rather than waits. The panel is showing the error,
+  /// the error is the state, and hanging until the timeout would turn "this
+  /// demo is broken" into "the tool is broken".
+  @override
+  String? get busyWith {
+    for (var session in _sessions.values) {
+      if (session.phase == CatalogSessionPhase.starting) {
+        return session.busyWith ?? 'starting the catalog';
+      }
+      if (session.busyWith case var busy?) return busy;
+      if (session.selectedError != null) continue;
+      if (session.selected?.id != session.active?.id) {
+        return 'loading ${session.selected?.id}';
+      }
+    }
+    return null;
+  }
+
   /// What the compiler is doing for [path], or null when it is idle.
   ///
   /// This is the status worth a sidebar row: a cold compile is the only thing

@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutterware/plugins.dart';
 
 import '../address/address_scope.dart';
+import '../capture/capture_mode.dart';
+import '../capture/capture_request.dart';
 import '../plugins/native_plugin.dart';
 import '../ui/theme.dart';
 import 'address_bar.dart';
@@ -41,9 +43,26 @@ const _tabLabelMaxWidth = 180.0;
 const _sidebarWidth = 232.0;
 
 class ShellApp extends StatelessWidget {
-  const ShellApp(this.shell, {super.key});
+  const ShellApp(
+    this.shell, {
+    super.key,
+    this.captureKey,
+    this.framing = const CaptureFraming(),
+  });
 
   final ShellController shell;
+
+  /// Marks what a window capture photographs, when one is going to happen.
+  ///
+  /// On `builder` rather than around [ShellView], so the boundary sits *above*
+  /// the navigator and its overlay: a dialog or a menu is part of the window
+  /// and a picture that silently omitted it would be wrong in a way nobody
+  /// notices until the screenshot is in the README.
+  final GlobalKey? captureKey;
+
+  /// Size, density and theme for a capture. Default is "whatever this machine
+  /// is", which is right for a human and wrong for anything committed.
+  final CaptureFraming framing;
 
   @override
   Widget build(BuildContext context) {
@@ -54,8 +73,16 @@ class ShellApp extends StatelessWidget {
       // so both builds come from the same widgets — but a plugin panel that
       // still hardcodes its own will stay light, and look it.
       darkTheme: appDarkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: framing.themeMode ?? ThemeMode.system,
       debugShowCheckedModeBanner: false,
+      builder: captureKey == null
+          ? null
+          : (context, child) => framing.frame(
+              context,
+              CaptureMode(
+                child: RepaintBoundary(key: captureKey, child: child),
+              ),
+            ),
       home: ShellView(shell),
     );
   }

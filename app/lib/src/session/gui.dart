@@ -36,8 +36,18 @@ class GuiLauncher {
     bool? interactive,
     this.alreadyBuilt,
     this.describeProject,
+    this.extraEnvironment = const {},
   }) : gui = DesktopGui(appPath: appToolPath, flutterSdk: flutterSdk),
        interactive = interactive ?? outputIsInteractive;
+
+  /// Anything else the GUI process should be started with.
+  ///
+  /// `fw capture` is the only caller: the request it puts here is what turns an
+  /// ordinary launch into a launch that navigates, photographs itself and
+  /// exits. Deliberately additive rather than a second launcher — a capture
+  /// run must come up through exactly the path a human's window does, or it is
+  /// photographing something else.
+  final Map<String, String> extraEnvironment;
 
   /// Where the GUI is built from and where the build puts it. Shared with the
   /// launcher, which starts the same build early so that it overlaps the CLI's.
@@ -327,6 +337,7 @@ class GuiLauncher {
     projectDefineKey: projectDirectory.absolute.path,
     appToolPathKey: appToolPath,
     flutterSdkDefineKey: gui.flutterSdk,
+    ...extraEnvironment,
   };
 
   /// Builds the GUI, with the build's own output in a file rather than in the

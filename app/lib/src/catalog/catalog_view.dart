@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../address/address_scope.dart';
+import '../capture/capture_mode.dart';
 import '../embedder/embedded_engine.dart';
 import '../embedder/protocol.dart';
 import '../ui/design/design.dart';
@@ -2259,19 +2260,28 @@ class _StatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Everything this bar draws about *timing* is a fact about this run rather
+    // than about the catalog, so a picture leaves it out — otherwise a
+    // committed screenshot changes every time the compiler is a little faster.
+    // What is kept is what a reader of the picture would want: which entry, and
+    // whether it built.
+    var photographed = CaptureMode.isCapturing(context);
     var parts = <String>[];
-    if (session.coldCompile case var cold?) parts.add('cold ${_ms(cold)}');
+    if (session.coldCompile case var cold?) {
+      if (!photographed) parts.add('cold ${_ms(cold)}');
+    }
     if (session.lastSwitch case var report?) {
-      parts.add(
-        report.ok
-            ? '${report.entry.name}: compile ${_ms(report.compile)} '
-                  '· reload ${_ms(report.reload)} '
-                  // What the reload was *made of*: edited files on a reload,
-                  // added libraries on a first visit. Both are zero when the
-                  // guest is showing what it already had.
-                  '· ${report.reloaded ? '${report.editedCount} edited' : '+${report.newSourceCount} libs'}'
-            : '${report.entry.name}: did not compile',
-      );
+      parts.add(switch ((report.ok, photographed)) {
+        (false, _) => '${report.entry.name}: did not compile',
+        (true, true) => report.entry.name,
+        (true, false) =>
+          '${report.entry.name}: compile ${_ms(report.compile)} '
+              '· reload ${_ms(report.reload)} '
+              // What the reload was *made of*: edited files on a reload,
+              // added libraries on a first visit. Both are zero when the
+              // guest is showing what it already had.
+              '· ${report.reloaded ? '${report.editedCount} edited' : '+${report.newSourceCount} libs'}',
+      });
     }
     var failed = session.lastSwitch?.ok == false;
     var ready = session.phase == CatalogSessionPhase.ready;
