@@ -288,14 +288,20 @@ void main() {
     expect(shell.lastLoad(main)!.outcome, ConfigLoadOutcome.unchanged);
   });
 
-  test('a changed packages list rebuilds everything', () async {
+  test('a changed package list rebuilds everything', () async {
     var shell = _controller();
     await shell.start('/repo');
     _disposedIds = [];
 
+    // The packages are read off the plugins that name them, so a package only
+    // ever moves as part of a plugin's config moving — and that is a change to
+    // the manifest like any other. `Workspace` interns a `Pkg` for identity, and
+    // every `PluginHost` holds the workspace, so a package that moved cannot
+    // reach a plugin that was kept.
     _loader.manifest =
-        '{"version":1,"packages":[{"path":"app"}],'
-        '"plugins":[{"id":"a.one","label":"One"},{"id":"a.two","label":"Two"}]}';
+        '{"version":1,"plugins":['
+        '{"id":"a.one","label":"One","config":{"packages":[{"path":"app"}]}},'
+        '{"id":"a.two","label":"Two"}]}';
     await shell.reloadConfig();
 
     expect(_disposedIds, ['/repo:a.one', '/repo:a.two']);

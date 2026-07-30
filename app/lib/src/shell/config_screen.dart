@@ -191,6 +191,11 @@ class _Failure extends StatelessWidget {
 ///
 /// The answer to "why isn't my plugin showing up", which is otherwise only
 /// answerable by reading the file and guessing.
+///
+/// The packages are **derived** — read off the plugins that name them, since
+/// `fw.packages([...])` went away — so this list is not something the file says
+/// anywhere in one place. That makes showing it more useful than it was, not
+/// less: it is the only view of the union.
 class _Resolved extends StatelessWidget {
   const _Resolved(this.shell, this.worktree, this.manifest);
 
@@ -227,13 +232,6 @@ class _Resolved extends StatelessWidget {
                     color: missing.contains(pkg.path) ? colors.red : null,
                   ),
                 ),
-                if (pkg.tags.isNotEmpty) ...[
-                  const Gap(FwSpacing.sm),
-                  Text(
-                    pkg.tags.join(' · '),
-                    style: context.type.micro.copyWith(color: colors.mut2),
-                  ),
-                ],
                 if (missing.contains(pkg.path)) ...[
                   const Gap(FwSpacing.sm),
                   Text(
