@@ -47,7 +47,7 @@ void main() {
     root.deleteSync(recursive: true);
   });
 
-  test('watches the config file\'s directory, not the file', () async {
+  test("watches the config file's directory, not the file", () async {
     await watcher.start();
     expect(watcher.watching, p.join(root.path, 'tool'));
     expect(watcher.isWatching, isTrue);
