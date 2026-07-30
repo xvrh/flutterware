@@ -20,22 +20,34 @@ import 'package:logging/logging.dart';
 /// the last of them is what put the GUI's welcome banner on screen as
 /// `[$message - $title]`.
 abstract class LogClient {
-  factory LogClient.print() = _PrintLogClient;
+  /// Straight to stdout, which the CLI is reading and putting above its region.
+  factory LogClient.print() => _LogClient(print);
+
+  /// To [sink] instead — what a surface whose stdout belongs to something else
+  /// needs.
+  ///
+  /// MCP speaks JSON-RPC on stdout, so a log line printed there is not a stray
+  /// message a human can ignore; it is a malformed frame, and the client
+  /// disconnects. Which sink a session logs to is therefore a property of the
+  /// surface, not a default any one of them gets to keep to itself.
+  factory LogClient.writeTo(StringSink sink) => _LogClient(sink.writeln);
 
   void printLogRecord(LogRecord record);
 }
 
-class _PrintLogClient implements LogClient {
-  /// Straight to stdout, which the CLI is reading and putting above its region.
-  ///
+class _LogClient implements LogClient {
+  _LogClient(this._write);
+
+  final void Function(String line) _write;
+
   /// The level is named only when it is one somebody should act on. Tagging
   /// every line `[STATUS]` is how the old client made ordinary logs look like
   /// diagnostics.
   @override
   void printLogRecord(LogRecord record) {
     var level = record.level >= Level.WARNING ? '${record.level.name}: ' : '';
-    print('$level${record.loggerName} - ${record.message}');
-    if (record.error case var error?) print('  $error');
-    if (record.stackTrace case var stackTrace?) print('  $stackTrace');
+    _write('$level${record.loggerName} - ${record.message}');
+    if (record.error case var error?) _write('  $error');
+    if (record.stackTrace case var stackTrace?) _write('  $stackTrace');
   }
 }

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dart_mcp/client.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
+import 'package:flutterware_app/src/session/cli.dart';
 import 'package:flutterware_app/src/session/mcp_server.dart';
 import 'package:flutterware_app/src/shell/repo_layout.dart';
 import 'package:stream_channel/stream_channel.dart';
@@ -207,6 +208,38 @@ void main() {
         ),
       );
       expect(result.isError, isTrue);
+    });
+  });
+
+  group('fw mcp', () {
+    // The command is how a client reaches any of the above. `app/bin/mcp.dart`
+    // only exists inside a checkout, so a server nobody can spawn is a server
+    // that is not there.
+    test('serves, rather than reporting an unknown command', () async {
+      var served = false;
+      var err = StringBuffer();
+      var exit = await FwCli(
+        openSession: () => throw StateError('mcp opens no session of its own'),
+        out: StringBuffer(),
+        err: err,
+        serveMcp: () async => served = true,
+      ).run(['mcp']);
+
+      expect(served, isTrue);
+      expect(exit, 0);
+      expect(err.toString(), isEmpty);
+    });
+
+    test('writes nothing to stdout — that is the wire', () async {
+      var out = StringBuffer();
+      await FwCli(
+        openSession: () => throw StateError('mcp opens no session of its own'),
+        out: out,
+        err: StringBuffer(),
+        serveMcp: () async {},
+      ).run(['mcp']);
+
+      expect(out.toString(), isEmpty);
     });
   });
 }

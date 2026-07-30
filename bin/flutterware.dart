@@ -157,13 +157,19 @@ Future<ProcessLog?> _work(
   if (stages.isEmpty) return null;
 
   var log = File(p.join(appPath, 'build', 'cli-build.log'));
+  // `mcp` is about to speak JSON-RPC on stdout, and a cold first run is exactly
+  // when there is something to narrate. Writing the plan there would put a
+  // progress panel in front of the handshake, so the narration moves rather
+  // than being suppressed — a 40s silent start is the other way to look broken.
+  var protocolOwnsStdout = _ownsStdout(arguments);
   var plan = LaunchPlan(
     stages,
-    out: stdout,
+    out: protocolOwnsStdout ? stderr : stdout,
     // A live panel and a firehose cannot both own the bottom of the terminal,
     // so `-v` gets the plain rendering: one line per stage saying what is about
-    // to make all the noise below it.
-    interactive: outputIsInteractive && !verbose,
+    // to make all the noise below it. So does a redirected stderr, which no
+    // amount of cursor movement is going to redraw.
+    interactive: outputIsInteractive && !verbose && !protocolOwnsStdout,
     title: 'flutterware · ${p.basename(Directory.current.path)}',
     subtitle: buildGui == null
         ? null
@@ -245,6 +251,15 @@ Future<ProcessLog?> _work(
   );
   return guiResult;
 }
+
+/// Whether the command about to run is going to speak a protocol on stdout.
+///
+/// A prediction, like [_willBuildGui], and wrong in only one harmless
+/// direction: narrating to stderr for a command that did not need it costs a
+/// human nothing, where narrating to stdout for one that did costs it the
+/// connection.
+bool _ownsStdout(List<String> arguments) =>
+    arguments.firstWhere((a) => !a.startsWith('-'), orElse: () => '') == 'mcp';
 
 /// Whether the command about to run is going to want a built GUI.
 ///

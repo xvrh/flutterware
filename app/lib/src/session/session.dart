@@ -142,6 +142,7 @@ class Session {
     PluginCoreRegistry? registry,
     FlutterSdkPath? flutterSdk,
     Directory? appToolDirectory,
+    LogClient? logger,
   }) async {
     var root = findRepoRoot(start.path);
     if (root == null) {
@@ -168,7 +169,9 @@ class Session {
           : manifest.packages,
       discovered: discoverPackages(root),
       appContext: AppContext(
-        logger: LogClient.print(),
+        // Defaults to stdout because every surface but one is a human reading
+        // a terminal. MCP is the one, and passes its own.
+        logger: logger ?? LogClient.print(),
         // The GUI's shell resolves this too, and both feed the same
         // [DaemonConfig.forPackage] — which is what stops `fw` and a panel
         // starting two daemons for one package.
