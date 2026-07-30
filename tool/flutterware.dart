@@ -5,8 +5,10 @@ import 'package:flutterware/plugins.dart';
 ///
 /// There is exactly one config, here at the repo root: `examples/example` is a
 /// workspace *member*, so it is a package below, not a project of its own.
-/// `.new(...)` is the dot shorthand; it needs an SDK constraint of 3.10+, and
-/// the explicit `DependenciesPackage(...)` form is identical otherwise.
+/// `.new(...)` is the dot shorthand for a package entry, and needs an SDK
+/// constraint of 3.10+; the explicit `UiCatalogPackage(...)` form is identical
+/// otherwise. It only works inside a list literal, where the context type is
+/// the entry — `.each(...)` is handed a `List`, so it stays spelled out.
 const root = Pkg('.', tags: ['lib']);
 const app = Pkg('app', tags: ['gui']);
 const example = Pkg('examples/example', tags: ['sample']);
@@ -22,12 +24,12 @@ void main() => Flutterware.configure((fw) {
       packages: [
         // flutterware's own demos sit beside the harness that renders them
         // rather than in `demo/`, because they exist to exercise the catalog.
-        UiCatalogPackage(app, entrypoint: 'tool/catalog'),
-        UiCatalogPackage(example),
+        .new(app, entrypoint: 'tool/catalog'),
+        .new(example),
       ],
     ),
   );
   // `example` only. `root` is a library and `app` is this GUI — neither has a
   // native splash to resolve, which is why `NativeSplash` offers no `each`.
-  fw.use(NativeSplash(packages: [NativeSplashPackage(example)]));
+  fw.use(NativeSplash(packages: [.new(example)]));
 });

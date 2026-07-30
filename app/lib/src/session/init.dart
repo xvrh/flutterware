@@ -163,21 +163,23 @@ class ProjectInit {
     file.writeAsStringSync('''
 import 'package:flutterware/plugins.dart';
 
-/// Which tools this project gets, and what they work on.
-///
-/// Run `fw status` to see what they say, and `fw actions` for what they can
-/// do. Every plugin listed here is available from the GUI, the CLI and MCP —
-/// they are three renderings of this file.
+// Which tools this project gets, and what they work on.
+//
+// Run `fw status` to see what they say, and `fw actions` for what they can do.
+// Every plugin listed here is available from the GUI, the CLI and MCP — they
+// are three renderings of this file.
+
+// One Pkg per package in the repo; the default is the single package here.
+const app = Pkg('.');
+
 void main() => Flutterware.configure((fw) {
-  // Add a Pkg for each package in the repo; the default is the one package
-  // here. `fw status` lists what it found.
-  fw.packages([const Pkg('.')]);
+  fw.packages([app]);
 
-  fw.use(Dependencies(packages: DependenciesPackage.each([const Pkg('.')])));
+  fw.use(Dependencies(packages: [.new(app)]));
 
-  // Renders the widgets you have annotated with `@Demo`, in an embedded
-  // engine. `fw run ui_catalog entries` lists them.
-  fw.use(UiCatalog(packages: [UiCatalogPackage(const Pkg('.'))]));
+  // Renders the widgets you have annotated with `@Demo`.
+  // `fw run ui_catalog entries` lists them.
+  fw.use(UiCatalog(packages: [.new(app)]));
 });
 ''');
     return true;
