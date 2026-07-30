@@ -2124,6 +2124,13 @@ final resultShapes = <String, ResultShape>{
           ],
         },
       },
+      <String, Object?>{
+        'name': 'axes',
+        'type': 'Map<String, String>',
+        'optional': true,
+        'doc':
+            'The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.',
+      },
     ],
   }),
   'ScenarioRunStep': ResultShape.fromJson(<String, Object?>{

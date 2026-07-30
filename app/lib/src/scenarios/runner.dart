@@ -10,6 +10,7 @@ import '../embedder/flutter_cache.dart';
 import '../embedder/frontend_server.dart';
 import '../embedder/guest_vm_service.dart';
 import '../embedder/source_invalidator.dart';
+import 'axes.dart';
 import 'discovery.dart';
 import 'harness_entrypoint.dart';
 
@@ -334,12 +335,14 @@ class ScenarioRunner {
 
   /// Runs scenarios — all of them, one file's, or one — writing each step's
   /// PNG and tree under [outDir] and returning the harness's report verbatim.
+  /// [axes] is applied for the whole request and reset after it.
   ///
   /// A warm runner refreshes first, so what runs is always what is on disk.
   Future<Map<String, Object?>> run({
     required String outDir,
     String? file,
     String? scenario,
+    ScenarioAxes axes = const ScenarioAxes(),
   }) => _exclusive(() async {
     var wasWarm = _starting != null;
     await start();
@@ -347,7 +350,12 @@ class ScenarioRunner {
     Directory(outDir).createSync(recursive: true);
     var response = await _vm!.requireExtension(
       'ext.flutterware.scenarios.run',
-      args: {'out': outDir, 'file': ?file, 'scenario': ?scenario},
+      args: {
+        'out': outDir,
+        'file': ?file,
+        'scenario': ?scenario,
+        ...axes.harnessArgs(),
+      },
     );
     if (response!['error'] case String error) {
       throw StateError('the harness failed:\n$error\n${response['stack']}');

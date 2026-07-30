@@ -7,6 +7,8 @@ import 'package:flutterware/plugins.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../../catalog/devices.dart';
+import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/runner.dart';
 import '../plugin_core.dart';
@@ -24,12 +26,18 @@ const scenariosPluginId = 'flutterware.scenarios';
 class ScenarioPanelRun {
   ScenarioPanelRun({
     required this.running,
+    required this.axes,
     this.outcome,
     this.error,
     this.output,
   });
 
   final bool running;
+
+  /// The axis assignment of the latest *attempt* — not of [outcome], which a
+  /// failed re-run keeps from before. Recorded on failure too, so the page
+  /// can see "these axes were tried" and not retry them in a loop.
+  final ScenarioAxes axes;
 
   /// The last completed outcome — kept while a re-run is in flight and kept
   /// through a failed one, so the page never blanks what it was showing.
@@ -140,22 +148,25 @@ class ScenariosCore extends PluginCore {
     String package, {
     required String file,
     required String scenario,
+    ScenarioAxes axes = const ScenarioAxes(),
   }) {
     var key = (package, file, scenario);
     var previous = _panelRuns[key];
     if (previous?.running ?? false) return;
     _panelRuns[key] = ScenarioPanelRun(
       running: true,
+      axes: axes,
       outcome: previous?.outcome,
       output: previous?.output,
     );
     notifyChanged();
-    unawaited(_panelRun(key, previous));
+    unawaited(_panelRun(key, previous, axes));
   }
 
   Future<void> _panelRun(
     (String, String, String) key,
     ScenarioPanelRun? previous,
+    ScenarioAxes axes,
   ) async {
     var (package, file, scenario) = key;
     var packageRoot = host.workspace.packageFor(package).directory.path;
@@ -169,13 +180,14 @@ class ScenariosCore extends PluginCore {
     try {
       var report = await _runnerFor(
         package,
-      ).run(outDir: outDir, file: file, scenario: scenario);
-      var outcome = _describeRun(package, outDir, report).scenarios
+      ).run(outDir: outDir, file: file, scenario: scenario, axes: axes);
+      var outcome = _describeRun(package, outDir, report, axes: axes).scenarios
           .where((s) => s.file == file && s.name == scenario)
           .firstOrNull;
       if (outcome == null) {
         _panelRuns[key] = ScenarioPanelRun(
           running: false,
+          axes: axes,
           outcome: previous?.outcome,
           output: previous?.output,
           error:
@@ -186,6 +198,7 @@ class ScenariosCore extends PluginCore {
       }
       _panelRuns[key] = ScenarioPanelRun(
         running: false,
+        axes: axes,
         outcome: outcome,
         output: outDir,
       );
@@ -202,6 +215,7 @@ class ScenariosCore extends PluginCore {
     } catch (error) {
       _panelRuns[key] = ScenarioPanelRun(
         running: false,
+        axes: axes,
         outcome: previous?.outcome,
         output: previous?.output,
         error: '$error',
@@ -303,10 +317,106 @@ class ScenariosCore extends PluginCore {
                   'Where step artifacts are written; a fresh directory under '
                   "the package's build/ when omitted",
             ),
+            // The axes. Declared because they change the pixels, and anything
+            // that changes the pixels is recorded on the artifact's address.
+            ActionParameter(
+              'device',
+              'Device',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  'Run as a device: its screen, its pixel ratio, its safe '
+                  'areas and its platform, so the app reads the phone from '
+                  '`MediaQuery`. Omitted means the test default surface. The '
+                  'same vocabulary the UI catalog frames with.',
+              options: [
+                for (var device in catalogDevices)
+                  ActionOption(device.id, label: device.label),
+              ],
+            ),
+            const ActionParameter(
+              'language',
+              'Language',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'A locale tag — `fr`, `fr-CA` — applied as the platform '
+                  'locale for the whole run',
+            ),
+            const ActionParameter(
+              'text-scale',
+              'Text scale',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'The platform text scale factor — `1.3` is a common '
+                  'accessibility setting',
+            ),
+            const ActionParameter(
+              'brightness',
+              'Brightness',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'The platform brightness the app sees',
+              options: [ActionOption('light'), ActionOption('dark')],
+            ),
           ],
         ),
       ],
       view: _view(),
+    );
+  }
+
+  /// The request's axis assignment, validated. Refused rather than
+  /// approximated — a device this build does not know must fail loudly,
+  /// because silently running at the default surface produces a picture that
+  /// is wrong without looking wrong.
+  static ScenarioAxes _axesFrom(Map<String, Object?> arguments) {
+    var device = arguments['device'];
+    if (device != null && (device is! String || deviceById(device) == null)) {
+      throw ArgumentError.value(
+        device,
+        'device',
+        'no such device. Accepted: '
+            '${[for (var d in catalogDevices) d.id].join(', ')}',
+      );
+    }
+    var language = arguments['language'];
+    if (language != null &&
+        (language is! String ||
+            !RegExp(
+              r'^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})?$',
+            ).hasMatch(language))) {
+      throw ArgumentError.value(
+        language,
+        'language',
+        'not a locale tag — expected e.g. `fr` or `fr-CA`',
+      );
+    }
+    double? textScale;
+    if (arguments['text-scale'] case var raw?) {
+      textScale = switch (raw) {
+        num value => value.toDouble(),
+        String value => double.tryParse(value),
+        _ => null,
+      };
+      if (textScale == null) {
+        throw ArgumentError.value(raw, 'text-scale', 'not a number');
+      }
+    }
+    var brightness = arguments['brightness'];
+    if (brightness != null && brightness != 'light' && brightness != 'dark') {
+      throw ArgumentError.value(
+        brightness,
+        'brightness',
+        'accepted: light, dark',
+      );
+    }
+    return ScenarioAxes(
+      device: device as String?,
+      language: language as String?,
+      textScale: textScale,
+      brightness: brightness as String?,
     );
   }
 
@@ -458,6 +568,7 @@ class ScenariosCore extends PluginCore {
       );
     }
     var output = arguments['output'] as String?;
+    var axes = _axesFrom(arguments);
 
     var results = <ScenarioRunPackage>[];
     for (var path in paths) {
@@ -474,15 +585,18 @@ class ScenariosCore extends PluginCore {
       try {
         var report = await _runnerFor(
           path,
-        ).run(outDir: outDir, file: file, scenario: scenario);
-        results.add(_describeRun(path, outDir, report));
+        ).run(outDir: outDir, file: file, scenario: scenario, axes: axes);
+        results.add(_describeRun(path, outDir, report, axes: axes));
       } catch (error) {
         results.add(
           ScenarioRunPackage(path: path, output: outDir, error: '$error'),
         );
       }
     }
-    return ScenarioRunResult(packages: results);
+    return ScenarioRunResult(
+      packages: results,
+      axes: axes.isEmpty ? null : axes.toParams(),
+    );
   }
 
   ScenarioRunner _runnerFor(String path) => _runners.putIfAbsent(
@@ -505,12 +619,14 @@ class ScenariosCore extends PluginCore {
       _runners[path] = runner;
 
   /// The harness's report, in the declared result shape and with each step
-  /// given its `fw://` address.
+  /// given its `fw://` address — carrying [axes] as query parameters, since
+  /// the picture depends on them.
   ScenarioRunPackage _describeRun(
     String path,
     String outDir,
-    Map<String, Object?> report,
-  ) {
+    Map<String, Object?> report, {
+    ScenarioAxes axes = const ScenarioAxes(),
+  }) {
     return ScenarioRunPackage(
       path: path,
       output: outDir,
@@ -542,6 +658,7 @@ class ScenariosCore extends PluginCore {
                       file: outcome['file']! as String,
                       scenario: outcome['name']! as String,
                     ),
+                    axes: axes.toParams(),
                   ).child('${step['index']}').toString(),
                 ),
             ],

@@ -31,6 +31,7 @@ Map<String, dynamic> _$ScenarioListEntryToJson(ScenarioListEntry instance) =>
 Map<String, dynamic> _$ScenarioRunResultToJson(ScenarioRunResult instance) =>
     <String, dynamic>{
       'packages': instance.packages.map((e) => e.toJson()).toList(),
+      'axes': ?instance.axes,
     };
 
 Map<String, dynamic> _$ScenarioRunPackageToJson(ScenarioRunPackage instance) =>

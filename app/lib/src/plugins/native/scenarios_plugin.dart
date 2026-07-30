@@ -4,7 +4,10 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
 import '../../address/address_scope.dart';
+import '../../catalog/devices.dart';
+import '../../scenarios/axes.dart';
 import '../../ui/empty_state.dart';
+import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../native_plugin.dart';
@@ -78,6 +81,25 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
       );
     }
 
+    // The axes ride the address as plain parameters, above the segments —
+    // pick French and an iPhone once, and every scenario you open runs that
+    // way. An unknown device is reported by the page, not repaired here.
+    var axes = ScenarioAxes(
+      device: switch (AddressScope.param(context, 'device')) {
+        var id? when isDeviceId(id) && id != fitDeviceId => id,
+        _ => null,
+      },
+      language: AddressScope.param(context, 'language'),
+      textScale: double.tryParse(
+        AddressScope.param(context, 'text-scale') ?? '',
+      ),
+      brightness: switch (AddressScope.param(context, 'brightness')) {
+        'light' => 'light',
+        'dark' => 'dark',
+        _ => null,
+      },
+    );
+
     // The plugin already relays core.changes as ChangeNotifier notifications.
     return ListenableBuilder(
       listenable: widget.plugin,
@@ -89,6 +111,7 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
             file: file,
             scenario: scenario,
             step: place.step,
+            axes: axes,
             key: ValueKey('${place.package}/$file#$scenario'),
           );
         }
@@ -164,6 +187,7 @@ class _ScenarioPage extends StatefulWidget {
     this.package, {
     required this.file,
     required this.scenario,
+    required this.axes,
     this.step,
     super.key,
   });
@@ -172,6 +196,9 @@ class _ScenarioPage extends StatefulWidget {
   final String package;
   final String file;
   final String scenario;
+
+  /// The axis assignment the address asks for.
+  final ScenarioAxes axes;
 
   /// The step the address selects, or null for the run's last step.
   final int? step;
@@ -191,12 +218,28 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     widget.package,
     file: widget.file,
     scenario: widget.scenario,
+    axes: widget.axes,
   );
+
+  /// Runs when nothing has, and re-runs when the settled state was made under
+  /// different axes than the address now asks for — which is how an axis
+  /// picked in the toolbar becomes a fresh run. Compared against the last
+  /// *attempt*'s axes, so a failure is not retried in a loop.
+  void _maybeRun() {
+    var run = _run;
+    if (run == null || (!run.running && run.axes != widget.axes)) _start();
+  }
 
   @override
   void initState() {
     super.initState();
-    if (_run == null) _start();
+    _maybeRun();
+  }
+
+  @override
+  void didUpdateWidget(_ScenarioPage old) {
+    super.didUpdateWidget(old);
+    _maybeRun();
   }
 
   void _selectStep(ScenarioRunStep step) {
@@ -217,7 +260,16 @@ class _ScenarioPageState extends State<_ScenarioPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _header(context, run),
+        _AxesBar(axes: widget.axes),
         const Divider(height: 1),
+        // Said out loud rather than repaired, with the accepted values — the
+        // reader is often an agent that guessed.
+        if (unknownDeviceIn(AddressScope.param(context, 'device'))
+            case var device?)
+          _ErrorBanner(
+            'No device "$device". Accepted: '
+            '${[for (var d in catalogDevices) d.id].join(', ')}.',
+          ),
         Expanded(child: _body(context, run)),
       ],
     );
@@ -474,6 +526,238 @@ class _StepCard extends StatelessWidget {
                 File(step.png),
                 fit: BoxFit.contain,
                 filterQuality: FilterQuality.medium,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The axis assignment, as controls: device, language, text scale,
+/// brightness. **Every control writes the address and holds nothing** — the
+/// page notices the address moved and re-runs, so a picked axis and a pasted
+/// `?device=` link are the same code path.
+///
+/// Plain parameters, deliberately above the segments' lifetime: pick French
+/// once and every scenario you open runs French, exactly like the catalog's
+/// device framing.
+class _AxesBar extends StatelessWidget {
+  const _AxesBar({required this.axes});
+
+  final ScenarioAxes axes;
+
+  @override
+  Widget build(BuildContext context) {
+    var device = axes.device == null ? null : deviceById(axes.device!);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        FwSpacing.lg,
+        0,
+        FwSpacing.lg,
+        FwSpacing.md,
+      ),
+      // A Wrap rather than a Row: four controls do not fit every panel width,
+      // and a second line beats a clipped one.
+      child: Wrap(
+        spacing: FwSpacing.md,
+        runSpacing: FwSpacing.xs,
+        children: [
+          Menu(
+            entries: [
+              MenuItem(
+                'Default surface',
+                onSelected: () =>
+                    AddressScope.write(context).setParam('device', null),
+              ),
+              for (var group in {for (var d in catalogDevices) d.group}) ...[
+                MenuHeader(group),
+                for (var d in catalogDevices.where((d) => d.group == group))
+                  MenuItem(
+                    d.label,
+                    shortcut: describeDevice(d),
+                    onSelected: () =>
+                        AddressScope.write(context).setParam('device', d.id),
+                  ),
+              ],
+            ],
+            builder: (context, controller) => _AxisChip(
+              label: 'Device',
+              value: device?.label ?? 'Default',
+              active: device != null,
+              onTap: controller.toggle,
+            ),
+          ),
+          _LanguageField(language: axes.language),
+          Menu(
+            entries: [
+              for (var (label, value) in [
+                ('Default', null),
+                ('0.85', '0.85'),
+                ('1.15', '1.15'),
+                ('1.3', '1.3'),
+                ('2', '2'),
+              ])
+                MenuItem(
+                  label,
+                  onSelected: () =>
+                      AddressScope.write(context).setParam('text-scale', value),
+                ),
+            ],
+            builder: (context, controller) => _AxisChip(
+              label: 'Text scale',
+              value: axes.textScale == null ? 'Default' : '${axes.textScale}',
+              active: axes.textScale != null,
+              onTap: controller.toggle,
+            ),
+          ),
+          Menu(
+            entries: [
+              for (var (label, value) in [
+                ('Default', null),
+                ('Light', 'light'),
+                ('Dark', 'dark'),
+              ])
+                MenuItem(
+                  label,
+                  onSelected: () =>
+                      AddressScope.write(context).setParam('brightness', value),
+                ),
+            ],
+            builder: (context, controller) => _AxisChip(
+              label: 'Brightness',
+              value: switch (axes.brightness) {
+                'dark' => 'Dark',
+                'light' => 'Light',
+                _ => 'Default',
+              },
+              active: axes.brightness != null,
+              onTap: controller.toggle,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One axis as a compact dropdown trigger. Accent-tinted when set, so a page
+/// running under non-default axes says so at a glance.
+class _AxisChip extends StatelessWidget {
+  const _AxisChip({
+    required this.label,
+    required this.value,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tappable(
+      onTap: onTap,
+      child: Container(
+        height: 24,
+        padding: const EdgeInsets.only(left: FwSpacing.md, right: FwSpacing.xs),
+        decoration: BoxDecoration(
+          color: active ? colors.accentSoft : colors.bg,
+          border: Border.all(color: active ? colors.accent : colors.line),
+          borderRadius: BorderRadius.circular(context.radii.radius),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$label: ',
+              style: context.type.caption.copyWith(color: colors.mut2),
+            ),
+            Text(
+              value,
+              style: context.type.caption.copyWith(color: colors.ink),
+            ),
+            Icon(Icons.arrow_drop_down, size: 16, color: colors.mut2),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The language axis — free text, because a locale tag is one.
+///
+/// Owns a controller but no truth: the address is the value, the field is how
+/// you type one. An outside change (a pasted link, another control's write
+/// dropping params) lands via [didUpdateWidget] unless the user is mid-edit.
+class _LanguageField extends StatefulWidget {
+  const _LanguageField({required this.language});
+
+  final String? language;
+
+  @override
+  State<_LanguageField> createState() => _LanguageFieldState();
+}
+
+class _LanguageFieldState extends State<_LanguageField> {
+  late final _controller = TextEditingController(text: widget.language ?? '');
+  final _focus = FocusNode();
+
+  @override
+  void didUpdateWidget(_LanguageField old) {
+    super.didUpdateWidget(old);
+    if (old.language != widget.language && !_focus.hasFocus) {
+      _controller.text = widget.language ?? '';
+    }
+  }
+
+  void _submit(String value) {
+    var tag = value.trim();
+    AddressScope.write(context).setParam('language', tag.isEmpty ? null : tag);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var active = widget.language != null;
+    // The transparent Material is for the TextField, which refuses to build
+    // without one — the panel makes no promise about what it is mounted
+    // under.
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        height: 24,
+        width: 150,
+        padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
+        decoration: BoxDecoration(
+          color: active ? colors.accentSoft : colors.bg,
+          border: Border.all(color: active ? colors.accent : colors.line),
+          borderRadius: BorderRadius.circular(context.radii.radius),
+        ),
+        child: Row(
+          children: [
+            Text(
+              'Language: ',
+              style: context.type.caption.copyWith(color: colors.mut2),
+            ),
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                focusNode: _focus,
+                onSubmitted: _submit,
+                decoration: const InputDecoration.collapsed(hintText: '—'),
+                style: context.type.caption.copyWith(color: colors.ink),
               ),
             ),
           ],

@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:test_api/src/backend/declarer.dart';
 import 'package:test_api/src/backend/group.dart';
@@ -15,6 +16,7 @@ import 'package:test_api/src/backend/suite_platform.dart';
 import 'package:test_api/src/backend/test.dart';
 
 import '../inspect/guest_inspect.dart';
+import 'run_args.dart';
 import 'run_listener.dart';
 
 // ignore_for_file: implementation_imports
@@ -83,6 +85,7 @@ Future<void> _runHarness(Map<String, void Function()> scenarioMains) async {
         outDir: args['out']!,
         file: args['file'],
         scenario: args['scenario'],
+        runArgs: _parseRunArgs(args),
       );
       return developer.ServiceExtensionResponse.result(jsonEncode(report));
     } catch (error, stack) {
@@ -166,12 +169,69 @@ String _leafName(GroupEntry test, Group group) {
   return test.name.substring(group.name.length + 1);
 }
 
+/// The run request's axis assignment, from the flat string args the runner
+/// sends. Geometry arrives resolved — the device vocabulary (`iphone-se` →
+/// numbers) belongs to the host, and the harness applies numbers.
+ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
+  double? number(String key) {
+    var raw = args[key];
+    return raw == null ? null : double.parse(raw);
+  }
+
+  Size? size;
+  if ((number('width'), number('height')) case (var width?, var height?)) {
+    size = Size(width, height);
+  }
+  var insets = EdgeInsets.fromLTRB(
+    number('insetLeft') ?? 0,
+    number('insetTop') ?? 0,
+    number('insetRight') ?? 0,
+    number('insetBottom') ?? 0,
+  );
+  var locale = switch (args['language']) {
+    null => null,
+    var tag => () {
+      var parts = tag.split(RegExp('[-_]'));
+      return parts.length > 1 ? Locale(parts[0], parts[1]) : Locale(parts[0]);
+    }(),
+  };
+  var runArgs = ScenarioRunArgs(
+    size: size,
+    pixelRatio: number('pixelRatio'),
+    padding: insets == EdgeInsets.zero ? null : insets,
+    platform: switch (args['platform']?.toLowerCase()) {
+      null => null,
+      // By lowercase name: the wire says `ios`, the enum says `iOS`.
+      var name => TargetPlatform.values.firstWhere(
+        (p) => p.name.toLowerCase() == name,
+      ),
+    },
+    locale: locale,
+    textScale: number('textScale'),
+    brightness: switch (args['brightness']) {
+      null => null,
+      'dark' => Brightness.dark,
+      _ => Brightness.light,
+    },
+  );
+  var untouched =
+      runArgs.size == null &&
+      runArgs.pixelRatio == null &&
+      runArgs.padding == null &&
+      runArgs.platform == null &&
+      runArgs.locale == null &&
+      runArgs.textScale == null &&
+      runArgs.brightness == null;
+  return untouched ? null : runArgs;
+}
+
 Future<Map<String, Object?>> _run(
   Map<String, void Function()> scenarioMains, {
   required GuestInspector inspector,
   required String outDir,
   String? file,
   String? scenario,
+  ScenarioRunArgs? runArgs,
 }) async {
   var only = file != null && scenario != null ? '$file $scenario' : null;
   var mains = file == null
@@ -207,7 +267,14 @@ Future<Map<String, Object?>> _run(
   }
 
   var suite = Suite(root, SuitePlatform(Runtime.vm));
-  await walk(root, suite, null);
+  // Read by `scenario()` inside each test body, applied through the binding's
+  // own test values, reset by its tearDown — the run-args zone of the design.
+  scenarioRunArgs = runArgs;
+  try {
+    await walk(root, suite, null);
+  } finally {
+    scenarioRunArgs = null;
+  }
 
   return {'ms': watch.elapsedMilliseconds, 'scenarios': outcomes};
 }

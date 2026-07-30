@@ -9,6 +9,7 @@ import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/scenarios_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
+import 'package:flutterware_app/src/scenarios/axes.dart';
 import 'package:flutterware_app/src/scenarios/runner.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
@@ -58,6 +59,7 @@ void main() {
         worktree: 'wt',
         plugin: scenariosPluginId,
         segments: ['.', 'test', 'scenarios', 'a_test.dart', 'A'],
+        axes: {'device': 'iphone-se', 'brightness': 'dark'},
       ),
     );
     await tester.pumpWidget(
@@ -91,11 +93,27 @@ void main() {
     expect(address.value.segments.last, '0');
     expect(find.text('hello', findRichText: true), findsOneWidget);
 
+    // The address's axes went into the run, and the toolbar reads them back.
+    expect(
+      runner.seenAxes.single,
+      const ScenarioAxes(device: 'iphone-se', brightness: 'dark'),
+    );
+    expect(find.text('iPhone SE'), findsOneWidget);
+    expect(find.text('Dark'), findsOneWidget);
+
+    // An axis change is an address write, and the page notices and re-runs.
+    address.value = address.value.withAxes({'language': 'fr'});
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(runner.runs, 2);
+    expect(runner.seenAxes.last.language, 'fr');
+
     // Run again — the button is the same demand as opening was.
     await tester.tap(find.text('Run'));
     await tester.pump();
     await tester.pump();
-    expect(runner.runs, 2);
+    expect(runner.runs, 3);
   });
 }
 
@@ -104,14 +122,17 @@ class _FakeRunner extends ScenarioRunner {
     : super(packageRoot: '/none', directory: 'none', flutterSdkRoot: '/none');
 
   var runs = 0;
+  final seenAxes = <ScenarioAxes>[];
 
   @override
   Future<Map<String, Object?>> run({
     required String outDir,
     String? file,
     String? scenario,
+    ScenarioAxes axes = const ScenarioAxes(),
   }) async {
     runs++;
+    seenAxes.add(axes);
     Directory(outDir).createSync(recursive: true);
     Map<String, Object?> step(int index, String name, String text) {
       var png = '$outDir/$index-$name.png';

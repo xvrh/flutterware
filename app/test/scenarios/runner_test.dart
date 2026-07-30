@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware_app/src/scenarios/axes.dart';
 import 'package:flutterware_app/src/scenarios/harness_entrypoint.dart';
 import 'package:flutterware_app/src/scenarios/runner.dart';
 import 'package:path/path.dart' as p;
@@ -118,6 +119,46 @@ void main() {
       } finally {
         scratch.deleteSync();
       }
+
+      // Axes: the same warm harness, run as an iPhone in French, dark and
+      // scaled — then bare again, proving the reset is per-run, not
+      // per-process. The probe scenario prints what `MediaQuery` actually
+      // sees, so these assertions are the app's view, not the harness's.
+      var probe = File(
+        p.join(packageRoot, 'test', 'scenarios', 'axes_probe_test.dart'),
+      );
+      probe.writeAsStringSync(_probeSource);
+      try {
+        var framed = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/axes_probe_test.dart',
+          scenario: 'Probe',
+          axes: const ScenarioAxes(
+            device: 'iphone-se',
+            language: 'fr-CA',
+            textScale: 1.3,
+            brightness: 'dark',
+          ),
+        );
+        expect(
+          _scratchTexts(framed),
+          contains('375x667 2.0 20.0 fr-CA Brightness.dark 13.0'),
+        );
+        expect(_pngSize(_lastPng(framed)), (375, 667));
+
+        var bare = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/axes_probe_test.dart',
+          scenario: 'Probe',
+        );
+        var text = _scratchTexts(bare).single;
+        expect(text, startsWith('800x600 3.0 0.0'));
+        expect(text, contains('Brightness.light'));
+        expect(text, endsWith('10.0'));
+        expect(_pngSize(_lastPng(bare)), (800, 600));
+      } finally {
+        probe.deleteSync();
+      }
     } finally {
       await runner.dispose();
       Directory(outDir).deleteSync(recursive: true);
@@ -177,6 +218,57 @@ void main() {
       const MaterialApp(home: Scaffold(body: Text('$label'))),
     );
     await s.screen('shot');
+  });
+}
+''';
+
+/// The last step's PNG path of a single-scenario run report.
+String _lastPng(Map<String, Object?> report) {
+  var steps = ((report['scenarios']! as List).single as Map)['steps']! as List;
+  return (steps.last as Map)['png']! as String;
+}
+
+/// Width and height from the PNG's IHDR chunk — no decoder needed.
+(int, int) _pngSize(String path) {
+  var bytes = File(path).readAsBytesSync();
+  int word(int offset) =>
+      (bytes[offset] << 24) |
+      (bytes[offset + 1] << 16) |
+      (bytes[offset + 2] << 8) |
+      bytes[offset + 3];
+  return (word(16), word(20));
+}
+
+/// Prints the app's own view of the axes: logical size, pixel ratio, the top
+/// safe area, the platform locale, brightness, and 10 through the text
+/// scaler.
+const _probeSource = r'''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Probe', (s) async {
+    await s.tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) {
+              var media = MediaQuery.of(context);
+              var locale = View.of(context).platformDispatcher.locale;
+              return Text(
+                '${media.size.width.round()}x${media.size.height.round()} '
+                '${media.devicePixelRatio} '
+                '${media.padding.top} '
+                '${locale.toLanguageTag()} '
+                '${media.platformBrightness} '
+                '${media.textScaler.scale(10)}',
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await s.screen('probe');
   });
 }
 ''';

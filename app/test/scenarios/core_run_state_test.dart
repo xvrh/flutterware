@@ -7,7 +7,9 @@ import 'package:flutterware/plugins.dart';
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/scenarios_core.dart';
+import 'package:flutterware_app/src/plugins/native/scenarios_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
+import 'package:flutterware_app/src/scenarios/axes.dart';
 import 'package:flutterware_app/src/scenarios/runner.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
@@ -126,6 +128,55 @@ void main() {
     await settled(subject);
     expect(runner.runs, 1);
   });
+
+  test('the run action carries its axes into the runner, the result and '
+      'every step address', () async {
+    var runner = _FakeRunner();
+    var subject = core(runner: runner);
+    var result =
+        (await subject.invoke(
+              'run',
+              arguments: {
+                'package': '.',
+                'file': 'test/scenarios/a_test.dart',
+                'scenario': 'A',
+                'device': 'iphone-se',
+                'language': 'fr-CA',
+                'text-scale': '1.3',
+                'brightness': 'dark',
+              },
+            ))!
+            as ScenarioRunResult;
+
+    expect(
+      runner.seenAxes.single,
+      const ScenarioAxes(
+        device: 'iphone-se',
+        language: 'fr-CA',
+        textScale: 1.3,
+        brightness: 'dark',
+      ),
+    );
+    expect(result.axes, {
+      'device': 'iphone-se',
+      'language': 'fr-CA',
+      'text-scale': '1.3',
+      'brightness': 'dark',
+    });
+    var address = result.packages.single.scenarios.single.steps.single.address;
+    expect(address, contains('device=iphone-se'));
+    expect(address, contains('brightness=dark'));
+  });
+
+  test('the run action refuses axes it does not know', () async {
+    var subject = core(runner: _FakeRunner());
+    Future<Object?> run(Map<String, Object?> arguments) =>
+        subject.invoke('run', arguments: {'package': '.', ...arguments});
+    await expectLater(run({'device': 'iphone-99'}), throwsArgumentError);
+    await expectLater(run({'brightness': 'dim'}), throwsArgumentError);
+    await expectLater(run({'text-scale': 'big'}), throwsArgumentError);
+    await expectLater(run({'language': 'not a tag'}), throwsArgumentError);
+  });
 }
 
 class _FakeRunner extends ScenarioRunner {
@@ -134,6 +185,7 @@ class _FakeRunner extends ScenarioRunner {
 
   var runs = 0;
   String? failure;
+  final seenAxes = <ScenarioAxes>[];
 
   /// When set, [run] waits on it — so a test can observe the running state.
   Completer<void>? gate;
@@ -143,8 +195,10 @@ class _FakeRunner extends ScenarioRunner {
     required String outDir,
     String? file,
     String? scenario,
+    ScenarioAxes axes = const ScenarioAxes(),
   }) async {
     runs++;
+    seenAxes.add(axes);
     if (gate case var gate?) await gate.future;
     if (failure case var failure?) throw StateError(failure);
     return {

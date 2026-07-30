@@ -81,9 +81,15 @@ class ScenarioListEntry {
   createFactory: false,
 )
 class ScenarioRunResult implements PluginResult {
-  ScenarioRunResult({required this.packages});
+  ScenarioRunResult({required this.packages, this.axes});
 
   final List<ScenarioRunPackage> packages;
+
+  /// The axis assignment the whole request ran under —
+  /// `{device: iphone-se, language: fr}` — or null for the test defaults.
+  /// Recorded because a screenshot is under-specified without it; the same
+  /// values ride every step's address as query parameters.
+  final Map<String, String>? axes;
 
   @override
   Map<String, Object?> toJson() => _$ScenarioRunResultToJson(this);

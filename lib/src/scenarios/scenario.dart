@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meta/meta.dart';
 
+import 'run_args.dart';
 import 'run_listener.dart';
 
 /// A scenario: a widget test with per-step screenshots.
@@ -30,8 +32,65 @@ void scenario(
   Shots shots = Shots.auto,
 }) {
   testWidgets(description, (tester) async {
-    await body(ScenarioTester._(tester, description, shots: shots));
+    var restore = _applyRunArgs(tester);
+    try {
+      await body(ScenarioTester._(tester, description, shots: shots));
+    } finally {
+      restore?.call();
+    }
   });
+}
+
+/// Applies the harness's axis assignment through the test binding's own test
+/// values, exactly as a hand-written widget test would — so a scenario under
+/// an axis and a test that sets `tester.view.physicalSize` itself are the
+/// same machinery, and bare `flutter test` (null args) pays nothing.
+///
+/// Returns the reset, which the caller must run **inside the test body** — a
+/// tearDown is too late: the binding verifies its foundation debug variables
+/// (`debugDefaultTargetPlatformOverride` among them) at the end of the body,
+/// before tearDowns run.
+VoidCallback? _applyRunArgs(WidgetTester tester) {
+  var args = scenarioRunArgs;
+  if (args == null) return null;
+
+  var view = tester.view;
+  var dispatcher = tester.platformDispatcher;
+
+  var ratio = args.pixelRatio ?? view.devicePixelRatio;
+  if (args.pixelRatio != null) view.devicePixelRatio = ratio;
+  if (args.size case var size?) view.physicalSize = size * ratio;
+  if (args.padding case var padding?) {
+    // FakeViewPadding speaks physical pixels; the args speak logical, like
+    // the device table they come from.
+    var fake = FakeViewPadding(
+      left: padding.left * ratio,
+      top: padding.top * ratio,
+      right: padding.right * ratio,
+      bottom: padding.bottom * ratio,
+    );
+    view.padding = fake;
+    view.viewPadding = fake;
+  }
+  if (args.platform case var platform?) {
+    debugDefaultTargetPlatformOverride = platform;
+  }
+  if (args.locale case var locale?) {
+    dispatcher.localeTestValue = locale;
+    dispatcher.localesTestValue = [locale];
+  }
+  if (args.textScale case var scale?) {
+    dispatcher.textScaleFactorTestValue = scale;
+  }
+  if (args.brightness case var brightness?) {
+    dispatcher.platformBrightnessTestValue = brightness;
+  }
+
+  return () {
+    debugDefaultTargetPlatformOverride = null;
+    view.reset();
+    dispatcher.clearAllTestValues();
+  };
 }
 
 /// Whether a scenario captures a screenshot after every high-level action, or

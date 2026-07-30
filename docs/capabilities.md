@@ -315,7 +315,7 @@ fw run server sql [--name=…] [--top=…]
 Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured just before it.
 
 ```sh
-fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…]
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--text-scale=…] [--brightness=…]
 ```
 
 Returns `ScenarioRunResult`:
@@ -343,6 +343,7 @@ packages: List<ScenarioRunPackage>
       error: String
       stack: String?
   error: String?   # Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.
+axes: Map<String, String>?   # The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.
 ```
 
 | parameter | kind | required | default | |
@@ -351,6 +352,10 @@ packages: List<ScenarioRunPackage>
 | `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it |
 | `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
 | `output` | string | no | — | Where step artifacts are written; a fresh directory under the package's build/ when omitted |
+| `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted means the test default surface. The same vocabulary the UI catalog frames with. |
+| `language` | string | no | — | A locale tag — `fr`, `fr-CA` — applied as the platform locale for the whole run |
+| `text-scale` | string | no | — | The platform text scale factor — `1.3` is a common accessibility setting |
+| `brightness` | choice | no | — | The platform brightness the app sees |
 
 
 ### `flutterware.splash`
