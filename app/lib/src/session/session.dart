@@ -45,7 +45,9 @@ class Session {
     this.workspace,
     List<PluginCore> cores,
     this._ownsWorkspace,
-  ) : _cores = cores;
+    PluginManifest manifest,
+  ) : _cores = cores,
+      _manifest = manifest;
 
   /// Builds a session over pieces the caller has already resolved.
   ///
@@ -66,6 +68,7 @@ class Session {
     workspace,
     (registry ?? defaultCoreRegistry()).resolve(manifest, worktree, workspace),
     false,
+    manifest,
   );
 
   /// Whether disposing this session also disposes the workspace under it.
@@ -122,6 +125,23 @@ class Session {
         ? Directory(candidate)
         : null;
   }
+
+  /// The manifest [cores] were built from.
+  ///
+  /// **Here, not beside the session in whatever built it.** These cores *are*
+  /// this manifest resolved; a copy kept elsewhere has to be written, undone
+  /// and cleared in step with them, and the reload path had exactly that —
+  /// a write in one method undone two statements later in another.
+  PluginManifest get manifest => _manifest;
+  PluginManifest _manifest;
+
+  /// What [reconcile] would do, so a caller can decide *whether* to reconcile.
+  ///
+  /// A changed `packages:` is the caller's problem rather than this object's:
+  /// it invalidates the [Workspace] every host holds, which the session does
+  /// not own.
+  ManifestDiff diff(PluginManifest next) =>
+      ManifestDiff.between(_manifest, next);
 
   /// Opens the session for whichever repo [start] sits in.
   ///
@@ -183,6 +203,7 @@ class Session {
         workspace,
       ),
       true,
+      manifest,
     );
   }
 
@@ -197,8 +218,8 @@ class Session {
     return found;
   }
 
-  /// Swaps [cores] to match [manifest], disposing and rebuilding only what
-  /// [diff] says moved, and returns the ids that were rebuilt.
+  /// Swaps [cores] to match [manifest], rebuilding only what moved, and returns
+  /// the diff it derived along with the ids it built.
   ///
   /// **The correctness bias lives here.** An affected plugin is disposed and
   /// reconstructed — never reconfigured in place — because that is the only
@@ -213,27 +234,36 @@ class Session {
   /// behaviour under them" rule as [dispose], kept in one place rather than
   /// restated in two.
   ///
-  /// Never called for a diff that `needsFullRebuild`: a new [Workspace] makes
+  /// Never called when [diff] says `needsFullRebuild`: a new [Workspace] makes
   /// every host stale, so there is nothing to reuse and the caller builds a
   /// fresh session instead.
+  ///
   /// [prepare] sees the new core list while **nothing has been swapped or
   /// disposed yet**, so a renderer can build whatever it draws over those cores
   /// and throw safely. It is the other half of [onRelease]: together they let a
   /// caller keep its own list in step with [cores] through a failure, which a
   /// caller building afterwards cannot do — by then the old cores are gone and
   /// there is nothing to roll back to.
-  List<String> reconcile(
-    PluginManifest manifest,
-    ManifestDiff diff, {
+  ({ManifestDiff diff, List<String> rebuilt}) reconcile(
+    PluginManifest manifest, {
     void Function(List<PluginCore> next)? prepare,
     void Function(PluginCore core)? onRelease,
     PluginCoreRegistry? registry,
   }) {
+    // Derived here rather than accepted. A manifest and a diff passed together
+    // are two arguments that must agree about a third thing — this session's
+    // current manifest — and nothing could check it: a mismatched pair produced
+    // a silently wrong graph and then recorded itself as the new baseline.
+    // Recomputing costs 0.02ms measured.
+    var diff = this.diff(manifest);
     assert(
       !diff.needsFullRebuild,
       'a changed packages list invalidates every host; rebuild the session',
     );
-    if (diff.isEmpty) return const [];
+    if (diff.isEmpty) {
+      _manifest = manifest;
+      return (diff: diff, rebuilt: const []);
+    }
 
     var affected = diff.affected.toSet();
     var surviving = {
@@ -275,16 +305,20 @@ class Session {
         if (!kept.contains(core)) core,
     ];
     _cores = next;
+    _manifest = manifest;
 
     for (var core in released) {
       onRelease?.call(core);
       core.dispose();
     }
 
-    return [
-      for (var core in next)
-        if (!surviving.containsKey(core.id)) core.id,
-    ];
+    return (
+      diff: diff,
+      rebuilt: [
+        for (var core in next)
+          if (!surviving.containsKey(core.id)) core.id,
+      ],
+    );
   }
 
   PluginCore? coreById(String id) =>

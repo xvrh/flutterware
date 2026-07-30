@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -25,9 +26,12 @@ const _manifestJson =
     '{"id":"a.two","label":"Two"}]}';
 
 var _disposedIds = <String>[];
+var _builtIds = <String>[];
 
 class _FakeCore extends PluginCore {
-  _FakeCore(super.host, {this.guards = const []});
+  _FakeCore(super.host, {this.guards = const []}) {
+    _builtIds.add('${host.worktree.path}:${host.id}');
+  }
 
   final List<Guard> guards;
 
@@ -92,9 +96,16 @@ class _StubLoader implements ManifestLoader {
   int exitCode;
   var loads = 0;
 
+  /// Held open to keep a load in flight while another is started.
+  Completer<void>? gate;
+
   @override
   Future<PluginManifest?> load(String worktreePath) async {
     loads++;
+    if (gate case var gate?) {
+      this.gate = null;
+      await gate.future;
+    }
     if (exitCode != 0) {
       throw ManifestLoadException('config failed', details: 'boom');
     }
@@ -122,6 +133,7 @@ class _StubLoader implements ManifestLoader {
 void main() {
   setUp(() {
     _disposedIds = <String>[];
+    _builtIds = <String>[];
     _currentListing = _listing;
   });
 
@@ -366,6 +378,61 @@ void main() {
     expect(load.outcome, ConfigLoadOutcome.built);
     expect(load.summary, 'opened, 2 plugins');
     expect(load.reasons, isEmpty, reason: 'nothing was lost to lose');
+  });
+
+  test('a superseded load does not commit its stale manifest', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var main = shell.selected!;
+
+    // Two reloads on the *same* open worktree, the first still running when the
+    // second is asked for. Close-and-reopen is caught by object identity
+    // instead — this is the case only the generation counter can decide.
+    var gate = Completer<void>();
+    _loader.gate = gate;
+    _loader.manifest = '{"version":1,"plugins":[{"id":"a.one","label":"One"}]}';
+    var first = shell.reloadConfig();
+
+    _loader.manifest = _manifestJson;
+    var second = shell.reloadConfig();
+    gate.complete();
+    await Future.wait([first, second]);
+
+    expect(
+      shell.sessionFor(main)!.plugins.map((pl) => pl.id),
+      ['a.one', 'a.two'],
+      reason: 'the later load wins, whichever finishes first',
+    );
+    expect(
+      shell.loadLog(main),
+      hasLength(2),
+      reason: 'and the superseded one records nothing',
+    );
+  });
+
+  test('a load whose tab was reopened underneath it builds nothing', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var main = shell.worktrees.first;
+
+    // The stale load holds the *old* per-worktree state, whose generation it
+    // still matches — only object identity can tell that the tab it belonged to
+    // is gone. Getting this wrong builds a whole session nobody can reach and
+    // nobody disposes, which is invisible except by counting.
+    var gate = Completer<void>();
+    _loader.gate = gate;
+    var stale = shell.reloadConfig();
+    shell.close(main);
+    await shell.open(main);
+    gate.complete();
+    await stale;
+
+    var live = shell.sessionFor(shell.worktrees.first)!.plugins.length;
+    expect(
+      _builtIds.length - _disposedIds.length,
+      live,
+      reason: 'every core built is either live or disposed — none orphaned',
+    );
   });
 
   test('closing forgets the reload history', () async {

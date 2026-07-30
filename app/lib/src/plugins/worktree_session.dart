@@ -88,20 +88,16 @@ class WorktreeSession extends ChangeNotifier {
   /// Ordering is [session]'s to enforce: `onRelease` disposes a panel before
   /// the core beneath it goes, which is the same rule [dispose] follows, stated
   /// once instead of twice.
-  List<String> reconcile(
-    PluginManifest manifest,
-    ManifestDiff diff, {
+  ({ManifestDiff diff, List<String> rebuilt}) reconcile(
+    PluginManifest manifest, {
     required PluginRegistry registry,
     PluginCoreRegistry? coreRegistry,
   }) {
-    if (diff.isEmpty) return const [];
-
     var panels = {for (var plugin in _plugins) plugin.core: plugin};
     List<NativePlugin>? staged;
 
-    var rebuilt = session.reconcile(
+    var result = session.reconcile(
       manifest,
-      diff,
       registry: coreRegistry,
       // **Built before anything is disposed.** Building afterwards meant a panel
       // factory that throws left `session.cores` already swapped while
@@ -138,10 +134,12 @@ class WorktreeSession extends ChangeNotifier {
       },
     );
 
-    _plugins = staged!;
+    // Null only when the diff was empty and `prepare` never ran, in which case
+    // every core survived and the list is already right.
+    if (staged case var next?) _plugins = next;
 
     notifyListeners();
-    return rebuilt;
+    return result;
   }
 
   bool get isDisposed => _disposed;

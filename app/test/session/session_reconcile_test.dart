@@ -3,7 +3,6 @@ import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/context.dart';
-import 'package:flutterware_app/src/plugins/manifest_diff.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/session/session.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
@@ -63,13 +62,9 @@ void main() {
     var before = session.cores;
     _log = [];
 
-    var rebuilt = session.reconcile(
-      manifest,
-      ManifestDiff.between(manifest, manifest),
-      registry: _registry,
-    );
+    var rebuilt = session.reconcile(manifest, registry: _registry);
 
-    expect(rebuilt, isEmpty);
+    expect(rebuilt.rebuilt, isEmpty);
     expect(_log, isEmpty, reason: 'nothing built, nothing disposed');
     expect(identical(session.cores[0], before[0]), isTrue);
     expect(identical(session.cores[1], before[1]), isTrue);
@@ -97,13 +92,12 @@ void main() {
     var kept = session.cores[0];
     _log = [];
 
-    var rebuilt = session.reconcile(
-      after,
-      ManifestDiff.between(before, after),
-      registry: _registry,
-    );
+    var rebuilt = session.reconcile(after, registry: _registry);
 
-    expect(rebuilt, ['a.two']);
+    expect(rebuilt.rebuilt, ['a.two']);
+    expect(rebuilt.diff.changed, {
+      'a.two': ['dir'],
+    }, reason: 'the diff it acted on is the diff it reports');
     expect(_log, ['build a.two', 'dispose a.two']);
     expect(identical(session.cores[0], kept), isTrue);
     expect(session.cores[1].host.config, {'dir': 'unit'});
@@ -115,13 +109,10 @@ void main() {
     var session = _session(before);
     _log = [];
 
-    var rebuilt = session.reconcile(
-      after,
-      ManifestDiff.between(before, after),
-      registry: _registry,
-    );
+    var rebuilt = session.reconcile(after, registry: _registry);
 
-    expect(rebuilt, isEmpty, reason: 'nothing was built');
+    expect(rebuilt.rebuilt, isEmpty, reason: 'nothing was built');
+    expect(rebuilt.diff.removed, ['a.two']);
     expect(_log, ['dispose a.two']);
     expect(session.cores.map((c) => c.id), ['a.one']);
   });
@@ -133,13 +124,9 @@ void main() {
     var kept = session.cores[0];
     _log = [];
 
-    var rebuilt = session.reconcile(
-      after,
-      ManifestDiff.between(before, after),
-      registry: _registry,
-    );
+    var rebuilt = session.reconcile(after, registry: _registry);
 
-    expect(rebuilt, ['a.one']);
+    expect(rebuilt.rebuilt, ['a.one']);
     expect(_log, ['build a.one']);
     expect(session.cores.map((c) => c.id), ['a.one', 'a.two']);
     expect(identical(session.cores[1], kept), isTrue);
@@ -153,13 +140,9 @@ void main() {
     var two = session.cores[1];
     _log = [];
 
-    var rebuilt = session.reconcile(
-      after,
-      ManifestDiff.between(before, after),
-      registry: _registry,
-    );
+    var rebuilt = session.reconcile(after, registry: _registry);
 
-    expect(rebuilt, isEmpty);
+    expect(rebuilt.rebuilt, isEmpty);
     expect(_log, isEmpty);
     expect(identical(session.cores[0], two), isTrue);
     expect(identical(session.cores[1], one), isTrue);
@@ -173,7 +156,6 @@ void main() {
 
     session.reconcile(
       after,
-      ManifestDiff.between(before, after),
       registry: _registry,
       onRelease: (core) => _log.add('release ${core.id}'),
     );
@@ -191,7 +173,6 @@ void main() {
     expect(
       () => session.reconcile(
         after,
-        ManifestDiff.between(before, after),
         registry: PluginCoreRegistry({
           'a.one': _Core.new,
           'a.two': (host) => throw StateError('nope'),
@@ -203,6 +184,20 @@ void main() {
     expect(session.cores.map((c) => c.id), ['a.one']);
     expect(identical(session.cores[0], kept), isTrue);
     expect(_log, isEmpty, reason: 'nothing was disposed on the way out');
+  });
+
+  test('the session tracks the manifest its cores came from', () {
+    var before = _m([_one]);
+    var after = _m([_one, _two]);
+    var session = _session(before);
+    expect(session.manifest, same(before));
+
+    session.reconcile(after, registry: _registry);
+
+    // Held here rather than beside the session, so it cannot fall out of step
+    // with the cores it describes.
+    expect(session.manifest, same(after));
+    expect(session.diff(after).isEmpty, isTrue);
   });
 
   test('cores is unmodifiable to callers', () {
