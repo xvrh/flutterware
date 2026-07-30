@@ -185,6 +185,7 @@ class _FakeRunner extends ScenarioRunner {
     String? file,
     String? scenario,
     ScenarioAxes axes = const ScenarioAxes(),
+    double? captureScale,
   }) async {
     runs++;
     seenAxes.add(axes);

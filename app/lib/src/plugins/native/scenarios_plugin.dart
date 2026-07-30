@@ -389,18 +389,18 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   @override
   Widget build(BuildContext context) {
     var run = _run;
-    var outcome = run?.outcome;
     var device = run?.axes.device == null
         ? null
         : deviceById(run!.axes.device!);
 
     // The pushed page: a step, with its back button. Full page — the flow is
     // exactly one back-tap away, per the reference GUI.
-    if (widget.step != null && outcome != null) {
-      var step = outcome.steps.firstWhereOrNull((s) => s.index == widget.step);
+    var steps = run?.steps ?? const <ScenarioRunStep>[];
+    if (widget.step != null) {
+      var step = steps.firstWhereOrNull((s) => s.index == widget.step);
       if (step != null) {
         return ScenarioStepPage(
-          steps: outcome.steps,
+          steps: steps,
           step: step,
           device: device,
           onBack: _closeStep,
@@ -494,53 +494,57 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     ScenarioPanelRun? run,
     CatalogDevice? device,
   ) {
-    var outcome = run?.outcome;
-    if (outcome == null) {
-      if (run?.error case var error? when !(run?.running ?? false)) {
+    var steps = run?.steps ?? const <ScenarioRunStep>[];
+    var running = run?.running ?? false;
+
+    if (steps.isEmpty) {
+      if (run?.error case var error? when !running) {
         return _RunFailure(error);
       }
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const Gap(FwSpacing.lg),
-            // The runner narrates its cold start — "building the asset
-            // bundle" is a very different wait from a hung harness.
-            Text(
-              widget.core.runnerLogFor(widget.package) ??
-                  'starting the harness…',
-              style: context.type.bodyMuted,
-            ),
-          ],
-        ),
+      if (running || run == null) {
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const Gap(FwSpacing.lg),
+              // The runner narrates its cold start — "building the asset
+              // bundle" is a very different wait from a hung harness. Once
+              // the first step lands, the flow itself is the progress.
+              Text(
+                widget.core.runnerLogFor(widget.package) ??
+                    'starting the harness…',
+                style: context.type.bodyMuted,
+              ),
+            ],
+          ),
+        );
+      }
+      return const EmptyState(
+        icon: Icons.image_not_supported_outlined,
+        title: 'No steps captured',
+        message:
+            'The scenario ran without a screenshot — every tap and '
+            'screen() captures one unless Shots.manual turned that off.',
       );
     }
 
+    var outcome = run?.outcome;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (run?.error case var error?) _ErrorBanner(error),
-        for (var error in outcome.errors.take(1)) _ErrorBanner(error.error),
-        if (outcome.steps.isEmpty)
-          const Expanded(
-            child: EmptyState(
-              icon: Icons.image_not_supported_outlined,
-              title: 'No steps captured',
-              message:
-                  'The scenario ran without a screenshot — every tap and '
-                  'screen() captures one unless Shots.manual turned that off.',
-            ),
-          )
-        else
-          Expanded(
-            child: ScenarioFlowView(
-              steps: outcome.steps,
-              device: device,
-              onOpenStep: _openStep,
-              key: ValueKey(run?.output),
-            ),
+        if (outcome != null)
+          for (var error in outcome.errors.take(1)) _ErrorBanner(error.error),
+        // Drawn from the streamed steps: the flow starts filling in with the
+        // first capture, while the scenario is still running.
+        Expanded(
+          child: ScenarioFlowView(
+            steps: steps,
+            device: device,
+            onOpenStep: _openStep,
           ),
+        ),
       ],
     );
   }

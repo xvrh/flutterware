@@ -27,6 +27,7 @@ class ScenarioPanelRun {
   ScenarioPanelRun({
     required this.running,
     required this.axes,
+    this.steps = const [],
     this.outcome,
     this.error,
     this.output,
@@ -34,20 +35,28 @@ class ScenarioPanelRun {
 
   final bool running;
 
-  /// The axis assignment of the latest *attempt* — not of [outcome], which a
-  /// failed re-run keeps from before. Recorded on failure too, so the page
-  /// can see "these axes were tried" and not retry them in a loop.
+  /// The axis assignment of the latest *attempt*. Recorded on failure too,
+  /// so the page can see "these axes were tried" and not retry them in a
+  /// loop.
   final ScenarioAxes axes;
 
-  /// The last completed outcome — kept while a re-run is in flight and kept
-  /// through a failed one, so the page never blanks what it was showing.
+  /// The run's steps as the page draws them: **growing while the run
+  /// executes** — each one announced by the harness the moment its artifacts
+  /// hit disk — and the settled list afterwards. A failed run keeps what it
+  /// captured before dying, which is the frame just before the failure.
+  ///
+  /// Starting a run clears this: for a long scenario, an empty flow filling
+  /// in beats last run's pictures pretending to be this run's.
+  final List<ScenarioRunStep> steps;
+
+  /// The completed outcome of this attempt, or null while running (and after
+  /// a failed attempt — [steps] and [error] are what remain of one).
   final ScenarioRunOutcome? outcome;
 
-  /// What the last attempt died of, or null. Coexists with [outcome]: a
-  /// failed *re-run* keeps the previous result on screen under the complaint.
+  /// What the attempt died of, or null.
   final String? error;
 
-  /// The directory [outcome]'s artifacts live in.
+  /// The directory the artifacts live in.
   final String? output;
 }
 
@@ -169,14 +178,37 @@ class ScenariosCore extends PluginCore {
     var key = (package, file, scenario);
     var previous = _panelRuns[key];
     if (previous?.running ?? false) return;
-    _panelRuns[key] = ScenarioPanelRun(
-      running: true,
-      axes: axes,
-      outcome: previous?.outcome,
-      output: previous?.output,
-    );
+    // The immediate clear: the page shows *this* run filling in, never the
+    // previous run's pictures under this run's spinner.
+    _panelRuns[key] = ScenarioPanelRun(running: true, axes: axes);
     notifyChanged();
     unawaited(_panelRun(key, previous, axes));
+  }
+
+  /// One step, announced mid-run over the VM service — appended to the
+  /// running attempt's [ScenarioPanelRun.steps] as it lands.
+  void _onRunnerStep(String package, Map<String, Object?> event) {
+    if ((event['file'], event['scenario']) case (
+      String file,
+      String scenario,
+    )) {
+      var key = (package, file, scenario);
+      var state = _panelRuns[key];
+      if (state == null || !state.running) return;
+      var step = _stepFrom(
+        (event['step']! as Map).cast<String, dynamic>(),
+        package,
+        file: file,
+        scenario: scenario,
+        axes: state.axes,
+      );
+      _panelRuns[key] = ScenarioPanelRun(
+        running: true,
+        axes: state.axes,
+        steps: [...state.steps, step],
+      );
+      notifyChanged();
+    }
   }
 
   Future<void> _panelRun(
@@ -204,8 +236,7 @@ class ScenariosCore extends PluginCore {
         _panelRuns[key] = ScenarioPanelRun(
           running: false,
           axes: axes,
-          outcome: previous?.outcome,
-          output: previous?.output,
+          steps: _panelRuns[key]?.steps ?? const [],
           error:
               'The harness ran nothing named "$scenario" in $file — '
               'renamed since this page was opened?',
@@ -215,6 +246,7 @@ class ScenariosCore extends PluginCore {
       _panelRuns[key] = ScenarioPanelRun(
         running: false,
         axes: axes,
+        steps: outcome.steps,
         outcome: outcome,
         output: outDir,
       );
@@ -229,16 +261,32 @@ class ScenariosCore extends PluginCore {
         }
       }
     } catch (error) {
+      // The steps captured before the failure stay: the last one is the
+      // frame just before it died.
       _panelRuns[key] = ScenarioPanelRun(
         running: false,
         axes: axes,
-        outcome: previous?.outcome,
-        output: previous?.output,
+        steps: _panelRuns[key]?.steps ?? const [],
         error: '$error',
       );
     } finally {
       notifyChanged();
+      // The run compiled the suite as it is on disk, which is newer truth
+      // than the list pane's scan — catch the pane up.
+      _rescan(package);
     }
+  }
+
+  /// Replaces the cached scan — what [track] deliberately never does.
+  void _rescan(String path) {
+    var scanner = ScenarioScanner(
+      packageRoot: host.workspace.packageFor(path).directory.path,
+      directory: directoryFor(path),
+    );
+    _scans[path] = Isolate.run(scanner.scan)
+        .then<void>((result) => _results[path] = result)
+        .catchError((Object error) => _errors[path] = error)
+        .whenComplete(notifyChanged);
   }
 
   @override
@@ -402,6 +450,18 @@ class ScenariosCore extends PluginCore {
               required: false,
               description: 'The invert-colors accessibility switch',
               options: [ActionOption('true'), ActionOption('false')],
+            ),
+            const ActionParameter(
+              'capture-scale',
+              'Capture scale',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Screenshot pixels per logical pixel, 1 (the default) to '
+                  "4. The device's own ratio gives a true screenshot; 1 is "
+                  '~10× faster and smaller, which is what keeps a long '
+                  'FakeAsync run instantaneous. Not an axis: it changes the '
+                  'artifact, never what the app sees.',
             ),
           ],
         ),
@@ -621,6 +681,17 @@ class ScenariosCore extends PluginCore {
     }
     var output = arguments['output'] as String?;
     var axes = _axesFrom(arguments);
+    double? captureScale;
+    if (arguments['capture-scale'] case var raw?) {
+      captureScale = switch (raw) {
+        num value => value.toDouble(),
+        String value => double.tryParse(value),
+        _ => null,
+      };
+      if (captureScale == null || captureScale <= 0 || captureScale > 4) {
+        throw ArgumentError.value(raw, 'capture-scale', 'a number in (0, 4]');
+      }
+    }
 
     var results = <ScenarioRunPackage>[];
     for (var path in paths) {
@@ -635,9 +706,13 @@ class ScenariosCore extends PluginCore {
             '${DateTime.now().millisecondsSinceEpoch}',
           );
       try {
-        var report = await _runnerFor(
-          path,
-        ).run(outDir: outDir, file: file, scenario: scenario, axes: axes);
+        var report = await _runnerFor(path).run(
+          outDir: outDir,
+          file: file,
+          scenario: scenario,
+          axes: axes,
+          captureScale: captureScale,
+        );
         results.add(_describeRun(path, outDir, report, axes: axes));
       } catch (error) {
         results.add(
@@ -651,18 +726,23 @@ class ScenariosCore extends PluginCore {
     );
   }
 
-  ScenarioRunner _runnerFor(String path) => _runners.putIfAbsent(
-    path,
-    () => ScenarioRunner(
-      packageRoot: host.workspace.packageFor(path).directory.path,
-      directory: directoryFor(path),
-      flutterSdkRoot: host.workspace.flutterSdk.root,
-      onLog: (line) {
-        _runnerLogs[path] = line;
-        notifyChanged();
-      },
-    ),
-  );
+  ScenarioRunner _runnerFor(String path) {
+    var runner = _runners.putIfAbsent(
+      path,
+      () => ScenarioRunner(
+        packageRoot: host.workspace.packageFor(path).directory.path,
+        directory: directoryFor(path),
+        flutterSdkRoot: host.workspace.flutterSdk.root,
+        onLog: (line) {
+          _runnerLogs[path] = line;
+          notifyChanged();
+        },
+      ),
+    );
+    // (Re)attached on every ask, so an installed test runner streams too.
+    runner.onStep = (event) => _onRunnerStep(path, event);
+    return runner;
+  }
 
   /// Installs a runner for [path], so a test can drive the run-state machinery
   /// without a real `flutter_tester` behind it.
@@ -670,9 +750,34 @@ class ScenariosCore extends PluginCore {
   void debugInstallRunner(String path, ScenarioRunner runner) =>
       _runners[path] = runner;
 
-  /// The harness's report, in the declared result shape and with each step
-  /// given its `fw://` address — carrying [axes] as query parameters, since
-  /// the picture depends on them.
+  /// One step of the harness's vocabulary — the same map whether it arrived
+  /// in the final report or as a mid-run event — with its `fw://` address,
+  /// carrying [axes] as query parameters since the picture depends on them.
+  ScenarioRunStep _stepFrom(
+    Map<String, dynamic> step,
+    String path, {
+    required String file,
+    required String scenario,
+    required ScenarioAxes axes,
+  }) {
+    return ScenarioRunStep(
+      index: step['index']! as int,
+      name: step['name'] as String?,
+      auto: step['auto'] == true,
+      tags: (step['tags'] as List?)?.cast<String>() ?? const [],
+      png: step['png']! as String,
+      tree: step['tree']! as String,
+      texts: (step['texts']! as List).cast<String>(),
+      address: Address(
+        worktree: host.worktree.name,
+        plugin: host.id,
+        segments: scenarioSegments(path, file: file, scenario: scenario),
+        axes: axes.toParams(),
+      ).child('${step['index']}').toString(),
+    );
+  }
+
+  /// The harness's report, in the declared result shape.
   ScenarioRunPackage _describeRun(
     String path,
     String outDir,
@@ -694,24 +799,12 @@ class ScenariosCore extends PluginCore {
             steps: [
               for (var step
                   in (outcome['steps']! as List).cast<Map<String, dynamic>>())
-                ScenarioRunStep(
-                  index: step['index']! as int,
-                  name: step['name'] as String?,
-                  auto: step['auto'] == true,
-                  tags: (step['tags'] as List?)?.cast<String>() ?? const [],
-                  png: step['png']! as String,
-                  tree: step['tree']! as String,
-                  texts: (step['texts']! as List).cast<String>(),
-                  address: Address(
-                    worktree: host.worktree.name,
-                    plugin: host.id,
-                    segments: scenarioSegments(
-                      path,
-                      file: outcome['file']! as String,
-                      scenario: outcome['name']! as String,
-                    ),
-                    axes: axes.toParams(),
-                  ).child('${step['index']}').toString(),
+                _stepFrom(
+                  step,
+                  path,
+                  file: outcome['file']! as String,
+                  scenario: outcome['name']! as String,
+                  axes: axes,
                 ),
             ],
             errors: [

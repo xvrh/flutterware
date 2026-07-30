@@ -37,6 +37,11 @@ void main() {
         for (var s in listed) '${s.file} ${s.name}',
       ], contains('test/scenarios/counter_test.dart Counter'));
 
+      // Each step is also announced mid-run over the VM service — the
+      // streaming half; the blocking response stays the complete report.
+      var streamed = <Map<String, Object?>>[];
+      runner.onStep = streamed.add;
+
       var report = await runner.run(
         outDir: outDir,
         file: 'test/scenarios/counter_test.dart',
@@ -65,6 +70,11 @@ void main() {
       }
       var last = steps.last;
       expect((last['texts']! as List).cast<String>(), contains('a label'));
+
+      expect(streamed, hasLength(5));
+      expect(streamed.first['scenario'], 'Counter');
+      expect((streamed.first['step']! as Map)['index'], 1);
+      runner.onStep = null;
 
       // Warm re-run: the compiled harness and the live tester are reused, so
       // this is the instantaneous FakeAsync loop, not a second cold start.
@@ -145,8 +155,10 @@ void main() {
           _scratchTexts(framed),
           contains('375x667 2.0 20.0 fr-CA Brightness.dark 13.0 true'),
         );
-        // Physical pixels — a phone's screenshot is logical × its ratio.
-        expect(_pngSize(_lastPng(framed)), (750, 1334));
+        // Logical pixels by default — the measured cost of physical capture
+        // (10× the time and bytes) is not a good default; `captureScale`
+        // buys it back explicitly.
+        expect(_pngSize(_lastPng(framed)), (375, 667));
 
         var bare = await runner.run(
           outDir: outDir,
@@ -157,7 +169,17 @@ void main() {
         expect(text, startsWith('800x600 3.0 0.0'));
         expect(text, contains('Brightness.light'));
         expect(text, endsWith('10.0 false'));
-        expect(_pngSize(_lastPng(bare)), (2400, 1800));
+        expect(_pngSize(_lastPng(bare)), (800, 600));
+
+        // The knob back up: the device's own ratio is a true screenshot.
+        var sharp = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/axes_probe_test.dart',
+          scenario: 'Probe',
+          axes: const ScenarioAxes(device: 'iphone-se'),
+          captureScale: 2,
+        );
+        expect(_pngSize(_lastPng(sharp)), (750, 1334));
       } finally {
         probe.deleteSync();
       }

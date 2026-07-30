@@ -89,19 +89,61 @@ void main() {
     expect(subject.anyPanelRunning, isFalse);
   });
 
-  test('a failed re-run keeps the outcome it had, under the error', () async {
+  test('a re-run clears immediately; a failed one keeps its error and '
+      'whatever it captured', () async {
     var runner = _FakeRunner();
     var subject = core(runner: runner);
     start(subject);
-    var first = await settled(subject);
+    await settled(subject);
 
     runner.failure = 'the harness does not compile';
+    runner.gate = Completer<void>();
     start(subject);
+    // The immediate clear: the page never shows the previous run's pictures
+    // under this run's spinner.
+    var during = subject.panelRunFor(
+      '.',
+      file: 'test/scenarios/a_test.dart',
+      scenario: 'A',
+    )!;
+    expect(during.running, isTrue);
+    expect(during.steps, isEmpty);
+    expect(during.outcome, isNull);
+
+    runner.gate!.complete();
     var second = await settled(subject);
     expect(second.error, contains('does not compile'));
-    expect(second.outcome, same(first.outcome));
-    expect(second.output, first.output);
+    expect(second.outcome, isNull);
   });
+
+  test(
+    'steps stream into the running state as the harness announces them',
+    () async {
+      var runner = _FakeRunner()
+        ..gate = Completer<void>()
+        ..emitSteps = true;
+      var subject = core(runner: runner);
+      start(subject);
+
+      // The fake announced step 0 and is now gated mid-run: the state already
+      // holds the step, before any response.
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      var during = subject.panelRunFor(
+        '.',
+        file: 'test/scenarios/a_test.dart',
+        scenario: 'A',
+      )!;
+      expect(during.running, isTrue);
+      expect(during.steps, hasLength(1));
+      expect(during.steps.single.texts, ['hello']);
+      expect(during.steps.single.address, contains('/a_test.dart/A/0'));
+
+      runner.gate!.complete();
+      var final_ = await settled(subject);
+      expect(final_.outcome, isNotNull);
+      expect(final_.steps, hasLength(1));
+    },
+  );
 
   test('a superseding run deletes the previous artifacts', () async {
     var runner = _FakeRunner();
@@ -236,15 +278,31 @@ class _FakeRunner extends ScenarioRunner {
   /// When set, [run] waits on it — so a test can observe the running state.
   Completer<void>? gate;
 
+  /// Announce each step through [onStep] before returning, as the real
+  /// runner's VM-service subscription does.
+  var emitSteps = false;
+
   @override
   Future<Map<String, Object?>> run({
     required String outDir,
     String? file,
     String? scenario,
     ScenarioAxes axes = const ScenarioAxes(),
+    double? captureScale,
   }) async {
     runs++;
     seenAxes.add(axes);
+    var step = {
+      'index': 0,
+      'name': 'shot',
+      'auto': false,
+      'png': '$outDir/0-shot.png',
+      'tree': '$outDir/0-shot.tree.json',
+      'texts': ['hello'],
+    };
+    if (emitSteps) {
+      onStep?.call({'file': file, 'scenario': scenario, 'step': step});
+    }
     if (gate case var gate?) await gate.future;
     if (failure case var failure?) throw StateError(failure);
     return {
@@ -255,16 +313,7 @@ class _FakeRunner extends ScenarioRunner {
           'name': scenario,
           'ok': true,
           'ms': 3,
-          'steps': [
-            {
-              'index': 0,
-              'name': 'shot',
-              'auto': false,
-              'png': '$outDir/0-shot.png',
-              'tree': '$outDir/0-shot.tree.json',
-              'texts': ['hello'],
-            },
-          ],
+          'steps': [step],
         },
       ],
     };

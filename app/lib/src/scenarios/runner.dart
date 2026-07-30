@@ -54,6 +54,15 @@ class ScenarioRunner {
   final String flutterSdkRoot;
   final void Function(String line)? onLog;
 
+  /// Called for every step the harness announces **mid-run** — the streaming
+  /// half of a run, `{file, scenario, step}` with the artifacts already on
+  /// disk. The blocking [run] response remains the complete report; this is
+  /// how a panel fills the flow in while the scenario executes.
+  ///
+  /// Mutable rather than constructor-fixed so the owner can attach after the
+  /// runner exists.
+  void Function(Map<String, Object?> event)? onStep;
+
   late final FlutterCache _cache = FlutterCache(
     p.join(flutterSdkRoot, 'bin', 'cache'),
   );
@@ -61,6 +70,7 @@ class ScenarioRunner {
   FrontendServer? _compiler;
   Process? _guest;
   GuestVmService? _vm;
+  StreamSubscription<Map<String, Object?>>? _stepEvents;
   Future<void>? _starting;
   var _disposed = false;
 
@@ -204,7 +214,10 @@ class ScenarioRunner {
       onTimeout: () =>
           throw TimeoutException('the scenario harness never became ready'),
     );
-    _vm = await GuestVmService.connect(await vmServiceUri.future);
+    var vm = _vm = await GuestVmService.connect(await vmServiceUri.future);
+    _stepEvents = vm
+        .extensionEvents('flutterware.scenarios.step')
+        .listen((event) => onStep?.call(event));
   }
 
   /// The real `flutter build bundle`, cached against the pubspec.
@@ -215,15 +228,25 @@ class ScenarioRunner {
   /// died on its first tap. Teaching the fast builder about shaders is the
   /// follow-up that swaps this back; seconds-once-then-cached is the honest
   /// price today.
-  Future<void> _ensureAssetBundle(String assetsDir) async {
-    var stampFile = File(p.join(assetsDir, '.pubspec.stamp'));
+  String get _pubspecStamp {
     var pubspec = File(p.join(packageRoot, 'pubspec.yaml'));
-    var stamp = '${pubspec.statSync().modified.microsecondsSinceEpoch}';
-    if (File(p.join(assetsDir, 'FontManifest.json')).existsSync() &&
+    return '${pubspec.statSync().modified.microsecondsSinceEpoch}';
+  }
+
+  /// Whether the built bundle still matches the pubspec. **The stamp is the
+  /// pubspec's mtime, so an asset added to an already-declared directory is
+  /// invisible to it** — that gap stays until the fast bundle builder takes
+  /// over with real per-asset tracking.
+  bool _assetBundleFresh(String assetsDir) {
+    var stampFile = File(p.join(assetsDir, '.pubspec.stamp'));
+    return File(p.join(assetsDir, 'FontManifest.json')).existsSync() &&
         stampFile.existsSync() &&
-        stampFile.readAsStringSync() == stamp) {
-      return;
-    }
+        stampFile.readAsStringSync() == _pubspecStamp;
+  }
+
+  Future<void> _ensureAssetBundle(String assetsDir) async {
+    if (_assetBundleFresh(assetsDir)) return;
+    var stamp = _pubspecStamp;
     onLog?.call('[scenarios] building the asset bundle');
     var result = await Process.run(p.join(flutterSdkRoot, 'bin', 'flutter'), [
       'build',
@@ -234,7 +257,7 @@ class ScenarioRunner {
     if (result.exitCode != 0) {
       throw StateError('flutter build bundle failed:\n${result.stderr}');
     }
-    stampFile.writeAsStringSync(stamp);
+    File(p.join(assetsDir, '.pubspec.stamp')).writeAsStringSync(stamp);
   }
 
   /// Brings a warm harness up to date with the sources on disk.
@@ -253,9 +276,15 @@ class ScenarioRunner {
   Future<void> _refresh() async {
     await start();
     var files = _scanFiles();
-    if (!const ListEquality<String>().equals(files, _files)) {
+    var filesChanged = !const ListEquality<String>().equals(files, _files);
+    if (filesChanged) {
       _files = files;
       writeHarnessEntrypoint(packageRoot, files);
+    }
+    // An edited pubspec restarts too: the guest holds the bundle directory
+    // open, so the rebuild happens around a fresh process, never under a
+    // live one.
+    if (filesChanged || !_assetBundleFresh(_assetsDir!)) {
       await _restartGuest();
       return;
     }
@@ -291,6 +320,8 @@ class ScenarioRunner {
   /// Kills the guest and starts a fresh one from a full kernel, reusing the
   /// warm compiler and the asset bundle.
   Future<void> _restartGuest() async {
+    await _stepEvents?.cancel();
+    _stepEvents = null;
     await _vm?.close();
     _vm = null;
     if (_guest case var guest?) {
@@ -298,6 +329,10 @@ class ScenarioRunner {
       await guest.exitCode;
     }
     _guest = null;
+
+    // With the old guest gone, the bundle can be rebuilt if the pubspec
+    // moved. A no-op when it is fresh.
+    await _ensureAssetBundle(_assetsDir!);
 
     var compiler = _compiler!;
     _dirty.addAll(_invalidator!.sweep(compiler.sources));
@@ -343,6 +378,7 @@ class ScenarioRunner {
     String? file,
     String? scenario,
     ScenarioAxes axes = const ScenarioAxes(),
+    double? captureScale,
   }) => _exclusive(() async {
     var wasWarm = _starting != null;
     await start();
@@ -354,6 +390,7 @@ class ScenarioRunner {
         'out': outDir,
         'file': ?file,
         'scenario': ?scenario,
+        if (captureScale != null) 'captureScale': '$captureScale',
         ...axes.harnessArgs(),
       },
     );
@@ -366,6 +403,7 @@ class ScenarioRunner {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    await _stepEvents?.cancel();
     await _vm?.close();
     _guest?.kill();
     if (_guest != null) await _guest!.exitCode;

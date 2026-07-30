@@ -218,6 +218,7 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       highContrast: args['highContrast'] == 'true',
       invertColors: args['invertColors'] == 'true',
     ),
+    captureScale: number('captureScale'),
   );
   var untouched =
       runArgs.size == null &&
@@ -227,7 +228,8 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       runArgs.locale == null &&
       runArgs.textScale == null &&
       runArgs.brightness == null &&
-      runArgs.accessibility.isDefault;
+      runArgs.accessibility.isDefault &&
+      runArgs.captureScale == null;
   return untouched ? null : runArgs;
 }
 
@@ -306,7 +308,7 @@ Future<Map<String, Object?>> _runOne(
     // is fetched per step by whoever wants it.
     var tree = inspector.read().toJson();
     File('$base.tree.json').writeAsStringSync(jsonEncode(tree));
-    steps.add({
+    var step = {
       'index': capture.index,
       if (capture.name != null) 'name': capture.name,
       'auto': capture.name == null,
@@ -314,6 +316,16 @@ Future<Map<String, Object?>> _runOne(
       'png': '$base.png',
       'tree': '$base.tree.json',
       'texts': capture.texts,
+    };
+    steps.add(step);
+    // Announced the moment it exists — the artifacts are already on disk —
+    // so a host drawing the flow can fill it in while the scenario still
+    // runs. The response at the end stays the complete report: streaming is
+    // for watching, the barrier is for agents.
+    developer.postEvent('flutterware.scenarios.step', {
+      'file': file,
+      'scenario': name,
+      'step': step,
     });
   };
 

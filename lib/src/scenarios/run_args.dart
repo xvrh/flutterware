@@ -15,6 +15,7 @@ class ScenarioRunArgs {
     this.textScale,
     this.brightness,
     this.accessibility = const ScenarioRunAccessibility(),
+    this.captureScale,
   });
 
   final ScenarioRunAccessibility accessibility;
@@ -34,6 +35,11 @@ class ScenarioRunArgs {
   final Locale? locale;
   final double? textScale;
   final Brightness? brightness;
+
+  /// Output pixels per **logical** pixel in captured screenshots, or null for
+  /// the device's own ratio (a real screenshot's resolution). Not an axis —
+  /// it changes the artifact, never what the app sees.
+  final double? captureScale;
 }
 
 /// The accessibility features a run can turn on — the platform switches a

@@ -315,7 +315,7 @@ fw run server sql [--name=…] [--top=…]
 Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured just before it.
 
 ```sh
-fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…]
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…]
 ```
 
 Returns `ScenarioRunResult`:
@@ -359,6 +359,7 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `bold-text` | choice | no | — | The bold-text accessibility switch |
 | `high-contrast` | choice | no | — | The high-contrast accessibility switch |
 | `invert-colors` | choice | no | — | The invert-colors accessibility switch |
+| `capture-scale` | string | no | — | Screenshot pixels per logical pixel, 1 (the default) to 4. The device's own ratio gives a true screenshot; 1 is ~10× faster and smaller, which is what keeps a long FakeAsync run instantaneous. Not an axis: it changes the artifact, never what the app sees. |
 
 
 ### `flutterware.splash`

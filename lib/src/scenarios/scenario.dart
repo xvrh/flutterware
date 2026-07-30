@@ -203,10 +203,19 @@ class ScenarioTester {
       // The root layer's coordinates are **physical** pixels — the
       // device-pixel-ratio transform sits inside it — so the capture rect
       // must be the physical frame or a 3× device saves its top-left ninth.
-      // Physical is also the honest resolution: a phone's screenshot is
-      // 1170×2532, not 390×844.
+      //
+      // The default *output* is logical (1×), measured, not guessed: on a
+      // 50-screen scenario, physical 3× costs 22.4s and 56MB where 1× costs
+      // 2.4s and 7MB — capture is the whole cost of a FakeAsync run, and 1×
+      // is what keeps it feeling instantaneous. `captureScale` (up to the
+      // device ratio for a true screenshot) is the host's knob when
+      // fidelity is worth the wait.
       var dpr = view.flutterView.devicePixelRatio;
-      var image = await layer.toImage(Offset.zero & (view.size * dpr));
+      var scale = scenarioRunArgs?.captureScale ?? 1.0;
+      var image = await layer.toImage(
+        Offset.zero & (view.size * dpr),
+        pixelRatio: scale / dpr,
+      );
       var data = (await image.toByteData(format: ui.ImageByteFormat.png))!;
       image.dispose();
       var png = data.buffer.asUint8List();
