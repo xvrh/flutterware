@@ -7,7 +7,6 @@ import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 
 import '../context.dart';
-import '../plugins/manifest_diff.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/plugin_core.dart';
 import '../plugins/registry.dart';
@@ -196,12 +195,8 @@ class ShellController extends ChangeNotifier {
   ///
   /// Null when no load has succeeded yet, which is not the same as a worktree
   /// with no plugins: that one has an empty manifest.
-  PluginManifest? manifestFor(Worktree worktree) {
-    var open = _open[worktree.path];
-    // A provisional session was built to explain a failure, not from a config.
-    if (open == null || open.provisional) return null;
-    return open.session?.session.manifest;
-  }
+  PluginManifest? manifestFor(Worktree worktree) =>
+      _open[worktree.path]?.session?.session.manifest;
 
   void _record(_Open open, ConfigLoad load) {
     open.log.insert(0, load);
@@ -261,10 +256,13 @@ class ShellController extends ChangeNotifier {
 
   /// Open, but its config has not finished running yet. The tab exists; the
   /// session does not.
-  bool isLoading(Worktree worktree) => switch (_open[worktree.path]) {
-    null => false,
-    var open => open.session == null,
-  };
+  /// Open, but its config has not finished running yet.
+  ///
+  /// Tracked rather than inferred from a missing session. Inferring it meant a
+  /// first load that *failed* looked like one still running — a permanent
+  /// spinner — and the workaround was to build an empty session purely so the
+  /// inference came out right.
+  bool isLoading(Worktree worktree) => _open[worktree.path]?.hasLoaded == false;
 
   WorktreeSession? sessionFor(Worktree worktree) =>
       _open[worktree.path]?.session;
@@ -485,18 +483,13 @@ class ShellController extends ChangeNotifier {
 
   /// Decides what this load did, or null when it no longer matters.
   ///
-  /// Five outcomes, and the split is the whole point (see
-  /// `2026-07-29-config-reload-findings.md`):
+  /// Four outcomes, and only one of them is a judgement call:
   ///
   /// - **failed** — nothing is torn down. The error surfaces and every plugin
   ///   keeps running, because a half-written file must not cost a worktree.
-  /// - **unchanged** — the manifest matched, so not a single object moves.
-  ///   Re-running the config *is* the comparison; a comment or a reformat lands
-  ///   here without anything having to detect a comment.
-  /// - **built** — the worktree opened; nothing was lost because nothing was
-  ///   there.
-  /// - **rebuilt** — `packages:` moved, so the workspace and every core go.
-  /// - **reconciled** — only the plugins whose declaration moved are rebuilt.
+  /// - **unchanged** — the config declared what was already there, so not one
+  ///   object moves. This is the whole point; everything else is bookkeeping.
+  /// - **built** / **rebuilt** — the graph is thrown away and made again.
   Future<ConfigLoad?> _apply(
     _Open open,
     int generation,
@@ -507,15 +500,13 @@ class ShellController extends ChangeNotifier {
 
     ConfigLoad done(
       ConfigLoadOutcome outcome, {
-      List<String> rebuilt = const [],
-      Map<String, String> reasons = const {},
+      int plugins = 0,
       String? error,
     }) => ConfigLoad(
       at: started,
       duration: watch.elapsed,
       outcome: outcome,
-      rebuilt: rebuilt,
-      reasons: reasons,
+      plugins: plugins,
       error: error,
     );
 
@@ -534,22 +525,13 @@ class ShellController extends ChangeNotifier {
         open.generation != generation) {
       return null;
     }
+    open.hasLoaded = true;
 
     if (error != null) {
       // Before any release, and leaving the session alone: the plugins built
       // from the last config that loaded are still the ones running, and the
-      // next success must diff against the config they came from.
+      // next success compares against the config they came from.
       open.error = WorktreeError(worktree, error);
-
-      // Nothing to preserve on a *first* load, and a tab with no session reads
-      // as one still loading forever. Give it an empty session so the shell can
-      // explain instead of spinning — marked provisional, because it came from
-      // no config at all and must never be diffed against.
-      if (open.session == null) {
-        if (_build(open, const PluginManifest([])) == null) {
-          open.provisional = true;
-        }
-      }
       return done(ConfigLoadOutcome.failed, error: error);
     }
 
@@ -558,63 +540,23 @@ class ShellController extends ChangeNotifier {
     open.error = null;
 
     var existing = open.session;
-    if (existing != null && !existing.isDisposed && !open.provisional) {
-      ManifestDiff diff;
-      try {
-        diff = existing.session.diff(manifest);
-      } catch (e) {
-        open.error = WorktreeError(worktree, '$e');
-        return done(ConfigLoadOutcome.failed, error: '$e');
-      }
-
-      if (diff.isEmpty) return done(ConfigLoadOutcome.unchanged);
-
-      if (!diff.needsFullRebuild) {
-        try {
-          var result = existing.reconcile(
-            manifest,
-            registry: registry,
-            coreRegistry: coreRegistry,
-          );
-          // `diff.affected`, not what was *built*: a plugin that was only
-          // removed built nothing, and reporting the build list logged it as
-          // "reordered" — wrong on the one surface this exists to make
-          // trustworthy.
-          return done(
-            ConfigLoadOutcome.reconciled,
-            rebuilt: result.diff.affected,
-            reasons: {
-              for (var id in result.diff.affected)
-                id: ?result.diff.reasonFor(id),
-            },
-          );
-        } catch (e) {
-          // A core or panel constructor that throws on the new declaration.
-          // `reconcile` builds before it disposes, so the session is intact —
-          // the same shape as a config that will not compile, and the same
-          // answer: nothing torn down, the reason shown.
-          open.error = WorktreeError(worktree, '$e');
-          return done(ConfigLoadOutcome.failed, error: '$e');
-        }
-      }
+    if (existing != null &&
+        !existing.isDisposed &&
+        existing.session.declares(manifest)) {
+      return done(
+        ConfigLoadOutcome.unchanged,
+        plugins: existing.plugins.length,
+      );
     }
 
-    // Either the first load of this worktree, or `packages:` moved. Both build
-    // from nothing; only the second one cost anything.
-    var opening = existing == null || open.provisional;
+    var opening = existing == null;
     open.release();
     if (_build(open, manifest) case var failure?) {
       return done(ConfigLoadOutcome.failed, error: failure);
     }
     return done(
       opening ? ConfigLoadOutcome.built : ConfigLoadOutcome.rebuilt,
-      rebuilt: [for (var declaration in manifest.plugins) declaration.id],
-      reasons: opening
-          ? const {}
-          : {
-              for (var declaration in manifest.plugins)
-                declaration.id: 'packages changed',
-            },
+      plugins: manifest.plugins.length,
     );
   }
 
@@ -655,12 +597,10 @@ class ShellController extends ChangeNotifier {
         workspace: workspace,
         coreRegistry: coreRegistry,
       )..addListener(() => _onSessionChanged(worktree.path));
-      open.provisional = false;
       return null;
     } catch (e) {
       // Returned rather than only recorded. A caller that logged "opened, 3
-      // plugins" over this would be claiming a session that does not exist,
-      // leaving `isLoading` true and the panel drawing a loader forever.
+      // plugins" over this would be claiming a session that does not exist.
       open.error ??= WorktreeError(worktree, '$e');
       return '$e';
     }
@@ -896,13 +836,8 @@ class _Open {
   /// The config changed while a plugin hard-blocked teardown.
   bool pendingReload = false;
 
-  /// True when [session] was built to explain a failure rather than from a
-  /// config that ran.
-  ///
-  /// It has an empty manifest, and diffing against that would read the eventual
-  /// fix as an ordinary reload that added every plugin. Previously this was a
-  /// build followed two statements later by an undo in a different method.
-  bool provisional = false;
+  /// Whether a load has finished, however it finished.
+  bool hasLoaded = false;
 
   /// Drops what a load produced, keeping the tab, its place and its history.
   void release() {
@@ -911,7 +846,6 @@ class _Open {
     workspace?.dispose();
     workspace = null;
     error = null;
-    provisional = false;
   }
 
   void close() {

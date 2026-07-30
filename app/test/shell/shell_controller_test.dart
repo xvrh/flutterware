@@ -223,11 +223,10 @@ void main() {
     expect(shell.lastLoad(main)!.summary, 'no changes');
   });
 
-  test('a changed declaration rebuilds only that plugin', () async {
+  test('a changed declaration rebuilds the graph', () async {
     var shell = _controller();
     await shell.start('/repo');
     var main = shell.selected!;
-    var kept = shell.selectedSession!.plugins.first;
     _disposedIds = [];
 
     _loader.manifest =
@@ -235,46 +234,34 @@ void main() {
         '{"id":"a.two","label":"Two","config":{"dir":"unit"}}]}';
     await shell.reloadConfig();
 
-    expect(_disposedIds, ['/repo:a.two']);
-    expect(identical(shell.selectedSession!.plugins.first, kept), isTrue);
+    // Everything goes, including the plugin whose own declaration did not move.
+    // That is the accepted price of the config having changed at all.
+    expect(_disposedIds, ['/repo:a.one', '/repo:a.two']);
     var load = shell.lastLoad(main)!;
-    expect(load.outcome, ConfigLoadOutcome.reconciled);
-    expect(load.rebuilt, ['a.two']);
-    expect(load.reasons, {'a.two': 'dir changed'});
-    expect(load.summary, 'two rebuilt');
+    expect(load.outcome, ConfigLoadOutcome.rebuilt);
+    expect(load.summary, 'rebuilt, 2 plugins');
   });
 
-  test('a removed plugin goes; the survivor keeps its panel', () async {
+  test('a removed plugin is gone after the rebuild', () async {
     var shell = _controller();
     await shell.start('/repo');
-    var kept = shell.selectedSession!.plugins.first;
-    _disposedIds = [];
 
     _loader.manifest = '{"version":1,"plugins":[{"id":"a.one","label":"One"}]}';
     await shell.reloadConfig();
 
-    expect(_disposedIds, ['/repo:a.two']);
     expect(shell.selectedSession!.plugins.map((p) => p.id), ['a.one']);
-    expect(identical(shell.selectedSession!.plugins.first, kept), isTrue);
   });
 
-  test('an added plugin arrives without disposing anything', () async {
+  test('an added plugin arrives', () async {
     var shell = _controller(
       manifest: '{"version":1,"plugins":[{"id":"a.one","label":"One"}]}',
     );
     await shell.start('/repo');
-    var kept = shell.selectedSession!.plugins.first;
-    _disposedIds = [];
 
     _loader.manifest = _manifestJson;
     await shell.reloadConfig();
 
-    expect(_disposedIds, isEmpty);
     expect(shell.selectedSession!.plugins.map((p) => p.id), ['a.one', 'a.two']);
-    expect(identical(shell.selectedSession!.plugins.first, kept), isTrue);
-    expect(shell.lastLoad(shell.selected!)!.reasons, {
-      'a.two': 'newly declared',
-    });
   });
 
   test('a broken config tears nothing down', () async {
@@ -304,7 +291,6 @@ void main() {
   test('a changed packages list rebuilds everything', () async {
     var shell = _controller();
     await shell.start('/repo');
-    var main = shell.selected!;
     _disposedIds = [];
 
     _loader.manifest =
@@ -313,31 +299,20 @@ void main() {
     await shell.reloadConfig();
 
     expect(_disposedIds, ['/repo:a.one', '/repo:a.two']);
-    var load = shell.lastLoad(main)!;
-    expect(load.outcome, ConfigLoadOutcome.rebuilt);
-    expect(load.reasons, {
-      'a.one': 'packages changed',
-      'a.two': 'packages changed',
-    });
+    expect(shell.lastLoad(shell.selected!)!.outcome, ConfigLoadOutcome.rebuilt);
   });
 
-  test('a reorder moves the rail without rebuilding a thing', () async {
+  test('a reorder is a change, and the rail follows it', () async {
     var shell = _controller();
     await shell.start('/repo');
-    var one = shell.selectedSession!.plugins[0];
-    var two = shell.selectedSession!.plugins[1];
-    _disposedIds = [];
 
     _loader.manifest =
         '{"version":1,"plugins":[{"id":"a.two","label":"Two"},'
         '{"id":"a.one","label":"One"}]}';
     await shell.reloadConfig();
 
-    expect(_disposedIds, isEmpty);
     expect(shell.selectedSession!.plugins.map((p) => p.id), ['a.two', 'a.one']);
-    expect(identical(shell.selectedSession!.plugins[0], two), isTrue);
-    expect(identical(shell.selectedSession!.plugins[1], one), isTrue);
-    expect(shell.lastLoad(shell.selected!)!.summary, 'reordered');
+    expect(shell.lastLoad(shell.selected!)!.outcome, ConfigLoadOutcome.rebuilt);
   });
 
   test('a reload that drops the selected plugin falls back home', () async {
@@ -377,7 +352,6 @@ void main() {
 
     expect(load.outcome, ConfigLoadOutcome.built);
     expect(load.summary, 'opened, 2 plugins');
-    expect(load.reasons, isEmpty, reason: 'nothing was lost to lose');
   });
 
   test('a superseded load does not commit its stale manifest', () async {
@@ -506,8 +480,11 @@ void main() {
 
     expect(shell.openWorktrees, hasLength(1));
     expect(shell.errorFor(shell.worktrees[0])!.message, contains('boom'));
-    // Open but empty — the shell can explain rather than showing nothing.
-    expect(shell.sessionFor(shell.worktrees[0])!.plugins, isEmpty);
+    // No session at all — and, crucially, *not loading*. That used to be
+    // inferred from the missing session, so a first load that failed looked
+    // like one still running and span forever; the workaround was an empty
+    // session built purely to make the inference come out right.
+    expect(shell.sessionFor(shell.worktrees[0]), isNull);
     expect(
       shell.isLoading(shell.worktrees[0]),
       isFalse,
@@ -519,13 +496,11 @@ void main() {
     var shell = _controller(manifestExit: 1);
     await shell.start('/repo');
     var main = shell.worktrees[0];
-    expect(shell.sessionFor(main)!.plugins, isEmpty);
+    expect(shell.sessionFor(main), isNull);
 
     _loader.exitCode = 0;
     await shell.reloadConfig();
 
-    // The empty session it was given to explain itself is not a config it can
-    // be diffed against, so this is a build and not a two-plugin "reload".
     expect(shell.sessionFor(main)!.plugins.map((p) => p.id), [
       'a.one',
       'a.two',

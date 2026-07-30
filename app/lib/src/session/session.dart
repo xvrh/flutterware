@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+// Only the equality: this file has its own `firstOrNull`.
+import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:flutterware/plugins.dart';
 
 // ignore: implementation_imports
@@ -9,14 +11,12 @@ import 'package:path/path.dart' as p;
 
 import '../constants.dart';
 import '../context.dart';
-import '../plugins/manifest_diff.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/native/assets_core.dart';
 import '../plugins/native/dependencies_core.dart';
 import '../plugins/native/splash_core.dart';
 import '../plugins/native/ui_catalog_core.dart';
 import '../plugins/plugin_core.dart';
-import '../plugins/plugin_host.dart';
 import '../shell/workspace.dart';
 import '../shell/worktree.dart';
 import '../shell/worktree_discovery.dart';
@@ -45,9 +45,8 @@ class Session {
     this.workspace,
     List<PluginCore> cores,
     this._ownsWorkspace,
-    PluginManifest manifest,
-  ) : _cores = cores,
-      _manifest = manifest;
+    this.manifest,
+  ) : _cores = cores;
 
   /// Builds a session over pieces the caller has already resolved.
   ///
@@ -89,7 +88,7 @@ class Session {
   /// a plugin set can only change by re-running the config.
   List<PluginCore> get cores => List.unmodifiable(_cores);
 
-  List<PluginCore> _cores;
+  final List<PluginCore> _cores;
 
   /// flutterware's own `app/` install, for the cores that need to find the
   /// machinery shipped beside them — the catalog daemon and its native host.
@@ -126,22 +125,13 @@ class Session {
         : null;
   }
 
-  /// The manifest [cores] were built from.
+  /// The manifest [cores] were built from, and what the next load is compared
+  /// against.
   ///
   /// **Here, not beside the session in whatever built it.** These cores *are*
-  /// this manifest resolved; a copy kept elsewhere has to be written, undone
-  /// and cleared in step with them, and the reload path had exactly that —
-  /// a write in one method undone two statements later in another.
-  PluginManifest get manifest => _manifest;
-  PluginManifest _manifest;
-
-  /// What [reconcile] would do, so a caller can decide *whether* to reconcile.
-  ///
-  /// A changed `packages:` is the caller's problem rather than this object's:
-  /// it invalidates the [Workspace] every host holds, which the session does
-  /// not own.
-  ManifestDiff diff(PluginManifest next) =>
-      ManifestDiff.between(_manifest, next);
+  /// this manifest resolved; a copy kept elsewhere has to be written and cleared
+  /// in step with them, which the reload path used to get wrong.
+  final PluginManifest manifest;
 
   /// Opens the session for whichever repo [start] sits in.
   ///
@@ -218,108 +208,19 @@ class Session {
     return found;
   }
 
-  /// Swaps [cores] to match [manifest], rebuilding only what moved, and returns
-  /// the diff it derived along with the ids it built.
+  /// Whether [next] declares exactly what these cores were built from.
   ///
-  /// **The correctness bias lives here.** An affected plugin is disposed and
-  /// reconstructed — never reconfigured in place — because that is the only
-  /// behaviour that is correct without cooperation from the plugin. Losing
-  /// whatever a rebuilt plugin held is the expected price of having changed the
-  /// declaration that started it; what must not happen is an unrelated plugin
-  /// paying for it.
+  /// **The one question a reload asks.** Everything else it might have asked —
+  /// which plugin moved, whether one could be kept — was machinery for keeping
+  /// state alive across a config change, and losing that state is the accepted
+  /// price of having changed the config. What is *not* acceptable is paying it
+  /// for a save that changed nothing, so this is the check that has to be right,
+  /// and it is the only one.
   ///
-  /// [onRelease] runs for each core about to be disposed, *before* it is. That
-  /// is how a renderer tears down whatever it built over a core without this
-  /// method knowing what a panel is — the same "panels first, then the
-  /// behaviour under them" rule as [dispose], kept in one place rather than
-  /// restated in two.
-  ///
-  /// Never called when [diff] says `needsFullRebuild`: a new [Workspace] makes
-  /// every host stale, so there is nothing to reuse and the caller builds a
-  /// fresh session instead.
-  ///
-  /// [prepare] sees the new core list while **nothing has been swapped or
-  /// disposed yet**, so a renderer can build whatever it draws over those cores
-  /// and throw safely. It is the other half of [onRelease]: together they let a
-  /// caller keep its own list in step with [cores] through a failure, which a
-  /// caller building afterwards cannot do — by then the old cores are gone and
-  /// there is nothing to roll back to.
-  ({ManifestDiff diff, List<String> rebuilt}) reconcile(
-    PluginManifest manifest, {
-    void Function(List<PluginCore> next)? prepare,
-    void Function(PluginCore core)? onRelease,
-    PluginCoreRegistry? registry,
-  }) {
-    // Derived here rather than accepted. A manifest and a diff passed together
-    // are two arguments that must agree about a third thing — this session's
-    // current manifest — and nothing could check it: a mismatched pair produced
-    // a silently wrong graph and then recorded itself as the new baseline.
-    // Recomputing costs 0.02ms measured.
-    var diff = this.diff(manifest);
-    assert(
-      !diff.needsFullRebuild,
-      'a changed packages list invalidates every host; rebuild the session',
-    );
-    if (diff.isEmpty) {
-      _manifest = manifest;
-      return (diff: diff, rebuilt: const []);
-    }
-
-    var affected = diff.affected.toSet();
-    var surviving = {
-      for (var core in _cores)
-        if (!affected.contains(core.id)) core.id: core,
-    };
-    var factory = registry ?? defaultCoreRegistry();
-
-    // Built in full before anything is disposed, so a factory that throws
-    // leaves the session exactly as it was — and the ones this attempt already
-    // built are disposed on the way out rather than left subscribed to nothing.
-    var next = <PluginCore>[];
-    try {
-      for (var declaration in manifest.plugins) {
-        next.add(
-          surviving[declaration.id] ??
-              factory.create(
-                PluginHost(
-                  id: declaration.id,
-                  label: declaration.label,
-                  worktree: worktree,
-                  workspace: workspace,
-                  config: declaration.config,
-                ),
-              ),
-        );
-      }
-      prepare?.call(next);
-    } catch (_) {
-      for (var core in next) {
-        if (!surviving.containsKey(core.id)) core.dispose();
-      }
-      rethrow;
-    }
-
-    var kept = next.toSet();
-    var released = [
-      for (var core in _cores)
-        if (!kept.contains(core)) core,
-    ];
-    _cores = next;
-    _manifest = manifest;
-
-    for (var core in released) {
-      onRelease?.call(core);
-      core.dispose();
-    }
-
-    return (
-      diff: diff,
-      rebuilt: [
-        for (var core in next)
-          if (!surviving.containsKey(core.id)) core.id,
-      ],
-    );
-  }
+  /// Compared through `toJson`, so it sees exactly what crossed the process
+  /// boundary rather than object identity.
+  bool declares(PluginManifest next) =>
+      const DeepCollectionEquality().equals(manifest.toJson(), next.toJson());
 
   PluginCore? coreById(String id) =>
       cores.where((core) => core.id == id).firstOrNull;

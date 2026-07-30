@@ -380,17 +380,6 @@ class LoadRow extends StatelessWidget {
               ),
             ],
           ),
-          // Only the reasons, one per rebuilt plugin. A load that rebuilt
-          // nothing has nothing to explain, which is most of them.
-          for (var id in load.rebuilt)
-            if (load.reasons[id] case var reason?)
-              Padding(
-                padding: const EdgeInsets.only(left: 132, top: 2),
-                child: Text(
-                  '$id — $reason',
-                  style: context.type.micro.copyWith(color: colors.mut2),
-                ),
-              ),
           if (load.error case var error?)
             Padding(
               padding: const EdgeInsets.only(left: 132, top: 2),

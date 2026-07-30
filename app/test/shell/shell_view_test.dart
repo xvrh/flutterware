@@ -750,7 +750,7 @@ void main() {
       expect(inLine('no changes'), findsOneWidget);
     });
 
-    testWidgets('the line names the plugin it rebuilt, then fades', (
+    testWidgets('the line says what the reload did, then fades', (
       tester,
     ) async {
       var shell = await _pumpShell(tester);
@@ -759,7 +759,7 @@ void main() {
       await shell.reloadConfig();
       await tester.pump();
 
-      expect(inLine('tests rebuilt'), findsOneWidget);
+      expect(inLine('rebuilt, 2 plugins'), findsOneWidget);
 
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
@@ -827,16 +827,13 @@ void main() {
       expect(find.byKey(configErrorBannerKey), findsNothing);
     });
 
-    testWidgets('the log says which config key moved', (tester) async {
+    testWidgets('the log keeps every load, newest first', (tester) async {
       var shell = await _pumpShell(tester);
       _loader.manifest = changedTests;
       await shell.reloadConfig();
       await openConfig(tester);
 
-      expect(inConfig('tests rebuilt'), findsOneWidget);
-      // The diff, made visible: which key moved, not merely that one did.
-      expect(inConfig('a.tests — dir changed'), findsOneWidget);
-      // Newest first, and the open is still there under it.
+      expect(inConfig('rebuilt, 2 plugins'), findsOneWidget);
       expect(inConfig('opened, 2 plugins'), findsOneWidget);
     });
   });

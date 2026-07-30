@@ -171,8 +171,7 @@ void main() {
         'a.one',
         'a.two',
       ]);
-      expect(shell.lastLoad(worktree)!.outcome, ConfigLoadOutcome.reconciled);
-      expect(_disposedIds, isEmpty, reason: 'a.one was not touched');
+      expect(shell.lastLoad(worktree)!.outcome, ConfigLoadOutcome.rebuilt);
     },
   );
 

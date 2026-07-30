@@ -1,25 +1,20 @@
 /// What one run of `tool/flutterware.dart` did.
 enum ConfigLoadOutcome {
   /// The worktree was opened, so the graph was built rather than changed.
-  ///
-  /// Distinct from [rebuilt] because nothing was lost: there was nothing there
-  /// to lose. A surface reporting reloads should stay quiet for this one — the
-  /// tab appearing is already the feedback — while the log still keeps the row.
   built,
 
-  /// It ran, and matched what was already there.
+  /// It ran, and declared exactly what was already there.
   ///
-  /// **This has to be reported rather than inferred from silence.** A reload
-  /// that changed nothing and a reload that never fired look identical
-  /// otherwise, and that ambiguity is what makes a file-watching feature feel
-  /// broken. Every surface that renders a load must render this case.
+  /// **The case the whole feature turns on.** A reload that rebuilds everything
+  /// is fine — losing a compiled catalog to a config change is the price of
+  /// having changed the config. Paying it for a comment is not, so "nothing
+  /// moved" has to be exact.
+  ///
+  /// It also has to be *reported*, not inferred from silence: a no-op reload and
+  /// a watcher that is not working look identical otherwise.
   unchanged,
 
-  /// Some plugins were rebuilt; the rest were left alone, still holding
-  /// whatever they held.
-  reconciled,
-
-  /// The `packages:` list moved, so the workspace and every core went with it.
+  /// The config declared something different, so the graph was rebuilt.
   rebuilt,
 
   /// The config did not produce a manifest. **Nothing was torn down** — the
@@ -33,28 +28,23 @@ class ConfigLoad {
     required this.at,
     required this.duration,
     required this.outcome,
-    this.rebuilt = const [],
-    this.reasons = const {},
+    this.plugins = 0,
     this.error,
   });
 
   final DateTime at;
 
   /// How long the whole load took — running the config, comparing, and
-  /// rebuilding whatever moved.
+  /// rebuilding if it moved.
   ///
-  /// Surfaced so a drift from ~100ms to seconds is visible without anyone
+  /// Surfaced so a drift from ~300ms to seconds is visible without anyone
   /// instrumenting anything.
   final Duration duration;
 
   final ConfigLoadOutcome outcome;
 
-  /// Plugin ids that were disposed and rebuilt.
-  final List<String> rebuilt;
-
-  /// Why each id in [rebuilt] moved — `'packages changed'`, `'newly
-  /// declared'`. Keyed by plugin id.
-  final Map<String, String> reasons;
+  /// How many plugins the graph ended up with.
+  final int plugins;
 
   /// The load failure, when [outcome] is [ConfigLoadOutcome.failed].
   final String? error;
@@ -63,21 +53,11 @@ class ConfigLoad {
 
   /// A phrase for one line of UI — no timing, no prefix.
   String get summary => switch (outcome) {
-    ConfigLoadOutcome.built => switch (rebuilt.length) {
-      1 => 'opened, 1 plugin',
-      var n => 'opened, $n plugins',
-    },
+    ConfigLoadOutcome.built => 'opened, ${_plural(plugins)}',
     ConfigLoadOutcome.unchanged => 'no changes',
-    ConfigLoadOutcome.reconciled => switch (rebuilt.length) {
-      0 => 'reordered',
-      1 => '${_short(rebuilt.single)} rebuilt',
-      var n => '$n plugins rebuilt',
-    },
-    ConfigLoadOutcome.rebuilt => 'workspace rebuilt, ${rebuilt.length} plugins',
+    ConfigLoadOutcome.rebuilt => 'rebuilt, ${_plural(plugins)}',
     ConfigLoadOutcome.failed => 'failed',
   };
 
-  /// The last dotted segment, which is what a person calls a plugin —
-  /// `ui_catalog`, not `flutterware.ui_catalog`.
-  static String _short(String id) => id.split('.').last;
+  static String _plural(int n) => n == 1 ? '1 plugin' : '$n plugins';
 }
