@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutterware_app/src/catalog/asset_bundle.dart';
 import 'package:flutterware_app/src/catalog/package_config_locator.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart';
+import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:path/path.dart' as p;
 
 /// Asks whether `flutter build bundle` is actually needed to run the guest.
@@ -122,7 +125,13 @@ Future<List<int>> _render(
   String workDir,
   String label,
 ) async {
-  var socketPath = p.join(workDir, '$label.sock');
+  // Under the run dir, not [workDir]: a unix socket path is capped at 104
+  // bytes, and a build directory inside a worktree already spends most of
+  // that. The hash keeps two checkouts' probes apart.
+  var key = sha1.convert(utf8.encode(workDir)).toString().substring(0, 12);
+  var socketPath = checkSocketPath(
+    p.join(flutterwareRunDir(), 'probe-$key-$label.sock'),
+  );
   var rawFrame = p.join(workDir, '$label.rawframe');
   for (var path in [socketPath, rawFrame]) {
     var file = File(path);
@@ -133,33 +142,44 @@ Future<List<int>> _render(
     0,
   );
 
+  // No `--capture-raw`: that arms a one-shot capture the *first* presented
+  // frame consumes, which photographs the scene before anything asynchronous
+  // — an image decode above all — has landed. Instead the scene gets a moment
+  // to settle after its first frame, and then a capture of a current frame is
+  // asked for explicitly.
   var guest = await Process.start(hostPath, [
     assetsDir,
     cache.icuData,
     socketPath,
     '800',
     '600',
-    '--capture-raw',
-    rawFrame,
   ]);
   unawaited(guest.stdout.drain<void>());
   unawaited(guest.stderr.drain<void>());
 
   var conn = await server.first;
   var reader = FrameReader();
-  loop:
-  await for (var chunk in conn) {
+  var sawFrame = Completer<void>();
+  var captured = Completer<void>();
+  var subscription = conn.listen((chunk) {
     for (var message in reader.addBytes(chunk)) {
-      if (message is FrameReadyMessage) break loop;
+      if (message is FrameReadyMessage && !sawFrame.isCompleted) {
+        sawFrame.complete();
+      }
+      if (message is CapturedMessage) captured.complete();
       if (message is ErrorMessage) {
         stderr.writeln('[$label] guest error: ${message.message}');
         guest.kill();
         exit(1);
       }
     }
-  }
-  // Let the first frame settle before capturing; fonts resolve asynchronously.
+  });
+  await sawFrame.future;
   await Future<void>.delayed(const Duration(seconds: 2));
+  conn.add(encodeMessage(CaptureMessage(rawFrame)));
+  await conn.flush();
+  await captured.future;
+  await subscription.cancel();
 
   conn.add(encodeMessage(const ShutdownMessage()));
   await conn.flush();

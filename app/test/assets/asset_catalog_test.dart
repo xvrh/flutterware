@@ -324,6 +324,149 @@ flutter:
     expect(catalog.usesMaterialDesign, isTrue);
   });
 
+  test("a packages/ declaration reaches into the dependency's lib", () async {
+    // The documented way to bundle a file a dependency *has* but never
+    // declared: `_resolveAsset` at asset.dart:1402 falls through to
+    // `_resolvePackageAsset`, which reads `<name>`'s lib/.
+    write('app/pubspec.yaml', '''
+name: app
+dependencies:
+  dep:
+flutter:
+  assets:
+    - packages/dep/images/logo.png
+''');
+    write('dep/pubspec.yaml', 'name: dep\n');
+    write('dep/lib/images/logo.png', 'png');
+    write('dep/lib/images/2.0x/logo.png', 'png');
+
+    var catalog = await resolve();
+
+    var logo = catalog.byKey['packages/dep/images/logo.png']!;
+    expect(logo.package, isNull, reason: 'The root package declared it.');
+    expect(logo.packageRoot, depRoot());
+    expect(logo.main.path, p.join(depRoot(), 'lib', 'images', 'logo.png'));
+    expect(logo.variants.map((v) => v.key), [
+      'packages/dep/images/2.0x/logo.png',
+    ]);
+    expect(catalog.problems, isEmpty);
+  });
+
+  test(
+    'a real file at the literal packages/ path wins over the reach',
+    () async {
+      // flutter_tools tries the declarer's own tree first, so a project with an
+      // actual `packages/` directory keeps meaning its own files.
+      write('app/pubspec.yaml', '''
+name: app
+dependencies:
+  dep:
+flutter:
+  assets:
+    - packages/dep/logo.png
+''');
+      write('dep/pubspec.yaml', 'name: dep\n');
+      write('app/packages/dep/logo.png', 'the literal one');
+      write('dep/lib/logo.png', 'the reached one');
+
+      var catalog = await resolve();
+
+      var logo = catalog.byKey['packages/dep/logo.png']!;
+      expect(logo.main.path, p.join(appRoot(), 'packages', 'dep', 'logo.png'));
+      expect(logo.packageRoot, appRoot());
+    },
+  );
+
+  test('a packages/ declaration by a package is not re-prefixed', () async {
+    write('app/pubspec.yaml', '''
+name: app
+dependencies:
+  dep:
+''');
+    write('dep/pubspec.yaml', '''
+name: dep
+dependencies:
+  deep:
+flutter:
+  assets:
+    - packages/deep/icons/check.svg
+''');
+    write('deep/pubspec.yaml', 'name: deep\n');
+    write('deep/lib/icons/check.svg', 'svg');
+
+    var catalog = await resolve();
+
+    expect(
+      catalog.byKey.keys,
+      ['packages/deep/icons/check.svg'],
+      reason:
+          'The declaration already names its package; '
+          '"packages/dep/packages/deep/…" is a key nothing resolves.',
+    );
+  });
+
+  test('a font asset can be a packages/ reach too', () async {
+    write('app/pubspec.yaml', '''
+name: app
+dependencies:
+  dep:
+flutter:
+  fonts:
+    - family: Brand
+      fonts:
+        - asset: packages/dep/fonts/Brand-Regular.ttf
+''');
+    write('dep/pubspec.yaml', 'name: dep\n');
+    write('dep/lib/fonts/Brand-Regular.ttf', 'ttf');
+
+    var catalog = await resolve();
+
+    var family = catalog.fonts.single;
+    expect(family.family, 'Brand', reason: 'The root package declared it.');
+    expect(family.fonts.single.key, 'packages/dep/fonts/Brand-Regular.ttf');
+    expect(
+      family.fonts.single.path,
+      p.join(depRoot(), 'lib', 'fonts', 'Brand-Regular.ttf'),
+    );
+    var asset = catalog.byKey['packages/dep/fonts/Brand-Regular.ttf']!;
+    expect(asset.packageRoot, depRoot());
+    expect(catalog.problems, isEmpty);
+  });
+
+  test('a reach that lands nowhere is reported, and says why', () async {
+    write('app/pubspec.yaml', '''
+name: app
+dependencies:
+  dep:
+flutter:
+  assets:
+    - packages/ghost/logo.png
+    - packages/dep/absent.png
+''');
+    write('dep/pubspec.yaml', 'name: dep\n');
+
+    var catalog = await resolve();
+
+    expect(catalog.assets, isEmpty);
+    var byDeclaration = {
+      for (var problem in catalog.problems) problem.declaration: problem,
+    };
+    expect(
+      byDeclaration['packages/ghost/logo.png']!.detail,
+      contains('No package in the config'),
+      reason:
+          'The tool prints "Could not resolve package for asset" and fails '
+          'the build on the same input.',
+    );
+    expect(
+      byDeclaration['packages/dep/absent.png']!.detail,
+      contains('Reaches into package "dep"'),
+    );
+    expect(catalog.problems.map((e) => e.kind).toSet(), {
+      AssetProblemKind.missingFile,
+    });
+  });
+
   group('parseScale', () {
     test('reads a density directory, long form and short', () {
       expect(AssetCatalog.parseScale('assets/2.0x/foo.png'), 2.0);
