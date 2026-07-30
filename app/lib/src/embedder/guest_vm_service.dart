@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
@@ -14,13 +15,50 @@ import 'package:vm_service/vm_service_io.dart';
 /// as server-initiated notifications with no request id, which a
 /// request/response-only client drops on the floor.
 class GuestVmService {
-  GuestVmService._(this.service, this.isolateId);
+  GuestVmService._(
+    this.service,
+    this.isolateId, {
+    this.registrationWindow = _defaultRegistrationWindow,
+  });
+
+  /// A client over a [service] somebody else connected, for a test.
+  ///
+  /// [connect] is the way in for everything real: it is what knows a guest
+  /// prints an `http://` URI and that the isolate to talk to is the first one.
+  /// A test of [requireExtension]'s wait has neither a guest nor a socket, and
+  /// standing one up to watch a retry would be a slower test that proved less.
+  @visibleForTesting
+  factory GuestVmService.forTesting(
+    VmService service,
+    String isolateId, {
+    Duration registrationWindow = _defaultRegistrationWindow,
+  }) => GuestVmService._(
+    service,
+    isolateId,
+    registrationWindow: registrationWindow,
+  );
 
   /// The underlying client, for calls this wrapper does not name.
   final VmService service;
 
   /// The guest's main isolate, captured once at connect.
   final String isolateId;
+
+  /// How long [requireExtension] gives the guest to register before it calls
+  /// an extension missing. See there for why waiting at all is the fix.
+  ///
+  /// Generous by default: what waiting costs is a slower error for a typo, and
+  /// what not waiting costs is a crash on every cold start.
+  final Duration registrationWindow;
+
+  static const _defaultRegistrationWindow = Duration(seconds: 5);
+
+  /// How often [requireExtension] asks again inside that window.
+  ///
+  /// By re-calling rather than by polling `getIsolate` for the name: the call
+  /// is the thing the caller wanted, so a list saying the extension is there
+  /// would only be one more fact to then act on.
+  static const _registrationPoll = Duration(milliseconds: 25);
 
   /// Connects to the `http://` URI the guest prints on stdout at startup.
   static Future<GuestVmService> connect(String httpUri) async {
@@ -96,18 +134,37 @@ class GuestVmService {
   ///
   /// A guest too old to have the extension is a real case, which is why the
   /// tolerant form stays. It is just not the right form for a write.
+  ///
+  /// **Gives the guest [registrationWindow] to register before it believes
+  /// the answer.** "Not registered" and "not registered *yet*" arrive as the
+  /// same JSON-RPC 32601, and nothing but time tells them apart: the VM service
+  /// is listening — and its URI printed, and this client connected — well
+  /// before the guest's `main` has run, so a host that asks the moment it
+  /// connects is asking an isolate that has registered nothing at all. That is
+  /// the window a panel mounting at startup lands in, and reporting it as a
+  /// missing extension names the wrong fault.
+  ///
+  /// The strictness is unchanged, only postponed. A renamed extension still
+  /// throws, and still lists what the guest does register — it just pays the
+  /// wait first, which nobody but a developer with a typo ever pays.
   Future<Map<String, dynamic>?> requireExtension(
     String method, {
     Map<String, String>? args,
   }) async {
-    try {
-      return await _call(method, args);
-    } on RPCError catch (e) {
-      if (!_isMethodNotFound(e)) rethrow;
-      throw StateError(
-        'the guest has no $method. It registers: '
-        '${(await _registeredExtensions()).join(', ')}',
-      );
+    var waited = Stopwatch()..start();
+    while (true) {
+      try {
+        return await _call(method, args);
+      } on RPCError catch (e) {
+        if (!_isMethodNotFound(e)) rethrow;
+        if (waited.elapsed >= registrationWindow) {
+          throw StateError(
+            'the guest has no $method. It registers: '
+            '${(await _registeredExtensions()).join(', ')}',
+          );
+        }
+        await Future<void>.delayed(_registrationPoll);
+      }
     }
   }
 
