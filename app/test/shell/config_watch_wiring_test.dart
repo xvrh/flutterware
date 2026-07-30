@@ -29,6 +29,12 @@ const _two =
     '{"version":1,"plugins":[{"id":"a.one","label":"One"},'
     '{"id":"a.two","label":"Two"}]}';
 
+/// Names a package that is not on disk. The package list is read off the
+/// plugins that declare it, so this is where a package lives now.
+const _declaringMissing =
+    '{"version":1,"plugins":[{"id":"a.one","label":"One",'
+    '"config":{"packages":[{"path":"pkg"}]}}]}';
+
 var _disposedIds = <String>[];
 
 class _FakeCore extends PluginCore {
@@ -222,6 +228,41 @@ void main() {
     ]);
     expect(_disposedIds, contains('a.one'));
     expect(shell.lastLoad(worktree)!.outcome, ConfigLoadOutcome.rebuilt);
+  });
+
+  test('a load that changed nothing still re-checks the disk', () async {
+    // The one error that is not a fact about the config: you named a package
+    // and it is not there. An unchanged load clears the error before it decides
+    // whether to rebuild, so without a re-check it would drop a warning that is
+    // still true — and never notice the package you have since created.
+    config.writeAsStringSync(_declaringMissing);
+    shell = controller(cores: {'a.one': _FakeCore.new});
+    await shell.start(root.path);
+    var worktree = shell.selected!;
+    expect(shell.errorFor(worktree)?.message, contains('pkg'));
+
+    // Same manifest, different bytes — the content gate lets it through and
+    // `declares` says nothing moved.
+    await save('  $_declaringMissing');
+
+    expect(shell.lastLoad(worktree)!.outcome, ConfigLoadOutcome.unchanged);
+    expect(
+      shell.errorFor(worktree)?.message,
+      contains('pkg'),
+      reason: 'the package is still missing, so the warning is still true',
+    );
+
+    Directory(p.join(root.path, 'pkg')).createSync();
+    await save('   $_declaringMissing');
+
+    expect(shell.lastLoad(worktree)!.outcome, ConfigLoadOutcome.unchanged);
+    expect(
+      shell.errorFor(worktree),
+      isNull,
+      reason:
+          'and it clears the moment the package exists, without the '
+          'config having changed at all',
+    );
   });
 
   test('closing the worktree stops its watcher', () async {

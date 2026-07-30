@@ -459,6 +459,10 @@ class ShellController extends ChangeNotifier {
     if (existing != null &&
         !existing.isDisposed &&
         existing.session.declares(manifest)) {
+      // The config did not move; the disk may have. This is the one check that
+      // does not follow from the manifest, so an unchanged load still has to
+      // make it — see [_checkDeclarations].
+      _checkDeclarations(open);
       return done(
         ConfigLoadOutcome.unchanged,
         plugins: existing.plugins.length,
@@ -495,16 +499,7 @@ class ShellController extends ChangeNotifier {
         flutterSdk: flutterSdk,
       );
       open.workspace = workspace;
-
-      // Never clobber a config-load failure: that is the more useful error,
-      // and a broken config is often *why* the declarations look wrong.
-      var unknown = workspace.unknownDeclarations;
-      if (unknown.isNotEmpty && open.error == null) {
-        open.error = WorktreeError(
-          worktree,
-          'Declared package(s) not found on disk: ${unknown.join(', ')}',
-        );
-      }
+      _checkDeclarations(open);
 
       open.session = WorktreeSession.resolve(
         worktree: worktree,
@@ -519,6 +514,26 @@ class ShellController extends ChangeNotifier {
       // plugins" over this would be claiming a session that does not exist.
       open.error ??= WorktreeError(worktree, '$e');
       return '$e';
+    }
+  }
+
+  /// Re-derives the "you named a package that is not there" error.
+  ///
+  /// **Run on every load, including one that changed nothing.** It is the one
+  /// error whose truth lives on disk rather than in the config, so a load that
+  /// skipped it would either keep a warning about a package you have since
+  /// created, or — worse — drop a warning that is still true, because the load
+  /// clears the error before deciding whether to rebuild.
+  ///
+  /// Never clobbers a config-load failure: that is the more useful error, and a
+  /// broken config is often *why* the declarations look wrong.
+  void _checkDeclarations(_Open open) {
+    var unknown = open.workspace?.unknownDeclarations ?? const <String>[];
+    if (unknown.isNotEmpty && open.error == null) {
+      open.error = WorktreeError(
+        open.worktree,
+        'Declared package(s) not found on disk: ${unknown.join(', ')}',
+      );
     }
   }
 

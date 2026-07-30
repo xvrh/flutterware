@@ -103,6 +103,14 @@ class ManifestLoader {
       return ProcessResult(process.pid, exitCode, await stdout, await stderr);
     } on TimeoutException {
       process.kill(ProcessSignal.sigkill);
+      // Nobody will await these now, and an abandoned future that completes
+      // with an error is an unhandled async error — a test failure under
+      // `flutter test`, a crash report in the app. SIGKILL can cut a multi-byte
+      // sequence in half and `utf8.decoder` is strict, so this is reachable
+      // rather than theoretical. Whatever they were going to say, the exception
+      // below says it better.
+      unawaited(stdout.then((_) {}, onError: (_) {}));
+      unawaited(stderr.then((_) {}, onError: (_) {}));
       throw ManifestLoadException(
         '$configFilePath did not finish within ${timeout.inSeconds}s and was '
         'killed.',
