@@ -11,13 +11,19 @@ import 'package:path/path.dart' as p;
 /// appended. A socket under that copy's `build/` overflows, and the error the
 /// OS gives is about path length rather than about anything the caller did.
 String flutterwareRunDir() {
+  var dir = p.join(flutterwareDir(), 'run');
+  Directory(dir).createSync(recursive: true);
+  return dir;
+}
+
+/// The `~/.flutterware` directory: per-user state that outlives any one run
+/// or checkout, such as compiled-shader caches keyed by engine revision.
+String flutterwareDir() {
   var home =
       Platform.environment['HOME'] ??
       Platform.environment['USERPROFILE'] ??
       Directory.systemTemp.path;
-  var dir = p.join(home, '.flutterware', 'run');
-  Directory(dir).createSync(recursive: true);
-  return dir;
+  return p.join(home, '.flutterware');
 }
 
 /// Deletes what previous runs left behind in [flutterwareRunDir].

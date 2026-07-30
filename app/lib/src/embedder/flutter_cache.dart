@@ -69,6 +69,12 @@ class FlutterCache {
   // engine dir, and the engine binaries shipped here are universal.
   String get icuData => p.join(_engine, 'darwin-x64', 'icudtl.dat');
 
+  /// The Impeller shader compiler, a host tool living next to [icuData].
+  String get impellerc => p.join(_engine, 'darwin-x64', 'impellerc');
+
+  /// The include directory with impellerc's standard library.
+  String get shaderLib => p.join(_engine, 'darwin-x64', 'shader_lib');
+
   /// The engine revision the cached artifacts were built at. Used to fetch the
   /// matching `FlutterEmbedder.framework` from Flutter's artifact storage.
   String get engineRevision =>

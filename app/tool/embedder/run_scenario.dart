@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:async/async.dart';
+import 'package:flutterware_app/src/catalog/asset_bundle.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/frontend_server.dart';
@@ -17,10 +18,9 @@ import 'package:path/path.dart' as p;
 /// With `--hot`, runs the scenario, edits the scenario source, hot-reloads the
 /// *live* guest through its VM service, and re-runs — without restarting.
 ///
-/// Flags: `--hot`, `--rebuild-assets`.
+/// Flags: `--hot`.
 Future<void> main(List<String> args) async {
   var hot = args.contains('--hot');
-  var forceAssets = args.contains('--rebuild-assets');
 
   var packageRoot = p.dirname(p.dirname(p.dirname(p.fromUri(Platform.script))));
   var repoRoot = p.dirname(packageRoot);
@@ -45,16 +45,16 @@ Future<void> main(List<String> args) async {
   out.createSync(recursive: true);
 
   await ensureEmbedderFramework(cache, engineDir);
-  // The asset bundle (fonts, MaterialIcons, AssetManifest) is what makes the
-  // guest behave like a real app. It is slow (~11s) and changes rarely, so it
-  // is cached; the kernel is recompiled over it by the fast compiler below.
-  await _ensureAssetBundle(
-    packageRoot: packageRoot,
-    scenePath: scenePath,
-    assetsDir: assetsDir,
+  // The asset bundle (fonts, MaterialIcons, compiled shaders, manifests) is
+  // what makes the guest behave like a real app — the ink-sparkle shader in
+  // particular, which the FilledButton tap below loads on first use.
+  // Milliseconds, so it is rebuilt every start; the kernel is compiled over it
+  // by the fast compiler below.
+  await AssetBundleBuilder(
     cache: cache,
-    force: forceAssets,
-  );
+    rootPackageRoot: packageRoot,
+    packageConfigPath: p.join(repoRoot, '.dart_tool', 'package_config.json'),
+  ).build(assetsDir);
 
   // A *resident* compiler: the first compile is cold, every later one is an
   // incremental recompile of just the edited library.
@@ -271,30 +271,6 @@ Future<bool> _hotCycle({
     return await _runOnce(control, lines, outDir, 'run-1-hot');
   } finally {
     file.writeAsStringSync(original);
-  }
-}
-
-Future<void> _ensureAssetBundle({
-  required String packageRoot,
-  required String scenePath,
-  required String assetsDir,
-  required FlutterCache cache,
-  required bool force,
-}) async {
-  if (File(p.join(assetsDir, 'FontManifest.json')).existsSync() && !force) {
-    return;
-  }
-  stdout.writeln('[scenario] building the Flutter asset bundle');
-  var result = await Process.run(p.join(cache.flutterRoot, 'bin', 'flutter'), [
-    'build',
-    'bundle',
-    '-t',
-    scenePath,
-    '--asset-dir',
-    assetsDir,
-  ], workingDirectory: packageRoot);
-  if (result.exitCode != 0) {
-    throw StateError('flutter build bundle failed:\n${result.stderr}');
   }
 }
 

@@ -103,6 +103,18 @@ void main() => runApp(
     p.join(toolDir, 'kernel_blob.bin'),
   ).copySync(p.join(fastDir, 'kernel_blob.bin'));
 
+  // The scene never draws the framework shaders, so frame identity cannot
+  // vouch for them; their compiled bytes are compared directly instead.
+  for (var shader in ['ink_sparkle.frag', 'stretch_effect.frag']) {
+    var tool = File(p.join(toolDir, 'shaders', shader)).readAsBytesSync();
+    var fast = File(p.join(fastDir, 'shaders', shader)).readAsBytesSync();
+    var same = tool.length == fast.length && _digest(tool) == _digest(fast);
+    stdout.writeln(
+      'shaders/$shader ${same ? '— identical (${tool.length} bytes)' : '— DIFFERENT'}',
+    );
+    if (!same) exit(1);
+  }
+
   var a = await _render(hostPath, toolDir, cache, work.path, 'tool');
   var b = await _render(hostPath, fastDir, cache, work.path, 'fast');
 

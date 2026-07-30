@@ -6,6 +6,7 @@ import 'package:standard_message_codec/standard_message_codec.dart';
 
 import '../assets/model/asset_catalog.dart';
 import '../embedder/flutter_cache.dart';
+import '../utils/run_dir.dart';
 
 /// Assembles the asset directory the embedder guest reads, without invoking
 /// `flutter build bundle`.
@@ -22,6 +23,14 @@ import '../embedder/flutter_cache.dart';
 /// - editing an asset in the project tree needs no rebundle, because the
 ///   bundle entry *is* the project's file;
 /// - `NOTICES.Z` is simply absent, which the guest does not mind.
+///
+/// The one payload that cannot be symlinked is the framework's fragment
+/// shaders: the tool *compiles* those with `impellerc`, and
+/// `FragmentProgram.fromAsset` parses the compiled bundle — handed the GLSL
+/// source instead, it throws, which surfaces as a crash on the first tap of a
+/// Material 3 button (the ink-sparkle ripple). They are compiled here with the
+/// tool's exact invocation and cached per engine revision, so only the first
+/// build after an SDK update pays the ~250ms per shader.
 ///
 /// **Which keys resolve to which files is not decided here** — [AssetCatalog]
 /// decides it, and the asset inspector reads the same answer. What is left in
@@ -59,6 +68,7 @@ class AssetBundleBuilder {
 
     _writeManifests(output, catalog);
     _linkPayloads(output, catalog);
+    await _linkCompiledShaders(output);
   }
 
   void _writeManifests(String output, AssetCatalog catalog) {
@@ -128,16 +138,6 @@ class AssetBundleBuilder {
       );
     }
 
-    var src = p.join(cache.flutterRoot, 'packages', 'flutter', 'lib', 'src');
-    _link(
-      p.join(output, 'shaders', 'ink_sparkle.frag'),
-      p.join(src, 'material', 'shaders', 'ink_sparkle.frag'),
-    );
-    _link(
-      p.join(output, 'shaders', 'stretch_effect.frag'),
-      p.join(src, 'widgets', 'shaders', 'stretch_effect.frag'),
-    );
-
     _link(
       p.join(output, 'isolate_snapshot_data'),
       p.join(
@@ -150,6 +150,63 @@ class AssetBundleBuilder {
     );
     // Empty in a JIT debug build, and the engine expects the file to exist.
     File(p.join(output, 'vm_snapshot_data')).writeAsBytesSync(const []);
+  }
+
+  /// The framework's default shaders — the M3 ink-sparkle ripple and the
+  /// stretch-overscroll effect — bundled compiled, like the tool bundles them
+  /// (unconditionally: whether they load is decided by the app's code, not its
+  /// manifest).
+  Future<void> _linkCompiledShaders(String output) async {
+    var src = p.join(cache.flutterRoot, 'packages', 'flutter', 'lib', 'src');
+    var sources = [
+      p.join(src, 'material', 'shaders', 'ink_sparkle.frag'),
+      p.join(src, 'widgets', 'shaders', 'stretch_effect.frag'),
+    ];
+    var cacheDir = p.join(flutterwareDir(), 'shaders', cache.engineRevision);
+    await Future.wait([
+      for (var source in sources)
+        if (File(source).existsSync())
+          _compiledShader(source, cacheDir).then(
+            (compiled) =>
+                _link(p.join(output, 'shaders', p.basename(source)), compiled),
+          ),
+    ]);
+  }
+
+  /// The compiled form of [source], produced on first use per engine revision.
+  ///
+  /// The invocation is flutter_tools' `ShaderCompiler` verbatim, for the
+  /// target platform `flutter build bundle` defaults to — which is what makes
+  /// the output byte-identical to the tool's, and it includes the SkSL variant
+  /// the guest's Skia engine actually consumes.
+  Future<String> _compiledShader(String source, String cacheDir) async {
+    var compiled = p.join(cacheDir, p.basename(source));
+    if (File(compiled).existsSync()) return compiled;
+    Directory(cacheDir).createSync(recursive: true);
+    // Compiled under a scratch name and renamed in: two builders racing on a
+    // fresh cache each write their own scratch, and the renames — of identical
+    // bytes — land whole either way.
+    var scratch = '$compiled.$pid';
+    var result = await Process.run(cache.impellerc, [
+      '--sksl',
+      '--runtime-stage-gles',
+      '--runtime-stage-gles3',
+      '--runtime-stage-vulkan',
+      '--iplr',
+      '--sl=$scratch',
+      '--spirv=$scratch.spirv',
+      '--input=$source',
+      '--input-type=frag',
+      '--include=${p.dirname(source)}',
+      '--include=${cache.shaderLib}',
+    ]);
+    if (result.exitCode != 0) {
+      throw StateError('impellerc failed on $source:\n${result.stderr}');
+    }
+    // A by-product nothing reads; the tool deletes it too.
+    File('$scratch.spirv').deleteSync();
+    File(scratch).renameSync(compiled);
+    return compiled;
   }
 
   void _link(String at, String target) {
