@@ -34,9 +34,27 @@ void main() {
     expect(scenarioPlace(segments), place);
   });
 
+  test('round-trips a step', () {
+    var place = const ScenarioPlace(
+      'examples/example',
+      file: 'test/scenarios/counter_test.dart',
+      scenario: 'Counter',
+      step: 3,
+    );
+    var segments = scenarioSegments(
+      place.package,
+      file: place.file,
+      scenario: place.scenario,
+      step: place.step,
+    );
+    expect(segments.last, '3');
+    expect(scenarioPlace(segments), place);
+  });
+
   test('reads an unrecognised tail as the nearest known place', () {
     expect(scenarioPlace([]), isNull);
     expect(scenarioPlace(['app', 'not-a-file']), const ScenarioPlace('app'));
+    // A non-numeric tail past the scenario is not a step.
     expect(
       scenarioPlace(['app', 'a', 'b.dart', 'Name', 'extra']),
       const ScenarioPlace('app', file: 'a/b.dart', scenario: 'Name'),

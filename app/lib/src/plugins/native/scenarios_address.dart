@@ -5,18 +5,20 @@
 /// ```
 /// <package>                          the package's scenario list
 /// <package>/<file…>/<scenario>       one scenario
+/// <package>/<file…>/<scenario>/<n>   one step of its run
 /// ```
 ///
 /// The package path is one segment (the framework escapes `/`); the source
 /// file is split into path segments so the tree reads naturally; the file's
 /// end is recognised by its `.dart` suffix, which is what makes the scenario
-/// name after it unambiguous. Step addressing (`…/<scenario>/<step>`) arrives
-/// with the runner, not the skeleton.
+/// name after it unambiguous. The step is a bare index — it is the same
+/// segment the `run` action's per-step addresses carry.
 library;
 
 /// A place in the scenarios plugin.
 class ScenarioPlace {
-  const ScenarioPlace(this.package, {this.file, this.scenario});
+  const ScenarioPlace(this.package, {this.file, this.scenario, this.step})
+    : assert(scenario != null || step == null, 'a step needs its scenario');
 
   /// The workspace-relative package path whose scenarios are shown.
   final String package;
@@ -27,21 +29,26 @@ class ScenarioPlace {
   /// The scenario within [file], or null for the whole file.
   final String? scenario;
 
+  /// The selected step of [scenario]'s run, or null for the scenario itself.
+  final int? step;
+
   @override
   bool operator ==(Object other) =>
       other is ScenarioPlace &&
       other.package == package &&
       other.file == file &&
-      other.scenario == scenario;
+      other.scenario == scenario &&
+      other.step == step;
 
   @override
-  int get hashCode => Object.hash(package, file, scenario);
+  int get hashCode => Object.hash(package, file, scenario, step);
 
   @override
   String toString() =>
       'ScenarioPlace($package'
       '${file == null ? '' : '/$file'}'
-      '${scenario == null ? '' : '#$scenario'})';
+      '${scenario == null ? '' : '#$scenario'}'
+      '${step == null ? '' : '@$step'})';
 }
 
 /// The address segments naming [package] and, if given, where inside it.
@@ -49,9 +56,11 @@ List<String> scenarioSegments(
   String package, {
   String? file,
   String? scenario,
+  int? step,
 }) {
   assert(scenario == null || file != null, 'a scenario needs its file');
-  return [package, ...?file?.split('/'), ?scenario];
+  assert(step == null || scenario != null, 'a step needs its scenario');
+  return [package, ...?file?.split('/'), ?scenario, if (step != null) '$step'];
 }
 
 /// The inverse of [scenarioSegments].
@@ -67,5 +76,8 @@ ScenarioPlace? scenarioPlace(List<String> segments) {
   if (dartIndex < 0) return ScenarioPlace(package);
   var file = rest.take(dartIndex + 1).join('/');
   var scenario = dartIndex + 1 < rest.length ? rest[dartIndex + 1] : null;
-  return ScenarioPlace(package, file: file, scenario: scenario);
+  var step = dartIndex + 2 < rest.length
+      ? int.tryParse(rest[dartIndex + 2])
+      : null;
+  return ScenarioPlace(package, file: file, scenario: scenario, step: step);
 }

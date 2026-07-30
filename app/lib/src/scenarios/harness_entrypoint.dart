@@ -31,10 +31,18 @@ String generateHarnessEntrypoint(List<String> files) {
 }
 
 /// Writes the entrypoint into the package and returns its absolute path.
+///
+/// Left alone when the content is already right: the entrypoint is a compiled
+/// source, and an untouched mtime is what keeps a refresh from invalidating —
+/// and recompiling — it for nothing.
 String writeHarnessEntrypoint(String packageRoot, List<String> files) {
   var path = p.join(packageRoot, harnessEntrypointPath);
-  File(path)
-    ..parent.createSync(recursive: true)
-    ..writeAsStringSync(generateHarnessEntrypoint(files));
+  var source = generateHarnessEntrypoint(files);
+  var file = File(path);
+  if (!file.existsSync() || file.readAsStringSync() != source) {
+    file
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync(source);
+  }
   return path;
 }

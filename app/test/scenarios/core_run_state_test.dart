@@ -1,0 +1,175 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/plugins.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/log_client.dart';
+import 'package:flutterware_app/src/context.dart';
+import 'package:flutterware_app/src/plugins/native/scenarios_core.dart';
+import 'package:flutterware_app/src/plugins/plugin_host.dart';
+import 'package:flutterware_app/src/scenarios/runner.dart';
+import 'package:flutterware_app/src/shell/workspace.dart';
+import 'package:flutterware_app/src/shell/worktree.dart';
+import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+
+/// The panel's run-state machinery — transitions, kept outcomes, artifact
+/// cleanup — over a fake runner, because the real one's behaviour is already
+/// covered end-to-end by `runner_test.dart` and a second cold `flutter_tester`
+/// here would prove nothing new about state handling.
+void main() {
+  late Directory root;
+
+  ScenariosCore core({_FakeRunner? runner}) {
+    var worktree = Worktree(path: root.path);
+    var subject = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: worktree,
+        workspace: Workspace(
+          root: worktree.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    if (runner != null) subject.debugInstallRunner('.', runner);
+    return subject;
+  }
+
+  Future<ScenarioPanelRun> settled(ScenariosCore subject) async {
+    while (true) {
+      var run = subject.panelRunFor(
+        '.',
+        file: 'test/scenarios/a_test.dart',
+        scenario: 'A',
+      );
+      if (run != null && !run.running) return run;
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+  }
+
+  void start(ScenariosCore subject) =>
+      subject.startRun('.', file: 'test/scenarios/a_test.dart', scenario: 'A');
+
+  setUp(() {
+    root = Directory.systemTemp.createTempSync('fw_scenarios_core_test');
+  });
+
+  tearDown(() => root.deleteSync(recursive: true));
+
+  test('a run lands as the outcome, with its artifact directory', () async {
+    var runner = _FakeRunner();
+    var subject = core(runner: runner);
+    start(subject);
+    expect(
+      subject
+          .panelRunFor('.', file: 'test/scenarios/a_test.dart', scenario: 'A')!
+          .running,
+      isTrue,
+    );
+    expect(subject.anyPanelRunning, isTrue);
+
+    var run = await settled(subject);
+    expect(run.error, isNull);
+    expect(run.outcome!.ok, isTrue);
+    expect(run.outcome!.steps.single.texts, ['hello']);
+    expect(run.output, isNotNull);
+    expect(runner.runs, 1);
+    expect(subject.anyPanelRunning, isFalse);
+  });
+
+  test('a failed re-run keeps the outcome it had, under the error', () async {
+    var runner = _FakeRunner();
+    var subject = core(runner: runner);
+    start(subject);
+    var first = await settled(subject);
+
+    runner.failure = 'the harness does not compile';
+    start(subject);
+    var second = await settled(subject);
+    expect(second.error, contains('does not compile'));
+    expect(second.outcome, same(first.outcome));
+    expect(second.output, first.output);
+  });
+
+  test('a superseding run deletes the previous artifacts', () async {
+    var runner = _FakeRunner();
+    var subject = core(runner: runner);
+    start(subject);
+    var first = await settled(subject);
+    var oldDir = Directory(first.output!)..createSync(recursive: true);
+
+    // Same-millisecond runs would share the directory name; nudge past it.
+    await Future<void>.delayed(const Duration(milliseconds: 2));
+    start(subject);
+    var second = await settled(subject);
+    expect(second.output, isNot(first.output));
+    expect(oldDir.existsSync(), isFalse);
+  });
+
+  test('starting while running is a no-op', () async {
+    var runner = _FakeRunner()..gate = Completer<void>();
+    var subject = core(runner: runner);
+    start(subject);
+    start(subject);
+    start(subject);
+    runner.gate!.complete();
+    await settled(subject);
+    expect(runner.runs, 1);
+  });
+}
+
+class _FakeRunner extends ScenarioRunner {
+  _FakeRunner()
+    : super(packageRoot: '/none', directory: 'none', flutterSdkRoot: '/none');
+
+  var runs = 0;
+  String? failure;
+
+  /// When set, [run] waits on it — so a test can observe the running state.
+  Completer<void>? gate;
+
+  @override
+  Future<Map<String, Object?>> run({
+    required String outDir,
+    String? file,
+    String? scenario,
+  }) async {
+    runs++;
+    if (gate case var gate?) await gate.future;
+    if (failure case var failure?) throw StateError(failure);
+    return {
+      'ms': 5,
+      'scenarios': [
+        {
+          'file': file,
+          'name': scenario,
+          'ok': true,
+          'ms': 3,
+          'steps': [
+            {
+              'index': 0,
+              'name': 'shot',
+              'auto': false,
+              'png': '$outDir/0-shot.png',
+              'tree': '$outDir/0-shot.tree.json',
+              'texts': ['hello'],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  @override
+  Future<void> dispose() async {}
+}

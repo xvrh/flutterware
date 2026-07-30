@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 
+import 'package:collection/collection.dart';
 import 'package:flutterware/plugins.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../../scenarios/discovery.dart';
@@ -14,10 +17,36 @@ import 'scenarios_results.dart';
 /// The registered id — also what `tool/flutterware.dart` declares.
 const scenariosPluginId = 'flutterware.scenarios';
 
-/// Scenarios for each declared package — the skeleton tier: the syntactic
-/// scan, projected into the report and the `list` action. The runner (daemon,
-/// `run` action, per-step artifacts) builds on top of this; see
-/// `docs/superpowers/specs/2026-07-30-scenarios-design.md`.
+/// One scenario's latest panel-driven run — what the flow page renders.
+///
+/// Replaced wholesale on every transition, never mutated: the panel compares
+/// nothing, it just draws whatever this says.
+class ScenarioPanelRun {
+  ScenarioPanelRun({
+    required this.running,
+    this.outcome,
+    this.error,
+    this.output,
+  });
+
+  final bool running;
+
+  /// The last completed outcome — kept while a re-run is in flight and kept
+  /// through a failed one, so the page never blanks what it was showing.
+  final ScenarioRunOutcome? outcome;
+
+  /// What the last attempt died of, or null. Coexists with [outcome]: a
+  /// failed *re-run* keeps the previous result on screen under the complaint.
+  final String? error;
+
+  /// The directory [outcome]'s artifacts live in.
+  final String? output;
+}
+
+/// Scenarios for each declared package: the syntactic scan projected into the
+/// report and the `list` action, the `run` action in a warm
+/// [ScenarioRunner], and the panel's per-scenario run state on the same
+/// runner; see `docs/superpowers/specs/2026-07-30-scenarios-design.md`.
 ///
 /// Follows the dependencies core's rule: **nothing here starts work.** The
 /// constructor allocates nothing and [report] only reads what somebody already
@@ -33,6 +62,14 @@ class ScenariosCore extends PluginCore {
   /// One warm runner per package, created by the first `run` and kept — a
   /// second run reuses the compiled harness and the live tester.
   final _runners = <String, ScenarioRunner>{};
+
+  /// The panel's runs, one per scenario, keyed `(package, file, scenario)`.
+  final _panelRuns = <(String, String, String), ScenarioPanelRun>{};
+
+  /// The runner's last progress line per package — the only narration a cold
+  /// start has, so the panel can say "building the asset bundle" rather than
+  /// spinning silently for thirty seconds.
+  final _runnerLogs = <String, String>{};
 
   /// Declared packages, filtered to those the workspace knows about.
   late final List<String> packages = [
@@ -81,6 +118,98 @@ class ScenariosCore extends PluginCore {
 
   /// A scan result is cheap and kept — releasing it would only buy a rescan.
   void untrack(String path) {}
+
+  /// The panel's latest run of one scenario, or null when it has never run.
+  ScenarioPanelRun? panelRunFor(
+    String package, {
+    required String file,
+    required String scenario,
+  }) => _panelRuns[(package, file, scenario)];
+
+  String? runnerLogFor(String package) => _runnerLogs[package];
+
+  bool get anyPanelRunning => _panelRuns.values.any((run) => run.running);
+
+  /// Starts one scenario's run for the panel. A no-op while that scenario is
+  /// already running; a completed run may be started again.
+  ///
+  /// Same runner, same warm guest as the `run` action — the panel is another
+  /// caller, not another path. The runner refreshes edited sources before a
+  /// warm run, which is what makes the Run button honest after an edit.
+  void startRun(
+    String package, {
+    required String file,
+    required String scenario,
+  }) {
+    var key = (package, file, scenario);
+    var previous = _panelRuns[key];
+    if (previous?.running ?? false) return;
+    _panelRuns[key] = ScenarioPanelRun(
+      running: true,
+      outcome: previous?.outcome,
+      output: previous?.output,
+    );
+    notifyChanged();
+    unawaited(_panelRun(key, previous));
+  }
+
+  Future<void> _panelRun(
+    (String, String, String) key,
+    ScenarioPanelRun? previous,
+  ) async {
+    var (package, file, scenario) = key;
+    var packageRoot = host.workspace.packageFor(package).directory.path;
+    var outDir = p.join(
+      packageRoot,
+      'build',
+      'flutterware',
+      'scenario_runs',
+      'panel-${DateTime.now().millisecondsSinceEpoch}',
+    );
+    try {
+      var report = await _runnerFor(
+        package,
+      ).run(outDir: outDir, file: file, scenario: scenario);
+      var outcome = _describeRun(package, outDir, report).scenarios
+          .where((s) => s.file == file && s.name == scenario)
+          .firstOrNull;
+      if (outcome == null) {
+        _panelRuns[key] = ScenarioPanelRun(
+          running: false,
+          outcome: previous?.outcome,
+          output: previous?.output,
+          error:
+              'The harness ran nothing named "$scenario" in $file — '
+              'renamed since this page was opened?',
+        );
+        return;
+      }
+      _panelRuns[key] = ScenarioPanelRun(
+        running: false,
+        outcome: outcome,
+        output: outDir,
+      );
+      // The superseded run's artifacts. The images already on screen are
+      // decoded, so pulling the files is safe — and keeping them would grow a
+      // directory per click.
+      if (previous?.output case var old? when old != outDir) {
+        try {
+          Directory(old).deleteSync(recursive: true);
+        } on FileSystemException {
+          // Somebody looking at it, or already gone — either way not ours.
+        }
+      }
+    } catch (error) {
+      _panelRuns[key] = ScenarioPanelRun(
+        running: false,
+        outcome: previous?.outcome,
+        output: previous?.output,
+        error: '$error',
+      );
+    } finally {
+      notifyChanged();
+    }
+  }
 
   @override
   PluginReport get report {
@@ -362,8 +491,18 @@ class ScenariosCore extends PluginCore {
       packageRoot: host.workspace.packageFor(path).directory.path,
       directory: directoryFor(path),
       flutterSdkRoot: host.workspace.flutterSdk.root,
+      onLog: (line) {
+        _runnerLogs[path] = line;
+        notifyChanged();
+      },
     ),
   );
+
+  /// Installs a runner for [path], so a test can drive the run-state machinery
+  /// without a real `flutter_tester` behind it.
+  @visibleForTesting
+  void debugInstallRunner(String path, ScenarioRunner runner) =>
+      _runners[path] = runner;
 
   /// The harness's report, in the declared result shape and with each step
   /// given its `fw://` address.

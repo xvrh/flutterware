@@ -1,4 +1,4 @@
-@Timeout(Duration(minutes: 3))
+@Timeout(Duration(minutes: 4))
 library;
 
 import 'dart:convert';
@@ -75,9 +75,64 @@ void main() {
       );
       expect(((rerun['scenarios']! as List).single as Map)['ok'], isTrue);
       expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
+
+      // A new scenario file. No hot reload re-runs the generated entrypoint's
+      // `main`, so this must take the restart lane — and prove the freshly
+      // imported file arrives.
+      var scratch = File(
+        p.join(packageRoot, 'test', 'scenarios', 'scratch_test.dart'),
+      );
+      scratch.writeAsStringSync(_scratchSource('v1'));
+      try {
+        await runner.refresh();
+        var refreshed = await runner.list();
+        expect([
+          for (var s in refreshed) '${s.file} ${s.name}',
+        ], contains('test/scenarios/scratch_test.dart Scratch'));
+        expect(
+          _scratchTexts(
+            await runner.run(
+              outDir: outDir,
+              file: 'test/scenarios/scratch_test.dart',
+              scenario: 'Scratch',
+            ),
+          ),
+          contains('v1'),
+        );
+
+        // A body edit. `run` on a warm runner refreshes by itself — the Run
+        // button never replays stale code — and the same file set means this
+        // takes the reload lane, not a restart.
+        await Future<void>.delayed(const Duration(seconds: 1));
+        scratch.writeAsStringSync(_scratchSource('v2'));
+        expect(
+          _scratchTexts(
+            await runner.run(
+              outDir: outDir,
+              file: 'test/scenarios/scratch_test.dart',
+              scenario: 'Scratch',
+            ),
+          ),
+          contains('v2'),
+        );
+      } finally {
+        scratch.deleteSync();
+      }
     } finally {
       await runner.dispose();
       Directory(outDir).deleteSync(recursive: true);
+    }
+  });
+
+  test('the entrypoint file is left alone when its content is right', () {
+    var root = Directory.systemTemp.createTempSync('scenario_entrypoint');
+    try {
+      var path = writeHarnessEntrypoint(root.path, ['test/scenarios/a.dart']);
+      var written = File(path).statSync().modified;
+      writeHarnessEntrypoint(root.path, ['test/scenarios/a.dart']);
+      expect(File(path).statSync().modified, written);
+    } finally {
+      root.deleteSync(recursive: true);
     }
   });
 
@@ -101,3 +156,27 @@ void main() {
     );
   });
 }
+
+/// The last (only) step's texts of a single-scenario run report.
+List<String> _scratchTexts(Map<String, Object?> report) {
+  var scenarios = (report['scenarios']! as List).cast<Map<String, dynamic>>();
+  var scratch = scenarios.single;
+  expect(scratch['ok'], isTrue, reason: '${scratch['errors']}');
+  var steps = (scratch['steps']! as List).cast<Map<String, dynamic>>();
+  return (steps.last['texts']! as List).cast<String>();
+}
+
+String _scratchSource(String label) =>
+    '''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Scratch', (s) async {
+    await s.tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: Text('$label'))),
+    );
+    await s.screen('shot');
+  });
+}
+''';
