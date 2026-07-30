@@ -53,37 +53,36 @@ void main() {
       );
 
       // `path` is the join key the framework guarantees, and the only part of a
-      // plugin's per-package config it understands. A plugin naming a package
-      // the config never declared is a real mistake with a silent symptom.
-      var declared = manifest.packages.map((package) => package.path).toSet();
-      var checked = 0;
+      // plugin's per-package config it understands. Every one of them has to
+      // survive the subprocess and reach `manifest.packages`, which is what the
+      // typo check and the shell's package rows are read off.
+      //
+      // This used to assert the reverse — that no plugin names a package the
+      // config never declared — against a separate `fw.packages([...])` list.
+      // That list is gone and the packages are read off these same entries, so
+      // the old direction is now true by construction and worth nothing.
+      var named = <String>{};
       for (var plugin in manifest.plugins) {
         var packages = plugin.config['packages'] as List? ?? const [];
         for (var entry in packages.cast<Map>()) {
-          checked++;
-          expect(
-            declared,
-            contains(entry['path']),
-            reason: '"${plugin.id}" names a package the config did not declare',
-          );
+          named.add(entry['path']! as String);
         }
       }
-
-      // The cross-check above is only worth having if it ran: a manifest where
-      // no plugin declared a package would satisfy every loop in this test
-      // while telling us nothing.
       expect(
-        checked,
-        greaterThan(0),
+        named,
+        isNotEmpty,
         reason: 'no plugin declared any package, so nothing was cross-checked',
       );
-
-      // Tags survive the encode/decode round trip through the subprocess —
-      // asserted by shape rather than by value, so tagging a package
-      // differently is not a test failure.
-      for (var package in manifest.packages) {
-        expect(package.tags, everyElement(isNotEmpty));
-      }
+      expect(
+        manifest.packages.map((package) => package.path).toSet(),
+        named,
+        reason: 'a package a plugin names went missing between the two',
+      );
+      expect(
+        manifest.packages.map((package) => package.path).toList(),
+        hasLength(named.length),
+        reason: 'a package named by two plugins should be reported once',
+      );
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );

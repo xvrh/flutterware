@@ -84,9 +84,13 @@ Everything else is the plugin's business, and it serialises through the existing
 > plugin's packages against it — so a package the list forgot was *silently
 > dropped* from a plugin that had been explicitly configured with it, which is
 > the one failure a declaration list exists to prevent. `PluginManifest.packages`
-> is now derived from the plugin entries, the typo check covers every path any
-> plugin names, and `Pkg.tags` rides on the per-plugin entry. The `Pkg` values
-> and per-plugin lists below are unchanged; only the extra call is.
+> is now derived from the plugin entries, and the typo check covers every path
+> any plugin names. `Pkg.tags` went with it: nothing ever read it, and with the
+> package list derived there was no longer anywhere for it to travel. Tag
+> filtering, if it lands, adds the field back and rewrites the config files that
+> want it — which the original "ship the syntax early" argument was trying to
+> avoid, and which is cheap next to carrying an unread field indefinitely. The
+> `Pkg` values and per-plugin lists below are otherwise unchanged.
 
 ```dart
 void main() => Flutterware.configure((fw) {

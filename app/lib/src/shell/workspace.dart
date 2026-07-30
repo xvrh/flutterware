@@ -64,14 +64,6 @@ class Workspace {
   String absolutePathOf(String relative) =>
       relative == '.' ? root : p.normalize(p.join(root, relative));
 
-  /// The declared package at [path], for its tags.
-  ///
-  /// No caller yet — it is the seam the host-side tag filter needs, and the
-  /// only way to reach [Pkg.tags] now that the packages come off the plugins.
-  /// It is not a gate: use [exists] for that.
-  Pkg? declaredAt(String path) =>
-      declared.where((pkg) => pkg.path == path).firstOrNull;
-
   /// The handle for one package, interned so callers can compare identity.
   ///
   /// Cheap and service-free, so unlike the `Project` it replaces, asking for

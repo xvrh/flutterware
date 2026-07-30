@@ -55,10 +55,9 @@ class PluginManifest {
       for (var entry in (plugin.config['packages'] as List? ?? const [])) {
         if (entry is! Map) continue;
         if (entry['path'] case String path) {
-          // First declaration wins, so the order is the order they are read in
-          // and a second mention cannot quietly change the tags. The plugin's
-          // own keys in this entry — `entrypoint`, `directory` — are not this
-          // decoder's business and are ignored.
+          // First mention wins, so the order is the order they are read in. The
+          // plugin's own keys in this entry — `entrypoint`, `directory` — are
+          // not this decoder's business and are ignored.
           byPath.putIfAbsent(
             path,
             () => Pkg.fromJson(entry.cast<String, Object?>()),

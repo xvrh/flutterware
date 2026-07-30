@@ -9,7 +9,7 @@ import 'package:test/test.dart';
 /// list's only observable effect was to contradict the config below it.
 void main() {
   const root = Pkg('.');
-  const app = Pkg('app', tags: ['gui']);
+  const app = Pkg('app');
 
   /// A config, emitted and parsed back — the host reads this off a
   /// subprocess's stdout and never sees the objects.
@@ -45,13 +45,6 @@ void main() {
     expect(manifest.packages.map((p) => p.path), ['app', '.']);
   });
 
-  test('tags survive the trip, since nothing else carries them now', () {
-    var manifest = manifestOf([
-      Assets(packages: [AssetsPackage(app)]),
-    ]);
-    expect(manifest.packages.single.tags, ['gui']);
-  });
-
   test('a plugin with no packages contributes none', () {
     expect(manifestOf([Dependencies()]).packages, isEmpty);
     expect(manifestOf([]).packages, isEmpty);
@@ -63,11 +56,7 @@ void main() {
     ]);
     expect(manifest.packages.map((p) => p.path), ['app']);
     expect(manifest.plugins.single.config['packages'], [
-      {
-        'path': 'app',
-        'tags': ['gui'],
-        'entrypoint': 'tool/catalog',
-      },
+      {'path': 'app', 'entrypoint': 'tool/catalog'},
     ]);
   });
 }
