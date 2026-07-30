@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterware/plugins.dart';
 
 import 'design/design.dart';
 
@@ -154,3 +155,13 @@ ThemeData buildAppTheme(FwTokens tokens) {
     ),
   );
 }
+
+/// Maps a plugin [Tone] to a palette colour. The single place tones become
+/// pixels — everywhere else they stay data.
+Color toneColor(FwPalette colors, Tone tone) => switch (tone) {
+  Tone.neutral => colors.mut2,
+  Tone.good => colors.grn,
+  Tone.info => colors.info,
+  Tone.warn => colors.amber,
+  Tone.error => colors.red,
+};

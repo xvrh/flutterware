@@ -75,9 +75,9 @@ const _header = '''
 
 # What flutterware can do
 
-Every capability below is reachable from all three surfaces, because all three
-drive the same `PluginCore`s through the same `Session.invoke`. The GUI adds a
-panel; it does not add abilities.
+Every capability below is reachable from `fw` and from MCP, because both drive
+the same `PluginCore`s through the same `Session.invoke`. The GUI adds a panel
+over those cores; it does not add abilities.
 
 Regenerate with:
 

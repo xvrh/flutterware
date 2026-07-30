@@ -135,3 +135,13 @@ Map<String, dynamic> _$CatalogAuditEntryToJson(CatalogAuditEntry instance) =>
 Map<String, dynamic> _$CatalogAuditFailureToJson(
   CatalogAuditFailure instance,
 ) => <String, dynamic>{'package': instance.package, 'error': instance.error};
+
+Map<String, dynamic> _$CatalogWebBuildResultToJson(
+  CatalogWebBuildResult instance,
+) => <String, dynamic>{
+  'package': instance.package,
+  'output': instance.output,
+  'indexHtml': instance.indexHtml,
+  'entries': instance.entries,
+  'durationMs': instance.durationMs,
+};

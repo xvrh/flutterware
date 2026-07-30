@@ -1485,6 +1485,29 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'CatalogWebBuildResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'CatalogWebBuildResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{
+        'name': 'output',
+        'type': 'String',
+        'doc':
+            'The directory to serve, worktree-relative where it is inside the worktree — a path that survives being read on another machine.',
+      },
+      <String, Object?>{
+        'name': 'indexHtml',
+        'type': 'String',
+        'doc': 'The page to open, relative to the same root as [output].',
+      },
+      <String, Object?>{
+        'name': 'entries',
+        'type': 'int',
+        'doc': 'How many entries the page can show.',
+      },
+      <String, Object?>{'name': 'durationMs', 'type': 'int'},
+    ],
+  }),
   'DependencyEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'DependencyEntry',
     'fields': <Object?>[

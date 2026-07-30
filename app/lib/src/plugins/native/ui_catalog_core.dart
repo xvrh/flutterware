@@ -25,6 +25,7 @@ import '../../catalog/inspect_client.dart';
 import '../../catalog/live_session.dart';
 import '../../catalog/protocol.dart';
 import '../../catalog/headless_catalog.dart';
+import '../../catalog/web_build.dart';
 import '../plugin_core.dart';
 import 'ui_catalog_address.dart';
 import 'ui_catalog_results.dart';
@@ -32,6 +33,14 @@ import '../plugin_host.dart';
 
 /// The registered id — also what `tool/flutterware.dart` declares.
 const uiCatalogPluginId = 'flutterware.ui_catalog';
+
+/// The action that compiles a browsable page.
+///
+/// Named once because two places spell it: the declaration below, and the
+/// command the GUI's build dialog shows so the same thing can be run from a
+/// terminal. A rename that reached only one of them would put a command that
+/// fails in front of a user.
+const webBuildActionId = 'build-web';
 
 /// Where a package keeps its demos when it does not say otherwise.
 const _defaultRoot = 'demo';
@@ -121,6 +130,11 @@ class UiCatalogCore extends PluginCore {
       if (host.workspace.exists(path)) path,
   ];
 
+  /// The web build in flight per package, so it can be refused a second time
+  /// and killed when the worktree goes — see [dispose]. A `flutter build web`
+  /// child is not reaped when the Dart process exits.
+  final _builds = <String, WebCatalogBuilder>{};
+
   final _scans = <String, ScanResult>{};
   final _failures = <String, String>{};
   final _scanning = <String>{};
@@ -134,6 +148,20 @@ class UiCatalogCore extends PluginCore {
 
   /// The scan failure for [path], for a panel that wants to show it directly.
   String? failureFor(String path) => _failures[path];
+
+  /// Ends anything still running, which for this plugin means a web build.
+  ///
+  /// Called by the [Session] when the worktree closes. Without it a compile
+  /// started from the dialog outlives the window it belongs to and keeps writing
+  /// into the user's project.
+  @override
+  void dispose() {
+    for (var builder in _builds.values) {
+      unawaited(builder.cancel());
+    }
+    _builds.clear();
+    super.dispose();
+  }
 
   /// Scans [path], unless it already has been. Idempotent.
   ///
@@ -177,6 +205,13 @@ class UiCatalogCore extends PluginCore {
         () => CatalogScanner(projectRoot: root, roots: [entryRoot]).scan(),
       );
       _scans[path] = result;
+      // A scan that worked supersedes one that did not. Without this the
+      // failure outlives its cause for the life of the process: the sidebar
+      // keeps the error badge after the demo is fixed, `track` keeps declining
+      // to look again because it treats a recorded failure as "already
+      // scanned", and `build-web` keeps refusing with the stale message while
+      // holding a perfectly good entry list.
+      _failures.remove(path);
     } catch (e) {
       _failures[path] = '$e';
     } finally {
@@ -673,6 +708,47 @@ class UiCatalogCore extends PluginCore {
           ),
         ],
       ),
+      PluginAction(
+        webBuildActionId,
+        'Build a web page',
+        returns: CatalogWebBuildResult,
+        description:
+            'Compile the whole catalog into a browsable page — the demos '
+            'themselves running in a browser, with their knobs, not pictures '
+            'of them. Needs the package to have web enabled; says so, with the '
+            'command, when it does not.',
+        parameters: [
+          ActionParameter(
+            'package',
+            'Package',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description:
+                'Which declared package; the only one when there is one',
+            options: [
+              for (var path in packages)
+                ActionOption(path, label: path == '.' ? 'root' : path),
+            ],
+          ),
+          const ActionParameter(
+            'output',
+            'Write to',
+            required: false,
+            description:
+                'Where the page goes. Package-relative unless absolute; '
+                'defaults to `build/catalog/web`.',
+          ),
+          const ActionParameter(
+            'base-href',
+            'Base href',
+            required: false,
+            description:
+                'What `flutter build web --base-href` takes, for serving the '
+                'page from a subdirectory rather than the root of a host. Must '
+                'begin and end with a slash — `/catalog/`.',
+          ),
+        ],
+      ),
     ],
     view: _view,
   );
@@ -786,6 +862,8 @@ class UiCatalogCore extends PluginCore {
         return _inspect(arguments);
       case 'audit':
         return _audit(arguments);
+      case webBuildActionId:
+        return _buildWeb(arguments);
       default:
         return super.invoke(actionId, arguments: arguments);
     }
@@ -815,6 +893,133 @@ class UiCatalogCore extends PluginCore {
       packages: [for (var path in paths) _packageEntries(path)],
     );
   }
+
+  /// Compiles one package's catalog into a browsable page.
+  ///
+  /// Unlike every other action here this runs no daemon and no guest: a page is
+  /// the demos themselves, compiled for a browser, not pictures of them. What
+  /// it needs from this class is only the scan — which entries there are — and
+  /// which package they belong to.
+  ///
+  /// [onOutput] is how a caller follows a build that takes tens of seconds; the
+  /// CLI hands it straight to its own printer and the GUI to a dialog.
+  Future<CatalogWebBuildResult> buildWeb({
+    String? package,
+    String? output,
+    String? baseHref,
+    void Function(String line)? onOutput,
+  }) async {
+    var packagePath = _requireOnePackage(package);
+    await _scan(packagePath);
+    if (_failures[packagePath] case var failure?) {
+      throw StateError('$packagePath could not be scanned: $failure');
+    }
+
+    // One at a time per package. Two builds share a generated source directory,
+    // and `WebAppGenerator.generate` deletes it recursively before writing — so
+    // a second build started while the first is compiling pulls the first's
+    // sources out from under it, and the first fails pointing at files that no
+    // longer exist.
+    if (_builds.containsKey(packagePath)) {
+      throw StateError(
+        'A web build is already running for $packagePath. Wait for it, or '
+        'close the worktree to stop it.',
+      );
+    }
+
+    var packageRoot = p.join(host.worktree.path, packagePath);
+    var builder = _builds[packagePath] = WebCatalogBuilder(
+      flutterExecutable: host.workspace.flutterSdk.flutter,
+      packageRoot: packageRoot,
+      // The package rather than the plugin: a page says what it is a catalog
+      // *of*, and "UI catalog" on a repo with three of them says nothing.
+      title: packagePath == '.' ? host.worktree.name : packagePath,
+    );
+    WebCatalogBuild built;
+    try {
+      built = await builder.build(
+        entries: _scans[packagePath]?.entries ?? const [],
+        output: output,
+        baseHref: baseHref,
+        onOutput: onOutput,
+      );
+    } finally {
+      _builds.remove(packagePath);
+    }
+
+    return CatalogWebBuildResult(
+      package: packagePath,
+      output: _shortened(built.output),
+      indexHtml: _shortened(built.indexHtml),
+      entries: built.entryCount,
+      durationMs: built.duration.inMilliseconds,
+    );
+  }
+
+  Future<CatalogWebBuildResult> _buildWeb(Map<String, Object?> arguments) {
+    String? text(String name) {
+      var value = arguments[name];
+      if (value == null) return null;
+      if (value is! String) {
+        throw ArgumentError.value(value, name, 'must be a string');
+      }
+      return value.isEmpty ? null : value;
+    }
+
+    var baseHref = text('base-href');
+    // Checked here rather than left to the tool, which fails after the whole
+    // compile with a message about a value this action accepted.
+    if (baseHref != null &&
+        (!baseHref.startsWith('/') || !baseHref.endsWith('/'))) {
+      throw ArgumentError.value(
+        baseHref,
+        'base-href',
+        'must begin and end with a slash — `/catalog/`',
+      );
+    }
+
+    return buildWeb(
+      package: text('package'),
+      output: text('output'),
+      baseHref: baseHref,
+    );
+  }
+
+  /// The one package an action can act on, which is not the same question
+  /// [_requestedPackages] answers.
+  ///
+  /// A build writes one page from one package's demos. Defaulting to "all of
+  /// them" would either concatenate catalogues that are deliberately separate
+  /// or silently build the first — so a repo with several is asked, once,
+  /// rather than guessed at.
+  String _requireOnePackage(String? requested) {
+    if (requested != null) {
+      if (!packages.contains(requested)) {
+        throw ArgumentError.value(
+          requested,
+          'package',
+          'not declared for this plugin. Declared: ${packages.join(', ')}',
+        );
+      }
+      return requested;
+    }
+    if (packages.length == 1) return packages.single;
+    if (packages.isEmpty) {
+      throw StateError('No packages are declared for the UI catalog.');
+    }
+    throw ArgumentError.value(
+      null,
+      'package',
+      'this plugin has more than one package, so a build has to say which: '
+          '${packages.join(', ')}',
+    );
+  }
+
+  /// Worktree-relative where it is inside the worktree, so the value survives
+  /// being read on another machine — the same rule [Artifact.path] follows.
+  String _shortened(String path) => p.isWithin(host.worktree.path, path)
+      ? p.relative(path, from: host.worktree.path)
+      : path;
 
   /// Which packages an action was pointed at: the named one, or all declared.
   List<String> _requestedPackages(Map<String, Object?> arguments) {

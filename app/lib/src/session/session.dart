@@ -230,10 +230,14 @@ class Session {
 
   /// Runs one plugin action. **The only way an action is ever run.**
   ///
-  /// Every renderer goes through here — `fw`, the MCP server, and a GUI panel's
-  /// button — which is what makes the parity rule checkable rather than
-  /// aspirational: a capability that is not a declared [PluginAction] is not
-  /// expressible, because there is no other door.
+  /// `fw` and the MCP server both go through here, which is what makes the
+  /// parity rule checkable rather than aspirational: a capability those two can
+  /// reach that is not a declared [PluginAction] is not expressible, because
+  /// there is no other door.
+  ///
+  /// **The GUI is not a third caller.** A panel holds its core and calls it, so
+  /// what keeps the surfaces honest there is not this method but the split
+  /// described on `NativePlugin` — the behaviour belongs to the core either way.
   ///
   /// It is also the seam. Recording the run, joining two clients onto one
   /// execution, reporting progress, and one day forwarding the whole thing to a

@@ -8,8 +8,10 @@ implemented** — `Address`, `Artifact`, `ValueStream`, and the `Session` that
 run log yet, and no viewer to reveal into. See the "landed" sections at the
 end for what exists.
 
-**2026-07-28 session, in one line:** every renderer now runs actions through
-one `Session.invoke`, the GUI included; the two actions we had turned out to do
+**2026-07-28 session, in one line:** `fw` and MCP now run actions through one
+`Session.invoke` — *not* the GUI, which dispatches nothing and calls its core
+directly, as the landed section below already records (this line claimed "the GUI
+included"; corrected 2026-07-30); the two actions we had turned out to do
 nothing and were replaced by queries people actually wanted; a test now drives
 `fw` and MCP over the same session and found three ways they disagreed; and what
 an action returns is a typed class whose shape is read out of the source and

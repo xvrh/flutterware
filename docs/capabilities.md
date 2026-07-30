@@ -2,9 +2,9 @@
 
 # What flutterware can do
 
-Every capability below is reachable from all three surfaces, because all three
-drive the same `PluginCore`s through the same `Session.invoke`. The GUI adds a
-panel; it does not add abilities.
+Every capability below is reachable from `fw` and from MCP, because both drive
+the same `PluginCore`s through the same `Session.invoke`. The GUI adds a panel
+over those cores; it does not add abilities.
 
 Regenerate with:
 
@@ -564,3 +564,27 @@ unreachable: List<CatalogAuditFailure>   # Packages that could not be audited at
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 | `path` | string | no | — | A directory or one file — `demo/settings`, `demo/settings/tile.dart`. Either package-relative or worktree-relative; both are accepted because an entry id is the first and a shell tab-completes the second. |
+
+#### `build-web` — Build a web page
+
+Compile the whole catalog into a browsable page — the demos themselves running in a browser, with their knobs, not pictures of them. Needs the package to have web enabled; says so, with the command, when it does not.
+
+```sh
+fw run ui_catalog build-web [--package=…] [--output=…] [--base-href=…]
+```
+
+Returns `CatalogWebBuildResult`:
+
+```
+package: String
+output: String   # The directory to serve, worktree-relative where it is inside the worktree — a path that survives being read on another machine.
+indexHtml: String   # The page to open, relative to the same root as [output].
+entries: int   # How many entries the page can show.
+durationMs: int
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the only one when there is one |
+| `output` | string | no | — | Where the page goes. Package-relative unless absolute; defaults to `build/catalog/web`. |
+| `base-href` | string | no | — | What `flutter build web --base-href` takes, for serving the page from a subdirectory rather than the root of a host. Must begin and end with a slash — `/catalog/`. |

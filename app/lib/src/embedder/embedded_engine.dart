@@ -5,9 +5,14 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart';
+
 import '../utils/run_dir.dart';
+import 'frame_capture.dart';
 import 'protocol.dart';
 
 enum EmbeddedEnginePhase { building, running, error }
@@ -65,6 +70,25 @@ class EmbeddedEngine extends ChangeNotifier {
   /// The guest's VM-service URI, which it prints on stdout at startup. Needed
   /// to hot-reload the live guest.
   Future<String> get vmServiceUri => _vmServiceUri.future;
+
+  /// Photographs the guest — the same exchange the headless pipeline uses.
+  ///
+  /// Worth having on the *live* engine specifically: this frame is the demo as
+  /// the person driving it left it, which nothing rendered fresh can reproduce.
+  /// It is also the only way to get one from here, since the texture belongs to
+  /// the compositor rather than to Flutter and `toImage` cannot read it.
+  late final _capture = FrameCapture(
+    send: (message) async {
+      var conn = _conn;
+      if (conn == null || phase != EmbeddedEnginePhase.running) {
+        throw StateError('the guest is not running');
+      }
+      conn.add(encodeMessage(message));
+      await conn.flush();
+    },
+    // Per engine, so two panels capturing at once do not write one path.
+    workDir: p.join(flutterwareRunDir(), 'cap-$name'),
+  );
 
   String get _dartExecutable => p.join(flutterSdkRoot, 'bin', 'dart');
 
@@ -173,9 +197,13 @@ class EmbeddedEngine extends ChangeNotifier {
           });
         }
       case ErrorMessage():
+        // Before failing the engine: a guest that has errored will not finish
+        // writing a frame, and a caller left on the capture timeout learns
+        // thirty seconds later, in less detail, what this already says.
+        _capture.failAll(StateError(message.message));
         _fail(message.message);
       case CapturedMessage():
-        break; // Awaited by whoever asked for the capture, not here.
+        _capture.acknowledge(message);
       case ResizeMessage():
       case PointerEventMessage():
       case KeyEventMessage():
@@ -299,9 +327,34 @@ class EmbeddedEngine extends ChangeNotifier {
     );
   }
 
+  /// The frame the guest draws next, as PNG bytes.
+  ///
+  /// PNG rather than an image, because both callers — the clipboard and the
+  /// save dialog — want encoded bytes, and the one that does not is welcome to
+  /// decode them.
+  ///
+  /// Pass [crop] to cut it to a node's box, in the guest's logical coordinates:
+  /// the space [InspectLayout] reports, which is why a node's rect from the
+  /// inspect panel crops its own picture with no transform.
+  Future<Uint8List> capturePng({
+    InspectLayout? crop,
+    List<InspectNode> annotate = const [],
+    double pixelRatio = 1,
+  }) async {
+    var image = await _capture.capture(
+      crop: crop,
+      annotate: annotate,
+      pixelRatio: pixelRatio,
+    );
+    return img.encodePng(image);
+  }
+
   @override
   void dispose() {
     _disposed = true;
+    // Nothing outstanding survives the guest, and a caller waiting on the
+    // 30-second timeout would otherwise outlive the panel it belongs to.
+    _capture.failAll(StateError('the panel was closed'));
     if (_conn != null && phase == EmbeddedEnginePhase.running) {
       _conn!.add(encodeMessage(const ShutdownMessage()));
     }

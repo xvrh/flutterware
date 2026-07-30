@@ -19,6 +19,8 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
     EmbedderTexturePlugin.register(
       with: flutterViewController.registrar(forPlugin: "EmbedderTexturePlugin"))
+    ClipboardImagePlugin.register(
+      with: flutterViewController.registrar(forPlugin: "ClipboardImagePlugin"))
 
     super.awakeFromNib()
   }
