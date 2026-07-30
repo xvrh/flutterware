@@ -47,6 +47,8 @@ dependencies:
   path:
   path_provider:
   shared_preferences:
+  # For bin/example_server.dart — the server-inspection example.
+  shelf:
 
 dev_dependencies:
   flutter_lints:

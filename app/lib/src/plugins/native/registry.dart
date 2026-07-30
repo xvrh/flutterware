@@ -2,6 +2,7 @@ import '../native_plugin.dart';
 import '../registry.dart';
 import 'assets_plugin.dart';
 import 'dependencies_plugin.dart';
+import 'server_plugin.dart';
 import 'splash_plugin.dart';
 import 'ui_catalog_plugin.dart';
 
@@ -18,6 +19,7 @@ import 'ui_catalog_plugin.dart';
 PluginRegistry buildNativeRegistry() => PluginRegistry({
   assetsPluginId: panelFor<AssetsCore>(AssetsPlugin.new),
   dependenciesPluginId: panelFor<DependenciesCore>(DependenciesPlugin.new),
+  serverPluginId: panelFor<ServerCore>(ServerPlugin.new),
   splashPluginId: panelFor<SplashCore>(SplashPlugin.new),
   uiCatalogPluginId: panelFor<UiCatalogCore>(UiCatalogPlugin.new),
 });

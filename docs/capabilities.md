@@ -234,6 +234,48 @@ packages: List<DependencyListPackage>
 | `transitive` | boolean | no | false | List what the package pulls in indirectly too. The counts are reported either way. |
 
 
+### `flutterware.server`
+
+#### `requests` — Recent requests
+
+The latest HTTP requests a running server reported, each with the SQL queries and log lines it caused.
+
+```sh
+fw run server requests [--name=…] [--last=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `name` | string | no | — | Which server, when several are running. |
+| `last` | integer | no | 20 | — |
+
+#### `errors` — Recent errors
+
+Failed requests (5xx or thrown), severe log lines, and any event carrying an error — each with the request it happened under.
+
+```sh
+fw run server errors [--name=…] [--last=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `name` | string | no | — | Which server, when several are running. |
+| `last` | integer | no | 20 | — |
+
+#### `sql` — Query statistics
+
+Every recorded query grouped by its normalized shape — count, total, average and max duration — heaviest first. The same aggregation the SQL panel shows.
+
+```sh
+fw run server sql [--name=…] [--top=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `name` | string | no | — | Which server, when several are running. |
+| `top` | integer | no | 20 | — |
+
+
 ### `flutterware.splash`
 
 #### `describe` — Describe

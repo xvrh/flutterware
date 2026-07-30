@@ -62,8 +62,20 @@ String flutterwareDir() {
 /// a capture does both per frame, so a directory old enough to sweep belongs
 /// to nothing.
 ///
+/// **`srv-*` sockets get the daemon rule, not the guest rule.** The guest
+/// rationale inverts for an inspected server: a dev server running since
+/// Monday is normal, and aging its socket out would cascade into a lie —
+/// nothing new could connect, so the next attacher would delete its handle as
+/// dead, and the server would vanish from every list while still running. The
+/// knock is free by protocol: an inspected server writes nothing to a
+/// connection that has not sent `meta/attach` (see
+/// `lib/src/server/protocol.dart` in `package:flutterware`).
+///
 /// `live-*.json` is left alone: there is exactly one per project, so it is
-/// bounded, and [attachToLiveSession] already deletes one that will not connect.
+/// bounded, and [attachToLiveSession] already deletes one that will not
+/// connect. `srv-*.json` does not share that bound — one per server process,
+/// under names that change — so an old one is swept with its socket, and kept
+/// while its socket still answers.
 ///
 /// Every failure is swallowed per file. This is housekeeping — another process
 /// winning a race to delete the same orphan is the expected case, not an error,
@@ -98,9 +110,11 @@ Future<int> sweepRunDir({
       serving.add(key);
       continue;
     }
-    // A daemon key is the 16 hex characters of a config hash. Anything else in
-    // here is a guest or a spike, and is aged out rather than knocked on.
-    if (_daemonKey.hasMatch(key) && await _answers(entity.path)) {
+    // A daemon key is the 16 hex characters of a config hash; `srv-*` is an
+    // inspected server's socket. Both are probed rather than aged — see the
+    // doc above. Anything else is a guest or a spike, aged out unprobed.
+    if ((_daemonKey.hasMatch(key) || key.startsWith('srv-')) &&
+        await _answers(entity.path)) {
       serving.add(key);
       continue;
     }
@@ -109,7 +123,10 @@ Future<int> sweepRunDir({
 
   for (var entity in entries) {
     var name = p.basename(entity.path);
-    if (!name.endsWith('.log') && !name.endsWith('.lock')) continue;
+    var isServerHandle = name.startsWith('srv-') && name.endsWith('.json');
+    if (!name.endsWith('.log') && !name.endsWith('.lock') && !isServerHandle) {
+      continue;
+    }
     var key = name.substring(0, name.lastIndexOf('.'));
     if (serving.contains(key)) continue;
     if (!_isOlderThan(entity, cutoff)) continue;

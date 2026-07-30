@@ -21,6 +21,7 @@ const _declaredPlugins = [
   'flutterware.assets',
   'flutterware.ui_catalog',
   'flutterware.splash',
+  'flutterware.server',
 ];
 
 /// Drives the server through a real MCP client over an in-memory channel, so
