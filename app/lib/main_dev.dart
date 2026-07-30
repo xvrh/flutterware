@@ -7,7 +7,7 @@ import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 
 import 'src/context.dart';
-import 'src/app/project_view.dart' show enableDrawingPath, enableUIBook;
+import 'src/app/project_view.dart' show enableDrawingPath;
 import 'src/devbar.dart';
 import 'src/plugins/manifest_loader.dart';
 import 'src/plugins/native/registry.dart';
@@ -53,10 +53,7 @@ void main() async {
 
   runApp(
     AppDevbar(
-      flags: [
-        enableDrawingPath.withDefaultValue,
-        enableUIBook.withDefaultValue,
-      ],
+      flags: [enableDrawingPath.withDefaultValue],
       child: ShellApp(shell),
     ),
   );

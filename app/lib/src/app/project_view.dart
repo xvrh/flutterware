@@ -11,14 +11,12 @@ import '../project.dart';
 import '../test_runner/menu.dart';
 import '../test_runner/screen.dart';
 import '../ui/side_menu.dart';
-import '../ui_catalog/ui_catalog.dart';
 import '../utils/async_value.dart';
 import '../utils/value_stream_builder.dart';
 import '../utils/router_outlet.dart';
 import 'paths.dart' as paths;
 
 final enableDrawingPath = FeatureFlag('enableDrawingPath', false);
-final enableUIBook = FeatureFlag('enableUIBook', false);
 
 class ProjectView extends StatelessWidget {
   final Project project;
@@ -79,7 +77,6 @@ class ProjectView extends StatelessWidget {
               ],
             ),
             TestMenu(project),
-            if (enableUIBook.dependsOnValue(context)) UICatalogMenu(),
             if (enableDrawingPath.dependsOnValue(context)) DrawingMenu(project),
           ],
         ),
@@ -91,7 +88,6 @@ class ProjectView extends StatelessWidget {
             // pre-shell view has no address to give it. It lives in the
             // `flutterware.dependencies` plugin now.
             paths.tests: (route) => TestRunnerScreen(project),
-            paths.uiCatalog: (route) => UICatalogScreen(project),
             paths.icon: (route) => IconScreen(project),
             paths.drawing: (route) => DrawingScreen(project),
           }, onNotFound: (_) => paths.home),
