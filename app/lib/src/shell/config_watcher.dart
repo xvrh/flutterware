@@ -123,6 +123,11 @@ class ConfigWatcher {
   var _disposed = false;
 
   Future<void> _fire() async {
+    // The single disposal check, and it is at the entry rather than at each
+    // caller on purpose. `dispose` cannot cancel a reload it is already
+    // awaiting, so the queued follow-up arrives here after the fact — and a
+    // second guard beside that follow-up would only mean two mechanisms for one
+    // rule, each hiding the other from any test that removed it.
     if (_disposed) return;
     if (_running) {
       _againWhenDone = true;
@@ -168,10 +173,7 @@ class ConfigWatcher {
       onError?.call(e);
     } finally {
       _running = false;
-      // Disposed while the reload ran: `dispose` cannot cancel an awaited call,
-      // so the follow-up has to check. Without this, switching the watch off
-      // mid-reload still landed one more reload afterwards.
-      if (_againWhenDone && !_disposed) {
+      if (_againWhenDone) {
         _againWhenDone = false;
         // Straight to the check: the debounce already elapsed for that event.
         unawaited(_fire());
@@ -197,7 +199,6 @@ class ConfigWatcher {
 
   Future<void> dispose() async {
     _disposed = true;
-    _againWhenDone = false;
     _settle?.cancel();
     var events = _events;
     _events = null;

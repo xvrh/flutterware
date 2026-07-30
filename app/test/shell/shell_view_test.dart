@@ -142,6 +142,9 @@ class _StubLoader implements ManifestLoader {
 
   @override
   String get dartExecutable => 'dart';
+
+  @override
+  Duration get timeout => Duration.zero; // Unused: no stub spawns a process.
 }
 
 late _StubLoader _loader;
@@ -850,4 +853,7 @@ class _EmptyLoader implements ManifestLoader {
 
   @override
   String get dartExecutable => 'dart';
+
+  @override
+  Duration get timeout => Duration.zero; // Unused: no stub spawns a process.
 }

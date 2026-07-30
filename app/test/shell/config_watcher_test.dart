@@ -13,7 +13,7 @@ void main() {
   late Directory root;
   late File config;
   late StreamController<WatchEvent> events;
-  late int fired;
+  late List<String?> seen;
   late ConfigWatcher watcher;
 
   /// A save: write the bytes, then announce it the way a directory watcher
@@ -31,10 +31,11 @@ void main() {
       ..createSync(recursive: true)
       ..writeAsStringSync('void main() {}');
     events = StreamController<WatchEvent>.broadcast();
-    fired = 0;
+    seen = [];
     watcher = ConfigWatcher(
       worktreePath: root.path,
-      onChanged: () async => fired++,
+      onChanged: () async =>
+          seen.add(config.existsSync() ? config.readAsStringSync() : null),
       debounce: _debounce,
       watch: (_) => events.stream,
     );
@@ -55,31 +56,62 @@ void main() {
   test('a real edit fires once', () async {
     await watcher.start();
     await save('void main() { print(1); }');
-    expect(fired, 1);
+    expect(seen, hasLength(1));
   });
 
   test('a save that changed no bytes does not fire', () async {
     await watcher.start();
     // What a save-all, or a formatter that had nothing to do, produces.
     await save('void main() {}');
-    expect(fired, 0);
+    expect(seen, isEmpty);
   });
 
-  test('a burst of events for one save fires once', () async {
+  test('a burst of writes inside one window fires once, for the last', () async {
+    await watcher.start();
+
+    // Distinct content each time: with no debounce every write is its own fire,
+    // and counting a burst of events over *one* content cannot tell them apart.
+    for (var i = 0; i < 5; i++) {
+      config.writeAsStringSync('void main() { print($i); }');
+      events.add(WatchEvent(ChangeType.MODIFY, config.path));
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    await Future<void>.delayed(_debounce * 6);
+
+    expect(seen, [
+      'void main() { print(4); }',
+    ], reason: 'one fire, for the content it settled on');
+  });
+
+  test('sustained churn defers the fire until it stops', () async {
     await watcher.start();
     config.writeAsStringSync('void main() { print(1); }');
-    for (var i = 0; i < 5; i++) {
+
+    // What `git rebase` looks like: events arriving faster than the debounce,
+    // for longer than the debounce. Each one must *reset* the timer. Without
+    // the cancel the first timer survives and fires mid-churn — and every later
+    // one is then absorbed by the hash gate, so only the timing tells them
+    // apart.
+    for (var i = 0; i < 10; i++) {
       events.add(WatchEvent(ChangeType.MODIFY, config.path));
+      await Future<void>.delayed(const Duration(milliseconds: 3));
     }
-    await Future<void>.delayed(_debounce * 4);
-    expect(fired, 1);
+    expect(seen, isEmpty, reason: 'still churning');
+
+    await Future<void>.delayed(_debounce * 6);
+    expect(seen, hasLength(1), reason: 'and once it settles, exactly one');
   });
 
   test('an event for a sibling file is ignored', () async {
     await watcher.start();
+
+    // The config's bytes move too. Otherwise the hash gate absorbs the event
+    // and the test passes with the path filter deleted.
+    config.writeAsStringSync('void main() { print(99); }');
     var sibling = p.join(root.path, 'tool', 'other.dart');
     await save('// unrelated', path: sibling);
-    expect(fired, 0);
+
+    expect(seen, isEmpty, reason: 'only the config file may wake it');
   });
 
   test('the file going away is a change', () async {
@@ -87,30 +119,30 @@ void main() {
     config.deleteSync();
     events.add(WatchEvent(ChangeType.REMOVE, config.path));
     await Future<void>.delayed(_debounce * 4);
-    expect(fired, 1);
+    expect(seen, hasLength(1));
   });
 
   test('broken twice fires once', () async {
     await watcher.start();
 
     await save('void main() { syntax error');
-    expect(fired, 1);
+    expect(seen, hasLength(1));
 
     // Saving the same broken file again changes nothing, and re-running would
     // reproduce the same error.
     await save('void main() { syntax error');
-    expect(fired, 1);
+    expect(seen, hasLength(1));
   });
 
   test('fixing back to the original content still fires', () async {
     await watcher.start();
     await save('void main() { broken');
-    expect(fired, 1);
+    expect(seen, hasLength(1));
 
     // The manifest currently running came from this content, but the *file* did
     // not have it a moment ago, so the save is real and must be acted on.
     await save('void main() {}');
-    expect(fired, 2);
+    expect(seen, hasLength(2));
   });
 
   test('nothing is watched when the config directory does not exist', () async {
@@ -139,9 +171,15 @@ void main() {
     events.add(WatchEvent(ChangeType.MODIFY, config.path));
     await Future<void>.delayed(_debounce * 2);
     config.writeAsStringSync('void main() { print(1); }');
+    // The event a real watcher sends for the second write. Without it the test
+    // passes whether or not the empty state is confirmed, because nothing ever
+    // asks again.
+    events.add(WatchEvent(ChangeType.MODIFY, config.path));
     await Future<void>.delayed(_debounce * 6);
 
-    expect(fired, 1);
+    expect(seen, [
+      'void main() { print(1); }',
+    ], reason: 'the empty state must never reach the loader');
   });
 
   test('a file that really is emptied still lands', () async {
@@ -151,7 +189,7 @@ void main() {
     events.add(WatchEvent(ChangeType.MODIFY, config.path));
     await Future<void>.delayed(_debounce * 8);
 
-    expect(fired, 1, reason: 'one settle later, it is believed');
+    expect(seen, [''], reason: 'one settle later, the empty file is believed');
   });
 
   test('a save during a reload becomes one follow-up', () async {
@@ -253,6 +291,6 @@ void main() {
     await watcher.start();
     await watcher.dispose();
     await save('void main() { print(2); }');
-    expect(fired, 0);
+    expect(seen, isEmpty);
   });
 }

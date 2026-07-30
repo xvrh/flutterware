@@ -35,6 +35,9 @@ class _Loader implements ManifestLoader {
       (manifest: await load(p), error: null);
   @override
   String get dartExecutable => 'dart';
+
+  @override
+  Duration get timeout => Duration.zero; // Unused: no stub spawns a process.
 }
 
 void main() {

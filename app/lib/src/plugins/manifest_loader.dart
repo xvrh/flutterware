@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -36,23 +37,81 @@ class ManifestLoadException implements Exception {
 class ManifestLoader {
   ManifestLoader({
     required this.dartExecutable,
+    this.timeout = const Duration(seconds: 30),
     Future<ProcessResult> Function(
       String executable,
       List<String> arguments, {
       String? workingDirectory,
     })?
     runProcess,
-  }) : _run = runProcess ?? Process.run;
+    // ignore: prefer_initializing_formals
+  }) : _runProcess = runProcess;
 
   /// The `dart` to run — the SDK pinned by the project, not whatever is on PATH.
   final String dartExecutable;
+
+  /// How long the config gets before it is killed and reported.
+  ///
+  /// **A config is user code and can hang** — an accidental infinite loop, a
+  /// read from stdin, an `await` on something that never arrives. Without a
+  /// deadline that is not a slow reload, it is a permanent one: `fw` waits at
+  /// the terminal forever, and in the GUI the watcher treats a reload as still
+  /// in flight and folds every later save into it, so even the save that
+  /// *fixes* the file does nothing. Generous against a file that normally takes
+  /// ~50ms, because being wrong in the other direction kills a config that was
+  /// merely doing something slow.
+  final Duration timeout;
 
   final Future<ProcessResult> Function(
     String executable,
     List<String> arguments, {
     String? workingDirectory,
-  })
-  _run;
+  })?
+  _runProcess;
+
+  Future<ProcessResult> _run(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+  }) =>
+      _runProcess?.call(
+        executable,
+        arguments,
+        workingDirectory: workingDirectory,
+      ) ??
+      _spawn(executable, arguments, workingDirectory);
+
+  /// `Process.run` with a deadline.
+  ///
+  /// It has to be `Process.start`: `Process.run` returns a future that cannot be
+  /// cancelled, so timing it out would leave the child alive — and a runaway
+  /// config would then accumulate one orphaned process per save.
+  Future<ProcessResult> _spawn(
+    String executable,
+    List<String> arguments,
+    String? workingDirectory,
+  ) async {
+    var process = await Process.start(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+    );
+    var stdout = process.stdout.transform(utf8.decoder).join();
+    var stderr = process.stderr.transform(utf8.decoder).join();
+    try {
+      var exitCode = await process.exitCode.timeout(timeout);
+      return ProcessResult(process.pid, exitCode, await stdout, await stderr);
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+      throw ManifestLoadException(
+        '$configFilePath did not finish within ${timeout.inSeconds}s and was '
+        'killed.',
+        details:
+            'A config is expected to print its manifest and exit. Check for a '
+            'loop, a read from stdin, or an await that never completes.',
+      );
+    }
+  }
 
   /// Returns the worktree's manifest, or null when it declares no config file.
   ///
