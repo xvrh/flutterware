@@ -916,6 +916,7 @@ class _GuestSession {
     /// Logical-to-physical, for turning either of the above into pixels.
     double pixelRatio = 1,
   }) async {
+    await _settleImages();
     var image = await _capture.capture(
       crop: crop,
       annotate: annotate,
@@ -925,6 +926,47 @@ class _GuestSession {
     file.parent.createSync(recursive: true);
     file.writeAsBytesSync(img.encodePng(image));
     return file;
+  }
+
+  /// Waits until the guest has no image loads in flight, bounded.
+  ///
+  /// A demo's images arrive after its layout: `Image.asset` registers the load
+  /// during build and the decode lands asynchronously, so a frame photographed
+  /// in between shows the layout without the pixels — measured on
+  /// `asset_smoke.dart`, where both images were simply absent from an otherwise
+  /// perfect capture. Every call to the extension renders a frame, which is
+  /// what starts the loads on a fresh guest and paints whatever has been
+  /// delivered since; see [GuestImages].
+  ///
+  /// Zero **twice in a row**, because one asynchronous hop can separate a
+  /// build from the `Image` it creates — a `FutureBuilder` over
+  /// `rootBundle.load` reads zero pending while its future is still in flight,
+  /// and by the next frame the image it built is either delivered or counted.
+  ///
+  /// Bounded, never a hang: a demo that streams images forever costs a
+  /// slightly-early picture, the same trade [SettleRegistry] makes for busy
+  /// plugins.
+  ///
+  /// [GuestVmService.requireExtension] rather than the tolerant form, and the
+  /// distinction is this bug's whole history: the first capture of a fresh
+  /// guest lands before `main` has registered anything, and a call that treats
+  /// "not registered yet" as "no answer needed" skips the wait on exactly the
+  /// capture most likely to race the decode — intermittently, which is how the
+  /// missing images stayed invisible in the first place.
+  Future<void> _settleImages() async {
+    var deadline = Stopwatch()..start();
+    var zeros = 0;
+    while (deadline.elapsed < const Duration(seconds: 3)) {
+      var report = await _vmService.requireExtension(
+        'ext.flutterware.imagesSettled',
+      );
+      if (report == null) return;
+      if ((report['pending'] as num? ?? 0) == 0) {
+        if (++zeros >= 2) return;
+      } else {
+        zeros = 0;
+      }
+    }
   }
 
   Future<void> close() async {

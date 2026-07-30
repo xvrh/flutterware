@@ -193,6 +193,9 @@ void main() => GuestLogs.instance.install(() {
   // which read stdout for nothing but the VM service URI.
   GuestErrors.instance.install();
   GuestErrors.instance.registerExtensions();
+  // Whether every image the build asked for has arrived — what a capture
+  // polls so it does not photograph a layout whose pixels are still decoding.
+  GuestImages.instance.registerExtensions();
   // And what the demo prints, which reached the *host's* console and nowhere
   // else: the GUI could not show it, `fw` could not return it, and an agent
   // driving a demo could not read the first thing a developer reaches for.

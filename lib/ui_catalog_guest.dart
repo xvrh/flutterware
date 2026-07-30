@@ -16,6 +16,7 @@ export 'src/ui_catalog/knob.dart' show KnobDescriptor, KnobKind, KnobReport;
 export 'src/ui_catalog/axis.dart' show AxisReport;
 export 'src/inspect/error.dart' show InspectError, InspectErrors;
 export 'src/inspect/guest_errors.dart' show GuestErrors;
+export 'src/inspect/guest_images.dart' show GuestImages;
 export 'src/inspect/guest_logs.dart' show GuestLogs;
 export 'src/inspect/log.dart' show InspectLogLine, InspectLogs;
 export 'src/inspect/guest_inspect.dart' show GuestInspector;
