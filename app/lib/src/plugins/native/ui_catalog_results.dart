@@ -550,3 +550,41 @@ class CatalogAuditFailure {
 
   Map<String, Object?> toJson() => _$CatalogAuditFailureToJson(this);
 }
+
+/// `build-web` — where the browsable page was written.
+///
+/// A directory rather than an [Artifact]: an artifact carries one file and a
+/// MIME type, and a Flutter web build is a tree whose entry point happens to be
+/// `index.html`. Naming both is what lets a caller serve the first and open the
+/// second without guessing the relationship.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class CatalogWebBuildResult implements PluginResult {
+  CatalogWebBuildResult({
+    required this.package,
+    required this.output,
+    required this.indexHtml,
+    required this.entries,
+    required this.durationMs,
+  });
+
+  final String package;
+
+  /// The directory to serve, worktree-relative where it is inside the worktree
+  /// — a path that survives being read on another machine.
+  final String output;
+
+  /// The page to open, relative to the same root as [output].
+  final String indexHtml;
+
+  /// How many entries the page can show.
+  final int entries;
+
+  final int durationMs;
+
+  @override
+  Map<String, Object?> toJson() => _$CatalogWebBuildResultToJson(this);
+}

@@ -9,6 +9,8 @@ import '../../address/address_scope.dart';
 import '../../catalog/catalog_devices.dart';
 import '../../catalog/catalog_session.dart';
 import '../../catalog/catalog_view.dart';
+import '../../catalog/web_build_dialog.dart';
+import '../../catalog/web_server.dart';
 import '../native_plugin.dart';
 import 'ui_catalog_address.dart';
 import 'ui_catalog_core.dart';
@@ -34,7 +36,37 @@ class UiCatalogPlugin extends NativePlugin<UiCatalogCore> {
 
   final _sessions = <String, CatalogSession>{};
 
+  /// A server per served directory, so a rebuild of the same page reuses the
+  /// port a browser tab already has open — the tab reloads onto the new build
+  /// rather than pointing at a server that has gone.
+  final _servers = <String, CatalogWebServer>{};
+
   List<String> get packages => core.packages;
+
+  /// Serves a built page and answers with the URL, starting a server only if
+  /// this directory has not got one.
+  ///
+  /// Owned here rather than by the dialog that asks for it: the dialog is
+  /// closed the moment you have the URL, and a server that died with it would
+  /// leave the tab it just opened showing a connection error. The worktree is
+  /// the right lifetime — see [dispose].
+  Future<Uri> serveBuild(String output, {String basePath = '/'}) async {
+    var directory = p.isAbsolute(output)
+        ? output
+        : p.join(host.worktree.path, output);
+    var existing = _servers[directory];
+    // Rebound when the base href changed: the same directory built for a
+    // different mount point is a different page as far as a browser is
+    // concerned, and the old server would answer 404 for all of it.
+    if (existing != null &&
+        existing.basePath == CatalogWebServer.normaliseBasePath(basePath)) {
+      return existing.url;
+    }
+    await existing?.close();
+    var server = await CatalogWebServer.serve(directory, basePath: basePath);
+    _servers[directory] = server;
+    return server.url;
+  }
 
   /// The live compile loop for [path], started on first ask — which is the
   /// panel mounting.
@@ -72,8 +104,32 @@ class UiCatalogPlugin extends NativePlugin<UiCatalogCore> {
   @override
   Widget buildPanel(BuildContext context) => _CatalogPanel(this);
 
-  /// Closing the worktree is what ends the compile loops — nothing shorter
-  /// does, which is the whole point of the plugin owning them.
+  /// One command, on the row for the package it would build.
+  ///
+  /// On the row rather than in the panel because that is what it is *of*: a
+  /// page is one package's whole catalog, and the panel is always looking at
+  /// one entry of it.
+  @override
+  List<PluginChildCommand> childCommands(
+    BuildContext context,
+    String childId,
+  ) => [
+    PluginChildCommand(
+      label: 'Build a web page…',
+      icon: Icons.language,
+      onSelected: (context) => unawaited(
+        showWebBuildDialog(
+          context,
+          core: core,
+          package: childId,
+          serve: serveBuild,
+        ),
+      ),
+    ),
+  ];
+
+  /// Closing the worktree is what ends the compile loops and the servers —
+  /// nothing shorter does, which is the whole point of the plugin owning them.
   @override
   void dispose() {
     for (var session in _sessions.values) {
@@ -82,6 +138,10 @@ class UiCatalogPlugin extends NativePlugin<UiCatalogCore> {
         ..dispose();
     }
     _sessions.clear();
+    for (var server in _servers.values) {
+      unawaited(server.close());
+    }
+    _servers.clear();
     super.dispose();
   }
 }

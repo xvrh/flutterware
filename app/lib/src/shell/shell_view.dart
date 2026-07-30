@@ -13,6 +13,7 @@ import '../utils/hot_reload.dart';
 import '../utils/value_stream_builder.dart';
 import 'shell_controller.dart';
 import 'shell_search.dart';
+import 'sidebar_row.dart';
 import 'worktree.dart';
 import 'worktree_home.dart';
 
@@ -27,16 +28,6 @@ const _tabInset = 6.0;
 /// How much of a tab a worktree's name may claim before it is ellipsised.
 const _tabLabelMaxWidth = 180.0;
 const _sidebarWidth = 232.0;
-
-/// Maps a plugin [Tone] to a palette colour. The single place tones become
-/// pixels — everywhere else they stay data.
-Color toneColor(FwPalette colors, Tone tone) => switch (tone) {
-  Tone.neutral => colors.mut2,
-  Tone.good => colors.grn,
-  Tone.info => colors.info,
-  Tone.warn => colors.amber,
-  Tone.error => colors.red,
-};
 
 class ShellApp extends StatelessWidget {
   const ShellApp(this.shell, {super.key});
@@ -747,7 +738,15 @@ class _Sidebar extends StatelessWidget {
                     // summary.
                     if (shell.selectedPluginId == plugin.id)
                       for (var child in plugin.core.report.children)
-                        _ChildRow(shell, plugin.id, child),
+                        SidebarChildRow(
+                          label: child.label,
+                          status: child.status,
+                          selected:
+                              shell.selectedPluginId == plugin.id &&
+                              shell.selectedChildId == child.id,
+                          commands: plugin.childCommands(context, child.id),
+                          onTap: () => shell.selectChild(plugin.id, child.id),
+                        ),
                   ],
               ],
             ),
@@ -872,84 +871,6 @@ class _PluginRow extends StatelessWidget {
       selected: shell.selectedPluginId == plugin.id,
       onTap: () => shell.selectPlugin(plugin.id),
       status: report.status,
-    );
-  }
-}
-
-/// One package of a plugin, hung off a rail rather than boxed. Selecting it is
-/// what raises that package's work.
-class _ChildRow extends StatelessWidget {
-  const _ChildRow(this.shell, this.pluginId, this.child);
-
-  final ShellController shell;
-  final String pluginId;
-  final PluginChild child;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var selected =
-        shell.selectedPluginId == pluginId && shell.selectedChildId == child.id;
-
-    return _Hoverable(
-      onTap: () => shell.selectChild(pluginId, child.id),
-      builder: (context, hovered) => Container(
-        // The rail is always drawn — only its colour changes — so the row keeps
-        // its geometry and nothing below it moves on selection.
-        margin: const EdgeInsets.only(left: FwSpacing.xxl),
-        decoration: BoxDecoration(
-          color: hovered && !selected
-              ? colors.hoverOverlay
-              : Colors.transparent,
-          border: Border(
-            left: BorderSide(
-              color: selected
-                  ? colors.accent
-                  : hovered
-                  ? colors.mut3
-                  : colors.line,
-              width: 2,
-            ),
-          ),
-        ),
-        padding: const EdgeInsets.fromLTRB(
-          FwSpacing.lg,
-          FwSpacing.sm,
-          FwSpacing.xl,
-          FwSpacing.sm,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                child.label,
-                overflow: TextOverflow.ellipsis,
-                style: context.type.bodySmall.copyWith(
-                  color: selected ? colors.ink : colors.mut,
-                ),
-              ),
-            ),
-            if (!child.status.isEmpty) ...[
-              const Gap(FwSpacing.sm),
-              // Flexible, so a long status cannot take the whole row and leave
-              // the `Expanded` label with nothing — a row that says
-              // "10 assets · 347 kB · 2 problems" and not *which package* is
-              // worse than one that says neither. Loose fit: a short status
-              // still takes only what it needs and the label keeps the rest.
-              Flexible(
-                child: Text(
-                  child.status.message,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.type.micro.copyWith(
-                    color: toneColor(colors, child.status.tone),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }

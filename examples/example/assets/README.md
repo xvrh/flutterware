@@ -27,8 +27,15 @@ one of these "bugs" breaks the case it stands for.
 | `images/icons/star.png` | a directory declaration **does not recurse**. `assets/images/` is declared, this file is inside it, and it never reaches the bundle |
 | `images/badge.png` + `images/3.0x/badge.png` | a `3.0x` with no `2.0x` beside it |
 | `images/wordmark.png` | byte-identical to `logo.png` under a second key |
-| `assets/images/missing.png` (pubspec) | declared, not on disk |
-| `assets/fonts/Roboto-Italic.ttf` (pubspec) | the same, for a font entry — which fails differently, since the family still resolves for its other two weights |
+
+Every fixture above is a *file* that is wrong. There are deliberately no
+**declared-but-absent** fixtures — `missingFile` and `missingFontFile` — even
+though the audit reports both, and the reason is that this package has to stay
+buildable: `flutter build` treats a declared asset with no file as fatal, so one
+of those fixtures makes `fw run ui_catalog build-web` (and every other build of
+this example) impossible. Both findings are covered instead by
+`app/test/assets/asset_catalog_test.dart`, which can declare a missing file
+without having to compile anything.
 
 ## Provenance
 

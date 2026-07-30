@@ -69,7 +69,6 @@ flutter:
   # is meant to expose. Several of these are wrong on purpose.
   assets:
     - assets/images/
-    - assets/images/missing.png
     - assets/icons/check.svg
     - path: assets/icons/heart.svg
     - assets/animations/
@@ -86,9 +85,6 @@ flutter:
         - asset: assets/fonts/Roboto-Regular.ttf
         - asset: assets/fonts/Roboto-Bold.ttf
           weight: 700
-        # Declared, and not on disk — the font half of assets/images/missing.png.
-        - asset: assets/fonts/Roboto-Italic.ttf
-          style: italic
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages

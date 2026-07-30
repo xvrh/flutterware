@@ -27,6 +27,7 @@ void main() {
   UiCatalogCore catalog({
     String? entrypoint,
     List<String> packages = const ['.'],
+    String flutterSdkRoot = '/tmp/flutter',
   }) {
     var worktree = Worktree(path: root.path);
     return UiCatalogCore(
@@ -39,7 +40,7 @@ void main() {
           declared: [for (var path in packages) Pkg(path)],
           discovered: packages,
           appContext: AppContext(logger: LogClient.print()),
-          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+          flutterSdk: FlutterSdkPath(flutterSdkRoot),
         ),
         config: {
           'packages': [
@@ -445,6 +446,125 @@ Widget added() => const Placeholder();
           arguments: {'entry': 'demo/counter.dart#counter', 'find': 12},
         ),
         throwsArgumentError,
+      );
+    });
+  });
+
+  group('build-web', () {
+    // Every case here is refused *before* anything is compiled. A web build is
+    // tens of seconds, so an argument that cannot work should cost none of it —
+    // and the one a user hits most, web not being enabled, is a property of the
+    // package rather than of what they typed.
+
+    test('refuses a package that is not declared', () async {
+      var subject = catalog();
+
+      expect(
+        subject.invoke('build-web', arguments: {'package': 'packages/nope'}),
+        throwsArgumentError,
+      );
+    });
+
+    test('asks which package when the plugin has several', () async {
+      var subject = catalog(packages: const ['.', 'packages/ui']);
+
+      // Not "build the first one": two catalogues are declared separately
+      // because they are separate, and picking silently produces a page of the
+      // wrong demos.
+      await expectLater(
+        subject.invoke('build-web'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            allOf(contains('packages/ui'), contains('more than one')),
+          ),
+        ),
+      );
+    });
+
+    test('refuses a base href that is not a directory path', () async {
+      var subject = catalog();
+
+      // `--base-href` is checked here rather than left to the tool, which
+      // rejects it only after the whole compile has run.
+      await expectLater(
+        subject.invoke('build-web', arguments: {'base-href': '/catalog'}),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            contains('begin and end with a slash'),
+          ),
+        ),
+      );
+    });
+
+    test('refuses a second build, and teardown stops the first', () async {
+      // A fake SDK whose `flutter` ignores its arguments and does not finish, so
+      // the first build is genuinely in flight. With a real (missing) path it
+      // failed at `Process.start` and cleared the guard before the second call
+      // even ran, which made this race rather than test anything.
+      var bin = Directory(p.join(root.path, 'fakesdk', 'bin'))
+        ..createSync(recursive: true);
+      var flutter = File(p.join(bin.path, 'flutter'))
+        ..writeAsStringSync('#!/bin/sh\nexec sleep 30\n');
+      Process.runSync('chmod', ['+x', flutter.path]);
+      Directory(p.join(root.path, 'web')).createSync(recursive: true);
+
+      var subject = catalog(flutterSdkRoot: p.join(root.path, 'fakesdk'));
+      var first = subject.buildWeb();
+      // Long enough for the child to be up and the guard registered.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      // Both builds share `build/catalog/web_src`, and the generator deletes it
+      // recursively before writing — so a second build started mid-compile pulls
+      // the first one's sources out from under it.
+      await expectLater(
+        subject.buildWeb(),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('already running'),
+          ),
+        ),
+      );
+
+      // And closing the worktree ends it. A `flutter build web` child is not
+      // reaped when the Dart process exits, so without this it outlives the
+      // window and keeps writing into the user's project.
+      subject.dispose();
+      await expectLater(
+        first,
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('cancelled'),
+          ),
+        ),
+      );
+    });
+
+    test('says how to enable web when the package has none', () async {
+      var subject = catalog();
+
+      // The fixture has demos and no `web/`, which is the ordinary state of a
+      // package nobody has built for the web before. The message has to carry
+      // the command, because nothing else on screen will.
+      await expectLater(
+        subject.invoke('build-web'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('no web/ directory'),
+              contains('flutter create --platforms=web'),
+            ),
+          ),
+        ),
       );
     });
   });

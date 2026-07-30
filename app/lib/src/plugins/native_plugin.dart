@@ -61,6 +61,19 @@ abstract class NativePlugin<C extends PluginCore> extends ChangeNotifier {
   /// something did.
   Widget buildPanel(BuildContext context);
 
+  /// Commands offered on one of this plugin's sidebar rows, behind a ⋮ that
+  /// appears on hover. Empty for most plugins, and then no ⋮ is drawn.
+  ///
+  /// [childId] is the [PluginChild.id] the row stands for — a package path, for
+  /// every plugin that has children today.
+  ///
+  /// Built during the row's build, so a command may close over [context] to put
+  /// something on screen when it is chosen.
+  List<PluginChildCommand> childCommands(
+    BuildContext context,
+    String childId,
+  ) => const [];
+
   /// Schedules a change notification, coalescing bursts into one.
   ///
   /// Prefer this over [notifyListeners]. A plugin's work starts when a widget
@@ -92,6 +105,34 @@ abstract class NativePlugin<C extends PluginCore> extends ChangeNotifier {
     unawaited(_changes.cancel());
     super.dispose();
   }
+}
+
+/// One command on a sidebar child's ⋮ menu.
+///
+/// **Deliberately not a [PluginAction].** An action is behaviour every renderer
+/// can reach by name; these are the GUI's own affordances — a form to fill in
+/// first, a log to watch while it runs, somewhere to go when it finishes. None
+/// of that survives being described to `fw`.
+///
+/// It is not a way to put behaviour in a panel either. What a command drives
+/// still belongs on the [PluginCore], where `fw` and MCP reach the same method
+/// by their own route; the difference is only that the GUI can hand it a
+/// progress callback, which an invocation across a process cannot carry.
+class PluginChildCommand {
+  const PluginChildCommand({
+    required this.label,
+    required this.onSelected,
+    this.icon,
+    this.danger = false,
+  });
+
+  final String label;
+  final IconData? icon;
+
+  /// Destroys data. The row is tinted for it.
+  final bool danger;
+
+  final void Function(BuildContext context) onSelected;
 }
 
 /// Builds a plugin's panel over the core the session already resolved.

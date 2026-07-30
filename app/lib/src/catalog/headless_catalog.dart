@@ -20,8 +20,8 @@ import 'package:flutterware/src/ui_catalog/axis.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/ui_catalog/knob.dart';
 
+import '../embedder/frame_capture.dart';
 import '../embedder/protocol.dart';
-import '../embedder/raw_frame.dart';
 import 'catalog_params.dart';
 import 'debug_flags.dart';
 import 'devices.dart';
@@ -691,7 +691,15 @@ class _GuestSession {
     patience: InspectPatience.headless,
   );
 
-  final _captures = <String, Completer<void>>{};
+  /// The capture exchange, shared with the GUI's live engine — see
+  /// [FrameCapture].
+  late final _capture = FrameCapture(
+    send: (message) async {
+      _connection.add(encodeMessage(message));
+      await _connection.flush();
+    },
+    workDir: _workDir,
+  );
 
   static Future<_GuestSession> start({
     required String hostPath,
@@ -770,15 +778,9 @@ class _GuestSession {
 
   void _onData(List<int> chunk) {
     for (var message in _reader.addBytes(chunk)) {
-      if (message is CapturedMessage) {
-        _captures.remove(message.path)?.complete();
-      } else if (message is ErrorMessage) {
-        for (var pending in _captures.values) {
-          if (!pending.isCompleted) {
-            pending.completeError(StateError(message.message));
-          }
-        }
-        _captures.clear();
+      if (_capture.acknowledge(message)) continue;
+      if (message is ErrorMessage) {
+        _capture.failAll(StateError(message.message));
       }
     }
   }
@@ -1028,118 +1030,15 @@ class _GuestSession {
     /// Logical-to-physical, for turning either of the above into pixels.
     double pixelRatio = 1,
   }) async {
-    var rawFrame = p.join(_workDir, 'screenshot.rawframe');
-    var raw = File(rawFrame);
-    if (raw.existsSync()) raw.deleteSync();
-
-    var done = _captures[rawFrame] = Completer<void>();
-    _connection.add(encodeMessage(CaptureMessage(rawFrame)));
-    await _connection.flush();
-    await done.future.timeout(const Duration(seconds: 30));
-
-    var image = decodeRawFrame(raw.readAsBytesSync());
-    // Annotate before cropping, so a box on a node partly outside the crop is
-    // clipped with the picture rather than drawn against its edge.
-    if (annotate.isNotEmpty) image = _annotate(image, annotate, pixelRatio);
-    if (crop != null) image = _crop(image, crop, pixelRatio);
+    var image = await _capture.capture(
+      crop: crop,
+      annotate: annotate,
+      pixelRatio: pixelRatio,
+    );
     var file = File(output);
     file.parent.createSync(recursive: true);
     file.writeAsBytesSync(img.encodePng(image));
-    raw.deleteSync();
     return file;
-  }
-
-  /// One node per distinct box, outermost kept.
-  ///
-  /// Most of a summary tree lays nothing out of its own: a provider, a builder
-  /// and the widget under them share one rect, so drawing every node draws the
-  /// same rectangle six times and stacks six labels on one corner. The first
-  /// version did exactly that and was unreadable — which is the difference
-  /// between a feature that exists and one that answers the question.
-  ///
-  /// Outermost wins because it is the shorter id and the one a caller is more
-  /// likely to have meant; the inner ones are still in the tree for anyone who
-  /// wants them.
-  static List<InspectNode> _distinctBoxes(List<InspectNode> nodes) {
-    var seen = <String>{};
-    return [
-      for (var node in nodes)
-        if (node.layout case var l?)
-          if (seen.add('${l.x},${l.y},${l.width},${l.height}')) node,
-    ];
-  }
-
-  /// The frame, cut to one node's box.
-  ///
-  /// Cropped out of the real composited frame rather than re-rendered in
-  /// isolation, which is what `ext.flutter.inspector.screenshot` would do: a
-  /// widget photographed away from its surroundings is a different picture, and
-  /// usually not the one the question was about.
-  ///
-  /// Clamped to the frame, because a node may legitimately sit partly outside
-  /// it — that is what an overflow *is* — and a crop that threw would refuse to
-  /// show the one case worth looking at.
-  static img.Image _crop(img.Image image, InspectLayout rect, double ratio) {
-    var x = (rect.x * ratio).round().clamp(0, image.width - 1);
-    var y = (rect.y * ratio).round().clamp(0, image.height - 1);
-    return img.copyCrop(
-      image,
-      x: x,
-      y: y,
-      width: (rect.width * ratio).round().clamp(1, image.width - x),
-      height: (rect.height * ratio).round().clamp(1, image.height - y),
-    );
-  }
-
-  /// A box and an id over each node.
-  ///
-  /// The point is the id: an agent reads a tree, gets `0/1/2`, and then gets a
-  /// picture with `0/1/2` written on the thing it names. Without that the tree
-  /// and the screenshot are two observations of the same frame with nothing
-  /// joining them.
-  static img.Image _annotate(
-    img.Image image,
-    List<InspectNode> nodes,
-    double ratio,
-  ) {
-    for (var node in _distinctBoxes(nodes)) {
-      if (node.layout case var layout?) {
-        var x = (layout.x * ratio).round();
-        var y = (layout.y * ratio).round();
-        var w = (layout.width * ratio).round();
-        var h = (layout.height * ratio).round();
-        img.drawRect(
-          image,
-          x1: x,
-          y1: y,
-          x2: x + w - 1,
-          y2: y + h - 1,
-          color: img.ColorRgb8(255, 0, 128),
-        );
-        var label = node.id.isEmpty ? 'root' : node.id;
-        // A filled strip behind it: these are drawn over a rendered UI, and
-        // magenta-on-whatever-was-there is not always legible.
-        var labelX = x + 2;
-        var labelY = y < 16 ? y + 2 : y - 15;
-        img.fillRect(
-          image,
-          x1: labelX - 1,
-          y1: labelY - 1,
-          x2: labelX + label.length * 8,
-          y2: labelY + 14,
-          color: img.ColorRgb8(255, 0, 128),
-        );
-        img.drawString(
-          image,
-          label,
-          font: img.arial14,
-          x: labelX,
-          y: labelY,
-          color: img.ColorRgb8(255, 255, 255),
-        );
-      }
-    }
-    return image;
   }
 
   Future<void> close() async {
