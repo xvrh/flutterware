@@ -200,7 +200,13 @@ class ScenarioTester {
     await tester.runAsync(() async {
       var view = tester.binding.renderViews.single;
       var layer = view.debugLayer! as OffsetLayer;
-      var image = await layer.toImage(Offset.zero & view.size);
+      // The root layer's coordinates are **physical** pixels — the
+      // device-pixel-ratio transform sits inside it — so the capture rect
+      // must be the physical frame or a 3× device saves its top-left ninth.
+      // Physical is also the honest resolution: a phone's screenshot is
+      // 1170×2532, not 390×844.
+      var dpr = view.flutterView.devicePixelRatio;
+      var image = await layer.toImage(Offset.zero & (view.size * dpr));
       var data = (await image.toByteData(format: ui.ImageByteFormat.png))!;
       image.dispose();
       var png = data.buffer.asUint8List();

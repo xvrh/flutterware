@@ -145,7 +145,8 @@ void main() {
           _scratchTexts(framed),
           contains('375x667 2.0 20.0 fr-CA Brightness.dark 13.0 true'),
         );
-        expect(_pngSize(_lastPng(framed)), (375, 667));
+        // Physical pixels — a phone's screenshot is logical × its ratio.
+        expect(_pngSize(_lastPng(framed)), (750, 1334));
 
         var bare = await runner.run(
           outDir: outDir,
@@ -156,7 +157,7 @@ void main() {
         expect(text, startsWith('800x600 3.0 0.0'));
         expect(text, contains('Brightness.light'));
         expect(text, endsWith('10.0 false'));
-        expect(_pngSize(_lastPng(bare)), (800, 600));
+        expect(_pngSize(_lastPng(bare)), (2400, 1800));
       } finally {
         probe.deleteSync();
       }
