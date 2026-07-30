@@ -100,10 +100,16 @@ class _ServerPanelState extends State<_ServerPanel> {
                   .firstOrNull;
 
         var view = place?.view ?? ServerViewKind.overview;
+        // The rail already lists every server (report.children) — repeating
+        // that here for one healthy server is noise. The bar appears only
+        // when it says something the rail row beside it does not: several
+        // servers to switch between in place, or a session that is stopped
+        // or reconnecting.
+        var showBar = servers.length > 1 || server.stopped || !server.connected;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _ServerBar(servers, shown: server),
+            if (showBar) _ServerBar(servers, shown: server),
             _ViewTabs(server: server, view: view),
             const Divider(height: 1),
             Expanded(
@@ -164,7 +170,7 @@ class _ServerBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
+    var colors = context.colors;
     return Padding(
       padding: const EdgeInsets.all(8),
       child: Wrap(
@@ -172,29 +178,53 @@ class _ServerBar extends StatelessWidget {
         runSpacing: 4,
         children: [
           for (var server in servers)
-            InputChip(
-              selected: identical(server, shown),
-              showCheckmark: false,
-              avatar: Icon(
-                Icons.circle,
-                size: 10,
-                color: server.stopped
-                    ? theme.disabledColor
-                    : server.connected
-                    ? Colors.green.shade600
-                    : Colors.orange.shade600,
-              ),
-              label: Text(
-                server.stopped
-                    ? '${server.handle.name} (stopped)'
-                    : server.connected
-                    ? '${server.handle.name} · pid ${server.handle.pid}'
-                    : '${server.handle.name} · reconnecting',
-                style: theme.textTheme.bodySmall,
-              ),
-              onPressed: () => AddressScope.write(
+            Tappable.builder(
+              onTap: () => AddressScope.write(
                 context,
               ).setSegments(serverSegments(server.handle.name)),
+              builder: (context, hovered) {
+                var selected = identical(server, shown);
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? colors.accentSoft
+                        : hovered
+                        ? colors.hoverOverlay
+                        : null,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: selected ? colors.accentSoft2 : colors.line,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.circle,
+                        size: 8,
+                        color: server.stopped
+                            ? colors.mut3
+                            : server.connected
+                            ? colors.grn
+                            : colors.amber,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        server.stopped
+                            ? '${server.handle.name} (stopped)'
+                            : server.connected
+                            ? '${server.handle.name} · pid ${server.handle.pid}'
+                            : '${server.handle.name} · reconnecting',
+                        style: context.type.bodySmall,
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
         ],
       ),
