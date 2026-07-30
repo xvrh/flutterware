@@ -157,10 +157,27 @@ class EmbeddedEngine extends ChangeNotifier {
       }
       _conn = connected;
       _conn!.listen(_onSocketData, onDone: _onSocketClosed);
+      // Every failure path completes the URI through [_fail] — except a guest
+      // that runs happily without ever printing the line the scrape above
+      // expects. Bound that one too, or `await vmServiceUri` waits forever
+      // and a panel sits on "building".
+      _uriDeadline = Timer(const Duration(seconds: 30), () {
+        if (_vmServiceUri.isCompleted) return;
+        // Not [_fail]: the engine may be rendering fine — only inspection is
+        // lost — and a consumer that never asks for the VM service should not
+        // see an error for it. The pre-attached listener keeps the error off
+        // the zone for exactly that consumer.
+        unawaited(_vmServiceUri.future.catchError((_) => ''));
+        _vmServiceUri.completeError(
+          StateError('the guest connected but never announced its VM service'),
+        );
+      });
     } catch (e) {
       _fail('$e');
     }
   }
+
+  Timer? _uriDeadline;
 
   Future<GuestBuild> _runBuild() async {
     var result = await Process.run(_dartExecutable, [
@@ -374,6 +391,7 @@ class EmbeddedEngine extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _uriDeadline?.cancel();
     // Nothing outstanding survives the guest, and a caller waiting on the
     // 30-second timeout would otherwise outlive the panel it belongs to.
     _capture.failAll(StateError('the panel was closed'));
@@ -391,6 +409,16 @@ class EmbeddedEngine extends ChangeNotifier {
     unawaited(_conn?.close());
     unawaited(_server?.close());
     _guest?.kill();
+    // Frames delete themselves as they are read; this picks up the scratch
+    // directory itself, which would otherwise accumulate one per session id.
+    // The run-dir sweep ages out what a crash skips.
+    try {
+      Directory(
+        p.join(flutterwareRunDir(), 'cap-$name'),
+      ).deleteSync(recursive: true);
+    } on FileSystemException {
+      // Housekeeping only.
+    }
     super.dispose();
   }
 }

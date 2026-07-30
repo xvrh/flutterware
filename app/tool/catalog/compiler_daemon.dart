@@ -135,17 +135,26 @@ class _Daemon {
   /// What the roots looked like when [_discovered] was produced.
   var _scanned = '';
 
-  /// Bumped whenever a rescan adds a library to the compiler's baseline.
+  /// Bumped whenever the compiler *accepts* anything — a fresh library from a
+  /// rescan, an edit, or the entrypoint rewrite a select is.
   ///
-  /// A delta is relative to that baseline, not to any particular guest: once a
-  /// new wrapper has been compiled in, a later delta no longer carries it —
-  /// it is unchanged — and a guest that never had the library reloads nothing
-  /// and renders nothing. Sessions that are behind get the whole program
-  /// instead. `EntrypointGenerator.registerAll` avoids the same divergence at
-  /// startup by registering everything before anyone connects; entries that
-  /// appear later cannot be handled that way.
+  /// A delta is relative to that accepted state, not to any particular guest:
+  /// once a change has been compiled in, a later delta no longer carries it —
+  /// it is unchanged — and a guest that never took the delta it arrived in
+  /// reloads nothing and stays on the old code. Sessions that are behind get
+  /// the whole program instead. `EntrypointGenerator.registerAll` avoids the
+  /// startup case by registering everything before anyone connects; changes
+  /// that land later cannot be handled that way.
   var _baseline = 0;
   ResidentCompiler? _compiler;
+
+  /// Bumped whenever a select sweeps up real changes — edited sources or a
+  /// changed scan. `ifChanged` compares a session's own mark against this,
+  /// because edits are *consumed* by whichever session's sweep sees them
+  /// first: without the generation, client A's sweep would eat the edit and
+  /// client B's next `ifChanged` would see a clean world and keep rendering
+  /// the stale build.
+  var _changeGeneration = 0;
 
   /// What turns an edit into a recompile. Every request sweeps: the daemon has
   /// no watcher, so a client asking for something is the only moment it can
@@ -339,7 +348,12 @@ class _Daemon {
 
   void _accept(Socket socket) {
     _idle?.cancel();
-    var session = _Session(this, socket, 'session-${_sessionCounter++}');
+    // The daemon's own pid is in the id because clients use it to name files
+    // in the shared run directory (`g-<id>.sock`, `cap-<id>`). A counter alone
+    // is unique within one daemon; two projects' daemons would both hand their
+    // first client `session-0` and the clients' guests would fight over one
+    // socket path.
+    var session = _Session(this, socket, 'session-$pid-${_sessionCounter++}');
     _sessions.add(session);
     try {
       session.start();
@@ -553,15 +567,22 @@ class _Daemon {
         '(swept in ${_invalidator.lastSweep.inMilliseconds}ms)',
       );
     }
+    if (rescanned.isNotEmpty || edited.isNotEmpty) _changeGeneration++;
 
-    // Nothing moved, and the entry asked for is the one already compiled in.
-    // Saying so is the whole value of `ifChanged`: the caller is a reflex, not
-    // a decision, and a reload it did not need still reassembles the guest and
-    // resets the demo's state.
+    // Nothing has moved since *this session's* guest last took a kernel, and
+    // the entry asked for is the one it is already rendering. Saying so is the
+    // whole value of `ifChanged`: the caller is a reflex, not a decision, and
+    // a reload it did not need still reassembles the guest and resets the
+    // demo's state.
+    //
+    // Judged per session, not against [_active]: the entrypoint may have been
+    // rewritten for another client since — an agent screenshotting beside an
+    // open panel — without this guest's picture going stale. Comparing against
+    // the daemon's own state made every focus reload after any other client's
+    // activity a state-resetting recompile.
     if (ifChanged &&
-        rescanned.isEmpty &&
-        edited.isEmpty &&
-        _active?.id == id &&
+        session.lastSelected == id &&
+        session.currentAt == _changeGeneration &&
         !_quarantine.containsKey(id)) {
       return DaemonCompiled(
         requestId: requestId,
@@ -592,6 +613,12 @@ class _Daemon {
       _compiler!.reset();
     }
     var compiled = await _compileServingWhatWorks(invalidated.toList());
+    // Whatever the compiler just accepted is absent from every later delta,
+    // so no other session's guest can be caught up by one any more. Move the
+    // baseline; their next select takes a whole program. Before the
+    // quarantine check below, because the compile advanced the accepted state
+    // whether or not the requested entry survived it.
+    if (compiled.ok && invalidated.isNotEmpty) _baseline++;
 
     // The requested entry may be exactly what the compile just quarantined, in
     // which case the compile "succeeded" — without it. Say so rather than hand
@@ -608,7 +635,11 @@ class _Daemon {
       );
     }
 
-    if (compiled.ok) session.baseline = _baseline;
+    if (compiled.ok) {
+      session.baseline = _baseline;
+      session.lastSelected = id;
+      session.currentAt = _changeGeneration;
+    }
     return DaemonCompiled(
       requestId: requestId,
       id: id,
@@ -831,6 +862,12 @@ class _Session {
   /// The compiler baseline this session's guest has been fed up to. Behind the
   /// daemon's own means the next kernel it is given has to be a whole program.
   int baseline = 0;
+
+  /// The entry this session last took a kernel for, and the change generation
+  /// that kernel was current at. Together they are what `ifChanged` answers
+  /// from — a fact about this client's guest, not about the daemon.
+  String? lastSelected;
+  int currentAt = -1;
 
   String get _dir => p.join(_daemon._buildDir, 'sessions', id);
   String get assetsDir => p.join(_dir, 'assets');

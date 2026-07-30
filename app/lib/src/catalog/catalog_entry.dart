@@ -4,9 +4,9 @@ part 'catalog_entry.g.dart';
 
 /// One addressable catalog entry.
 ///
-/// Discovery does not exist yet, so these are supplied by hand — see
-/// `stub_entries.dart`. The shape is what a syntactic scan will produce: a
-/// path, a symbol, and the annotation's source text, never its meaning.
+/// Produced by the syntactic scan in `discovery.dart`: a path, a symbol, and
+/// the annotation's source text, never its meaning. Resolution is the guest's
+/// job — the scan sees a declaration, not what it evaluates to.
 @JsonSerializable()
 class CatalogEntry {
   const CatalogEntry({

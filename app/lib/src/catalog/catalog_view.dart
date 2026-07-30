@@ -4,7 +4,7 @@ import 'dart:math' as math;
 
 import 'package:device_frame/device_frame.dart';
 import 'package:file_selector/file_selector.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutterware/ui_catalog_guest.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 

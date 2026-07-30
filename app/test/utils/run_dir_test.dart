@@ -71,6 +71,25 @@ void main() {
 
       expect(await sweep(), 2);
     });
+
+    test('a frame-scratch directory a crash left behind', () async {
+      // A session that closes cleanly deletes its own `cap-*`; only a crash
+      // leaves one, and a capture in progress keeps its directory's mtime
+      // fresh by writing and deleting frames in it.
+      var dir = Directory(p.join(runDir.path, 'cap-session-9-0'))..createSync();
+      File(p.join(dir.path, 'screenshot.rawframe')).writeAsStringSync('x');
+      // `Directory` has no setLastModifiedSync; this file already assumes a
+      // unix machine by binding unix-domain sockets.
+      var stamp = DateTime.now().subtract(const Duration(days: 3));
+      String two(int n) => n.toString().padLeft(2, '0');
+      var when =
+          '${stamp.year}${two(stamp.month)}${two(stamp.day)}'
+          '${two(stamp.hour)}${two(stamp.minute)}';
+      Process.runSync('touch', ['-m', '-t', when, dir.path]);
+
+      expect(await sweep(), 1);
+      expect(dir.existsSync(), isFalse);
+    });
   });
 
   group('what it spares', () {
@@ -81,9 +100,10 @@ void main() {
       aged('$key.lock', const Duration(minutes: 1));
       aged('$key.log', const Duration(minutes: 1));
       aged('g-fresh.sock', const Duration(minutes: 1));
+      Directory(p.join(runDir.path, 'cap-session-1-0')).createSync();
 
       expect(await sweep(), 0);
-      expect(runDir.listSync(), hasLength(3));
+      expect(runDir.listSync(), hasLength(4));
     });
 
     test('a log old enough to delete, whose daemon still answers', () async {

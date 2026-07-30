@@ -142,7 +142,7 @@ class EntrypointGenerator {
 // GENERATED — do not edit.
 ${emitProbe ? "import 'dart:async';\n" : ''}import 'package:flutter/widgets.dart';
 import 'package:flutter/widget_previews.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutterware/ui_catalog_guest.dart';
 
 $imports
 // Getters, never top-level finals: a final is initialised once and hot reload

@@ -355,6 +355,58 @@ void main() {
       },
     );
 
+    test('an ifChanged reflex survives the other client selecting '
+        'elsewhere', () async {
+      // The focus-triggered reload asks "has anything moved for *my* guest".
+      // It used to be answered from the daemon's own active entry, so an agent
+      // screenshotting a different entry made the panel's next alt-tab a real
+      // recompile and a state-resetting reload — two clients alternating was
+      // constant ping-pong.
+      var mine = entry('counter').id;
+      expect((await daemon.select(mine, full: true)).ok, isTrue);
+      expect(
+        (await second.select(entry('dashboard').id, full: true)).ok,
+        isTrue,
+      );
+
+      var reflex = await daemon.select(mine, ifChanged: true);
+      expect(
+        reflex.unchanged,
+        isTrue,
+        reason:
+            "another client's select is not an edit; this guest's picture "
+            'is still current',
+      );
+    });
+
+    test('an edit reaches both clients, though only one sweep sees it', () async {
+      // Edits are consumed by whichever session's sweep runs first. Without a
+      // per-session change generation, the first client's reflex would eat the
+      // edit and the second's would see a clean world — and keep rendering the
+      // stale build.
+      var (file, added) = await addDemo(
+        'interleaved',
+        _demo('fixtureInterleaved', 'first'),
+      );
+      expect((await daemon.select(added.id, full: true)).ok, isTrue);
+      expect((await second.select(added.id, full: true)).ok, isTrue);
+
+      file.writeAsStringSync(_demo('fixtureInterleaved', 'second'));
+      var one = await daemon.select(added.id, ifChanged: true);
+      expect(one.ok, isTrue, reason: one.error ?? '');
+      expect(one.unchanged, isFalse, reason: 'the sweeping client recompiles');
+
+      var two = await second.select(added.id, ifChanged: true);
+      expect(two.ok, isTrue, reason: two.error ?? '');
+      expect(
+        two.unchanged,
+        isFalse,
+        reason:
+            'and so does the other one, whose own sweep no longer sees the '
+            'edit — the change generation is what remembers it',
+      );
+    });
+
     test('a demo it discovers is announced to the client that did not '
         'ask', () async {
       // The case that separates a shared daemon from a private one. Discovery

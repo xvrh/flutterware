@@ -50,6 +50,12 @@ String flutterwareRunDir() {
 /// it is a leak. They are not probed because a guest's IPC socket expects a
 /// protocol, not a knock.
 ///
+/// Frame-scratch directories (`cap-*`) age out the same way. A session that
+/// closes cleanly deletes its own; this catches the ones a crash left behind.
+/// A directory's mtime moves with every file created or deleted inside it, and
+/// a capture does both per frame, so a directory old enough to sweep belongs
+/// to nothing.
+///
 /// `live-*.json` is left alone: there is exactly one per project, so it is
 /// bounded, and [attachToLiveSession] already deletes one that will not connect.
 ///
@@ -102,6 +108,19 @@ Future<int> sweepRunDir({
     if (serving.contains(key)) continue;
     if (!_isOlderThan(entity, cutoff)) continue;
     if (_delete(entity)) deleted++;
+  }
+
+  for (var entity in entries) {
+    if (entity is! Directory) continue;
+    if (!p.basename(entity.path).startsWith('cap-')) continue;
+    if (!_isOlderThan(entity, cutoff)) continue;
+    try {
+      entity.deleteSync(recursive: true);
+      deleted++;
+    } on FileSystemException {
+      // Another sweeper won the race, or a frame is mid-write; either way it
+      // is not ours to force.
+    }
   }
 
   return deleted;
