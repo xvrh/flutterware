@@ -90,9 +90,51 @@ void main() {
       expect(await sweep(), 1);
       expect(dir.existsSync(), isFalse);
     });
+
+    test("a dead server's socket, and its handle with it", () async {
+      // `srv-*` is probed like a daemon, not aged like a guest — but this one
+      // is a plain file where a socket was, so nothing answers, and the
+      // handle would otherwise keep announcing a server that is gone.
+      aged('srv-12ab34cd-api-4242.sock', const Duration(days: 3));
+      aged('srv-12ab34cd-api-4242.json', const Duration(days: 3));
+
+      expect(await sweep(), 2);
+      expect(runDir.listSync(), isEmpty);
+    });
   });
 
   group('what it spares', () {
+    test('a server socket that still answers, however old', () async {
+      // The guest rule would be wrong here: a dev server legitimately runs
+      // for days, and unlinking a live one's socket makes it unreachable for
+      // new attachers — the next scan would then delete its handle as dead,
+      // and the server would vanish from the list while still running. The
+      // probe is free: an inspected server writes nothing to a connection
+      // that has not sent `meta/attach`.
+      var base = 'srv-12ab34cd-api-4242';
+      var socketPath = p.join(runDir.path, '$base.sock');
+      var server = await ServerSocket.bind(
+        InternetAddress(socketPath, type: InternetAddressType.unix),
+        0,
+      );
+      addTearDown(() async {
+        await server.close();
+        if (File(socketPath).existsSync()) File(socketPath).deleteSync();
+      });
+      File(
+        socketPath,
+      ).setLastModifiedSync(DateTime.now().subtract(const Duration(days: 3)));
+      aged('$base.json', const Duration(days: 3));
+
+      expect(await sweep(), 0);
+      expect(File(socketPath).existsSync(), isTrue);
+      expect(
+        File(p.join(runDir.path, '$base.json')).existsSync(),
+        isTrue,
+        reason: "a live server's handle is what keeps it discoverable",
+      );
+    });
+
     test('anything modified inside the window', () async {
       // The rule that protects everything in use: a live daemon appends to its
       // log, and a client deciding whether to spawn has just created its lock.

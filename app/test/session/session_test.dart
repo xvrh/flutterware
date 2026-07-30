@@ -41,6 +41,7 @@ void main() {
       'flutterware.assets',
       'flutterware.ui_catalog',
       'flutterware.splash',
+      'flutterware.server',
     ]);
   });
 

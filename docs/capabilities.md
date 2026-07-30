@@ -234,6 +234,22 @@ packages: List<DependencyListPackage>
 | `transitive` | boolean | no | false | List what the package pulls in indirectly too. The counts are reported either way. |
 
 
+### `flutterware.server`
+
+#### `requests` — Recent requests
+
+The latest HTTP requests a running server reported, each with the SQL queries and log lines it caused.
+
+```sh
+fw run server requests [--name=…] [--last=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `name` | string | no | — | Which server, when several are running. |
+| `last` | integer | no | 20 | — |
+
+
 ### `flutterware.splash`
 
 #### `describe` — Describe

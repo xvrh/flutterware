@@ -148,6 +148,19 @@ class NativeSplashPackage extends PluginPackage {
   const NativeSplashPackage(super.pkg);
 }
 
+/// Live inspection of the project's Dart servers: HTTP requests, SQL queries
+/// and logs, reported from inside the running process by
+/// `package:flutterware/server.dart`.
+///
+/// Deliberately declares no `packages:` — a server announces *itself* at
+/// runtime with a handle under `~/.flutterware/run`, however it was launched,
+/// so there is nothing to configure but the wish to see them. See
+/// `docs/superpowers/specs/2026-07-30-server-inspection-design.md`.
+class ServerInspection extends Plugin {
+  ServerInspection({String? label})
+    : super('flutterware.server', label: label ?? 'Server');
+}
+
 /// The launcher-icon editor. Only meaningful for packages that are apps, so it
 /// deliberately offers no `each` — naming them is the point.
 class LauncherIcon extends Plugin {
