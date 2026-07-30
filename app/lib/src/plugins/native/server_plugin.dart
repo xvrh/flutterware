@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/server.dart';
 
 import '../../address/address_scope.dart';
+import '../../ui/json_view.dart';
 import '../native_plugin.dart';
 import 'server_address.dart';
 import 'server_core.dart';
@@ -259,9 +260,7 @@ class _SqlView extends StatelessWidget {
       );
     }
     var header = theme.textTheme.bodySmall!.copyWith(color: theme.hintColor);
-    var numbers = theme.textTheme.bodySmall!.copyWith(
-      fontFeatures: const [FontFeature.tabularFigures()],
-    );
+    var numbers = _mono(context);
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 4),
       children: [
@@ -305,9 +304,7 @@ class _SqlView extends StatelessWidget {
                       shape.normalized,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall!.copyWith(
-                        fontFamily: 'monospace',
-                      ),
+                      style: _mono(context),
                     ),
                   ),
                   SizedBox(
@@ -357,38 +354,38 @@ class _QueryDetail extends StatefulWidget {
 
 class _QueryDetailState extends State<_QueryDetail> {
   String? _resultTitle;
-  String? _resultBody;
+
+  /// The decoded response map on success, the error text on failure.
+  Object? _result;
   var _busy = false;
 
   Future<void> _run(String method, String query) async {
     setState(() {
       _busy = true;
       _resultTitle = method;
-      _resultBody = null;
+      _result = null;
     });
-    String body;
+    Object? result;
     try {
-      var response = await sqlCommand(widget.server, method, query);
-      body = const JsonEncoder.withIndent('  ').convert(response);
+      result = await sqlCommand(widget.server, method, query);
     } on Object catch (e) {
       // A missing handler or a failing one — an answer, not a crash. The
       // hint names the fix because "no handler for sql.explain" alone reads
       // as our bug rather than a snippet not yet pasted.
-      body =
+      result =
           '$e\n\nThe server registers command handlers itself — see the '
           'sql adapter snippets in doc/server_inspection.md.';
     }
     if (!mounted) return;
     setState(() {
       _busy = false;
-      _resultBody = body;
+      _result = result;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    var mono = theme.textTheme.bodySmall!.copyWith(fontFamily: 'monospace');
     var stats = sqlStats(
       widget.server.events,
     ).where((s) => s.key == widget.queryKey).firstOrNull;
@@ -410,9 +407,7 @@ class _QueryDetailState extends State<_QueryDetail> {
             Expanded(
               child: Text(
                 stats.normalized,
-                style: theme.textTheme.titleSmall!.copyWith(
-                  fontFamily: 'monospace',
-                ),
+                style: _mono(context, fontSize: 15),
               ),
             ),
             IconButton(
@@ -456,17 +451,7 @@ class _QueryDetailState extends State<_QueryDetail> {
                   padding: EdgeInsets.all(8),
                   child: Center(child: CircularProgressIndicator()),
                 )
-              : Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest.withValues(
-                      alpha: 0.5,
-                    ),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(_resultBody ?? '', style: mono),
-                ),
+              : _CommandResult(_result),
         ],
         const SizedBox(height: 16),
         Text('Occurrences', style: theme.textTheme.titleSmall),
@@ -490,7 +475,7 @@ class _OccurrenceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    var mono = theme.textTheme.bodySmall!.copyWith(fontFamily: 'monospace');
+    var mono = _mono(context);
     var params = occurrence.payload['params'];
     var request = occurrence.rid == null
         ? null
@@ -625,10 +610,7 @@ class _RequestRow extends StatelessWidget {
             if (showTime) ...[
               Text(
                 _timestamp(request.time),
-                style: theme.textTheme.bodySmall!.copyWith(
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                  color: theme.hintColor,
-                ),
+                style: _mono(context, color: theme.hintColor),
               ),
               const SizedBox(width: 10),
             ],
@@ -639,7 +621,7 @@ class _RequestRow extends StatelessWidget {
                 '${p['method']} ${p['path']}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium,
+                style: _mono(context, fontSize: 13),
               ),
             ),
             if (repeatedCount > 0) ...[
@@ -667,13 +649,7 @@ class _RequestRow extends StatelessWidget {
               ),
             ],
             const SizedBox(width: 8),
-            Text(
-              _ms(p['ms']),
-              style: theme.textTheme.bodySmall!.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()],
-                color: theme.hintColor,
-              ),
-            ),
+            Text(_ms(p['ms']), style: _mono(context, color: theme.hintColor)),
           ],
         ),
       ),
@@ -728,10 +704,10 @@ class _RequestDetail extends StatelessWidget {
               Expanded(
                 child: Text(
                   '${p['method']} ${p['path']} → ${p['status']}',
-                  style: theme.textTheme.titleMedium,
+                  style: _mono(context, fontSize: 15),
                 ),
               ),
-              Text(_ms(p['ms']), style: theme.textTheme.titleMedium),
+              Text(_ms(p['ms']), style: _mono(context, fontSize: 15)),
               const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.close, size: 18),
@@ -841,10 +817,16 @@ class _WaterfallTab extends StatelessWidget {
               color: Colors.amber.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text(
-              'N+1: this query runs ${entry.value}× in this request\n'
-              '${entry.key}',
-              style: theme.textTheme.bodySmall,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'N+1: this query runs ${entry.value}× in this request',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 2),
+                Text(entry.key, style: _mono(context)),
+              ],
             ),
           ),
         _Waterfall(server: server, request: request, spans: spans),
@@ -867,16 +849,15 @@ class _RequestSqlTab extends StatefulWidget {
 
 class _RequestSqlTabState extends State<_RequestSqlTab> {
   final _expanded = <int>{};
-  final _explained = <int, String>{};
+  final _explained = <int, Object?>{};
   final _busy = <int>{};
 
   Future<void> _explain(ServerEvent event) async {
     var query = event.payload['query']! as String;
     setState(() => _busy.add(event.id));
-    String result;
+    Object? result;
     try {
-      var response = await sqlCommand(widget.server, 'explain', query);
-      result = const JsonEncoder.withIndent('  ').convert(response);
+      result = await sqlCommand(widget.server, 'explain', query);
     } on Object catch (e) {
       result =
           '$e\n\nThe server registers command handlers itself — see the '
@@ -892,7 +873,7 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    var mono = theme.textTheme.bodySmall!.copyWith(fontFamily: 'monospace');
+    var mono = _mono(context);
     if (widget.queries.isEmpty) {
       return Center(
         child: Text(
@@ -994,22 +975,47 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
                       child: CircularProgressIndicator(),
                     ),
                   if (_explained[event.id] != null)
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(top: 6),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: SelectableText(_explained[event.id]!, style: mono),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: _CommandResult(_explained[event.id]),
                     ),
                 ],
               ),
             ),
         ],
       ],
+    );
+  }
+}
+
+/// An explain/requery answer: structured responses fold like any JSON, an
+/// error reads as text.
+class _CommandResult extends StatelessWidget {
+  const _CommandResult(this.result);
+
+  final Object? result;
+
+  @override
+  Widget build(BuildContext context) {
+    var result = this.result;
+    if (result is Map || result is List) {
+      return JsonView(
+        data: result,
+        initialExpandDepth: 3,
+        searchable: false,
+        maxHeight: 360,
+      );
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: SelectableText('$result', style: _mono(context)),
     );
   }
 }
@@ -1032,7 +1038,7 @@ class _HttpMessageTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    var mono = theme.textTheme.bodySmall!.copyWith(fontFamily: 'monospace');
+    var mono = _mono(context);
     return FutureBuilder(
       future: server.detailsFor(request),
       builder: (context, snapshot) {
@@ -1069,8 +1075,16 @@ class _HttpMessageTab extends StatelessWidget {
             const SizedBox(height: 16),
             Text('Body', style: theme.textTheme.titleSmall),
             const SizedBox(height: 4),
-            body is String
-                ? Container(
+            body is! String
+                ? Text(
+                    'Not captured — binary, streamed, or over the size cap.',
+                    style: theme.textTheme.bodySmall,
+                  )
+                // A JSON body folds; anything else stays plain text. Sniffing
+                // the first character beats trusting content-type, which lies.
+                : body.trimLeft().startsWith(RegExp(r'[\[{]'))
+                ? JsonView.source(body, maxHeight: 520)
+                : Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
@@ -1079,10 +1093,6 @@ class _HttpMessageTab extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: SelectableText(body, style: mono),
-                  )
-                : Text(
-                    'Not captured — binary, streamed, or over the size cap.',
-                    style: theme.textTheme.bodySmall,
                   ),
           ],
         );
@@ -1099,7 +1109,7 @@ class _RequestLogsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    var mono = theme.textTheme.bodySmall!.copyWith(fontFamily: 'monospace');
+    var mono = _mono(context);
     if (logs.isEmpty) {
       return Center(
         child: Text(
@@ -1256,20 +1266,13 @@ class _EventRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    var time = event.time;
-    var timestamp =
-        '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}'
-        '.${time.millisecond.toString().padLeft(3, '0')}';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
           Text(
-            timestamp,
-            style: theme.textTheme.bodySmall!.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
-              color: theme.hintColor,
-            ),
+            _timestamp(event.time),
+            style: _mono(context, color: theme.hintColor),
           ),
           const SizedBox(width: 8),
           _ChannelChip(event),
@@ -1279,7 +1282,7 @@ class _EventRow extends StatelessWidget {
               _summary(event),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium,
+              style: _mono(context, fontSize: 13),
             ),
           ),
         ],
@@ -1366,6 +1369,18 @@ String _summary(ServerEvent event) {
 
 String _ms(Object? value) =>
     value is num ? '${value.toStringAsFixed(1)}ms' : '';
+
+/// The panel's one mono style — everything that is machine data (paths,
+/// queries, headers, durations) wears it; prose stays in the UI face.
+TextStyle _mono(BuildContext context, {Color? color, double? fontSize}) =>
+    Theme.of(context).textTheme.bodySmall!.copyWith(
+      fontFamily: 'monospace',
+      fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
+      letterSpacing: 0,
+      fontFeatures: const [FontFeature.tabularFigures()],
+      color: color,
+      fontSize: fontSize,
+    );
 
 String _timestamp(DateTime time) =>
     '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}'
