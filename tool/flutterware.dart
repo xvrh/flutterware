@@ -33,5 +33,11 @@ void main() => Flutterware.configure((fw) {
   fw.use(NativeSplash(packages: [.new(example)]));
   fw.use(ServerInspection());
   // `example` only, for now — the sample scenarios live there.
-  fw.use(Scenarios(packages: [.new(example)]));
+  fw.use(
+    Scenarios(
+      packages: [
+        .new(example, languages: ['en', 'fr']),
+      ],
+    ),
+  );
 });

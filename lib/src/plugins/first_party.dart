@@ -112,16 +112,22 @@ class Scenarios extends Plugin {
 }
 
 class ScenariosPackage extends PluginPackage {
-  const ScenariosPackage(super.pkg, {this.directory});
+  const ScenariosPackage(super.pkg, {this.directory, this.languages});
 
   /// Where this package keeps its scenarios, relative to the package;
   /// `test/scenarios` when null.
   final String? directory;
 
+  /// The locale tags this app supports — `['en', 'fr']` — offered by the
+  /// language axis. Null means the axis offers no list and runs stay on the
+  /// platform default.
+  final List<String>? languages;
+
   @override
   Map<String, Object?> toJson() => {
     ...super.toJson(),
     if (directory != null) 'directory': directory,
+    if (languages != null) 'languages': languages,
   };
 
   static List<ScenariosPackage> each(List<Pkg> packages) => [

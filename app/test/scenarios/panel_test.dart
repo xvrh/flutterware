@@ -79,19 +79,14 @@ void main() {
     await tester.pump();
 
     expect(runner.runs, 1);
-    expect(find.text('A'), findsOneWidget);
+    // Master/detail: the scenario list stays visible beside the flow.
+    expect(find.text('A'), findsWidgets);
+    expect(find.text('test/scenarios/a_test.dart'), findsWidgets);
+    // The flow: one node per step, on the graph canvas.
     expect(find.text('0 · shot'), findsOneWidget);
     expect(find.text('1 · end'), findsOneWidget);
-    expect(find.text('VISIBLE TEXTS'), findsOneWidget);
-    // The last step is the default selection, and its texts are the ones
-    // shown.
-    expect(find.text('bye', findRichText: true), findsOneWidget);
-
-    // Selecting a step is an address write, not local state.
-    await tester.tap(find.text('0 · shot'));
-    await tester.pump();
-    expect(address.value.segments.last, '0');
-    expect(find.text('hello', findRichText: true), findsOneWidget);
+    // The texts live on the pushed step page, not the flow.
+    expect(find.text('VISIBLE TEXTS'), findsNothing);
 
     // The address's axes went into the run, and the toolbar reads them back.
     expect(
@@ -100,6 +95,19 @@ void main() {
     );
     expect(find.text('iPhone SE'), findsOneWidget);
     expect(find.text('Dark'), findsOneWidget);
+
+    // Opening a step is an address write that pushes the detail page.
+    await tester.tap(find.text('0 · shot'), warnIfMissed: false);
+    await tester.pump();
+    expect(address.value.segments.last, '0');
+    expect(find.text('VISIBLE TEXTS'), findsOneWidget);
+    expect(find.text('hello', findRichText: true), findsOneWidget);
+
+    // And its back button pops to the flow.
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pump();
+    expect(address.value.segments.last, 'A');
+    expect(find.text('VISIBLE TEXTS'), findsNothing);
 
     // An axis change is an address write, and the page notices and re-runs.
     address.value = address.value.withAxes({'language': 'fr'});
@@ -114,6 +122,53 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(runner.runs, 3);
+  });
+
+  testWidgets('an unset device runs as the default phone', (tester) async {
+    var core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: Worktree(path: root.path),
+        workspace: Workspace(
+          root: root.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    var runner = _FakeRunner();
+    core.debugInstallRunner('.', runner);
+    var plugin = ScenariosPlugin(core);
+
+    var address = ValueNotifier(
+      Address(
+        worktree: 'wt',
+        plugin: scenariosPluginId,
+        segments: ['.', 'test', 'scenarios', 'a_test.dart', 'A'],
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: AddressRoot(
+          address: address,
+          onChanged: (a) => address.value = a,
+          child: Builder(builder: plugin.buildPanel),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(runner.seenAxes.single.device, 'iphone-13');
+    expect(find.text('iPhone 13'), findsOneWidget);
   });
 }
 

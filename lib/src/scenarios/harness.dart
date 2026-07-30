@@ -213,6 +213,11 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       'dark' => Brightness.dark,
       _ => Brightness.light,
     },
+    accessibility: ScenarioRunAccessibility(
+      boldText: args['boldText'] == 'true',
+      highContrast: args['highContrast'] == 'true',
+      invertColors: args['invertColors'] == 'true',
+    ),
   );
   var untouched =
       runArgs.size == null &&
@@ -221,7 +226,8 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       runArgs.platform == null &&
       runArgs.locale == null &&
       runArgs.textScale == null &&
-      runArgs.brightness == null;
+      runArgs.brightness == null &&
+      runArgs.accessibility.isDefault;
   return untouched ? null : runArgs;
 }
 

@@ -14,7 +14,10 @@ class ScenarioRunArgs {
     this.locale,
     this.textScale,
     this.brightness,
+    this.accessibility = const ScenarioRunAccessibility(),
   });
+
+  final ScenarioRunAccessibility accessibility;
 
   /// The screen in **logical** pixels — what the layout reads from
   /// `MediaQuery`.
@@ -31,6 +34,23 @@ class ScenarioRunArgs {
   final Locale? locale;
   final double? textScale;
   final Brightness? brightness;
+}
+
+/// The accessibility features a run can turn on — the platform switches a
+/// real user flips, applied through the binding's
+/// `accessibilityFeaturesTestValue`.
+class ScenarioRunAccessibility {
+  const ScenarioRunAccessibility({
+    this.boldText = false,
+    this.highContrast = false,
+    this.invertColors = false,
+  });
+
+  final bool boldText;
+  final bool highContrast;
+  final bool invertColors;
+
+  bool get isDefault => !boldText && !highContrast && !invertColors;
 }
 
 /// Set by the flutterware harness for the duration of one run request; null

@@ -19,5 +19,11 @@ void main() => Flutterware.configure((fw) {
   // bin/example_server.dart.
   fw.use(ServerInspection());
   // No `directory:` — scenarios live in `test/scenarios/`.
-  fw.use(Scenarios(packages: [.new(app)]));
+  fw.use(
+    Scenarios(
+      packages: [
+        .new(app, languages: ['en', 'fr']),
+      ],
+    ),
+  );
 });

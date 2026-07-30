@@ -315,7 +315,7 @@ fw run server sql [--name=…] [--top=…]
 Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured just before it.
 
 ```sh
-fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--text-scale=…] [--brightness=…]
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…]
 ```
 
 Returns `ScenarioRunResult`:
@@ -352,10 +352,13 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it |
 | `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
 | `output` | string | no | — | Where step artifacts are written; a fresh directory under the package's build/ when omitted |
-| `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted means the test default surface. The same vocabulary the UI catalog frames with. |
+| `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted means the default form factor (iphone-13); `fit` means the bare 800×600 test surface. The same vocabulary the UI catalog frames with. |
 | `language` | string | no | — | A locale tag — `fr`, `fr-CA` — applied as the platform locale for the whole run |
 | `text-scale` | string | no | — | The platform text scale factor — `1.3` is a common accessibility setting |
 | `brightness` | choice | no | — | The platform brightness the app sees |
+| `bold-text` | choice | no | — | The bold-text accessibility switch |
+| `high-contrast` | choice | no | — | The high-contrast accessibility switch |
+| `invert-colors` | choice | no | — | The invert-colors accessibility switch |
 
 
 ### `flutterware.splash`

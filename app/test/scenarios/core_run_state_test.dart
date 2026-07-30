@@ -176,6 +176,52 @@ void main() {
     await expectLater(run({'brightness': 'dim'}), throwsArgumentError);
     await expectLater(run({'text-scale': 'big'}), throwsArgumentError);
     await expectLater(run({'language': 'not a tag'}), throwsArgumentError);
+    await expectLater(run({'bold-text': 'maybe'}), throwsArgumentError);
+  });
+
+  test('the device defaults to the phone form factor; fit is the bare '
+      'surface', () async {
+    var runner = _FakeRunner();
+    var subject = core(runner: runner);
+    Future<void> run(Map<String, Object?> arguments) async {
+      await subject.invoke(
+        'run',
+        arguments: {
+          'package': '.',
+          'file': 'test/scenarios/a_test.dart',
+          'scenario': 'A',
+          ...arguments,
+        },
+      );
+    }
+
+    await run({});
+    expect(runner.seenAxes.last.device, 'iphone-13');
+    await run({'device': 'fit'});
+    expect(runner.seenAxes.last.device, isNull);
+  });
+
+  test('the accessibility switches travel as axes', () async {
+    var runner = _FakeRunner();
+    var subject = core(runner: runner);
+    var result =
+        (await subject.invoke(
+              'run',
+              arguments: {
+                'package': '.',
+                'file': 'test/scenarios/a_test.dart',
+                'scenario': 'A',
+                'bold-text': 'true',
+                'high-contrast': 'true',
+              },
+            ))!
+            as ScenarioRunResult;
+    expect(runner.seenAxes.last.boldText, isTrue);
+    expect(runner.seenAxes.last.highContrast, isTrue);
+    expect(runner.seenAxes.last.invertColors, isFalse);
+    expect(result.axes!['bold-text'], 'true');
+    expect(result.axes!['high-contrast'], 'true');
+    expect(result.axes!.containsKey('invert-colors'), isFalse);
   });
 }
 

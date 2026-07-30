@@ -1,13 +1,16 @@
-import 'dart:io';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
 import '../../address/address_scope.dart';
 import '../../catalog/devices.dart';
 import '../../scenarios/axes.dart';
+import '../../scenarios/discovery.dart';
+import '../../scenarios/flow_view.dart';
+import '../../scenarios/step_page.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/menu.dart';
+import '../../ui/popover.dart';
+import '../../ui/popover_menu.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../native_plugin.dart';
@@ -17,11 +20,12 @@ import 'scenarios_results.dart';
 
 export 'scenarios_core.dart' show ScenariosCore, scenariosPluginId;
 
-/// The GUI half of the scenarios plugin: the scanned list, and the flow page —
-/// one scenario's run laid out as its steps, left to right, with the selected
-/// step's frame and texts underneath.
+/// The GUI half of the scenarios plugin — dev_studio's proven shape on the
+/// shell: the scenario list as a master pane on the left, the selected
+/// scenario's run as a full-page flow of device-framed screenshots, and a
+/// step pushed over it with a back button.
 ///
-/// Everything the page shows comes out of [ScenariosCore.panelRunFor]; the
+/// Everything the pages show comes out of [ScenariosCore.panelRunFor]; the
 /// panel starts runs and draws state, and that is all it does.
 class ScenariosPlugin extends NativePlugin<ScenariosCore> {
   ScenariosPlugin(super.core);
@@ -83,11 +87,12 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
 
     // The axes ride the address as plain parameters, above the segments —
     // pick French and an iPhone once, and every scenario you open runs that
-    // way. An unknown device is reported by the page, not repaired here.
+    // way. The device defaults to the phone form factor; an unknown one is
+    // reported by the page, not repaired here.
     var axes = ScenarioAxes(
       device: switch (AddressScope.param(context, 'device')) {
-        var id? when isDeviceId(id) && id != fitDeviceId => id,
-        _ => null,
+        var id? when !isDeviceId(id) => defaultScenarioDeviceId,
+        var id => resolveScenarioDevice(id),
       },
       language: AddressScope.param(context, 'language'),
       textScale: double.tryParse(
@@ -98,14 +103,18 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
         'dark' => 'dark',
         _ => null,
       },
+      boldText: AddressScope.param(context, 'bold-text') == 'true',
+      highContrast: AddressScope.param(context, 'high-contrast') == 'true',
+      invertColors: AddressScope.param(context, 'invert-colors') == 'true',
     );
 
     // The plugin already relays core.changes as ChangeNotifier notifications.
     return ListenableBuilder(
       listenable: widget.plugin,
       builder: (context, _) {
+        Widget detail;
         if ((place.file, place.scenario) case (var file?, var scenario?)) {
-          return _ScenarioPage(
+          detail = _ScenarioPage(
             _core,
             place.package,
             file: file,
@@ -114,22 +123,48 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
             axes: axes,
             key: ValueKey('${place.package}/$file#$scenario'),
           );
+        } else {
+          detail = const EmptyState(
+            icon: Icons.route_outlined,
+            title: 'Pick a scenario',
+            message: 'Opening one runs it.',
+          );
         }
-        return _ScenarioList(
-          _core,
-          place.package,
-          key: ValueKey(place.package),
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: 240,
+              child: _ScenarioListPane(
+                _core,
+                place.package,
+                selected: place,
+                key: ValueKey(place.package),
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(child: detail),
+          ],
         );
       },
     );
   }
 }
 
-class _ScenarioList extends StatelessWidget {
-  const _ScenarioList(this.core, this.package, {super.key});
+/// The master pane: every scenario of the package, grouped by file, the
+/// selected one highlighted. Always visible — running a scenario never hides
+/// where you are in the suite.
+class _ScenarioListPane extends StatelessWidget {
+  const _ScenarioListPane(
+    this.core,
+    this.package, {
+    required this.selected,
+    super.key,
+  });
 
   final ScenariosCore core;
   final String package;
+  final ScenarioPlace selected;
 
   @override
   Widget build(BuildContext context) {
@@ -137,10 +172,13 @@ class _ScenarioList extends StatelessWidget {
     if (result == null) {
       if (core.scanErrorFor(package) case var error?) {
         return Center(
-          child: Text(
-            'The scan failed:\n$error',
-            textAlign: TextAlign.center,
-            style: context.type.bodyMuted,
+          child: Padding(
+            padding: const EdgeInsets.all(FwSpacing.lg),
+            child: Text(
+              'The scan failed:\n$error',
+              textAlign: TextAlign.center,
+              style: context.type.bodyMuted,
+            ),
           ),
         );
       }
@@ -148,39 +186,124 @@ class _ScenarioList extends StatelessWidget {
     }
     if (result.scenarios.isEmpty) {
       return Center(
-        child: Text(
-          'No scenarios in ${core.directoryFor(package)}.\n'
-          "Write one with scenario('…', (s) async { … }).",
-          textAlign: TextAlign.center,
-          style: context.type.bodyMuted,
+        child: Padding(
+          padding: const EdgeInsets.all(FwSpacing.lg),
+          child: Text(
+            'No scenarios in ${core.directoryFor(package)}.\n'
+            "Write one with scenario('…', (s) async { … }).",
+            textAlign: TextAlign.center,
+            style: context.type.bodyMuted,
+          ),
         ),
       );
     }
+
+    var byFile = <String, List<ScenarioRef>>{};
+    for (var ref in result.scenarios) {
+      byFile.putIfAbsent(ref.file, () => []).add(ref);
+    }
+
     return ListView(
+      padding: const EdgeInsets.symmetric(vertical: FwSpacing.md),
       children: [
         for (var diagnostic in result.diagnostics)
-          ListTile(
-            leading: const Icon(Icons.warning_amber_outlined),
-            title: Text(diagnostic, style: context.type.bodyMuted),
-            dense: true,
-          ),
-        for (var ref in result.scenarios)
-          ListTile(
-            leading: const Icon(Icons.route_outlined),
-            title: Text(ref.name),
-            subtitle: Text('${ref.file}:${ref.line}'),
-            onTap: () => AddressScope.write(context).setSegments(
-              scenarioSegments(package, file: ref.file, scenario: ref.name),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: FwSpacing.lg,
+              vertical: FwSpacing.xs,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.warning_amber_outlined,
+                  size: 14,
+                  color: context.colors.amber,
+                ),
+                const Gap(FwSpacing.sm),
+                Expanded(child: Text(diagnostic, style: context.type.caption)),
+              ],
             ),
           ),
+        for (var entry in byFile.entries) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              FwSpacing.lg,
+              FwSpacing.md,
+              FwSpacing.lg,
+              FwSpacing.xs,
+            ),
+            child: Text(
+              entry.key,
+              style: context.type.sectionLabel,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          for (var ref in entry.value)
+            _ScenarioRow(
+              ref,
+              selected:
+                  selected.file == ref.file && selected.scenario == ref.name,
+              onTap: () => AddressScope.write(context).setSegments(
+                scenarioSegments(package, file: ref.file, scenario: ref.name),
+              ),
+            ),
+        ],
       ],
     );
   }
 }
 
-/// One scenario's flow page. Opening it is the demand: a scenario nobody has
-/// run yet runs now, and the Run button reruns — against the sources on disk,
-/// since the warm runner refreshes first.
+class _ScenarioRow extends StatelessWidget {
+  const _ScenarioRow(this.ref, {required this.selected, required this.onTap});
+
+  final ScenarioRef ref;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tappable.builder(
+      onTap: onTap,
+      builder: (context, hovered) => Container(
+        color: selected
+            ? colors.accentSoft
+            : hovered
+            ? colors.panel
+            : Colors.transparent,
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.lg,
+          vertical: FwSpacing.sm,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.route_outlined,
+              size: 14,
+              color: selected ? colors.accent : colors.mut2,
+            ),
+            const Gap(FwSpacing.md),
+            Expanded(
+              child: Text(
+                ref.name,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.body.copyWith(
+                  color: selected ? colors.ink : colors.mut,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One scenario's page. Opening it is the demand: a scenario nobody has run
+/// yet runs now, and the Run button reruns — against the sources on disk,
+/// since the warm runner refreshes first. The run draws as the flow; a step
+/// address pushes [ScenarioStepPage] over it.
 class _ScenarioPage extends StatefulWidget {
   const _ScenarioPage(
     this.core,
@@ -200,7 +323,7 @@ class _ScenarioPage extends StatefulWidget {
   /// The axis assignment the address asks for.
   final ScenarioAxes axes;
 
-  /// The step the address selects, or null for the run's last step.
+  /// The step the address pushes, or null for the flow.
   final int? step;
 
   @override
@@ -242,7 +365,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     _maybeRun();
   }
 
-  void _selectStep(ScenarioRunStep step) {
+  void _openStep(ScenarioRunStep step) {
     AddressScope.write(context).setSegments(
       scenarioSegments(
         widget.package,
@@ -253,24 +376,57 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     );
   }
 
+  void _closeStep() {
+    AddressScope.write(context).setSegments(
+      scenarioSegments(
+        widget.package,
+        file: widget.file,
+        scenario: widget.scenario,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     var run = _run;
+    var outcome = run?.outcome;
+    var device = run?.axes.device == null
+        ? null
+        : deviceById(run!.axes.device!);
+
+    // The pushed page: a step, with its back button. Full page — the flow is
+    // exactly one back-tap away, per the reference GUI.
+    if (widget.step != null && outcome != null) {
+      var step = outcome.steps.firstWhereOrNull((s) => s.index == widget.step);
+      if (step != null) {
+        return ScenarioStepPage(
+          steps: outcome.steps,
+          step: step,
+          device: device,
+          onBack: _closeStep,
+          onOpenStep: _openStep,
+        );
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _header(context, run),
-        _AxesBar(axes: widget.axes),
+        _AxesBar(
+          axes: widget.axes,
+          languages: widget.core.languagesFor(widget.package),
+        ),
         const Divider(height: 1),
         // Said out loud rather than repaired, with the accepted values — the
         // reader is often an agent that guessed.
         if (unknownDeviceIn(AddressScope.param(context, 'device'))
-            case var device?)
+            case var bad?)
           _ErrorBanner(
-            'No device "$device". Accepted: '
-            '${[for (var d in catalogDevices) d.id].join(', ')}.',
+            'No device "$bad" — running as $defaultScenarioDeviceId. '
+            'Accepted: ${deviceIds.join(', ')}.',
           ),
-        Expanded(child: _body(context, run)),
+        Expanded(child: _body(context, run, device)),
       ],
     );
   }
@@ -286,12 +442,6 @@ class _ScenarioPageState extends State<_ScenarioPage> {
       ),
       child: Row(
         children: [
-          Tappable(
-            onTap: () =>
-                AddressScope.write(context).setSegments([widget.package]),
-            child: Icon(Icons.arrow_back, size: 18, color: colors.mut),
-          ),
-          const Gap(FwSpacing.lg),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -339,7 +489,11 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     );
   }
 
-  Widget _body(BuildContext context, ScenarioPanelRun? run) {
+  Widget _body(
+    BuildContext context,
+    ScenarioPanelRun? run,
+    CatalogDevice? device,
+  ) {
     var outcome = run?.outcome;
     if (outcome == null) {
       if (run?.error case var error? when !(run?.running ?? false)) {
@@ -363,17 +517,12 @@ class _ScenarioPageState extends State<_ScenarioPage> {
       );
     }
 
-    var steps = outcome.steps;
-    var selected = widget.step == null
-        ? steps.lastOrNull
-        : steps.firstWhereOrNull((s) => s.index == widget.step) ??
-              steps.lastOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (run?.error case var error?) _ErrorBanner(error),
         for (var error in outcome.errors.take(1)) _ErrorBanner(error.error),
-        if (selected == null)
+        if (outcome.steps.isEmpty)
           const Expanded(
             child: EmptyState(
               icon: Icons.image_not_supported_outlined,
@@ -383,11 +532,15 @@ class _ScenarioPageState extends State<_ScenarioPage> {
                   'screen() captures one unless Shots.manual turned that off.',
             ),
           )
-        else ...[
-          _StepStrip(steps: steps, selected: selected, onSelect: _selectStep),
-          const Divider(height: 1),
-          Expanded(child: _StepDetail(selected)),
-        ],
+        else
+          Expanded(
+            child: ScenarioFlowView(
+              steps: outcome.steps,
+              device: device,
+              onOpenStep: _openStep,
+              key: ValueKey(run?.output),
+            ),
+          ),
       ],
     );
   }
@@ -441,101 +594,7 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
-/// The flow: every captured step in run order, left to right. Linear because a
-/// scenario is — branching flows come back if scenarios ever grow splits.
-class _StepStrip extends StatelessWidget {
-  const _StepStrip({
-    required this.steps,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  final List<ScenarioRunStep> steps;
-  final ScenarioRunStep selected;
-  final void Function(ScenarioRunStep) onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 210,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.all(FwSpacing.lg),
-        itemCount: steps.length,
-        separatorBuilder: (_, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
-            child: Icon(
-              Icons.arrow_forward,
-              size: 14,
-              color: context.colors.mut3,
-            ),
-          ),
-        ),
-        itemBuilder: (context, index) {
-          var step = steps[index];
-          return _StepCard(
-            step,
-            selected: step.index == selected.index,
-            onTap: () => onSelect(step),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _StepCard extends StatelessWidget {
-  const _StepCard(this.step, {required this.selected, required this.onTap});
-
-  final ScenarioRunStep step;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Tappable(
-      onTap: onTap,
-      child: Container(
-        width: 210,
-        padding: const EdgeInsets.all(FwSpacing.sm),
-        decoration: BoxDecoration(
-          color: selected ? colors.accentSoft : colors.bg,
-          border: Border.all(
-            color: selected ? colors.accent : colors.line,
-            width: selected ? 1.5 : 1,
-          ),
-          borderRadius: BorderRadius.circular(context.radii.radius),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              '${step.index} · ${step.name ?? 'step'}',
-              style: context.type.caption.copyWith(
-                color: selected ? colors.ink : colors.mut,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-            const Gap(FwSpacing.xs),
-            Expanded(
-              child: Image.file(
-                File(step.png),
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.medium,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The axis assignment, as controls: device, language, text scale,
+/// The axis assignment, as controls: device, language, accessibility,
 /// brightness. **Every control writes the address and holds nothing** — the
 /// page notices the address moved and re-runs, so a picked axis and a pasted
 /// `?device=` link are the same code path.
@@ -544,9 +603,12 @@ class _StepCard extends StatelessWidget {
 /// once and every scenario you open runs French, exactly like the catalog's
 /// device framing.
 class _AxesBar extends StatelessWidget {
-  const _AxesBar({required this.axes});
+  const _AxesBar({required this.axes, required this.languages});
 
   final ScenarioAxes axes;
+
+  /// The locale tags the project's config declares — the whole language menu.
+  final List<String> languages;
 
   @override
   Widget build(BuildContext context) {
@@ -567,9 +629,14 @@ class _AxesBar extends StatelessWidget {
           Menu(
             entries: [
               MenuItem(
-                'Default surface',
+                'Default · ${deviceById(defaultScenarioDeviceId)!.label}',
                 onSelected: () =>
                     AddressScope.write(context).setParam('device', null),
+              ),
+              MenuItem(
+                'Bare test surface',
+                onSelected: () =>
+                    AddressScope.write(context).setParam('device', fitDeviceId),
               ),
               for (var group in {for (var d in catalogDevices) d.group}) ...[
                 MenuHeader(group),
@@ -584,32 +651,47 @@ class _AxesBar extends StatelessWidget {
             ],
             builder: (context, controller) => _AxisChip(
               label: 'Device',
-              value: device?.label ?? 'Default',
-              active: device != null,
+              value: device?.label ?? 'Bare surface',
+              active: axes.device != defaultScenarioDeviceId,
               onTap: controller.toggle,
             ),
           ),
-          _LanguageField(language: axes.language),
-          Menu(
-            entries: [
-              for (var (label, value) in [
-                ('Default', null),
-                ('0.85', '0.85'),
-                ('1.15', '1.15'),
-                ('1.3', '1.3'),
-                ('2', '2'),
-              ])
+          if (languages.isNotEmpty)
+            Menu(
+              entries: [
                 MenuItem(
-                  label,
+                  'Default',
                   onSelected: () =>
-                      AddressScope.write(context).setParam('text-scale', value),
+                      AddressScope.write(context).setParam('language', null),
                 ),
-            ],
-            builder: (context, controller) => _AxisChip(
-              label: 'Text scale',
-              value: axes.textScale == null ? 'Default' : '${axes.textScale}',
-              active: axes.textScale != null,
+                for (var language in languages)
+                  MenuItem(
+                    language,
+                    onSelected: () => AddressScope.write(
+                      context,
+                    ).setParam('language', language),
+                  ),
+              ],
+              builder: (context, controller) => _AxisChip(
+                label: 'Language',
+                value: axes.language ?? 'Default',
+                active: axes.language != null,
+                onTap: controller.toggle,
+              ),
+            ),
+          Popover(
+            side: PopoverSide.bottom,
+            align: PopoverAlign.start,
+            anchor: (context, controller) => _AxisChip(
+              label: 'Accessibility',
+              value: _describeAccessibility(axes),
+              active: axes.anyAccessibility,
               onTap: controller.toggle,
+            ),
+            content: (context, controller) => PopoverMenuSurface(
+              minWidth: 260,
+              maxWidth: 320,
+              child: _AccessibilityPanel(axes: axes),
             ),
           ),
           Menu(
@@ -638,6 +720,104 @@ class _AxesBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  static String _describeAccessibility(ScenarioAxes axes) {
+    var features = [
+      if (axes.boldText) 'bold',
+      if (axes.highContrast) 'high contrast',
+      if (axes.invertColors) 'invert',
+    ];
+    var scale = axes.textScale;
+    if (scale == null && features.isEmpty) return 'Default';
+    var scaleText = 'Text ${((scale ?? 1.0) * 100).round()}%';
+    return features.isEmpty ? scaleText : '$scaleText, ${features.join(', ')}';
+  }
+}
+
+/// The accessibility features, as dev_studio offered them: the text scale
+/// stepper and the platform switches. Every row writes the address on the
+/// spot — with warm FakeAsync re-runs there is nothing to batch behind an
+/// Apply button.
+class _AccessibilityPanel extends StatelessWidget {
+  const _AccessibilityPanel({required this.axes});
+
+  final ScenarioAxes axes;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var scale = axes.textScale ?? 1.0;
+    void setScale(double value) {
+      AddressScope.write(context).setParam(
+        'text-scale',
+        (value - 1.0).abs() < 0.001 ? null : value.toStringAsFixed(2),
+      );
+    }
+
+    Widget toggle(String label, String param, bool value) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.lg,
+          vertical: FwSpacing.xs,
+        ),
+        child: Row(
+          children: [
+            Expanded(child: Text(label, style: context.type.body)),
+            Checkbox(
+              value: value,
+              visualDensity: VisualDensity.compact,
+              onChanged: (checked) => AddressScope.write(
+                context,
+              ).setParam(param, (checked ?? false) ? 'true' : null),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Gap(FwSpacing.md),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
+          child: Text('ACCESSIBILITY', style: context.type.sectionLabel),
+        ),
+        const Gap(FwSpacing.md),
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: FwSpacing.lg,
+            vertical: FwSpacing.xs,
+          ),
+          child: Row(
+            children: [
+              Expanded(child: Text('Text scale', style: context.type.body)),
+              Tappable(
+                onTap: () => setScale((scale - 0.1).clamp(0.5, 3.0)),
+                child: Icon(Icons.remove, size: 16, color: colors.mut),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
+                child: Text(
+                  '${(scale * 100).round()}%',
+                  style: context.type.bodyStrong,
+                ),
+              ),
+              Tappable(
+                onTap: () => setScale((scale + 0.1).clamp(0.5, 3.0)),
+                child: Icon(Icons.add, size: 16, color: colors.mut),
+              ),
+            ],
+          ),
+        ),
+        toggle('Bold text', 'bold-text', axes.boldText),
+        toggle('High contrast', 'high-contrast', axes.highContrast),
+        toggle('Invert colors', 'invert-colors', axes.invertColors),
+        const Gap(FwSpacing.md),
+      ],
     );
   }
 }
@@ -685,132 +865,6 @@ class _AxisChip extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// The language axis — free text, because a locale tag is one.
-///
-/// Owns a controller but no truth: the address is the value, the field is how
-/// you type one. An outside change (a pasted link, another control's write
-/// dropping params) lands via [didUpdateWidget] unless the user is mid-edit.
-class _LanguageField extends StatefulWidget {
-  const _LanguageField({required this.language});
-
-  final String? language;
-
-  @override
-  State<_LanguageField> createState() => _LanguageFieldState();
-}
-
-class _LanguageFieldState extends State<_LanguageField> {
-  late final _controller = TextEditingController(text: widget.language ?? '');
-  final _focus = FocusNode();
-
-  @override
-  void didUpdateWidget(_LanguageField old) {
-    super.didUpdateWidget(old);
-    if (old.language != widget.language && !_focus.hasFocus) {
-      _controller.text = widget.language ?? '';
-    }
-  }
-
-  void _submit(String value) {
-    var tag = value.trim();
-    AddressScope.write(context).setParam('language', tag.isEmpty ? null : tag);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _focus.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var active = widget.language != null;
-    // The transparent Material is for the TextField, which refuses to build
-    // without one — the panel makes no promise about what it is mounted
-    // under.
-    return Material(
-      type: MaterialType.transparency,
-      child: Container(
-        height: 24,
-        width: 150,
-        padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
-        decoration: BoxDecoration(
-          color: active ? colors.accentSoft : colors.bg,
-          border: Border.all(color: active ? colors.accent : colors.line),
-          borderRadius: BorderRadius.circular(context.radii.radius),
-        ),
-        child: Row(
-          children: [
-            Text(
-              'Language: ',
-              style: context.type.caption.copyWith(color: colors.mut2),
-            ),
-            Expanded(
-              child: TextField(
-                controller: _controller,
-                focusNode: _focus,
-                onSubmitted: _submit,
-                decoration: const InputDecoration.collapsed(hintText: '—'),
-                style: context.type.caption.copyWith(color: colors.ink),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The selected step, big: the frame on the left, its visible texts on the
-/// right. The tree dump joins this side when the inspector slice lands.
-class _StepDetail extends StatelessWidget {
-  const _StepDetail(this.step);
-
-  final ScenarioRunStep step;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: Container(
-            color: colors.panel2,
-            padding: const EdgeInsets.all(FwSpacing.xl),
-            child: Image.file(
-              File(step.png),
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.medium,
-            ),
-          ),
-        ),
-        const VerticalDivider(width: 1),
-        SizedBox(
-          width: 260,
-          child: ListView(
-            padding: const EdgeInsets.all(FwSpacing.lg),
-            children: [
-              Text('VISIBLE TEXTS', style: context.type.sectionLabel),
-              const Gap(FwSpacing.md),
-              if (step.texts.isEmpty)
-                Text('No visible texts.', style: context.type.bodyMuted)
-              else
-                for (var text in step.texts)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: FwSpacing.xs),
-                    child: SelectableText(text, style: context.type.bodySmall),
-                  ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

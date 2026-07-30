@@ -1,7 +1,24 @@
 import '../catalog/devices.dart';
 
+/// What `?device=` means when nothing was chosen: scenarios frame as a phone
+/// by default — the "default form factor". An explicit [fitDeviceId] is how
+/// you ask for the bare test surface instead.
+const defaultScenarioDeviceId = 'iphone-13';
+
+/// The scenarios reading of a raw `?device=` parameter.
+///
+/// Absent defaults to [defaultScenarioDeviceId]; [fitDeviceId] resolves to no
+/// device at all (the bare 800×600 test surface); anything else is itself.
+/// Both the panel and the `run` action read through this, so the two cannot
+/// disagree about what an unspecified device means.
+String? resolveScenarioDevice(String? param) => switch (param) {
+  null => defaultScenarioDeviceId,
+  fitDeviceId => null,
+  var id => id,
+};
+
 /// One run's axis assignment, exactly as the address carries it:
-/// `?device=iphone-se&language=fr&text-scale=1.3&brightness=dark`.
+/// `?device=iphone-se&language=fr&text-scale=1.3&brightness=dark&bold-text=true`.
 ///
 /// Plain Dart, plain strings — this is the vocabulary a person types into an
 /// address bar and an agent passes to the `run` action, kept unresolved so a
@@ -15,9 +32,14 @@ class ScenarioAxes {
     this.language,
     this.textScale,
     this.brightness,
+    this.boldText = false,
+    this.highContrast = false,
+    this.invertColors = false,
   });
 
-  /// A [CatalogDevice] id, or null for the tester's default surface.
+  /// A [CatalogDevice] id, or null for the tester's default surface. Already
+  /// resolved — see [resolveScenarioDevice] for what an absent `?device=`
+  /// means.
   final String? device;
 
   /// A locale tag — `fr`, `fr-CA`.
@@ -28,11 +50,34 @@ class ScenarioAxes {
   /// `light` or `dark`.
   final String? brightness;
 
+  // The accessibility features, off by default like on a real phone.
+  final bool boldText;
+  final bool highContrast;
+  final bool invertColors;
+
   bool get isEmpty =>
       device == null &&
       language == null &&
       textScale == null &&
-      brightness == null;
+      brightness == null &&
+      !boldText &&
+      !highContrast &&
+      !invertColors;
+
+  /// Whether any accessibility setting departs from the default — what the
+  /// toolbar's accessibility chip lights up on.
+  bool get anyAccessibility =>
+      textScale != null || boldText || highContrast || invertColors;
+
+  ScenarioAxes copyWith({String? device}) => ScenarioAxes(
+    device: device ?? this.device,
+    language: language,
+    textScale: textScale,
+    brightness: brightness,
+    boldText: boldText,
+    highContrast: highContrast,
+    invertColors: invertColors,
+  );
 
   /// The address parameters this assignment writes — and what gets recorded
   /// on every artifact, per the rule that a screenshot is under-specified
@@ -42,6 +87,9 @@ class ScenarioAxes {
     'language': ?language,
     if (textScale case var scale?) 'text-scale': _compact(scale),
     'brightness': ?brightness,
+    if (boldText) 'bold-text': 'true',
+    if (highContrast) 'high-contrast': 'true',
+    if (invertColors) 'invert-colors': 'true',
   };
 
   /// The flat string args the harness's `run` extension takes. Geometry is
@@ -63,6 +111,9 @@ class ScenarioAxes {
       'language': ?language,
       if (textScale case var scale?) 'textScale': '$scale',
       'brightness': ?brightness,
+      if (boldText) 'boldText': 'true',
+      if (highContrast) 'highContrast': 'true',
+      if (invertColors) 'invertColors': 'true',
     };
   }
 
@@ -76,10 +127,21 @@ class ScenarioAxes {
       other.device == device &&
       other.language == language &&
       other.textScale == textScale &&
-      other.brightness == brightness;
+      other.brightness == brightness &&
+      other.boldText == boldText &&
+      other.highContrast == highContrast &&
+      other.invertColors == invertColors;
 
   @override
-  int get hashCode => Object.hash(device, language, textScale, brightness);
+  int get hashCode => Object.hash(
+    device,
+    language,
+    textScale,
+    brightness,
+    boldText,
+    highContrast,
+    invertColors,
+  );
 
   @override
   String toString() => 'ScenarioAxes(${toParams()})';

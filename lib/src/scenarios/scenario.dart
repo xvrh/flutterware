@@ -85,6 +85,13 @@ VoidCallback? _applyRunArgs(WidgetTester tester) {
   if (args.brightness case var brightness?) {
     dispatcher.platformBrightnessTestValue = brightness;
   }
+  if (!args.accessibility.isDefault) {
+    dispatcher.accessibilityFeaturesTestValue = FakeAccessibilityFeatures(
+      boldText: args.accessibility.boldText,
+      highContrast: args.accessibility.highContrast,
+      invertColors: args.accessibility.invertColors,
+    );
+  }
 
   return () {
     debugDefaultTargetPlatformOverride = null;

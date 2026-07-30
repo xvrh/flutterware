@@ -138,11 +138,12 @@ void main() {
             language: 'fr-CA',
             textScale: 1.3,
             brightness: 'dark',
+            boldText: true,
           ),
         );
         expect(
           _scratchTexts(framed),
-          contains('375x667 2.0 20.0 fr-CA Brightness.dark 13.0'),
+          contains('375x667 2.0 20.0 fr-CA Brightness.dark 13.0 true'),
         );
         expect(_pngSize(_lastPng(framed)), (375, 667));
 
@@ -154,7 +155,7 @@ void main() {
         var text = _scratchTexts(bare).single;
         expect(text, startsWith('800x600 3.0 0.0'));
         expect(text, contains('Brightness.light'));
-        expect(text, endsWith('10.0'));
+        expect(text, endsWith('10.0 false'));
         expect(_pngSize(_lastPng(bare)), (800, 600));
       } finally {
         probe.deleteSync();
@@ -261,7 +262,8 @@ void main() {
                 '${media.padding.top} '
                 '${locale.toLanguageTag()} '
                 '${media.platformBrightness} '
-                '${media.textScaler.scale(10)}',
+                '${media.textScaler.scale(10)} '
+                '${media.boldText}',
               );
             },
           ),

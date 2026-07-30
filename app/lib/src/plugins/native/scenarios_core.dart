@@ -95,6 +95,22 @@ class ScenariosCore extends PluginCore {
     return defaultScenariosDirectory;
   }
 
+  /// The locale tags declared for [path] in `tool/flutterware.dart` —
+  /// `Scenarios(packages: [.new(app, languages: ['en', 'fr'])])` — or empty.
+  /// The language axis offers exactly this list; it is configuration, not
+  /// free text, because a tag the app does not support runs the fallback
+  /// locale and produces a picture that is wrong without looking wrong.
+  List<String> languagesFor(String path) {
+    for (var config in host.packageConfigs) {
+      if (config['path'] == path) {
+        if (config['languages'] case List<Object?> languages) {
+          return languages.cast<String>();
+        }
+      }
+    }
+    return const [];
+  }
+
   /// Whether [path] has been scanned (or is scanning) — the laziness rule,
   /// made observable.
   bool isRealised(String path) => _scans.containsKey(path);
@@ -327,11 +343,14 @@ class ScenariosCore extends PluginCore {
               description:
                   'Run as a device: its screen, its pixel ratio, its safe '
                   'areas and its platform, so the app reads the phone from '
-                  '`MediaQuery`. Omitted means the test default surface. The '
-                  'same vocabulary the UI catalog frames with.',
+                  '`MediaQuery`. Omitted means the default form factor '
+                  '($defaultScenarioDeviceId); `fit` means the bare 800×600 '
+                  'test surface. The same vocabulary the UI catalog frames '
+                  'with.',
               options: [
                 for (var device in catalogDevices)
                   ActionOption(device.id, label: device.label),
+                ActionOption(fitDeviceId, label: 'Bare test surface'),
               ],
             ),
             const ActionParameter(
@@ -360,6 +379,30 @@ class ScenariosCore extends PluginCore {
               description: 'The platform brightness the app sees',
               options: [ActionOption('light'), ActionOption('dark')],
             ),
+            const ActionParameter(
+              'bold-text',
+              'Bold text',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'The bold-text accessibility switch',
+              options: [ActionOption('true'), ActionOption('false')],
+            ),
+            const ActionParameter(
+              'high-contrast',
+              'High contrast',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'The high-contrast accessibility switch',
+              options: [ActionOption('true'), ActionOption('false')],
+            ),
+            const ActionParameter(
+              'invert-colors',
+              'Invert colors',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'The invert-colors accessibility switch',
+              options: [ActionOption('true'), ActionOption('false')],
+            ),
           ],
         ),
       ],
@@ -373,12 +416,11 @@ class ScenariosCore extends PluginCore {
   /// is wrong without looking wrong.
   static ScenarioAxes _axesFrom(Map<String, Object?> arguments) {
     var device = arguments['device'];
-    if (device != null && (device is! String || deviceById(device) == null)) {
+    if (device != null && (device is! String || !isDeviceId(device))) {
       throw ArgumentError.value(
         device,
         'device',
-        'no such device. Accepted: '
-            '${[for (var d in catalogDevices) d.id].join(', ')}',
+        'no such device. Accepted: ${deviceIds.join(', ')}',
       );
     }
     var language = arguments['language'];
@@ -412,11 +454,21 @@ class ScenariosCore extends PluginCore {
         'accepted: light, dark',
       );
     }
+    bool flag(String name) {
+      var raw = arguments[name];
+      if (raw == null || raw == 'false' || raw == false) return false;
+      if (raw == 'true' || raw == true) return true;
+      throw ArgumentError.value(raw, name, 'accepted: true, false');
+    }
+
     return ScenarioAxes(
-      device: device as String?,
+      device: resolveScenarioDevice(device as String?),
       language: language as String?,
       textScale: textScale,
       brightness: brightness as String?,
+      boldText: flag('bold-text'),
+      highContrast: flag('high-contrast'),
+      invertColors: flag('invert-colors'),
     );
   }
 
