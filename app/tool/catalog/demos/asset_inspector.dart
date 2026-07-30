@@ -36,6 +36,13 @@ Widget assetInspectorDetail() => const _Detail();
 /// Every state of the list at once, which is the point of stacking them: an
 /// empty state that collapses or a key that overflows shows up here without
 /// anyone selecting a variant to find it.
+///
+/// **Scrolls sideways**, because three fixed-width cases are wider than some of
+/// the windows this is rendered in. Each case keeps a realistic width instead of
+/// being squeezed — the list's own ellipsis behaviour is one of the things being
+/// looked at, and it is a function of that width, so flexing the cases to fit
+/// would quietly change what the demo demonstrates. Below 888px you scroll; at
+/// or above it, nothing looks different from before.
 class _Lists extends StatefulWidget {
   const _Lists();
 
@@ -49,43 +56,46 @@ class _ListsState extends State<_Lists> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _Case(
-            'Filtered — matched characters lit',
-            AssetListView(
-              initialQuery: 'log',
-              own: _own,
-              fromPackages: [
-                AssetOwner(package: 'flutterware', assets: _dependencyAssets),
-              ],
-              problems: const [],
-              selected: _selected,
-              onSelect: (key) => setState(() => _selected = key),
+      body: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Case(
+              'Filtered — matched characters lit',
+              AssetListView(
+                initialQuery: 'log',
+                own: _own,
+                fromPackages: [
+                  AssetOwner(package: 'flutterware', assets: _dependencyAssets),
+                ],
+                problems: const [],
+                selected: _selected,
+                onSelect: (key) => setState(() => _selected = key),
+              ),
             ),
-          ),
-          _Case(
-            'With problems',
-            AssetListView(
-              own: _own.take(2).toList(),
-              fromPackages: const [],
-              problems: _problems,
-              selected: null,
-              onSelect: (_) {},
+            _Case(
+              'With problems',
+              AssetListView(
+                own: _own.take(2).toList(),
+                fromPackages: const [],
+                problems: _problems,
+                selected: null,
+                onSelect: (_) {},
+              ),
             ),
-          ),
-          _Case(
-            'Nothing declared',
-            AssetListView(
-              own: const [],
-              fromPackages: const [],
-              problems: const [],
-              selected: null,
-              onSelect: (_) {},
+            _Case(
+              'Nothing declared',
+              AssetListView(
+                own: const [],
+                fromPackages: const [],
+                problems: const [],
+                selected: null,
+                onSelect: (_) {},
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

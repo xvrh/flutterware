@@ -345,22 +345,39 @@ Future<void> main(List<String> args) async {
     var back = await _nextProbe(probes.stream, const Duration(seconds: 10));
     check(!back.contains('(edited)'), 'reverting the file reverts the screen');
 
-    // What the checks below expect the guest to be rendering.
-    await _renderEntry(daemon, vmService, probes, entries.first);
+    // The entry the checks below edit, named rather than taken from the sort
+    // order.
+    //
+    // It has to be the *empty* one: the text they replace, `No members yet`, is
+    // the empty branch of `avatar_tile.dart`, so `avatarTileMembers` — which
+    // renders a populated list — never puts it on screen. It used to be
+    // `entries.first`, which was `avatarTileEmpty` only by accident of sorting;
+    // adding `asset_inspector.dart` took that slot, and this check went on
+    // editing the right file while the guest rendered the asset inspector. It
+    // compiled, it reloaded, and the text it was waiting for could not appear.
+    //
+    // Same lesson as the loop above, which says out loud that which entry is
+    // first is not its business.
+    var empty = entries.firstWhere((e) => e.symbol == 'avatarTileEmpty');
+    await _renderEntry(daemon, vmService, probes, empty);
 
     // 3c. The contract the focus-triggered reload rests on: a request nobody
     // pressed must cost nothing when nothing was edited. A reload that always
     // works reassembles the guest and resets the demo's state, which would make
     // alt-tabbing back to the panel a way to lose your place.
-    var quiet = await daemon.select(entries.first.id, ifChanged: true);
+    var quiet = await daemon.select(empty.id, ifChanged: true);
     check(quiet.unchanged, 'ifChanged does nothing when nothing was edited');
     check(quiet.dill == null, 'and hands back no kernel to reload');
 
     try {
-      source.writeAsStringSync(
-        original.replaceAll('No members yet', 'Nobody yet'),
-      );
-      var noisy = await daemon.select(entries.first.id, ifChanged: true);
+      var edit = original.replaceAll('No members yet', 'Nobody yet');
+      // The edit has to actually change the file, or everything below passes for
+      // the wrong reason: writing identical bytes still moves the mtime, so the
+      // sweep reports one edited file and the compile succeeds, and only the
+      // probe notices that nothing on screen moved.
+      check(edit != original, 'the demo still has the text this edits');
+      source.writeAsStringSync(edit);
+      var noisy = await daemon.select(empty.id, ifChanged: true);
       check(!noisy.unchanged, 'and does not skip when a file did move');
       check(noisy.ok, 'compiling what changed: ${noisy.error}');
       check(noisy.editedCount == 1, 'having found the one edited file');
