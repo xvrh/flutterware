@@ -817,6 +817,7 @@ class CatalogSession extends ChangeNotifier {
   /// far as a guest does not delete a handle belonging to another window.
   var _published = false;
   StreamSubscription<CatalogChanged>? _changes;
+  StreamSubscription<AssetsChanged>? _assetsChanges;
   Future<void> _queue = Future.value();
   bool _disposed = false;
 
@@ -893,6 +894,7 @@ class CatalogSession extends ChangeNotifier {
       quarantined = ready.quarantined;
       diagnostics = ready.diagnostics;
       _changes = daemon.catalogChanges.listen(_onCatalogChanged);
+      _assetsChanges = daemon.assetsChanges.listen(_onAssetsChanged);
       // Then whatever changed between the handshake and that subscription. The
       // ready message is a snapshot of the moment the daemon prepared, which for
       // a client attaching to a daemon that has been up a while is not the same
@@ -1370,6 +1372,35 @@ class CatalogSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The shared bundle moved under the guest — a file added to a declared
+  /// directory, a pubspec edit — and the guest's caches still answer from the
+  /// old one.
+  ///
+  /// `AssetManifest.bin` is the cache that matters: an added or removed key
+  /// is a manifest change, and reassemble re-resolves every image against the
+  /// fresh read (clearing the image cache with it, which also covers an
+  /// edited file). Fonts are past helping here — the engine registered them
+  /// at guest startup, and `asset_refresh_test.dart` measures that eviction
+  /// does not move a glyph — so [AssetsChanged.fontsChanged] waits for the
+  /// next guest launch. Relaunching this one automatically is a decision
+  /// about losing the user's state, not a cache call, and is deliberately
+  /// not taken here.
+  void _onAssetsChanged(AssetsChanged change) {
+    var vm = _vmService;
+    if (vm == null) return;
+    _fireAndForget(() async {
+      await vm.service.callServiceExtension(
+        'ext.flutter.evict',
+        isolateId: vm.isolateId,
+        args: {'value': 'AssetManifest.bin'},
+      );
+      await vm.service.callServiceExtension(
+        'ext.flutter.reassemble',
+        isolateId: vm.isolateId,
+      );
+    }(), 'refresh assets');
+  }
+
   void _onEngineChanged() {
     if (_engine?.phase == EmbeddedEnginePhase.error) {
       _fail(_engine!.errorMessage ?? 'the embedder guest failed');
@@ -1437,6 +1468,7 @@ class CatalogSession extends ChangeNotifier {
     if (_published) LiveSession.clear(projectRoot);
     unawaited(_vmService?.close());
     unawaited(_changes?.cancel());
+    unawaited(_assetsChanges?.cancel());
     unawaited(_daemon?.close());
     super.dispose();
   }

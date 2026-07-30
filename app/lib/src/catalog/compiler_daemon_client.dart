@@ -65,6 +65,11 @@ class CompilerDaemonClient {
 
   final _changes = StreamController<CatalogChanged>.broadcast();
 
+  /// An event and not a value, unlike [lastChange]: this message carries no
+  /// snapshot to catch up on — a client attaching after assets moved reads a
+  /// bundle that already moved with them.
+  final _assetsChanges = StreamController<AssetsChanged>.broadcast();
+
   /// The most recent [CatalogChanged], whether or not anyone was listening.
   ///
   /// **State, not a replayed event**, and the distinction is the whole point.
@@ -175,6 +180,7 @@ class CompilerDaemonClient {
         throw StateError('the compiler daemon failed: $message\n$stackTrace');
       case DaemonCompiled():
       case CatalogChanged():
+      case AssetsChanged():
         await client.close();
         throw StateError('the daemon spoke before it was ready: $first');
     }
@@ -216,6 +222,8 @@ class CompilerDaemonClient {
       case CatalogChanged():
         _lastChange = response;
         if (!_changes.isClosed) _changes.add(response);
+      case AssetsChanged():
+        if (!_assetsChanges.isClosed) _assetsChanges.add(response);
     }
   }
 
@@ -232,6 +240,7 @@ class CompilerDaemonClient {
     }
     _pending.clear();
     if (!_changes.isClosed) _changes.close();
+    if (!_assetsChanges.isClosed) _assetsChanges.close();
   }
 
   /// Fires whenever the set of servable entries moves — an entry quarantined
@@ -244,6 +253,10 @@ class CompilerDaemonClient {
   /// is no window between the two. For what landed *before* a caller got here,
   /// read [lastChange] once after subscribing.
   Stream<CatalogChanged> get catalogChanges => _changes.stream;
+
+  /// Fires when a refresh rebuilt the shared asset bundle and it differed —
+  /// the notice a session turns into evicting its guest's caches.
+  Stream<AssetsChanged> get assetsChanges => _assetsChanges.stream;
 
   /// Makes [id] the active entry and compiles it into the entrypoint.
   ///
