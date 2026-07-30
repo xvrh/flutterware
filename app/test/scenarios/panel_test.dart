@@ -196,6 +196,7 @@ class _FakeRunner extends ScenarioRunner {
       File(png).writeAsBytesSync(_transparentPng);
       return {
         'index': index,
+        if (index > 0) 'parent': index - 1,
         'name': name,
         'auto': false,
         'image': png,

@@ -22,7 +22,7 @@ import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 void main() {
   late Directory root;
 
-  ScenariosCore core({_FakeRunner? runner}) {
+  ScenariosCore core({_FakeRunner? runner, double? captureScale}) {
     var worktree = Worktree(path: root.path);
     var subject = ScenariosCore(
       PluginHost(
@@ -38,7 +38,7 @@ void main() {
         ),
         config: {
           'packages': [
-            {'path': '.'},
+            {'path': '.', 'captureScale': ?captureScale},
           ],
         },
       ),
@@ -265,6 +265,35 @@ void main() {
     expect(result.axes!['high-contrast'], 'true');
     expect(result.axes!.containsKey('invert-colors'), isFalse);
   });
+
+  test("the configured captureScale is every run's default; an explicit "
+      'capture-scale still wins', () async {
+    var runner = _FakeRunner();
+    var subject = core(runner: runner, captureScale: 3);
+
+    // The panel's run.
+    start(subject);
+    await settled(subject);
+    expect(runner.seenCaptureScales.last, 3);
+
+    // The run action, defaulted…
+    await subject.invoke(
+      'run',
+      arguments: {'package': '.', 'file': 'test/scenarios/a_test.dart'},
+    );
+    expect(runner.seenCaptureScales.last, 3);
+
+    // …and overridden.
+    await subject.invoke(
+      'run',
+      arguments: {
+        'package': '.',
+        'file': 'test/scenarios/a_test.dart',
+        'capture-scale': '1',
+      },
+    );
+    expect(runner.seenCaptureScales.last, 1);
+  });
 }
 
 class _FakeRunner extends ScenarioRunner {
@@ -274,6 +303,7 @@ class _FakeRunner extends ScenarioRunner {
   var runs = 0;
   String? failure;
   final seenAxes = <ScenarioAxes>[];
+  final seenCaptureScales = <double?>[];
 
   /// When set, [run] waits on it — so a test can observe the running state.
   Completer<void>? gate;
@@ -293,6 +323,7 @@ class _FakeRunner extends ScenarioRunner {
   }) async {
     runs++;
     seenAxes.add(axes);
+    seenCaptureScales.add(captureScale);
     var step = {
       'index': 0,
       'name': 'shot',

@@ -201,6 +201,46 @@ void main() {
       } finally {
         probe.deleteSync();
       }
+
+      // A nested split: the body replays once per path, shared-prefix steps
+      // are captured exactly once, and every step carries the parent link
+      // (and the branch label on a branch's first step) the flow graph draws
+      // its edges from.
+      var forked = File(
+        p.join(packageRoot, 'test', 'scenarios', 'split_test.dart'),
+      );
+      forked.writeAsStringSync(_splitSource);
+      try {
+        var report = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/split_test.dart',
+          scenario: 'Split',
+        );
+        var outcome = (report['scenarios']! as List).single as Map;
+        expect(outcome['ok'], isTrue, reason: '${outcome['errors']}');
+        var steps = (outcome['steps']! as List).cast<Map<String, dynamic>>();
+        // 3 paths → root and L once each, tail three times: 8, not 10.
+        expect(steps, hasLength(8));
+        Map<String, dynamic> named(String name) =>
+            steps.singleWhere((s) => s['name'] == name);
+        (int?, String?) shape(String name) =>
+            (named(name)['parent'] as int?, named(name)['branch'] as String?);
+
+        expect(shape('root'), (null, null));
+        expect(shape('L'), (named('root')['index'], 'left'));
+        expect(shape('LX'), (named('L')['index'], 'x'));
+        expect(shape('LY'), (named('L')['index'], 'y'));
+        expect(shape('R'), (named('root')['index'], 'right'));
+        // One tail per leaf, each chained to its own path's last step.
+        var leaves = {
+          for (var name in ['LX', 'LY', 'R']) named(name)['index'],
+        };
+        var tails = steps.where((s) => s['name'] == 'tail').toList();
+        expect(tails, hasLength(3));
+        expect({for (var t in tails) t['parent']}, leaves);
+      } finally {
+        forked.deleteSync();
+      }
     } finally {
       await runner.dispose();
       Directory(outDir).deleteSync(recursive: true);
@@ -280,6 +320,40 @@ String _lastPng(Map<String, Object?> report) {
       bytes[offset + 3];
   return (word(16), word(20));
 }
+
+/// A nested split: three paths (left→x, left→y, right), a shared prefix
+/// (`root`), and a step after the split (`tail`) that runs once per path.
+const _splitSource = r'''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Split', (s) async {
+    await s.pumpWidget(
+      const MaterialApp(home: Scaffold(body: Text('root'))),
+      shot: Shot.skip,
+    );
+    await s.screen('root');
+    await s.split({
+      'left': () async {
+        await s.screen('L');
+        await s.split({
+          'x': () async {
+            await s.screen('LX');
+          },
+          'y': () async {
+            await s.screen('LY');
+          },
+        });
+      },
+      'right': () async {
+        await s.screen('R');
+      },
+    });
+    await s.screen('tail');
+  });
+}
+''';
 
 /// Prints the app's own view of the axes: logical size, pixel ratio, the top
 /// safe area, the platform locale, brightness, and 10 through the text

@@ -56,6 +56,8 @@ Map<String, dynamic> _$ScenarioRunOutcomeToJson(ScenarioRunOutcome instance) =>
 Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
     <String, dynamic>{
       'index': instance.index,
+      'parent': ?instance.parent,
+      'branch': ?instance.branch,
       'name': ?instance.name,
       'auto': instance.auto,
       'tags': instance.tags,

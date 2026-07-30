@@ -170,6 +170,8 @@ class ScenarioRunStep {
     required this.tree,
     required this.texts,
     required this.address,
+    this.parent,
+    this.branch,
     this.name,
     this.tags = const [],
     this.statusBrightness,
@@ -178,6 +180,14 @@ class ScenarioRunStep {
 
   /// 1-based position in the scenario's capture sequence.
   final int index;
+
+  /// The [index] of the step this one follows; null for the scenario's
+  /// first. `split` gives one parent several children — these are the flow
+  /// graph's edges.
+  final int? parent;
+
+  /// The `split` branch label when this step is a branch's first capture.
+  final String? branch;
 
   /// The `Shot`'s name; null for an automatic capture.
   final String? name;

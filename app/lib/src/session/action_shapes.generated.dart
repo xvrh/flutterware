@@ -1864,6 +1864,20 @@ final resultShapes = <String, ResultShape>{
               'doc': '1-based position in the scenario\'s capture sequence.',
             },
             <String, Object?>{
+              'name': 'parent',
+              'type': 'int',
+              'optional': true,
+              'doc':
+                  'The [index] of the step this one follows; null for the scenario\'s first.',
+            },
+            <String, Object?>{
+              'name': 'branch',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The `split` branch label when this step is a branch\'s first capture.',
+            },
+            <String, Object?>{
               'name': 'name',
               'type': 'String',
               'optional': true,
@@ -1974,6 +1988,20 @@ final resultShapes = <String, ResultShape>{
                     'type': 'int',
                     'doc':
                         '1-based position in the scenario\'s capture sequence.',
+                  },
+                  <String, Object?>{
+                    'name': 'parent',
+                    'type': 'int',
+                    'optional': true,
+                    'doc':
+                        'The [index] of the step this one follows; null for the scenario\'s first.',
+                  },
+                  <String, Object?>{
+                    'name': 'branch',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The `split` branch label when this step is a branch\'s first capture.',
                   },
                   <String, Object?>{
                     'name': 'name',
@@ -2104,6 +2132,20 @@ final resultShapes = <String, ResultShape>{
                               '1-based position in the scenario\'s capture sequence.',
                         },
                         <String, Object?>{
+                          'name': 'parent',
+                          'type': 'int',
+                          'optional': true,
+                          'doc':
+                              'The [index] of the step this one follows; null for the scenario\'s first.',
+                        },
+                        <String, Object?>{
+                          'name': 'branch',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The `split` branch label when this step is a branch\'s first capture.',
+                        },
+                        <String, Object?>{
                           'name': 'name',
                           'type': 'String',
                           'optional': true,
@@ -2210,6 +2252,20 @@ final resultShapes = <String, ResultShape>{
         'name': 'index',
         'type': 'int',
         'doc': '1-based position in the scenario\'s capture sequence.',
+      },
+      <String, Object?>{
+        'name': 'parent',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'The [index] of the step this one follows; null for the scenario\'s first.',
+      },
+      <String, Object?>{
+        'name': 'branch',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The `split` branch label when this step is a branch\'s first capture.',
       },
       <String, Object?>{
         'name': 'name',

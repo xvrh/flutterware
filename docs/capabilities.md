@@ -332,6 +332,8 @@ packages: List<ScenarioRunPackage>
     ms: int
     steps: List<ScenarioRunStep>
       index: int   # 1-based position in the scenario's capture sequence.
+      parent: int?   # The [index] of the step this one follows; null for the scenario's first.
+      branch: String?   # The `split` branch label when this step is a branch's first capture.
       name: String?   # The `Shot`'s name; null for an automatic capture.
       auto: bool   # True when nothing named this capture — a collapsible detail step.
       tags: List<String>
@@ -364,7 +366,7 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `bold-text` | choice | no | — | The bold-text accessibility switch |
 | `high-contrast` | choice | no | — | The high-contrast accessibility switch |
 | `invert-colors` | choice | no | — | The invert-colors accessibility switch |
-| `capture-scale` | string | no | — | Screenshot pixels per logical pixel, 1 (the default) to 4. The device's own ratio gives a true screenshot; 1 is ~10× faster and smaller, which is what keeps a long FakeAsync run instantaneous. Not an axis: it changes the artifact, never what the app sees. |
+| `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. Omitted means the package's configured captureScale (tool/flutterware.dart), or 1. The device's own ratio gives a true screenshot; 1 is ~10× faster and smaller, which is what keeps a long FakeAsync run instantaneous. Not an axis: it changes the artifact, never what the app sees. |
 | `format` | choice | no | — | `png` (the default) is what everything opens. `raw` — bare rgba8888 rows, width×height×4 bytes as the result reports them — skips PNG encoding, which is ~80% of a capture's cost; for pipelines that consume pixels directly. |
 
 #### `restart` — Restart

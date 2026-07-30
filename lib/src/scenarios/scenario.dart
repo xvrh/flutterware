@@ -35,11 +35,75 @@ void scenario(
   testWidgets(description, (tester) async {
     var restore = _applyRunArgs(tester);
     try {
-      await body(ScenarioTester._(tester, description, shots: shots));
+      // The split-replay loop: the body runs once per path through its
+      // `split`s, depth-first — a body with none runs once. Every replay
+      // starts from the top, so its `pumpWidget` rebuilds the app from
+      // scratch; steps already captured on a shared prefix are recognised by
+      // position and not captured again.
+      var state = _ReplayState();
+      var first = true;
+      do {
+        state.plan.beginRun();
+        if (!first) {
+          // Tear the tree down first: re-pumping the same app widget over
+          // its previous self keeps every State alive — the navigator stack
+          // included — and a replay must start from nothing.
+          await tester.pumpWidget(const SizedBox.shrink());
+        }
+        first = false;
+        await body(ScenarioTester._(tester, description, shots, state));
+      } while (state.plan.advance());
     } finally {
       restore?.call();
     }
   });
+}
+
+/// What survives across a scenario's replays: which paths ran, which step
+/// positions were already captured, and the global step numbering.
+class _ReplayState {
+  final plan = _SplitPlan();
+
+  /// Position key → the emitted step's index. A position seen again on a
+  /// later replay's shared prefix is skipped without rendering anything.
+  final emitted = <String, int>{};
+
+  var stepCount = 0;
+}
+
+/// Depth-first enumeration of a scenario's `split` choices.
+///
+/// One entry per split encountered along the current path, in order: replay
+/// the recorded prefix, then explore `0` at every split found beyond it.
+/// [advance] bumps the deepest split that still has an unvisited branch and
+/// drops everything after it.
+class _SplitPlan {
+  final _stack = <({int choice, int count})>[];
+  var _cursor = 0;
+
+  void beginRun() => _cursor = 0;
+
+  /// The branch to take at the next split of the current run.
+  int choose(int count) {
+    if (_cursor < _stack.length) return _stack[_cursor++].choice;
+    _stack.add((choice: 0, count: count));
+    _cursor++;
+    return 0;
+  }
+
+  /// The choices consumed so far this run — the position key's path half.
+  String get path =>
+      [for (var entry in _stack.take(_cursor)) entry.choice].join('.');
+
+  /// Moves to the next unvisited path; false when every path has run.
+  bool advance() {
+    while (_stack.isNotEmpty && _stack.last.choice + 1 >= _stack.last.count) {
+      _stack.removeLast();
+    }
+    if (_stack.isEmpty) return false;
+    _stack.last = (choice: _stack.last.choice + 1, count: _stack.last.count);
+    return true;
+  }
 }
 
 /// Applies the harness's axis assignment through the test binding's own test
@@ -126,14 +190,29 @@ class Shot {
 /// settles and then captures per the scenario's [Shots] policy; anything done
 /// through [tester] directly is plain `flutter_test` and captures nothing.
 class ScenarioTester {
-  ScenarioTester._(this.tester, this._description, {required this.shots});
+  ScenarioTester._(this.tester, this._description, this.shots, this._state);
 
   /// The real tester — the escape hatch to the full `flutter_test` surface.
   final WidgetTester tester;
 
   final Shots shots;
   final String _description;
-  var _stepCount = 0;
+
+  /// Shared across replays; everything below is this replay's alone.
+  final _ReplayState _state;
+
+  /// Captures since the last split (or the start) — the position key's
+  /// ordinal half. Two replays walking the same choice prefix count the same
+  /// way, which is what makes a position mean "the same step as last time".
+  var _ordinal = 0;
+
+  /// The position of the last capture this replay saw — emitted or
+  /// recognised — whose step is the next capture's parent.
+  String? _lastPosition;
+
+  /// The branch label owed to the next capture, set on entering a split
+  /// branch.
+  String? _pendingBranch;
 
   Future<void> pumpWidget(Widget widget, {Shot? shot}) async {
     await tester.pumpWidget(widget);
@@ -162,6 +241,38 @@ class ScenarioTester {
   /// Captures a named screen without performing an action.
   Future<void> screen(String name, {List<String> tags = const []}) =>
       _capture(Shot(name, tags: tags));
+
+  /// Forks the scenario: every branch runs, each in its own replay of the
+  /// whole body — so each branch starts from the exact state this line was
+  /// reached with, and the flow graph fans out here.
+  ///
+  /// ```dart
+  /// await s.split({
+  ///   'pay by card': () async {
+  ///     await s.tap('Pay');
+  ///     await s.screen('Receipt');
+  ///   },
+  ///   'payment fails': () async {
+  ///     await s.tap('Pay');
+  ///     await s.screen('Error dialog');
+  ///   },
+  /// });
+  /// ```
+  ///
+  /// Steps before the split are captured once and shared; anything after the
+  /// call runs per branch, since by then the paths have genuinely diverged.
+  /// Splits nest. Under bare `flutter test` the replays run too, so CI
+  /// asserts every path.
+  Future<void> split(Map<String, Future<void> Function()> branches) async {
+    if (branches.isEmpty) return;
+    var names = branches.keys.toList();
+    var name = names[_state.plan.choose(names.length)];
+    // A new segment: positions restart under the extended choice path, and
+    // the branch's first capture wears the label.
+    _ordinal = 0;
+    _pendingBranch = name;
+    await branches[name]!();
+  }
 
   Future<void> _afterStep(Shot? shot) async {
     if (identical(shot, Shot.skip)) return;
@@ -194,10 +305,26 @@ class ScenarioTester {
   /// `SCREENSHOTS_DESTINATION` environment variable — and skipped otherwise,
   /// so plain CI runs pay nothing for it.
   Future<void> _capture(Shot? shot) async {
-    _stepCount++;
+    // Where this capture sits in the scenario's shape: the split choices
+    // taken so far plus the count since the last one. Replays of a shared
+    // prefix land on the same position — captured once, recognised after.
+    var position = '${_state.plan.path}#${++_ordinal}';
     var listener = scenarioRunListener;
     var destination = _screenshotsDestination;
     if (listener == null && destination == null) return;
+    var parent = _lastPosition == null ? null : _state.emitted[_lastPosition!];
+    if (_state.emitted.containsKey(position)) {
+      // Already captured on an earlier replay — skip the rendering entirely,
+      // but keep our place so the next new step's parent is right.
+      _lastPosition = position;
+      _pendingBranch = null;
+      return;
+    }
+    var index = ++_state.stepCount;
+    _state.emitted[position] = index;
+    _lastPosition = position;
+    var branch = _pendingBranch;
+    _pendingBranch = null;
     await tester.runAsync(() async {
       var view = tester.binding.renderViews.single;
       var layer = view.debugLayer! as OffsetLayer;
@@ -236,7 +363,9 @@ class ScenarioTester {
         var style = SystemChrome.latestStyle;
         listener(
           ScenarioStepCapture(
-            index: _stepCount,
+            index: index,
+            parent: parent,
+            branch: branch,
             name: shot?.name,
             tags: shot?.tags ?? const [],
             bytes: bytes,
@@ -250,11 +379,11 @@ class ScenarioTester {
         );
         return;
       }
-      var label = shot?.name ?? 'step $_stepCount';
+      var label = shot?.name ?? 'step $index';
       var directory = Directory('$destination/${_fileSafe(_description)}')
         ..createSync(recursive: true);
       File(
-        '${directory.path}/$_stepCount-${_fileSafe(label)}.png',
+        '${directory.path}/$index-${_fileSafe(label)}.png',
       ).writeAsBytesSync(bytes);
     });
   }

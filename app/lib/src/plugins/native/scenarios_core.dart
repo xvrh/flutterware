@@ -120,6 +120,19 @@ class ScenariosCore extends PluginCore {
     return const [];
   }
 
+  /// The configured capture scale for [path] — output pixels per logical
+  /// pixel on every run — or null for the measured default of 1. An explicit
+  /// `capture-scale` on a run still wins; this is the project saying "always
+  /// retina" once, in `tool/flutterware.dart`.
+  double? captureScaleFor(String path) {
+    for (var config in host.packageConfigs) {
+      if (config['path'] == path) {
+        if (config['captureScale'] case num scale) return scale.toDouble();
+      }
+    }
+    return null;
+  }
+
   /// Whether [path] has been scanned (or is scanning) — the laziness rule,
   /// made observable.
   bool isRealised(String path) => _scans.containsKey(path);
@@ -233,6 +246,7 @@ class ScenariosCore extends PluginCore {
         file: file,
         scenario: scenario,
         axes: axes,
+        captureScale: captureScaleFor(package),
         captureRaw: true,
       );
       var outcome = _describeRun(package, outDir, report, axes: axes).scenarios
@@ -463,11 +477,13 @@ class ScenariosCore extends PluginCore {
               kind: ActionParameterKind.string,
               required: false,
               description:
-                  'Screenshot pixels per logical pixel, 1 (the default) to '
-                  "4. The device's own ratio gives a true screenshot; 1 is "
-                  '~10× faster and smaller, which is what keeps a long '
-                  'FakeAsync run instantaneous. Not an axis: it changes the '
-                  'artifact, never what the app sees.',
+                  'Screenshot pixels per logical pixel, up to 4. Omitted '
+                  "means the package's configured captureScale "
+                  "(tool/flutterware.dart), or 1. The device's own ratio "
+                  'gives a true screenshot; 1 is ~10× faster and smaller, '
+                  'which is what keeps a long FakeAsync run instantaneous. '
+                  'Not an axis: it changes the artifact, never what the app '
+                  'sees.',
             ),
             const ActionParameter(
               'format',
@@ -777,7 +793,7 @@ class ScenariosCore extends PluginCore {
           file: file,
           scenario: scenario,
           axes: axes,
-          captureScale: captureScale,
+          captureScale: captureScale ?? captureScaleFor(path),
           captureRaw: format == 'raw',
         );
         results.add(_describeRun(path, outDir, report, axes: axes));
@@ -853,6 +869,8 @@ class ScenariosCore extends PluginCore {
   }) {
     return ScenarioRunStep(
       index: step['index']! as int,
+      parent: step['parent'] as int?,
+      branch: step['branch'] as String?,
       name: step['name'] as String?,
       auto: step['auto'] == true,
       tags: (step['tags'] as List?)?.cast<String>() ?? const [],

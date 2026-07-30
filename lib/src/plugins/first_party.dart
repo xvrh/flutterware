@@ -112,7 +112,12 @@ class Scenarios extends Plugin {
 }
 
 class ScenariosPackage extends PluginPackage {
-  const ScenariosPackage(super.pkg, {this.directory, this.languages});
+  const ScenariosPackage(
+    super.pkg, {
+    this.directory,
+    this.languages,
+    this.captureScale,
+  });
 
   /// Where this package keeps its scenarios, relative to the package;
   /// `test/scenarios` when null.
@@ -123,11 +128,18 @@ class ScenariosPackage extends PluginPackage {
   /// platform default.
   final List<String>? languages;
 
+  /// Screenshot pixels per logical pixel for every run of this package —
+  /// `3` renders retina captures, at roughly the device ratio's cost in
+  /// time and bytes. Null means 1, the measured sweet spot; a run's own
+  /// `capture-scale` argument still wins.
+  final double? captureScale;
+
   @override
   Map<String, Object?> toJson() => {
     ...super.toJson(),
     if (directory != null) 'directory': directory,
     if (languages != null) 'languages': languages,
+    if (captureScale != null) 'captureScale': captureScale,
   };
 
   static List<ScenariosPackage> each(List<Pkg> packages) => [

@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
 import '../catalog/devices.dart';
@@ -31,14 +32,28 @@ class ScenarioStepPage extends StatelessWidget {
   /// Status-chrome tint when the step declared no overlay style.
   final Brightness statusFallback;
 
+  /// Walks the graph, not the emission order: previous is this step's
+  /// parent, next its first child — so inside a split branch the links stay
+  /// on the branch. Parentless data (older artifacts) falls back to the
+  /// list order it used to walk.
+  (ScenarioRunStep?, ScenarioRunStep?) _neighbours() {
+    if (steps.any((s) => s.parent != null)) {
+      return (
+        steps.firstWhereOrNull((s) => s.index == step.parent),
+        steps.firstWhereOrNull((s) => s.parent == step.index),
+      );
+    }
+    var position = steps.indexWhere((s) => s.index == step.index);
+    return (
+      position > 0 ? steps[position - 1] : null,
+      position >= 0 && position + 1 < steps.length ? steps[position + 1] : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var position = steps.indexWhere((s) => s.index == step.index);
-    var previous = position > 0 ? steps[position - 1] : null;
-    var next = position >= 0 && position + 1 < steps.length
-        ? steps[position + 1]
-        : null;
+    var (previous, next) = _neighbours();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

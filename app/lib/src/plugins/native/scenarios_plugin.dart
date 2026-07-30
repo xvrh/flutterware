@@ -203,6 +203,12 @@ class _ScenarioListPane extends StatelessWidget {
       byFile.putIfAbsent(ref.file, () => []).add(ref);
     }
 
+    // Every file lives under the configured directory, so the prefix says
+    // nothing — the header drops it and the tooltip keeps the whole path.
+    var prefix = '${core.directoryFor(package)}/';
+    String sectionLabel(String file) =>
+        file.startsWith(prefix) ? file.substring(prefix.length) : file;
+
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: FwSpacing.md),
       children: [
@@ -233,10 +239,14 @@ class _ScenarioListPane extends StatelessWidget {
               FwSpacing.lg,
               FwSpacing.xs,
             ),
-            child: Text(
-              entry.key,
-              style: context.type.sectionLabel,
-              overflow: TextOverflow.ellipsis,
+            child: Tooltip(
+              message: entry.key,
+              waitDuration: const Duration(milliseconds: 500),
+              child: Text(
+                sectionLabel(entry.key),
+                style: context.type.sectionLabel,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
           for (var ref in entry.value)

@@ -6,6 +6,8 @@ import 'dart:typed_data';
 class ScenarioStepCapture {
   ScenarioStepCapture({
     required this.index,
+    required this.parent,
+    required this.branch,
     required this.name,
     required this.tags,
     required this.bytes,
@@ -19,6 +21,15 @@ class ScenarioStepCapture {
 
   /// 1-based position in the scenario's capture sequence.
   final int index;
+
+  /// The [index] of the step this one follows, or null for the first. A
+  /// linear scenario chains; a `split` gives one parent several children —
+  /// the flow graph's edges, exactly.
+  final int? parent;
+
+  /// The `split` branch label when this is a branch's first capture; null
+  /// everywhere else.
+  final String? branch;
 
   /// The [Shot]'s name, or null for an automatic capture.
   final String? name;

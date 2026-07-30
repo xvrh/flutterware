@@ -313,6 +313,8 @@ Future<Map<String, Object?>> _runOne(
     File('$base.tree.json').writeAsStringSync(jsonEncode(tree));
     var step = {
       'index': capture.index,
+      'parent': ?capture.parent,
+      'branch': ?capture.branch,
       if (capture.name != null) 'name': capture.name,
       'auto': capture.name == null,
       if (capture.tags.isNotEmpty) 'tags': capture.tags,

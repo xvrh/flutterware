@@ -103,11 +103,29 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
   @override
   Widget build(BuildContext context) {
     var steps = widget.steps;
+    // The edges are the parent links the capture recorded — a linear
+    // scenario chains, a split fans out. Data without parents (older
+    // artifacts) falls back to the chain the list order implies.
+    var hasParents = steps.any((s) => s.parent != null);
+    var children = <int, List<int>>{};
+    if (hasParents) {
+      for (var step in steps) {
+        if (step.parent case var parent?) {
+          children.putIfAbsent(parent, () => []).add(step.index);
+        }
+      }
+    } else {
+      for (var (i, step) in steps.indexed) {
+        if (i + 1 < steps.length) children[step.index] = [steps[i + 1].index];
+      }
+    }
     var inputs = [
-      for (var (i, step) in steps.indexed)
+      for (var step in steps)
         NodeInput(
           id: '${step.index}',
-          next: [if (i + 1 < steps.length) '${steps[i + 1].index}'],
+          next: [
+            for (var child in children[step.index] ?? const <int>[]) '$child',
+          ],
         ),
     ];
     var byId = {for (var step in steps) '${step.index}': step};
@@ -179,6 +197,19 @@ class _StepNode extends StatelessWidget {
       onTap: onTap,
       child: Column(
         children: [
+          // The split's branch label, worn by the branch's first step — how
+          // the fan-out says which arm is which.
+          if (step.branch case var branch?)
+            Text(
+              branch,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: context.type.body.copyWith(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                color: context.colors.accent,
+              ),
+            ),
           Text(
             '${step.index} · ${step.name ?? 'step'}',
             maxLines: 1,
