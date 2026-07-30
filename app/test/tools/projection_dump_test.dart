@@ -22,7 +22,6 @@ void main() {
     var root = findRepoRoot('..')!;
     var manifest = PluginManifest.parse(
       '{"version":1,'
-      '"packages":[{"path":"."},{"path":"app"},{"path":"examples/example"}],'
       '"plugins":[{"id":"flutterware.dependencies","label":"Dependencies",'
       '"config":{"packages":[{"path":"."},{"path":"app"},'
       '{"path":"examples/example"}]}}]}',

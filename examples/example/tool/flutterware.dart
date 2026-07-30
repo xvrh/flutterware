@@ -10,7 +10,6 @@ import 'package:flutterware/plugins.dart';
 const app = Pkg('.');
 
 void main() => Flutterware.configure((fw) {
-  fw.packages([app]);
   fw.use(Dependencies(packages: [.new(app)]));
   fw.use(Assets(packages: [.new(app)]));
   fw.use(NativeSplash(packages: [.new(app)]));

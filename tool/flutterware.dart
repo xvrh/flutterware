@@ -14,7 +14,6 @@ const app = Pkg('app', tags: ['gui']);
 const example = Pkg('examples/example', tags: ['sample']);
 
 void main() => Flutterware.configure((fw) {
-  fw.packages([root, app, example]);
   fw.use(
     Dependencies(packages: DependenciesPackage.each([root, app, example])),
   );

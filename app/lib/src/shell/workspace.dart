@@ -29,7 +29,8 @@ class Workspace {
   /// Absolute path to the worktree root — where `tool/flutterware.dart` lives.
   final String root;
 
-  /// Packages the config declared. Only these are addressable by plugins.
+  /// Every package the config's plugins name, in declaration order,
+  /// deduplicated — see [PluginManifest.packages].
   final List<Pkg> declared;
 
   /// Packages found on disk (from `workspace:`, else a scan). Reference data:
@@ -41,20 +42,33 @@ class Workspace {
   final FlutterSdkPath flutterSdk;
   final _packages = <String, PackageRef>{};
 
-  /// Declared paths that are not on disk — almost always a typo, and worth
-  /// saying out loud rather than silently doing nothing.
+  /// Whether [path] is a directory that is actually there.
+  ///
+  /// This is what a plugin filters its declared packages on. It used to filter
+  /// on membership of a separate `fw.packages([...])` list, which could only
+  /// ever subtract a package the config had explicitly handed the plugin — and
+  /// did it silently. Existence is the question that was worth asking.
+  bool exists(String path) =>
+      // '.' is the worktree root, which is there by construction.
+      path == '.' ||
+      discovered.contains(path) ||
+      Directory(absolutePathOf(path)).existsSync();
+
+  /// Named paths that are not on disk — almost always a typo, and worth saying
+  /// out loud rather than silently doing nothing.
   List<String> get unknownDeclarations => [
     for (var pkg in declared)
-      // '.' is the worktree root — it exists by construction.
-      if (pkg.path != '.' &&
-          !discovered.contains(pkg.path) &&
-          !Directory(absolutePathOf(pkg.path)).existsSync())
-        pkg.path,
+      if (!exists(pkg.path)) pkg.path,
   ];
 
   String absolutePathOf(String relative) =>
       relative == '.' ? root : p.normalize(p.join(root, relative));
 
+  /// The declared package at [path], for its tags.
+  ///
+  /// No caller yet — it is the seam the host-side tag filter needs, and the
+  /// only way to reach [Pkg.tags] now that the packages come off the plugins.
+  /// It is not a gate: use [exists] for that.
   Pkg? declaredAt(String path) =>
       declared.where((pkg) => pkg.path == path).firstOrNull;
 

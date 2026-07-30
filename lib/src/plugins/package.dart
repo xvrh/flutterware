@@ -56,5 +56,13 @@ abstract class PluginPackage {
   String get path => pkg.path;
 
   /// Must include `path`; the rest is whatever the plugin needs.
-  Map<String, Object?> toJson() => {'path': path};
+  ///
+  /// [Pkg.tags] rides along because this is now the only thing that crosses to
+  /// the host — there is no separate package list for them to travel in. They
+  /// repeat across plugins that name the same [Pkg], which costs a few bytes of
+  /// JSON and keeps the host from reading an empty tag list as "untagged".
+  Map<String, Object?> toJson() => {
+    'path': path,
+    if (pkg.tags.isNotEmpty) 'tags': pkg.tags,
+  };
 }

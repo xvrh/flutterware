@@ -169,12 +169,11 @@ import 'package:flutterware/plugins.dart';
 // Every plugin listed here is available from the GUI, the CLI and MCP — they
 // are three renderings of this file.
 
-// One Pkg per package in the repo; the default is the single package here.
+// One Pkg per package you want a tool to work on; the default is the single
+// package here. Hand each tool the ones it applies to.
 const app = Pkg('.');
 
 void main() => Flutterware.configure((fw) {
-  fw.packages([app]);
-
   fw.use(Dependencies(packages: [.new(app)]));
 
   // Renders the widgets you have annotated with `@Demo`.
