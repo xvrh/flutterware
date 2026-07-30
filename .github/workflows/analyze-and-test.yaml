@@ -35,6 +35,31 @@ jobs:
                    "and check in all changes" \
               && exit 1)
         shell: bash
+      - name: "fw finds its own install"
+        # The one thing that runs `fw` as a *process*, from a project that is not
+        # the app package, and reaches a plugin action that needs the daemon.
+        #
+        # It exists because that combination had two independent bugs and nothing
+        # could see either. `UiCatalogCore` passed the target package as
+        # `appPackageRoot`, so the launch machinery looked for
+        # `tool/catalog/compiler_daemon.dart` inside the user's project; and once
+        # that was fixed, `dart run app/bin/fw.dart` still had no
+        # `APP_TOOL_PATH`, because only the launcher sets it. Every headless
+        # catalog action — screenshot, inspect, describe --knobs, check, audit —
+        # was broken from `fw` in an ordinary project, in both cases.
+        #
+        # `headless_check` could not catch it: it builds its own `DaemonConfig`,
+        # which is the very step that was wrong, and it runs in-process, which
+        # skips how `fw` resolves its own install. A unit test cannot either,
+        # since that resolution reads `Platform.script` and the environment.
+        # Running the binary is the whole point.
+        #
+        # `check` and not `screenshot` so this can *block*: it stops at the
+        # daemon handshake, launching no guest, so it needs no GPU — which is
+        # exactly why the step below cannot block.
+        run: dart run ../../app/bin/fw.dart run ui_catalog check
+        working-directory: examples/example
+
       - name: "catalog loop, end to end"
         # Last on purpose: it writes and deletes demo fixtures to test
         # them, so a crash mid-run can leave one behind — and the

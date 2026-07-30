@@ -46,21 +46,14 @@ class UiCatalogPlugin extends NativePlugin<UiCatalogCore> {
       // So a `file:line` in the panel reads the same as one from `fw`, which
       // shortens against the worktree too.
       worktreeRoot: host.worktree.path,
-      roots: [_rootFor(path)],
+      // The core's answer, not a second one: `roots` is part of the daemon
+      // address, so a panel resolving it independently would open a different
+      // daemon than `fw run ui_catalog` does for the same package.
+      roots: [core.rootFor(path)],
     )..addListener(core.notifyChanged);
     unawaited(session.start());
     return session;
   });
-
-  /// The package's demo directory: `entrypoint` when declared, else `demo/`.
-  String _rootFor(String path) {
-    for (var config in host.packageConfigs) {
-      if (config['path'] != path) continue;
-      var entrypoint = config['entrypoint'];
-      if (entrypoint is String && entrypoint.isNotEmpty) return entrypoint;
-    }
-    return 'demo';
-  }
 
   /// What the compiler is doing for [path], or null when it is idle.
   ///

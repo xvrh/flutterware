@@ -5,7 +5,9 @@ import 'package:flutterware/plugins.dart';
 
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
+import 'package:path/path.dart' as p;
 
+import '../constants.dart';
 import '../context.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/native/assets_core.dart';
@@ -78,6 +80,41 @@ class Session {
   /// One core per declared plugin, in the order the config declared them.
   final List<PluginCore> cores;
 
+  /// flutterware's own `app/` install, for the cores that need to find the
+  /// machinery shipped beside them — the catalog daemon and its native host.
+  ///
+  /// Two strategies, in this order, because neither covers both ways `fw` runs:
+  ///
+  /// - **[appPathEnvironmentKey], recorded by the launcher.** Authoritative, and
+  ///   the only thing that can work in production: `fw` is an AOT binary there,
+  ///   so `Platform.resolvedExecutable` is itself and `Platform.script` is a
+  ///   path inside `build/cli/bundle`. The launcher ran under `dart run` and
+  ///   therefore knew — the same "record, do not discover" rule
+  ///   `.flutterware/sdk` follows.
+  /// - **Derived from [Platform.script].** For `dart run app/bin/fw.dart`, which
+  ///   is how this CLI is driven while being worked on and has no launcher to
+  ///   record anything. `bin/fw.dart` sits two directories below the package
+  ///   root, and this is exactly the case where that is true, because it is the
+  ///   case where the script *is* a source file.
+  ///
+  /// The derivation is accepted only if the result looks like a package root, so
+  /// the two cannot be confused: in the AOT case there is no `pubspec.yaml`
+  /// above `bin/`, which is what makes guessing safe to attempt at all.
+  ///
+  /// Null when neither answers — a test driving a session directly. A core that
+  /// needs it then fails naming the path it looked for, rather than spawning
+  /// something against the working directory and timing out.
+  static Directory? findAppToolDirectory() {
+    var recorded = Platform.environment[appPathEnvironmentKey];
+    if (recorded != null && recorded.isNotEmpty) return Directory(recorded);
+
+    if (!Platform.script.isScheme('file')) return null;
+    var candidate = p.dirname(p.dirname(p.fromUri(Platform.script)));
+    return File(p.join(candidate, 'pubspec.yaml')).existsSync()
+        ? Directory(candidate)
+        : null;
+  }
+
   /// Opens the session for whichever repo [start] sits in.
   ///
   /// Walks up to the repo root, the same idiom the shell uses — one window (or
@@ -86,6 +123,7 @@ class Session {
     Directory start, {
     PluginCoreRegistry? registry,
     FlutterSdkPath? flutterSdk,
+    Directory? appToolDirectory,
   }) async {
     var root = findRepoRoot(start.path);
     if (root == null) {
@@ -111,7 +149,13 @@ class Session {
           ? const [Pkg('.')]
           : manifest.packages,
       discovered: discoverPackages(root),
-      appContext: AppContext(logger: LogClient.print()),
+      appContext: AppContext(
+        logger: LogClient.print(),
+        // The GUI's shell resolves this too, and both feed the same
+        // [DaemonConfig.forPackage] — which is what stops `fw` and a panel
+        // starting two daemons for one package.
+        appToolDirectory: appToolDirectory ?? findAppToolDirectory(),
+      ),
       flutterSdk: sdk,
     );
 

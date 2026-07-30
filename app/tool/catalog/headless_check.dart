@@ -13,7 +13,6 @@ import 'package:flutterware_app/src/catalog/devices.dart';
 import 'package:flutterware_app/src/catalog/headless_catalog.dart';
 import 'package:flutterware_app/src/catalog/inspect_client.dart';
 import 'package:flutterware_app/src/catalog/live_session.dart';
-import 'package:flutterware_app/src/catalog/package_config_locator.dart';
 import 'package:flutterware_app/src/catalog/protocol.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
@@ -28,6 +27,14 @@ import 'package:path/path.dart' as p;
 /// exercised here, and it is verified by asserting what the guest actually
 /// renders, not merely that a reload reported success.
 ///
+/// **What this deliberately does not cover: how `fw` finds its own install.**
+/// Everything below builds its own [DaemonConfig] and runs in-process, so a
+/// wrong `appPackageRoot` at a *call site* — the bug that broke every headless
+/// catalog action from `fw` — is invisible from here by construction. Two things
+/// cover it instead: the "one door" test in `test/catalog/daemon_config_test.dart`
+/// forbids a second construction site in `lib/`, and the `fw finds its own
+/// install` CI step runs the real binary from a project that is not this package.
+///
 /// ```sh
 /// cd app && dart run tool/catalog/headless_check.dart
 /// ```
@@ -37,12 +44,12 @@ Future<void> main(List<String> args) async {
   var buildDir = p.join(packageRoot, 'build', 'catalog');
   Directory(buildDir).createSync(recursive: true);
 
-  var config = DaemonConfig(
-    appPackageRoot: packageRoot,
+  var config = DaemonConfig.forPackage(
+    appToolDirectory: packageRoot,
     // The demos live under `app/tool/catalog/`, so the app package is both the
-    // scan root and the entrypoint's package.
-    projectRoot: packageRoot,
-    packageConfig: requirePackageConfig(packageRoot),
+    // scan root and the entrypoint's package — the one case where these two are
+    // the same directory.
+    packageRoot: packageRoot,
     flutterSdkRoot: cache.flutterRoot,
     roots: const ['tool/catalog'],
     // `--no-probe` reproduces exactly what the GUI compiles. The probe adds a
@@ -579,11 +586,11 @@ Future<void> main(List<String> args) async {
   var otherProject = p.join(p.dirname(packageRoot), 'examples', 'example');
   var (other, otherReady) = await CompilerDaemonClient.connect(
     dartExecutable: p.join(cache.flutterRoot, 'bin', 'dart'),
-    config: DaemonConfig(
-      appPackageRoot: packageRoot,
-      projectRoot: otherProject,
-      packageConfig: requirePackageConfig(otherProject),
+    config: DaemonConfig.forPackage(
+      appToolDirectory: packageRoot,
+      packageRoot: otherProject,
       flutterSdkRoot: cache.flutterRoot,
+      roots: const ['demo'],
     ),
     onLog: (line) => stdout.writeln('  [daemon] $line'),
   );
@@ -614,6 +621,47 @@ Future<void> main(List<String> args) async {
     }
   } finally {
     await other.close();
+  }
+
+  // 4c. One client's nonsense does not take the daemon down with the others.
+  //
+  // The daemon reads a line, decodes it into a request, and used to do that
+  // without a guard — so an unknown request type threw `FormatException` out of
+  // a `listen` callback, which is an unhandled async error, which kills the
+  // isolate. Every other client's warm compiler died with it, and the only
+  // evidence was a socket that stopped answering.
+  //
+  // Checked from a raw socket rather than through `CompilerDaemonClient`,
+  // because the client is exactly what cannot produce this: the failure arrives
+  // from something the daemon was not built to expect — a newer client, a stray
+  // line — and the property under test is that the process survives it.
+  stdout.writeln('[check] poking the daemon with lines it cannot read');
+  var rude = await Socket.connect(
+    InternetAddress(daemon.address.socketPath, type: InternetAddressType.unix),
+    0,
+  );
+  rude
+    ..writeln('{"type":"a-request-from-a-later-flutterware"}')
+    ..writeln('{"no":"type at all"}')
+    ..writeln('not json in the first place');
+  await rude.flush();
+  await rude.close();
+  rude.destroy();
+
+  var afterRude = await daemon.select(entries.first.id);
+  check(
+    afterRude.ok,
+    'the daemon still serves after a malformed request: ${afterRude.error}',
+  );
+  if (probing) {
+    var afterRudeProbe = await _nextProbe(
+      probes.stream,
+      const Duration(seconds: 10),
+    );
+    check(
+      afterRudeProbe.isNotEmpty,
+      'and the guest that was already running is still rendering',
+    );
   }
 
   // 5. Fixing a broken demo brings it back, and every client is told.

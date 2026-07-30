@@ -13,6 +13,7 @@ import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/resident_compiler.dart';
 import 'package:flutterware_app/src/embedder/source_invalidator.dart';
+import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:path/path.dart' as p;
 
 /// The catalog's build and compile half, as a plain Dart process shared by
@@ -30,7 +31,26 @@ import 'package:path/path.dart' as p;
 /// ```sh
 /// dart run tool/catalog/compiler_daemon.dart <config.json>
 /// ```
+/// Guarded, because this process is **shared**.
+///
+/// An error nobody catches, in the root zone, kills the isolate — and every
+/// client's compiler with it. That is the wrong blast radius for a daemon whose
+/// whole purpose is that a panel, a `fw` command and an agent lean on one
+/// process: a single malformed line from one of them would take down the other
+/// two, and the surviving evidence would be a socket that stopped answering.
+///
+/// So the escape hatch is closed at the top rather than only at each call site.
+/// The zone logs and keeps serving; the alternative — dying quietly — is the one
+/// outcome a shared daemon cannot afford. Errors that genuinely make the daemon
+/// useless still exit through [_Daemon.serve]'s own failure path, which tells
+/// its clients why first.
 Future<void> main(List<String> args) async {
+  await runZonedGuarded(() => _main(args), (error, stackTrace) {
+    stderr.writeln('[catalog] uncaught: $error\n$stackTrace');
+  });
+}
+
+Future<void> _main(List<String> args) async {
   if (args.length != 1) {
     stderr.writeln('usage: compiler_daemon.dart <config.json>');
     exit(64);
@@ -54,6 +74,16 @@ Future<void> main(List<String> args) async {
     stderr.writeln('[catalog] address already served, exiting: ${e.message}');
     exit(0);
   }
+
+  // After binding, so this daemon's own socket is already there to be spared,
+  // and before preparing, so the sweep is not racing a compile for the disk.
+  //
+  // Here because daemons are what leave the litter: a key moves whenever the
+  // daemon's sources change, so a developer generates a set of orphans per edit.
+  // A client could sweep instead, but a client runs far more often for far less
+  // reason — and the process that made the mess is the honest place to clear it.
+  var swept = await sweepRunDir();
+  if (swept > 0) stderr.writeln('[catalog] swept $swept stale run files');
 
   var daemon = _Daemon(config, address, server);
   for (var signal in [ProcessSignal.sigint, ProcessSignal.sigterm]) {
@@ -886,7 +916,27 @@ class _Session {
   Future<void> _onLine(String line) async {
     var json = tryDecodeLine(line);
     if (json == null) return;
-    switch (DaemonRequest.decode(json)) {
+
+    // `tryDecodeLine` only proves the line was a JSON object, so anything that
+    // is not a request this build knows arrives here — a newer client's request
+    // type, or a stray JSON line on the wire. Decoding is therefore fallible,
+    // and this is where a client's mistake must stop being the daemon's: it
+    // used to throw out of this callback, which is an unhandled async error and
+    // so the death of every other client's compiler.
+    //
+    // Logged rather than answered. Only `select` has a reply contract, and a
+    // line that did not decode as one carries no request id to echo — so there
+    // is nobody waiting and nothing to say. `DaemonFailed` would be the wrong
+    // shape: clients read it as terminal.
+    DaemonRequest request;
+    try {
+      request = DaemonRequest.decode(json);
+    } on FormatException catch (e) {
+      stderr.writeln('[catalog] $id sent something unreadable: $e');
+      return;
+    }
+
+    switch (request) {
       case SelectRequest(:var requestId, :var id, :var full, :var ifChanged):
         try {
           send(
@@ -914,16 +964,31 @@ class _Session {
         // generated wrappers and the entrypoint, which a compile in flight is
         // reading. Nothing is sent back — whatever it finds goes out as a
         // CatalogChanged, to every client rather than just this one.
-        await _daemon.refresh();
+        //
+        // Caught here rather than left to the zone: a refresh has no reply to
+        // fail, so without this the only trace of a broken rescan is a generic
+        // uncaught line that does not say which client asked.
+        try {
+          await _daemon.refresh();
+        } catch (e, s) {
+          stderr.writeln('[catalog] refresh for $id failed: $e\n$s');
+        }
       case StopDaemonRequest():
         await _daemon.stop();
     }
   }
 
+  /// Writes one response, or drops it if the client is not there to read it.
+  ///
+  /// **Every failure mode of a departed client, not just [SocketException].** A
+  /// closed `IOSink` throws `StateError`, and this is called while iterating
+  /// every session to broadcast a [CatalogChanged] — so one client that left
+  /// between the compile and the broadcast used to abort the broadcast for
+  /// everyone behind it in the list.
   void send(DaemonResponse message) {
     try {
       _socket.writeln(encodeLine(message));
-    } on SocketException {
+    } on Object {
       // The client left mid-request; _detach will follow.
     }
   }

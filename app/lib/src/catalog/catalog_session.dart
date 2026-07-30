@@ -14,7 +14,6 @@ import 'catalog_entry.dart';
 import 'compiler_daemon_client.dart';
 import 'inspect_client.dart';
 import 'live_session.dart';
-import 'package_config_locator.dart';
 import 'protocol.dart';
 
 enum CatalogSessionPhase { starting, ready, error }
@@ -844,12 +843,12 @@ class CatalogSession extends ChangeNotifier {
     try {
       var (daemon, ready) = await CompilerDaemonClient.connect(
         dartExecutable: p.join(flutterSdkRoot, 'bin', 'dart'),
-        config: DaemonConfig(
-          appPackageRoot: appPackageRoot,
-          projectRoot: projectRoot,
-          // The *project's* config, not the GUI's: it is the one that resolves
-          // the demos' own package as well as flutter and flutterware.
-          packageConfig: requirePackageConfig(projectRoot),
+        // Through the shared builder, so this panel and `fw run ui_catalog`
+        // arrive at the same socket. See [DaemonConfig.forPackage] for what
+        // happened when each side built its own.
+        config: DaemonConfig.forPackage(
+          appToolDirectory: appPackageRoot,
+          packageRoot: projectRoot,
           flutterSdkRoot: flutterSdkRoot,
           roots: roots,
         ),
@@ -861,6 +860,12 @@ class CatalogSession extends ChangeNotifier {
       quarantined = ready.quarantined;
       diagnostics = ready.diagnostics;
       _changes = daemon.catalogChanges.listen(_onCatalogChanged);
+      // Then whatever changed between the handshake and that subscription. The
+      // ready message is a snapshot of the moment the daemon prepared, which for
+      // a client attaching to a daemon that has been up a while is not the same
+      // as now — another client's compile may have quarantined an entry since,
+      // and the notice for it was addressed to a listener that did not exist yet.
+      if (daemon.lastChange case var missed?) _onCatalogChanged(missed);
       if (_disposed) return;
 
       // What the address asked for if the daemon turned out to have it, else

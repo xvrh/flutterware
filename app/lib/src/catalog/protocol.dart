@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'catalog_entry.dart';
+import 'package_config_locator.dart';
 
 part 'protocol.g.dart';
 
@@ -364,7 +365,58 @@ class DaemonConfig {
   factory DaemonConfig.fromJson(Map<String, dynamic> json) =>
       _$DaemonConfigFromJson(json);
 
+  /// **The one place a config is built for a declared package.** Every renderer
+  /// goes through here — the GUI's [CatalogSession], `fw`'s [HeadlessCatalog],
+  /// and an agent over MCP.
+  ///
+  /// It exists because the alternative was tried and failed. The GUI and `fw`
+  /// each built their own config for the same package and disagreed about one
+  /// field — the GUI passed the app tool directory as [appPackageRoot], `fw`
+  /// passed the package itself — so they hashed to different [DaemonAddress]
+  /// keys and *never shared a compiler daemon*, despite that being the whole
+  /// reason the daemon is a separate process. Worse, `fw`'s value sent the
+  /// launch machinery looking for `tool/catalog/compiler_daemon.dart` inside the
+  /// user's project, where it does not exist.
+  ///
+  /// Nothing about that was catchable by reading either call site: both were
+  /// locally reasonable, and the field name reads like the second one. So the
+  /// two roots are named apart *here*, once, and the address invariant is a test
+  /// rather than a convention — see `test/catalog/daemon_config_test.dart`.
+  ///
+  /// [appToolDirectory] is flutterware's own `app/` install; [packageRoot] is
+  /// the package whose demos are being catalogued. They are the same directory
+  /// only when cataloguing flutterware itself.
+  factory DaemonConfig.forPackage({
+    required String appToolDirectory,
+    required String packageRoot,
+    required String flutterSdkRoot,
+    required List<String> roots,
+    bool emitProbe = false,
+  }) => DaemonConfig(
+    appPackageRoot: appToolDirectory,
+    projectRoot: packageRoot,
+    // The *project's* config, not the app's: it is the one that resolves the
+    // demos' own package as well as flutter and flutterware.
+    packageConfig: requirePackageConfig(packageRoot),
+    flutterSdkRoot: flutterSdkRoot,
+    roots: roots,
+    emitProbe: emitProbe,
+  );
+
+  /// flutterware's own `app/` directory — **not** the package being
+  /// catalogued.
+  ///
+  /// It is where the daemon's own machinery lives: the daemon script and its
+  /// snapshot, the embedder framework under `.engine/`, the C host sources
+  /// under `native/`, and the per-address build directory. A value pointing at
+  /// the user's project makes every one of those resolve to a path that does
+  /// not exist.
+  ///
+  /// Build configs through [DaemonConfig.forPackage] rather than naming this
+  /// directly; the constructor is public only because the daemon has to decode
+  /// the config it is handed.
   final String appPackageRoot;
+
   final String projectRoot;
   final String packageConfig;
 

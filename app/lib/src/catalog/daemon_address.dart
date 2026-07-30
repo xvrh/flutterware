@@ -24,6 +24,25 @@ class DaemonAddress {
   /// Deliberately the whole config: adding a field to [DaemonConfig] without
   /// thinking about sharing should split the daemon, not silently hand a client
   /// someone else's compiler.
+  ///
+  /// **That rule is right for one service and inverts for several.** It works
+  /// here because the process *is* the compiler, so "would produce a different
+  /// kernel" and "should be a different process" are the same question. The day
+  /// this process hosts a second service — a test runner, a resident analyzer —
+  /// they stop being: `trackWidgetCreation` and `emitProbe` are knobs only the
+  /// compiler cares about, and forking on them would duplicate a service that
+  /// never heard of them.
+  ///
+  /// So a second service must **not** inherit this address. Identity splits in
+  /// two at that point: a coarse process address, and a per-service config
+  /// negotiated after connect, with this hash surviving unchanged as the key
+  /// that picks one compiler out of several inside the one process.
+  ///
+  /// Deferred deliberately rather than built ahead of a use case — the
+  /// granularity is undecided until something concrete moves in. The catalog is
+  /// per *package*; `Session` and `fw` are per *worktree*; a shared daemon has
+  /// to pick one, and which depends on whether the newcomer needs the compiler
+  /// at all.
   late final String key = sha1
       .convert(utf8.encode(jsonEncode(_canonical(config.toJson()))))
       .toString()

@@ -23,7 +23,6 @@ import '../../catalog/devices.dart';
 import '../../catalog/discovery.dart';
 import '../../catalog/inspect_client.dart';
 import '../../catalog/live_session.dart';
-import '../../catalog/package_config_locator.dart';
 import '../../catalog/protocol.dart';
 import '../../catalog/headless_catalog.dart';
 import '../plugin_core.dart';
@@ -168,7 +167,7 @@ class UiCatalogCore extends PluginCore {
 
   Future<void> _scan(String path) async {
     var root = p.join(host.worktree.path, path);
-    var entryRoot = _rootFor(path);
+    var entryRoot = rootFor(path);
     _scanning.add(path);
     try {
       // Off the calling isolate: a large catalog is tens of milliseconds of
@@ -187,7 +186,12 @@ class UiCatalogCore extends PluginCore {
   }
 
   /// The package's demo directory: `entrypoint` when declared, else `demo/`.
-  String _rootFor(String path) {
+  ///
+  /// Public because it is part of the daemon address — `roots` is one of the
+  /// fields [DaemonConfig] hashes — so the panel has to reach *this* answer
+  /// rather than compute its own. It had a byte-identical copy in
+  /// `UiCatalogPlugin` until that copy became the next `appPackageRoot`.
+  String rootFor(String path) {
     for (var config in host.packageConfigs) {
       if (config['path'] != path) continue;
       var entrypoint = config['entrypoint'];
@@ -1468,19 +1472,19 @@ class UiCatalogCore extends PluginCore {
   }
 
   /// The headless pipeline for one declared package.
-  HeadlessCatalog _headlessFor(String packagePath) {
-    var packageRoot = p.join(host.worktree.path, packagePath);
-    return HeadlessCatalog(
-      dartExecutable: p.join(host.workspace.flutterSdk.root, 'bin', 'dart'),
-      config: DaemonConfig(
-        appPackageRoot: packageRoot,
-        projectRoot: packageRoot,
-        packageConfig: requirePackageConfig(packageRoot),
-        flutterSdkRoot: host.workspace.flutterSdk.root,
-        roots: [_rootFor(packagePath)],
-      ),
-    );
-  }
+  ///
+  /// The config comes from [DaemonConfig.forPackage] so that this and the GUI's
+  /// [CatalogSession] derive the same [DaemonAddress] — which is what makes
+  /// `fw` and a panel two drivers of one daemon rather than two daemons.
+  HeadlessCatalog _headlessFor(String packagePath) => HeadlessCatalog(
+    dartExecutable: p.join(host.workspace.flutterSdk.root, 'bin', 'dart'),
+    config: DaemonConfig.forPackage(
+      appToolDirectory: host.workspace.appContext.appToolDirectory.path,
+      packageRoot: p.join(host.worktree.path, packagePath),
+      flutterSdkRoot: host.workspace.flutterSdk.root,
+      roots: [rootFor(packagePath)],
+    ),
+  );
 
   /// Renders one entry to a PNG.
   ///
