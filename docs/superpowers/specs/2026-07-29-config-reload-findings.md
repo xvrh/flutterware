@@ -258,18 +258,35 @@ callback exists.
 
 ## Phase 1, as built (2026-07-30)
 
-Measured on this repo's own config (three packages, two plugins), by
-`app/integration_test/shell/config_exec_test.dart`:
+Two sets of numbers, and the difference between them matters.
+
+By `app/integration_test/shell/config_exec_test.dart`, re-running this repo's
+config *without changing it*:
 
 | | measured |
 |---|---|
 | warm manifest load, five samples | **45, 49, 48, 45, 45 ms** |
 | `ManifestDiff.between`, ×1000 | **22 ms** — 0.02ms each |
 
-So a reconciled reload lands well inside the ~150ms this doc predicted, and the
-comparison is not a term in the cost at all. Nothing here argues for revisiting
-the spawn-then-swap decision, and the case for hot-reloading the config process
-is weaker still than § "Hot reload or respawn?" already made it.
+And from the running GUI, reloading after a real edit:
+
+| edit | measured |
+|---|---|
+| open the worktree, cold | 349–769 ms |
+| a comment — `no changes` | ~320 ms |
+| one plugin's declaration — `dependencies rebuilt` | ~320–370 ms |
+| `packages:` — `workspace rebuilt, 3 plugins` | ~310 ms |
+| a syntax error — `failed`, nothing torn down | ~475 ms |
+
+**Correction to the 45ms figure.** It is the cost of re-running an *unchanged*
+config, and the kernel cache is keyed on content — so any edit at all
+invalidates it and pays `dart compile kernel`. A reload the watcher triggers
+costs ~300ms, not ~45ms. That is still comfortably invisible on a deliberate
+save and still an order below anything that would reopen the spawn-then-swap
+decision, but the earlier claim that a reconciled reload "lands well inside
+~150ms" was measuring the one case a reload never is.
+
+The comparison itself remains free at 0.02ms, so none of that cost is the diff.
 
 Two things the build settled that the design did not:
 
@@ -285,12 +302,43 @@ Two things the build settled that the design did not:
   that is not empty can still have nothing to rebuild. Collapsing the two would
   make a reorder either invisible or expensive.
 
-**Not verified interactively.** The plan's smoke steps became widget tests over
-the real `ShellView` — they cover the three surfaces, the no-op line, the sticky
-banner and the log. What they cannot cover is the thing the whole diff exists
-for: a live `CatalogSession` guest engine surviving an unrelated config edit.
-That needs the GUI driven by hand, and it is the one claim in this document with
-no evidence behind it yet.
+### What running it found that 1172 tests did not
+
+The watcher shipped, and driving the real GUI immediately produced a defect the
+whole test suite had missed: **some edits reloaded twice, and one of the two was
+of a momentarily empty file.**
+
+A plain append was reliably one reload, so the debounce and the content gate
+were right. What was wrong was everything either side of them. `python`'s
+truncate-then-write and `git checkout` both pass the file through an
+intermediate state, and an empty config reports "it printed nothing" — a red
+banner for a file that is perfectly fine, arriving a fraction of a second before
+the correct reload.
+
+Two rules, now tested:
+
+- **An empty or absent file gets one more settle before it is believed.** A
+  config that really was emptied still lands, one debounce later. This is the
+  "a vanished file is not 'no plugins' until it settles" rule from the trap list
+  above, which was written down and then not implemented.
+- **Events arriving during a reload fold into one follow-up**, for the content as
+  it finally is, rather than one reload per save racing the one in flight.
+
+**Lesson worth keeping:** the trap list had the first of these in it from the
+start. Writing a trap down is not the same as covering it, and a test suite
+written from the same understanding as the code will not catch the gap — only
+the real filesystem did, on the first thing anyone tried.
+
+### Still not verified
+
+A live `CatalogSession` guest engine surviving an unrelated config edit. The
+object-level claim is proven — `reload_keeps_panels_test.dart` asserts the real
+`UiCatalogPlugin` instance is identical across a `Dependencies`-only edit, and
+the sessions are a field of that panel — but nobody has yet watched a rendered
+device stay up across a save. That needs the catalog panel open with a device in
+it, which is a click.
+
+Also unverified: whether the surfaces *look* right. They are asserted, not seen.
 
 ## Still open
 

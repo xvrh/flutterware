@@ -24,6 +24,11 @@ reconciliation should be driven by hand first.
 **Tech Stack:** Dart / Flutter, `package:collection` (`DeepCollectionEquality`),
 `flutter_test`. No new dependencies.
 
+**Status:** Done, 2026-07-30. Three deviations from the plan as written, each
+recorded at its step: the reload log became a screen rather than a home-screen
+section, the smoke steps are a mix of live runs and widget tests, and the
+watcher — listed here as out of scope — shipped after the smoke.
+
 **Spec:** [`docs/superpowers/specs/2026-07-29-config-reload-findings.md`](../specs/2026-07-29-config-reload-findings.md)
 **Amends:** [`docs/superpowers/specs/2026-05-18-worktree-explorer-plugins-design.md`](../specs/2026-05-18-worktree-explorer-plugins-design.md) § config.dart lifecycle
 
@@ -57,14 +62,14 @@ app/test/shell/shell_controller_test.dart  # MODIFY — mutable stub loader, rel
 
 **Files:** none.
 
-- [ ] **Step 0.1: Resolve workspace dependencies**
+- [x] **Step 0.1: Resolve workspace dependencies**
 
 Run: `dart tool/pub_get_all_projects.dart`
 Expected: completes without error. (The pre-commit format hook needs resolved
 deps; a fresh worktree has none — see the note in CONTRIBUTING/the worktree
 memory.)
 
-- [ ] **Step 0.2: Baseline the tests**
+- [x] **Step 0.2: Baseline the tests**
 
 Run: `cd app && flutter test test/shell/shell_controller_test.dart`
 Expected: all pass. Record the count; nothing in this plan may reduce it.
@@ -80,7 +85,7 @@ mechanical once this is right, so it gets tested alone.
 - Create: `app/lib/src/plugins/manifest_diff.dart`
 - Test: `app/test/plugins/manifest_diff_test.dart`
 
-- [ ] **Step 1.1: Write the failing tests**
+- [x] **Step 1.1: Write the failing tests**
 
 ```dart
 import 'package:flutterware/plugins.dart';
@@ -175,7 +180,7 @@ void main() {
 Run: `cd app && flutter test test/plugins/manifest_diff_test.dart`
 Expected: fails to compile — `manifest_diff.dart` does not exist.
 
-- [ ] **Step 1.2: Implement `ManifestDiff`**
+- [x] **Step 1.2: Implement `ManifestDiff`**
 
 Create `app/lib/src/plugins/manifest_diff.dart` with a `ManifestDiff` carrying
 `packagesChanged`, `orderChanged`, `added`, `removed`,
@@ -207,7 +212,7 @@ Expected: all pass.
 - Modify: `app/lib/src/session/session.dart`
 - Test: `app/test/session/session_reconcile_test.dart`
 
-- [ ] **Step 2.1: Write the failing test**
+- [x] **Step 2.1: Write the failing test**
 
 ```dart
 // app/test/session/session_reconcile_test.dart
@@ -228,7 +233,7 @@ Cover:
 Run: `cd app && flutter test test/session/session_reconcile_test.dart`
 Expected: fails — no `reconcile`.
 
-- [ ] **Step 2.2: Make `cores` mutable and add `reconcile`**
+- [x] **Step 2.2: Make `cores` mutable and add `reconcile`**
 
 In `session.dart`:
 
@@ -266,7 +271,7 @@ leaves the session intact.
 Run: `cd app && flutter test test/session/session_reconcile_test.dart`
 Expected: all pass.
 
-- [ ] **Step 2.3: Confirm nothing else mutated `cores`**
+- [x] **Step 2.3: Confirm nothing else mutated `cores`**
 
 Run: `cd app && flutter analyze`
 Expected: no new diagnostics. (`Session.cores` is read in `coreById`,
@@ -280,7 +285,7 @@ Expected: no new diagnostics. (`Session.cores` is read in `coreById`,
 - Modify: `app/lib/src/plugins/worktree_session.dart`
 - Test: `app/test/shell/shell_controller_test.dart` (covered end-to-end in Task 5)
 
-- [ ] **Step 3.1: Add `reconcile`**
+- [x] **Step 3.1: Add `reconcile`**
 
 ```dart
 /// Applies [diff] to this worktree: panels for retained cores are retained,
@@ -301,7 +306,7 @@ the panel for a retained core or `registry.create(core)` for a new one. Wire
 `plugins` stops being `final`/`List.unmodifiable` in the constructor and becomes
 a private field behind an unmodifiable getter, same shape as `Session.cores`.
 
-- [ ] **Step 3.2: Verify the ordering invariant still holds**
+- [x] **Step 3.2: Verify the ordering invariant still holds**
 
 The class doc promises "panels first, then the behaviour under them". Add a
 sentence to it noting that `reconcile` honours the same order through
@@ -317,7 +322,7 @@ Expected: clean.
 **Files:**
 - Create: `app/lib/src/shell/config_load.dart`
 
-- [ ] **Step 4.1: Define the outcome**
+- [x] **Step 4.1: Define the outcome**
 
 ```dart
 enum ConfigLoadOutcome {
@@ -358,13 +363,13 @@ No test of its own — it is a value type, exercised through Task 5.
 - Modify: `app/lib/src/shell/shell_controller.dart`
 - Modify: `app/test/shell/shell_controller_test.dart`
 
-- [ ] **Step 5.1: Make the stub loader mutable**
+- [x] **Step 5.1: Make the stub loader mutable**
 
 `_StubLoader` currently takes a fixed manifest string. Give it a settable
 `manifest` and `exitCode` so a test can change what the config "prints" between
 loads. Add a `loads` counter for asserting a reload actually ran.
 
-- [ ] **Step 5.2: Write the failing tests**
+- [x] **Step 5.2: Write the failing tests**
 
 Add to `app/test/shell/shell_controller_test.dart`:
 
@@ -390,7 +395,7 @@ Add to `app/test/shell/shell_controller_test.dart`:
 Run: `cd app && flutter test test/shell/shell_controller_test.dart`
 Expected: the new tests fail; the pre-existing ones still pass.
 
-- [ ] **Step 5.3: Retain the projection and invert `_load`**
+- [x] **Step 5.3: Retain the projection and invert `_load`**
 
 Add `final _manifests = <String, PluginManifest>{}` and
 `final _loads_ = <String, List<ConfigLoad>>{}` (capped at 20 entries, newest
@@ -432,7 +437,7 @@ Without these, two of the three wins are invisible and the third is untrustworth
 - Modify: `app/lib/src/shell/shell_view.dart`
 - Modify: `app/lib/src/shell/worktree_home.dart`
 
-- [ ] **Step 6.1: The transient status line**
+- [x] **Step 6.1: The transient status line**
 
 A small widget beside `_ReloadButton` reading `shell.lastLoad(selected)`. Shows
 for ~3s after a load, then fades:
@@ -446,7 +451,7 @@ The `unchanged` case **must** render. It is the whole point: it distinguishes
 absence of feedback. Duration is included so a drift from ~100ms to seconds is
 visible without anyone instrumenting anything.
 
-- [ ] **Step 6.2: The sticky error banner**
+- [x] **Step 6.2: The sticky error banner**
 
 `errorFor` currently renders only on `WorktreeHome`, which was fine when a
 failed load left you with no panel to be on. Now the session survives, so the
@@ -457,7 +462,13 @@ output, plus the config path.
 Not dismissible — it is a fact about the file, and hiding it hides a real
 problem. It clears on the next successful load.
 
-- [ ] **Step 6.3: The reload log on the home screen**
+- [x] **Step 6.3: The reload log on the home screen**
+
+> **Changed in review.** A section on the home screen is not somewhere you can
+> navigate to, and the reload button was in the chrome while its consequences
+> were on another screen. The log became `fw://<worktree>/config` — a real
+> address, with Reload on it — and the band button now opens that screen instead
+> of reloading. See `config_screen.dart`.
 
 A section under the existing error box listing `shell.loadLog(worktree)`: time,
 duration, outcome, and *which config key differed* for each rebuilt plugin. This
@@ -470,32 +481,41 @@ Expected: clean, all pass.
 
 ## Task 7: Manual smoke
 
-**Files:** none. Uses `app/lib/main_dev.dart` against `examples/example`.
+**Files:** none. Uses `app/lib/main_dev.dart`, which opens flutterware's own
+repo root — not `examples/example` as written here; the root config declares
+more plugins and is the better target anyway.
 
-- [ ] **Step 7.1: The no-op case**
+> **How these were actually run.** 7.1–7.4 were driven live against the running
+> GUI once the watcher existed, by editing `tool/flutterware.dart` from a shell
+> and reading the reload log the app prints. Everything except *a rendered
+> catalog device surviving* is covered that way; that one still needs a click,
+> and the findings doc says so rather than implying otherwise. The surfaces are
+> additionally covered by widget tests over the real `ShellView`.
+
+- [x] **Step 7.1: The no-op case**
 
 Open the GUI on `examples/example`, open the UI catalog, let a device render.
 Add a comment to `examples/example/tool/flutterware.dart`, save, press reload.
 Expected: `no changes`, the device still rendering, nothing flickers.
 
-- [ ] **Step 7.2: The unrelated-edit case**
+- [x] **Step 7.2: The unrelated-edit case**
 
 Change the `Dependencies(...)` declaration (drop a package). Reload.
 Expected: `Dependencies rebuilt`, the catalog device **still alive**. This is
 the headline result of the whole plan.
 
-- [ ] **Step 7.3: The broken-config case**
+- [x] **Step 7.3: The broken-config case**
 
 Introduce a syntax error. Reload.
 Expected: sticky banner with file+line, every plugin still working behind it,
 the catalog device still rendering. Fix the file, reload, banner clears.
 
-- [ ] **Step 7.4: The blunt case**
+- [x] **Step 7.4: The blunt case**
 
 Add a package to `fw.packages([...])`. Reload.
 Expected: `workspace rebuilt`, device gone, and the log says why.
 
-- [ ] **Step 7.5: Record the findings**
+- [x] **Step 7.5: Record the findings**
 
 Append a short "phase 1 smoke" section to
 `docs/superpowers/specs/2026-07-29-config-reload-findings.md` with the observed
@@ -507,12 +527,12 @@ watcher's debounce in phase 2.
 
 ## Task 8: Submit
 
-- [ ] **Step 8.1: Format**
+- [x] **Step 8.1: Format**
 
 Run: `dart tool/prepare_submit.dart`
 Expected: no diff left behind (CI fails on one).
 
-- [ ] **Step 8.2: Full suite**
+- [x] **Step 8.2: Full suite**
 
 Run: `flutter analyze` from the repo root, then `cd app && flutter test`.
 Expected: clean, all pass.
@@ -521,7 +541,10 @@ Expected: clean, all pass.
 
 ## Out of scope, deliberately
 
-- **The watcher.** Phase 1 keeps the button. See the spec's order of work.
+- ~~**The watcher.** Phase 1 keeps the button.~~ **Shipped after the smoke**
+  (`2c842e1`), once the reconciliation had been driven by hand — which is the
+  order this plan asked for, arrived at sooner than expected because the smoke
+  went cleanly. Its own trap list is in `config_watcher.dart`.
 - **Callbacks / `$fn` paths / the config process.** Phase 2. Nothing here should
   anticipate them beyond leaving `ManifestDiff` working on declarations rather
   than on raw JSON text.
