@@ -7,10 +7,11 @@
 ///
 /// The shapes:
 ///
-///     …/flutterware.server/<name>                   the overview
+///     …/flutterware.server/<name>                   the request list
 ///     …/flutterware.server/<name>/req/<eventId>     one request
 ///     …/flutterware.server/<name>/sql               the SQL view
 ///     …/flutterware.server/<name>/sql/<shapeKey>    one query shape
+///     …/flutterware.server/<name>/events            the raw event stream
 ///
 /// The server is named, not pid-qualified — an address a person pastes
 /// tomorrow should survive tonight's restart. When a stopped session and its
@@ -22,7 +23,7 @@
 library;
 
 /// Which pane of one server the address names.
-enum ServerViewKind { overview, request, sql }
+enum ServerViewKind { overview, request, sql, events }
 
 /// A place in the inspector: a server, and which of its panes.
 class ServerPlace {
@@ -36,6 +37,11 @@ class ServerPlace {
   const ServerPlace.sql(this.server, {this.queryKey})
     : requestId = null,
       view = ServerViewKind.sql;
+
+  const ServerPlace.events(this.server)
+    : requestId = null,
+      queryKey = null,
+      view = ServerViewKind.events;
 
   /// The announced server name — `example_server`.
   final String server;
@@ -77,6 +83,9 @@ List<String> sqlSegments(String server, {String? queryKey}) => [
   ?queryKey,
 ];
 
+/// The segments naming the raw event stream.
+List<String> eventsSegments(String server) => [server, 'events'];
+
 List<String> serverSegmentsOf(ServerPlace place) => switch (place.view) {
   ServerViewKind.overview => serverSegments(place.server),
   ServerViewKind.request => serverSegments(
@@ -84,6 +93,7 @@ List<String> serverSegmentsOf(ServerPlace place) => switch (place.view) {
     requestId: place.requestId,
   ),
   ServerViewKind.sql => sqlSegments(place.server, queryKey: place.queryKey),
+  ServerViewKind.events => eventsSegments(place.server),
 };
 
 /// The inverse of [serverSegments] and [sqlSegments].
@@ -94,6 +104,9 @@ List<String> serverSegmentsOf(ServerPlace place) => switch (place.view) {
 ServerPlace? serverPlace(List<String> segments) {
   if (segments.isEmpty || segments.first.isEmpty) return null;
   var server = segments.first;
+  if (segments.length >= 2 && segments[1] == 'events') {
+    return ServerPlace.events(server);
+  }
   if (segments.length >= 2 && segments[1] == 'sql') {
     return ServerPlace.sql(
       server,

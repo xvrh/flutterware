@@ -352,6 +352,26 @@ class TrackedServer {
     _events.add(event);
   }
 
+  /// One event's lazy details — headers, bodies — fetched once and kept.
+  ///
+  /// Null means the server never captured them, evicted them, or is gone;
+  /// the panel words those the same way ("not captured"), because the
+  /// difference is not actionable from here. Cached including the nulls: a
+  /// detail that was evicted once will not un-evict.
+  Future<Map<String, Object?>?> detailsFor(ServerEvent event) {
+    return _detailsCache.putIfAbsent(event.id, () async {
+      var client = this.client;
+      if (client == null) return null;
+      try {
+        return await client.details(event.id);
+      } on Object {
+        return null;
+      }
+    });
+  }
+
+  final _detailsCache = <int, Future<Map<String, Object?>?>>{};
+
   /// The connection is gone; the server may not be. Keeps the history and
   /// [wasConnected], so the next scan can reattach or conclude "stopped".
   void dropConnection() {

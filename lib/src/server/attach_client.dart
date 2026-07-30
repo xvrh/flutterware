@@ -136,6 +136,14 @@ class ServerAttachClient {
     Map<String, Object?> params = const {},
   ]) => _request(channel, method, params);
 
+  /// The lazily-held details of one event — headers, bodies — or null when
+  /// the server never captured them or has since evicted them.
+  Future<Map<String, Object?>?> details(int eventId) async {
+    var response = await _request(metaChannel, metaDetail, {'event': eventId});
+    var details = response['details'];
+    return details is Map ? details.cast<String, Object?>() : null;
+  }
+
   Future<Map<String, Object?>> _request(
     String channel,
     String method, [

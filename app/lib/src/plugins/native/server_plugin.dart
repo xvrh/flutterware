@@ -104,37 +104,47 @@ class _ServerPanelState extends State<_ServerPanel> {
             _ViewTabs(server: server, view: view),
             const Divider(height: 1),
             Expanded(
-              child: view == ServerViewKind.sql
-                  ? (place?.queryKey == null
-                        ? _SqlView(server)
-                        : _QueryDetail(
-                            server: server,
-                            queryKey: place!.queryKey!,
-                          ))
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(
-                          width: 380,
-                          child: _RequestList(
-                            server: server,
-                            requests: requests.reversed.toList(),
-                            byRid: byRid,
-                            selectedId: selected?.id,
-                          ),
+              child: switch (view) {
+                ServerViewKind.sql =>
+                  place?.queryKey == null
+                      ? _SqlView(server)
+                      : _QueryDetail(
+                          server: server,
+                          queryKey: place!.queryKey!,
                         ),
-                        const VerticalDivider(width: 1),
-                        Expanded(
-                          child: selected == null
-                              ? _EventTimeline(events)
-                              : _RequestDetail(
-                                  server: server,
-                                  request: selected,
-                                  caused: byRid[selected.rid] ?? const [],
-                                ),
-                        ),
-                      ],
+                ServerViewKind.events => _EventTimeline(events),
+                // No selection: the request list has the whole width. The raw
+                // stream lives under Events, not behind an unselected detail.
+                _ when selected == null => _RequestList(
+                  server: server,
+                  requests: requests.reversed.toList(),
+                  byRid: byRid,
+                  selectedId: null,
+                  showTime: true,
+                ),
+                _ => Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: 380,
+                      child: _RequestList(
+                        server: server,
+                        requests: requests.reversed.toList(),
+                        byRid: byRid,
+                        selectedId: selected.id,
+                      ),
                     ),
+                    const VerticalDivider(width: 1),
+                    Expanded(
+                      child: _RequestDetail(
+                        server: server,
+                        request: selected,
+                        caused: byRid[selected.rid] ?? const [],
+                      ),
+                    ),
+                  ],
+                ),
+              },
             ),
           ],
         );
@@ -204,8 +214,13 @@ class _ViewTabs extends StatelessWidget {
       child: Row(
         children: [
           for (var (label, segments, selected) in [
-            ('Requests', serverSegments(name), view != ServerViewKind.sql),
+            (
+              'Requests',
+              serverSegments(name),
+              view == ServerViewKind.overview || view == ServerViewKind.request,
+            ),
             ('SQL', sqlSegments(name), view == ServerViewKind.sql),
+            ('Events', eventsSegments(name), view == ServerViewKind.events),
           ])
             Padding(
               padding: const EdgeInsets.only(right: 4),
@@ -531,6 +546,7 @@ class _RequestList extends StatelessWidget {
     required this.requests,
     required this.byRid,
     required this.selectedId,
+    this.showTime = false,
   });
 
   final TrackedServer server;
@@ -539,6 +555,9 @@ class _RequestList extends StatelessWidget {
   final List<ServerEvent> requests;
   final Map<String, List<ServerEvent>> byRid;
   final int? selectedId;
+
+  /// True in the full-width form, where there is room for a timestamp.
+  final bool showTime;
 
   @override
   Widget build(BuildContext context) {
@@ -560,6 +579,7 @@ class _RequestList extends StatelessWidget {
           server: server,
           request: request,
           selected: request.id == selectedId,
+          showTime: showTime,
           repeatedCount: repeated.isEmpty
               ? 0
               : repeated.values.reduce((a, b) => a > b ? a : b),
@@ -575,11 +595,13 @@ class _RequestRow extends StatelessWidget {
     required this.request,
     required this.selected,
     required this.repeatedCount,
+    this.showTime = false,
   });
 
   final TrackedServer server;
   final ServerEvent request;
   final bool selected;
+  final bool showTime;
 
   /// The largest repeat count among this request's queries; 0 for none.
   final int repeatedCount;
@@ -600,6 +622,16 @@ class _RequestRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
           children: [
+            if (showTime) ...[
+              Text(
+                _timestamp(request.time),
+                style: theme.textTheme.bodySmall!.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: theme.hintColor,
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
             _StatusDot(failed: failed),
             const SizedBox(width: 8),
             Expanded(
@@ -662,9 +694,125 @@ class _StatusDot extends StatelessWidget {
   );
 }
 
-/// The selected request: headline, N+1 warnings, the waterfall, the logs.
+/// The selected request, in tabs: the waterfall (with its N+1 warnings),
+/// its queries, the request and response messages, and its logs.
+///
+/// The tab is an axis (`?tab=`), not a segment — the same request seen
+/// differently, which is the framework's own distinction.
 class _RequestDetail extends StatelessWidget {
   const _RequestDetail({
+    required this.server,
+    required this.request,
+    required this.caused,
+  });
+
+  final TrackedServer server;
+  final ServerEvent request;
+  final List<ServerEvent> caused;
+
+  static const _tabs = ['waterfall', 'sql', 'request', 'response', 'logs'];
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    var p = request.payload;
+    var tab = AddressScope.param(context, 'tab') ?? 'waterfall';
+    if (!_tabs.contains(tab)) tab = 'waterfall';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${p['method']} ${p['path']} → ${p['status']}',
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+              Text(_ms(p['ms']), style: theme.textTheme.titleMedium),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                tooltip: 'Back to the request list',
+                onPressed: () => AddressScope.write(
+                  context,
+                ).setSegments(serverSegments(server.handle.name)),
+              ),
+            ],
+          ),
+        ),
+        if (p['error'] != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Text(
+              '${p['error']}',
+              style: theme.textTheme.bodyMedium!.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+          child: Row(
+            children: [
+              for (var name in _tabs)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: TextButton(
+                    style: name == tab
+                        ? TextButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary
+                                .withValues(alpha: 0.1),
+                          )
+                        : null,
+                    onPressed: () =>
+                        AddressScope.write(context).setParam('tab', name),
+                    child: Text(name),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: switch (tab) {
+            'sql' => _RequestSqlTab(
+              server: server,
+              queries: [
+                for (var event in caused)
+                  if (event.channel == 'sql') event,
+              ],
+            ),
+            'request' => _HttpMessageTab(
+              server: server,
+              request: request,
+              response: false,
+            ),
+            'response' => _HttpMessageTab(
+              server: server,
+              request: request,
+              response: true,
+            ),
+            'logs' => _RequestLogsTab([
+              for (var event in caused)
+                if (event.channel == 'log') event,
+            ]),
+            _ => _WaterfallTab(
+              server: server,
+              request: request,
+              caused: caused,
+            ),
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _WaterfallTab extends StatelessWidget {
+  const _WaterfallTab({
     required this.server,
     required this.request,
     required this.caused,
@@ -677,51 +825,17 @@ class _RequestDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    var p = request.payload;
     var repeated = repeatedQueries(caused);
     var spans = [
       for (var event in caused)
         if (event.payload['ms'] is num) event,
     ];
-    var logs = [
-      for (var event in caused)
-        if (event.payload['ms'] is! num) event,
-    ];
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '${p['method']} ${p['path']} → ${p['status']}',
-                style: theme.textTheme.titleMedium,
-              ),
-            ),
-            Text(_ms(p['ms']), style: theme.textTheme.titleMedium),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.close, size: 18),
-              tooltip: 'Back to the timeline',
-              onPressed: () => AddressScope.write(
-                context,
-              ).setSegments(serverSegments(server.handle.name)),
-            ),
-          ],
-        ),
-        if (p['error'] != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              '${p['error']}',
-              style: theme.textTheme.bodyMedium!.copyWith(
-                color: theme.colorScheme.error,
-              ),
-            ),
-          ),
         for (var entry in repeated.entries)
           Container(
-            margin: const EdgeInsets.only(top: 12),
+            margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.amber.withValues(alpha: 0.15),
@@ -733,23 +847,275 @@ class _RequestDetail extends StatelessWidget {
               style: theme.textTheme.bodySmall,
             ),
           ),
-        const SizedBox(height: 16),
         _Waterfall(server: server, request: request, spans: spans),
-        if (logs.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text('Logs', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 4),
-          for (var log in logs)
+      ],
+    );
+  }
+}
+
+/// The request's own queries, each expandable to its parameters, row count
+/// and an inline explain — the "simple case" viewer, one tap from a request.
+class _RequestSqlTab extends StatefulWidget {
+  const _RequestSqlTab({required this.server, required this.queries});
+
+  final TrackedServer server;
+  final List<ServerEvent> queries;
+
+  @override
+  State<_RequestSqlTab> createState() => _RequestSqlTabState();
+}
+
+class _RequestSqlTabState extends State<_RequestSqlTab> {
+  final _expanded = <int>{};
+  final _explained = <int, String>{};
+  final _busy = <int>{};
+
+  Future<void> _explain(ServerEvent event) async {
+    var query = event.payload['query']! as String;
+    setState(() => _busy.add(event.id));
+    String result;
+    try {
+      var response = await sqlCommand(widget.server, 'explain', query);
+      result = const JsonEncoder.withIndent('  ').convert(response);
+    } on Object catch (e) {
+      result =
+          '$e\n\nThe server registers command handlers itself — see the '
+          'sql adapter snippets in doc/server_inspection.md.';
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy.remove(event.id);
+      _explained[event.id] = result;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    var mono = theme.textTheme.bodySmall!.copyWith(fontFamily: 'monospace');
+    if (widget.queries.isEmpty) {
+      return Center(
+        child: Text(
+          'No queries in this request.',
+          style: theme.textTheme.bodyMedium,
+        ),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      children: [
+        for (var event in widget.queries) ...[
+          InkWell(
+            onTap: () => setState(() {
+              _expanded.contains(event.id)
+                  ? _expanded.remove(event.id)
+                  : _expanded.add(event.id);
+            }),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Row(
+                children: [
+                  Icon(
+                    _expanded.contains(event.id)
+                        ? Icons.expand_more
+                        : Icons.chevron_right,
+                    size: 16,
+                    color: theme.hintColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      '${event.payload['query']}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: mono,
+                    ),
+                  ),
+                  if (event.payload['rows'] is int) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '${event.payload['rows']} rows',
+                      style: theme.textTheme.bodySmall!.copyWith(
+                        color: theme.hintColor,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 8),
+                  Text(_ms(event.payload['ms']), style: mono),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded.contains(event.id))
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Text(
-                _summary(log),
-                style: theme.textTheme.bodySmall!.copyWith(
-                  fontFamily: 'monospace',
-                ),
+              padding: const EdgeInsets.fromLTRB(36, 0, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText('${event.payload['query']}', style: mono),
+                  if (event.payload['params'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'params: ${jsonEncode(event.payload['params'])}',
+                        style: mono.copyWith(color: theme.hintColor),
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      OutlinedButton(
+                        onPressed:
+                            _busy.contains(event.id) || !widget.server.connected
+                            ? null
+                            : () => _explain(event),
+                        child: const Text('explain'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () =>
+                            AddressScope.write(context).setSegments(
+                              sqlSegments(
+                                widget.server.handle.name,
+                                queryKey: queryShapeKey(
+                                  normalizeSql(
+                                    event.payload['query']! as String,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        child: const Text('all occurrences'),
+                      ),
+                    ],
+                  ),
+                  if (_busy.contains(event.id))
+                    const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: CircularProgressIndicator(),
+                    ),
+                  if (_explained[event.id] != null)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: 6),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: SelectableText(_explained[event.id]!, style: mono),
+                    ),
+                ],
               ),
             ),
         ],
+      ],
+    );
+  }
+}
+
+/// One side of the HTTP exchange: headers and body, fetched lazily from the
+/// server's detail store the first time this tab opens.
+class _HttpMessageTab extends StatelessWidget {
+  const _HttpMessageTab({
+    required this.server,
+    required this.request,
+    required this.response,
+  });
+
+  final TrackedServer server;
+  final ServerEvent request;
+
+  /// False for the request side, true for the response side.
+  final bool response;
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    var mono = theme.textTheme.bodySmall!.copyWith(fontFamily: 'monospace');
+    return FutureBuilder(
+      future: server.detailsFor(request),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        var details = snapshot.data;
+        var headers = details?[response ? 'responseHeaders' : 'requestHeaders'];
+        var body = details?[response ? 'responseBody' : 'requestBody'];
+        if (details == null || headers is! Map) {
+          return Center(
+            child: Text(
+              'Not captured.\n'
+              'The middleware decides what to record — see the capturing '
+              'version in doc/server_inspection.md.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium,
+            ),
+          );
+        }
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text('Headers', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 4),
+            for (var entry in headers.entries)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 1),
+                child: SelectableText(
+                  '${entry.key}: ${entry.value}',
+                  style: mono,
+                ),
+              ),
+            const SizedBox(height: 16),
+            Text('Body', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 4),
+            body is String
+                ? Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: SelectableText(body, style: mono),
+                  )
+                : Text(
+                    'Not captured — binary, streamed, or over the size cap.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _RequestLogsTab extends StatelessWidget {
+  const _RequestLogsTab(this.logs);
+
+  final List<ServerEvent> logs;
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    var mono = theme.textTheme.bodySmall!.copyWith(fontFamily: 'monospace');
+    if (logs.isEmpty) {
+      return Center(
+        child: Text(
+          'No logs in this request.',
+          style: theme.textTheme.bodyMedium,
+        ),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        for (var log in logs)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: SelectableText(_summary(log), style: mono),
+          ),
       ],
     );
   }
@@ -1000,6 +1366,10 @@ String _summary(ServerEvent event) {
 
 String _ms(Object? value) =>
     value is num ? '${value.toStringAsFixed(1)}ms' : '';
+
+String _timestamp(DateTime time) =>
+    '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}'
+    '.${time.millisecond.toString().padLeft(3, '0')}';
 
 String _two(int n) => n.toString().padLeft(2, '0');
 

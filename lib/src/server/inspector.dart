@@ -58,8 +58,17 @@ class FlutterwareServer {
 
   /// Reports one event on [channel]. Fire-and-forget and safe everywhere:
   /// when the inspector is inert this is a null check and a return.
-  static void event(String channel, Map<String, Object?> payload) {
-    _active?.addEvent(channel, payload, rid: _rid());
+  ///
+  /// [details] is for the heavy parts — headers, bodies — held server-side
+  /// in a byte-capped store and fetched only when an attacher asks
+  /// (`meta/detail`, spec decision 11). The event itself stays small, so the
+  /// hot path and the ring never carry a body.
+  static void event(
+    String channel,
+    Map<String, Object?> payload, {
+    Map<String, Object?>? details,
+  }) {
+    _active?.addEvent(channel, payload, rid: _rid(), details: details);
   }
 
   /// Runs [body] and reports it as a timed event on [channel] — duration in
@@ -210,6 +219,7 @@ class ServerInspector {
     required this.projectRoot,
     required this.name,
     required this.ringSize,
+    required this.detailsByteCap,
     required this.pid,
   });
 
@@ -225,6 +235,7 @@ class ServerInspector {
     required String projectRoot,
     required String name,
     int ringSize = 500,
+    int detailsByteCap = 16 * 1024 * 1024,
     int? pid,
   }) {
     var inspector = ServerInspector._(
@@ -232,6 +243,7 @@ class ServerInspector {
       projectRoot: projectRoot,
       name: name,
       ringSize: ringSize,
+      detailsByteCap: detailsByteCap,
       pid: pid ?? io.pid,
     );
     unawaited(inspector._publish());
@@ -245,9 +257,15 @@ class ServerInspector {
   /// Kept events per channel; the oldest fall off first.
   final int ringSize;
 
+  /// Bytes of encoded details kept; the oldest evict first. Bounded in bytes
+  /// rather than entries because one body can outweigh a thousand headers.
+  final int detailsByteCap;
+
   final startedAt = DateTime.now();
 
   final _ring = <String, Queue<_RingEvent>>{};
+  final _details = <int, String>{};
+  var _detailsBytes = 0;
   final _handlers = <String, Map<String, ServerCommandHandler>>{};
   final _attached = <Socket>{};
   var _nextEventId = 1;
@@ -276,7 +294,12 @@ class ServerInspector {
     }
   }
 
-  void addEvent(String channel, Map<String, Object?> payload, {String? rid}) {
+  void addEvent(
+    String channel,
+    Map<String, Object?> payload, {
+    String? rid,
+    Map<String, Object?>? details,
+  }) {
     if (_stopped) return;
     var event = _RingEvent(
       _nextEventId++,
@@ -285,6 +308,7 @@ class ServerInspector {
       rid,
       payload,
     );
+    if (details != null) _stashDetails(event.id, details);
     var ring = _ring.putIfAbsent(channel, Queue.new);
     ring.add(event);
     while (ring.length > ringSize) {
@@ -292,6 +316,23 @@ class ServerInspector {
     }
     if (_attached.isNotEmpty) {
       _broadcast(encodeFrame(event.toFrame()));
+    }
+  }
+
+  /// Insertion order is the eviction order: `_details` is a plain map, and
+  /// Dart maps iterate in insertion order, so `keys.first` is the oldest.
+  void _stashDetails(int eventId, Map<String, Object?> details) {
+    String encoded;
+    try {
+      encoded = jsonEncode(details);
+    } on Object {
+      return;
+    }
+    _details[eventId] = encoded;
+    _detailsBytes += encoded.length;
+    while (_detailsBytes > detailsByteCap && _details.length > 1) {
+      var oldest = _details.keys.first;
+      _detailsBytes -= _details.remove(oldest)!.length;
     }
   }
 
@@ -382,6 +423,22 @@ class ServerInspector {
     if (channel is! String || method is! String || id is! int) return;
     if (channel == metaChannel && method == metaAttach) {
       _attach(socket, id);
+      return;
+    }
+    if (channel == metaChannel && method == metaDetail) {
+      var params = frame[framePayload];
+      var eventId = params is Map ? params['event'] : null;
+      var encoded = eventId is int ? _details[eventId] : null;
+      _send(socket, {
+        frameChannel: metaChannel,
+        frameType: typeResponse,
+        frameRequestId: id,
+        framePayload: encoded == null
+            // Honest about the difference between "never captured" and
+            // "captured and evicted": the attacher words them differently.
+            ? {'evicted': true}
+            : {'details': jsonDecode(encoded)},
+      });
       return;
     }
     var handler = _handlers[channel]?[method];

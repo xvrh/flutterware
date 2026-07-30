@@ -25,6 +25,7 @@ void main() {
       const ServerPlace('api', requestId: 7),
       const ServerPlace.sql('api'),
       const ServerPlace.sql('api', queryKey: 'ab12cd34'),
+      const ServerPlace.events('api'),
     ]) {
       expect(serverPlace(serverSegmentsOf(place)), place);
     }

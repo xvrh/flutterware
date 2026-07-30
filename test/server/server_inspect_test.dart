@@ -146,6 +146,48 @@ void main() {
       expect(client.received.first.payload['i'], 3);
     });
 
+    test(
+      'details are held lazily, fetched by id, and evict by bytes',
+      () async {
+        inspector.addEvent(
+          'http',
+          {'path': '/big'},
+          details: {'respBody': 'x' * 100},
+        );
+        var client = await attach();
+        addTearDown(client.close);
+        await _until(() => client.replayComplete);
+        var id = client.received.single.id;
+
+        expect((await client.details(id))!['respBody'], 'x' * 100);
+        expect(
+          await client.details(999),
+          isNull,
+          reason: 'never captured reads as absent, not as an error',
+        );
+
+        // A small cap: stashing more evicts the oldest.
+        var tight = ServerInspector.start(
+          runDir: runDir.path,
+          projectRoot: '/repo/app',
+          name: 'tight',
+          detailsByteCap: 200,
+        );
+        addTearDown(tight.stop);
+        await tight.published;
+        tight.addEvent('http', {'i': 1}, details: {'body': 'a' * 150});
+        tight.addEvent('http', {'i': 2}, details: {'body': 'b' * 150});
+        var tightClient = await ServerAttachClient.connect(
+          scanServerHandles(runDir.path).singleWhere((h) => h.name == 'tight'),
+        );
+        addTearDown(tightClient.close);
+        await _until(() => tightClient.replayComplete);
+        var ids = [for (var e in tightClient.received) e.id];
+        expect(await tightClient.details(ids[0]), isNull, reason: 'evicted');
+        expect((await tightClient.details(ids[1]))!['body'], 'b' * 150);
+      },
+    );
+
     test('requests reach handlers; unknown methods answer with err', () async {
       inspector.registerHandler('sql', 'explain', (params) {
         return {'plan': 'SCAN ${params['table']}'};

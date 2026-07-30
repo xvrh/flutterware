@@ -58,6 +58,15 @@ Middleware inspect() {
 // var handler = const Pipeline().addMiddleware(inspect()).addHandler(router);
 ```
 
+The version in `example_server.dart` goes further and is the one to copy for
+the Request/Response tabs: it captures **redacted headers** and **capped
+textual bodies** into the event's lazy `details:` — held server-side, fetched
+only when someone opens the tab. The capture cut (decision 11): textual
+content types with a known length under 32 KB are buffered; streams and
+everything else are recorded as size only, because interposing on a stream is
+exactly the overhead this design refuses. Redaction lives in that snippet —
+in code you own — not in the library.
+
 ## Logs: package:logging
 
 The listener runs in whatever zone called `listen`, so correlation must come
@@ -113,6 +122,9 @@ class InspectingInterceptor extends QueryInterceptor {
       'query': sql,
       if (args.isNotEmpty) 'params': args,
     }, body);
+    // For selects, prefer reporting the row count too — it is what the
+    // occurrence rows show: run the body yourself, then
+    // FlutterwareServer.event('sql', {..., 'rows': result.length, 'ms': …}).
   }
 
   @override

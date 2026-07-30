@@ -56,46 +56,116 @@ Future<void> main() async {
 
 /// Adapter: the shelf middleware. One `runZoned` is the whole correlation
 /// story — every query and log line emitted below it carries this request's id.
+///
+/// Headers and small textual bodies go into the event's lazy `details`
+/// (spec decision 11): captured here, held server-side, fetched only when
+/// somebody opens the Request/Response tab. Redaction happens *here*, in
+/// code you own, before anything leaves your handler's reach.
 Middleware _inspect() {
   var nextRequestId = 1;
   return (inner) => (request) {
     var id = 'req-${nextRequestId++}';
     return runZoned(() async {
       var watch = Stopwatch()..start();
+      var (request2, requestBody) = await _captureRequestBody(request);
       try {
-        var response = await inner(request);
-        FlutterwareServer.event('http', {
-          'method': request.method,
-          'path': '/${request.url.path}',
-          'status': response.statusCode,
-          'ms': watch.elapsedMicroseconds / 1000,
-        });
-        return response;
+        var response = await inner(request2);
+        var (response2, responseBody) = await _captureResponseBody(response);
+        FlutterwareServer.event(
+          'http',
+          {
+            'method': request.method,
+            'path': '/${request.url.path}',
+            'status': response.statusCode,
+            'ms': watch.elapsedMicroseconds / 1000,
+          },
+          details: {
+            'requestHeaders': _redact(request.headers),
+            'responseHeaders': _redact(response.headers),
+            'requestBody': ?requestBody,
+            'responseBody': ?responseBody,
+          },
+        );
+        return response2;
       } catch (e) {
-        FlutterwareServer.event('http', {
-          'method': request.method,
-          'path': '/${request.url.path}',
-          'status': 500,
-          'ms': watch.elapsedMicroseconds / 1000,
-          'error': '$e',
-        });
+        FlutterwareServer.event(
+          'http',
+          {
+            'method': request.method,
+            'path': '/${request.url.path}',
+            'status': 500,
+            'ms': watch.elapsedMicroseconds / 1000,
+            'error': '$e',
+          },
+          details: {'requestHeaders': _redact(request.headers)},
+        );
         rethrow;
       }
     }, zoneValues: {FlutterwareServer.requestIdKey: id});
   };
 }
 
+/// The capture cut (spec decision 11): textual content types with a known
+/// length under the cap are buffered; streams and everything else are
+/// recorded as size only. Reading a shelf body consumes it, so a captured
+/// message is rebuilt around the bytes just read.
+const _bodyCap = 32 * 1024;
+
+bool _textual(String? contentType) =>
+    contentType != null &&
+    (contentType.contains('json') ||
+        contentType.startsWith('text/') ||
+        contentType.contains('xml') ||
+        contentType.contains('form-urlencoded'));
+
+Future<(Request, String?)> _captureRequestBody(Request request) async {
+  if (request.contentLength == null ||
+      request.contentLength == 0 ||
+      request.contentLength! > _bodyCap ||
+      !_textual(request.headers['content-type'])) {
+    return (request, null);
+  }
+  var body = await request.readAsString();
+  return (request.change(body: body), body);
+}
+
+Future<(Response, String?)> _captureResponseBody(Response response) async {
+  if (response.contentLength == null ||
+      response.contentLength == 0 ||
+      response.contentLength! > _bodyCap ||
+      !_textual(response.headers['content-type'])) {
+    return (response, null);
+  }
+  var body = await response.readAsString();
+  return (response.change(body: body), body);
+}
+
+/// What must not leave the process, dropped before reporting — edit to taste.
+Map<String, String> _redact(Map<String, String> headers) => {
+  for (var entry in headers.entries)
+    entry.key:
+        const {
+          'authorization',
+          'cookie',
+          'set-cookie',
+        }.contains(entry.key.toLowerCase())
+        ? '<redacted>'
+        : entry.value,
+};
+
 /// Adapter: a query wrapper — what a drift `QueryInterceptor` or a thin
-/// sqlite3/postgres wrapper reduces to. Parameters ride along under `params`,
-/// which is what the query detail pane shows per occurrence.
+/// sqlite3/postgres wrapper reduces to. Parameters and the row count ride
+/// along, which is what the query views show per occurrence.
 List<Map<String, Object?>> _query(String sql, [List<Object?>? params]) {
-  return FlutterwareServer.spanSync(
-    'sql',
-    {'query': sql, 'params': ?params},
-    () {
-      return _database.execute(sql);
-    },
-  );
+  var watch = Stopwatch()..start();
+  var rows = _database.execute(sql);
+  FlutterwareServer.event('sql', {
+    'query': sql,
+    'params': ?params,
+    'rows': rows.length,
+    'ms': watch.elapsedMicroseconds / 1000,
+  });
+  return rows;
 }
 
 Future<Response> _route(Request request) async {
@@ -120,6 +190,13 @@ Future<Response> _route(Request request) async {
         ['ada', 50],
       );
       return Response.ok('done being slow\n');
+    case '/echo' when request.method == 'POST':
+      // A request with a body, so the Request tab has one to show.
+      var body = await request.readAsString();
+      return Response.ok(
+        body.toUpperCase(),
+        headers: {'content-type': 'text/plain'},
+      );
     case '/error':
       _log.severe('about to fail on purpose');
       throw StateError('deliberate failure for the errors view');

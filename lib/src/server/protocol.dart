@@ -36,10 +36,14 @@ const typeResponse = 'res';
 const typeError = 'err';
 
 /// The built-in channel. `meta/attach` is the handshake that turns a
-/// connection into an attachment; `replay-done` marks the ring/live boundary.
+/// connection into an attachment; `replay-done` marks the ring/live boundary;
+/// `meta/detail` fetches an event's lazily-held details (headers, bodies) by
+/// event id — spec decision 11: events stay small, the heavy parts are
+/// fetched when someone actually looks.
 const metaChannel = 'meta';
 const metaAttach = 'attach';
 const metaReplayDone = 'replay-done';
+const metaDetail = 'detail';
 
 String encodeFrame(Map<String, Object?> frame) => '${jsonEncode(frame)}\n';
 

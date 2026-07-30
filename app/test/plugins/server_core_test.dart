@@ -211,6 +211,21 @@ void main() {
     );
   });
 
+  test('details are fetched lazily through the tracked server', () async {
+    inspector.addEvent(
+      'http',
+      {'path': '/x', 'status': 200},
+      details: {'responseBody': 'hello'},
+    );
+    await core.computeAll();
+    core.track();
+    await _until(() => core.servers.single.connected);
+
+    var event = core.servers.single.events.single;
+    var details = await core.servers.single.detailsFor(event);
+    expect(details!['responseBody'], 'hello');
+  });
+
   test('track attaches, replays, and follows live events', () async {
     inspector.addEvent('log', {'message': 'before'});
     await core.computeAll();
