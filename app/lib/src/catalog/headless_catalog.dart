@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
@@ -54,7 +53,7 @@ class HeadlessCatalog {
   ///
   /// Starts a daemon, compiles the entry, renders one frame, and shuts
   /// everything down. Fine for one entry; a batch wants a session that stays
-  /// warm, which is why [captureAll] exists.
+  /// warm, which is how [auditAll] works.
   ///
   /// [knobs] are raw strings — a flag and a JSON object both arrive as text —
   /// and are coerced to whatever kind the demo declared. A name the entry does
@@ -125,73 +124,10 @@ class HeadlessCatalog {
         hostPath: ready.hostPath,
         assetsDir: ready.assetsDir,
         icuData: ready.icuData,
-        workDir: p.join(config.appPackageRoot, 'build', 'catalog'),
+        name: ready.sessionId,
         viewport: viewport,
       );
       return await body(guest);
-    } finally {
-      await guest?.close();
-      await daemon.close();
-    }
-  }
-
-  /// Screenshots several entries against **one** daemon and **one** guest.
-  ///
-  /// The first entry pays a cold compile and a guest launch. Every entry after
-  /// it is a hot reload and a capture request — the same economics as browsing,
-  /// because it is the same mechanism.
-  Future<Map<String, File>> captureAll({
-    required List<String> entryIds,
-    required String Function(String entryId) outputFor,
-    CaptureViewport viewport = CaptureViewport.panel,
-  }) async {
-    var (daemon, ready) = await CompilerDaemonClient.connect(
-      dartExecutable: dartExecutable,
-      config: config,
-    );
-    _GuestSession? guest;
-    try {
-      var known = {for (var entry in ready.entries) entry.id};
-      for (var id in entryIds) {
-        if (!known.contains(id)) {
-          throw ArgumentError.value(
-            id,
-            'entryId',
-            'no such entry. Known ids: ${known.join(', ')}',
-          );
-        }
-      }
-
-      var captured = <String, File>{};
-      for (var id in entryIds) {
-        if (guest == null) {
-          // The guest loads the kernel from disk at launch, so the first entry
-          // needs a whole one; afterwards a delta is all a live isolate wants.
-          var compiled = await daemon.select(id, full: true);
-          if (!compiled.ok) {
-            throw StateError('$id did not compile:\n${compiled.error}');
-          }
-          guest = await _GuestSession.start(
-            // The daemon builds the host and reports where it put it. Taking
-            // it from the handshake rather than a caller's guess means there
-            // is one answer to "where is the host binary", and it is the one
-            // that was actually built.
-            hostPath: ready.hostPath,
-            assetsDir: ready.assetsDir,
-            icuData: ready.icuData,
-            workDir: p.join(config.appPackageRoot, 'build', 'catalog'),
-            viewport: viewport,
-          );
-        } else {
-          var compiled = await daemon.select(id);
-          if (!compiled.ok) {
-            throw StateError('$id did not compile:\n${compiled.error}');
-          }
-          await guest.reload(compiled.dill!);
-        }
-        captured[id] = await guest.capture(outputFor(id));
-      }
-      return captured;
     } finally {
       await guest?.close();
       await daemon.close();
@@ -254,46 +190,12 @@ class HeadlessCatalog {
     (guest) => guest.settledAxes(entryId),
   );
 
-  /// What [entryId] reports when it is actually rendered.
-  ///
-  /// `check` answers whether an entry *compiles*, which is a different
-  /// question and the only one anything could ask before now.
-  Future<InspectErrors> errors({
-    required String entryId,
-    CaptureViewport viewport = CaptureViewport.panel,
-    Map<String, String> knobs = const {},
-    Map<String, String> axes = const {},
-  }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
-    if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
-    if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
-    return guest.settledErrors(entryId);
-  });
-
-  /// What [entryId] printed when it was rendered.
-  ///
-  /// **No `PluginAction` of its own, deliberately.** The panel spec names
-  /// `logs` as the sixth projection of one rendered build that was about to be
-  /// added to the action list by reflex, and S6 collapses all of them into one
-  /// `inspect` — so shipping a `logs` action here would be shipping the thing
-  /// that step exists to remove. The capability lands now; the CLI surface for
-  /// it lands with the re-cut.
-  Future<InspectLogs> logs({
-    required String entryId,
-    CaptureViewport viewport = CaptureViewport.panel,
-    Map<String, String> knobs = const {},
-    Map<String, String> axes = const {},
-  }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
-    if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
-    if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
-    return guest.settledLogs(entryId);
-  });
-
   /// Renders **every** entry against one warm guest and reports what each said.
   ///
-  /// The economics of [captureAll], which is the reason this is affordable at
-  /// all: the first entry pays a cold compile and a guest launch, and every one
-  /// after it is a hot reload and a frame. Measured on this repo at ~120ms per
-  /// entry after the first.
+  /// The economics that make it affordable: the first entry pays a cold
+  /// compile and a guest launch, and every one after it is a hot reload and a
+  /// frame — the same mechanism as browsing. Measured on this repo at ~120ms
+  /// per entry after the first.
   ///
   /// Entries the compiler refused never get a guest — they are in the
   /// handshake, and an entry that does not build cannot be rendered to find out
@@ -326,7 +228,7 @@ class HeadlessCatalog {
             hostPath: ready.hostPath,
             assetsDir: ready.assetsDir,
             icuData: ready.icuData,
-            workDir: p.join(config.appPackageRoot, 'build', 'catalog'),
+            name: ready.sessionId,
             viewport: CaptureViewport.panel,
           );
         } else {
@@ -346,27 +248,6 @@ class HeadlessCatalog {
       await daemon.close();
     }
   }
-
-  /// The widget tree [entryId] builds, read from a live guest.
-  ///
-  /// Same shape as [knobs] and for the same reason: a tree is what a build
-  /// produced, so it takes a compile, a guest and a frame. [knobs] are applied
-  /// first when given, because a tree is of one particular build and turning a
-  /// knob can change which widgets there are.
-  Future<InspectTree> tree({
-    required String entryId,
-    CaptureViewport viewport = CaptureViewport.panel,
-    Map<String, String> knobs = const {},
-    Map<String, String> axes = const {},
-    Map<String, String> debug = const {},
-  }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
-    if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
-    if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
-    // Before the read, not after: `platform` and `brightness` change what the
-    // demo *builds*, not only how it is painted.
-    await guest.applyDebug(debug);
-    return guest.settledTree(entryId);
-  });
 
   /// Everything asked about **one** rendered build.
   ///
@@ -472,27 +353,6 @@ class HeadlessCatalog {
       knobs: applied,
       hits: hits,
       screenshot: picture,
-    );
-  });
-
-  /// The tree, and the ids under one point of it.
-  ///
-  /// Both from one guest, because they have to agree: an id means a position
-  /// in a particular tree, and a hit resolved against a second reading of it
-  /// would be answering about a tree the caller was never shown.
-  Future<(InspectTree, List<String>)> hitTest({
-    required String entryId,
-    required double x,
-    required double y,
-    CaptureViewport viewport = CaptureViewport.panel,
-    Map<String, String> knobs = const {},
-    Map<String, String> axes = const {},
-  }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
-    if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
-    if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
-    return (
-      await guest.settledTree(entryId),
-      await guest.settledHitTest(entryId, x, y),
     );
   });
 }
@@ -705,16 +565,23 @@ class _GuestSession {
     required String hostPath,
     required String assetsDir,
     required String icuData,
-    required String workDir,
+    required String name,
     required CaptureViewport viewport,
   }) async {
-    // Not under [workDir]: a unix socket path is capped at 104 bytes, and a
-    // build directory inside a worktree already spends most of that. The
-    // derived name keeps two concurrent captures from colliding.
-    var key = sha1.convert(utf8.encode(workDir)).toString().substring(0, 12);
+    // Keyed by the daemon session, like the GUI's `g-<name>.sock` — the run
+    // directory is shared by every project on the machine, so anything less
+    // unique means one capture deletes another's socket mid-launch. An earlier
+    // version hashed the work directory, which is the *same* directory for
+    // every capture on the machine. Not under the build directory: a unix
+    // socket path is capped at 104 bytes, and a build directory inside a
+    // worktree already spends most of that.
     var socketPath = checkSocketPath(
-      p.join(flutterwareRunDir(), 'shot-$key.sock'),
+      p.join(flutterwareRunDir(), 'shot-$name.sock'),
     );
+    // The frame scratch gets the same key for the same reason: every capture
+    // used to write one shared `screenshot.rawframe`, and two concurrent
+    // captures swapped frames.
+    var workDir = p.join(flutterwareRunDir(), 'cap-$name');
     var socket = File(socketPath);
     if (socket.existsSync()) socket.deleteSync();
     var server = await ServerSocket.bind(
@@ -722,44 +589,63 @@ class _GuestSession {
       0,
     );
 
-    var guest = await Process.start(hostPath, [
-      assetsDir,
-      icuData,
-      socketPath,
-      '${viewport.width}',
-      '${viewport.height}',
-    ]);
-    var vmServiceUri = Completer<String>();
-    guest.stdout
-        .transform(const SystemEncoding().decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
-          var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
-          if (match != null && !vmServiceUri.isCompleted) {
-            vmServiceUri.complete(match.group(1));
-          }
-        });
-    unawaited(guest.stderr.drain<void>());
+    Process? guest;
+    try {
+      guest = await Process.start(hostPath, [
+        assetsDir,
+        icuData,
+        socketPath,
+        '${viewport.width}',
+        '${viewport.height}',
+      ]);
+      var vmServiceUri = Completer<String>();
+      guest.stdout
+          .transform(const SystemEncoding().decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+            var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
+            if (match != null && !vmServiceUri.isCompleted) {
+              vmServiceUri.complete(match.group(1));
+            }
+          });
+      unawaited(guest.stderr.drain<void>());
 
-    var connected = await Future.any<Object?>([server.first, guest.exitCode]);
-    if (connected is! Socket) {
-      throw StateError('the guest exited before connecting');
+      var connected = await Future.any<Object?>([server.first, guest.exitCode]);
+      if (connected is! Socket) {
+        throw StateError('the guest exited before connecting');
+      }
+
+      // Raced and bounded like the connect above: a guest that binds its
+      // socket and then dies — or whose stdout stops matching the scrape —
+      // would otherwise hang this await forever with the process orphaned.
+      var announced = await Future.any<Object?>([
+        vmServiceUri.future,
+        guest.exitCode,
+      ]).timeout(const Duration(seconds: 30));
+      if (announced is! String) {
+        throw StateError('the guest exited before announcing its VM service');
+      }
+
+      var session = _GuestSession._(
+        guest,
+        connected,
+        server,
+        FrameReader(),
+        await GuestVmService.connect(announced),
+        workDir,
+      );
+      connected.listen(session._onData);
+      // Argv carried the buffer size; this carries what the buffer *means*. The
+      // ratio and the safe areas have no other way in, and without them a phone
+      // capture is a correctly-sized picture of the wrong layout.
+      session._resize(viewport);
+      return session;
+    } catch (_) {
+      // Whatever failed above, nothing owns the guest yet.
+      guest?.kill();
+      await server.close();
+      rethrow;
     }
-
-    var session = _GuestSession._(
-      guest,
-      connected,
-      server,
-      FrameReader(),
-      await GuestVmService.connect(await vmServiceUri.future),
-      workDir,
-    );
-    connected.listen(session._onData);
-    // Argv carried the buffer size; this carries what the buffer *means*. The
-    // ratio and the safe areas have no other way in, and without them a phone
-    // capture is a correctly-sized picture of the wrong layout.
-    session._resize(viewport);
-    return session;
   }
 
   void _resize(CaptureViewport viewport) => _connection.add(
@@ -1048,5 +934,13 @@ class _GuestSession {
     await _connection.close();
     _guest.kill();
     await _server.close();
+    // Frames delete themselves as they are read; this picks up the directory,
+    // which would otherwise accumulate one empty `cap-<session>` per capture.
+    try {
+      Directory(_workDir).deleteSync(recursive: true);
+    } on FileSystemException {
+      // Housekeeping only — a frame still being written wins, and loses
+      // nothing but an empty directory.
+    }
   }
 }

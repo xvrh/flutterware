@@ -23,6 +23,15 @@ import 'protocol.dart';
 /// Flutter app is the app binary, so compiling in-process relaunched the app
 /// recursively. `FrontendServer` takes an explicit executable, so that class of
 /// bug is gone and no longer the reason for anything here.)
+/// The shape of [CompilerDaemonClient.connect], for callers that take the
+/// connect as a parameter so a test can hold it open.
+typedef DaemonConnector =
+    Future<(CompilerDaemonClient, DaemonReady)> Function({
+      required String dartExecutable,
+      required DaemonConfig config,
+      void Function(String)? onLog,
+    });
+
 class CompilerDaemonClient {
   CompilerDaemonClient._(this._socket, this.address, this._onLog) {
     _lines = _socket

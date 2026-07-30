@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutterware/ui_catalog_guest.dart';
 
 import '../address/address_scope.dart';
 import '../ui/design/design.dart';

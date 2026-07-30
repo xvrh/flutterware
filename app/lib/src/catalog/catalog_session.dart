@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutterware/ui_catalog_guest.dart';
 import 'package:path/path.dart' as p;
 
 import '../embedder/embedded_engine.dart';
@@ -171,6 +171,7 @@ class CatalogSession extends ChangeNotifier {
     required this.projectRoot,
     this.worktreeRoot,
     this.roots = const ['demo'],
+    this.connectToDaemon = CompilerDaemonClient.connect,
   }) {
     // Forwarded, so a renderer has one thing to listen to.
     browsing.addListener(notifyListeners);
@@ -215,6 +216,12 @@ class CatalogSession extends ChangeNotifier {
   /// ui_catalog inspect --tree` prints, which is what lets you paste one where
   /// the other was expected. Falls back to [projectRoot] when nothing said.
   final String? worktreeRoot;
+
+  /// How [start] reaches a daemon. [CompilerDaemonClient.connect] outside of
+  /// tests, which cannot afford the snapshot compile and process it spawns —
+  /// and the dispose-during-connect window can only be held open by a connect
+  /// a test controls.
+  final DaemonConnector connectToDaemon;
 
   /// What a path shown in the panel is measured against.
   String get displayRoot => worktreeRoot ?? projectRoot;
@@ -859,7 +866,7 @@ class CatalogSession extends ChangeNotifier {
     // behind a spinner, and the screen has nothing else on it.
     _busy('building', tick: true);
     try {
-      var (daemon, ready) = await CompilerDaemonClient.connect(
+      var (daemon, ready) = await connectToDaemon(
         dartExecutable: p.join(flutterSdkRoot, 'bin', 'dart'),
         // Through the shared builder, so this panel and `fw run ui_catalog`
         // arrive at the same socket. See [DaemonConfig.forPackage] for what
@@ -872,6 +879,14 @@ class CatalogSession extends ChangeNotifier {
         ),
         onLog: (line) => debugPrint('[catalog] $line'),
       );
+      if (_disposed) {
+        // Disposed while connecting — which spans the cold compile, i.e.
+        // exactly when a config reload tears the plugin graph down. [dispose]
+        // ran and closed a null; the client the await just produced is ours,
+        // and leaked it holds the shared daemon's idle reaper open forever.
+        unawaited(daemon.close());
+        return;
+      }
       _daemon = daemon;
       coldCompile = ready.coldCompile;
       entries = ready.entries;
@@ -925,9 +940,15 @@ class CatalogSession extends ChangeNotifier {
       await engine.start(width: width, height: height);
       if (_disposed) return;
 
-      var vmService = _vmService = await GuestVmService.connect(
-        await engine.vmServiceUri,
-      );
+      var uri = await engine.vmServiceUri;
+      var vmService = await GuestVmService.connect(uri);
+      if (_disposed) {
+        // Same shape as the connect above: [dispose] closed a null, so the
+        // connection this await produced is ours to close.
+        unawaited(vmService.close());
+        return;
+      }
+      _vmService = vmService;
       _inspect = InspectClient(
         vmService,
         patience: InspectPatience.live,
@@ -943,16 +964,13 @@ class CatalogSession extends ChangeNotifier {
       }
       // Announced only now: a URI published before the service answers is a
       // URI that fails to connect. From here on `fw` and an agent can read the
-      // entry on screen rather than rendering their own copy of it.
+      // entry on screen rather than rendering their own copy of it. No await
+      // between the disposed check above and this publish, so a session that
+      // publishes is one whose [dispose] is still to come and will clear it.
       LiveSession.publish(
-        LiveSession(
-          projectRoot: projectRoot,
-          vmServiceUri: await engine.vmServiceUri,
-          pid: pid,
-        ),
+        LiveSession(projectRoot: projectRoot, vmServiceUri: uri, pid: pid),
       );
       _published = true;
-      if (_disposed) return;
 
       selected = first;
       // [active] is what the guest actually holds. A demo that did not compile

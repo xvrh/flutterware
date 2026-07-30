@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutterware/ui_catalog_guest.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';

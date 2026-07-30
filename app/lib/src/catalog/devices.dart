@@ -1,16 +1,13 @@
 /// The device vocabulary an address may use, in **plain Dart**.
 ///
 /// Deliberately free of `device_frame`, and by extension of Flutter. `fw` and
-/// MCP link this — they have to validate `--device` and render a capture at the
-/// right size — and they are compiled with `dart compile exe`, where
-/// `package:flutter` cannot load at all. The panel's own frame drawing needs
-/// the real `DeviceInfo`, and that lives next door in `catalog_devices.dart`,
-/// which maps these ids onto it.
+/// MCP link this — they have to validate `--device` and render a capture at
+/// the right size — and their entry points must never reach `package:flutter`
+/// (`entry_point_purity_test.dart` is what holds that).
 ///
-/// So the numbers here are a copy, and a copy is a thing that drifts. They are
-/// checked against `device_frame`'s own by a test rather than trusted, which is
-/// the same bargain as anywhere else: a vocabulary enforced apart from where it
-/// is defined is a vocabulary that is quietly wrong.
+/// This is the **only** list of measurements. The panel's silhouette is built
+/// from these same numbers by `catalog_devices.dart`, through `device_frame`'s
+/// generic builders — see `deviceFrameFor` for the second list this retired.
 library;
 
 /// What shape of thing a device is.

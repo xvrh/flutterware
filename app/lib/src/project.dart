@@ -8,7 +8,6 @@ import 'icon/model/service.dart';
 import 'overview/service.dart';
 import 'package_ref.dart';
 import 'test_runner/model/service.dart';
-import 'ui_catalog/service/service.dart';
 import 'utils/async_value.dart';
 import 'utils/value_stream.dart';
 
@@ -34,7 +33,6 @@ class Project extends PackageRef {
   late final icons = IconService(this);
   late final dependencies = DependenciesService(this);
   late final drawing = DrawingService(this);
-  late final uiCatalog = UICatalogService(this);
 
   Project(super.context, super.path, super.flutterSdkPath);
 

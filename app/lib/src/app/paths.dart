@@ -5,4 +5,3 @@ const themes = 'themes';
 const runs = 'runs';
 const icon = 'icon';
 const drawing = 'drawing';
-const uiCatalog = 'ui-catalog';
