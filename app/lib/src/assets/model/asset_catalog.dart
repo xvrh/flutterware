@@ -23,7 +23,9 @@ import 'package:yaml/yaml.dart';
 /// `PluginCore.computeAll`'s budget, so every surface can call it freely.
 ///
 /// Not yet handled, and absent rather than half-done: `flavors:` on an asset
-/// entry, `transformers:`, and `.lottie` archives.
+/// entry and `.lottie` archives. `transformers:` are *reported*, not run —
+/// see [AssetProblemKind.unsupportedTransformer] and the 2026-07-30
+/// transformers spike for what running them would cost.
 class AssetCatalog {
   AssetCatalog._({
     required this.assets,
@@ -298,7 +300,19 @@ enum AssetProblemKind {
   malformedDeclaration('Not a path.'),
   missingFontFile('Font file declared, and not on disk.'),
   malformedFontEntry('Font entry is unusable and was dropped.'),
-  unreadablePubspec('The pubspec could not be parsed.');
+  unreadablePubspec('The pubspec could not be parsed.'),
+
+  /// The asset still resolves — to the *untransformed* file, which is the
+  /// point of reporting it: a build runs `dart run <package> --input --output`
+  /// over these bytes and ships the result, so what the catalog's guest
+  /// renders is not what the app would. Reported rather than half-run: the
+  /// transformers spike (2026-07-30) measured ~0.3s per asset per run, and
+  /// until the bundle builder runs them for real, an honest wrong-bytes
+  /// warning beats a silent one.
+  unsupportedTransformer(
+    'Declared with transformers, which the catalog '
+    'does not run — its bytes are served untransformed.',
+  );
 
   const AssetProblemKind(this.summary);
 
@@ -426,7 +440,22 @@ class _Resolver {
         if (entry is String) {
           _addAsset(packageRoot, entry, packageName);
         } else if (entry is YamlMap && entry['path'] is String) {
-          _addAsset(packageRoot, entry['path'] as String, packageName);
+          var path = entry['path'] as String;
+          _addAsset(packageRoot, path, packageName);
+          if (entry['transformers'] case YamlList transformers
+              when transformers.isNotEmpty) {
+            problems.add(
+              AssetProblem(
+                kind: AssetProblemKind.unsupportedTransformer,
+                package: packageName,
+                packageRoot: packageRoot,
+                declaration: path,
+                detail:
+                    'Transformed by '
+                    '${transformers.map(_transformerName).join(', then ')}.',
+              ),
+            );
+          }
         } else {
           problems.add(
             AssetProblem(
@@ -445,6 +474,14 @@ class _Resolver {
       _addFonts(packageRoot, declaredFonts, packageName);
     }
   }
+
+  /// `{package: name, args: […]}` in the manifest, or a bare string; either
+  /// way the package is the name worth reporting.
+  static String _transformerName(Object? transformer) => switch (transformer) {
+    YamlMap map when map['package'] is String => map['package'] as String,
+    String name => name,
+    _ => '$transformer',
+  };
 
   /// A declaration is either a file or, when it ends in `/`, every file
   /// **directly** inside that directory.

@@ -467,6 +467,30 @@ flutter:
     });
   });
 
+  test('a transformed asset resolves, and says its bytes are wrong', () async {
+    // A build runs `dart run <package> --input --output` over the file and
+    // ships the result; the catalog serves the source bytes. Both facts are
+    // reported: the asset resolves — the inspector can still show it — and
+    // the problem says what a guest render of it is *not*.
+    write('app/pubspec.yaml', '''
+name: app
+flutter:
+  assets:
+    - path: assets/icons/check.svg
+      transformers:
+        - package: vector_graphics_compiler
+''');
+    write('app/assets/icons/check.svg', '<svg/>');
+
+    var catalog = await resolve();
+
+    expect(catalog.byKey.keys, ['assets/icons/check.svg']);
+    var problem = catalog.problems.single;
+    expect(problem.kind, AssetProblemKind.unsupportedTransformer);
+    expect(problem.declaration, 'assets/icons/check.svg');
+    expect(problem.detail, contains('vector_graphics_compiler'));
+  });
+
   group('parseScale', () {
     test('reads a density directory, long form and short', () {
       expect(AssetCatalog.parseScale('assets/2.0x/foo.png'), 2.0);
