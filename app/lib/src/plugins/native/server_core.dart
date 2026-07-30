@@ -368,4 +368,25 @@ class TrackedServer {
   void dispose() => markStopped();
 }
 
+/// Normalized query → occurrence count, for queries repeated at least
+/// [threshold] times within one request's correlated events — the N+1 shape.
+///
+/// Counts on [normalizeSql]'s output because the N+1 queries differ precisely
+/// in their literals (spec decision 12). Lives on the core side so the badge
+/// the panel draws and whatever `fw` reports later are the same computation.
+Map<String, int> repeatedQueries(
+  Iterable<ServerEvent> caused, {
+  int threshold = 3,
+}) {
+  var counts = <String, int>{};
+  for (var event in caused) {
+    if (event.channel != 'sql') continue;
+    var query = event.payload['query'];
+    if (query is! String) continue;
+    counts.update(normalizeSql(query), (n) => n + 1, ifAbsent: () => 1);
+  }
+  counts.removeWhere((_, count) => count < threshold);
+  return counts;
+}
+
 PluginCore serverCoreFactory(PluginHost host) => ServerCore(host);
