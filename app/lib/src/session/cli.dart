@@ -277,15 +277,26 @@ class FwCli {
     return init.run(quiet: quiet);
   }
 
-  /// Initializes silently when the project has not been, so no command has to
-  /// begin by refusing.
+  /// Brings the project up to whatever `init` writes, before every command
+  /// rather than once, so no command has to begin by refusing.
+  ///
+  /// **It used to skip everything when `.flutterware/sdk` existed**, which made
+  /// one artifact stand for all of them: anything `init` learned to write later
+  /// never reached a project that had run it once already, and each addition
+  /// arrived needing a migration. Every step of [ProjectInit.run] is its own
+  /// check and does nothing when its own thing is there, so that gate was the
+  /// only part of this that could go stale.
+  ///
+  /// It costs a few stats, plus one `git check-ignore` until the line is
+  /// written — 14ms against the ~3s a command already spends running the
+  /// project's config file in a subprocess.
   ///
   /// Only when the launcher told us which `dart` it used. A test driving
   /// [FwCli] directly has no launcher, and must not have its working directory
   /// written to as a side effect of calling a command.
   Future<void> _autoInit() async {
     var init = _projectInit();
-    if (init == null || init.isInitialized) return;
+    if (init == null) return;
     await init.run(quiet: true);
   }
 

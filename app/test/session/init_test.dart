@@ -32,6 +32,8 @@ void main() {
         ProcessResult(0, alreadyIgnored ? 0 : 1, '', ''),
   );
 
+  Link sdkLink() => Link(p.join(root.path, '.flutterware', 'sdk'));
+
   setUp(() {
     out = StringBuffer();
     err = StringBuffer();
@@ -131,6 +133,84 @@ void main() {
       File(p.join(root.path, 'tool', 'flutterware.dart')).readAsStringSync(),
       '// mine',
     );
+  });
+
+  group('running before every command', () {
+    // `_autoInit` no longer skips on `.flutterware/sdk` existing, so `run` is
+    // what a project meets on every invocation rather than once. These are the
+    // properties that makes safe.
+
+    test('restores what init writes after it is removed', () async {
+      // The bug the gate caused, in the shape it will keep taking: something
+      // init writes is added later — or deleted — and a project that ran once
+      // already never sees it. Nothing here should need a migration.
+      await initWith().run();
+      File(p.join(root.path, '.mcp.json')).deleteSync();
+      File(p.join(root.path, 'tool', 'flutterware.dart')).deleteSync();
+
+      await initWith().run();
+
+      expect(File(p.join(root.path, '.mcp.json')).existsSync(), isTrue);
+      expect(
+        File(p.join(root.path, 'tool', 'flutterware.dart')).existsSync(),
+        isTrue,
+      );
+    });
+
+    test('stops asking git once the line is written', () async {
+      // The one part of a run that spawns a process. It has to fall out of the
+      // steady state, or every command pays for an answer that cannot change.
+      var gitCalls = 0;
+      ProjectInit counted() => ProjectInit(
+        root: root.path,
+        dartExecutable: p.join(sdk.path, 'bin', 'dart'),
+        out: out,
+        err: err,
+        runProcess: (_, _, {workingDirectory}) async {
+          gitCalls++;
+          return ProcessResult(0, 1, '', '');
+        },
+      );
+
+      // Quiet, because that is what runs before every command — the `.mcp.json`
+      // "is it hidden" note asks git too, and only when reporting to a human.
+      await counted().run(quiet: true);
+      expect(gitCalls, 1, reason: 'the first run has to ask');
+
+      await counted().run(quiet: true);
+      expect(gitCalls, 1, reason: 'the second reads .gitignore instead');
+    });
+
+    test('leaves the sdk link in place when nothing moved', () async {
+      await initWith().run();
+      var before = sdkLink().statSync().changed;
+
+      await initWith().run();
+
+      // Rewritten means deleted and recreated, which is a window with no link
+      // at all for anything reading it concurrently.
+      expect(sdkLink().statSync().changed, before);
+    });
+
+    test('still repoints the sdk link when the SDK changes', () async {
+      await initWith().run();
+      var other = fakeSdk('fw-init-moved');
+      addTearDown(() => other.deleteSync(recursive: true));
+
+      await ProjectInit(
+        root: root.path,
+        dartExecutable: p.join(other.path, 'bin', 'dart'),
+        out: out,
+        err: err,
+        runProcess: (_, _, {workingDirectory}) async =>
+            ProcessResult(0, 1, '', ''),
+      ).run();
+
+      expect(
+        p.canonicalize(sdkLink().resolveSymbolicLinksSync()),
+        p.canonicalize(other.resolveSymbolicLinksSync()),
+      );
+    });
   });
 
   test('is idempotent, and says nothing the second time', () async {

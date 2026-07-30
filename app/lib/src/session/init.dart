@@ -59,7 +59,11 @@ class ProjectInit {
   Directory get directory => Directory(p.join(root, '.flutterware'));
   Link get sdkLink => Link(p.join(directory.path, 'sdk'));
 
-  /// True when this project has been initialized — what the walker tests for.
+  /// True when `.flutterware/sdk` is there — what the walker tests for.
+  ///
+  /// Deliberately not what decides whether [run] happens. It names one
+  /// artifact, and standing it in for "everything init writes" is what used to
+  /// keep later additions out of any project that had run once already.
   bool get isInitialized => sdkLink.existsSync();
 
   Future<int> run({bool quiet = false}) async {
@@ -115,7 +119,13 @@ class ProjectInit {
         ? p.join('..', '.fvm', 'flutter_sdk')
         : sdk.root;
 
-    if (sdkLink.existsSync()) sdkLink.deleteSync();
+    // Leave an unchanged link alone. This runs before every command now, and
+    // delete-then-create is a write where nothing has moved — briefly, a
+    // window with no link at all.
+    if (sdkLink.existsSync()) {
+      if (sdkLink.targetSync() == target) return target;
+      sdkLink.deleteSync();
+    }
     sdkLink.createSync(target);
     return target;
   }
@@ -161,19 +171,22 @@ class ProjectInit {
   /// Appending a redundant line to a tracked file is worse than doing nothing,
   /// hence the question first.
   Future<bool> _ensureIgnored() async {
-    if (await _isIgnoredByGit(p.join(directory.path, 'sdk'))) return false;
-
     var gitignore = File(p.join(root, '.gitignore'));
     var existing = gitignore.existsSync() ? gitignore.readAsStringSync() : '';
 
     // Our own line may already be there while git still says otherwise — a
     // `!.flutterware/` later in the file, a global excludes file, or no git at
     // all. Appending a second copy every run is the one outcome to rule out.
+    //
+    // Asked before git, not after: this runs before every command, the answer
+    // stays true once it is true, and reading a file beats spawning a process.
     if (const LineSplitter()
         .convert(existing)
         .any((line) => line.trim() == _ignoreEntry)) {
       return false;
     }
+
+    if (await _isIgnoredByGit(p.join(directory.path, 'sdk'))) return false;
     gitignore.writeAsStringSync(
       '${existing.isEmpty || existing.endsWith('\n') ? existing : '$existing\n'}'
       '\n# flutterware: recorded SDK and build output, machine-specific.\n'
