@@ -40,6 +40,7 @@ void main() {
       'flutterware.dependencies',
       'flutterware.assets',
       'flutterware.ui_catalog',
+      'flutterware.splash',
     ]);
   });
 
@@ -53,7 +54,9 @@ void main() {
     );
     try {
       expect(bare.cores, everyElement(isA<MissingPluginCore>()));
-      expect(bare.cores, hasLength(3));
+      // One per declaration, same as a real build — a registry with nothing in
+      // it must not shrink the list, which is the whole point.
+      expect(bare.cores, hasLength(session.cores.length));
       for (var core in bare.cores) {
         expect(core.report.status.isEmpty, isFalse);
       }
@@ -75,7 +78,7 @@ void main() {
   test('reports are readable without any subscriber', () {
     // The rule that makes it safe for the sidebar, `fw` and an agent to call
     // this for every plugin: a pure read of cached state.
-    expect(session.reports, hasLength(3));
+    expect(session.reports, hasLength(session.cores.length));
     expect(session.reports.first.id, dependenciesPluginId);
   });
 

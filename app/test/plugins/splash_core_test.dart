@@ -95,8 +95,13 @@ ${withSplashDependency ? '  flutter_native_splash: ^2.4.0' : '  flutter_lints:'}
     test('a project with no config says so rather than erroring', () async {
       var c = core();
       await c.computeAll();
-      expect(c.report.status.tone, Tone.neutral);
-      expect(c.report.status.message, contains('No splash configured'));
+      // The package row says it; the plugin row stays quiet.
+      expect(c.report.status, Status.none);
+      expect(
+        c.report.children.single.status.message,
+        contains('No splash configured'),
+      );
+      expect(c.report.badge.isEmpty, isTrue);
     });
 
     test('reads flutter_native_splash.yaml', () async {
@@ -199,7 +204,11 @@ flutter_native_splash:
       var unknown = found.singleWhere((p) => p.key == 'colour_dark');
       expect(unknown.blocksGeneration, isTrue);
       expect(unknown.tone, 'error');
-      expect(c.report.status.message, contains('stop generation'));
+      // Counts live on the package row, not repeated on the plugin's own; the
+      // plugin row carries only a badge.
+      expect(c.report.status, Status.none);
+      expect(c.report.children.single.status.message, contains('blocking'));
+      expect(c.report.badge.tone, Tone.error);
     });
 
     test('a missing image stops generation', () async {
@@ -584,11 +593,15 @@ flutter_native_splash:
       expect(text, contains('flutter_native_splash.yaml'));
     });
 
-    test('a package with nothing loaded reports "not computed"', () {
+    test('a package with nothing loaded says nothing, and starts nothing', () {
       // The report must never start work — it is read for every plugin on every
-      // sidebar paint.
+      // sidebar paint. It must also not *narrate* that: "not computed" is the
+      // resting state of every plugin until you click it, so announcing it drew
+      // the eye to the one thing that had not happened.
       var c = core();
-      expect(c.report.status.message, 'Not computed');
+      expect(c.report.status, Status.none);
+      expect(c.report.children.single.status, Status.none);
+      expect(c.report.badge.isEmpty, isTrue);
       expect(c.scanFor('.'), isNull);
     });
   });

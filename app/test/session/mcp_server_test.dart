@@ -9,6 +9,19 @@ import 'package:flutterware_app/src/session/mcp_server.dart';
 import 'package:flutterware_app/src/shell/repo_layout.dart';
 import 'package:stream_channel/stream_channel.dart';
 
+/// What `tool/flutterware.dart` declares, in declared order.
+///
+/// One list, read by both tests that care: one checks the ids a client gets,
+/// the other that a build with no cores still reports every one of them. Two
+/// literals would mean the second silently stops covering the plugin the first
+/// just gained.
+const _declaredPlugins = [
+  'flutterware.dependencies',
+  'flutterware.assets',
+  'flutterware.ui_catalog',
+  'flutterware.splash',
+];
+
 /// Drives the server through a real MCP client over an in-memory channel, so
 /// what is asserted is what a client actually receives — tool schemas
 /// included — rather than the shape of a Dart method.
@@ -75,11 +88,7 @@ void main() {
     var payload = _decode(result);
 
     var plugins = (payload['plugins']! as List).cast<Map<String, Object?>>();
-    expect(plugins.map((p) => p['id']), [
-      'flutterware.dependencies',
-      'flutterware.assets',
-      'flutterware.ui_catalog',
-    ]);
+    expect(plugins.map((p) => p['id']), _declaredPlugins);
     // An MCP call starts cold, so a status that reported only cached state
     // would say "not computed" for every package on every call — the config
     // file read back rather than an answer. Both cores load first.
@@ -120,7 +129,9 @@ void main() {
       ),
     );
     var plugins = (payload['plugins']! as List).cast<Map<String, Object?>>();
-    expect(plugins, hasLength(3));
+    // One per declaration, whatever the config declares — a registry with
+    // nothing in it must not shrink the list, which is the whole point.
+    expect(plugins, hasLength(_declaredPlugins.length));
     for (var plugin in plugins) {
       expect(
         (plugin['status']! as Map)['message'],
