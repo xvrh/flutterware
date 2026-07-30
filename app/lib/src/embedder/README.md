@@ -20,6 +20,16 @@ This builds and spawns the guest, then shows its live output. A macOS app
 launched by `flutter run` has no usable environment or working directory, so
 the `app/` package root and Flutter SDK root are passed via `--dart-define`.
 
+## Capturing a panel that shows a guest
+
+`EmbeddedEngine.capture` asks the live guest for its next composited frame, as
+a raw BGRA file `decodeRawFrame` reads. It exists because **the guest is not in
+the host's layer tree**: `Texture(textureId:)` is resolved by the platform
+compositor at raster time, so `RenderRepaintBoundary.toImage()` of the window
+returns a fully transparent rectangle where the panel is. A picture of the
+window *and* its guest is two captures composited — measured, see decision 5 of
+`docs/superpowers/specs/2026-07-27-gui-cli-mcp-architecture.md`.
+
 ## Run the headless smoke
 
 ```sh

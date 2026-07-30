@@ -26,6 +26,7 @@ cd app && dart run bin/fw.dart <command>
 | `init` | record what this project needs, once |
 | `app [--release] [--json]` | open the flutterware GUI |
 | `mcp` | serve this project to an agent, over stdio |
+| `capture [<address>] -o <file> [--size=WxH] [--theme=light|dark] [--pixel-ratio=N] [--timeout=<seconds>]` | photograph the GUI at an address |
 | `help [<command>]` | this, or one command in detail |
 
 `-v` on any command shows the output of whatever it has to build, instead of

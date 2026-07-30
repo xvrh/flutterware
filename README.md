@@ -148,6 +148,17 @@ From the CLI or from an agent, those same entries can be screenshotted,
 inspected (widget tree, layout, what a build printed, what is under a point),
 and audited in bulk for anything that fails to compile or render.
 
+![The UI catalog panel, showing a Buttons demo rendered live beside the entry
+tree and the inspection pane](doc/screenshots/ui_catalog.png)
+
+The preview is a real Flutter engine in its own process, not a re-render of
+your widget in the tool's. A demo can pin its own canvas — a phone, a tablet —
+and get that device's size and pixel ratio from `MediaQuery`, because the
+guest's window *is* the device screen:
+
+![The same catalog showing a demo pinned to an iPhone 13 canvas, drawn inside a
+device frame](doc/screenshots/ui_catalog_device.png)
+
 `Demo` extends Flutter's own `Preview`, so one annotation serves both the
 flutterware catalog and Flutter's widget previewer.
 
@@ -158,6 +169,9 @@ flutterware catalog and Flutter's widget previewer.
 Every dependency of every declared package, with the resolved version, the
 constraint that asked for it, and where pub got it from.
 
+![The dependencies table, listing each package with its type, origin,
+constraint and resolved version](doc/screenshots/dependencies.png)
+
 ### Assets
 
 What a package's bundle actually resolves to, what each asset weighs and which
@@ -165,12 +179,18 @@ densities exist, plus an audit for declarations that resolve to nothing, files
 a directory declaration never reaches, gaps in a density ladder, duplicates and
 oversized rasters.
 
+![The assets panel, listing every asset with its size and variants, above two
+flagged problems](doc/screenshots/assets.png)
+
 ### Native splash
 
 Resolves your `flutter_native_splash` config the way the platform will —
 per surface (including Android 12+, which reads different keys), per theme,
 per flavor — tells you which config key won each value, and can run the
 generator.
+
+![The splash previewer, showing the same config rendered for Android, Android
+12+, iOS and web in both themes](doc/screenshots/splash.png)
 
 ## Libraries
 
@@ -211,3 +231,16 @@ Open GitHub issues and pull requests with your ideas :-)
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), and [CLAUDE.md](CLAUDE.md) for how the
 repo is laid out and how the launch flow works.
+
+The screenshots above are generated, not taken by hand — flutterware
+photographs itself:
+
+```sh
+dart tool/screenshots.dart
+```
+
+Each one is a `fw capture` of the GUI at a fixed size, density and theme, so
+re-running it leaves the files untouched unless what they show has actually
+changed. See [tool/screenshots.dart](tool/screenshots.dart) for the list, and
+`dart run flutterware help capture` for how a panel can tell it is being
+photographed.

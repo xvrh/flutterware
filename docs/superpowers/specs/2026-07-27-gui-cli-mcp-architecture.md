@@ -276,6 +276,46 @@ uninstalled:
 - `reveal` with no viewer attached is a **normal outcome**, not an error. The
   adapter reports "no viewer attached"; it is never why a task fails.
 
+**Measured 2026-07-30: `viewer.capture({window})` is two captures composited,
+not one.** The table above leaves `window`, `panel` and `guest` looking like
+three framings of one screenshot. They are not, because a panel showing a guest
+is **not in the host's layer tree**. `catalog_view.dart` renders it as
+`Texture(textureId:)`, an external texture the platform compositor resolves at
+raster time; `RenderRepaintBoundary.toImage()` rasterizes a layer tree
+offscreen. A throwaway probe on macOS (chrome + border around a live guest, dpr
+2.0, texture rect 1172×980 physical) confirmed the consequence: of 71785 samples
+inside that rect, **1 distinct colour and 0 with alpha above zero**. Fully
+transparent — the texture contributes nothing.
+
+So `window` is:
+
+1. `toImage()` for everything the host drew, which comes back with a hole;
+2. the guest's own frame, over the embedder's existing `kMsgCapture` — the
+   same message the headless catalog uses, aimed at the guest already on
+   screen. This is now `EmbeddedEngine.capture`, ~20 lines, because the C host
+   already armed a capture on request and only the Dart side was missing;
+3. the second pasted into the first at the `Texture`'s rect, from its
+   `RenderObject`.
+
+Both frames came back at 1172×980 in the probe, so the paste is 1:1 with no
+resampling, and the transparent hole means no clearing step. Worth taking
+deliberately: **capture the guest at its own scale, not the host's.** The frame
+is the guest's, so a doc screenshot can ask for 2× guest pixels inside a 1×
+host raster.
+
+**The OS-level alternative is rejected.** macOS `ScreenCaptureKit` captures the
+real composited result and would need none of the above, at the cost of a
+Screen Recording permission prompt, a window that must be visible and
+unoccluded, and screen-scale dependence. That is a bad fit for `viewer.capture`
+(the point of which is *"no, reads only"*) and a worse one for an unattended
+script or CI. The composite needs no permission and does not care whether the
+window is on screen.
+
+Not established: this is macOS. Linux and Windows external-texture paths could
+differ, though the reason is the same on all three. And the probe used the
+fixed harness scene, not a catalog entry — the mechanism is identical, but no
+catalog-specific layout was exercised.
+
 ### 6. One session library; `fw` and MCP are adapters over it
 
 A pure-Dart `flutterware_session` that both `bin/fw` and the MCP server link.

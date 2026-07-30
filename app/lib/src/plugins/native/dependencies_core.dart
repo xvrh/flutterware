@@ -73,6 +73,22 @@ class DependenciesCore extends PluginCore {
   Snapshot<Dependencies>? _cached(String path) =>
       _services.containsKey(path) ? _services[path]!.dependencies.value : null;
 
+  /// Whether anything being watched is still resolving.
+  ///
+  /// **Tracked, not declared.** [track] is what the panel calls on mount, so
+  /// this answers about what someone is actually looking at rather than about
+  /// every package in the workspace — and asking about an untracked package
+  /// would build its service, which is the whole thing [_cached] avoids.
+  ///
+  /// The same condition `_status` reports as "loading…", read from the same
+  /// snapshots, so the sidebar and a window capture can never disagree about
+  /// whether this panel is ready.
+  bool get isLoading => _tracked.keys.any((path) {
+    var snapshot = _cached(path);
+    return snapshot == null ||
+        (snapshot.data == null && snapshot.error == null);
+  });
+
   @override
   PluginReport get report {
     var known = <String, Snapshot<Dependencies>>{};

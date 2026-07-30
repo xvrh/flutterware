@@ -1,8 +1,11 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/src/log_client.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
+
+import 'src/capture/capture_request.dart';
 import 'src/constants.dart';
 import 'src/context.dart';
 import 'src/plugins/manifest_loader.dart';
@@ -52,7 +55,18 @@ void main() async {
     ),
   );
 
-  runApp(ShellApp(shell));
+  // A capture run is the same window, driven and then closed. It is set up
+  // before `runApp` only so the boundary exists in the first frame.
+  var capture = CaptureRequest.fromEnvironment();
+  var captureKey = capture == null ? null : GlobalKey();
+
+  runApp(
+    ShellApp(
+      shell,
+      captureKey: captureKey,
+      framing: capture?.framing ?? const CaptureFraming(),
+    ),
+  );
 
   // No welcome banner. It used to be printed here, and this process has no
   // terminal to print it to — `fw` owns the one it inherits, knows the plugin
@@ -62,4 +76,12 @@ void main() async {
   // After the first frame: discovery runs a subprocess, and the shell renders
   // its empty state until it resolves rather than holding up the window.
   await shell.start(projectPath);
+
+  // Everything above is the ordinary launch, unchanged. A capture only ever
+  // happens after it, against a window that came up exactly as a human's does
+  // — which is the whole point of photographing this process rather than
+  // rendering the panels somewhere headless.
+  if (capture != null) {
+    exit(await capture.run(shell, captureKey!, appContext.settle));
+  }
 }

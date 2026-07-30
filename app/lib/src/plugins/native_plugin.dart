@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
+import '../capture/settle.dart';
 import 'plugin_core.dart';
 import 'plugin_host.dart';
 
@@ -28,7 +29,8 @@ import 'plugin_host.dart';
 /// action the other two surfaces reach on their own — which is also why that
 /// dialog can print the equivalent command. A panel holding behaviour its core
 /// does not have is the drift this arrangement exists to prevent.
-abstract class NativePlugin<C extends PluginCore> extends ChangeNotifier {
+abstract class NativePlugin<C extends PluginCore> extends ChangeNotifier
+    implements SettleSource {
   NativePlugin(this.core) {
     // `skip(1)` drops the replay. A ValueStream hands every new subscriber the
     // value that was already current, and "what it already was" is not a
@@ -47,6 +49,25 @@ abstract class NativePlugin<C extends PluginCore> extends ChangeNotifier {
   PluginHost get host => core.host;
 
   String get id => core.id;
+
+  /// What this plugin is still working on, or null when it has nothing in
+  /// flight.
+  ///
+  /// Read by a window capture, which must not photograph a panel that is still
+  /// filling in — see [SettleSource]. **Null by default, deliberately**: a
+  /// plugin that never answers is treated as settled, so the cost of not
+  /// implementing this is a picture taken slightly early rather than a capture
+  /// that never returns.
+  ///
+  /// That default is not free, and this getter exists because it was paid: the
+  /// first generated screenshot of the dependencies panel caught it mid-resolve
+  /// — an empty table under the word "loading…", reported as a success.
+  ///
+  /// Answer from the same state the panel draws from, not from a second flag.
+  /// A plugin whose idea of busy can disagree with what it renders will
+  /// eventually be photographed at exactly the moment they differ.
+  @override
+  String? get busyWith => null;
 
   /// The panel mounted when this plugin is selected. Real Flutter, no limits.
   ///

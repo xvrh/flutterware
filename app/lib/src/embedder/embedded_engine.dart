@@ -50,6 +50,19 @@ class EmbeddedEngine extends ChangeNotifier {
 
   static const _channel = MethodChannel('flutterware/embedder_texture');
 
+  /// Every engine currently backing a texture, by the id the host gave it.
+  ///
+  /// **Static, and worth defending.** A window capture finds its guests by
+  /// walking the render tree for `TextureBox`, which yields texture ids and
+  /// nothing else — the widget that built one is long out of reach by then.
+  /// Something has to turn an id back into the engine that owns it, and a
+  /// texture id is already a process-wide identifier issued by the platform
+  /// side, so a process-wide map is the same scope rather than a wider one.
+  static final _byTextureId = <int, EmbeddedEngine>{};
+
+  /// The engine behind [textureId], or null when nothing here owns it.
+  static EmbeddedEngine? withTexture(int textureId) => _byTextureId[textureId];
+
   EmbeddedEnginePhase phase = EmbeddedEnginePhase.building;
   String? errorMessage;
   int? textureId;
@@ -220,6 +233,7 @@ class EmbeddedEngine extends ChangeNotifier {
       textureId = await _channel.invokeMethod<int>('createTexture', {
         'surfaceIds': message.surfaceIds,
       });
+      if (textureId case var id?) _byTextureId[id] = this;
       phase = EmbeddedEnginePhase.running;
     } else if (message.generation != _currentGeneration) {
       await _channel.invokeMethod('updateSurfaces', {
@@ -340,14 +354,22 @@ class EmbeddedEngine extends ChangeNotifier {
     InspectLayout? crop,
     List<InspectNode> annotate = const [],
     double pixelRatio = 1,
-  }) async {
-    var image = await _capture.capture(
-      crop: crop,
-      annotate: annotate,
-      pixelRatio: pixelRatio,
-    );
-    return img.encodePng(image);
-  }
+  }) async => img.encodePng(
+    await captureImage(crop: crop, annotate: annotate, pixelRatio: pixelRatio),
+  );
+
+  /// The same frame, undecoded.
+  ///
+  /// For the one caller that is going to draw with it rather than write it out:
+  /// a window capture pastes this into the hole the guest's texture leaves in
+  /// the host's raster, and encoding a PNG just to decode it again would be the
+  /// only step in that path that did nothing.
+  Future<img.Image> captureImage({
+    InspectLayout? crop,
+    List<InspectNode> annotate = const [],
+    double pixelRatio = 1,
+  }) =>
+      _capture.capture(crop: crop, annotate: annotate, pixelRatio: pixelRatio);
 
   @override
   void dispose() {
@@ -358,10 +380,11 @@ class EmbeddedEngine extends ChangeNotifier {
     if (_conn != null && phase == EmbeddedEnginePhase.running) {
       _conn!.add(encodeMessage(const ShutdownMessage()));
     }
-    if (textureId != null) {
+    if (textureId case var id?) {
+      _byTextureId.remove(id);
       unawaited(
         _channel
-            .invokeMethod('disposeTexture', {'textureId': textureId})
+            .invokeMethod('disposeTexture', {'textureId': id})
             .catchError((_) {}),
       );
     }

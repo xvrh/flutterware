@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutterware/plugins.dart';
+import 'package:path/path.dart' as p;
 
 import '../constants.dart';
 import '../plugins/plugin_core.dart';
@@ -143,6 +144,59 @@ const fwCommands = [
         'whatever this has to build before it can answer — goes to stderr.',
   ),
   FwCommand(
+    'capture',
+    usage:
+        'capture [<address>] -o <file> [--size=WxH] [--theme=light|dark] '
+        '[--pixel-ratio=N] [--timeout=<seconds>]',
+    summary: 'photograph the GUI at an address',
+    details:
+        'Opens the GUI, goes to `<address>`, waits until nothing is still\n'
+        'working, writes a PNG and exits. No window is left behind and '
+        'nothing\nhas to be clicked, so this is what a documentation script '
+        'calls.\n'
+        '\n'
+        'Give `--size` and `--theme` for anything you intend to commit. '
+        'Without\nthem the picture is whatever size the window opened at, in '
+        "whichever\ntheme the machine's OS is set to — so the same command "
+        'produces a\ndifferent file on a different desk, and every '
+        'regeneration is a diff.\n'
+        '`--size` is the layout size, not the window: it is not bounded by '
+        'the\ndisplay, so 1600x1200 works on a laptop that cannot show it.\n'
+        '`--pixel-ratio` fixes the density the same way — `2` for the retina\n'
+        'screenshots most READMEs want, whatever screen runs the command.\n'
+        '\n'
+        'This always runs the built GUI, never `flutter run`, because it '
+        'needs\nan exit code and nobody is at the keyboard. A built GUI that '
+        'already\nexists is not rebuilt — so if you are working on the GUI '
+        'itself, pass\n`--force-compile` or you will photograph the previous '
+        'build.\n'
+        '\n'
+        'A panel knows it is being photographed — `CaptureMode.isCapturing` — '
+        'and\ndecides for itself what that means. The catalog drops its '
+        'compile and\nreload timings, because a number sampled from a clock '
+        'is a fact about\nthe run rather than about the project, and a '
+        'committed screenshot that\ncarries one is a diff on every '
+        'regeneration.\n'
+        '\n'
+        'An address names the worktree first, then the plugin, in full:\n'
+        '`fw:///<worktree>/flutterware.ui_catalog/<package>/<entry>`. The\n'
+        'worktree slot is positional, so it cannot be left out — `~` is the\n'
+        'main checkout. With no address at all it photographs the home screen\n'
+        'of the worktree you ran it in.\n'
+        '\n'
+        'What it waits for is every panel that declares itself busy: a cold\n'
+        'catalog compile is the usual one, and the guest showing the entry '
+        'that\nwas asked for rather than the one before it is part of the '
+        'test.\n'
+        '`--timeout` bounds that wait; reaching it still writes the picture '
+        'and\nsays what was still running.\n'
+        '\n'
+        'Embedded views are included. The guest renders in its own process '
+        "and\nis not in the window's layer tree, so it is captured "
+        'separately and\ncomposited in — see decision 5 of the GUI/CLI/MCP '
+        'architecture.',
+  ),
+  FwCommand(
     'help',
     usage: 'help [<command>]',
     summary: 'this, or one command in detail',
@@ -241,6 +295,7 @@ class FwCli {
           verbose: verbose,
         ),
         'mcp' => await _mcp(),
+        'capture' => await _capture(rest, json: json, verbose: verbose),
         'help' || '--help' || '-h' => _help(rest.firstOrNull),
         _ => fail('unknown command "$command". Try `fw help`.'),
       };
@@ -365,6 +420,124 @@ class FwCli {
       ),
       describeProject: _describeProject,
     ).run(forceBuild: forceBuild, release: release);
+  }
+
+  /// Opens the GUI, photographs it and lets it exit.
+  ///
+  /// **Always the built binary, never `flutter run`.** On a path dependency
+  /// `fw app` hands the terminal to `flutter run` so `r` works, and that is
+  /// exactly wrong here: this needs the *app's* exit code, and there is no
+  /// human to press anything. `release: true` and `interactive: false` are the
+  /// two lines that make an ordinary launch a scriptable one.
+  Future<int> _capture(
+    List<String> arguments, {
+    required bool json,
+    required bool verbose,
+  }) async {
+    String? output;
+    String? address;
+    String? theme;
+    double? width;
+    double? height;
+    double? pixelRatio;
+    var timeout = 180.0;
+    var argv = arguments.toList();
+    // **Needed here in a way it is not for `fw app`.** On a path dependency
+    // `fw app` runs `flutter run`, which decides for itself whether the binary
+    // is stale. This forces `release`, and a release binary that already
+    // exists is never rebuilt — so while working on the GUI itself, a capture
+    // silently photographs the previous build.
+    var forceBuild = argv.remove('--$forceCompileOption');
+    for (var i = 0; i < argv.length; i++) {
+      var argument = argv[i];
+      if (argument == '-o' || argument == '--output') {
+        if (++i >= argv.length) return fail('$argument needs a file.');
+        output = argv[i];
+      } else if (argument.startsWith('--output=')) {
+        output = argument.substring('--output='.length);
+      } else if (argument.startsWith('--size=')) {
+        var value = argument.substring('--size='.length).split('x');
+        width = value.length == 2 ? double.tryParse(value.first) : null;
+        height = value.length == 2 ? double.tryParse(value.last) : null;
+        if (width == null || height == null) {
+          return fail('--size takes <width>x<height>, as `--size=1440x900`.');
+        }
+      } else if (argument.startsWith('--pixel-ratio=')) {
+        pixelRatio = double.tryParse(
+          argument.substring('--pixel-ratio='.length),
+        );
+        if (pixelRatio == null || pixelRatio <= 0) {
+          return fail('--pixel-ratio takes a positive number, as `2`.');
+        }
+      } else if (argument.startsWith('--theme=')) {
+        theme = argument.substring('--theme='.length);
+        if (theme != 'light' && theme != 'dark') {
+          return fail('--theme takes `light` or `dark`.');
+        }
+      } else if (argument.startsWith('--timeout=')) {
+        var seconds = double.tryParse(argument.substring('--timeout='.length));
+        if (seconds == null) {
+          return fail('--timeout takes a number of seconds.');
+        }
+        timeout = seconds;
+      } else if (argument.startsWith('-')) {
+        return fail('unknown option "$argument". Try `fw help capture`.');
+      } else if (address == null) {
+        address = argument;
+      } else {
+        return fail('capture takes one address, and got a second: "$argument"');
+      }
+    }
+
+    if (output == null) {
+      return fail('capture needs somewhere to write: `-o <file>`.');
+    }
+    if (address != null && Address.tryParse(address) == null) {
+      return fail('"$address" is not an address. Try `fw help capture`.');
+    }
+
+    var appToolPath = Platform.environment[appPathEnvironmentKey];
+    var dartExecutable = Platform.environment[dartExecutableEnvironmentKey];
+    if (appToolPath == null || dartExecutable == null) {
+      return fail(
+        'capture has to be started through the launcher, which is what '
+        'knows\nwhich SDK and which copy to use:\n\n    dart run flutterware',
+      );
+    }
+    var sdk = await FlutterSdkPath.tryFind(dartExecutable);
+    if (sdk == null) {
+      return fail(
+        'no Flutter SDK above $dartExecutable.\n'
+        'Run flutterware with the `dart` from a Flutter SDK, not a standalone '
+        'one.',
+      );
+    }
+
+    return GuiLauncher(
+      appToolPath: appToolPath,
+      flutterSdk: sdk.root,
+      projectDirectory: Directory.current,
+      out: out,
+      err: err,
+      json: json,
+      verbose: verbose,
+      interactive: false,
+      extraEnvironment: {
+        captureRequestKey: jsonEncode({
+          'address': ?address,
+          'width': ?width,
+          'height': ?height,
+          'pixelRatio': ?pixelRatio,
+          'theme': ?theme,
+          // **Absolute.** The GUI is spawned with the app directory as its
+          // working directory, so a relative path here would write the
+          // screenshot into the flutterware install rather than next to the
+          // README that is going to reference it.
+          'output': p.absolute(output),
+          'settleTimeout': timeout,
+        }),
+      },
+    ).run(forceBuild: forceBuild, release: true);
   }
 
   /// What this project has, for the terminal the GUI is running in.

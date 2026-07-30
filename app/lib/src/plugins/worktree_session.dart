@@ -32,6 +32,12 @@ class WorktreeSession extends ChangeNotifier {
     : plugins = List.unmodifiable(plugins) {
     for (var plugin in this.plugins) {
       plugin.addListener(notifyListeners);
+      // Every panel, not the ones that remembered to ask. A capture must not
+      // photograph a worktree whose panels are still filling in, and which
+      // plugins can be slow is not knowable from here — `NativePlugin.busyWith`
+      // answers null unless the plugin overrides it, so this costs nothing for
+      // the ones that are always ready.
+      plugin.host.workspace.appContext.settle.add(plugin);
     }
   }
 
@@ -122,6 +128,7 @@ class WorktreeSession extends ChangeNotifier {
     // core would be drawing something already torn down.
     for (var plugin in plugins) {
       plugin.removeListener(notifyListeners);
+      plugin.host.workspace.appContext.settle.remove(plugin);
       plugin.dispose();
     }
     session.dispose();
