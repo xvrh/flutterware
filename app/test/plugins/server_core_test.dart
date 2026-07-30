@@ -157,6 +157,60 @@ void main() {
     expect(core.servers.singleWhere((s) => s.connected).events, isEmpty);
   });
 
+  test('sqlStats groups by shape, heaviest total first', () {
+    ServerEvent sql(String query, double ms) => ServerEvent(
+      channel: 'sql',
+      id: 0,
+      time: DateTime.now(),
+      payload: {'query': query, 'ms': ms},
+      isReplay: false,
+    );
+    var stats = sqlStats([
+      sql('select count(*) from posts where user_id = 1', 2),
+      sql('select count(*) from posts where user_id = 2', 3),
+      sql('select * from users', 20),
+      ServerEvent(
+        channel: 'log',
+        id: 0,
+        time: DateTime.now(),
+        payload: {'message': 'not sql'},
+        isReplay: false,
+      ),
+    ]);
+
+    expect(stats, hasLength(2));
+    expect(stats.first.normalized, 'select * from users');
+    expect(stats.first.totalMs, 20);
+    var grouped = stats.last;
+    expect(grouped.count, 2);
+    expect(grouped.totalMs, 5);
+    expect(grouped.maxMs, 3);
+    expect(
+      grouped.latest.payload['query'],
+      'select count(*) from posts where user_id = 2',
+      reason: 'explain acts on a real query, not the ?-shape',
+    );
+  });
+
+  test('explain runs inside the server and answers over the wire', () async {
+    inspector.registerHandler('sql', 'explain', (params) {
+      return {'plan': 'SCAN (${params['query']})'};
+    });
+    inspector.addEvent('sql', {'query': 'select 1', 'ms': 1.0});
+    await core.computeAll();
+    core.track();
+    await _until(() => core.servers.single.connected);
+
+    var response = await sqlCommand(core.servers.single, 'explain', 'select 1');
+    expect(response['plan'], 'SCAN (select 1)');
+
+    // No requery handler registered — the panel shows this as text.
+    await expectLater(
+      () => sqlCommand(core.servers.single, 'requery', 'select 1'),
+      throwsA(isA<ServerRequestException>()),
+    );
+  });
+
   test('track attaches, replays, and follows live events', () async {
     inspector.addEvent('log', {'message': 'before'});
     await core.computeAll();

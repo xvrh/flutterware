@@ -86,11 +86,16 @@ Middleware _inspect() {
 }
 
 /// Adapter: a query wrapper — what a drift `QueryInterceptor` or a thin
-/// sqlite3/postgres wrapper reduces to.
-List<Map<String, Object?>> _query(String sql) {
-  return FlutterwareServer.spanSync('sql', {'query': sql}, () {
-    return _database.execute(sql);
-  });
+/// sqlite3/postgres wrapper reduces to. Parameters ride along under `params`,
+/// which is what the query detail pane shows per occurrence.
+List<Map<String, Object?>> _query(String sql, [List<Object?>? params]) {
+  return FlutterwareServer.spanSync(
+    'sql',
+    {'query': sql, 'params': ?params},
+    () {
+      return _database.execute(sql);
+    },
+  );
 }
 
 Future<Response> _route(Request request) async {
@@ -108,7 +113,12 @@ Future<Response> _route(Request request) async {
       return Response.ok('${users.map((u) => u['name']).join('\n')}\n');
     case '/slow':
       await Future<void>.delayed(const Duration(milliseconds: 300));
-      _query('select * from posts order by created_at desc limit 50');
+      // Parameterized, so the query detail pane has params to show.
+      _query(
+        'select * from posts where author = ? order by created_at '
+        'desc limit ?',
+        ['ada', 50],
+      );
       return Response.ok('done being slow\n');
     case '/error':
       _log.severe('about to fail on purpose');

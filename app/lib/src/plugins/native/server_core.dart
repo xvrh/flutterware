@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:flutterware/server.dart';
 import 'package:meta/meta.dart';
@@ -366,6 +368,72 @@ class TrackedServer {
   }
 
   void dispose() => markStopped();
+}
+
+/// Sends a `sql` command — `explain`, `requery` — into a live server, which
+/// runs it on its own connection and answers. Throws [StateError] when not
+/// attached and [ServerRequestException] when the server has no such handler
+/// or the handler failed; the panel shows both as text, not as crashes.
+Future<Map<String, Object?>> sqlCommand(
+  TrackedServer server,
+  String method,
+  String query,
+) {
+  var client = server.client;
+  if (client == null) {
+    throw StateError('Not attached to ${server.handle.name}.');
+  }
+  return client.request('sql', method, {'query': query});
+}
+
+/// One normalized query shape, aggregated across everything a server
+/// reported — the row of the SQL view.
+class QueryStats {
+  QueryStats(this.normalized) : key = queryShapeKey(normalized);
+
+  final String normalized;
+
+  /// The address segment naming this shape — see `server_address.dart`.
+  final String key;
+
+  final occurrences = <ServerEvent>[];
+  var totalMs = 0.0;
+  var maxMs = 0.0;
+
+  int get count => occurrences.length;
+  double get averageMs => count == 0 ? 0 : totalMs / count;
+
+  /// The most recent raw occurrence — what explain and requery act on: a
+  /// real query the database has actually seen, not the `?`-shape.
+  ServerEvent get latest => occurrences.last;
+}
+
+/// The stable identity of a normalized shape, short enough for a segment.
+String queryShapeKey(String normalized) =>
+    sha1.convert(utf8.encode(normalized)).toString().substring(0, 8);
+
+/// Every `sql` event grouped by shape, heaviest total time first — the whole
+/// SQL view, computed rather than stored, so it is always the events' truth.
+/// On the core side so the panel and whatever `fw` reports later agree.
+List<QueryStats> sqlStats(Iterable<ServerEvent> events) {
+  var byShape = <String, QueryStats>{};
+  for (var event in events) {
+    if (event.channel != 'sql') continue;
+    var query = event.payload['query'];
+    if (query is! String) continue;
+    var stats = byShape.putIfAbsent(
+      normalizeSql(query),
+      () => QueryStats(normalizeSql(query)),
+    );
+    stats.occurrences.add(event);
+    var ms = event.payload['ms'];
+    if (ms is num) {
+      stats.totalMs += ms.toDouble();
+      if (ms > stats.maxMs) stats.maxMs = ms.toDouble();
+    }
+  }
+  return byShape.values.toList()
+    ..sort((a, b) => b.totalMs.compareTo(a.totalMs));
 }
 
 /// Normalized query → occurrence count, for queries repeated at least

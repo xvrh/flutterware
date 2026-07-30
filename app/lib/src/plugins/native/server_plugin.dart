@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/server.dart';
 
@@ -94,36 +96,45 @@ class _ServerPanelState extends State<_ServerPanel> {
                   .cast<ServerEvent?>()
                   .firstOrNull;
 
+        var view = place?.view ?? ServerViewKind.overview;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _ServerBar(servers, shown: server),
+            _ViewTabs(server: server, view: view),
             const Divider(height: 1),
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    width: 380,
-                    child: _RequestList(
-                      server: server,
-                      requests: requests.reversed.toList(),
-                      byRid: byRid,
-                      selectedId: selected?.id,
-                    ),
-                  ),
-                  const VerticalDivider(width: 1),
-                  Expanded(
-                    child: selected == null
-                        ? _EventTimeline(events)
-                        : _RequestDetail(
+              child: view == ServerViewKind.sql
+                  ? (place?.queryKey == null
+                        ? _SqlView(server)
+                        : _QueryDetail(
                             server: server,
-                            request: selected,
-                            caused: byRid[selected.rid] ?? const [],
+                            queryKey: place!.queryKey!,
+                          ))
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(
+                          width: 380,
+                          child: _RequestList(
+                            server: server,
+                            requests: requests.reversed.toList(),
+                            byRid: byRid,
+                            selectedId: selected?.id,
                           ),
-                  ),
-                ],
-              ),
+                        ),
+                        const VerticalDivider(width: 1),
+                        Expanded(
+                          child: selected == null
+                              ? _EventTimeline(events)
+                              : _RequestDetail(
+                                  server: server,
+                                  request: selected,
+                                  caused: byRid[selected.rid] ?? const [],
+                                ),
+                        ),
+                      ],
+                    ),
             ),
           ],
         );
@@ -171,6 +182,342 @@ class _ServerBar extends StatelessWidget {
               onPressed: () => AddressScope.write(
                 context,
               ).setSegments(serverSegments(server.handle.name)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Requests | SQL — which pane of the shown server, written into the address.
+class _ViewTabs extends StatelessWidget {
+  const _ViewTabs({required this.server, required this.view});
+
+  final TrackedServer server;
+  final ServerViewKind view;
+
+  @override
+  Widget build(BuildContext context) {
+    var name = server.handle.name;
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, bottom: 4),
+      child: Row(
+        children: [
+          for (var (label, segments, selected) in [
+            ('Requests', serverSegments(name), view != ServerViewKind.sql),
+            ('SQL', sqlSegments(name), view == ServerViewKind.sql),
+          ])
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: TextButton(
+                style: selected
+                    ? TextButton.styleFrom(
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.1),
+                      )
+                    : null,
+                onPressed: () =>
+                    AddressScope.write(context).setSegments(segments),
+                child: Text(label),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The aggregate: every query shape this server ran, heaviest first.
+class _SqlView extends StatelessWidget {
+  const _SqlView(this.server);
+
+  final TrackedServer server;
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    var stats = sqlStats(server.events);
+    if (stats.isEmpty) {
+      return Center(
+        child: Text('No queries recorded.', style: theme.textTheme.bodyMedium),
+      );
+    }
+    var header = theme.textTheme.bodySmall!.copyWith(color: theme.hintColor);
+    var numbers = theme.textTheme.bodySmall!.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Row(
+            children: [
+              SizedBox(width: 50, child: Text('count', style: header)),
+              Expanded(child: Text('query shape', style: header)),
+              SizedBox(
+                width: 70,
+                child: Text('total', style: header, textAlign: TextAlign.right),
+              ),
+              SizedBox(
+                width: 70,
+                child: Text('avg', style: header, textAlign: TextAlign.right),
+              ),
+              SizedBox(
+                width: 70,
+                child: Text('max', style: header, textAlign: TextAlign.right),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        for (var shape in stats)
+          InkWell(
+            onTap: () => AddressScope.write(
+              context,
+            ).setSegments(sqlSegments(server.handle.name, queryKey: shape.key)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 50,
+                    child: Text('${shape.count}×', style: numbers),
+                  ),
+                  Expanded(
+                    child: Text(
+                      shape.normalized,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall!.copyWith(
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 70,
+                    child: Text(
+                      _ms(shape.totalMs),
+                      style: numbers,
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 70,
+                    child: Text(
+                      _ms(shape.averageMs),
+                      style: numbers,
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 70,
+                    child: Text(
+                      _ms(shape.maxMs),
+                      style: numbers,
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One query shape: its stats, its occurrences with their parameters, and
+/// the two commands that run inside the live server — explain and requery.
+class _QueryDetail extends StatefulWidget {
+  const _QueryDetail({required this.server, required this.queryKey});
+
+  final TrackedServer server;
+  final String queryKey;
+
+  @override
+  State<_QueryDetail> createState() => _QueryDetailState();
+}
+
+class _QueryDetailState extends State<_QueryDetail> {
+  String? _resultTitle;
+  String? _resultBody;
+  var _busy = false;
+
+  Future<void> _run(String method, String query) async {
+    setState(() {
+      _busy = true;
+      _resultTitle = method;
+      _resultBody = null;
+    });
+    String body;
+    try {
+      var response = await sqlCommand(widget.server, method, query);
+      body = const JsonEncoder.withIndent('  ').convert(response);
+    } on Object catch (e) {
+      // A missing handler or a failing one — an answer, not a crash. The
+      // hint names the fix because "no handler for sql.explain" alone reads
+      // as our bug rather than a snippet not yet pasted.
+      body =
+          '$e\n\nThe server registers command handlers itself — see the '
+          'sql adapter snippets in doc/server_inspection.md.';
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _resultBody = body;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    var mono = theme.textTheme.bodySmall!.copyWith(fontFamily: 'monospace');
+    var stats = sqlStats(
+      widget.server.events,
+    ).where((s) => s.key == widget.queryKey).firstOrNull;
+    if (stats == null) {
+      return Center(
+        child: Text(
+          'This query shape is no longer in the recorded window.',
+          style: theme.textTheme.bodyMedium,
+        ),
+      );
+    }
+    var latestQuery = stats.latest.payload['query']! as String;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                stats.normalized,
+                style: theme.textTheme.titleSmall!.copyWith(
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              tooltip: 'Back to all queries',
+              onPressed: () => AddressScope.write(
+                context,
+              ).setSegments(sqlSegments(widget.server.handle.name)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${stats.count}× · total ${_ms(stats.totalMs)} · '
+          'avg ${_ms(stats.averageMs)} · max ${_ms(stats.maxMs)}',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            for (var method in ['explain', 'requery'])
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: OutlinedButton(
+                  onPressed: _busy || !widget.server.connected
+                      ? null
+                      : () => _run(method, latestQuery),
+                  child: Text(method),
+                ),
+              ),
+            if (!widget.server.connected)
+              Text('not attached', style: theme.textTheme.bodySmall),
+          ],
+        ),
+        if (_resultTitle != null) ...[
+          const SizedBox(height: 12),
+          Text(_resultTitle!, style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          _busy
+              ? const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.5,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(_resultBody ?? '', style: mono),
+                ),
+        ],
+        const SizedBox(height: 16),
+        Text('Occurrences', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 4),
+        // Newest first, and every one of them — the ring already bounds it.
+        for (var occurrence in stats.occurrences.reversed)
+          _OccurrenceRow(server: widget.server, occurrence: occurrence),
+      ],
+    );
+  }
+}
+
+/// One raw execution: when, how long, the exact SQL and its parameters, and
+/// the way back to the request that caused it.
+class _OccurrenceRow extends StatelessWidget {
+  const _OccurrenceRow({required this.server, required this.occurrence});
+
+  final TrackedServer server;
+  final ServerEvent occurrence;
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    var mono = theme.textTheme.bodySmall!.copyWith(fontFamily: 'monospace');
+    var params = occurrence.payload['params'];
+    var request = occurrence.rid == null
+        ? null
+        : server.events
+              .where((e) => e.channel == 'http' && e.rid == occurrence.rid)
+              .firstOrNull;
+    var time = occurrence.time;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}',
+            style: theme.textTheme.bodySmall!.copyWith(color: theme.hintColor),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 60,
+            child: Text(_ms(occurrence.payload['ms']), style: mono),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${occurrence.payload['query']}', style: mono),
+                if (params != null)
+                  Text(
+                    'params: ${jsonEncode(params)}',
+                    style: mono.copyWith(color: theme.hintColor),
+                  ),
+              ],
+            ),
+          ),
+          if (request != null)
+            IconButton(
+              icon: const Icon(Icons.north_east, size: 14),
+              tooltip:
+                  '${request.payload['method']} ${request.payload['path']}',
+              onPressed: () => AddressScope.write(context).setSegments(
+                serverSegments(server.handle.name, requestId: request.id),
+              ),
             ),
         ],
       ),
@@ -387,7 +734,7 @@ class _RequestDetail extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 16),
-        _Waterfall(request: request, spans: spans),
+        _Waterfall(server: server, request: request, spans: spans),
         if (logs.isNotEmpty) ...[
           const SizedBox(height: 16),
           Text('Logs', style: theme.textTheme.titleSmall),
@@ -415,8 +762,13 @@ class _RequestDetail extends StatelessWidget {
 /// clamped — clock skew between an event and its request is possible and must
 /// not push a bar off the canvas.
 class _Waterfall extends StatelessWidget {
-  const _Waterfall({required this.request, required this.spans});
+  const _Waterfall({
+    required this.server,
+    required this.request,
+    required this.spans,
+  });
 
+  final TrackedServer server;
   final ServerEvent request;
   final List<ServerEvent> spans;
 

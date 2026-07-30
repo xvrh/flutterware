@@ -11,6 +11,25 @@ void main() {
     );
   });
 
+  test('sql segments and place are inverses', () {
+    expect(serverPlace(sqlSegments('api')), const ServerPlace.sql('api'));
+    expect(
+      serverPlace(sqlSegments('api', queryKey: 'ab12cd34')),
+      const ServerPlace.sql('api', queryKey: 'ab12cd34'),
+    );
+  });
+
+  test('every place round-trips through serverSegmentsOf', () {
+    for (var place in [
+      const ServerPlace('api'),
+      const ServerPlace('api', requestId: 7),
+      const ServerPlace.sql('api'),
+      const ServerPlace.sql('api', queryKey: 'ab12cd34'),
+    ]) {
+      expect(serverPlace(serverSegmentsOf(place)), place);
+    }
+  });
+
   test('a malformed tail reads back as the server alone', () {
     expect(serverPlace(['api', 'req']), const ServerPlace('api'));
     expect(serverPlace(['api', 'req', 'oops']), const ServerPlace('api'));
