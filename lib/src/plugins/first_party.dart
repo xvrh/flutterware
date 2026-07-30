@@ -127,6 +127,28 @@ class TestsPackage extends PluginPackage {
   ];
 }
 
+/// The native splash screen: what `flutter_native_splash` will produce, on
+/// every surface and in both themes.
+///
+/// Like [LauncherIcon] it offers no `each`: a splash config only means anything
+/// in a package that is an app, and quietly declaring one for a pure Dart
+/// library would report "no splash configured" forever.
+class NativeSplash extends Plugin {
+  NativeSplash({this.packages = const [], String? label})
+    : super('flutterware.splash', label: label ?? 'Splash screen');
+
+  final List<NativeSplashPackage> packages;
+
+  @override
+  Map<String, Object?> get config => {
+    'packages': [for (var p in packages) p.toJson()],
+  };
+}
+
+class NativeSplashPackage extends PluginPackage {
+  const NativeSplashPackage(super.pkg);
+}
+
 /// The launcher-icon editor. Only meaningful for packages that are apps, so it
 /// deliberately offers no `each` — naming them is the point.
 class LauncherIcon extends Plugin {

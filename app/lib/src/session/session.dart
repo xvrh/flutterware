@@ -12,6 +12,7 @@ import '../context.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/native/assets_core.dart';
 import '../plugins/native/dependencies_core.dart';
+import '../plugins/native/splash_core.dart';
 import '../plugins/native/ui_catalog_core.dart';
 import '../plugins/plugin_core.dart';
 import '../shell/workspace.dart';
@@ -400,6 +401,7 @@ class Session {
 PluginCoreRegistry defaultCoreRegistry() => PluginCoreRegistry({
   assetsPluginId: assetsCoreFactory,
   dependenciesPluginId: dependenciesCoreFactory,
+  splashPluginId: splashCoreFactory,
   uiCatalogPluginId: uiCatalogCoreFactory,
 });
 

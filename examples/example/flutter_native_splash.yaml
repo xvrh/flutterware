@@ -1,0 +1,30 @@
+# A deliberately realistic flutter_native_splash config, so the splash plugin
+# has something to resolve.
+#
+# It is set up the way most projects are: a light splash that works, a dark
+# variant that is only half declared, and an android_12 section — which is the
+# section every one of these files needs and most of them do not have.
+flutter_native_splash:
+  color: 'FFFFFF'
+  image: assets/splash/logo.png
+  branding: assets/splash/branding.png
+  branding_mode: bottom
+  branding_bottom_padding: 24
+
+  # Only the colour is declared for dark. The dark keys are a chain of their
+  # own — `_dark_<platform>` then `_dark`, never falling through to the light
+  # ones — so this is enough to get dark resources generated, and the image is
+  # then taken from `image_dark`… which is not set. The plugin says so.
+  color_dark: '101418'
+
+  android_gravity: center
+  ios_content_mode: center
+  web_image_mode: center
+
+  android_12:
+    color: 'FFFFFF'
+    color_dark: '101418'
+    # 1152×1152, with the art kept inside the 768px circle that survives the
+    # mask. Getting this wrong is the single most common splash bug there is.
+    image: assets/splash/android12_logo.png
+    branding: assets/splash/branding.png

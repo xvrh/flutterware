@@ -13,6 +13,7 @@ void main() => Flutterware.configure((fw) {
   fw.packages([app]);
   fw.use(Dependencies(packages: [DependenciesPackage(app)]));
   fw.use(Assets(packages: [AssetsPackage(app)]));
+  fw.use(NativeSplash(packages: [NativeSplashPackage(app)]));
   // No `entrypoint:` — this is the ordinary case, where demos live in `demo/`.
   fw.use(UiCatalog(packages: [UiCatalogPackage(app)]));
 });

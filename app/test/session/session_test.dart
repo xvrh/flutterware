@@ -8,6 +8,8 @@ import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/session/session.dart';
 import 'package:flutterware_app/src/shell/repo_layout.dart';
 
+import '../support/declared_dependencies.dart';
+
 /// Drives the real repo, because the point of a session is that it resolves a
 /// real `tool/flutterware.dart`. Nothing here computes anything: the laziness
 /// rule is most of what is being asserted.
@@ -38,6 +40,7 @@ void main() {
       'flutterware.dependencies',
       'flutterware.assets',
       'flutterware.ui_catalog',
+      'flutterware.splash',
     ]);
   });
 
@@ -51,7 +54,9 @@ void main() {
     );
     try {
       expect(bare.cores, everyElement(isA<MissingPluginCore>()));
-      expect(bare.cores, hasLength(3));
+      // One per declaration, same as a real build — a registry with nothing in
+      // it must not shrink the list, which is the whole point.
+      expect(bare.cores, hasLength(session.cores.length));
       for (var core in bare.cores) {
         expect(core.report.status.isEmpty, isFalse);
       }
@@ -73,7 +78,7 @@ void main() {
   test('reports are readable without any subscriber', () {
     // The rule that makes it safe for the sidebar, `fw` and an agent to call
     // this for every plugin: a pure read of cached state.
-    expect(session.reports, hasLength(3));
+    expect(session.reports, hasLength(session.cores.length));
     expect(session.reports.first.id, dependenciesPluginId);
   });
 
@@ -147,9 +152,16 @@ void main() {
     expect(flutterTest.source, 'sdk');
     expect(flutterTest.dev, isTrue, reason: 'declared in dev_dependencies');
 
-    // The counts are per-member, not per-workspace.
-    expect(result.packages.single.direct, 14);
-    expect(result.packages.single.dev, 4);
+    // The counts are per-member, not per-workspace — derived from the member's
+    // own pubspec rather than written down here, so adding a dependency to the
+    // sample project does not fail a test about where packages come from.
+    var declared = DeclaredDependencies.of('../examples/example/pubspec.yaml');
+    expect(result.packages.single.direct, declared.dependencies.length);
+    expect(result.packages.single.dev, declared.devs.length);
+    expect(
+      result.packages.single.transitive,
+      greaterThan(declared.dependencies.length),
+    );
   });
 
   test('a dependency is findable in the palette once computed', () async {

@@ -1704,4 +1704,220 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'SplashArtifactEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashArtifactEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'path',
+        'type': 'String',
+        'doc':
+            'Worktree-relative, so an agent whose tools are scoped to the repo can open it.',
+      },
+      <String, Object?>{'name': 'surface', 'type': 'String'},
+      <String, Object?>{'name': 'theme', 'type': 'String'},
+      <String, Object?>{'name': 'density', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'modified', 'type': 'String'},
+    ],
+  }),
+  'SplashArtifactsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashArtifactsResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{
+        'name': 'generated',
+        'type': 'bool',
+        'doc':
+            'False when nothing has been generated yet, which is what distinguishes "run `generate` first" from "the generator produced nothing".',
+      },
+      <String, Object?>{
+        'name': 'stale',
+        'type': 'bool',
+        'doc': 'The config has been edited since these were written.',
+      },
+      <String, Object?>{
+        'name': 'artifacts',
+        'type': 'List<SplashArtifactEntry>',
+        'shape': <String, Object?>{
+          'type': 'SplashArtifactEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'path',
+              'type': 'String',
+              'doc':
+                  'Worktree-relative, so an agent whose tools are scoped to the repo can open it.',
+            },
+            <String, Object?>{'name': 'surface', 'type': 'String'},
+            <String, Object?>{'name': 'theme', 'type': 'String'},
+            <String, Object?>{
+              'name': 'density',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{'name': 'modified', 'type': 'String'},
+          ],
+        },
+      },
+    ],
+  }),
+  'SplashDescribeResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashDescribeResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{
+        'name': 'address',
+        'type': 'String',
+        'doc':
+            'The address of this exact cell — pasteable back into `capture`.',
+      },
+      <String, Object?>{'name': 'surface', 'type': 'String'},
+      <String, Object?>{'name': 'theme', 'type': 'String'},
+      <String, Object?>{
+        'name': 'configPath',
+        'type': 'String',
+        'doc': 'Which file the config was read from, and in what form.',
+      },
+      <String, Object?>{'name': 'configKind', 'type': 'String'},
+      <String, Object?>{'name': 'flavor', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'enabled',
+        'type': 'bool',
+        'doc': 'False when the project switched this platform off.',
+      },
+      <String, Object?>{
+        'name': 'placement',
+        'type': 'String',
+        'doc':
+            'Where the image lands, in words — so the CLI answers the question without rendering anything.',
+      },
+      <String, Object?>{
+        'name': 'properties',
+        'type': 'List<SplashProperty>',
+        'shape': <String, Object?>{
+          'type': 'SplashProperty',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'name',
+              'type': 'String',
+              'doc': '`color`, `image`, `branding`.',
+            },
+            <String, Object?>{'name': 'value', 'type': 'String'},
+            <String, Object?>{
+              'name': 'from',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The config key that won the cascade — `color_dark_android`.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'fallsBackToLight',
+        'type': 'bool',
+        'doc':
+            'The dark chain resolved nothing, so the OS will show the light splash.',
+      },
+      <String, Object?>{
+        'name': 'problems',
+        'type': 'List<SplashProblemEntry>',
+        'shape': <String, Object?>{
+          'type': 'SplashProblemEntry',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'tone', 'type': 'String'},
+            <String, Object?>{'name': 'message', 'type': 'String'},
+            <String, Object?>{
+              'name': 'key',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'surface',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'theme',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'blocksGeneration',
+              'type': 'bool',
+              'doc': '`create` will exit rather than write anything.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'SplashGenerateResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashGenerateResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{'name': 'flavor', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
+      <String, Object?>{'name': 'exitCode', 'type': 'int'},
+      <String, Object?>{
+        'name': 'output',
+        'type': 'String',
+        'doc': 'The generator\'s own output, kept whole.',
+      },
+      <String, Object?>{
+        'name': 'artifacts',
+        'type': 'List<SplashArtifactEntry>',
+        'doc': 'What exists afterwards — the point of having run it.',
+        'shape': <String, Object?>{
+          'type': 'SplashArtifactEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'path',
+              'type': 'String',
+              'doc':
+                  'Worktree-relative, so an agent whose tools are scoped to the repo can open it.',
+            },
+            <String, Object?>{'name': 'surface', 'type': 'String'},
+            <String, Object?>{'name': 'theme', 'type': 'String'},
+            <String, Object?>{
+              'name': 'density',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{'name': 'modified', 'type': 'String'},
+          ],
+        },
+      },
+    ],
+  }),
+  'SplashProblemEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashProblemEntry',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'tone', 'type': 'String'},
+      <String, Object?>{'name': 'message', 'type': 'String'},
+      <String, Object?>{'name': 'key', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'surface', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'theme', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'blocksGeneration',
+        'type': 'bool',
+        'doc': '`create` will exit rather than write anything.',
+      },
+    ],
+  }),
+  'SplashProperty': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashProperty',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'name',
+        'type': 'String',
+        'doc': '`color`, `image`, `branding`.',
+      },
+      <String, Object?>{'name': 'value', 'type': 'String'},
+      <String, Object?>{
+        'name': 'from',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The config key that won the cascade — `color_dark_android`.',
+      },
+    ],
+  }),
 };

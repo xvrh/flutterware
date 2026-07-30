@@ -219,6 +219,105 @@ packages: List<DependencyListPackage>
 | `transitive` | boolean | no | false | List what the package pulls in indirectly too. The counts are reported either way. |
 
 
+### `flutterware.splash`
+
+#### `describe` — Describe
+
+One surface and theme resolved in full — every value, the config key each one came from, and where the image lands, in words
+
+```sh
+fw run splash describe [--package=…] [--surface=…] [--theme=…] [--flavor=…]
+```
+
+Returns `SplashDescribeResult`:
+
+```
+package: String
+address: String   # The address of this exact cell — pasteable back into `capture`.
+surface: String
+theme: String
+configPath: String   # Which file the config was read from, and in what form.
+configKind: String
+flavor: String?
+enabled: bool   # False when the project switched this platform off.
+placement: String   # Where the image lands, in words — so the CLI answers the question without rendering anything.
+properties: List<SplashProperty>
+  name: String   # `color`, `image`, `branding`.
+  value: String
+  from: String?   # The config key that won the cascade — `color_dark_android`.
+fallsBackToLight: bool   # The dark chain resolved nothing, so the OS will show the light splash.
+problems: List<SplashProblemEntry>
+  tone: String
+  message: String
+  key: String?
+  surface: String?
+  theme: String?
+  blocksGeneration: bool   # `create` will exit rather than write anything.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the first when omitted |
+| `surface` | choice | no | android | Android 12+ is its own surface: it reads different keys and ignores most of the legacy ones |
+| `theme` | choice | no | light | — |
+| `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
+
+#### `artifacts` — Artifacts
+
+The real generated files as they are on disk — ground truth, once generate has run
+
+```sh
+fw run splash artifacts [--package=…]
+```
+
+Returns `SplashArtifactsResult`:
+
+```
+package: String
+generated: bool   # False when nothing has been generated yet, which is what distinguishes "run `generate` first" from "the generator produced nothing".
+stale: bool   # The config has been edited since these were written.
+artifacts: List<SplashArtifactEntry>
+  path: String   # Worktree-relative, so an agent whose tools are scoped to the repo can open it.
+  surface: String
+  theme: String
+  density: String?
+  modified: String
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the first when omitted |
+
+#### `generate` — Generate
+
+Runs `dart run flutter_native_splash:create`, which rewrites files under android/, ios/ and web/
+
+```sh
+fw run splash generate [--package=…] [--flavor=…]
+```
+
+Returns `SplashGenerateResult`:
+
+```
+package: String
+flavor: String?
+ok: bool
+exitCode: int
+output: String   # The generator's own output, kept whole.
+artifacts: List<SplashArtifactEntry>   # What exists afterwards — the point of having run it.
+  path: String   # Worktree-relative, so an agent whose tools are scoped to the repo can open it.
+  surface: String
+  theme: String
+  density: String?
+  modified: String
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the first when omitted |
+| `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
+
+
 ### `flutterware.ui_catalog`
 
 #### `entries` — Entries
