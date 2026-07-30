@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -139,7 +140,119 @@ void main() {
     expect(await initWith().run(), 0);
     expect(out.toString(), isNot(contains('.gitignore')));
     expect(out.toString(), isNot(contains('tool/flutterware.dart')));
+    expect(out.toString(), isNot(contains('.mcp.json')));
     expect(Link(p.join(root.path, '.flutterware', 'sdk')).existsSync(), isTrue);
+  });
+
+  group('.mcp.json', () {
+    File mcpConfig() => File(p.join(root.path, '.mcp.json'));
+    Map<String, Object?> readConfig() =>
+        jsonDecode(mcpConfig().readAsStringSync()) as Map<String, Object?>;
+
+    test('registers `fw mcp` so an agent finds the project', () async {
+      await initWith().run();
+
+      expect(readConfig(), {
+        'mcpServers': {
+          'flutterware': {
+            'command': 'fw',
+            'args': ['mcp'],
+          },
+        },
+      });
+    });
+
+    test('says `fw` has to be installed for the entry to resolve', () async {
+      await initWith().run();
+
+      expect(out.toString(), contains('dart install flutterware'));
+    });
+
+    test('keeps servers it did not write', () async {
+      // The one outcome to rule out: this file is shared, and clobbering
+      // someone else's server is worse than never having written ours.
+      mcpConfig().writeAsStringSync('''
+{
+  "mcpServers": {
+    "other": { "command": "other-server" }
+  }
+}
+''');
+
+      await initWith().run();
+
+      var servers = readConfig()['mcpServers']! as Map<String, Object?>;
+      expect(servers['other'], {'command': 'other-server'});
+      expect(servers, contains('flutterware'));
+    });
+
+    test('never rewrites an entry someone has edited', () async {
+      mcpConfig().writeAsStringSync('''
+{
+  "mcpServers": {
+    "flutterware": { "command": "/opt/fw", "args": ["mcp", "--verbose"] }
+  }
+}
+''');
+
+      await initWith().run();
+
+      var servers = readConfig()['mcpServers']! as Map<String, Object?>;
+      expect(servers['flutterware'], {
+        'command': '/opt/fw',
+        'args': ['mcp', '--verbose'],
+      });
+    });
+
+    test('leaves a file it cannot parse exactly as it found it', () async {
+      // Replacing it with a valid file would mean deleting whatever it said,
+      // which is not a repair anyone asked for.
+      mcpConfig().writeAsStringSync('{ not json');
+
+      expect(await initWith().run(), 0);
+
+      expect(mcpConfig().readAsStringSync(), '{ not json');
+      expect(out.toString(), isNot(contains('.mcp.json')));
+    });
+
+    test('leaves mcpServers alone when it is not an object', () async {
+      mcpConfig().writeAsStringSync('{"mcpServers": []}');
+
+      expect(await initWith().run(), 0);
+
+      expect(readConfig()['mcpServers'], isEmpty);
+    });
+
+    test('says so when .gitignore hides it', () async {
+      // A repo ignoring every dotfile with `.*` gets the file written and
+      // hidden, which works for whoever ran init and for nobody else. Silence
+      // would read as "your team has this now".
+      await initWith(alreadyIgnored: true).run();
+
+      expect(out.toString(), contains('.gitignore hides it'));
+    });
+
+    test(
+      'says nothing about .gitignore when the file will be shared',
+      () async {
+        await initWith().run();
+
+        expect(out.toString(), contains('.mcp.json'));
+        expect(out.toString(), isNot(contains('.gitignore hides it')));
+      },
+    );
+
+    test('preserves keys beside mcpServers', () async {
+      mcpConfig().writeAsStringSync('{"inputs": [{"id": "token"}]}');
+
+      await initWith().run();
+
+      var config = readConfig();
+      expect(config['inputs'], [
+        {'id': 'token'},
+      ]);
+      expect(config['mcpServers'], contains('flutterware'));
+    });
   });
 
   test('reports a dart that is not inside a Flutter SDK', () async {

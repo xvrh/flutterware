@@ -20,7 +20,9 @@ dart run flutterware
 That opens the GUI. The first launch is slow — it builds the CLI and the
 desktop app — and it also initializes the project: it writes `.flutterware/`
 (a pointer to the Flutter SDK you just ran it with), adds that directory to
-`.gitignore`, and scaffolds a `tool/flutterware.dart` if you have none.
+`.gitignore`, scaffolds a `tool/flutterware.dart` if you have none, and
+registers `fw mcp` in `.mcp.json` so an agent opening the repo finds the tools
+without being told.
 
 Anything after `dart run flutterware` is passed to the CLI instead:
 
@@ -29,6 +31,28 @@ dart run flutterware status     # what every tool says about this project
 dart run flutterware actions    # what can be invoked, and with what
 dart run flutterware help
 ```
+
+### Put `fw` on your PATH
+
+Once per machine, not per project:
+
+```shell
+dart install flutterware
+```
+
+`fw <command>` is then `dart run flutterware <command>` from anywhere inside a
+project, and the rest of this file is written that way.
+
+It is worth doing even if you like typing. `dart run` has to be started from a
+package root and uses whichever `dart` is on your PATH; `fw` walks up to the
+project itself and re-execs with the SDK that project recorded in
+`.flutterware/`, so it is right in a monorepo, right under fvm, and right when
+the `dart` you happen to have is not the one the project resolves against.
+
+**Agents need it.** An MCP client spawns a command; `fw mcp` is a single entry
+that works for every project on the machine, where `dart run` would need the
+client to already be standing in the right package with the right SDK. See
+[The three surfaces](#the-three-surfaces) below.
 
 ## Configure the project
 
@@ -55,25 +79,51 @@ for the single-app case.
 
 ## The three surfaces
 
-**GUI** — `dart run flutterware`. A tab per open git worktree, a sidebar of the
+**GUI** — `fw`, with no command. A tab per open git worktree, a sidebar of the
 tools you declared, and a command palette on `⌘K`.
 
 **CLI** — the same commands, without the window:
 
 ```shell
-dart run flutterware run ui_catalog entries
-dart run flutterware run ui_catalog screenshot --entry='demo/buttons.dart#buttons'
-dart run flutterware status --json
+fw run ui_catalog entries
+fw run ui_catalog screenshot --entry='demo/buttons.dart#buttons'
+fw status --json
 ```
 
 An action that produces a file prints its path, so `… | xargs open` works.
 Everything else prints as JSON.
 
-The binary is called `fw`; until it ships as a standalone launcher on your
-`PATH`, `dart run flutterware <command>` is how you reach it.
-
 **MCP** — `flutterware_status`, `flutterware_actions` and `flutterware_invoke`,
-over stdio, from `app/bin/mcp.dart`. Same session, same plugins.
+over stdio. Same session, same plugins, so an agent can do what you can do from
+the window.
+
+`fw init` already wrote this into your project's `.mcp.json`, which is why
+there is usually nothing to do:
+
+```json
+{
+  "mcpServers": {
+    "flutterware": { "command": "fw", "args": ["mcp"] }
+  }
+}
+```
+
+It is merged rather than written, so another server in that file stays and an
+entry you have edited is left alone. Put the same three lines in your client's
+own config if you would rather not commit it.
+
+The entry names `fw`, so it resolves only if `fw` is installed — see
+[Put `fw` on your PATH](#put-fw-on-your-path). Nothing else is per project: the
+client sets the working directory, and `fw` finds the project by walking up
+from it.
+
+Start with `flutterware_status`. `flutterware_actions` lists what can be
+invoked, with each action's parameters and the shape of what it returns, and
+`flutterware_invoke` runs one — a screenshot comes back as an image rather than
+as a path the agent cannot open.
+
+Stdout is the wire, so logs and anything flutterware has to build before it can
+answer go to stderr.
 
 Every capability of every surface is listed in
 [docs/capabilities.md](docs/capabilities.md), which is generated from the

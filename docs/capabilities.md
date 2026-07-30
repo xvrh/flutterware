@@ -25,6 +25,7 @@ cd app && dart run bin/fw.dart <command>
 | `run <plugin> <action> [--k=v]` | invoke one action |
 | `init` | record what this project needs, once |
 | `app [--release] [--json]` | open the flutterware GUI |
+| `mcp` | serve this project to an agent, over stdio |
 | `help [<command>]` | this, or one command in detail |
 
 `-v` on any command shows the output of whatever it has to build, instead of
@@ -40,11 +41,24 @@ Exit codes:
 
 ## MCP
 
-```sh
-cd app && dart run bin/mcp.dart
+Point a client at `fw mcp`:
+
+```json
+{
+  "mcpServers": {
+    "flutterware": { "command": "fw", "args": ["mcp"] }
+  }
+}
 ```
 
-Stdout belongs to the protocol — anything said to a human goes to stderr.
+This needs `fw` on the PATH — `dart install flutterware`. The client sets the
+working directory and the project is found by walking up from it, so one entry
+serves every project on the machine.
+
+Inside a checkout of flutterware itself, `cd app && dart run bin/mcp.dart` is
+the same server without the launcher in front of it.
+
+Stdout belongs to the protocol — logs and build narration go to stderr.
 
 ### `flutterware_status`
 

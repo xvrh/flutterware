@@ -3,7 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
+import 'package:dart_mcp/stdio.dart';
 import 'package:flutterware/plugins.dart';
+
+// ignore: implementation_imports
+import 'package:flutterware/src/log_client.dart';
 import 'package:path/path.dart' as p;
 
 import '../plugins/plugin_core.dart';
@@ -69,7 +73,15 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
   Future<T> _withSession<T>(FutureOr<T> Function(Session) body) async {
     var session =
         await (openSession?.call() ??
-            Session.open(workingDirectory, registry: registry));
+            Session.open(
+              workingDirectory,
+              registry: registry,
+              // Sessions log, and the default sink is stdout — which here is
+              // the wire. A plugin that logs while loading would not be noisy,
+              // it would be a corrupt frame, so the sink is part of opening a
+              // session on this surface rather than something to remember.
+              logger: LogClient.writeTo(stderr),
+            ));
     try {
       return await body(session);
     } finally {
@@ -229,4 +241,18 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
   /// read and correct, not a transport failure.
   static CallToolResult _error(String message) =>
       CallToolResult(isError: true, content: [TextContent(text: message)]);
+}
+
+/// Serves the tools on this process's stdio, completing when the client hangs
+/// up.
+///
+/// The one implementation of "flutterware as an MCP server". `fw mcp` and
+/// `app/bin/mcp.dart` both call it and neither adds anything, so the reachable
+/// surface and the one the tests drive cannot come apart.
+Future<void> serveMcpOnStdio({Directory? workingDirectory}) {
+  var server = FlutterwareMcpServer(
+    stdioChannel(input: stdin, output: stdout),
+    workingDirectory: workingDirectory,
+  );
+  return server.done;
 }

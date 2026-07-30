@@ -5,6 +5,9 @@ _*
 !.github
 !.pubignore
 !.fvmrc
+# Which MCP servers this project offers. `fw init` writes it, and it describes
+# the project rather than the machine, so it is shared like the config above.
+!.mcp.json
 
 # Files and directories created by pub.
 .dart_tool/

@@ -11,6 +11,7 @@ import 'action_shapes.generated.dart';
 import 'gui.dart';
 import 'init.dart';
 import 'job.dart';
+import 'mcp_server.dart';
 import 'session.dart';
 
 /// One `fw` command, as data.
@@ -85,6 +86,11 @@ const fwCommands = [
         'directory\nto .gitignore if nothing already covers it, and writes a '
         'starter\ntool/flutterware.dart if the project has none.\n'
         '\n'
+        'Registers `fw mcp` in .mcp.json too, so an agent opening the repo '
+        'finds\nthe tools without being told. That file is shared and '
+        'committed, so it\nis merged rather than written: another server stays, '
+        'and a flutterware\nentry someone has edited is left as it is.\n'
+        '\n'
         'It runs by itself the first time you use flutterware in a project, '
         'so\nthis is here for scripts, for CI, and for running it again after '
         'a\nchange of SDK.',
@@ -110,6 +116,31 @@ const fwCommands = [
         'flutterware itself — this runs the GUI under `flutter run`, so a\n'
         'change is `r` away instead of a rebuild. `--release` takes the built\n'
         'binary instead, which is what an ordinary install always gets.',
+  ),
+  FwCommand(
+    'mcp',
+    usage: 'mcp',
+    summary: 'serve this project to an agent, over stdio',
+    details:
+        'Speaks MCP on stdin/stdout, exposing the same plugins and the same\n'
+        'actions as the commands above — an agent can do what you can do here.\n'
+        '\n'
+        'Not a command to type. It is what an MCP client spawns, and what it\n'
+        'should be pointed at:\n'
+        '\n'
+        '    {\n'
+        '      "mcpServers": {\n'
+        '        "flutterware": { "command": "fw", "args": ["mcp"] }\n'
+        '      }\n'
+        '    }\n'
+        '\n'
+        '`fw` has to be on your PATH for that to resolve — see\n'
+        '`dart install flutterware`. The client sets the working directory,\n'
+        'and the project is found by walking up from it, so one entry works\n'
+        'for every project on the machine.\n'
+        '\n'
+        'stdout is the wire. Everything a human might want to read — logs, and\n'
+        'whatever this has to build before it can answer — goes to stderr.',
   ),
   FwCommand(
     'help',
@@ -148,6 +179,7 @@ class FwCli {
     required this.out,
     required this.err,
     this.launchGui,
+    this.serveMcp,
   });
 
   /// How to get a session. A function rather than a session, because `help`
@@ -162,6 +194,12 @@ class FwCli {
   /// without an SDK; the default reads what the launcher recorded in the
   /// environment.
   final Future<int> Function({required bool forceBuild})? launchGui;
+
+  /// Serves MCP on this process's stdio. Injected for the same reason
+  /// [launchGui] is: the real one takes stdin and does not give it back until
+  /// the client disconnects, and a test that called it would hand the test
+  /// runner's console to a JSON-RPC server and hang.
+  final Future<void> Function()? serveMcp;
 
   Future<int> run(List<String> arguments) async {
     // The global flags come out of the whole line before anything reads it,
@@ -202,6 +240,7 @@ class FwCli {
           json: json,
           verbose: verbose,
         ),
+        'mcp' => await _mcp(),
         'help' || '--help' || '-h' => _help(rest.firstOrNull),
         _ => fail('unknown command "$command". Try `fw help`.'),
       };
@@ -209,6 +248,21 @@ class FwCli {
       err.writeln('fw: $e');
       return 1;
     }
+  }
+
+  /// Serves MCP until the client hangs up.
+  ///
+  /// Opens no session of its own: a client connects once and then asks
+  /// questions for as long as it is alive, so the session belongs to the
+  /// request rather than to the process — which is also what makes a tool call
+  /// describe the project as it is now rather than as it was at startup.
+  Future<int> _mcp() async {
+    if (serveMcp case var serve?) {
+      await serve();
+    } else {
+      await serveMcpOnStdio();
+    }
+    return 0;
   }
 
   /// Records the SDK and the rest of `.flutterware/`.
