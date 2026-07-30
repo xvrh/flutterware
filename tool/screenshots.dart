@@ -20,7 +20,11 @@
 /// One shot per feature, and none of the shell on its own: the tabs, the rail
 /// and the address bar are in every picture below, and the overview screen by
 /// itself is a worktree name and two chips. `doc/screenshots/shell.png` is
-/// still the hand-taken one.
+/// still the hand-taken one — and so is `server.png`: it needs a live
+/// instrumented server with traffic, and its pids, timestamps and timings
+/// make byte-identical output impossible, which is this script's contract.
+/// To retake it: run `examples/example/bin/example_server.dart`, curl
+/// `/users` and `/slow`, then `fw capture` the request-detail address.
 library;
 
 import 'dart:convert';

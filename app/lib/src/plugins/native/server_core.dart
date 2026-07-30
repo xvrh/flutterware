@@ -162,15 +162,46 @@ class ServerCore extends PluginCore {
               'The latest HTTP requests a running server reported, each with '
               'the SQL queries and log lines it caused.',
           parameters: [
-            ActionParameter(
-              'name',
-              'Server',
-              required: false,
-              description: 'Which server, when several are running.',
-            ),
+            _serverParameter,
             ActionParameter(
               'last',
               'Count',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '20',
+            ),
+          ],
+        ),
+        PluginAction(
+          'errors',
+          'Recent errors',
+          description:
+              'Failed requests (5xx or thrown), severe log lines, and any '
+              'event carrying an error — each with the request it happened '
+              'under.',
+          parameters: [
+            _serverParameter,
+            ActionParameter(
+              'last',
+              'Count',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '20',
+            ),
+          ],
+        ),
+        PluginAction(
+          'sql',
+          'Query statistics',
+          description:
+              'Every recorded query grouped by its normalized shape — count, '
+              'total, average and max duration — heaviest first. The same '
+              'aggregation the SQL panel shows.',
+          parameters: [
+            _serverParameter,
+            ActionParameter(
+              'top',
+              'Shapes',
               kind: ActionParameterKind.integer,
               required: false,
               defaultValue: '20',
@@ -212,14 +243,42 @@ class ServerCore extends PluginCore {
     String actionId, {
     Map<String, Object?> arguments = const {},
   }) async {
-    if (actionId != 'requests') return super.invoke(actionId);
     var name = arguments['name'] as String?;
-    var last = switch (arguments['last']) {
-      int n => n,
-      String s => int.tryParse(s) ?? 20,
-      _ => 20,
+    return switch (actionId) {
+      'requests' => _collect(name, (client) {
+        return {
+          'requests': _shapeRequests(
+            client.received,
+            _intArgument(arguments['last'], 20),
+          ),
+        };
+      }),
+      'errors' => _collect(name, (client) {
+        return {
+          'errors': _shapeErrors(
+            client.received,
+            _intArgument(arguments['last'], 20),
+          ),
+        };
+      }),
+      'sql' => _collect(name, (client) {
+        return {
+          'queries': _shapeSqlStats(
+            client.received,
+            _intArgument(arguments['top'], 20),
+          ),
+        };
+      }),
+      _ => super.invoke(actionId),
     };
+  }
 
+  /// One ephemeral attachment per matching server: replay the ring, let
+  /// [shape] reduce it, leave. What all three read actions share.
+  Future<Object?> _collect(
+    String? name,
+    Map<String, Object?> Function(ServerAttachClient client) shape,
+  ) async {
     var handles = scanServerHandles(
       runDirProvider(),
       underRoot: host.worktree.path,
@@ -239,24 +298,25 @@ class ServerCore extends PluginCore {
       };
     }
 
-    // An ephemeral attachment per server: replay the ring, shape it, leave.
     var out = <Map<String, Object?>>[];
     for (var handle in handles) {
       var client = await attachToServer(handle);
       if (client == null) continue;
       try {
         await _replayed(client);
-        out.add({
-          'name': handle.name,
-          'pid': handle.pid,
-          'requests': _shapeRequests(client.received, last),
-        });
+        out.add({'name': handle.name, 'pid': handle.pid, ...shape(client)});
       } finally {
         await client.close();
       }
     }
     return {'servers': out};
   }
+
+  static int _intArgument(Object? value, int fallback) => switch (value) {
+    int n => n,
+    String s => int.tryParse(s) ?? fallback,
+    _ => fallback,
+  };
 
   static Future<void> _replayed(ServerAttachClient client) async {
     var deadline = DateTime.now().add(const Duration(seconds: 2));
@@ -294,6 +354,73 @@ class ServerCore extends PluginCore {
         },
     ];
   }
+
+  /// Anything that went wrong, newest first: failed requests, severe logs,
+  /// and any event carrying an error — with the request it happened under,
+  /// because "what broke" is only half the question.
+  static List<Map<String, Object?>> _shapeErrors(
+    List<ServerEvent> events,
+    int last,
+  ) {
+    var requestsByRid = <String, ServerEvent>{};
+    for (var event in events) {
+      if (event.channel == 'http' && event.rid != null) {
+        requestsByRid[event.rid!] = event;
+      }
+    }
+    var errors = [
+      for (var event in events)
+        if (_isError(event)) event,
+    ];
+    var recent = errors.length > last
+        ? errors.sublist(errors.length - last)
+        : errors;
+    return [
+      for (var event in recent.reversed)
+        {
+          'time': event.time.toIso8601String(),
+          'channel': event.channel,
+          ...event.payload,
+          if (event.channel != 'http' &&
+              event.rid != null &&
+              requestsByRid[event.rid] != null)
+            'request': {
+              'method': requestsByRid[event.rid]!.payload['method'],
+              'path': requestsByRid[event.rid]!.payload['path'],
+              'status': requestsByRid[event.rid]!.payload['status'],
+            },
+        },
+    ];
+  }
+
+  static bool _isError(ServerEvent event) {
+    if (event.payload['error'] != null) return true;
+    if (event.channel == 'http') {
+      return switch (event.payload['status']) {
+        int status => status >= 500,
+        _ => false,
+      };
+    }
+    if (event.channel == 'log') {
+      return const {'SEVERE', 'SHOUT'}.contains(event.payload['level']);
+    }
+    return false;
+  }
+
+  /// [sqlStats], flattened for the wire — same aggregation the panel shows.
+  static List<Map<String, Object?>> _shapeSqlStats(
+    List<ServerEvent> events,
+    int top,
+  ) => [
+    for (var shape in sqlStats(events).take(top))
+      {
+        'query': shape.normalized,
+        'count': shape.count,
+        'totalMs': double.parse(shape.totalMs.toStringAsFixed(1)),
+        'avgMs': double.parse(shape.averageMs.toStringAsFixed(1)),
+        'maxMs': double.parse(shape.maxMs.toStringAsFixed(1)),
+      },
+  ];
 
   @override
   void dispose() {
@@ -476,5 +603,12 @@ Map<String, int> repeatedQueries(
   counts.removeWhere((_, count) => count < threshold);
   return counts;
 }
+
+const _serverParameter = ActionParameter(
+  'name',
+  'Server',
+  required: false,
+  description: 'Which server, when several are running.',
+);
 
 PluginCore serverCoreFactory(PluginHost host) => ServerCore(host);

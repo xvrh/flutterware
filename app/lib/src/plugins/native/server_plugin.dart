@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/server.dart';
 
 import '../../address/address_scope.dart';
+import '../../ui/design/tokens.dart';
 import '../../ui/json_view.dart';
+import '../../ui/tappable.dart';
 import '../native_plugin.dart';
 import 'server_address.dart';
 import 'server_core.dart';
@@ -886,13 +888,14 @@ class _RequestSqlTabState extends State<_RequestSqlTab> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       children: [
         for (var event in widget.queries) ...[
-          InkWell(
+          Tappable.builder(
             onTap: () => setState(() {
               _expanded.contains(event.id)
                   ? _expanded.remove(event.id)
                   : _expanded.add(event.id);
             }),
-            child: Padding(
+            builder: (context, hovered) => Container(
+              color: hovered ? context.colors.hoverOverlay : null,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: Row(
                 children: [

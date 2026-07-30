@@ -399,7 +399,14 @@ required-looking call in a library whose pitch is "no init call".
 
 ## Where to pick up
 
-Five slices, correctness before surface area:
+**All five slices landed 2026-07-31**, plus a UI-review pass the plan did not
+foresee: request detail became tabbed (waterfall / sql / request / response /
+logs, the tab as an axis), the raw stream moved to an Events tab, and JSON
+bodies render in a `JsonView` ported from the cms project's admin_ui. What
+remains beyond this spec is usage-driven: more adapters as real servers adopt
+it, request replay, and whatever the next review round surfaces.
+
+The original plan — five slices, correctness before surface area:
 
 1. **Attach-loop robustness** (decision 10): core-owned merged store,
    reattach-on-drop, dedupe tests. The SQL normalizer (decision 12) lands

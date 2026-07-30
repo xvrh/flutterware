@@ -192,6 +192,23 @@ generator.
 ![The splash previewer, showing the same config rendered for Android, Android
 12+, iOS and web in both themes](doc/screenshots/splash.png)
 
+### Server inspection
+
+A Dart server that imports `package:flutterware/server.dart` announces itself
+however it was launched — `dart run`, the IDE, an agent — and the GUI shows
+its requests live: a waterfall of the queries and logs each one caused, an
+N+1 badge when a query shape repeats inside a request, request and response
+with headers and bodies, and a SQL view aggregating every query by shape.
+Explain and requery run inside your server, on its own connection. Inert in
+release builds; adapters are copy-paste snippets —
+see [doc/server_inspection.md](doc/server_inspection.md).
+
+The same answers reach the CLI and MCP: `requests`, `errors` and `sql`
+actions return the correlated data with no GUI running.
+
+![A request opened in the server inspector: the N+1 warning naming the
+repeated query, and the waterfall of its queries](doc/screenshots/server.png)
+
 ## Libraries
 
 `package:flutterware` also ships runtime libraries your app can depend on.
@@ -204,6 +221,7 @@ They are independent of the tools above.
 | `feature_flag.dart` | Feature flags, readable and overridable at runtime |
 | `router_outlet.dart` | Nested, URL-driven routing |
 | `flutter_test.dart` | Screenshot every step of a `flutter_test` — see [example](doc/app_tests.md) |
+| `server.dart` | Live inspection for Dart servers — the primitives behind the server tool above, and the protocol its attachers use |
 | `drawing.dart` | Path building and drawing helpers |
 | `plugins.dart` | The plugin contract `tool/flutterware.dart` is written against |
 
@@ -232,7 +250,8 @@ Open GitHub issues and pull requests with your ideas :-)
 See [CONTRIBUTING.md](CONTRIBUTING.md), and [CLAUDE.md](CLAUDE.md) for how the
 repo is laid out and how the launch flow works.
 
-The screenshots above are generated, not taken by hand — flutterware
+The screenshots above are generated, not taken by hand (except the shell and
+server ones, which need a hand anyway) — flutterware
 photographs itself:
 
 ```sh

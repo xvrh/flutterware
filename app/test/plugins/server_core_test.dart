@@ -211,6 +211,64 @@ void main() {
     );
   });
 
+  test(
+    'the errors action collects failures with their causing request',
+    () async {
+      inspector.addEvent('http', {
+        'method': 'GET',
+        'path': '/ok',
+        'status': 200,
+      }, rid: 'r1');
+      inspector.addEvent('log', {
+        'level': 'SEVERE',
+        'message': 'about to fail',
+      }, rid: 'r2');
+      inspector.addEvent('http', {
+        'method': 'GET',
+        'path': '/bad',
+        'status': 500,
+        'error': 'Bad state',
+      }, rid: 'r2');
+
+      await core.computeAll();
+      var result = (await core.invoke('errors'))! as Map<String, Object?>;
+      var servers = result['servers']! as List;
+      var errors = ((servers.single as Map)['errors']! as List).cast<Map>();
+
+      expect(errors, hasLength(2), reason: 'the 200 is not an error');
+      expect(errors.first['path'], '/bad', reason: 'newest first');
+      var log = errors.last;
+      expect(log['message'], 'about to fail');
+      expect(
+        (log['request']! as Map)['path'],
+        '/bad',
+        reason: 'a severe log carries the request it happened under',
+      );
+    },
+  );
+
+  test('the sql action returns the aggregate, heaviest first', () async {
+    inspector.addEvent('sql', {'query': 'select 1', 'ms': 1.0});
+    inspector.addEvent('sql', {
+      'query': 'select count(*) from t where id = 1',
+      'ms': 5.0,
+    });
+    inspector.addEvent('sql', {
+      'query': 'select count(*) from t where id = 2',
+      'ms': 5.0,
+    });
+
+    await core.computeAll();
+    var result = (await core.invoke('sql'))! as Map<String, Object?>;
+    var servers = result['servers']! as List;
+    var queries = ((servers.single as Map)['queries']! as List).cast<Map>();
+
+    expect(queries.first['query'], 'select count(*) from t where id = ?');
+    expect(queries.first['count'], 2);
+    expect(queries.first['totalMs'], 10.0);
+    expect(queries.last['query'], 'select ?');
+  });
+
   test('details are fetched lazily through the tracked server', () async {
     inspector.addEvent(
       'http',
