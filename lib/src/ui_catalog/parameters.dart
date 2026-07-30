@@ -1,5 +1,6 @@
 import 'dart:core' as core;
 import 'dart:core';
+
 import 'package:flutter/widgets.dart';
 
 class Parameters {
@@ -74,7 +75,47 @@ class EditableParameters implements Parameters {
 
   EditableParameters({required this.onRefresh, required this.onAdded});
 
+  /// The names declared since [beginPass], or null when no pass is open.
+  ///
+  /// A knob exists because a build asked for it, which makes a build the only
+  /// thing that can retire one: a knob renamed or deleted in the source is
+  /// simply never asked for again, and without a pass to notice that, it
+  /// lingers in [parameters] as a control that reads nothing.
+  Set<String>? _pass;
+
+  /// Starts recording which knobs a build declares.
+  ///
+  /// Between this and [endPass], [parameters] is the *union* of the last build
+  /// and this one — a knob is only known to be gone once the pass closes.
+  void beginPass() => _pass = <String>{};
+
+  /// Drops every knob the pass did not declare, and answers how many went.
+  core.int endPass() {
+    var declared = _pass;
+    _pass = null;
+    if (declared == null) return 0;
+    var retired = [
+      for (var name in parameters.keys)
+        if (!declared.contains(name)) name,
+    ];
+    for (var name in retired) {
+      var parameter = parameters.remove(name);
+      parameter?.removeListener(_onRefresh);
+      parameter?.dispose();
+    }
+    // Re-ordered to match the build, not the order things were first seen: a
+    // knob belongs in the panel where the demo asks for it, so one inserted
+    // halfway through a build appears halfway down rather than at the bottom.
+    // Without this a rename reads as a knob that moved as well as changed.
+    var ordered = {for (var name in declared) name: ?parameters[name]};
+    parameters
+      ..clear()
+      ..addAll(ordered);
+    return retired.length;
+  }
+
   T _addParameter<T extends Parameter>(String name, T Function() putIfAbsent) {
+    _pass?.add(name);
     var existingParameter = parameters[name];
     T parameter;
     if (existingParameter is T) {
@@ -251,35 +292,13 @@ class NumParameter<T extends num> extends Parameter<T> {
   bool get isInt => T == int;
 }
 
-/// How a [PickerParameter] renders in the toolbar.
-enum PickerStyle {
-  /// A compact button that opens a modal dialog listing the options. Best when
-  /// there are many options or little horizontal room for the list.
-  dialog,
-
-  /// An inline segmented control — every option visible at once. Best for two
-  /// or three options.
-  segmented,
-
-  /// A compact chip that opens an anchored popover menu under it. Less invasive
-  /// than [dialog]; best for a medium handful of options.
-  popover,
-}
-
 class PickerParameter<T> extends Parameter<T> {
   Map<String, T> options;
   Color Function(T value)? swatch;
   IconData Function(T value)? icon;
 
-  /// How this picker renders in the toolbar.
-  PickerStyle style;
-
-  PickerParameter({
-    required this.options,
-    this.swatch,
-    this.icon,
-    this.style = PickerStyle.popover,
-  }) : super(options.values.first);
+  PickerParameter({required this.options, this.swatch, this.icon})
+    : super(options.values.first);
 
   // Resolved here, inside the class, so the call runs with the reified [T] —
   // calling [swatch]/[icon] through the raw `PickerParameter` type would fail

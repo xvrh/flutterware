@@ -15,6 +15,8 @@ enum {
   kMsgPointerEvent = 6,
   kMsgKeyEvent = 7,
   kMsgShutdown = 8,
+  kMsgCapture = 9,
+  kMsgCaptured = 10,
 };
 
 // Connects to the GUI's Unix domain socket. Returns the fd, or -1 on failure.

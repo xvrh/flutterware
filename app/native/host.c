@@ -2,6 +2,7 @@
 // renderer directly into shared IOSurface-backed Metal textures (zero-copy),
 // and exchanges frames + input with a controlling process over a Unix domain
 // socket.
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -21,9 +22,14 @@ static uint32_t g_generation = 0;
 static uint64_t g_frame_id = 0;
 static double g_pixel_ratio = 1.0;
 
-// Optional headless smoke: dump the first frame as a step-2 raw file.
-static const char* g_capture_path = NULL;
-static bool g_captured = false;
+// A pending capture request. `--capture-raw` arms one at startup; a kMsgCapture
+// message arms another at any time, which is what lets one warm guest be
+// screenshotted repeatedly instead of being respawned per frame wanted.
+//
+// Written on the main thread (argv, socket loop), read and cleared on a
+// Metal completion thread, so it is guarded.
+static pthread_mutex_t g_capture_lock = PTHREAD_MUTEX_INITIALIZER;
+static char* g_capture_path = NULL;
 
 // Receives engine log output, including Dart print(). Kept on stdout so the
 // control socket carries only protocol traffic.
@@ -76,12 +82,21 @@ static void SendSurfacesAllocated(void) {
   ipc_send(g_socket, kMsgSurfacesAllocated, payload, sizeof(payload));
 }
 
-static void SendWindowMetrics(int width, int height, double pixel_ratio) {
+// `insets` is top, right, bottom, left in physical pixels — a device's safe
+// areas, which only the GUI knows because it is the one that picked the
+// device. The frame around the screen is drawn in that other process, so
+// without this the guest has no way to learn that it is behind a notch.
+static void SendWindowMetrics(int width, int height, double pixel_ratio,
+                              const double insets[4]) {
   FlutterWindowMetricsEvent metrics = {0};
   metrics.struct_size = sizeof(FlutterWindowMetricsEvent);
   metrics.width = (size_t)width;
   metrics.height = (size_t)height;
   metrics.pixel_ratio = pixel_ratio;
+  metrics.physical_view_inset_top = insets[0];
+  metrics.physical_view_inset_right = insets[1];
+  metrics.physical_view_inset_bottom = insets[2];
+  metrics.physical_view_inset_left = insets[3];
   FlutterEngineSendWindowMetricsEvent(g_engine, &metrics);
 }
 
@@ -97,9 +112,21 @@ typedef struct {
 // read it back and to tell the GUI the frame is ready.
 static void OnFramePresented(void* user_data) {
   PresentedFrame* frame = (PresentedFrame*)user_data;
-  if (g_capture_path && !g_captured) {
-    WriteRawCapture(g_capture_path, (int)frame->ring_index);
-    g_captured = true;
+
+  // Take the pending request, if any, and clear it under the lock so a second
+  // request cannot be lost or double-written.
+  pthread_mutex_lock(&g_capture_lock);
+  char* capture_path = g_capture_path;
+  g_capture_path = NULL;
+  pthread_mutex_unlock(&g_capture_lock);
+
+  if (capture_path) {
+    WriteRawCapture(capture_path, (int)frame->ring_index);
+    // Tell the caller the file is complete; without this it can only guess
+    // when the bytes have landed.
+    ipc_send(g_socket, kMsgCaptured, (const uint8_t*)capture_path,
+             strlen(capture_path));
+    free(capture_path);
   }
   uint8_t payload[16];
   memcpy(payload + 0, &frame->ring_index, 4);
@@ -164,7 +191,7 @@ int main(int argc, char** argv) {
   int height = atoi(argv[5]);
   for (int i = 6; i + 1 < argc; i += 2) {
     if (strcmp(argv[i], "--capture-raw") == 0) {
-      g_capture_path = argv[i + 1];
+      g_capture_path = strdup(argv[i + 1]);
     }
   }
 
@@ -206,7 +233,8 @@ int main(int argc, char** argv) {
 
   ipc_send(g_socket, kMsgReady, NULL, 0);
   SendSurfacesAllocated();
-  SendWindowMetrics(width, height, g_pixel_ratio);
+  const double no_insets[4] = {0, 0, 0, 0};
+  SendWindowMetrics(width, height, g_pixel_ratio, no_insets);
 
   // Socket read loop on the main thread.
   for (;;) {
@@ -218,17 +246,32 @@ int main(int argc, char** argv) {
       uint32_t new_width;
       uint32_t new_height;
       double pixel_ratio;
+      double insets[4] = {0, 0, 0, 0};
       memcpy(&new_width, payload + 0, 4);
       memcpy(&new_height, payload + 4, 4);
       memcpy(&pixel_ratio, payload + 8, 8);
+      // Optional, so a client built before the insets existed still resizes.
+      if (len >= 48) memcpy(insets, payload + 16, 32);
       g_pixel_ratio = pixel_ratio;
       // The ring is reallocated inside GetNextDrawable on the raster thread;
       // here we only nudge the engine to render at the new size.
-      SendWindowMetrics((int)new_width, (int)new_height, pixel_ratio);
+      SendWindowMetrics((int)new_width, (int)new_height, pixel_ratio, insets);
     } else if (type == kMsgPointerEvent) {
       input_handle_pointer(g_engine, payload, len);
     } else if (type == kMsgKeyEvent) {
       input_handle_key(g_engine, payload, len);
+    } else if (type == kMsgCapture) {
+      // Arm a capture and force a frame: the engine renders nothing when
+      // nothing changed, so without this a request on a static scene would
+      // wait forever.
+      char* path = (char*)malloc(len + 1);
+      memcpy(path, payload, len);
+      path[len] = '\0';
+      pthread_mutex_lock(&g_capture_lock);
+      free(g_capture_path);
+      g_capture_path = path;
+      pthread_mutex_unlock(&g_capture_lock);
+      FlutterEngineScheduleFrame(g_engine);
     } else if (type == kMsgShutdown) {
       free(payload);
       break;

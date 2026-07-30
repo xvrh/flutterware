@@ -34,6 +34,12 @@
 # Embedder: downloaded FlutterEmbedder.framework (see lib/src/embedder/)
 /.engine/
 
+# Demos written and deleted by integration_test/. Ignored rather than checked
+# in so a run killed halfway leaves an untracked file behind instead of a
+# modified tracked one — which would fail CI's uncommitted-changes step for a
+# reason that has nothing to do with the test.
+/tool/catalog/demos/fixture_*.dart
+
 # Web related
 lib/generated_plugin_registrant.dart
 

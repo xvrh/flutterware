@@ -23,6 +23,6 @@ abstract class SerializableLocale
   String? get country;
 
   String get displayString {
-    return [language, if (country != null) country!].join('_');
+    return [language, ?country].join('_');
   }
 }

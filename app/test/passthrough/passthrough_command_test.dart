@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import '../support/dart_executable.dart';
+
 import 'package:flutterware_app/src/passthrough/passthrough_command.dart';
 import 'package:test/test.dart';
 
@@ -8,20 +10,8 @@ import 'package:test/test.dart';
 /// `Platform.resolvedExecutable` would normally point at `dart`, but under
 /// `flutter test` it points at `flutter_tester` (which can't run scripts the
 /// same way). So we resolve `dart` from PATH at test time.
-String _resolveDart() {
-  if (Platform.resolvedExecutable.endsWith('/dart')) {
-    return Platform.resolvedExecutable;
-  }
-  final r = Process.runSync('/usr/bin/which', ['dart']);
-  if (r.exitCode == 0) {
-    final path = (r.stdout as String).trim();
-    if (path.isNotEmpty) return path;
-  }
-  throw StateError('Could not locate dart executable');
-}
-
 void main() {
-  final dart = _resolveDart();
+  final dart = resolveDartExecutable();
 
   test(
     'runUnderPty returns 127 for nonexistent executable without throwing',

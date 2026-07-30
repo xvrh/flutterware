@@ -7,6 +7,7 @@ import '../icon/model/service.dart';
 import '../project.dart';
 import '../ui/colors.dart';
 import '../utils/async_value.dart';
+import '../utils/value_stream_builder.dart';
 import '../utils/router_outlet.dart';
 import 'metrics_card.dart';
 import 'service.dart';
@@ -63,8 +64,8 @@ class _ProjectInfoCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        ValueListenableBuilder<Snapshot<Pubspec>>(
-          valueListenable: project.pubspec,
+        ValueStreamBuilder<Snapshot<Pubspec>>(
+          stream: project.pubspec,
           builder: (context, projectSnapshot, child) {
             var version = projectSnapshot.data?.version;
             String? versionString;
@@ -124,8 +125,8 @@ class _ProjectInfoCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            child: ValueListenableBuilder<Snapshot<List<FlutterPlatform>>>(
-              valueListenable: project.info.platforms,
+            child: ValueStreamBuilder<Snapshot<List<FlutterPlatform>>>(
+              stream: project.info.platforms,
               builder: (context, snapshot, child) {
                 return Text(
                   snapshot.data?.map((p) => p.name.toUpperCase()).join(' | ') ??
@@ -161,8 +162,8 @@ class _Icon extends StatelessWidget {
         child: SizedBox(
           width: IconService.previewSize.toDouble(),
           height: IconService.previewSize.toDouble(),
-          child: ValueListenableBuilder<Snapshot<SampleIcon>>(
-            valueListenable: project.icons.sample,
+          child: ValueStreamBuilder<Snapshot<SampleIcon>>(
+            stream: project.icons.sample.snapshots,
             builder: (context, snapshot, child) {
               var file = snapshot.data?.file;
               if (file != null) {

@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:pool/pool.dart';
+import 'value_stream.dart';
 
 final _logger = Logger('data_loader');
 
@@ -41,13 +41,22 @@ class Snapshot<T extends Object> {
   }
 }
 
-class AsyncValue<T extends Object>
-    implements ChangeNotifier, ValueListenable<Snapshot<T>> {
+/// A value loaded asynchronously, published as a [ValueStream] of [Snapshot]s.
+///
+/// This is a *loader*, not a notifier — the loading modes, the [Pool] that
+/// serialises refreshes and the [Disposable] chaining are what it is for.
+/// Notification is delegated to [snapshots], which is why nothing here imports
+/// `package:flutter`.
+///
+/// Laziness is [ValueStream]'s `onListen`: the first subscriber starts the
+/// load, and reading [value] never does. That is what makes a `PluginReport` a
+/// safe pure read of whatever some widget already caused to load.
+class AsyncValue<T extends Object> {
   final Future<T> Function() _loader;
   final String? debugName;
   final bool lazy;
   final LoadingMode? loadingMode;
-  final _value = ValueNotifier<Snapshot<T>>(const Snapshot());
+  late final ValueStream<Snapshot<T>> _snapshots;
   final _pool = Pool(1);
   bool _isInitialized = false;
   bool _isDisposed = false;
@@ -59,6 +68,13 @@ class AsyncValue<T extends Object>
     T? seed,
     this.debugName,
   }) : lazy = lazy ?? true {
+    _snapshots = ValueStream<Snapshot<T>>(
+      const Snapshot(),
+      debugName: debugName,
+      onListen: () {
+        if (!_isInitialized) refresh();
+      },
+    );
     if (seed != null) {
       _isInitialized = true;
       _setValue(Snapshot(data: seed));
@@ -66,6 +82,20 @@ class AsyncValue<T extends Object>
       refresh();
     }
   }
+
+  /// The snapshots, for a widget or anything else that wants to follow along.
+  /// Subscribing is what starts the load.
+  ValueStream<Snapshot<T>> get snapshots => _snapshots;
+
+  /// The current snapshot. Reading it never starts work — a caller that has
+  /// not subscribed sees `isLoading` until somebody does.
+  Snapshot<T> get value => _snapshots.value;
+
+  Stream<Snapshot<T>> get stream => _snapshots.stream;
+
+  StreamSubscription<Snapshot<T>> listen(
+    void Function(Snapshot<T> snapshot) onData,
+  ) => _snapshots.listen(onData);
 
   Future<Snapshot<T>> _load() async {
     try {
@@ -80,14 +110,13 @@ class AsyncValue<T extends Object>
     }
   }
 
-  @override
-  Snapshot<T> get value => _value.value;
-
   void _setValue(Snapshot<T> snapshot) {
     if (_isDisposed) return;
 
-    var previousValue = _value.value.data;
-    _value.value = snapshot;
+    var previousValue = _snapshots.value.data;
+    // `value =`, not `emit`: skipping an identical snapshot is what
+    // `ValueNotifier` did, and the UI is tuned against that.
+    _snapshots.value = snapshot;
     if (previousValue is Disposable) {
       previousValue.dispose();
     }
@@ -161,35 +190,14 @@ class AsyncValue<T extends Object>
     }
   }
 
-  @override
-  void addListener(VoidCallback listener) {
-    _value.addListener(listener);
+  bool get hasListeners => _snapshots.hasListeners;
 
-    if (!_isInitialized) {
-      refresh();
-    }
-  }
-
-  @override
-  bool get hasListeners => _value.hasListeners;
-
-  @override
-  void notifyListeners() {
-    _value.notifyListeners();
-  }
-
-  @override
-  void removeListener(VoidCallback listener) {
-    _value.removeListener(listener);
-  }
-
-  @override
   void dispose() {
     _isDisposed = true;
-    var previousValue = _value.value.data;
+    var previousValue = _snapshots.value.data;
     if (previousValue is Disposable) {
       previousValue.dispose();
     }
-    _value.dispose();
+    unawaited(_snapshots.close());
   }
 }

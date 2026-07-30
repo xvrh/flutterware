@@ -75,9 +75,34 @@ Future<String> buildHost({
   return p.join(nativeBuildDir, 'host');
 }
 
+/// Resolves [name] without relying on `PATH`.
+///
+/// A macOS app launched by `flutter run` inherits a stripped environment, so
+/// `cmake` is not findable by name even when a terminal finds it fine.
+String resolveExecutable(String name) {
+  var fromPath = Process.runSync('/usr/bin/which', [name]);
+  if (fromPath.exitCode == 0) {
+    var resolved = (fromPath.stdout as String).trim();
+    if (resolved.isNotEmpty) return resolved;
+  }
+  for (var dir in const [
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/usr/bin',
+    '/Applications/CMake.app/Contents/bin',
+  ]) {
+    var candidate = p.join(dir, name);
+    if (File(candidate).existsSync()) return candidate;
+  }
+  throw StateError(
+    'Could not find "$name". It is needed to build the embedder guest, and a '
+    'macOS app launched by `flutter run` does not inherit your shell PATH.',
+  );
+}
+
 Future<void> _run(String executable, List<String> args) async {
   var process = await Process.start(
-    executable,
+    resolveExecutable(executable),
     args,
     mode: ProcessStartMode.inheritStdio,
   );

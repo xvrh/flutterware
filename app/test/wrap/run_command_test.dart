@@ -1,21 +1,12 @@
 import 'dart:io';
+
+import '../support/dart_executable.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 /// Locate the `dart` executable (see passthrough_command_test for why).
-String _resolveDart() {
-  if (Platform.resolvedExecutable.endsWith('/dart')) {
-    return Platform.resolvedExecutable;
-  }
-  final r = Process.runSync('/usr/bin/which', ['dart']);
-  if (r.exitCode == 0 && (r.stdout as String).trim().isNotEmpty) {
-    return (r.stdout as String).trim();
-  }
-  throw StateError('Could not locate dart');
-}
-
 void main() {
-  final dart = _resolveDart();
+  final dart = resolveDartExecutable();
   // Use absolute path so `dart run` finds the script regardless of the
   // workingDirectory we set on the test process.
   final wrapScript = p.join(Directory.current.path, 'bin', 'wrap.dart');

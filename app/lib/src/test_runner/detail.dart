@@ -61,7 +61,7 @@ class DetailSkeleton extends StatelessWidget {
           child: Stack(
             children: [
               Positioned.fill(child: _ScreenView(run, screen, child: main)),
-              if (previousScreenLink != null) previousScreenLink,
+              ?previousScreenLink,
               Positioned(
                 right: 0,
                 bottom: 0,

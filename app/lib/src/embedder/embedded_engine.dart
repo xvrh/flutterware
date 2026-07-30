@@ -1,18 +1,41 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/run_dir.dart';
 import 'protocol.dart';
 
 enum EmbeddedEnginePhase { building, running, error }
 
 /// Drives an out-of-process Flutter-engine guest and bridges its rendered
 /// frames into a host external texture.
+typedef GuestBuild = ({String hostPath, String assetsDir, String icuData});
+
 class EmbeddedEngine extends ChangeNotifier {
-  EmbeddedEngine({required this.appPackageRoot, required this.flutterSdkRoot});
+  EmbeddedEngine({
+    required this.appPackageRoot,
+    required this.flutterSdkRoot,
+    this.buildGuest,
+    this.name = 'gui',
+  });
+
+  /// Distinguishes this engine's guest socket from any other's.
+  ///
+  /// A fixed name meant a second GUI deleted the first one's socket and bound
+  /// its own. Pass the daemon's session id: two clients of one daemon are now
+  /// an ordinary case — a panel open while an agent screenshots — rather than
+  /// something to refuse.
+  final String name;
+
+  /// Produces the guest's binary and assets. Defaults to running
+  /// `tool/embedder/build_guest.dart`, which compiles the fixed harness scene;
+  /// a caller with its own entrypoint and resident compiler supplies its own.
+  final Future<GuestBuild> Function()? buildGuest;
 
   /// Absolute path to the `flutterware_app` package root (the `app/` dir).
   final String appPackageRoot;
@@ -37,17 +60,26 @@ class EmbeddedEngine extends ChangeNotifier {
   Future<void> _handleChain = Future.value();
   int _currentGeneration = -1;
   bool _disposed = false;
+  final Completer<String> _vmServiceUri = Completer<String>();
+
+  /// The guest's VM-service URI, which it prints on stdout at startup. Needed
+  /// to hot-reload the live guest.
+  Future<String> get vmServiceUri => _vmServiceUri.future;
 
   String get _dartExecutable => p.join(flutterSdkRoot, 'bin', 'dart');
 
   /// Builds and launches the guest. Call once.
   Future<void> start({int width = 800, int height = 600}) async {
     try {
-      var build = await _runBuild();
+      var build = await (buildGuest ?? _runBuild)();
       if (_disposed) return;
 
-      var buildDir = p.join(appPackageRoot, 'build', 'embedder');
-      var socketPath = p.join(buildDir, 'embedder_gui.sock');
+      // Not under the build directory: the CLI installs the GUI at
+      // `~/.flutterware/<sha1>/app/`, and a socket below that overflows the
+      // 104-byte cap on a unix socket path.
+      var socketPath = checkSocketPath(
+        p.join(flutterwareRunDir(), 'g-$name.sock'),
+      );
       var socketFile = File(socketPath);
       if (socketFile.existsSync()) socketFile.deleteSync();
       _server = await ServerSocket.bind(
@@ -62,11 +94,20 @@ class EmbeddedEngine extends ChangeNotifier {
         '$width',
         '$height',
       ], mode: ProcessStartMode.normal);
-      _guest!.stdout.transform(const SystemEncoding().decoder).listen((line) {
-        debugPrint('[guest] $line');
-      });
+      _guest!.stdout
+          .transform(const SystemEncoding().decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+            debugPrint('[guest] $line');
+            _rememberGuestOutput(line);
+            var match = RegExp(r'(http://127\.0\.0\.1:\S+/)').firstMatch(line);
+            if (match != null && !_vmServiceUri.isCompleted) {
+              _vmServiceUri.complete(match.group(1));
+            }
+          });
       _guest!.stderr.transform(const SystemEncoding().decoder).listen((line) {
         debugPrint('[guest:err] $line');
+        _rememberGuestOutput(line);
       });
 
       // Accept the guest's connection, but don't hang forever if the guest
@@ -84,8 +125,7 @@ class EmbeddedEngine extends ChangeNotifier {
     }
   }
 
-  Future<({String hostPath, String assetsDir, String icuData})>
-  _runBuild() async {
+  Future<GuestBuild> _runBuild() async {
     var result = await Process.run(_dartExecutable, [
       'run',
       p.join('tool', 'embedder', 'build_guest.dart'),
@@ -134,10 +174,13 @@ class EmbeddedEngine extends ChangeNotifier {
         }
       case ErrorMessage():
         _fail(message.message);
+      case CapturedMessage():
+        break; // Awaited by whoever asked for the capture, not here.
       case ResizeMessage():
       case PointerEventMessage():
       case KeyEventMessage():
       case ShutdownMessage():
+      case CaptureMessage():
         break; // GUI-to-guest messages; never received here.
     }
   }
@@ -162,11 +205,31 @@ class EmbeddedEngine extends ChangeNotifier {
 
   void _onSocketClosed() {
     if (phase != EmbeddedEnginePhase.error && !_disposed) {
-      _fail('the embedder guest exited');
+      // With what it last said. "the embedder guest exited" on its own names
+      // the symptom and nothing else, and the guest is the only thing that
+      // knows why it went.
+      var tail = _guestLog.isEmpty
+          ? ' (it printed nothing)'
+          : ':\n${_guestLog.join('\n')}';
+      _fail('the embedder guest exited$tail');
     }
   }
 
+  /// The guest's last few lines, kept for the message above.
+  final _guestLog = <String>[];
+
+  void _rememberGuestOutput(String line) {
+    _guestLog.add(line);
+    if (_guestLog.length > 20) _guestLog.removeAt(0);
+  }
+
   void _fail(String message) {
+    if (!_vmServiceUri.isCompleted) {
+      _vmServiceUri.completeError(StateError(message));
+    }
+    // Notifying after dispose throws, and every socket error routes here —
+    // including the ones a teardown causes.
+    if (_disposed) return;
     errorMessage = message;
     phase = EmbeddedEnginePhase.error;
     notifyListeners();
@@ -180,8 +243,23 @@ class EmbeddedEngine extends ChangeNotifier {
   }
 
   /// Forwards a new physical-pixel size to the guest.
-  void resize(int width, int height, double pixelRatio) {
-    _send(ResizeMessage(width: width, height: height, pixelRatio: pixelRatio));
+  void resize(
+    int width,
+    int height,
+    double pixelRatio, {
+    EdgeInsets insets = EdgeInsets.zero,
+  }) {
+    _send(
+      ResizeMessage(
+        width: width,
+        height: height,
+        pixelRatio: pixelRatio,
+        insetTop: insets.top,
+        insetRight: insets.right,
+        insetBottom: insets.bottom,
+        insetLeft: insets.left,
+      ),
+    );
   }
 
   void sendPointer({

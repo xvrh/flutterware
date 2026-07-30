@@ -22,6 +22,11 @@ jobs:
       - run: flutter analyze
       - run: flutter test
         working-directory: app
+      # The root package's own tests. Separate because a pub workspace does not
+      # run its members' suites — without this line `test/` here is analyzed
+      # and never executed, which is how the inspection wire format sat
+      # unguarded while looking covered.
+      - run: flutter test
       - run: flutter pub run tool/prepare_submit.dart
       - name: "check for uncommitted changes"
         run: |
@@ -30,3 +35,46 @@ jobs:
                    "and check in all changes" \
               && exit 1)
         shell: bash
+      - name: "fw finds its own install"
+        # The one thing that runs `fw` as a *process*, from a project that is not
+        # the app package, and reaches a plugin action that needs the daemon.
+        #
+        # It exists because that combination had two independent bugs and nothing
+        # could see either. `UiCatalogCore` passed the target package as
+        # `appPackageRoot`, so the launch machinery looked for
+        # `tool/catalog/compiler_daemon.dart` inside the user's project; and once
+        # that was fixed, `dart run app/bin/fw.dart` still had no
+        # `APP_TOOL_PATH`, because only the launcher sets it. Every headless
+        # catalog action — screenshot, inspect, describe --knobs, check, audit —
+        # was broken from `fw` in an ordinary project, in both cases.
+        #
+        # `headless_check` could not catch it: it builds its own `DaemonConfig`,
+        # which is the very step that was wrong, and it runs in-process, which
+        # skips how `fw` resolves its own install. A unit test cannot either,
+        # since that resolution reads `Platform.script` and the environment.
+        # Running the binary is the whole point.
+        #
+        # `check` and not `screenshot` so this can *block*: it stops at the
+        # daemon handshake, launching no guest, so it needs no GPU — which is
+        # exactly why the step below cannot block.
+        run: dart run ../../app/bin/fw.dart run ui_catalog check
+        working-directory: examples/example
+
+      - name: "the compiler daemon, as a process"
+        # Everything in `app/integration_test/` that needs no GPU: the daemon
+        # starting, quarantining a demo it cannot compile, noticing an edit on
+        # disk, sharing one warm compiler between two clients without letting
+        # either decide what the other gets, announcing the servable set to a
+        # client that did not ask, and surviving a line it cannot read.
+        #
+        # `dart test`, not `flutter test`: anything under `integration_test/`
+        # makes `flutter test` demand a device and `package:integration_test`,
+        # and these are plain VM tests that spawn processes.
+        #
+        # `--exclude-tags gpu` leaves out the checks that spawn the embedder
+        # guest, which composites through Metal — see `app/dart_test.yaml`. That
+        # is what lets this step block: a check nobody can fail is not a check,
+        # and the step it replaces was `continue-on-error` from the day it was
+        # written to the day it was deleted.
+        run: dart test integration_test --exclude-tags gpu
+        working-directory: app

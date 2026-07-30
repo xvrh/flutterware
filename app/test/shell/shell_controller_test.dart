@@ -1,0 +1,556 @@
+import 'dart:io';
+
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/plugins.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/log_client.dart';
+import 'package:flutterware_app/src/context.dart';
+import 'package:flutterware_app/src/plugins/manifest_loader.dart';
+import 'package:flutterware_app/src/plugins/native_plugin.dart';
+import 'package:flutterware_app/src/plugins/plugin_core.dart';
+import 'package:flutterware_app/src/plugins/registry.dart';
+import 'package:flutterware_app/src/shell/shell_controller.dart';
+import 'package:flutterware_app/src/shell/worktree_discovery.dart';
+import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+
+const _listing =
+    'worktree /repo\nbranch refs/heads/main\n\n'
+    'worktree /repo-explorer\nbranch refs/heads/feature/explorer\n\n'
+    'worktree /repo-pty\nbranch refs/heads/fix/pty\n';
+
+const _manifestJson =
+    '{"version":1,"plugins":[{"id":"a.one","label":"One"},'
+    '{"id":"a.two","label":"Two"}]}';
+
+var _disposedIds = <String>[];
+
+class _FakeCore extends PluginCore {
+  _FakeCore(super.host, {this.guards = const []});
+
+  final List<Guard> guards;
+
+  @override
+  PluginReport get report =>
+      PluginReport(id: host.id, label: host.label, guards: guards);
+
+  /// Closing a worktree has to reach the core: that is where watchers,
+  /// subscriptions and processes live, and the panel is only a screen.
+  @override
+  void dispose() {
+    _disposedIds.add('${host.worktree.path}:${host.id}');
+    super.dispose();
+  }
+}
+
+class _Fake extends NativePlugin<_FakeCore> {
+  _Fake(super.core);
+
+  @override
+  Widget buildPanel(BuildContext context) => const SizedBox();
+}
+
+PluginRegistry _panels(Iterable<String> ids) =>
+    PluginRegistry({for (var id in ids) id: panelFor<_FakeCore>(_Fake.new)});
+
+/// Mutable so a test can change what git reports between calls.
+var _currentListing = _listing;
+
+ShellController _controller({
+  String manifest = _manifestJson,
+  int manifestExit = 0,
+  Map<String, PluginCoreFactory>? cores,
+}) {
+  cores ??= {'a.one': _FakeCore.new, 'a.two': _FakeCore.new};
+  return ShellController(
+    appContext: AppContext(logger: LogClient.print()),
+    flutterSdk: FlutterSdkPath('/tmp/flutter'),
+    registry: _panels(cores.keys),
+    coreRegistry: PluginCoreRegistry(cores),
+    manifestLoader: _StubLoader(manifest, manifestExit),
+    discovery: WorktreeDiscovery(
+      runProcess: (_, _, {workingDirectory}) async =>
+          ProcessResult(0, 0, _currentListing, ''),
+    ),
+  );
+}
+
+/// Bypasses the config-file existence check so tests need no fixtures.
+class _StubLoader implements ManifestLoader {
+  _StubLoader(this.manifest, this.exitCode);
+
+  final String manifest;
+  final int exitCode;
+
+  @override
+  Future<PluginManifest?> load(String worktreePath) async {
+    if (exitCode != 0) {
+      throw ManifestLoadException('config failed', details: 'boom');
+    }
+    return PluginManifest.parse(manifest);
+  }
+
+  @override
+  Future<({PluginManifest? manifest, String? error})> tryLoad(
+    String worktreePath,
+  ) async {
+    try {
+      return (manifest: await load(worktreePath), error: null);
+    } on ManifestLoadException catch (e) {
+      return (manifest: null, error: '$e');
+    }
+  }
+
+  @override
+  String get dartExecutable => 'dart';
+}
+
+void main() {
+  setUp(() {
+    _disposedIds = <String>[];
+    _currentListing = _listing;
+  });
+
+  test('start opens only the launch worktree', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+
+    expect(shell.worktrees, hasLength(3));
+    expect(shell.openWorktrees.map((w) => w.branch), ['main']);
+    expect(shell.closedWorktrees.map((w) => w.branch), [
+      'feature/explorer',
+      'fix/pty',
+    ]);
+    expect(shell.selected!.branch, 'main');
+    // Nothing is mounted: a worktree opens on its own home screen rather than
+    // on whichever plugin happens to be declared first.
+    expect(shell.isHome, isTrue);
+    expect(shell.selectedPluginId, isNull);
+  });
+
+  test('the tab exists before the config finishes running', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var explorer = shell.closedWorktrees.first;
+
+    // Not awaited: this is the window the user used to spend looking at an
+    // unchanged window.
+    var opening = shell.open(explorer);
+    expect(shell.openWorktrees.map((w) => w.branch), [
+      'main',
+      'feature/explorer',
+    ]);
+    expect(shell.isLoading(explorer), isTrue);
+    expect(shell.sessionFor(explorer), isNull);
+
+    await opening;
+    expect(shell.isLoading(explorer), isFalse);
+    expect(shell.sessionFor(explorer), isNotNull);
+  });
+
+  test('a worktree closed while it was still loading stays closed', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var explorer = shell.closedWorktrees.first;
+
+    var opening = shell.open(explorer);
+    expect(shell.close(explorer), isTrue);
+    await opening;
+
+    expect(shell.openWorktrees.map((w) => w.branch), ['main']);
+    expect(shell.sessionFor(explorer), isNull);
+  });
+
+  test('selection is remembered per worktree', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    var main = shell.worktrees.first;
+    var explorer = shell.closedWorktrees.first;
+
+    shell.selectPlugin('a.two');
+    await shell.open(explorer);
+    expect(shell.isHome, isTrue, reason: 'the new worktree opens on its home');
+
+    shell.select(main);
+    expect(shell.selectedPluginId, 'a.two');
+  });
+
+  test('reloading the config rebuilds the plugins in place', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    shell.selectPlugin('a.two');
+    var before = shell.selectedSession!.plugins.first;
+
+    expect(await shell.reloadConfig(), isTrue);
+
+    expect(shell.openWorktrees.map((w) => w.branch), ['main']);
+    expect(_disposedIds, ['/repo:a.one', '/repo:a.two']);
+    expect(identical(shell.selectedSession!.plugins.first, before), isFalse);
+    // Where you were survives the reload; the plugin is still declared.
+    expect(shell.selectedPluginId, 'a.two');
+  });
+
+  test('a blocking guard refuses the reload too', () async {
+    var shell = _controller(
+      cores: {
+        'a.one': (host) =>
+            _FakeCore(host, guards: const [Guard.block('dirty')]),
+        'a.two': _FakeCore.new,
+      },
+    );
+    await shell.start('/repo');
+
+    expect(await shell.reloadConfig(), isFalse);
+    expect(_disposedIds, isEmpty);
+  });
+
+  test('opening a second worktree gives it its own plugin instances', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    await shell.open(shell.closedWorktrees.first);
+
+    expect(shell.openWorktrees.map((w) => w.branch), [
+      'main',
+      'feature/explorer',
+    ]);
+    var a = shell.sessionFor(shell.worktrees[0])!.plugins.first;
+    var b = shell.sessionFor(shell.worktrees[1])!.plugins.first;
+    expect(identical(a, b), isFalse);
+    expect(a.host.worktree.path, isNot(b.host.worktree.path));
+  });
+
+  test("closing disposes only that worktree's plugins", () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    await shell.open(shell.closedWorktrees.first);
+
+    expect(shell.close(shell.worktrees[1]), isTrue);
+    expect(_disposedIds, ['/repo-explorer:a.one', '/repo-explorer:a.two']);
+    expect(shell.openWorktrees.map((w) => w.branch), ['main']);
+    // Selection falls back to a worktree that is still open.
+    expect(shell.selected!.branch, 'main');
+  });
+
+  test('a blocking guard refuses the close', () async {
+    var shell = _controller(
+      cores: {
+        'a.one': (host) =>
+            _FakeCore(host, guards: const [Guard.block('dirty')]),
+        'a.two': _FakeCore.new,
+      },
+    );
+    await shell.start('/repo');
+
+    expect(shell.sessionFor(shell.worktrees[0])!.isBlocked, isTrue);
+    expect(shell.close(shell.worktrees[0]), isFalse);
+    expect(shell.openWorktrees, hasLength(1));
+    expect(_disposedIds, isEmpty);
+  });
+
+  test('a warning guard does not refuse the close', () async {
+    var shell = _controller(
+      cores: {
+        'a.one': (host) => _FakeCore(host, guards: const [Guard.warn('busy')]),
+      },
+    );
+    await shell.start('/repo');
+    expect(shell.close(shell.worktrees[0]), isTrue);
+  });
+
+  test('a broken config still opens the worktree, with the reason', () async {
+    var shell = _controller(manifestExit: 1);
+    await shell.start('/repo');
+
+    expect(shell.openWorktrees, hasLength(1));
+    expect(shell.errorFor(shell.worktrees[0])!.message, contains('boom'));
+    // Open but empty — the shell can explain rather than showing nothing.
+    expect(shell.sessionFor(shell.worktrees[0])!.plugins, isEmpty);
+  });
+
+  test('rescanning closes worktrees git no longer reports', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    await shell.open(shell.closedWorktrees.first);
+    expect(shell.openWorktrees.map((w) => w.branch), [
+      'main',
+      'feature/explorer',
+    ]);
+
+    // The explorer worktree is removed behind our back (git worktree remove).
+    _currentListing =
+        'worktree /repo\nbranch refs/heads/main\n\n'
+        'worktree /repo-pty\nbranch refs/heads/fix/pty\n';
+    await shell.rescanWorktrees();
+
+    expect(shell.worktrees.map((w) => w.branch), ['main', 'fix/pty']);
+    expect(shell.openWorktrees.map((w) => w.branch), ['main']);
+    // Its plugins were disposed, not merely hidden.
+    expect(_disposedIds, ['/repo-explorer:a.one', '/repo-explorer:a.two']);
+  });
+
+  test('disposing the controller releases every open worktree', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    await shell.open(shell.closedWorktrees.first);
+
+    shell.dispose();
+    expect(_disposedIds, hasLength(4));
+  });
+
+  group('the address is the state', () {
+    test('every selection is legible as one', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      expect(
+        shell.address.toString(),
+        'fw:///~',
+        reason: 'the main checkout is ~, and names no plugin at home',
+      );
+
+      shell.selectPlugin('a.two');
+      expect(shell.address.toString(), 'fw:///~/a.two');
+
+      shell.selectChild('a.two', 'packages/app');
+      expect(shell.address.toString(), 'fw:///~/a.two/packages%2Fapp');
+    });
+
+    test('go is the write every select goes through', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      shell.go(Address.parse('fw:///~/a.one'));
+
+      expect(shell.selectedPluginId, 'a.one');
+      expect(shell.isHome, isFalse);
+    });
+
+    test('an address round-trips back to the same place', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      shell.selectChild('a.two', 'packages/app');
+      var written = shell.address.toString();
+
+      shell.selectHome();
+      expect(shell.isHome, isTrue);
+
+      shell.go(Address.parse(written));
+      expect(shell.selectedPluginId, 'a.two');
+      expect(shell.selectedChildId, 'packages/app');
+    });
+
+    test('segments past the child ride along untouched', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      // What a catalog entry looks like: the shell reads the package and
+      // leaves the rest for whoever owns it.
+      shell.go(Address.parse('fw:///~/a.two/packages%2Fapp/demo.dart%23x'));
+
+      expect(shell.selectedPluginId, 'a.two');
+      expect(shell.selectedChildId, 'packages/app');
+      expect(shell.address.segments, ['packages/app', 'demo.dart#x']);
+    });
+
+    test('a worktree that is not open is opened, not refused', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      expect(shell.go(Address.parse('fw:///repo-explorer/a.one')), GoResult.ok);
+
+      // Opening is the navigation. Landing on the home screen instead would be
+      // the same silent not-where-you-said the refusal used to be.
+      expect(shell.address.toString(), 'fw:///repo-explorer/a.one');
+      expect(shell.openWorktrees.map((w) => w.name), ['~', 'repo-explorer']);
+    });
+
+    test('the tab and the address are there before the config is', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      var explorer = shell.closedWorktrees.first;
+
+      // Synchronous: no await between the write and these reads.
+      shell.go(Address(worktree: explorer.name, plugin: 'a.one'));
+
+      expect(shell.isOpen(explorer), isTrue);
+      expect(shell.isLoading(explorer), isTrue, reason: 'no session yet');
+      expect(shell.selected, explorer);
+
+      // And the panel arrives without a second navigation.
+      await pumpEventQueue();
+      expect(shell.isLoading(explorer), isFalse);
+      expect(shell.selectedPluginId, 'a.one');
+    });
+
+    test('a load that blows up leaves a tab that says why', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      // `go` opens without awaiting, so nothing downstream is left to catch a
+      // throw from the disk. A tab with no session and no reason is a worktree
+      // that looks like it opened and then does nothing.
+      shell.go(Address(worktree: 'repo-explorer'));
+      await pumpEventQueue();
+
+      var explorer = shell.worktreeNamed('repo-explorer')!;
+      expect(shell.isOpen(explorer), isTrue);
+      expect(
+        shell.sessionFor(explorer) != null || shell.errorFor(explorer) != null,
+        isTrue,
+        reason: 'a tab ends up with a session or with an explanation',
+      );
+    });
+
+    test('selecting a closed worktree opens it too', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      var explorer = shell.closedWorktrees.first;
+
+      shell.select(explorer);
+
+      expect(shell.isOpen(explorer), isTrue);
+      expect(shell.address.worktree, explorer.name);
+    });
+
+    test('closing the selected tab moves the address to a live one', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      await shell.open(shell.closedWorktrees.first);
+      shell.selectPlugin('a.one');
+
+      expect(shell.close(shell.worktrees[1]), isTrue);
+
+      expect(shell.address.worktree, '~');
+      expect(shell.selected!.branch, 'main');
+    });
+
+    test('the address a tab was left at is what it comes back to', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      var main = shell.worktrees.first;
+      shell.selectChild('a.two', 'packages/app');
+
+      await shell.open(shell.closedWorktrees.first);
+      shell.select(main);
+
+      expect(shell.address.toString(), 'fw:///~/a.two/packages%2Fapp');
+    });
+  });
+
+  group('the same place in another checkout', () {
+    test('everything but the worktree rides along', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      shell.go(
+        Address.parse(
+          'fw:///~/a.two/packages%2Fapp/demo.dart%23x?axis.theme=dark',
+        ),
+      );
+
+      shell.goToWorktree(shell.closedWorktrees.first);
+
+      // The demo, the package and the theme are what make it a comparison
+      // rather than a navigation.
+      expect(
+        shell.address.toString(),
+        'fw:///repo-explorer/a.two/packages%2Fapp/demo.dart%23x?axis.theme=dark',
+      );
+    });
+
+    test('it opens the checkout it is comparing against', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      var explorer = shell.closedWorktrees.first;
+
+      expect(shell.goToWorktree(explorer), GoResult.ok);
+      expect(shell.isOpen(explorer), isTrue);
+    });
+
+    test('cycling flicks between the open ones and wraps', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      await shell.open(shell.closedWorktrees.first);
+      shell.select(shell.worktrees.first);
+      shell.selectPlugin('a.two');
+
+      shell.cycleWorktree(1);
+      expect(shell.address.worktree, 'repo-explorer');
+      expect(shell.selectedPluginId, 'a.two', reason: 'the place is kept');
+
+      shell.cycleWorktree(1);
+      expect(shell.address.worktree, '~', reason: 'two open, so it is a flick');
+
+      shell.cycleWorktree(-1);
+      expect(shell.address.worktree, 'repo-explorer', reason: 'and back');
+    });
+
+    test('cycling never opens anything', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+
+      // A keystroke that spawned a config subprocess is a keystroke you learn
+      // not to press. With one worktree open there is nowhere to flick to.
+      expect(shell.cycleWorktree(1), GoResult.unchanged);
+      expect(shell.openWorktrees, hasLength(1));
+    });
+  });
+
+  group('a branch is input, never identity', () {
+    test('an address naming a branch lands', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      await shell.open(shell.closedWorktrees.first);
+
+      // Nothing ever *writes* this — a branch moves between worktrees, so an
+      // address holding one would silently retarget. But a branch is what the
+      // tab shows, so it is what someone types.
+      expect(
+        shell.go(Address(worktree: 'feature/explorer', plugin: 'a.one')),
+        GoResult.ok,
+      );
+      expect(shell.selected!.path, '/repo-explorer');
+    });
+
+    test('what comes back out is the identity, not what was typed', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      await shell.open(shell.closedWorktrees.first);
+
+      shell.go(Address(worktree: 'feature/explorer', plugin: 'a.one'));
+
+      // Rewritten on the way in. Keeping the branch would put a name that moves
+      // with `git checkout` into the remembered address and into every artifact
+      // minted from where the shell is.
+      expect(shell.address.worktree, 'repo-explorer');
+      expect(shell.address.toString(), 'fw:///repo-explorer/a.one');
+    });
+
+    test('identity wins over another worktree that has it as a branch', () async {
+      _currentListing =
+          'worktree /repo\nbranch refs/heads/main\n\n'
+          'worktree /wt/alpha\nbranch refs/heads/beta\n\n'
+          'worktree /wt/beta\nbranch refs/heads/gamma\n';
+      addTearDown(() => _currentListing = _listing);
+
+      var shell = _controller();
+      await shell.start('/repo');
+      for (var closed in shell.closedWorktrees.toList()) {
+        await shell.open(closed);
+      }
+
+      // `beta` is /wt/beta's name and /wt/alpha's branch. The name wins, so the
+      // canonical form always resolves to itself.
+      shell.go(Address(worktree: 'beta', plugin: 'a.one'));
+      expect(shell.selected!.path, '/wt/beta');
+    });
+
+    test('a name that is neither is unknown, not merely closed', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      expect(
+        shell.go(Address(worktree: 'no-such-thing', plugin: 'a.one')),
+        GoResult.worktreeUnknown,
+      );
+    });
+  });
+}

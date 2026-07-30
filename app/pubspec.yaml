@@ -15,7 +15,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 0.5.1+1
+version: 0.5.2+1
 
 environment:
   sdk: ^3.13.0-0
@@ -35,6 +35,8 @@ dependencies:
   auto_size_text:
   built_collection:
   collection:
+  crypto:
+  dart_mcp: ^0.5.2
   dart_style:
   device_frame:
   diacritic:
@@ -49,14 +51,15 @@ dependencies:
     sdk: flutter
   flutterware:
     path: ../
-  frontend_server_client:
   github:
   glob:
+  http:
   image:
   intl:
   io:
   json_annotation:
   logging:
+  lottie:
   markdown:
   meta:
   more:
@@ -79,10 +82,15 @@ dependencies:
   shelf:
   shelf_router:
   shelf_web_socket:
+  standard_message_codec: ^0.0.1+5
   stream_channel:
   stream_transform:
+  # Backs FwTable's virtualization and pinned rows/columns. See
+  # app/lib/src/ui/table.dart.
+  two_dimensional_scrollables:
   url_launcher:
   vector_math:
+  vm_service: ^15.0.0
   watcher:
   web:
   web_socket_channel:

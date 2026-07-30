@@ -8,7 +8,10 @@ part of 'events.dart';
 
 DaemonConnectedEvent _$DaemonConnectedEventFromJson(
   Map<String, dynamic> json,
-) => DaemonConnectedEvent(json['version'] as String, json['pid'] as int);
+) => DaemonConnectedEvent(
+  json['version'] as String,
+  (json['pid'] as num).toInt(),
+);
 
 DaemonLogEvent _$DaemonLogEventFromJson(Map<String, dynamic> json) =>
     DaemonLogEvent(json['log'] as String, error: json['error'] as bool?);
@@ -39,7 +42,7 @@ AppStartEvent _$AppStartEventFromJson(Map<String, dynamic> json) =>
 AppDebugPortEvent _$AppDebugPortEventFromJson(Map<String, dynamic> json) =>
     AppDebugPortEvent(
       json['appId'] as String,
-      json['port'] as int,
+      (json['port'] as num).toInt(),
       Uri.parse(json['wsUri'] as String),
       Uri.parse(json['baseUri'] as String),
     );

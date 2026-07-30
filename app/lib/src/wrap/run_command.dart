@@ -40,7 +40,7 @@ class RunCommand extends Command<int> {
     IOSink? out;
     try {
       final ctx = resolveProject(Directory.current);
-      if (ctx == null) return _degrade(real, original);
+      if (ctx == null) return await _degrade(real, original);
 
       final token = newSessionId();
       final injected = injectDartDefine(
@@ -101,7 +101,7 @@ class RunCommand extends Command<int> {
         original,
         mode: ProcessStartMode.inheritStdio,
       );
-      return proc.exitCode;
+      return await proc.exitCode;
     } catch (e) {
       stderr.writeln('[wrap] degrade failed: $e');
       return 1;

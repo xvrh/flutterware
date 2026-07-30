@@ -1,25 +1,25 @@
-import '../../project.dart';
+import '../../package_ref.dart';
 import '../../utils/async_value.dart';
 import 'icons.dart';
 
 class IconService {
   static const previewSize = 70;
 
-  final Project project;
+  final PackageRef package;
   late final _sample = AsyncValue<SampleIcon>(loader: _loadIcon);
   late AsyncValue<AppIcons> _icons;
 
-  IconService(this.project) {
+  IconService(this.package) {
     _icons = AsyncValue(
       loader: () =>
-          AppIcons.loadIcons(project.directory.path, size: previewSize),
+          AppIcons.loadIcons(package.directory.path, size: previewSize),
       lazy: true,
     );
   }
 
   Future<SampleIcon> _loadIcon() async {
     var file = await AppIcons.findSampleIcon(
-      project.directory.path,
+      package.directory.path,
       size: previewSize,
     );
     return SampleIcon(file);

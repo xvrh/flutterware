@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutterware/devbar.dart';
 import '../about/screen.dart';
-import '../dependencies/list.dart';
 import '../drawing/menu.dart';
 import '../drawing/screen.dart';
 import '../icon/image_provider.dart';
@@ -14,6 +13,7 @@ import '../test_runner/screen.dart';
 import '../ui/side_menu.dart';
 import '../ui_catalog/ui_catalog.dart';
 import '../utils/async_value.dart';
+import '../utils/value_stream_builder.dart';
 import '../utils/router_outlet.dart';
 import 'paths.dart' as paths;
 
@@ -39,8 +39,8 @@ class ProjectView extends StatelessWidget {
                 url: paths.home,
                 title: Row(
                   children: [
-                    ValueListenableBuilder<Snapshot<SampleIcon>>(
-                      valueListenable: project.icons.sample,
+                    ValueStreamBuilder<Snapshot<SampleIcon>>(
+                      stream: project.icons.sample.snapshots,
                       builder: (context, snapshot, child) {
                         var data = snapshot.data?.file;
 
@@ -57,8 +57,8 @@ class ProjectView extends StatelessWidget {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: ValueListenableBuilder<Snapshot<Pubspec>>(
-                        valueListenable: project.pubspec,
+                      child: ValueStreamBuilder<Snapshot<Pubspec>>(
+                        stream: project.pubspec,
                         builder: (context, snapshot, child) {
                           return Text(snapshot.data?.name ?? '');
                         },
@@ -86,7 +86,10 @@ class ProjectView extends StatelessWidget {
         Expanded(
           child: RouterOutlet({
             paths.home: (route) => OverviewScreen(project),
-            paths.dependencies: (route) => DependenciesScreen(project),
+            // No dependencies route. That screen reads the shell's address for
+            // which package it is on and where inside itself it is, and this
+            // pre-shell view has no address to give it. It lives in the
+            // `flutterware.dependencies` plugin now.
             paths.tests: (route) => TestRunnerScreen(project),
             paths.uiCatalog: (route) => UICatalogScreen(project),
             paths.icon: (route) => IconScreen(project),

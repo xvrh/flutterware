@@ -42,7 +42,7 @@ class PassthroughCommand extends Command<int> {
     final arguments = rest.skip(1).toList();
 
     // Validate parent stdio.
-    if (!stdin.hasTerminal || !stdout.hasTerminal) {
+    if (!stdinIsInteractive || !stdout.hasTerminal) {
       stderr.writeln(
         '[passthrough] warning: parent stdin/stdout is not a TTY, interactive features may not work',
       );
@@ -57,6 +57,27 @@ class PassthroughCommand extends Command<int> {
   }
 }
 
+/// Whether stdin can actually be driven as a terminal.
+///
+/// **`stdin.hasTerminal` is not this question**, which cost every non-interactive
+/// invocation of this CLI. It reports whether stdin is a *character device*, and
+/// `/dev/null` is one — so `stdioType(stdin)` says `terminal`, `hasTerminal`
+/// says true, and asking that device for its line mode throws `ENODEV`. The
+/// process then died with an unhandled `StdinException` and exit 254, which is
+/// what CI, a piped shell and every `Process.run` in the tests were getting.
+///
+/// So the guard is the attempt itself. There is no property that answers
+/// "supports termios" — the only way to know is to ask and see.
+bool get stdinIsInteractive {
+  if (!stdin.hasTerminal) return false;
+  try {
+    stdin.lineMode;
+    return true;
+  } on StdinException {
+    return false;
+  }
+}
+
 Future<int> runUnderPty({
   required String executable,
   required List<String> arguments,
@@ -65,8 +86,9 @@ Future<int> runUnderPty({
   IOSink? captureSink,
 }) async {
   // Snapshot parent terminal modes for restoration.
-  final originalLineMode = stdin.hasTerminal ? stdin.lineMode : true;
-  final originalEchoMode = stdin.hasTerminal ? stdin.echoMode : true;
+  final interactive = stdinIsInteractive;
+  final originalLineMode = interactive ? stdin.lineMode : true;
+  final originalEchoMode = interactive ? stdin.echoMode : true;
 
   // Declare subscriptions and tee outside the try so finally can cancel them.
   StreamSubscription<List<int>>? stdinSub;
@@ -78,7 +100,7 @@ Future<int> runUnderPty({
   late TeeSink tee;
 
   try {
-    if (stdin.hasTerminal) {
+    if (interactive) {
       stdin.lineMode = false;
       stdin.echoMode = false;
     }
@@ -107,7 +129,7 @@ Future<int> runUnderPty({
     );
 
     // Parent stdin → PTY input.
-    if (stdin.hasTerminal) {
+    if (interactive) {
       stdinSub = stdin.listen(pty.writeInput);
     }
 
@@ -136,7 +158,7 @@ Future<int> runUnderPty({
     return code;
   } finally {
     try {
-      if (stdin.hasTerminal) {
+      if (interactive) {
         stdin.lineMode = originalLineMode;
         stdin.echoMode = originalEchoMode;
       }

@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../app/ui/breadcrumb.dart';
 import '../project.dart';
 import '../utils/async_value.dart';
+import '../utils/value_stream_builder.dart';
 import '../utils/state_extension.dart';
 import '../utils/ui/error_panel.dart';
 import '../utils/ui/loading.dart';
@@ -23,8 +24,8 @@ class IconScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var theme = Theme.of(context);
-    return ValueListenableBuilder<Snapshot<AppIcons>>(
-      valueListenable: project.icons.icons,
+    return ValueStreamBuilder<Snapshot<AppIcons>>(
+      stream: project.icons.icons.snapshots,
       builder: (context, snapshot, child) {
         var data = snapshot.data;
         var error = snapshot.error;

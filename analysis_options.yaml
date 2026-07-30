@@ -1,6 +1,21 @@
 include: package:lints/recommended.yaml
 
 analyzer:
+  exclude:
+    - build/**
+    # The catalog's generated guest entrypoint. It imports every entry so that
+    # one compiler is safe to share, which by construction leaves most of those
+    # imports unused in any single build.
+    - app/build/**
+    # A fixture that must not compile: `app/integration_test/` asserts the
+    # catalog quarantines it rather than failing the whole compile.
+    - app/tool/catalog/demos/does_not_compile.dart
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
   language:
     strict-casts: true
 

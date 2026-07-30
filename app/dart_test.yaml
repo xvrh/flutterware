@@ -1,0 +1,7 @@
+tags:
+  # Needs a real GPU: the tests so tagged spawn the embedder guest, which
+  # composites through Metal. CI runs `dart test integration_test
+  # --exclude-tags gpu`, so tagging a test here is what keeps the rest of the
+  # directory able to *block* a build. Whether a runner VM offers Metal is not
+  # answerable from a desk — until somebody answers it, these run by hand.
+  gpu:
