@@ -79,10 +79,21 @@ abstract class PluginPackage {
 Everything else is the plugin's business, and it serialises through the existing
 `Plugin.config` map — no framework change.
 
+> **Superseded 2026-07-30.** `fw.packages([...])` is gone. It was a second
+> declaration of what the plugins below already name, and the host filtered each
+> plugin's packages against it — so a package the list forgot was *silently
+> dropped* from a plugin that had been explicitly configured with it, which is
+> the one failure a declaration list exists to prevent. `PluginManifest.packages`
+> is now derived from the plugin entries, and the typo check covers every path
+> any plugin names. `Pkg.tags` went with it: nothing ever read it, and with the
+> package list derived there was no longer anywhere for it to travel. Tag
+> filtering, if it lands, adds the field back and rewrites the config files that
+> want it — which the original "ship the syntax early" argument was trying to
+> avoid, and which is cheap next to carrying an unread field indefinitely. The
+> `Pkg` values and per-plugin lists below are otherwise unchanged.
+
 ```dart
 void main() => Flutterware.configure((fw) {
-  fw.packages([admin, app, server]);
-
   fw.use(Git());                                    // repo-scoped, no packages
   fw.use(UiCatalog(packages: [
     .new(admin, entrypoint: 'lib/catalog.dart'),    // dot shorthand, verified
@@ -209,6 +220,7 @@ property without the churn. Revisit when a second package-scoped plugin exists.
 
 1. Repo root as the unit, with walk-up. Fixes the empty-sidebar bug.
 2. `Pkg`, `PluginPackage`, per-plugin package lists, `fw.packages([...])`.
+   *(2026-07-30: the `fw.packages([...])` call is removed — see the note above.)*
 3. Package discovery as reference data + typo warnings.
 4. `Workspace` on `PluginHost`, lazily building `Project`s.
 5. The non-triggering `report` rule, enforced by moving subscriptions into

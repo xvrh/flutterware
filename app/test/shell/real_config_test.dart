@@ -49,7 +49,6 @@ void main() {
     // integration_test/shell/config_exec_test.dart.
     var manifest = PluginManifest.parse(
       '{"version":1,'
-      '"packages":[{"path":"."},{"path":"app"},{"path":"examples/example"}],'
       '"plugins":[{"id":"flutterware.dependencies","label":"Dependencies",'
       '"config":{"packages":[{"path":"."},{"path":"app"},'
       '{"path":"examples/example"}]}}]}',
@@ -89,6 +88,40 @@ void main() {
     ]);
     expect(report.children.every((c) => c.status.isEmpty), isTrue);
     expect(report.view.toText(), contains('not computed'));
+
+    workspace.dispose();
+  });
+
+  test('a package that is not on disk is reported, not silently dropped', () {
+    var root = findRepoRoot('..')!;
+    var manifest = PluginManifest.parse(
+      '{"version":1,'
+      '"plugins":[{"id":"flutterware.dependencies","label":"Dependencies",'
+      '"config":{"packages":[{"path":"."},{"path":"exmaples/example"}]}}]}',
+    );
+
+    var workspace = Workspace(
+      root: root,
+      declared: manifest.packages,
+      discovered: discoverPackages(root),
+      appContext: AppContext(logger: LogClient.print()),
+      flutterSdk: FlutterSdkPath('/tmp/flutter'),
+    );
+
+    // The typo is named. It used to be invisible from here: the check only
+    // covered the separate `fw.packages([...])` list, so a path misspelled
+    // where the plugin names it went unmentioned and unused.
+    expect(workspace.unknownDeclarations, ['exmaples/example']);
+
+    var session = Session.resolved(
+      worktree: const Worktree(path: '/repo', branch: 'main'),
+      workspace: workspace,
+      manifest: manifest,
+    );
+    var plugins = buildNativeRegistry().resolve(session.cores);
+    // Still filtered out of the plugin — operating on a directory that is not
+    // there is worse than not operating. The difference is that it is now said.
+    expect(plugins.whereType<DependenciesPlugin>().single.packages, ['.']);
 
     workspace.dispose();
   });

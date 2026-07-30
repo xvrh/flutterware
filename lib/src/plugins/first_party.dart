@@ -5,7 +5,6 @@
 /// const app = Pkg('packages/app');
 ///
 /// void main() => Flutterware.configure((fw) {
-///   fw.packages([app]);
 ///   fw.use(UiCatalog(packages: [.new(app, entrypoint: 'lib/catalog.dart')]));
 /// });
 /// ```

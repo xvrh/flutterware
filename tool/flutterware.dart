@@ -9,12 +9,11 @@ import 'package:flutterware/plugins.dart';
 /// constraint of 3.10+; the explicit `UiCatalogPackage(...)` form is identical
 /// otherwise. It only works inside a list literal, where the context type is
 /// the entry — `.each(...)` is handed a `List`, so it stays spelled out.
-const root = Pkg('.', tags: ['lib']);
-const app = Pkg('app', tags: ['gui']);
-const example = Pkg('examples/example', tags: ['sample']);
+const root = Pkg('.');
+const app = Pkg('app');
+const example = Pkg('examples/example');
 
 void main() => Flutterware.configure((fw) {
-  fw.packages([root, app, example]);
   fw.use(
     Dependencies(packages: DependenciesPackage.each([root, app, example])),
   );

@@ -36,7 +36,7 @@ class DependenciesCore extends PluginCore {
   /// Declared packages, filtered to those the workspace knows about.
   late final List<String> packages = [
     for (var path in host.packagePaths)
-      if (host.workspace.declaredAt(path) != null) path,
+      if (host.workspace.exists(path)) path,
   ];
 
   DependenciesService serviceFor(String path) => _services.putIfAbsent(

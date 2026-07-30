@@ -47,7 +47,7 @@ class AssetsCore extends PluginCore {
   /// cannot make the plugin scan a directory that is not there.
   late final List<String> packages = [
     for (var path in host.packagePaths)
-      if (host.workspace.declaredAt(path) != null) path,
+      if (host.workspace.exists(path)) path,
   ];
 
   final _scans = <String, AssetScan>{};
