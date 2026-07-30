@@ -349,21 +349,70 @@ fw://<project>/<worktree>/server/<name>/sql
   not a TSDB.
 - `fw run server` restart-on-save sugar — worth doing, separately specced.
 
-## Open questions for review
+## Second round of decisions (2026-07-30, post-spike review)
 
-1. **Replay semantics with multiple attachers** — replay-then-tail per
-   connection is simple, but a second GUI window attaching mid-session gets a
-   duplicate history relative to what the plugin core already holds. Does the
-   core dedupe by event id, or is one-attacher-per-surface assumed?
-2. **Body capture policy** — capture-and-truncate at N KB with lazy full
-   fetch is proposed; but *streamed* responses (SSE, large downloads) should
-   probably record size/duration only. Where is the cut?
-3. **Normalization of SQL** for grouping/N+1 (strip literals, collapse IN
-   lists) — copy a known-good normalizer's rules, or keep v1 to exact-string
-   grouping?
-4. **Uncaught-error capture** — the library can offer a `runServer(() => …)`
-   zone wrapper to catch uncaught errors, but that is one step back toward an
-   init call. Snippet-only?
+The spike's four open questions, resolved:
+
+### 10. Replay duplication: the core dedupes by event id; the wire stays dumb
+
+Thinking this through surfaced a live bug in the spike core: on a transient
+disconnect (drop with the server still alive), `TrackedServer` kept its dead
+client for history and `_attach` skipped anything holding a client — a
+"stopped" server that never reattaches while its handle still announces it.
+The fix and the answer are one mechanism: **the core owns a merged event list
+per server, deduped by event id** (already monotonic per server process), and
+reattaches whenever the handle is present but the connection is not. A
+re-replay dedupes to a no-op. The protocol stays replay-then-tail unchanged;
+a `since:` parameter on `meta/attach` is the known extension *if* rings ever
+grow, and is not built at 500 events.
+
+### 11. Bodies: headers always (redacted in the snippet), capped textual
+### bodies only, streams never
+
+Buffer a body only when the content-type is textual (json / text / xml /
+form-encoded) **and** content-length is known and under a cap (~32 KB
+default). Chunked / SSE / unknown-length responses are never buffered —
+record `{size, type, streamed: true}` — because interposing on the stream is
+exactly the overhead this design refuses. Headers always, with
+`Authorization` / `Cookie` redacted **in the middleware snippet** rather than
+the library: redaction the user can see and edit beats redaction hidden
+behind an import. Bodies live in the server-side LRU (decision 8), fetched
+lazily via `http.body`.
+
+### 12. SQL normalization is required, small, and attacher-side
+
+Exact-string grouping cannot detect the headline N+1 — those queries differ
+*precisely* in their literals (`user_id = 1/2/3`). So the normalizer is the
+feature, not polish. The ruleset is the well-trodden one (numeric literals →
+`?`, quoted strings → `?`, `IN (…)` → `(?)`, whitespace folded), a pure
+function of ~20 lines. It runs on the **attacher side** — the wire carries
+raw SQL, so normalization improves with flutterware releases without
+touching anyone's server.
+
+### 13. Uncaught errors: snippet only
+
+The middleware already catches the dominant case — a handler throwing
+becomes a correlated 500 event. What remains is errors outside any request,
+and `runZonedGuarded` plus one `event('error', …)` is four lines in the
+example. A `FlutterwareServer.run(…)` wrapper would be the first
+required-looking call in a library whose pitch is "no init call".
+
+## Where to pick up
+
+Five slices, correctness before surface area:
+
+1. **Attach-loop robustness** (decision 10): core-owned merged store,
+   reattach-on-drop, dedupe tests. The SQL normalizer (decision 12) lands
+   here too — pure logic, needed by slice 2's badge.
+2. **Request-centric UI**: request list + detail waterfall, N+1 badge,
+   address segments `/server/<name>/req/<id>`.
+3. **SQL view + commands**: normalized grouping table, slow ranking,
+   explain/requery end-to-end, real adapter snippets (drift
+   `QueryInterceptor`, `postgres`, `sqlite3`).
+4. **Bodies** (decision 11): server-side LRU, `http.body`, middleware
+   capture with caps + redaction, body viewer, request replay.
+5. **Surface polish**: `server.errors` / `server.sql` actions, capabilities
+   regen, a `Shot` in `tool/screenshots.dart`, README.
 
 ## The spike (S-slice)
 

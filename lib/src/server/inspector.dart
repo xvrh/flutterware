@@ -210,22 +210,29 @@ class ServerInspector {
     required this.projectRoot,
     required this.name,
     required this.ringSize,
+    required this.pid,
   });
 
   /// Starts publishing immediately, but asynchronously: events reported while
   /// the socket is still binding only land in the ring, which is where an
   /// attacher would find them anyway.
+  ///
+  /// [pid] defaults to this process — overridable so a single-process test
+  /// can stage a "restart", which is otherwise invisible: the handle key is
+  /// `name-pid`, and two inspectors in one test share a pid.
   factory ServerInspector.start({
     required String runDir,
     required String projectRoot,
     required String name,
     int ringSize = 500,
+    int? pid,
   }) {
     var inspector = ServerInspector._(
       runDir: runDir,
       projectRoot: projectRoot,
       name: name,
       ringSize: ringSize,
+      pid: pid ?? io.pid,
     );
     unawaited(inspector._publish());
     return inspector;
@@ -258,7 +265,16 @@ class ServerInspector {
   String get _baseName =>
       serverHandleBaseName(projectRoot: projectRoot, name: name, pid: pid);
 
-  final int pid = io.pid;
+  final int pid;
+
+  /// Destroys every attached connection without touching the handle or the
+  /// socket — a transient drop, as a test stages it.
+  @visibleForTesting
+  void debugDropConnections() {
+    for (var socket in _attached.toList()) {
+      _drop(socket);
+    }
+  }
 
   void addEvent(String channel, Map<String, Object?> payload, {String? rid}) {
     if (_stopped) return;

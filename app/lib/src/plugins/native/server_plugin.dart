@@ -130,12 +130,16 @@ class _ServerBar extends StatelessWidget {
                 size: 10,
                 color: server.stopped
                     ? theme.disabledColor
-                    : Colors.green.shade600,
+                    : server.connected
+                    ? Colors.green.shade600
+                    : Colors.orange.shade600,
               ),
               label: Text(
                 server.stopped
                     ? '${server.handle.name} (stopped)'
-                    : '${server.handle.name} · pid ${server.handle.pid}',
+                    : server.connected
+                    ? '${server.handle.name} · pid ${server.handle.pid}'
+                    : '${server.handle.name} · reconnecting',
                 style: theme.textTheme.bodySmall,
               ),
             ),

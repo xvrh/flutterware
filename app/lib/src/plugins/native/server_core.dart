@@ -86,7 +86,7 @@ class ServerCore extends PluginCore {
   }
 
   void _attach(TrackedServer tracked) {
-    if (tracked.client != null || tracked.stopped || tracked.attaching) return;
+    if (tracked.connected || tracked.stopped || tracked.attaching) return;
     tracked.attaching = true;
     unawaited(() async {
       var client = await attachToServer(tracked.handle);
@@ -101,17 +101,27 @@ class ServerCore extends PluginCore {
         notifyChanged();
         return;
       }
-      tracked.client = client;
-      tracked.eventSubscription = client.events.listen((_) => notifyChanged());
+      tracked.adopt(client, onEvent: notifyChanged);
       unawaited(
         client.done.then((_) {
-          if (isDisposed) return;
-          tracked.markStopped();
+          if (isDisposed || tracked.client != client) return;
+          // A drop, not a death: the handle decides which on the next scan —
+          // still there means reattach (decision 10), and the re-replay
+          // dedupes against what this core already holds. Gone means the
+          // scan marks it stopped.
+          tracked.dropConnection();
           notifyChanged();
+          _scheduleRescan();
         }),
       );
       notifyChanged();
     }());
+  }
+
+  void _scheduleRescan() {
+    if (!_tracking || isDisposed) return;
+    _rescanDebounce?.cancel();
+    _rescanDebounce = Timer(const Duration(seconds: 1), _scan);
   }
 
   @override
@@ -181,12 +191,14 @@ class ServerCore extends PluginCore {
                 server.handle.name,
                 detail: server.stopped
                     ? 'stopped'
+                    : server.connected
+                    ? 'pid ${server.handle.pid}, '
+                          '${server.events.length} events'
+                    : server.wasConnected
+                    ? 'pid ${server.handle.pid}, reconnecting'
                     // The event count is only honest once attached — `fw`
                     // reads this without ever opening the socket.
-                    : server.client == null
-                    ? 'pid ${server.handle.pid}'
-                    : 'pid ${server.handle.pid}, '
-                          '${server.events.length} events',
+                    : 'pid ${server.handle.pid}',
               ),
           ]),
       ]),
@@ -293,29 +305,67 @@ class ServerCore extends PluginCore {
 }
 
 /// One announced server: its handle, the live attachment when tracking, and
-/// the events seen so far — which outlive the server, so a crashed process
-/// leaves its history on screen rather than vanishing mid-investigation.
+/// the events seen so far — which outlive both the connection and the
+/// server, so a drop or a crash never loses history mid-investigation.
 class TrackedServer {
   TrackedServer(this.handle);
 
   final ServerHandle handle;
   ServerAttachClient? client;
-  StreamSubscription<ServerEvent>? eventSubscription;
+  StreamSubscription<ServerEvent>? _eventSubscription;
   var attaching = false;
   var stopped = false;
 
-  List<ServerEvent> get events => client?.received ?? const [];
+  /// Distinguishes "dropped, reattaching" from "never attached" — `fw`, which
+  /// only scans, must not report a server it never touched as reconnecting.
+  var wasConnected = false;
+
+  bool get connected => client != null;
+
+  /// This core's own copy, merged across attachments and deduped by event id
+  /// (monotonic per server process — decision 10). A reattach replays the
+  /// whole ring; everything already here collapses to a no-op.
+  List<ServerEvent> get events => List.unmodifiable(_events);
+  final _events = <ServerEvent>[];
+  var _lastEventId = 0;
+
+  /// Takes ownership of a fresh attachment. Subscribes before draining
+  /// [ServerAttachClient.received] so nothing can slip between the two; the
+  /// id check makes the overlap harmless.
+  void adopt(ServerAttachClient attached, {required void Function() onEvent}) {
+    client = attached;
+    wasConnected = true;
+    _eventSubscription = attached.events.listen((event) {
+      _absorb(event);
+      onEvent();
+    });
+    for (var event in attached.received) {
+      _absorb(event);
+    }
+  }
+
+  void _absorb(ServerEvent event) {
+    if (event.id <= _lastEventId) return;
+    _lastEventId = event.id;
+    _events.add(event);
+  }
+
+  /// The connection is gone; the server may not be. Keeps the history and
+  /// [wasConnected], so the next scan can reattach or conclude "stopped".
+  void dropConnection() {
+    unawaited(_eventSubscription?.cancel());
+    _eventSubscription = null;
+    var dropped = client;
+    client = null;
+    if (dropped != null) unawaited(dropped.close());
+  }
 
   void markStopped() {
     stopped = true;
-    unawaited(eventSubscription?.cancel());
-    eventSubscription = null;
+    dropConnection();
   }
 
-  void dispose() {
-    markStopped();
-    unawaited(client?.close());
-  }
+  void dispose() => markStopped();
 }
 
 PluginCore serverCoreFactory(PluginHost host) => ServerCore(host);

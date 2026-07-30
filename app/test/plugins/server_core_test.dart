@@ -99,6 +99,64 @@ void main() {
     expect(caused.single['query'], 'select 1');
   });
 
+  test('a dropped connection reattaches without duplicating history', () async {
+    inspector.addEvent('log', {'message': 'one'});
+    await core.computeAll();
+    core.track();
+    await _until(() => core.servers.single.events.length == 1);
+
+    // The drop: connection gone, server alive, handle still published.
+    inspector.debugDropConnections();
+    await _until(() => !core.servers.single.connected);
+    expect(
+      core.servers.single.stopped,
+      isFalse,
+      reason: 'a drop is not a death',
+    );
+    expect(
+      core.servers.single.events,
+      hasLength(1),
+      reason: 'history survives',
+    );
+
+    // Reported while nobody is attached — only the ring has it.
+    inspector.addEvent('log', {'message': 'two'});
+
+    // The scheduled rescan reattaches; the full re-replay must dedupe.
+    await _until(() => core.servers.single.events.length == 2);
+    expect(core.servers.single.connected, isTrue);
+    var ids = [for (var e in core.servers.single.events) e.id];
+    expect(ids.toSet(), hasLength(2), reason: 'no duplicated replay');
+  });
+
+  test('a restart is a new session beside the greyed-out old one', () async {
+    inspector.addEvent('log', {'message': 'from the first run'});
+    await core.computeAll();
+    core.track();
+    await _until(() => core.servers.single.events.length == 1);
+
+    await inspector.stop();
+    var successor = ServerInspector.start(
+      runDir: runDir.path,
+      projectRoot: project.path,
+      name: 'api',
+      pid: pid + 1,
+    );
+    addTearDown(successor.stop);
+    await successor.published;
+    await core.computeAll();
+
+    await _until(() {
+      var servers = core.servers;
+      return servers.length == 2 &&
+          servers.any((s) => s.stopped) &&
+          servers.any((s) => s.connected);
+    });
+    var old = core.servers.singleWhere((s) => s.stopped);
+    expect(old.events.single.payload['message'], 'from the first run');
+    expect(core.servers.singleWhere((s) => s.connected).events, isEmpty);
+  });
+
   test('track attaches, replays, and follows live events', () async {
     inspector.addEvent('log', {'message': 'before'});
     await core.computeAll();

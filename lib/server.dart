@@ -21,5 +21,6 @@ export 'src/server/attach_client.dart'
         attachToServer;
 export 'src/server/inspector.dart'
     show FlutterwareServer, ServerCommandHandler, ServerInspector;
+export 'src/server/normalize_sql.dart' show normalizeSql;
 export 'src/server/protocol.dart'
     show ServerHandle, deleteServerHandle, existingRunDir, scanServerHandles;
