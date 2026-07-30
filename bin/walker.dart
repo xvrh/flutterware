@@ -32,7 +32,7 @@ Future<void> main(List<String> arguments) async {
     // Help must not be gated on setup — it is how someone finds out what the
     // setup is. Anything else keeps the message: bare `fw` opens the GUI
     // inside a project, so outside one the setup steps are the honest answer.
-    if (const {'help', '--help', '-h'}.contains(arguments.firstOrNull)) {
+    if (arguments.any(helpArguments.contains)) {
       stdout.writeln(noProjectHelp);
       exit(0);
     }

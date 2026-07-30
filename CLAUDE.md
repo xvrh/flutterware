@@ -23,8 +23,6 @@ fvm use --skip-pub-get   # reads .fvmrc, no prompt; creates .fvm/flutter_sdk (fv
 fvm flutter pub get
 ```
 
-`flutter_version` at the repo root is an existence-checked marker file for the wrap feature, not the SDK pin — `.fvmrc` is authoritative.
-
 Note: `.gitignore` starts with `.*`, so dot-directories like `.claude/` are silently unaddable — `git add` no-ops on them.
 
 ## How the CLI/GUI launch flow works

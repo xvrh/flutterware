@@ -85,4 +85,10 @@ void main() {
     expect(noProjectHelp, contains('dart run flutterware'));
     expect(noProjectHelp, contains('dart pub add flutterware'));
   });
+
+  test('the help spellings match what the CLI accepts', () {
+    // Mirrors FwCli's dispatcher, which the walker cannot import; this pins
+    // the copy so a drift shows up here instead of as a silent exit 64.
+    expect(helpArguments, {'help', '--help', '-h'});
+  });
 }

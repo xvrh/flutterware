@@ -33,6 +33,14 @@ Directory? findInitializedRoot(Directory start) {
   }
 }
 
+/// The spellings that ask for help.
+///
+/// Checked against every argument, not just the first: the CLI takes its
+/// global flags anywhere in the line (`fw -v help` works inside a project),
+/// and the walker cannot strip flags it does not know without acquiring
+/// logic that ages.
+const helpArguments = {'help', '--help', '-h'};
+
 /// The setup steps, shared by every message that has to teach them.
 const _setup = '''
 The first run has to go through your own Flutter SDK, so flutterware can

@@ -17,8 +17,19 @@ void main() {
 
 /// The repo root, so running from a subdirectory doesn't silently format
 /// only that subtree.
+///
+/// Anchored on this script's own location, not on cwd or git — cwd may be a
+/// subdirectory or another repository entirely. Under `pub run` the script is
+/// a snapshot in `<root>/.dart_tool/`, so walk up to the nearest pubspec.yaml
+/// rather than assuming `tool/`.
 Directory _repoRoot() {
-  var result = Process.runSync('git', ['rev-parse', '--show-toplevel']);
-  if (result.exitCode != 0) return Directory.current;
-  return Directory((result.stdout as String).trim());
+  var dir = File.fromUri(Platform.script).parent;
+  while (true) {
+    if (File('${dir.path}/pubspec.yaml').existsSync()) return dir;
+    var parent = dir.parent;
+    if (parent.path == dir.path) {
+      throw StateError('no pubspec.yaml above ${Platform.script}');
+    }
+    dir = parent;
+  }
 }
