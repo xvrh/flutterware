@@ -45,7 +45,10 @@ class ConfigWatcher {
   final String worktreePath;
 
   /// Called after [debounce] has settled and the file's bytes really moved.
-  final void Function() onChanged;
+  ///
+  /// Awaited: events that arrive while a reload is running are coalesced into
+  /// one follow-up rather than starting a second cycle underneath it.
+  final Future<void> Function() onChanged;
 
   final Duration debounce;
 
@@ -93,16 +96,59 @@ class ConfigWatcher {
 
   void _onEvent(WatchEvent event) {
     if (!p.equals(event.path, configPath)) return;
+    _arm();
+  }
+
+  void _arm() {
     _settle?.cancel();
     _settle = Timer(debounce, _fire);
   }
 
-  void _fire() {
+  /// True while [onChanged] is running, so a save landing mid-reload becomes one
+  /// follow-up instead of a second reload racing the first.
+  var _running = false;
+  var _againWhenDone = false;
+
+  Future<void> _fire() async {
+    if (_running) {
+      _againWhenDone = true;
+      return;
+    }
+
+    // **A file passing through nothing is not a file with nothing in it.** An
+    // editor that truncates before writing, and `git checkout`, both leave the
+    // config momentarily empty — and acting on that produces "it printed
+    // nothing", which is a red banner for a file that is fine. Give it one more
+    // settle before believing it. A config that really was emptied or deleted
+    // still lands, 250ms later.
+    var file = File(configPath);
+    if (!file.existsSync() || file.lengthSync() == 0) {
+      if (!_confirmingEmpty) {
+        _confirmingEmpty = true;
+        _arm();
+        return;
+      }
+    }
+    _confirmingEmpty = false;
+
     var hash = _hash();
     if (hash == _lastFired) return;
     _lastFired = hash;
-    onChanged();
+
+    _running = true;
+    try {
+      await onChanged();
+    } finally {
+      _running = false;
+      if (_againWhenDone) {
+        _againWhenDone = false;
+        // Straight to the check: the debounce already elapsed for that event.
+        unawaited(_fire());
+      }
+    }
   }
+
+  var _confirmingEmpty = false;
 
   /// Null when the file is absent — which is itself a change worth firing for,
   /// since a config that disappears means a worktree with no plugins.

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutterware/plugins.dart';
+import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 
@@ -17,6 +18,8 @@ import 'config_watcher.dart';
 import 'workspace.dart';
 import 'worktree.dart';
 import 'worktree_discovery.dart';
+
+final _logger = Logger('shell');
 
 /// Why a worktree could not be opened. Kept per worktree so a broken config in
 /// one checkout never takes down the shell.
@@ -159,7 +162,7 @@ class ShellController extends ChangeNotifier {
     unawaited(watcher.start());
   }
 
-  void _onConfigChanged(Worktree worktree) {
+  Future<void> _onConfigChanged(Worktree worktree) async {
     var path = worktree.path;
     // Closed between the save and the debounce settling.
     if (!_openPaths.contains(path)) return;
@@ -170,7 +173,9 @@ class ShellController extends ChangeNotifier {
       return;
     }
     _pending.remove(path);
-    unawaited(_load(worktree));
+    // Awaited so the watcher knows a reload is in flight and folds anything
+    // that lands during it into one follow-up.
+    await _load(worktree);
   }
 
   /// A session notification, which is also the only moment a guard is known to
@@ -205,6 +210,16 @@ class ShellController extends ChangeNotifier {
     var rows = _log.putIfAbsent(path, () => []);
     rows.insert(0, load);
     if (rows.length > _logLimit) rows.removeRange(_logLimit, rows.length);
+
+    // Also to the terminal that launched the GUI. The screen is the surface for
+    // someone using flutterware; this is the one for someone whose config just
+    // reloaded while they were watching a log scroll past, and it is how a
+    // reload is observable at all without a window in front of you.
+    _logger.info(
+      'config ${p.basename(path)}: ${load.summary} '
+      '(${load.duration.inMilliseconds}ms)'
+      '${load.error == null ? '' : '\n${load.error}'}',
+    );
   }
 
   /// **Where the shell is.** The one piece of navigation state; everything

@@ -34,7 +34,7 @@ void main() {
     fired = 0;
     watcher = ConfigWatcher(
       worktreePath: root.path,
-      onChanged: () => fired++,
+      onChanged: () async => fired++,
       debounce: _debounce,
       watch: (_) => events.stream,
     );
@@ -118,7 +118,7 @@ void main() {
     addTearDown(() => bare.deleteSync(recursive: true));
     var w = ConfigWatcher(
       worktreePath: bare.path,
-      onChanged: () {},
+      onChanged: () async {},
       debounce: _debounce,
       watch: (_) => events.stream,
     );
@@ -127,6 +127,66 @@ void main() {
     expect(w.watching, isNull);
     expect(w.isWatching, isFalse);
     await w.dispose();
+  });
+
+  test('a truncate-then-write is one fire, not an empty one first', () async {
+    await watcher.start();
+
+    // What python's `open(w)`, and `git checkout`, actually do: the file passes
+    // through nothing on the way to its new content. Acting on the empty state
+    // produces "it printed nothing" — a red banner for a file that is fine.
+    config.writeAsStringSync('');
+    events.add(WatchEvent(ChangeType.MODIFY, config.path));
+    await Future<void>.delayed(_debounce * 2);
+    config.writeAsStringSync('void main() { print(1); }');
+    await Future<void>.delayed(_debounce * 6);
+
+    expect(fired, 1);
+  });
+
+  test('a file that really is emptied still lands', () async {
+    await watcher.start();
+
+    config.writeAsStringSync('');
+    events.add(WatchEvent(ChangeType.MODIFY, config.path));
+    await Future<void>.delayed(_debounce * 8);
+
+    expect(fired, 1, reason: 'one settle later, it is believed');
+  });
+
+  test('a save during a reload becomes one follow-up', () async {
+    var running = Completer<void>();
+    var calls = <String>[];
+    var slow = ConfigWatcher(
+      worktreePath: root.path,
+      onChanged: () async {
+        calls.add(config.readAsStringSync());
+        await running.future;
+      },
+      debounce: _debounce,
+      watch: (_) => events.stream,
+    );
+    addTearDown(slow.dispose);
+    await slow.start();
+
+    await save('void main() { print(1); }');
+    expect(calls, hasLength(1));
+
+    // Two more saves while the first reload is still going.
+    config.writeAsStringSync('void main() { print(2); }');
+    events.add(WatchEvent(ChangeType.MODIFY, config.path));
+    await Future<void>.delayed(_debounce * 2);
+    config.writeAsStringSync('void main() { print(3); }');
+    events.add(WatchEvent(ChangeType.MODIFY, config.path));
+    await Future<void>.delayed(_debounce * 2);
+    expect(calls, hasLength(1), reason: 'nothing races the reload in flight');
+
+    running.complete();
+    await Future<void>.delayed(_debounce * 6);
+
+    // One follow-up, for the content as it finally is — not one per save.
+    expect(calls, hasLength(2));
+    expect(calls.last, contains('print(3)'));
   });
 
   test('disposing stops it firing', () async {
