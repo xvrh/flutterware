@@ -30,6 +30,22 @@ import 'package:collection/collection.dart';
 class Address {
   static const scheme = 'fw';
 
+  /// The one name in the [plugin] slot that is **not** a plugin:
+  /// `fw://<worktree>/config` is the shell's own screen for the worktree's
+  /// `tool/flutterware.dart` — what it resolved to, what each reload cost, and
+  /// why it failed when it did.
+  ///
+  /// It sits in the plugin slot rather than getting a field of its own because
+  /// it is addressed exactly like a plugin: one thing per worktree, mounted
+  /// where a panel mounts, remembered per tab like any other place. A second
+  /// field would make every reader of an address handle a case that behaves
+  /// identically.
+  ///
+  /// A plugin cannot shadow it — `FlutterwareConfig.use` refuses this id — which
+  /// is what makes the reservation a fact rather than a convention. Real plugin
+  /// ids are dotted and globally unique, so nothing legitimate wanted it.
+  static const shellConfig = 'config';
+
   /// Which project this address belongs to, or null for "the one the session
   /// reading it was launched in" — which is every address anything emits today,
   /// since a shell is opened on one repo and discovers that repo's worktrees.

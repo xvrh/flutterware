@@ -82,6 +82,9 @@ class _StubLoader implements ManifestLoader {
 
   @override
   String get dartExecutable => 'dart';
+
+  @override
+  Duration get timeout => Duration.zero; // Unused: no stub spawns a process.
 }
 
 Future<ShellController> _pump(WidgetTester tester) async {

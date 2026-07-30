@@ -9,6 +9,8 @@ import '../address/address_scope.dart';
 import '../plugins/native_plugin.dart';
 import '../ui/theme.dart';
 import 'address_bar.dart';
+import 'config_load.dart';
+import 'config_screen.dart';
 import '../utils/hot_reload.dart';
 import '../utils/value_stream_builder.dart';
 import 'shell_controller.dart';
@@ -16,6 +18,15 @@ import 'shell_search.dart';
 import 'sidebar_row.dart';
 import 'worktree.dart';
 import 'worktree_home.dart';
+
+/// The transient "what the last reload did" line in the band.
+const configLoadLineKey = Key('config-load-line');
+
+/// The sticky config-failure banner under the band.
+const configErrorBannerKey = Key('config-error-banner');
+
+/// The band button that opens the config screen.
+const configButtonKey = Key('config-button');
 
 /// Width the macOS traffic lights occupy; band content insets past them.
 const _trafficLightInset = 78.0;
@@ -116,6 +127,11 @@ class ShellView extends StatelessWidget {
               body: Column(
                 children: [
                   _Band(shell),
+                  // Above the rail and the panel both, because it is a fact
+                  // about the worktree rather than about whatever is mounted —
+                  // and a config that failed no longer takes the panel down
+                  // with it, so this is the only thing that would say so.
+                  _ConfigErrorBanner(shell),
                   Expanded(
                     child: Row(
                       children: [
@@ -173,7 +189,8 @@ class _Band extends StatelessWidget {
             onTap: () => unawaited(showShellSearch(context, shell)),
           ),
           const Gap(FwSpacing.md),
-          _ReloadButton(shell),
+          _ConfigLoadLine(shell),
+          _ConfigButton(shell),
           const _HotReloadButtons(),
           const Gap(FwSpacing.md),
         ],
@@ -206,12 +223,19 @@ class _SidebarButton extends StatelessWidget {
   }
 }
 
-/// Re-runs the selected worktree's `tool/flutterware.dart`.
+/// The selected worktree's config failure, until a load succeeds.
 ///
-/// Worktree discovery is *not* what this does — the switcher rescans itself
-/// when it opens, which is the only moment that list is looked at.
-class _ReloadButton extends StatelessWidget {
-  const _ReloadButton(this.shell);
+/// **Not dismissible.** It is a fact about a file on disk, so hiding it would
+/// hide a real problem — and unlike before, there is no other symptom to notice:
+/// the plugins built from the last config that loaded are all still running
+/// behind it.
+///
+/// Says one line and offers the screen. The compiler's own output lives on
+/// `fw://<worktree>/config`, where the reload button and the history of previous
+/// reloads are, and rendering it in two places would mean maintaining it in two
+/// places.
+class _ConfigErrorBanner extends StatelessWidget {
+  const _ConfigErrorBanner(this.shell);
 
   final ShellController shell;
 
@@ -219,17 +243,176 @@ class _ReloadButton extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var worktree = shell.selected;
-    var blocked =
-        worktree != null && (shell.sessionFor(worktree)?.isBlocked ?? false);
-    var enabled = worktree != null && !blocked && !shell.isLoading(worktree);
+    var error = worktree == null ? null : shell.errorFor(worktree);
+    // Redundant while you are looking at the screen that explains it.
+    if (error == null || shell.isConfigScreen) return const SizedBox.shrink();
+
+    return Container(
+      key: configErrorBannerKey,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.lg,
+        vertical: FwSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: colors.red.withValues(alpha: 0.08),
+        border: Border(bottom: BorderSide(color: colors.red)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, size: 14, color: colors.red),
+          const Gap(FwSpacing.sm),
+          Expanded(
+            child: Text(
+              error.message.trimRight().split('\n').first,
+              style: context.type.caption.copyWith(color: colors.red),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          TextButton(
+            onPressed: shell.selectConfig,
+            style: TextButton.styleFrom(
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'Details',
+              style: context.type.caption.copyWith(color: colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the last config load did, for a few seconds after it did it.
+///
+/// **The `unchanged` case is the reason this exists.** A reload that matched and
+/// a reload that never happened are the same absence of feedback, and that
+/// ambiguity is what makes reloading feel unreliable — so a load always says
+/// something, even when the answer is "nothing moved". The duration rides along
+/// so a drift from ~100ms to seconds is visible without anyone going looking.
+///
+/// Opening a worktree is deliberately silent: the tab appearing is already the
+/// feedback, and announcing it would make every switch chatty.
+class _ConfigLoadLine extends StatefulWidget {
+  const _ConfigLoadLine(this.shell);
+
+  final ShellController shell;
+
+  @override
+  State<_ConfigLoadLine> createState() => _ConfigLoadLineState();
+}
+
+class _ConfigLoadLineState extends State<_ConfigLoadLine> {
+  static const _linger = Duration(seconds: 4);
+
+  ConfigLoad? _showing;
+  Timer? _hide;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.shell.addListener(_check);
+  }
+
+  @override
+  void dispose() {
+    widget.shell.removeListener(_check);
+    _hide?.cancel();
+    super.dispose();
+  }
+
+  void _check() {
+    var worktree = widget.shell.selected;
+    var load = worktree == null ? null : widget.shell.lastLoad(worktree);
+    if (load == null ||
+        load == _showing ||
+        load.outcome == ConfigLoadOutcome.built) {
+      return;
+    }
+    setState(() => _showing = load);
+    _hide?.cancel();
+    _hide = Timer(_linger, () {
+      if (mounted) setState(() => _showing = null);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var load = _showing;
+    return AnimatedOpacity(
+      opacity: load == null ? 0 : 1,
+      duration: const Duration(milliseconds: 200),
+      child: load == null
+          ? const SizedBox.shrink()
+          : Padding(
+              key: configLoadLineKey,
+              padding: const EdgeInsets.only(right: FwSpacing.sm),
+              child: Text(
+                '${load.summary} · ${load.duration.inMilliseconds}ms',
+                style: context.type.caption.copyWith(
+                  color: load.succeeded ? colors.mut : colors.red,
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+/// Opens `fw://<worktree>/config`.
+///
+/// **This used to reload on click**, which put the action in the chrome and its
+/// result nowhere: a reload that rebuilt one plugin, or refused because a plugin
+/// was busy, had no place to say so. Now the button is navigation and the Reload
+/// button lives on the screen, next to the log of what previous reloads did.
+///
+/// It carries the config's state, because that is the one thing about this file
+/// worth a permanent pixel in the band: a dot when the config is failing.
+class _ConfigButton extends StatelessWidget {
+  const _ConfigButton(this.shell);
+
+  final ShellController shell;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var worktree = shell.selected;
+    var failing = worktree != null && shell.errorFor(worktree) != null;
 
     return Tooltip(
-      message: blocked
-          ? 'A plugin is busy; reloading would tear it down'
-          : 'Reload this worktree’s config',
+      message: failing
+          ? 'This worktree’s config did not load'
+          : 'Config — what tool/flutterware.dart resolved to',
       child: IconButton(
-        onPressed: enabled ? () => shell.reloadConfig() : null,
-        icon: Icon(Icons.refresh, size: 16, color: colors.mut),
+        key: configButtonKey,
+        onPressed: worktree == null ? null : shell.selectConfig,
+        icon: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(
+              Icons.tune,
+              size: 16,
+              color: shell.isConfigScreen ? colors.accent : colors.mut,
+            ),
+            if (failing)
+              Positioned(
+                right: -1,
+                top: -1,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
+        ),
         disabledColor: colors.mut3,
         constraints: const BoxConstraints.tightFor(width: 28, height: 28),
         padding: EdgeInsets.zero,
@@ -246,8 +429,8 @@ class _ReloadButton extends StatelessWidget {
 /// that is correct rather than a degraded experience: there is no compiler
 /// present to produce new code.
 ///
-/// Distinct from [_ReloadButton] beside it, which reloads the *worktree's
-/// config*. That one is for using flutterware; this pair is for working on it.
+/// Distinct from [_ConfigButton] beside it, which opens the *worktree's config*
+/// screen. That one is for using flutterware; this pair is for working on it.
 class _HotReloadButtons extends StatefulWidget {
   const _HotReloadButtons();
 
@@ -893,12 +1076,14 @@ class _Panel extends StatelessWidget {
       body = const _Message(title: 'No worktree open');
     } else if (session == null) {
       body = _Loading(worktree.displayName);
+    } else if (shell.isConfigScreen) {
+      body = ConfigScreen(shell, worktree);
     } else {
       var plugin = shell.selectedPluginId == null
           ? null
           : session.pluginById(shell.selectedPluginId!);
       body = plugin == null
-          ? WorktreeHome(shell, worktree)
+          ? WorktreeHome(worktree)
           : KeyedSubtree(
               // Rebuild the panel from scratch when the worktree or the plugin
               // changes; panels hold their own state and must not leak it

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
@@ -35,23 +37,89 @@ class ManifestLoadException implements Exception {
 class ManifestLoader {
   ManifestLoader({
     required this.dartExecutable,
+    this.timeout = const Duration(seconds: 30),
     Future<ProcessResult> Function(
       String executable,
       List<String> arguments, {
       String? workingDirectory,
     })?
     runProcess,
-  }) : _run = runProcess ?? Process.run;
+    // ignore: prefer_initializing_formals
+  }) : _runProcess = runProcess;
 
   /// The `dart` to run — the SDK pinned by the project, not whatever is on PATH.
   final String dartExecutable;
+
+  /// How long the config gets before it is killed and reported.
+  ///
+  /// **A config is user code and can hang** — an accidental infinite loop, a
+  /// read from stdin, an `await` on something that never arrives. Without a
+  /// deadline that is not a slow reload, it is a permanent one: `fw` waits at
+  /// the terminal forever, and in the GUI the watcher treats a reload as still
+  /// in flight and folds every later save into it, so even the save that
+  /// *fixes* the file does nothing. Generous against a file that normally takes
+  /// ~50ms, because being wrong in the other direction kills a config that was
+  /// merely doing something slow.
+  final Duration timeout;
 
   final Future<ProcessResult> Function(
     String executable,
     List<String> arguments, {
     String? workingDirectory,
-  })
-  _run;
+  })?
+  _runProcess;
+
+  Future<ProcessResult> _run(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+  }) =>
+      _runProcess?.call(
+        executable,
+        arguments,
+        workingDirectory: workingDirectory,
+      ) ??
+      _spawn(executable, arguments, workingDirectory);
+
+  /// `Process.run` with a deadline.
+  ///
+  /// It has to be `Process.start`: `Process.run` returns a future that cannot be
+  /// cancelled, so timing it out would leave the child alive — and a runaway
+  /// config would then accumulate one orphaned process per save.
+  Future<ProcessResult> _spawn(
+    String executable,
+    List<String> arguments,
+    String? workingDirectory,
+  ) async {
+    var process = await Process.start(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+    );
+    var stdout = process.stdout.transform(utf8.decoder).join();
+    var stderr = process.stderr.transform(utf8.decoder).join();
+    try {
+      var exitCode = await process.exitCode.timeout(timeout);
+      return ProcessResult(process.pid, exitCode, await stdout, await stderr);
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+      // Nobody will await these now, and an abandoned future that completes
+      // with an error is an unhandled async error — a test failure under
+      // `flutter test`, a crash report in the app. SIGKILL can cut a multi-byte
+      // sequence in half and `utf8.decoder` is strict, so this is reachable
+      // rather than theoretical. Whatever they were going to say, the exception
+      // below says it better.
+      unawaited(stdout.then((_) {}, onError: (_) {}));
+      unawaited(stderr.then((_) {}, onError: (_) {}));
+      throw ManifestLoadException(
+        '$configFilePath did not finish within ${timeout.inSeconds}s and was '
+        'killed.',
+        details:
+            'A config is expected to print its manifest and exit. Check for a '
+            'loop, a read from stdin, or an await that never completes.',
+      );
+    }
+  }
 
   /// Returns the worktree's manifest, or null when it declares no config file.
   ///
@@ -115,26 +183,47 @@ class ManifestLoader {
   ///
   /// Keyed on the config file, the package resolution, and which `dart` is
   /// doing the compiling. The first two are what change the output; the third
-  /// is there because an fvm switch changes the SDK without touching either.
+  /// is there because an fvm switch changes the SDK without touching either —
+  /// `package_config.json` names a `flutterRoot`, but only as of whenever pub
+  /// last ran, so switching without resolving would otherwise go unnoticed.
+  ///
+  /// **Keyed on content, not mtime.** `pub get` rewrites
+  /// `package_config.json` whether or not resolution moved, and the
+  /// Dependencies plugin runs `pub get` itself — so a stat-based key made
+  /// *using* flutterware invalidate flutterware's own cache, and every
+  /// following command paid the ~450ms compile again. Content survives that,
+  /// and survives a checkout or a stash that restores a file byte for byte.
+  ///
+  /// **Keyed on the whole compiled closure, not just the config file.**
+  /// `dart compile kernel` bundles every library the config reaches, so a key
+  /// naming only `tool/flutterware.dart` went stale the moment a declaration
+  /// moved in a file it imports — and the config would then keep reporting the
+  /// old manifest, which the reload machinery reads as "no changes". A stale
+  /// answer that says *nothing changed* is the one failure this whole feature
+  /// cannot tolerate, and content keying made it permanent rather than
+  /// transient: nothing else would ever invalidate it.
+  ///
+  /// `--depfile` is the compiler's own answer to "what did this depend on", so
+  /// the key is derived from the build rather than guessed alongside it.
+  /// Measured on this repo: 46 inputs, 0.7ms to hash.
   Future<String?> _kernel(String worktreePath, File configFile) async {
     var packageConfig = File(
       p.join(worktreePath, '.dart_tool', 'package_config.json'),
     );
     if (!packageConfig.existsSync()) return null;
 
-    var stamp = [
-      configFile.statSync().modified.millisecondsSinceEpoch,
-      configFile.statSync().size,
-      packageConfig.statSync().modified.millisecondsSinceEpoch,
-      dartExecutable,
-    ].join('|');
-
     var dill = File(p.join(_cacheDir(worktreePath), 'manifest.dill'));
     var stampFile = File(p.join(_cacheDir(worktreePath), 'manifest.stamp'));
-    if (dill.existsSync() &&
-        stampFile.existsSync() &&
-        stampFile.readAsStringSync() == stamp) {
-      return dill.path;
+    var depFile = File(p.join(_cacheDir(worktreePath), 'manifest.deps'));
+
+    // The previous compile's own dependency list. A closure that *grew* — a new
+    // import — is caught anyway, because adding the import changed the config
+    // file, which is in the list.
+    if (dill.existsSync() && stampFile.existsSync() && depFile.existsSync()) {
+      var stamp = _stamp(worktreePath, packageConfig, depFile);
+      if (stamp != null && stampFile.readAsStringSync() == stamp) {
+        return dill.path;
+      }
     }
 
     Directory(_cacheDir(worktreePath)).createSync(recursive: true);
@@ -143,12 +232,70 @@ class ManifestLoader {
       'kernel',
       '-o',
       dill.path,
+      '--depfile',
+      depFile.path,
       configFilePath,
     ], workingDirectory: worktreePath);
     if (compiled.exitCode != 0) return null;
 
+    var stamp = _stamp(worktreePath, packageConfig, depFile);
+    if (stamp == null) return dill.path; // Usable now, recompiled next time.
     stampFile.writeAsStringSync(stamp);
     return dill.path;
+  }
+
+  /// A hash over every source the last compile read, plus the resolution and
+  /// the compiler. Null when the dependency list cannot be read, which means
+  /// "do not trust the cache" rather than "the cache is fine".
+  String? _stamp(String worktreePath, File packageConfig, File depFile) {
+    List<String> inputs;
+    try {
+      inputs = _depfileInputs(depFile.readAsStringSync());
+    } on FileSystemException {
+      return null;
+    }
+    if (inputs.isEmpty) return null;
+
+    var parts = <String>[];
+    for (var input in inputs..sort()) {
+      var file = File(
+        p.isAbsolute(input) ? input : p.join(worktreePath, input),
+      );
+      if (!file.existsSync()) return null;
+      parts.add('$input ${sha1.convert(file.readAsBytesSync())}');
+    }
+    parts
+      ..add('${sha1.convert(packageConfig.readAsBytesSync())}')
+      ..add(dartExecutable);
+    return '${sha1.convert(utf8.encode(parts.join('\n')))}';
+  }
+
+  /// The inputs from a Ninja depfile: `output: in1 in2 \<newline> in3`, with
+  /// spaces in paths backslash-escaped.
+  static List<String> _depfileInputs(String source) {
+    var colon = source.indexOf(':');
+    if (colon < 0) return const [];
+    var body = source
+        .substring(colon + 1)
+        .replaceAll('\\\n', ' ')
+        .replaceAll('\n', ' ');
+
+    var inputs = <String>[];
+    var current = StringBuffer();
+    for (var i = 0; i < body.length; i++) {
+      var char = body[i];
+      if (char == r'\' && i + 1 < body.length && body[i + 1] == ' ') {
+        current.write(' ');
+        i++;
+      } else if (char == ' ') {
+        if (current.isNotEmpty) inputs.add(current.toString());
+        current = StringBuffer();
+      } else {
+        current.write(char);
+      }
+    }
+    if (current.isNotEmpty) inputs.add(current.toString());
+    return inputs;
   }
 
   void _invalidate(String worktreePath) {

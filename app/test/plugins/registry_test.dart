@@ -326,9 +326,18 @@ void main() {
         invocations.add(arguments);
         if (arguments.first == 'compile') {
           if (compileExit == 0) {
-            File(arguments[arguments.indexOf('-o') + 1])
+            var out = arguments[arguments.indexOf('-o') + 1];
+            File(out)
               ..createSync(recursive: true)
               ..writeAsStringSync('kernel');
+            // The real compiler's dependency list, which the cache key is
+            // derived from — without it the loader has no idea what the kernel
+            // was built from and correctly refuses to reuse it.
+            File(arguments[arguments.indexOf('--depfile') + 1])
+              ..createSync(recursive: true)
+              ..writeAsStringSync(
+                '$out: ${p.join(dir.path, configFilePath)}\n',
+              );
           }
           return ProcessResult(0, compileExit, '', '');
         }

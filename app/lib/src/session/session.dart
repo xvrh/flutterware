@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+// Only the equality: this file has its own `firstOrNull`.
+import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:flutterware/plugins.dart';
 
 // ignore: implementation_imports
@@ -41,9 +43,10 @@ class Session {
     this.root,
     this.worktree,
     this.workspace,
-    this.cores,
+    List<PluginCore> cores,
     this._ownsWorkspace,
-  );
+    this.manifest,
+  ) : _cores = cores;
 
   /// Builds a session over pieces the caller has already resolved.
   ///
@@ -64,6 +67,7 @@ class Session {
     workspace,
     (registry ?? defaultCoreRegistry()).resolve(manifest, worktree, workspace),
     false,
+    manifest,
   );
 
   /// Whether disposing this session also disposes the workspace under it.
@@ -79,7 +83,12 @@ class Session {
   final Workspace workspace;
 
   /// One core per declared plugin, in the order the config declared them.
-  final List<PluginCore> cores;
+  ///
+  /// Unmodifiable to callers: [reconcile] is the only thing that writes it, so
+  /// a plugin set can only change by re-running the config.
+  List<PluginCore> get cores => List.unmodifiable(_cores);
+
+  final List<PluginCore> _cores;
 
   /// flutterware's own `app/` install, for the cores that need to find the
   /// machinery shipped beside them — the catalog daemon and its native host.
@@ -115,6 +124,14 @@ class Session {
         ? Directory(candidate)
         : null;
   }
+
+  /// The manifest [cores] were built from, and what the next load is compared
+  /// against.
+  ///
+  /// **Here, not beside the session in whatever built it.** These cores *are*
+  /// this manifest resolved; a copy kept elsewhere has to be written and cleared
+  /// in step with them, which the reload path used to get wrong.
+  final PluginManifest manifest;
 
   /// Opens the session for whichever repo [start] sits in.
   ///
@@ -176,6 +193,7 @@ class Session {
         workspace,
       ),
       true,
+      manifest,
     );
   }
 
@@ -189,6 +207,20 @@ class Session {
     }
     return found;
   }
+
+  /// Whether [next] declares exactly what these cores were built from.
+  ///
+  /// **The one question a reload asks.** Everything else it might have asked —
+  /// which plugin moved, whether one could be kept — was machinery for keeping
+  /// state alive across a config change, and losing that state is the accepted
+  /// price of having changed the config. What is *not* acceptable is paying it
+  /// for a save that changed nothing, so this is the check that has to be right,
+  /// and it is the only one.
+  ///
+  /// Compared through `toJson`, so it sees exactly what crossed the process
+  /// boundary rather than object identity.
+  bool declares(PluginManifest next) =>
+      const DeepCollectionEquality().equals(manifest.toJson(), next.toJson());
 
   PluginCore? coreById(String id) =>
       cores.where((core) => core.id == id).firstOrNull;

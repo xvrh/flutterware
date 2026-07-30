@@ -19,6 +19,8 @@ import 'package:flutterware_app/src/shell/shell_search.dart';
 import 'package:flutterware_app/src/shell/shell_view.dart';
 import 'package:flutterware_app/src/ui/command_palette.dart';
 import 'package:flutterware_app/src/shell/worktree_discovery.dart';
+import 'package:flutterware_app/src/shell/config_load.dart';
+import 'package:flutterware_app/src/shell/config_screen.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 
 const _listing =
@@ -111,33 +113,59 @@ PluginRegistry _panels(Iterable<String> ids) =>
     PluginRegistry({for (var id in ids) id: panelFor<_FakeCore>(_Fake.new)});
 
 class _StubLoader implements ManifestLoader {
+  _StubLoader();
+
+  String manifest = _manifestJson;
+  bool broken = false;
+
   @override
-  Future<PluginManifest?> load(String path) async =>
-      PluginManifest.parse(_manifestJson);
+  Future<PluginManifest?> load(String path) async {
+    if (broken) {
+      throw ManifestLoadException(
+        'tool/flutterware.dart exited with 1.',
+        details: "lib/config.dart:4:3: Error: Expected ';'.",
+      );
+    }
+    return PluginManifest.parse(manifest);
+  }
 
   @override
   Future<({PluginManifest? manifest, String? error})> tryLoad(
     String path,
-  ) async => (manifest: await load(path), error: null);
+  ) async {
+    try {
+      return (manifest: await load(path), error: null);
+    } on ManifestLoadException catch (e) {
+      return (manifest: null, error: '$e');
+    }
+  }
 
   @override
   String get dartExecutable => 'dart';
+
+  @override
+  Duration get timeout => Duration.zero; // Unused: no stub spawns a process.
 }
 
-ShellController _controller({String listing = _listing}) => ShellController(
-  appContext: AppContext(logger: LogClient.print()),
-  flutterSdk: FlutterSdkPath('/tmp/flutter'),
-  registry: _panels(const ['a.deps', 'a.tests']),
-  coreRegistry: PluginCoreRegistry({
-    'a.deps': (h) => _FakeCore(h, status: const Status.neutral('170 direct')),
-    'a.tests': (h) => _FakeCore(h, status: const Status.error('3 failing')),
-  }),
-  manifestLoader: _StubLoader(),
-  discovery: WorktreeDiscovery(
-    runProcess: (_, _, {workingDirectory}) async =>
-        ProcessResult(0, 0, listing, ''),
-  ),
-);
+late _StubLoader _loader;
+
+ShellController _controller({String listing = _listing}) {
+  _loader = _StubLoader();
+  return ShellController(
+    appContext: AppContext(logger: LogClient.print()),
+    flutterSdk: FlutterSdkPath('/tmp/flutter'),
+    registry: _panels(const ['a.deps', 'a.tests']),
+    coreRegistry: PluginCoreRegistry({
+      'a.deps': (h) => _FakeCore(h, status: const Status.neutral('170 direct')),
+      'a.tests': (h) => _FakeCore(h, status: const Status.error('3 failing')),
+    }),
+    manifestLoader: _loader,
+    discovery: WorktreeDiscovery(
+      runProcess: (_, _, {workingDirectory}) async =>
+          ProcessResult(0, 0, listing, ''),
+    ),
+  );
+}
 
 Future<ShellController> _pumpShell(WidgetTester tester) async {
   var shell = _controller();
@@ -600,6 +628,193 @@ void main() {
       expect(inPalette('No results for “zzzz”'), findsOneWidget);
     });
   });
+
+  group('the config surfaces', () {
+    /// Scoped, so a phrase found somewhere else on screen cannot pass for the
+    /// band line saying it.
+    Finder inLine(String text) => find.descendant(
+      of: find.byKey(configLoadLineKey),
+      matching: find.textContaining(text),
+    );
+    Finder inBanner(String text) => find.descendant(
+      of: find.byKey(configErrorBannerKey),
+      matching: find.textContaining(text),
+    );
+    Finder inConfig(String text) => find.descendant(
+      of: find.byKey(configScreenKey),
+      matching: find.textContaining(text),
+    );
+    Future<void> openConfig(WidgetTester tester) async {
+      await tester.tap(find.byKey(configButtonKey));
+      await tester.pumpAndSettle();
+    }
+
+    const changedTests =
+        '{"version":1,"plugins":['
+        '{"id":"a.deps","label":"Dependencies"},'
+        '{"id":"a.tests","label":"Tests","config":{"dir":"unit"}}]}';
+
+    testWidgets('opening a worktree says nothing in the band', (tester) async {
+      var shell = await _pumpShell(tester);
+
+      // The tab appearing is already the feedback; announcing it would make
+      // every worktree switch chatty. It still reaches the terminal.
+      expect(find.byKey(configLoadLineKey), findsNothing);
+      expect(shell.lastLoad(shell.selected!)!.outcome, ConfigLoadOutcome.built);
+    });
+
+    testWidgets('the band button navigates rather than reloading', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+      var before = shell.lastLoad(shell.selected!);
+
+      await openConfig(tester);
+
+      expect(shell.isConfigScreen, isTrue);
+      expect(shell.isHome, isFalse);
+      expect(shell.selectedPluginId, isNull, reason: 'config is not a plugin');
+      expect(shell.address.plugin, 'config');
+      expect(
+        identical(shell.lastLoad(shell.selected!), before),
+        isTrue,
+        reason: 'clicking it must not re-run the config any more',
+      );
+    });
+
+    testWidgets('Reload on the screen re-runs the config', (tester) async {
+      var shell = await _pumpShell(tester);
+      await openConfig(tester);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Reload'));
+      await tester.pumpAndSettle();
+
+      expect(
+        shell.lastLoad(shell.selected!)!.outcome,
+        ConfigLoadOutcome.unchanged,
+      );
+      expect(inLine('no changes'), findsOneWidget);
+    });
+
+    testWidgets('the screen names the directory it watches', (tester) async {
+      await _pumpShell(tester);
+      await openConfig(tester);
+
+      // This harness's worktree path is not a real directory, so there is
+      // genuinely nothing to watch — and saying so is the point. "It did not
+      // notice my edit" is the standard complaint about file watching, and the
+      // standard cause is a watched set that does not contain what you edited.
+      expect(inConfig('Nothing to watch'), findsOneWidget);
+    });
+
+    testWidgets('the screen says what the config resolved to', (tester) async {
+      await _pumpShell(tester);
+      await openConfig(tester);
+
+      expect(inConfig('Resolved'), findsOneWidget);
+      expect(inConfig('a.deps'), findsOneWidget);
+      expect(inConfig('a.tests'), findsOneWidget);
+    });
+
+    testWidgets('an address naming the config screen lands on it', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+
+      shell.go(Address(worktree: shell.selected!.name, plugin: 'config'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(configScreenKey), findsOneWidget);
+    });
+
+    testWidgets('a reload that changed nothing still says so', (tester) async {
+      var shell = await _pumpShell(tester);
+
+      await shell.reloadConfig();
+      await tester.pump();
+
+      // The whole point: silence would be indistinguishable from a reload that
+      // never fired.
+      expect(inLine('no changes'), findsOneWidget);
+    });
+
+    testWidgets('the line says what the reload did, then fades', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+
+      _loader.manifest = changedTests;
+      await shell.reloadConfig();
+      await tester.pump();
+
+      expect(inLine('rebuilt, 2 plugins'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(find.byKey(configLoadLineKey), findsNothing);
+    });
+
+    testWidgets('a failed load shows a banner and keeps the plugins', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+      var before = shell.selectedSession!.plugins.first;
+
+      _loader.broken = true;
+      await shell.reloadConfig();
+      await tester.pumpAndSettle();
+
+      expect(inBanner('exited with 1'), findsOneWidget);
+      // Still there, still the same objects — the banner is the only symptom.
+      expect(identical(shell.selectedSession!.plugins.first, before), isTrue);
+
+      // The compiler's own output is not duplicated into the band; Details
+      // goes to the one screen that renders it.
+      expect(inBanner("Expected ';'"), findsNothing);
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(configErrorBannerKey),
+          matching: find.text('Details'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(shell.isConfigScreen, isTrue);
+      expect(inConfig("Expected ';'"), findsOneWidget);
+      // And it is redundant while you are looking at the explanation.
+      expect(find.byKey(configErrorBannerKey), findsNothing);
+    });
+
+    testWidgets('the band button shows a dot while the config is failing', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+      _loader.broken = true;
+      await shell.reloadConfig();
+      await tester.pumpAndSettle();
+
+      var button = find.byKey(configButtonKey);
+      expect(
+        find.descendant(of: button, matching: find.byType(Stack)),
+        findsOneWidget,
+      );
+      expect(shell.errorFor(shell.selected!), isNotNull);
+    });
+
+    testWidgets('the banner clears when a load succeeds', (tester) async {
+      var shell = await _pumpShell(tester);
+
+      _loader.broken = true;
+      await shell.reloadConfig();
+      await tester.pumpAndSettle();
+      expect(find.byKey(configErrorBannerKey), findsOneWidget);
+
+      _loader.broken = false;
+      await shell.reloadConfig();
+      await tester.pumpAndSettle();
+      expect(find.byKey(configErrorBannerKey), findsNothing);
+    });
+  });
 }
 
 class _EmptyLoader implements ManifestLoader {
@@ -613,4 +828,7 @@ class _EmptyLoader implements ManifestLoader {
 
   @override
   String get dartExecutable => 'dart';
+
+  @override
+  Duration get timeout => Duration.zero; // Unused: no stub spawns a process.
 }

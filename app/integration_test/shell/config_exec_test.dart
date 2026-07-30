@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:collection/collection.dart';
+
 import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/shell/repo_layout.dart';
 import 'package:path/path.dart' as p;
@@ -82,6 +84,47 @@ void main() {
         manifest.packages.map((package) => package.path).toList(),
         hasLength(named.length),
         reason: 'a package named by two plugins should be reported once',
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
+    'a warm load is cheap enough for a reload to be invisible',
+    () async {
+      var root = findRepoRoot('..')!;
+      var loader = ManifestLoader(dartExecutable: Platform.resolvedExecutable);
+
+      // First one may pay `dart compile kernel`; the rest are the real reload
+      // cost, and the number the phase-1 findings quote.
+      await loader.load(root);
+
+      var samples = <int>[];
+      for (var i = 0; i < 5; i++) {
+        var watch = Stopwatch()..start();
+        var manifest = await loader.load(root);
+        samples.add(watch.elapsedMilliseconds);
+        expect(manifest, isNotNull);
+      }
+      // Printed rather than asserted tightly: this is a measurement, and a CI
+      // machine is not the machine the number was quoted from.
+      print('warm manifest loads (ms): $samples');
+
+      // Deciding "did this config change" is the only judgement a reload
+      // makes, and it is not allowed to be a term in the cost.
+      var a = (await loader.load(root))!;
+      var b = (await loader.load(root))!;
+      var watch = Stopwatch()..start();
+      for (var i = 0; i < 1000; i++) {
+        const DeepCollectionEquality().equals(a.toJson(), b.toJson());
+      }
+      print('1000 comparisons (ms): ${watch.elapsedMilliseconds}');
+      expect(
+        const DeepCollectionEquality().equals(a.toJson(), b.toJson()),
+        isTrue,
+        reason:
+            'the same config twice must compare equal, or a comment '
+            'would rebuild the world',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

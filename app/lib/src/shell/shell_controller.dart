@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutterware/plugins.dart';
+import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
+import 'package:watcher/watcher.dart';
 
 import '../context.dart';
 import '../plugins/manifest_loader.dart';
@@ -10,9 +12,13 @@ import '../plugins/plugin_core.dart';
 import '../plugins/registry.dart';
 import '../plugins/worktree_session.dart';
 import '../utils/flutter_sdk.dart';
+import 'config_load.dart';
+import 'config_watcher.dart';
 import 'workspace.dart';
 import 'worktree.dart';
 import 'worktree_discovery.dart';
+
+final _logger = Logger('shell');
 
 /// Why a worktree could not be opened. Kept per worktree so a broken config in
 /// one checkout never takes down the shell.
@@ -38,7 +44,17 @@ class ShellController extends ChangeNotifier {
     required this.manifestLoader,
     this.coreRegistry,
     WorktreeDiscovery? discovery,
-  }) : _discovery = discovery ?? WorktreeDiscovery();
+    Stream<WatchEvent> Function(String directory)? watchEvents,
+    Duration? watchDebounce,
+  }) : _discovery = discovery ?? WorktreeDiscovery(),
+       // ignore: prefer_initializing_formals
+       _watchEvents = watchEvents,
+       // ignore: prefer_initializing_formals
+       _watchDebounce = watchDebounce;
+
+  /// Injectable so a test can drive a save without a filesystem.
+  final Stream<WatchEvent> Function(String directory)? _watchEvents;
+  final Duration? _watchDebounce;
 
   final AppContext appContext;
   final FlutterSdkPath flutterSdk;
@@ -54,24 +70,82 @@ class ShellController extends ChangeNotifier {
 
   var _worktrees = <Worktree>[];
 
-  /// Open worktrees, in the order they were opened. This — not [_sessions] — is
-  /// what the tabs are drawn from, so a worktree gets its tab the moment it is
-  /// opened rather than when its config finally finishes running.
-  final _openPaths = <String>[];
+  /// Every open worktree, in the order they were opened.
+  ///
+  /// **One map, not nine.** This was nine collections keyed by the same path —
+  /// session, workspace, error, remembered address, load generation, manifest,
+  /// log, watcher, pending flag — with a 24-line `_closeAt` that had to remember
+  /// every one of them. Nothing typed the relationship; a tenth piece of
+  /// per-worktree state was one forgotten line away from a leak no test would
+  /// notice. Insertion order is the tab order, so the separate path list went
+  /// with them.
+  final _open = <String, _Open>{};
 
-  final _sessions = <String, WorktreeSession>{};
-  final _workspaces = <String, Workspace>{};
-  final _errors = <String, WorktreeError>{};
+  /// The directory whose changes reach [worktree], or null when nothing is
+  /// watched — the honest answer to "why did it not notice my edit".
+  String? watchingFor(Worktree worktree) =>
+      _open[worktree.path]?.watcher?.watching;
 
-  /// Where each open worktree was left, so switching tabs comes back to the
-  /// same place rather than to its home screen. Keyed by path because that is
-  /// what everything else here is keyed by; the value is an [Address] like any
-  /// other, so restoring a tab is the same write as any other navigation.
-  final _remembered = <String, Address>{};
+  void _startWatching(Worktree worktree) {
+    var open = _open[worktree.path];
+    if (open == null || open.watcher != null) return;
+    var watcher = ConfigWatcher(
+      worktreePath: worktree.path,
+      onChanged: () => _onConfigChanged(worktree),
+      onError: (e) => _logger.severe('config reload failed: $e'),
+      watch: _watchEvents,
+      debounce: _watchDebounce ?? const Duration(milliseconds: 250),
+    );
+    open.watcher = watcher;
+    // A watcher that failed to start must not stay in the map: `watchingFor`
+    // reads the directory off the filesystem, so it would keep reporting the
+    // config as watched while nothing was listening — and `_startWatching`
+    // refuses to retry an id it already holds, so the state would be permanent.
+    unawaited(
+      watcher.start().catchError((Object e) {
+        _logger.warning('config watch failed for ${worktree.path}: $e');
+        if (identical(open.watcher, watcher)) open.watcher = null;
+        unawaited(watcher.dispose());
+        notifyListeners();
+      }),
+    );
+  }
 
-  /// Bumped per path on every load, so a load whose worktree was closed or
-  /// reloaded underneath it drops its result instead of resurrecting a session.
-  final _loads = <String, int>{};
+  Future<void> _onConfigChanged(Worktree worktree) async {
+    // Closed between the save and the debounce settling.
+    if (!_open.containsKey(worktree.path)) return;
+    // Awaited so the watcher knows a reload is in flight and folds anything
+    // that lands during it into one follow-up.
+    await _load(worktree);
+  }
+
+  /// What the last load of [worktree]'s config did, or null before the first.
+  ConfigLoad? lastLoad(Worktree worktree) => _open[worktree.path]?.lastLoad;
+
+  /// What [worktree]'s config resolved to — the manifest its plugins were built
+  /// from, and what the next load is compared against.
+  ///
+  /// Null when no load has succeeded yet, which is not the same as a worktree
+  /// with no plugins: that one has an empty manifest.
+  PluginManifest? manifestFor(Worktree worktree) =>
+      _open[worktree.path]?.session?.session.manifest;
+
+  void _record(_Open open, ConfigLoad load) {
+    open.lastLoad = load;
+
+    // Also to the terminal that launched the GUI. The band line is the surface
+    // for someone looking at the window; this is the one for someone whose
+    // config just reloaded while they were watching a log scroll past, and it
+    // is how a reload is observable at all without a window in front of you.
+    // It is also the only place a load older than the last one survives, which
+    // is the whole of the history now that every row would say the same three
+    // things.
+    _logger.info(
+      'config ${p.basename(open.worktree.path)}: ${load.summary} '
+      '(${load.duration.inMilliseconds}ms)'
+      '${load.error == null ? '' : '\n${load.error}'}',
+    );
+  }
 
   /// **Where the shell is.** The one piece of navigation state; everything
   /// below is read off it, and every way of moving is a write to it.
@@ -102,26 +176,32 @@ class ShellController extends ChangeNotifier {
   /// The open ones, in the order they were opened — including those still
   /// loading.
   List<Worktree> get openWorktrees => [
-    for (var path in _openPaths) ?_worktreeAt(path),
+    for (var open in _open.values) open.worktree,
   ];
 
   List<Worktree> get closedWorktrees => [
     for (var w in _worktrees)
-      if (!_openPaths.contains(w.path)) w,
+      if (!_open.containsKey(w.path)) w,
   ];
 
-  bool isOpen(Worktree worktree) => _openPaths.contains(worktree.path);
+  bool isOpen(Worktree worktree) => _open.containsKey(worktree.path);
 
   /// Open, but its config has not finished running yet. The tab exists; the
   /// session does not.
-  bool isLoading(Worktree worktree) =>
-      isOpen(worktree) && !_sessions.containsKey(worktree.path);
+  /// Open, but its config has not finished running yet.
+  ///
+  /// Tracked rather than inferred from a missing session. Inferring it meant a
+  /// first load that *failed* looked like one still running — a permanent
+  /// spinner — and the workaround was to build an empty session purely so the
+  /// inference came out right.
+  bool isLoading(Worktree worktree) => _open[worktree.path]?.hasLoaded == false;
 
-  WorktreeSession? sessionFor(Worktree worktree) => _sessions[worktree.path];
+  WorktreeSession? sessionFor(Worktree worktree) =>
+      _open[worktree.path]?.session;
 
-  WorktreeError? errorFor(Worktree worktree) => _errors[worktree.path];
+  WorktreeError? errorFor(Worktree worktree) => _open[worktree.path]?.error;
 
-  Workspace? workspaceFor(Worktree worktree) => _workspaces[worktree.path];
+  Workspace? workspaceFor(Worktree worktree) => _open[worktree.path]?.workspace;
 
   /// The open worktree the address names, or null when it names none.
   ///
@@ -152,13 +232,28 @@ class ShellController extends ChangeNotifier {
 
   WorktreeSession? get selectedSession {
     var path = selected?.path;
-    return path == null ? null : _sessions[path];
+    return path == null ? null : _open[path]?.session;
   }
 
-  /// The plugin whose panel is mounted, or null when the home screen is.
+  /// True while the address names the shell's own config screen.
+  ///
+  /// It occupies the plugin slot but is not a plugin, so it is neither
+  /// [selectedPluginId] nor [isHome] — a third place, and the only one the
+  /// shell itself owns.
+  bool get isConfigScreen => address.plugin == Address.shellConfig;
+
+  /// Moves to `fw://<worktree>/config`.
+  void selectConfig() {
+    if (address.worktree case var name?) {
+      go(Address(worktree: name, plugin: Address.shellConfig));
+    }
+  }
+
+  /// The plugin whose panel is mounted, or null when the home or config screen
+  /// is.
   String? get selectedPluginId {
     var id = address.plugin;
-    if (id == null) return null;
+    if (id == null || id == Address.shellConfig) return null;
     // A reloaded config may no longer declare it; fall back to home rather than
     // to a panel that cannot be built.
     var session = selectedSession;
@@ -175,7 +270,7 @@ class ShellController extends ChangeNotifier {
       selectedPluginId == null ? null : address.segments.firstOrNull;
 
   /// True while the selected worktree is showing its home screen.
-  bool get isHome => selectedPluginId == null;
+  bool get isHome => !isConfigScreen && selectedPluginId == null;
 
   /// Whether the plugin rail is showing.
   ///
@@ -221,7 +316,7 @@ class ShellController extends ChangeNotifier {
   Future<void> rescanWorktrees() async {
     if (_worktrees.isEmpty) return;
     _worktrees = await _discovery.discover(_worktrees.first.path);
-    for (var path in _openPaths.toList()) {
+    for (var path in _open.keys.toList()) {
       if (_worktreeAt(path) == null) _closeAt(path);
     }
     notifyListeners();
@@ -254,91 +349,192 @@ class ShellController extends ChangeNotifier {
   /// screen; [go] lands on wherever it was pointed, which is the whole reason
   /// this is separate from either.
   Future<void> _openTab(Worktree worktree) {
-    _openPaths.add(worktree.path);
+    _open[worktree.path] = _Open(worktree);
+    _startWatching(worktree);
     // The tab is on screen before the manifest subprocess starts; everything
     // below it draws a loader until the session lands.
     notifyListeners();
     return _load(worktree);
   }
 
-  /// Re-runs the selected worktree's config and rebuilds its plugins.
+  /// Re-runs the selected worktree's config and applies whatever moved.
   ///
-  /// Refuses while a plugin hard-blocks teardown: a reload disposes exactly what
-  /// a close does, so it has to answer to the same guards.
+  /// **Never refuses.** A reload used to answer to the same teardown guards a
+  /// close does, and defer itself until they cleared — a whole mechanism
+  /// protecting state that a config change is allowed to cost. Closing still
+  /// asks, because closing is a deliberate act on a worktree; reloading is what
+  /// the file you just saved asked for.
+  ///
+  /// **Does not release anything up front.** Whether the graph pays for a
+  /// reload is decided after the config has run and been compared; releasing
+  /// first would make a config that fails to compile cost the whole worktree.
   Future<bool> reloadConfig() async {
     var worktree = selected;
     if (worktree == null) return false;
-    if (_sessions[worktree.path]?.isBlocked ?? false) return false;
-
-    _releaseAt(worktree.path);
-    notifyListeners();
     await _load(worktree);
     return true;
   }
 
+  /// Runs a worktree's config and applies whatever moved.
+  ///
+  /// **One exit.** Every branch below produces a [ConfigLoad] and returns it;
+  /// this method records it and notifies, once. It used to be seven exits each
+  /// repeating `record(...); notifyListeners(); return;`, which made "every load
+  /// leaves exactly one row and one notification" a rule you had to remember
+  /// rather than one the shape enforces — and a branch that forgot the notify
+  /// was a frozen window.
   Future<void> _load(Worktree worktree) async {
-    var path = worktree.path;
-    var generation = (_loads[path] ?? 0) + 1;
-    _loads[path] = generation;
-    _errors.remove(path);
+    var open = _open[worktree.path];
+    if (open == null) return;
+
+    var generation = ++open.generation;
+    var watch = Stopwatch()..start();
+
+    var load = await _apply(open, generation, watch);
+    // The one silent return: this load was superseded or its tab closed, so
+    // there is nothing to say and nobody to say it to.
+    if (load == null) return;
+
+    _record(open, load);
+    notifyListeners();
+  }
+
+  /// Decides what this load did, or null when it no longer matters.
+  ///
+  /// Four outcomes, and only one of them is a judgement call:
+  ///
+  /// - **failed** — nothing is torn down. The error surfaces and every plugin
+  ///   keeps running, because a half-written file must not cost a worktree.
+  /// - **unchanged** — the config declared what was already there, so not one
+  ///   object moves. This is the whole point; everything else is bookkeeping.
+  /// - **built** / **rebuilt** — the graph is thrown away and made again.
+  Future<ConfigLoad?> _apply(
+    _Open open,
+    int generation,
+    Stopwatch watch,
+  ) async {
+    var worktree = open.worktree;
+
+    ConfigLoad done(
+      ConfigLoadOutcome outcome, {
+      int plugins = 0,
+      String? error,
+    }) => ConfigLoad(
+      duration: watch.elapsed,
+      outcome: outcome,
+      plugins: plugins,
+      error: error,
+    );
 
     PluginManifest? manifest;
     String? error;
     try {
-      var result = await manifestLoader.tryLoad(path);
+      var result = await manifestLoader.tryLoad(worktree.path);
       manifest = result.manifest;
       error = result.error;
     } catch (e) {
       error = '$e';
     }
 
-    // Closed, or superseded by a later reload, while the config ran.
-    if (_loads[path] != generation || !_openPaths.contains(path)) return;
+    // Closed, or superseded by a later load, while the config ran.
+    if (!identical(_open[worktree.path], open) ||
+        open.generation != generation) {
+      return null;
+    }
+    open.hasLoaded = true;
 
-    if (error != null) _errors[path] = WorktreeError(worktree, error);
+    if (error != null) {
+      // Before any release, and leaving the session alone: the plugins built
+      // from the last config that loaded are still the ones running, and the
+      // next success compares against the config they came from.
+      open.error = WorktreeError(worktree, error);
+      return done(ConfigLoadOutcome.failed, error: error);
+    }
 
     // No config file is not an error — the worktree opens with no plugins.
     manifest ??= const PluginManifest([]);
+    open.error = null;
 
-    // Everything past here touches the disk and builds the session, and since
-    // `go` opens a worktree without awaiting this, there is no caller left to
-    // catch what it throws. A tab with no session and no reason is a worktree
-    // that looks like it opened and then does nothing.
+    var existing = open.session;
+    if (existing != null &&
+        !existing.isDisposed &&
+        existing.session.declares(manifest)) {
+      // The config did not move; the disk may have. This is the one check that
+      // does not follow from the manifest, so an unchanged load still has to
+      // make it — see [_checkDeclarations].
+      _checkDeclarations(open);
+      return done(
+        ConfigLoadOutcome.unchanged,
+        plugins: existing.plugins.length,
+      );
+    }
+
+    var opening = existing == null;
+    open.release();
+    if (_build(open, manifest) case var failure?) {
+      return done(ConfigLoadOutcome.failed, error: failure);
+    }
+    return done(
+      opening ? ConfigLoadOutcome.built : ConfigLoadOutcome.rebuilt,
+      plugins: manifest.plugins.length,
+    );
+  }
+
+  /// Builds the workspace and session for a manifest, from nothing. Returns
+  /// null on success, or the failure to report.
+  ///
+  /// Everything here touches the disk, and since `go` opens a worktree without
+  /// awaiting the load, there is no caller left to catch what it throws.
+  String? _build(_Open open, PluginManifest manifest) {
+    var worktree = open.worktree;
     try {
       var workspace = Workspace(
-        root: path,
+        root: worktree.path,
         declared: manifest.packages.isEmpty
             // A project that declares nothing still has itself.
             ? const [Pkg('.')]
             : manifest.packages,
-        discovered: discoverPackages(path),
+        discovered: discoverPackages(worktree.path),
         appContext: appContext,
         flutterSdk: flutterSdk,
       );
-      _workspaces[path] = workspace;
+      open.workspace = workspace;
+      _checkDeclarations(open);
 
-      // Never clobber a config-load failure: that is the more useful error,
-      // and a broken config is often *why* the declarations look wrong.
-      var unknown = workspace.unknownDeclarations;
-      if (unknown.isNotEmpty && !_errors.containsKey(path)) {
-        _errors[path] = WorktreeError(
-          worktree,
-          'Declared package(s) not found on disk: ${unknown.join(', ')}',
-        );
-      }
-
-      _sessions[path] = WorktreeSession.resolve(
+      open.session = WorktreeSession.resolve(
         worktree: worktree,
         manifest: manifest,
         registry: registry,
         workspace: workspace,
         coreRegistry: coreRegistry,
       )..addListener(notifyListeners);
+      return null;
     } catch (e) {
-      _errors.putIfAbsent(path, () => WorktreeError(worktree, '$e'));
+      // Returned rather than only recorded. A caller that logged "opened, 3
+      // plugins" over this would be claiming a session that does not exist.
+      open.error ??= WorktreeError(worktree, '$e');
+      return '$e';
     }
+  }
 
-    notifyListeners();
+  /// Re-derives the "you named a package that is not there" error.
+  ///
+  /// **Run on every load, including one that changed nothing.** It is the one
+  /// error whose truth lives on disk rather than in the config, so a load that
+  /// skipped it would either keep a warning about a package you have since
+  /// created, or — worse — drop a warning that is still true, because the load
+  /// clears the error before deciding whether to rebuild.
+  ///
+  /// Never clobbers a config-load failure: that is the more useful error, and a
+  /// broken config is often *why* the declarations look wrong.
+  void _checkDeclarations(_Open open) {
+    var unknown = open.workspace?.unknownDeclarations ?? const <String>[];
+    if (unknown.isNotEmpty && open.error == null) {
+      open.error = WorktreeError(
+        open.worktree,
+        'Declared package(s) not found on disk: ${unknown.join(', ')}',
+      );
+    }
   }
 
   /// Closes [worktree], disposing its plugins and its [Project].
@@ -347,7 +543,7 @@ class ShellController extends ChangeNotifier {
   /// shown the guard reasons already.
   bool close(Worktree worktree) {
     if (!isOpen(worktree)) return true;
-    if (_sessions[worktree.path]?.isBlocked ?? false) return false;
+    if (_open[worktree.path]?.session?.isBlocked ?? false) return false;
     _closeAt(worktree.path);
     notifyListeners();
     return true;
@@ -358,32 +554,26 @@ class ShellController extends ChangeNotifier {
     // so after the removal it can no longer recognise the worktree it names
     // and the address would be left pointing at a closed tab.
     var wasSelected = selected?.path == path;
-    _releaseAt(path);
-    _openPaths.remove(path);
-    _remembered.remove(path);
-    _loads.remove(path);
+    // One line, and it cannot forget a field. That is the whole reason the
+    // per-worktree state is one object: teardown used to be nine removals that
+    // a tenth piece of state would silently not join.
+    _open.remove(path)?.close();
     if (wasSelected) {
-      var fallback = _openPaths.lastOrNull;
+      var fallback = _open.keys.lastOrNull;
       _address.value =
           (fallback == null ? null : _addressFor(fallback)) ?? Address();
     }
   }
 
-  /// Where a tab should reopen: where it was left, else its home screen.
+  /// Where a tab should land: where it was left, else its home screen.
+  ///
+  /// Resolves against every *known* worktree, not just the open ones —
+  /// [select] uses it to open a closed one, so scoping it to `_open` silently
+  /// turned selecting a closed worktree into doing nothing.
   Address? _addressFor(String path) {
-    var worktree = _worktreeAt(path);
+    var worktree = _open[path]?.worktree ?? _worktreeAt(path);
     if (worktree == null) return null;
-    return _remembered[path] ?? Address(worktree: worktree.name);
-  }
-
-  /// Drops everything a load produced, keeping the tab and its selection. What
-  /// a reload starts from, and what a close finishes.
-  void _releaseAt(String path) {
-    _sessions.remove(path)
-      ?..removeListener(notifyListeners)
-      ..dispose();
-    _workspaces.remove(path)?.dispose();
-    _errors.remove(path);
+    return _open[path]?.remembered ?? Address(worktree: worktree.name);
   }
 
   /// **The one way the shell moves.** Every `select…` below is a call to this,
@@ -416,7 +606,7 @@ class ShellController extends ChangeNotifier {
 
     // **Canonicalised on the way in**, so a branch is only ever input. Accepting
     // one and then keeping it would put a name that moves with `git checkout`
-    // into [_remembered], into the bar, and into every artifact minted from
+    // into the remembered address, into the bar, and into every artifact from
     // where the shell is — which is the retarget the identity rule exists to
     // prevent. This is the one place that can rewrite it, because it is the one
     // place that knows which worktree the name found.
@@ -428,7 +618,7 @@ class ShellController extends ChangeNotifier {
     var moved = destination.bare != address.bare;
 
     _address.value = destination;
-    _remembered[worktree.path] = destination;
+    _open[worktree.path]?.remembered = destination;
 
     // **Only when the shell's own reading of the address changed.** Everything
     // this notification serves — the tabs, the rail, which panel is mounted —
@@ -521,7 +711,7 @@ class ShellController extends ChangeNotifier {
 
   @override
   void dispose() {
-    for (var path in _openPaths.toList()) {
+    for (var path in _open.keys.toList()) {
       _closeAt(path);
     }
     _address.dispose();
@@ -542,4 +732,55 @@ enum GoResult {
 
   /// No worktree by that name, or the address named none at all.
   worktreeUnknown,
+}
+
+/// Everything one open worktree holds.
+///
+/// **The reason this type exists is teardown.** As nine maps keyed by path, the
+/// contract "closing a worktree releases all of it" lived in one method that had
+/// to name every one of them, and the tenth thing anyone added would have been a
+/// leak with no test to notice. Here it is [close], and a new field joins it by
+/// existing.
+class _Open {
+  _Open(this.worktree);
+
+  final Worktree worktree;
+
+  WorktreeSession? session;
+  Workspace? workspace;
+  WorktreeError? error;
+
+  /// Where this tab was left, so switching back returns to the same place.
+  Address? remembered;
+
+  /// Bumped on every load, so one whose tab was closed or which was superseded
+  /// drops its result instead of committing it. Never reset: a counter that
+  /// restarts lets a load from before a close collide with one from after a
+  /// reopen, both holding generation 1 and both passing the guard.
+  int generation = 0;
+
+  /// What the most recent load did. One, not a history: with the reload no
+  /// longer surgical every row said the same three things, and the terminal log
+  /// keeps the ones before this.
+  ConfigLoad? lastLoad;
+
+  ConfigWatcher? watcher;
+
+  /// Whether a load has finished, however it finished.
+  bool hasLoaded = false;
+
+  /// Drops what a load produced, keeping the tab and its place.
+  void release() {
+    session?.dispose();
+    session = null;
+    workspace?.dispose();
+    workspace = null;
+    error = null;
+  }
+
+  void close() {
+    release();
+    unawaited(watcher?.dispose());
+    watcher = null;
+  }
 }
