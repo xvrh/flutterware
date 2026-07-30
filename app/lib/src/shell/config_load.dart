@@ -22,17 +22,14 @@ enum ConfigLoadOutcome {
   failed,
 }
 
-/// One row of a worktree's reload history.
+/// What one load of a worktree's config did.
 class ConfigLoad {
   const ConfigLoad({
-    required this.at,
     required this.duration,
     required this.outcome,
     this.plugins = 0,
     this.error,
   });
-
-  final DateTime at;
 
   /// How long the whole load took — running the config, comparing, and
   /// rebuilding if it moved.

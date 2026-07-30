@@ -47,23 +47,16 @@ class _FakeCore extends PluginCore {
   }
 }
 
-/// A core whose guard can be released, so the pending path has something to
-/// wait for and then stop waiting for.
+/// A core that refuses teardown forever, so a reload has something to be
+/// stopped by if it were going to be.
 class _BlockingCore extends PluginCore {
   _BlockingCore(super.host);
-
-  var blocked = true;
-
-  void release() {
-    blocked = false;
-    notifyChanged();
-  }
 
   @override
   PluginReport get report => PluginReport(
     id: host.id,
     label: host.label,
-    guards: blocked ? const [Guard.block('busy')] : const [],
+    guards: const [Guard.block('busy')],
   );
 
   @override
@@ -179,14 +172,16 @@ void main() {
     shell = controller();
     await shell.start(root.path);
     var worktree = shell.selected!;
-    var loadsBefore = shell.loadLog(worktree).length;
+    var before = shell.lastLoad(worktree);
 
     await save(_one);
 
     expect(
-      shell.loadLog(worktree).length,
-      loadsBefore,
-      reason: 'the content gate stops it before the subprocess',
+      identical(shell.lastLoad(worktree), before),
+      isTrue,
+      reason:
+          'the content gate stops it before the subprocess, so there is '
+          'not even a load to report',
     );
   });
 
@@ -207,49 +202,26 @@ void main() {
     expect(_disposedIds, isEmpty);
   });
 
-  test('a blocked guard holds the reload, then it lands', () async {
-    late _BlockingCore blocker;
+  test('a plugin that hard-blocks teardown does not hold the reload', () async {
     shell = controller(
-      cores: {
-        'a.one': (host) => blocker = _BlockingCore(host),
-        'a.two': _FakeCore.new,
-      },
+      cores: {'a.one': _BlockingCore.new, 'a.two': _FakeCore.new},
     );
     await shell.start(root.path);
     var worktree = shell.selected!;
+    expect(shell.sessionFor(worktree)!.isBlocked, isTrue);
 
     await save(_two);
 
-    // Held, and *said* to be held — a save that quietly did nothing is
-    // indistinguishable from a watcher that is not working.
-    expect(shell.isReloadPending(worktree), isTrue);
-    expect(shell.sessionFor(worktree)!.plugins.map((pl) => pl.id), ['a.one']);
-
-    blocker.release();
-    await Future<void>.delayed(_debounce * 6);
-
-    expect(shell.isReloadPending(worktree), isFalse);
+    // The guard is honoured by `close`, which is a deliberate act on a
+    // worktree. It is not honoured here: deferring the reload was a mechanism
+    // protecting state a config change is allowed to cost, and it made the save
+    // that *fixes* a config refusable by the plugins the last one left running.
     expect(shell.sessionFor(worktree)!.plugins.map((pl) => pl.id), [
       'a.one',
       'a.two',
     ]);
-  });
-
-  test('turning the watch off stops it, and back on resumes', () async {
-    shell = controller();
-    await shell.start(root.path);
-    var worktree = shell.selected!;
-
-    shell.watchEnabled = false;
-    expect(shell.watchingFor(worktree), isNull);
-    await save(_two);
-    expect(shell.sessionFor(worktree)!.plugins, hasLength(1));
-
-    shell.watchEnabled = true;
-    expect(shell.watchingFor(worktree), p.join(root.path, 'tool'));
-    await save(_one);
-    await save(_two);
-    expect(shell.sessionFor(worktree)!.plugins, hasLength(2));
+    expect(_disposedIds, contains('a.one'));
+    expect(shell.lastLoad(worktree)!.outcome, ConfigLoadOutcome.rebuilt);
   });
 
   test('closing the worktree stops its watcher', () async {

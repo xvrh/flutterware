@@ -1,5 +1,15 @@
 # Config reload, phase 1 — Implementation Plan
 
+> **Partly superseded, 2026-07-30.** Executed as written, then cut back. The
+> surgical half — diff the new manifest against the old and rebuild only the
+> plugins whose declaration moved — is **gone**, along with the reload history,
+> the guard-deferred reload and the watch toggle that came with it. What
+> survives is the outer property: a failed config changes nothing, and a config
+> that declares what was already there costs nothing. Everything else rebuilds
+> the whole graph. See `specs/2026-07-29-config-reload-findings.md` for what was
+> removed and why it had looked necessary. Read the sections below as a record
+> of what was tried, not as a description of the code.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make reloading a worktree's config **correct and legible**: a failed

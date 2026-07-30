@@ -44,18 +44,13 @@ class ShellController extends ChangeNotifier {
     required this.manifestLoader,
     this.coreRegistry,
     WorktreeDiscovery? discovery,
-    DateTime Function()? now,
     Stream<WatchEvent> Function(String directory)? watchEvents,
     Duration? watchDebounce,
   }) : _discovery = discovery ?? WorktreeDiscovery(),
-       _now = now ?? DateTime.now,
        // ignore: prefer_initializing_formals
        _watchEvents = watchEvents,
        // ignore: prefer_initializing_formals
        _watchDebounce = watchDebounce;
-
-  /// Injectable so the reload log is deterministic under test.
-  final DateTime Function() _now;
 
   /// Injectable so a test can drive a save without a filesystem.
   final Stream<WatchEvent> Function(String directory)? _watchEvents;
@@ -86,45 +81,6 @@ class ShellController extends ChangeNotifier {
   /// with them.
   final _open = <String, _Open>{};
 
-  static const _logLimit = 20;
-
-  /// Whether saving `tool/flutterware.dart` reloads it.
-  ///
-  /// On by default — realtime reload is the point. The switch exists because a
-  /// filesystem that does not deliver native watch events would otherwise leave
-  /// a watcher that looks armed and is not, and turning it off says so.
-  bool get watchEnabled => _watchEnabled;
-  var _watchEnabled = true;
-
-  set watchEnabled(bool value) {
-    if (_watchEnabled == value) return;
-    _watchEnabled = value;
-    if (value) {
-      for (var open in _open.values.toList()) {
-        _startWatching(open.worktree);
-        // **Catch up on whatever was missed.** A fresh watcher takes the current
-        // file as its baseline, so an edit made while watching was off would
-        // never fire — the switch would silently eat it, which is the rule
-        // `_Open.pendingReload` states. Re-running costs one load and answers
-        // `no changes` when there was nothing to catch up on.
-        unawaited(_load(open.worktree));
-      }
-    } else {
-      for (var open in _open.values) {
-        unawaited(open.watcher?.dispose());
-        open.watcher = null;
-        // `pendingReload` is deliberately left set: the change it stands for is
-        // still unapplied, and dropping the marker would be the same silent
-        // loss by another route.
-      }
-    }
-    notifyListeners();
-  }
-
-  /// True when [worktree]'s config changed but a guard is holding the reload.
-  bool isReloadPending(Worktree worktree) =>
-      _open[worktree.path]?.pendingReload ?? false;
-
   /// The directory whose changes reach [worktree], or null when nothing is
   /// watched — the honest answer to "why did it not notice my edit".
   String? watchingFor(Worktree worktree) =>
@@ -132,7 +88,7 @@ class ShellController extends ChangeNotifier {
 
   void _startWatching(Worktree worktree) {
     var open = _open[worktree.path];
-    if (!_watchEnabled || open == null || open.watcher != null) return;
+    if (open == null || open.watcher != null) return;
     var watcher = ConfigWatcher(
       worktreePath: worktree.path,
       onChanged: () => _onConfigChanged(worktree),
@@ -157,38 +113,14 @@ class ShellController extends ChangeNotifier {
 
   Future<void> _onConfigChanged(Worktree worktree) async {
     // Closed between the save and the debounce settling.
-    var open = _open[worktree.path];
-    if (open == null) return;
-
-    if (open.session?.isBlocked ?? false) {
-      open.pendingReload = true;
-      notifyListeners();
-      return;
-    }
-    open.pendingReload = false;
+    if (!_open.containsKey(worktree.path)) return;
     // Awaited so the watcher knows a reload is in flight and folds anything
     // that lands during it into one follow-up.
     await _load(worktree);
   }
 
-  /// A session notification, which is also the only moment a guard is known to
-  /// have cleared.
-  void _onSessionChanged(String path) {
-    notifyListeners();
-    var open = _open[path];
-    if (open == null || !open.pendingReload) return;
-    if (open.session?.isBlocked ?? true) return;
-    open.pendingReload = false;
-    unawaited(_load(open.worktree));
-  }
-
   /// What the last load of [worktree]'s config did, or null before the first.
-  ConfigLoad? lastLoad(Worktree worktree) =>
-      _open[worktree.path]?.log.firstOrNull;
-
-  /// Every load of [worktree]'s config this session, newest first.
-  List<ConfigLoad> loadLog(Worktree worktree) =>
-      List.unmodifiable(_open[worktree.path]?.log ?? const []);
+  ConfigLoad? lastLoad(Worktree worktree) => _open[worktree.path]?.lastLoad;
 
   /// What [worktree]'s config resolved to — the manifest its plugins were built
   /// from, and what the next load is compared against.
@@ -199,15 +131,15 @@ class ShellController extends ChangeNotifier {
       _open[worktree.path]?.session?.session.manifest;
 
   void _record(_Open open, ConfigLoad load) {
-    open.log.insert(0, load);
-    if (open.log.length > _logLimit) {
-      open.log.removeRange(_logLimit, open.log.length);
-    }
+    open.lastLoad = load;
 
-    // Also to the terminal that launched the GUI. The screen is the surface for
-    // someone using flutterware; this is the one for someone whose config just
-    // reloaded while they were watching a log scroll past, and it is how a
-    // reload is observable at all without a window in front of you.
+    // Also to the terminal that launched the GUI. The band line is the surface
+    // for someone looking at the window; this is the one for someone whose
+    // config just reloaded while they were watching a log scroll past, and it
+    // is how a reload is observable at all without a window in front of you.
+    // It is also the only place a load older than the last one survives, which
+    // is the whole of the history now that every row would say the same three
+    // things.
     _logger.info(
       'config ${p.basename(open.worktree.path)}: ${load.summary} '
       '(${load.duration.inMilliseconds}ms)'
@@ -427,35 +359,22 @@ class ShellController extends ChangeNotifier {
 
   /// Re-runs the selected worktree's config and applies whatever moved.
   ///
-  /// Refuses while a plugin hard-blocks teardown. A reload can dispose what a
-  /// close does — for the plugins it rebuilds — so it answers to the same
-  /// guards. Returns false without logging a load: nothing ran.
+  /// **Never refuses.** A reload used to answer to the same teardown guards a
+  /// close does, and defer itself until they cleared — a whole mechanism
+  /// protecting state that a config change is allowed to cost. Closing still
+  /// asks, because closing is a deliberate act on a worktree; reloading is what
+  /// the file you just saved asked for.
   ///
-  /// **Does not release anything up front.** Which plugins pay for a reload is
-  /// decided after the config has run and been compared; releasing first would
-  /// make a config that fails to compile cost the whole worktree.
+  /// **Does not release anything up front.** Whether the graph pays for a
+  /// reload is decided after the config has run and been compared; releasing
+  /// first would make a config that fails to compile cost the whole worktree.
   Future<bool> reloadConfig() async {
     var worktree = selected;
     if (worktree == null) return false;
-    if (_open[worktree.path]?.session?.isBlocked ?? false) return false;
-
     await _load(worktree);
     return true;
   }
 
-  /// Runs a worktree's config and reconciles the plugin graph against it.
-  ///
-  /// Four outcomes, and the split is the whole point (see
-  /// `2026-07-29-config-reload-findings.md`):
-  ///
-  /// - **failed** — nothing is torn down. The error surfaces and every plugin
-  ///   keeps running, because a half-written file must not cost a worktree.
-  /// - **unchanged** — the manifest matched, so not a single object moves.
-  ///   Re-running the config *is* the comparison; a comment or a reformat lands
-  ///   here without anything having to detect a comment.
-  /// - **rebuilt** — `packages:` moved, so the workspace and every core go.
-  /// - **reconciled** — only the plugins whose declaration moved are disposed
-  ///   and rebuilt.
   /// Runs a worktree's config and applies whatever moved.
   ///
   /// **One exit.** Every branch below produces a [ConfigLoad] and returns it;
@@ -469,10 +388,9 @@ class ShellController extends ChangeNotifier {
     if (open == null) return;
 
     var generation = ++open.generation;
-    var started = _now();
     var watch = Stopwatch()..start();
 
-    var load = await _apply(open, generation, started, watch);
+    var load = await _apply(open, generation, watch);
     // The one silent return: this load was superseded or its tab closed, so
     // there is nothing to say and nobody to say it to.
     if (load == null) return;
@@ -493,7 +411,6 @@ class ShellController extends ChangeNotifier {
   Future<ConfigLoad?> _apply(
     _Open open,
     int generation,
-    DateTime started,
     Stopwatch watch,
   ) async {
     var worktree = open.worktree;
@@ -503,7 +420,6 @@ class ShellController extends ChangeNotifier {
       int plugins = 0,
       String? error,
     }) => ConfigLoad(
-      at: started,
       duration: watch.elapsed,
       outcome: outcome,
       plugins: plugins,
@@ -596,7 +512,7 @@ class ShellController extends ChangeNotifier {
         registry: registry,
         workspace: workspace,
         coreRegistry: coreRegistry,
-      )..addListener(() => _onSessionChanged(worktree.path));
+      )..addListener(notifyListeners);
       return null;
     } catch (e) {
       // Returned rather than only recorded. A caller that logged "opened, 3
@@ -828,18 +744,17 @@ class _Open {
   /// reopen, both holding generation 1 and both passing the guard.
   int generation = 0;
 
-  /// Reload history, newest first.
-  final log = <ConfigLoad>[];
+  /// What the most recent load did. One, not a history: with the reload no
+  /// longer surgical every row said the same three things, and the terminal log
+  /// keeps the ones before this.
+  ConfigLoad? lastLoad;
 
   ConfigWatcher? watcher;
-
-  /// The config changed while a plugin hard-blocked teardown.
-  bool pendingReload = false;
 
   /// Whether a load has finished, however it finished.
   bool hasLoaded = false;
 
-  /// Drops what a load produced, keeping the tab, its place and its history.
+  /// Drops what a load produced, keeping the tab and its place.
   void release() {
     session?.dispose();
     session = null;

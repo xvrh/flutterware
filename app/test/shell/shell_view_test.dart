@@ -630,8 +630,8 @@ void main() {
   });
 
   group('the config surfaces', () {
-    /// Scoped, because the log renders the same phrases the line does — an
-    /// unscoped finder would pass on the wrong widget.
+    /// Scoped, so a phrase found somewhere else on screen cannot pass for the
+    /// band line saying it.
     Finder inLine(String text) => find.descendant(
       of: find.byKey(configLoadLineKey),
       matching: find.textContaining(text),
@@ -654,26 +654,20 @@ void main() {
         '{"id":"a.deps","label":"Dependencies"},'
         '{"id":"a.tests","label":"Tests","config":{"dir":"unit"}}]}';
 
-    testWidgets('opening says nothing in the band, but is logged', (
-      tester,
-    ) async {
-      await _pumpShell(tester);
+    testWidgets('opening a worktree says nothing in the band', (tester) async {
+      var shell = await _pumpShell(tester);
 
       // The tab appearing is already the feedback; announcing it would make
-      // every worktree switch chatty.
+      // every worktree switch chatty. It still reaches the terminal.
       expect(find.byKey(configLoadLineKey), findsNothing);
-      // And the home screen stays thin — the log lives on the config screen.
-      expect(find.byKey(configScreenKey), findsNothing);
-
-      await openConfig(tester);
-      expect(inConfig('opened, 2 plugins'), findsOneWidget);
+      expect(shell.lastLoad(shell.selected!)!.outcome, ConfigLoadOutcome.built);
     });
 
     testWidgets('the band button navigates rather than reloading', (
       tester,
     ) async {
       var shell = await _pumpShell(tester);
-      var loadsBefore = shell.loadLog(shell.selected!).length;
+      var before = shell.lastLoad(shell.selected!);
 
       await openConfig(tester);
 
@@ -682,8 +676,8 @@ void main() {
       expect(shell.selectedPluginId, isNull, reason: 'config is not a plugin');
       expect(shell.address.plugin, 'config');
       expect(
-        shell.loadLog(shell.selected!).length,
-        loadsBefore,
+        identical(shell.lastLoad(shell.selected!), before),
+        isTrue,
         reason: 'clicking it must not re-run the config any more',
       );
     });
@@ -699,11 +693,11 @@ void main() {
         shell.lastLoad(shell.selected!)!.outcome,
         ConfigLoadOutcome.unchanged,
       );
-      expect(inConfig('no changes'), findsOneWidget);
+      expect(inLine('no changes'), findsOneWidget);
     });
 
     testWidgets('the screen names the directory it watches', (tester) async {
-      var shell = await _pumpShell(tester);
+      await _pumpShell(tester);
       await openConfig(tester);
 
       // This harness's worktree path is not a real directory, so there is
@@ -711,12 +705,6 @@ void main() {
       // notice my edit" is the standard complaint about file watching, and the
       // standard cause is a watched set that does not contain what you edited.
       expect(inConfig('Nothing to watch'), findsOneWidget);
-      expect(find.byType(Switch), findsOneWidget);
-
-      await tester.tap(find.byType(Switch));
-      await tester.pumpAndSettle();
-      expect(shell.watchEnabled, isFalse);
-      expect(inConfig('Reload on save is off'), findsOneWidget);
     });
 
     testWidgets('the screen says what the config resolved to', (tester) async {
@@ -825,16 +813,6 @@ void main() {
       await shell.reloadConfig();
       await tester.pumpAndSettle();
       expect(find.byKey(configErrorBannerKey), findsNothing);
-    });
-
-    testWidgets('the log keeps every load, newest first', (tester) async {
-      var shell = await _pumpShell(tester);
-      _loader.manifest = changedTests;
-      await shell.reloadConfig();
-      await openConfig(tester);
-
-      expect(inConfig('rebuilt, 2 plugins'), findsOneWidget);
-      expect(inConfig('opened, 2 plugins'), findsOneWidget);
     });
   });
 }

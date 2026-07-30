@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
 
 import '../ui/theme.dart';
-import 'shell_controller.dart';
 import 'worktree.dart';
 
 /// What a worktree opens on, instead of whichever plugin happened to be first.
 ///
 /// Deliberately thin, and deliberately not a plugin list — the sidebar already
-/// is one. What is here is what only the shell knows: which checkout this is,
-/// and why its config did not load when it did not. Everything on it is free.
+/// is one. What is here is what only the shell knows: which checkout this is.
+/// Everything on it is free.
+///
+/// It used to also carry the config failure. The band banner above it now says
+/// that on every screen rather than only this one, so keeping a copy here meant
+/// rendering the same sentence twice on the one screen where both are visible.
 class WorktreeHome extends StatelessWidget {
-  const WorktreeHome(this.shell, this.worktree, {super.key});
+  const WorktreeHome(this.worktree, {super.key});
 
-  final ShellController shell;
   final Worktree worktree;
 
   @override
   Widget build(BuildContext context) {
-    var colors = context.colors;
-    var error = shell.errorFor(worktree);
-
     return ListView(
       padding: const EdgeInsets.all(FwSpacing.xxxl),
       children: [
@@ -39,47 +38,6 @@ class WorktreeHome extends StatelessWidget {
               _Chip('detached at ${_short(head)}'),
           ],
         ),
-
-        if (error != null) ...[
-          const Gap(FwSpacing.xxl),
-          Container(
-            padding: const EdgeInsets.all(FwSpacing.lg),
-            decoration: BoxDecoration(
-              border: Border.all(color: colors.red),
-              borderRadius: BorderRadius.circular(context.radii.radius),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'This worktree’s config could not be read',
-                  style: context.type.bodyStrong.copyWith(color: colors.red),
-                ),
-                const Gap(FwSpacing.sm),
-                // The headline only. The compiler's own output, the reload
-                // button and the history all live on the config screen, and
-                // this page promises to stay thin.
-                Text(
-                  error.message.trimRight().split('\n').first,
-                  style: context.type.caption,
-                ),
-                const Gap(FwSpacing.sm),
-                TextButton(
-                  onPressed: shell.selectConfig,
-                  style: TextButton.styleFrom(
-                    minimumSize: Size.zero,
-                    padding: EdgeInsets.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    'Open config',
-                    style: context.type.caption.copyWith(color: colors.red),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }

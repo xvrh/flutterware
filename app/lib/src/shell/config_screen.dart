@@ -3,7 +3,6 @@ import 'package:flutterware/plugins.dart';
 
 import '../plugins/manifest_loader.dart';
 import '../ui/theme.dart';
-import 'config_load.dart';
 import 'shell_controller.dart';
 import 'worktree.dart';
 
@@ -19,10 +18,11 @@ const configScreenKey = Key('config-screen');
 /// screen most. It lives in the plugin *slot* of the address because it is
 /// addressed like one (see [Address.shellConfig]), and nowhere else.
 ///
-/// Three questions, in the order they get asked: **what did it resolve to**,
-/// **why did it fail**, and **what did the last reload cost me**. The last one
-/// is the diff made visible — without it, a surgical reload is a black box that
-/// quietly rebuilds some plugins and not others.
+/// Two questions: **what did it resolve to**, and **why did it fail**. There
+/// was a third — a history of what each reload cost — which existed to make a
+/// surgical reload auditable. A reload that rebuilds the whole graph has nothing
+/// per-row left to say, so the history went with the surgery and what remains
+/// of it is one line in the band and one in the terminal.
 class ConfigScreen extends StatelessWidget {
   const ConfigScreen(this.shell, this.worktree, {super.key});
 
@@ -34,7 +34,6 @@ class ConfigScreen extends StatelessWidget {
     var colors = context.colors;
     var error = shell.errorFor(worktree);
     var manifest = shell.manifestFor(worktree);
-    var log = shell.loadLog(worktree);
 
     return ListView(
       key: configScreenKey,
@@ -75,13 +74,6 @@ class ConfigScreen extends StatelessWidget {
           _Resolved(shell, worktree, manifest),
         ],
 
-        if (log.isNotEmpty) ...[
-          const Gap(FwSpacing.xxl),
-          Text('Reloads', style: context.type.sectionLabel),
-          const Gap(FwSpacing.sm),
-          for (var load in log) LoadRow(load),
-        ],
-
         if (manifest == null && error == null) ...[
           const Gap(FwSpacing.xxl),
           Text(
@@ -103,32 +95,20 @@ class _ReloadAction extends StatelessWidget {
   final Worktree worktree;
 
   @override
-  Widget build(BuildContext context) {
-    // A reload disposes what a close does — for the plugins it rebuilds — so it
-    // answers to the same guards.
-    var guards = shell.sessionFor(worktree)?.guards ?? const <Guard>[];
-    var blocking = guards
-        .where((g) => g.level == GuardLevel.block)
-        .map((g) => g.reason)
-        .toList();
-    var loading = shell.isLoading(worktree);
-
-    return Tooltip(
-      message: blocking.isNotEmpty
-          ? blocking.join('\n')
-          : 'Re-run $configFilePath',
-      child: FilledButton.icon(
-        onPressed: blocking.isEmpty && !loading
-            ? () => shell.reloadConfig()
-            : null,
-        icon: const Icon(Icons.refresh, size: 14),
-        label: const Text('Reload'),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Tooltip(
+    message: 'Re-run $configFilePath',
+    child: FilledButton.icon(
+      // Only while one is already running. It used to also refuse while a
+      // plugin hard-blocked teardown, which made the button that fixes a broken
+      // config refusable by the plugins the broken config left running.
+      onPressed: shell.isLoading(worktree) ? null : () => shell.reloadConfig(),
+      icon: const Icon(Icons.refresh, size: 14),
+      label: const Text('Reload'),
+    ),
+  );
 }
 
-/// Whether saving the file reloads it, and what is actually being watched.
+/// What is actually being watched.
 ///
 /// **Naming the directory is the point**, not decoration. "It did not notice my
 /// edit" is the standard complaint about file watching, and the standard cause is
@@ -136,6 +116,13 @@ class _ReloadAction extends StatelessWidget {
 /// is watched turns that from a mystery into a fact — and today the answer is
 /// only the config's own directory, so an edit to a file it imports really does
 /// need the button until the import closure arrives with the resident compiler.
+///
+/// **There is no off switch.** There was one, on the theory that a watcher which
+/// looks armed and is not should be turnable off to say so — but this line
+/// already says what is armed, and the switch brought its own failure mode: a
+/// fresh watcher takes the current file as its baseline, so every edit made
+/// while it was off had to be caught up on re-enabling or be silently eaten.
+/// That was a review finding, not a hypothetical.
 class _Watch extends StatelessWidget {
   const _Watch(this.shell, this.worktree);
 
@@ -144,47 +131,12 @@ class _Watch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var colors = context.colors;
     var watching = shell.watchingFor(worktree);
-    var pending = shell.isReloadPending(worktree);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Switch(
-              value: shell.watchEnabled,
-              onChanged: (value) => shell.watchEnabled = value,
-            ),
-            const Gap(FwSpacing.sm),
-            Expanded(
-              child: Text(switch ((shell.watchEnabled, watching)) {
-                (false, _) => 'Reload on save is off',
-                (true, null) =>
-                  'Nothing to watch — this worktree has no $configFilePath',
-                (true, var dir) => 'Reloads on save · watching $dir',
-              }, style: context.type.caption.copyWith(color: colors.mut)),
-            ),
-          ],
-        ),
-        if (pending) ...[
-          const Gap(FwSpacing.sm),
-          Row(
-            children: [
-              Icon(Icons.schedule, size: 12, color: colors.amber),
-              const Gap(FwSpacing.sm),
-              Expanded(
-                child: Text(
-                  'The file changed, but a plugin is busy. It will reload as '
-                  'soon as the guard clears.',
-                  style: context.type.caption.copyWith(color: colors.amber),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
+    return Text(
+      watching == null
+          ? 'Nothing to watch — this worktree has no $configFilePath'
+          : 'Reloads on save · watching $watching',
+      style: context.type.caption.copyWith(color: context.colors.mut),
     );
   }
 }
@@ -325,71 +277,6 @@ class _Resolved extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-/// One run of `tool/flutterware.dart`, and what it cost.
-///
-/// **The diff, made visible.** Without this the reconciliation is a black box
-/// you have to trust: a plugin quietly disappears and reappears and nothing says
-/// which config key moved. This is what answers "why did my device just die",
-/// which is the question a surgical reload creates by being surgical.
-class LoadRow extends StatelessWidget {
-  const LoadRow(this.load, {super.key});
-
-  final ConfigLoad load;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var at = load.at;
-    var clock =
-        '${at.hour.toString().padLeft(2, '0')}:'
-        '${at.minute.toString().padLeft(2, '0')}:'
-        '${at.second.toString().padLeft(2, '0')}';
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: FwSpacing.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 68,
-                child: Text(
-                  clock,
-                  style: context.type.caption.copyWith(color: colors.mut2),
-                ),
-              ),
-              SizedBox(
-                width: 64,
-                child: Text(
-                  '${load.duration.inMilliseconds}ms',
-                  style: context.type.caption.copyWith(color: colors.mut2),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  load.summary,
-                  style: context.type.caption.copyWith(
-                    color: load.succeeded ? colors.ink : colors.red,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (load.error case var error?)
-            Padding(
-              padding: const EdgeInsets.only(left: 132, top: 2),
-              child: Text(
-                error.trimRight().split('\n').first,
-                style: context.type.micro.copyWith(color: colors.red),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

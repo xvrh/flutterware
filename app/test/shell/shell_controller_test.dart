@@ -327,7 +327,7 @@ void main() {
     expect(shell.selectedPluginId, isNull, reason: 'not a gone plugin');
   });
 
-  test('a blocking guard refuses the reload, and logs nothing', () async {
+  test('a blocking guard does not refuse the reload', () async {
     var shell = _controller(
       cores: {
         'a.one': (host) =>
@@ -337,12 +337,18 @@ void main() {
     );
     await shell.start('/repo');
     var main = shell.selected!;
-    var loadsBefore = _loader.loads;
+    expect(shell.sessionFor(main)!.isBlocked, isTrue);
 
-    expect(await shell.reloadConfig(), isFalse);
-    expect(_disposedIds, isEmpty);
-    expect(_loader.loads, loadsBefore, reason: 'the config never ran');
-    expect(shell.lastLoad(main)!.outcome, ConfigLoadOutcome.built);
+    // A close still asks the guards — that is a deliberate act on a worktree.
+    // A reload does not: it is what the config you just changed asked for, and
+    // making it refusable meant the plugins a broken config left running could
+    // block the reload that would replace them.
+    _loader.manifest = '{"version":1,"plugins":[{"id":"a.two","label":"Two"}]}';
+    expect(await shell.reloadConfig(), isTrue);
+
+    expect(_disposedIds, contains('/repo:a.one'));
+    expect(shell.sessionFor(main)!.plugins.map((pl) => pl.id), ['a.two']);
+    expect(shell.lastLoad(main)!.outcome, ConfigLoadOutcome.rebuilt);
   });
 
   test('opening logs a build rather than a rebuild', () async {
@@ -362,6 +368,16 @@ void main() {
     // Two reloads on the *same* open worktree, the first still running when the
     // second is asked for. Close-and-reopen is caught by object identity
     // instead — this is the case only the generation counter can decide.
+    // Every distinct load that got reported, so a superseded one cannot hide
+    // behind the winner having overwritten it.
+    var reported = <ConfigLoad>[];
+    shell.addListener(() {
+      var load = shell.lastLoad(main);
+      if (load != null && !reported.any((l) => identical(l, load))) {
+        reported.add(load);
+      }
+    });
+
     var gate = Completer<void>();
     _loader.gate = gate;
     _loader.manifest = '{"version":1,"plugins":[{"id":"a.one","label":"One"}]}';
@@ -378,9 +394,9 @@ void main() {
       reason: 'the later load wins, whichever finishes first',
     );
     expect(
-      shell.loadLog(main),
-      hasLength(2),
-      reason: 'and the superseded one records nothing',
+      reported,
+      hasLength(1),
+      reason: 'and the superseded one reports nothing at all',
     );
   });
 
@@ -409,7 +425,7 @@ void main() {
     );
   });
 
-  test('closing forgets the reload history', () async {
+  test('closing forgets what the last load did', () async {
     var shell = _controller();
     await shell.start('/repo');
     var explorer = shell.closedWorktrees.first;
@@ -418,7 +434,6 @@ void main() {
 
     shell.close(explorer);
     expect(shell.lastLoad(explorer), isNull);
-    expect(shell.loadLog(explorer), isEmpty);
   });
 
   test('opening a second worktree gives it its own plugin instances', () async {
