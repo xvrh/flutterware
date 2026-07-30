@@ -465,6 +465,29 @@ class ScenariosCore extends PluginCore {
             ),
           ],
         ),
+        PluginAction(
+          'restart',
+          'Restart',
+          returns: ScenarioRestartResult,
+          description:
+              'Drops the warm harness so the next run cold-starts from '
+              'nothing: fresh asset bundle, fresh kernel, fresh tester '
+              'process. The escape hatch for changes no incremental lane '
+              "can see — a dependency's assets, or plain distrust.",
+          parameters: [
+            ActionParameter(
+              'package',
+              'Package',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'Which declared package; all of them when omitted',
+              options: [
+                for (var path in packages)
+                  ActionOption(path, label: path == '.' ? 'root' : path),
+              ],
+            ),
+          ],
+        ),
       ],
       view: _view(),
     );
@@ -594,8 +617,28 @@ class ScenariosCore extends PluginCore {
     return switch (actionId) {
       'list' => _list(arguments),
       'run' => _run(arguments),
+      'restart' => _restart(arguments),
       _ => super.invoke(actionId, arguments: arguments),
     };
+  }
+
+  Future<ScenarioRestartResult> _restart(Map<String, Object?> arguments) async {
+    var requested = arguments['package'];
+    if (requested != null && requested is! String) {
+      throw ArgumentError.value(requested, 'package', 'must be a package path');
+    }
+    var paths = requested == null ? packages : [requested as String];
+    for (var path in paths) {
+      if (!packages.contains(path)) {
+        throw ArgumentError.value(
+          path,
+          'package',
+          'not declared for this plugin. Declared: ${packages.join(', ')}',
+        );
+      }
+      restartRunner(path);
+    }
+    return ScenarioRestartResult(restarted: paths);
   }
 
   /// The scenarios of one package, or of every declared package.
@@ -724,6 +767,30 @@ class ScenariosCore extends PluginCore {
       packages: results,
       axes: axes.isEmpty ? null : axes.toParams(),
     );
+  }
+
+  /// The escape hatch: drops [path]'s warm harness, so the next run
+  /// cold-starts from nothing — fresh asset bundle, fresh kernel, fresh
+  /// tester process. For the changes no incremental lane can see, and for
+  /// "I don't trust anything right now".
+  void restartRunner(String path) {
+    if (_runners.remove(path) case var runner?) {
+      unawaited(runner.dispose());
+    }
+    _runnerLogs.remove(path);
+    // Drop the bundle stamp too: a full restart means "rebuild it all",
+    // including assets the stamp cannot see (a dependency's, say).
+    var stamp = File(
+      p.join(
+        host.workspace.packageFor(path).directory.path,
+        'build',
+        'flutterware',
+        'scenarios_assets',
+        '.assets.stamp',
+      ),
+    );
+    if (stamp.existsSync()) stamp.deleteSync();
+    notifyChanged();
   }
 
   ScenarioRunner _runnerFor(String path) {

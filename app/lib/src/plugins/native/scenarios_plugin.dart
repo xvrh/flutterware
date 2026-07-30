@@ -331,6 +331,12 @@ class _ScenarioPage extends StatefulWidget {
 }
 
 class _ScenarioPageState extends State<_ScenarioPage> {
+  /// The flow canvas's pan/zoom, owned here so a pushed step detail and its
+  /// back button land exactly where the canvas was.
+  final _flowTransform = TransformationController(
+    ScenarioFlowView.initialTransform(),
+  );
+
   ScenarioPanelRun? get _run => widget.core.panelRunFor(
     widget.package,
     file: widget.file,
@@ -363,6 +369,12 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   void didUpdateWidget(_ScenarioPage old) {
     super.didUpdateWidget(old);
     _maybeRun();
+  }
+
+  @override
+  void dispose() {
+    _flowTransform.dispose();
+    super.dispose();
   }
 
   void _openStep(ScenarioRunStep step) {
@@ -479,6 +491,22 @@ class _ScenarioPageState extends State<_ScenarioPage> {
             ),
           ],
           const Gap(FwSpacing.lg),
+          // The escape hatch, for the changes no incremental lane can see:
+          // drops the warm harness and cold-starts — fresh bundle, fresh
+          // kernel, fresh process.
+          Tooltip(
+            message: 'Full restart: rebuild assets and kernel, then run',
+            child: Tappable(
+              onTap: running
+                  ? null
+                  : () {
+                      widget.core.restartRunner(widget.package);
+                      _start();
+                    },
+              child: Icon(Icons.restart_alt, size: 18, color: colors.mut),
+            ),
+          ),
+          const Gap(FwSpacing.lg),
           ElevatedButton.icon(
             onPressed: running ? null : _start,
             icon: const Icon(Icons.play_arrow, size: 16),
@@ -542,6 +570,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
           child: ScenarioFlowView(
             steps: steps,
             device: device,
+            transform: _flowTransform,
             onOpenStep: _openStep,
           ),
         ),

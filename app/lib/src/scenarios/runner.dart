@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 import '../catalog/package_config_locator.dart';
 import '../embedder/flutter_cache.dart';
@@ -228,25 +229,90 @@ class ScenarioRunner {
   /// died on its first tap. Teaching the fast builder about shaders is the
   /// follow-up that swaps this back; seconds-once-then-cached is the honest
   /// price today.
-  String get _pubspecStamp {
+  /// One string that changes when anything the bundle is built from changes:
+  /// the pubspec itself plus the mtime of **every declared asset, font and
+  /// shader file** — a directory entry is walked, so editing an image or
+  /// dropping a new one into `assets/images/` is seen, pubspec untouched.
+  ///
+  /// What it still cannot see: assets living in *dependencies*
+  /// (`packages/...` entries resolve outside this package and stamp as
+  /// `missing`, constant either way). The full-restart action is the manual
+  /// override for those.
+  String _assetStamp() {
     var pubspec = File(p.join(packageRoot, 'pubspec.yaml'));
-    return '${pubspec.statSync().modified.microsecondsSinceEpoch}';
+    var buffer = StringBuffer()
+      ..writeln(
+        'pubspec:${pubspec.statSync().modified.microsecondsSinceEpoch}',
+      );
+
+    void stamp(String relative) {
+      var path = p.join(packageRoot, relative);
+      if (relative.endsWith('/')) {
+        var dir = Directory(path);
+        if (!dir.existsSync()) {
+          buffer.writeln('$relative:missing');
+          return;
+        }
+        var files = dir.listSync(recursive: true).whereType<File>().toList()
+          ..sort((a, b) => a.path.compareTo(b.path));
+        for (var file in files) {
+          buffer.writeln(
+            '${file.path}:${file.statSync().modified.microsecondsSinceEpoch}',
+          );
+        }
+      } else {
+        var file = File(path);
+        buffer.writeln(
+          file.existsSync()
+              ? '$relative:${file.statSync().modified.microsecondsSinceEpoch}'
+              : '$relative:missing',
+        );
+      }
+    }
+
+    Object? flutter;
+    try {
+      flutter = (loadYaml(pubspec.readAsStringSync()) as Map?)?['flutter'];
+    } on Object {
+      // An unparseable pubspec fails the build loudly on its own; the stamp
+      // only has to change when the file does, and its mtime above covers
+      // that.
+    }
+    if (flutter is Map) {
+      for (var asset in flutter['assets'] as List? ?? const []) {
+        switch (asset) {
+          case String path:
+            stamp(path);
+          case Map map when map['path'] is String:
+            stamp(map['path'] as String);
+        }
+      }
+      for (var family in flutter['fonts'] as List? ?? const []) {
+        if (family is Map && family['fonts'] is List) {
+          for (var font in family['fonts'] as List) {
+            if (font is Map && font['asset'] is String) {
+              stamp(font['asset'] as String);
+            }
+          }
+        }
+      }
+      for (var shader in flutter['shaders'] as List? ?? const []) {
+        if (shader is String) stamp(shader);
+      }
+    }
+    return buffer.toString();
   }
 
-  /// Whether the built bundle still matches the pubspec. **The stamp is the
-  /// pubspec's mtime, so an asset added to an already-declared directory is
-  /// invisible to it** — that gap stays until the fast bundle builder takes
-  /// over with real per-asset tracking.
   bool _assetBundleFresh(String assetsDir) {
-    var stampFile = File(p.join(assetsDir, '.pubspec.stamp'));
+    var stampFile = File(p.join(assetsDir, '.assets.stamp'));
     return File(p.join(assetsDir, 'FontManifest.json')).existsSync() &&
         stampFile.existsSync() &&
-        stampFile.readAsStringSync() == _pubspecStamp;
+        stampFile.readAsStringSync() == _assetStamp();
   }
 
   Future<void> _ensureAssetBundle(String assetsDir) async {
     if (_assetBundleFresh(assetsDir)) return;
-    var stamp = _pubspecStamp;
+    var stamp = _assetStamp();
     onLog?.call('[scenarios] building the asset bundle');
     var result = await Process.run(p.join(flutterSdkRoot, 'bin', 'flutter'), [
       'build',
@@ -257,7 +323,7 @@ class ScenarioRunner {
     if (result.exitCode != 0) {
       throw StateError('flutter build bundle failed:\n${result.stderr}');
     }
-    File(p.join(assetsDir, '.pubspec.stamp')).writeAsStringSync(stamp);
+    File(p.join(assetsDir, '.assets.stamp')).writeAsStringSync(stamp);
   }
 
   /// Brings a warm harness up to date with the sources on disk.
@@ -281,9 +347,9 @@ class ScenarioRunner {
       _files = files;
       writeHarnessEntrypoint(packageRoot, files);
     }
-    // An edited pubspec restarts too: the guest holds the bundle directory
-    // open, so the rebuild happens around a fresh process, never under a
-    // live one.
+    // A changed asset — edited, added to a declared directory, or a pubspec
+    // edit — restarts too: the guest holds the bundle directory open, so the
+    // rebuild happens around a fresh process, never under a live one.
     if (filesChanged || !_assetBundleFresh(_assetsDir!)) {
       await _restartGuest();
       return;

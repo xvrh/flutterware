@@ -216,6 +216,9 @@ class ScenarioTester {
         Offset.zero & (view.size * dpr),
         pixelRatio: scale / dpr,
       );
+      // PNG, knowingly: encode is ~80% of a 1× capture's cost (56ms/step vs
+      // 11.5ms raw) and ~96% at 3×. The raw-frame pipeline dev_studio ran —
+      // raw to disk, PNG only on demand — is the measured next win here.
       var data = (await image.toByteData(format: ui.ImageByteFormat.png))!;
       image.dispose();
       var png = data.buffer.asUint8List();

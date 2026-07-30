@@ -361,6 +361,24 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `invert-colors` | choice | no | — | The invert-colors accessibility switch |
 | `capture-scale` | string | no | — | Screenshot pixels per logical pixel, 1 (the default) to 4. The device's own ratio gives a true screenshot; 1 is ~10× faster and smaller, which is what keeps a long FakeAsync run instantaneous. Not an axis: it changes the artifact, never what the app sees. |
 
+#### `restart` — Restart
+
+Drops the warm harness so the next run cold-starts from nothing: fresh asset bundle, fresh kernel, fresh tester process. The escape hatch for changes no incremental lane can see — a dependency's assets, or plain distrust.
+
+```sh
+fw run scenarios restart [--package=…]
+```
+
+Returns `ScenarioRestartResult`:
+
+```
+restarted: List<String>   # The package paths whose harness was dropped.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+
 
 ### `flutterware.splash`
 

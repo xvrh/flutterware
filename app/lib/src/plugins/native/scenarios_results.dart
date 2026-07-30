@@ -210,3 +210,20 @@ class ScenarioRunError {
 
   Map<String, Object?> toJson() => _$ScenarioRunErrorToJson(this);
 }
+
+/// `restart` — the warm harness dropped, so the next run cold-starts from
+/// nothing: fresh asset bundle, fresh kernel, fresh tester process.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioRestartResult implements PluginResult {
+  ScenarioRestartResult({required this.restarted});
+
+  /// The package paths whose harness was dropped.
+  final List<String> restarted;
+
+  @override
+  Map<String, Object?> toJson() => _$ScenarioRestartResultToJson(this);
+}

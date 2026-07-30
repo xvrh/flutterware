@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../catalog/devices.dart';
 import '../plugins/native/scenarios_results.dart';
@@ -19,6 +20,7 @@ class ScenarioFlowView extends StatefulWidget {
     super.key,
     required this.steps,
     required this.device,
+    required this.transform,
     required this.onOpenStep,
   });
 
@@ -27,37 +29,63 @@ class ScenarioFlowView extends StatefulWidget {
   /// The device the run was framed as, or null for the bare surface.
   final CatalogDevice? device;
 
+  /// Owned by the page, not this widget, so pushing a step's detail and
+  /// coming back lands exactly where the canvas was.
+  final TransformationController transform;
+
   /// A tap on a step — the caller pushes the detail page.
   final void Function(ScenarioRunStep) onOpenStep;
+
+  /// The transform a fresh page starts from: zoomed out and a little inset,
+  /// like dev_studio's run view — the first glance is the whole flow, not
+  /// one giant phone.
+  static Matrix4 initialTransform() =>
+      (Matrix4.identity() * 0.5 as Matrix4)
+        ..translateByDouble(50.0, 100.0, 0, 1);
 
   @override
   State<ScenarioFlowView> createState() => _ScenarioFlowViewState();
 }
 
 class _ScenarioFlowViewState extends State<ScenarioFlowView> {
-  // Opens zoomed out and a little inset, like dev_studio's run view did —
-  // the first glance is the whole flow, not one giant phone.
-  final _transform = TransformationController()
-    ..value = ((Matrix4.identity() * 0.5 as Matrix4)
-      ..translateByDouble(50.0, 100.0, 0, 1));
-
-  var _scale = 0.5;
+  late var _scale = widget.transform.value.getMaxScaleOnAxis();
 
   @override
   void initState() {
     super.initState();
-    _transform.addListener(_onTransform);
+    widget.transform.addListener(_onTransform);
+    // For ⌘-scroll zoom: the modifier state decides what a trackpad scroll
+    // means, and only key events say when it changed.
+    HardwareKeyboard.instance.addHandler(_onKey);
   }
 
+  bool _onKey(KeyEvent event) {
+    setState(() {});
+    return false;
+  }
+
+  bool get _zoomKeyPressed =>
+      HardwareKeyboard.instance.isMetaPressed ||
+      HardwareKeyboard.instance.isControlPressed;
+
   void _onTransform() {
-    var scale = _transform.value.getMaxScaleOnAxis();
+    var scale = widget.transform.value.getMaxScaleOnAxis();
     if (scale != _scale) setState(() => _scale = scale);
   }
 
   @override
+  void didUpdateWidget(ScenarioFlowView old) {
+    super.didUpdateWidget(old);
+    if (old.transform != widget.transform) {
+      old.transform.removeListener(_onTransform);
+      widget.transform.addListener(_onTransform);
+    }
+  }
+
+  @override
   void dispose() {
-    _transform.removeListener(_onTransform);
-    _transform.dispose();
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    widget.transform.removeListener(_onTransform);
     super.dispose();
   }
 
@@ -91,11 +119,15 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
             tipLength: 20,
             orientation: MatrixOrientation.horizontal,
             interactiveBuilder: (context, child) => InteractiveViewer(
-              transformationController: _transform,
+              transformationController: widget.transform,
               maxScale: 1.5,
               minScale: 0.05,
               constrained: false,
               boundaryMargin: const EdgeInsets.all(5000),
+              // A mouse wheel zooms by itself; a trackpad scroll pans unless
+              // ⌘ (or Ctrl) turns it into the zoom gesture — dev_studio's
+              // behaviour.
+              trackpadScrollCausesScale: _zoomKeyPressed,
               child: child,
             ),
             builder: (context, node) => _StepNode(
@@ -114,7 +146,7 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
           bottom: FwSpacing.md,
           child: _ZoomButtons(
             value: _scale,
-            onScale: (factor) => _transform.value = _transform.value
+            onScale: (factor) => widget.transform.value = widget.transform.value
                 .scaledByDouble(factor, factor, factor, 1),
           ),
         ),

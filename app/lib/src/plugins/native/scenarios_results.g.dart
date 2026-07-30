@@ -67,3 +67,7 @@ Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
 
 Map<String, dynamic> _$ScenarioRunErrorToJson(ScenarioRunError instance) =>
     <String, dynamic>{'error': instance.error, 'stack': ?instance.stack};
+
+Map<String, dynamic> _$ScenarioRestartResultToJson(
+  ScenarioRestartResult instance,
+) => <String, dynamic>{'restarted': instance.restarted};

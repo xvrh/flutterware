@@ -8,10 +8,14 @@ import '../ui/theme.dart';
 
 /// A captured step, in the silhouette of the device it ran as.
 ///
-/// The frame is the catalog's own — same [deviceFrameFor], same measurements —
-/// so a scenario shot and a catalog capture of the same device look like the
-/// same phone. Desktop sizes and the bare test surface get a plain border: a
-/// monitor body around a rectangle explains nothing.
+/// iOS devices get `device_frame`'s **hand-drawn bodies** — an SE with its
+/// home button, a 13 with its notch — because the flow is a wall of phones
+/// and generic lozenges all read alike. That mapping is the second list the
+/// catalog's [deviceFrameFor] doc warns about, made safe the way it says:
+/// `frames_test.dart` holds the two sets of measurements together, and any
+/// device without a named body falls back to the same generic silhouette the
+/// catalog draws. Desktop sizes and the bare test surface get a plain
+/// border: a monitor body around a rectangle explains nothing.
 ///
 /// Unconstrained: renders at the device's logical size plus bezels. Put it in
 /// a `FittedBox` (the flow graph does) or size it from outside.
@@ -23,6 +27,18 @@ class FramedShot extends StatelessWidget {
 
   /// The device the run was framed as, or null for the bare surface.
   final CatalogDevice? device;
+
+  /// The hand-drawn body for [id], or null for the generic fallback. Only
+  /// devices whose named frame matches our table's screen exactly — the test
+  /// pins that.
+  static DeviceInfo? namedFrameFor(String id) => switch (id) {
+    'iphone-se' => Devices.ios.iPhoneSE,
+    'iphone-13-mini' => Devices.ios.iPhone13Mini,
+    'iphone-13' => Devices.ios.iPhone13,
+    'iphone-12-pro-max' => Devices.ios.iPhone12ProMax,
+    'ipad' => Devices.ios.iPad,
+    _ => null,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +61,7 @@ class FramedShot extends StatelessWidget {
       height: resolved.height,
       child: image,
     );
-    var chrome = deviceFrameFor(resolved);
+    var chrome = namedFrameFor(resolved.id) ?? deviceFrameFor(resolved);
     if (chrome == null) {
       // A desktop size: a hairline, not a monitor body.
       return Container(

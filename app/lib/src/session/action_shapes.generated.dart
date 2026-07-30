@@ -1828,6 +1828,16 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'ScenarioRestartResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioRestartResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'restarted',
+        'type': 'List<String>',
+        'doc': 'The package paths whose harness was dropped.',
+      },
+    ],
+  }),
   'ScenarioRunError': ResultShape.fromJson(<String, Object?>{
     'type': 'ScenarioRunError',
     'fields': <Object?>[
