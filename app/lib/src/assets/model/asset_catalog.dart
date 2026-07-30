@@ -84,13 +84,13 @@ class AssetCatalog {
     required String rootPackageRoot,
     required String packageConfigPath,
   }) async {
-    var builder = _Resolver(rootPackageRoot);
     var config = await loadPackageConfig(File(packageConfigPath));
+    var builder = _Resolver(rootPackageRoot, config);
 
     // The root package first: its asset keys are unprefixed.
     builder.readPubspec(rootPackageRoot, packageName: null);
 
-    var reachable = builder.dependenciesOf(rootPackageRoot, config);
+    var reachable = builder.dependenciesOf(rootPackageRoot);
     // Config order rather than discovery order, so the manifest a bundle writes
     // stays stable as dependencies are added and removed.
     for (var package in config.packages) {
@@ -157,8 +157,12 @@ class ResolvedAsset {
   /// are the only unprefixed ones.
   final String? package;
 
-  /// Absolute path to [package]'s root, so a reader can make [files] relative
-  /// to something a human recognises.
+  /// Absolute path to the root [files] sit under, so a reader can make them
+  /// relative to something a human recognises.
+  ///
+  /// Usually [package]'s root. For a `packages/<name>/…` declaration it is
+  /// `<name>`'s root instead — the declarer does not have the file, which is
+  /// the entire point of that form.
   final String packageRoot;
 
   /// The pubspec entry that pulled this in — `assets/images/` for a directory
@@ -337,9 +341,10 @@ class AssetProblem {
 /// asset keeps the registration it had. Both match what the engine's manifest
 /// used to be built from, and both are why this is a map rather than a list.
 class _Resolver {
-  _Resolver(this.rootPackageRoot);
+  _Resolver(this.rootPackageRoot, this.config);
 
   final String rootPackageRoot;
+  final PackageConfig config;
 
   final assets = <String, ResolvedAsset>{};
   final declarations = <AssetDeclaration>[];
@@ -352,7 +357,7 @@ class _Resolver {
   /// `dependencies:` only. A dev-dependency reached no other way is not in the
   /// bundle, and the walk is what keeps a pub workspace's other members out of
   /// it — they are in the config, and they are not dependencies.
-  Set<String> dependenciesOf(String packageRoot, PackageConfig config) {
+  Set<String> dependenciesOf(String packageRoot) {
     var seen = <String>{};
     var queue = [..._declaredDependencies(packageRoot)];
     while (queue.isNotEmpty) {
@@ -461,6 +466,10 @@ class _Resolver {
         packageName == null ? relative : 'packages/$packageName/$relative';
 
     if (declaration.endsWith('/')) {
+      // No `packages/…` reach for a directory: `_parseAssetsFromFolder`
+      // resolves the path literally and errors when it is absent
+      // (asset.dart:1168 in 3.47.0-0.1.pre), so a reach here would put files
+      // in this bundle that no build would carry.
       var directory = Directory(p.join(packageRoot, declaration));
       if (!directory.existsSync()) {
         problems.add(
@@ -483,43 +492,106 @@ class _Resolver {
           entity.path,
           packageRoot,
           relative,
-          key,
           packageName,
           declaration,
         );
       }
     } else {
       var file = File(p.join(packageRoot, declaration));
-      if (!file.existsSync()) {
+      if (file.existsSync()) {
+        _register(
+          key(declaration),
+          file.path,
+          packageRoot,
+          declaration,
+          packageName,
+          declaration,
+        );
+        return;
+      }
+      if (_packageReach(declaration) case var reach?) {
+        var reached = File(p.join(reach.root, reach.relative));
+        if (reached.existsSync()) {
+          // The key is the declaration verbatim — already `packages/…`, and
+          // never re-prefixed with the declarer's name.
+          _register(
+            declaration,
+            reached.path,
+            reach.root,
+            reach.relative,
+            packageName,
+            declaration,
+          );
+          return;
+        }
         problems.add(
           AssetProblem(
             kind: AssetProblemKind.missingFile,
             package: packageName,
             packageRoot: packageRoot,
             declaration: declaration,
+            detail:
+                'Reaches into package "${reach.name}", and '
+                '${reach.relative} is not there.',
           ),
         );
         return;
       }
-      _register(
-        key(declaration),
-        file.path,
-        packageRoot,
-        declaration,
-        key,
-        packageName,
-        declaration,
+      problems.add(
+        AssetProblem(
+          kind: AssetProblemKind.missingFile,
+          package: packageName,
+          packageRoot: packageRoot,
+          declaration: declaration,
+          detail: declaration.startsWith('packages/')
+              ? 'No package in the config answers to this prefix.'
+              : null,
+        ),
       );
     }
   }
 
+  /// Where a `packages/<name>/…` declaration reaches when the literal path is
+  /// absent: into `<name>`'s `lib/`.
+  ///
+  /// The literal path winning first is `flutter_tools`' rule, not a
+  /// convenience — `_resolveAsset` at asset.dart:1402 in 3.47.0-0.1.pre tries
+  /// the declarer's own tree before `_resolvePackageAsset` reaches out, so a
+  /// project with a real `packages/` directory keeps meaning its own files.
+  ///
+  /// Null when the shape does not match or the config has no such package,
+  /// which the caller reports rather than swallows: the tool prints "Could not
+  /// resolve package for asset" and fails the build on the same input.
+  ({String name, String root, String relative})? _packageReach(
+    String declaration,
+  ) {
+    var segments = declaration.split('/');
+    if (segments.length < 3 || segments.first != 'packages') return null;
+    var package = config[segments[1]];
+    if (package == null || !package.root.isScheme('file')) return null;
+    var root = p.normalize(p.fromUri(package.root));
+    var lib = p.normalize(p.fromUri(package.packageUriRoot));
+    return (
+      name: segments[1],
+      root: root,
+      relative: p
+          .split(
+            p.join(p.relative(lib, from: root), p.joinAll(segments.sublist(2))),
+          )
+          .join('/'),
+    );
+  }
+
   /// Registers an asset plus any `2.0x/`-style density variants beside it.
+  ///
+  /// [packageRoot] is the root [relative] sits under — the declarer's, or for
+  /// a `packages/…` reach the package it reaches into, so a reader making the
+  /// path relative gets `lib/images/logo.png` under a root a human knows.
   void _register(
     String manifestKey,
     String absolute,
     String packageRoot,
     String relative,
-    String Function(String) key,
     String? packageName,
     String declaration,
   ) {
@@ -570,23 +642,39 @@ class _Resolver {
         if (font is! YamlMap) continue;
         var asset = font['asset'];
         if (asset is! String) continue;
+        // The same resolution an asset declaration gets, with the same
+        // precedence: the literal path under the declarer wins, and only in
+        // its absence does `packages/<name>/…` reach into <name>'s lib/.
+        // `_parsePackageFonts` (asset.dart:976 in 3.47.0-0.1.pre) applies the
+        // rule to the keys and the bundle add at asset.dart:1141 to the files.
         var file = File(p.join(packageRoot, asset));
-        if (!file.existsSync()) {
-          problems.add(
-            AssetProblem(
-              kind: AssetProblemKind.missingFontFile,
-              package: packageName,
-              packageRoot: packageRoot,
-              declaration: asset,
-              detail: 'Declared by family "$name".',
-            ),
-          );
-          continue;
+        var fileRoot = packageRoot;
+        String manifestKey;
+        if (file.existsSync()) {
+          manifestKey = packageName == null
+              ? asset
+              : 'packages/$packageName/$asset';
+        } else {
+          var reach = _packageReach(asset);
+          var reached = reach == null
+              ? null
+              : File(p.join(reach.root, reach.relative));
+          if (reached == null || !reached.existsSync()) {
+            problems.add(
+              AssetProblem(
+                kind: AssetProblemKind.missingFontFile,
+                package: packageName,
+                packageRoot: packageRoot,
+                declaration: asset,
+                detail: 'Declared by family "$name".',
+              ),
+            );
+            continue;
+          }
+          file = reached;
+          fileRoot = reach!.root;
+          manifestKey = asset;
         }
-
-        var manifestKey = packageName == null
-            ? asset
-            : 'packages/$packageName/$asset';
         // A font file already registered as an asset keeps that registration:
         // it carries the declaration that pulled it in, and this one would say
         // only that a font pointed at it.
@@ -595,7 +683,7 @@ class _Resolver {
           () => ResolvedAsset(
             key: manifestKey,
             package: packageName,
-            packageRoot: packageRoot,
+            packageRoot: fileRoot,
             declaration: asset,
             files: [AssetFile(path: file.path, key: manifestKey, scale: null)],
           ),
