@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../inspect/guest_errors.dart';
 import '../inspect/guest_logs.dart';
+import '../inspect/guest_scrolls.dart';
 import 'axes.dart';
 import 'knob.dart';
 import 'parameters.dart';
@@ -285,20 +286,25 @@ class _CatalogGuestState extends State<CatalogGuest> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: _parameters.revision,
-      builder: (context, revision, _) {
-        // Everything below is about to re-declare what it reads, which is the
-        // only chance there is to notice a knob nobody reads any more.
-        _parameters._beginPass();
-        return UICatalogStateProvider(
-          // A new state per revision on purpose: the provider notifies its
-          // dependents by identity, and the demo *is* a dependent — reading a
-          // knob is what subscribed it.
-          state: _GuestCatalogState(_parameters.editable, revision),
-          child: KeyedSubtree(key: CatalogGuest.demoKey, child: widget.child),
-        );
-      },
+    // Above the marker rather than below it, so that counting the demo's
+    // scrolling adds nothing to the tree the panel reads — see [GuestScrolls]
+    // for why the watch cannot see a scroll any other way.
+    return GuestScrolls.instance.watching(
+      child: ValueListenableBuilder<int>(
+        valueListenable: _parameters.revision,
+        builder: (context, revision, _) {
+          // Everything below is about to re-declare what it reads, which is the
+          // only chance there is to notice a knob nobody reads any more.
+          _parameters._beginPass();
+          return UICatalogStateProvider(
+            // A new state per revision on purpose: the provider notifies its
+            // dependents by identity, and the demo *is* a dependent — reading a
+            // knob is what subscribed it.
+            state: _GuestCatalogState(_parameters.editable, revision),
+            child: KeyedSubtree(key: CatalogGuest.demoKey, child: widget.child),
+          );
+        },
+      ),
     );
   }
 }

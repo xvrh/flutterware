@@ -574,6 +574,8 @@ class CatalogSession extends ChangeNotifier {
     _watchSettle = null;
     _resizeSettle?.cancel();
     _resizeSettle = null;
+    _scrollSettle?.cancel();
+    _scrollSettle = null;
     unawaited(_watch?.cancel());
     _watch = null;
     watchedBox.value = null;
@@ -593,6 +595,34 @@ class CatalogSession extends ChangeNotifier {
     // geometry, not structure — so there is nothing here to smooth out.
     if (push.structureChanged && _inspecting) unawaited(_rereadTree());
     if (push.resized) _settleResize();
+    if (push.scrolled) _settleScroll();
+  }
+
+  Timer? _scrollSettle;
+
+  /// Catches up after something in the demo has scrolled.
+  ///
+  /// **The staleness nothing else here could see.** A scroll changes no
+  /// widget's type, no widget's depth and not the demo's box, so neither the
+  /// structure tier nor the resize tier fires — and the tree went on reporting
+  /// the rects from before it. That is invisible in the numbers and very
+  /// visible in the picker: the overlay is drawn from those rects, so after a
+  /// scroll it named whatever used to be under the pointer and put the box
+  /// wherever that had gone. Pressing refresh was the only way back, which is
+  /// how it was found.
+  ///
+  /// Waited out rather than acted on, like [_settleResize] and more so: a fling
+  /// reports on every frame of itself, and each one would otherwise queue a
+  /// 17ms walk for a layout that has already moved on. One read per gesture,
+  /// once it stops. Shorter than the resize window because this one ends a
+  /// gesture the hand has already finished, and the tree is what the next hover
+  /// reads.
+  void _settleScroll() {
+    _scrollSettle?.cancel();
+    _scrollSettle = Timer(const Duration(milliseconds: 120), () {
+      if (_disposed || !_panelOpen) return;
+      if (_inspecting) unawaited(_rereadTree());
+    });
   }
 
   Timer? _resizeSettle;
@@ -1469,6 +1499,7 @@ class CatalogSession extends ChangeNotifier {
     _ticker?.cancel();
     _watchSettle?.cancel();
     _resizeSettle?.cancel();
+    _scrollSettle?.cancel();
     unawaited(_watch?.cancel());
     unawaited(_logStream?.cancel());
     watchedBox.dispose();

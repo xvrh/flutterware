@@ -255,6 +255,25 @@ Problems at every width after it. A resize is exactly the moment that record
 becomes a claim about a layout that no longer exists, so it is cleared and
 re-read there.
 
+**And a fifth, found the same way: scroll.** Scrolling the demo moves every rect
+under the scrollable while changing no widget's type, no widget's depth and not
+the demo's own box — so structure and resize are both blind to it by
+construction, exactly as they are to a divider drag. The tree kept the rects
+from before the scroll and the picker drew its overlay from them, so hovering
+named whatever *used to* be under the pointer and put the box wherever that had
+since gone; refresh was the only way back, which is how this one was found too.
+A `NotificationListener<ScrollNotification>` above the demo counts what it
+scrolls — nothing per frame, because notifications arrive from scrolling and
+from nothing else — and the tier reports the count moving.
+
+**It says "still moving", not "moved", and the host waits it out.** A fling
+notifies on every frame of itself; a host re-reading on each would queue 17ms
+walks faster than they complete, for layouts the hand has already left behind.
+So the flag resets a 120ms timer and the read happens once the pushes stop —
+one walk per gesture. This is also the one tier whose flag is *held* across a
+debounced push rather than overwritten: a scroll nobody was told about leaves
+the picker lying with nothing else ever coming to correct it.
+
 **Which is why the watch's lifetime is the panel, not the Elements tab.** The
 tree read stays behind `inspecting` — it is the expensive half, and nobody
 looking at Controls should pay for it. But the watch itself is 0.3ms a frame and
@@ -262,9 +281,9 @@ nothing at all when nothing is drawn, and tying it to Elements would have left
 Problems — the one tab where a resize genuinely changes the answer — unable to
 learn that the preview had been resized.
 
-**The refresh button stays.** The three tiers cover shape, the demo's own box,
-and the node under the pointer; they do not cover every rect of a demo that
-resized one of its own children without changing shape. Removing the button
+**The refresh button stays.** The tiers cover shape, the demo's own box, what it
+scrolls, and the node under the pointer; they do not cover every rect of a demo
+that resized one of its own children without changing shape. Removing the button
 would be claiming a completeness the measurement does not support.
 
 Both behind one `ext.flutterware.watch`, on when the panel opens and off when it
@@ -634,7 +653,7 @@ Each step stands alone if the next is abandoned.
 | ~~**S5b**~~ | **landed.** The panel: collapsible, resizable, tabbed; Elements with a resizable tree │ detail split; knobs moved in as Controls and no longer vanish when an entry has none; `inspect.node` on the address; live-session `tree` wired to the consumer that justifies it | S5a |
 | **S5c** | hover-highlight, overlay inside the texture stack, picker with pointer swallow, `inspect.node` on the address | S5b |
 | **S5d** | Problems tab over `errors` / `audit`; badges on entry rows | S5b |
-| ~~**S5e**~~ | **landed.** The spike (see *Measured*); `ext.flutterware.watch` with three tiers — geometry, structure, **resize**; the panel subscribes for as long as it is mounted and the tree re-read stays behind the Elements tab | S5c |
+| ~~**S5e**~~ | **landed.** The spike (see *Measured*); `ext.flutterware.watch` with four tiers — geometry, structure, **resize**, **scroll**; the panel subscribes for as long as it is mounted and the tree re-read stays behind the Elements tab | S5c |
 | **S5f** | **Console tab and guest log capture landed** (finding 8). Flags-as-axes (S4b) and A11y (S3b) still open — S3b is a real behaviour change and stays its own decision | S5b |
 | ~~**S6**~~ | **landed.** `inspect` replaces `tree`, `find`, `at`, `errors` and the `logs` that was never shipped; `HeadlessCatalog.observe` is the one render behind it; `--annotate` now genuinely shares the tree it is drawn from | none technically; the panel by judgement |
 
