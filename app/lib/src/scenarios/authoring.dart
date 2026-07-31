@@ -41,7 +41,20 @@ changed.
   capture.
 
 `fw run scenarios new --file=$directory/shop_test.dart --name="Around the shop"`
-writes a runnable one to edit.''';
+writes a runnable one to edit — as does the panel's New scenario button.''';
+
+/// `Around the shop` → `around_the_shop_test.dart`.
+///
+/// Where `new` writes when the caller names no file. Public because the GUI's
+/// dialog previews the path while you type: the action never overwrites, so
+/// which file a name lands in is half of what pressing Create does.
+String scenarioFileName(String name) {
+  var slug = name
+      .toLowerCase()
+      .replaceAll(RegExp('[^a-z0-9]+'), '_')
+      .replaceAll(RegExp(r'^_+|_+$'), '');
+  return '${slug.isEmpty ? 'scenario' : slug}_test.dart';
+}
 
 /// The file `new` writes: a stub app and a scenario that drives it.
 ///

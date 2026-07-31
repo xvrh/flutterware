@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
@@ -7,6 +9,7 @@ import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/flow_view.dart';
+import '../../scenarios/new_scenario_dialog.dart';
 import '../../scenarios/step_page.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/menu.dart';
@@ -167,8 +170,37 @@ class _ScenarioListPane extends StatelessWidget {
   final String package;
   final ScenarioPlace selected;
 
+  /// Writes a scenario and goes straight to it — which runs it, since opening
+  /// a scenario is the demand. The whole point of the button over the command
+  /// the hint names: you end up looking at the thing you just made.
+  Future<void> _newScenario(BuildContext context) async {
+    var result = await showNewScenarioDialog(
+      context,
+      core: core,
+      package: package,
+    );
+    if (result == null || !context.mounted) return;
+    AddressScope.write(context).setSegments(
+      scenarioSegments(package, file: result.file, scenario: result.name),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ListPaneHeader(
+          directory: core.directoryFor(package),
+          onNew: () => unawaited(_newScenario(context)),
+        ),
+        const Divider(height: 1),
+        Expanded(child: _body(context)),
+      ],
+    );
+  }
+
+  Widget _body(BuildContext context) {
     var result = core.scanResultFor(package);
     if (result == null) {
       if (core.scanErrorFor(package) case var error?) {
@@ -186,14 +218,27 @@ class _ScenarioListPane extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
     if (result.scenarios.isEmpty) {
-      // The same string `list` hands an agent — this used to be the only place
-      // it was said, which is what made it unfindable from anywhere else.
+      // The hint is the same string `list` hands an agent — this used to be the
+      // only place it was said, which is what made it unfindable from anywhere
+      // else. Above it, the thing it describes, as a button: a reader who is in
+      // the GUI should not be sent to a terminal to get their first file.
       return SingleChildScrollView(
         padding: const EdgeInsets.all(FwSpacing.lg),
-        child: SelectableText(
-          'No scenarios in ${core.directoryFor(package)}.\n\n'
-          '${scenarioAuthoringHint(core.directoryFor(package))}',
-          style: context.type.caption.copyWith(color: context.colors.mut),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton.icon(
+              onPressed: () => unawaited(_newScenario(context)),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('New scenario'),
+            ),
+            const Gap(FwSpacing.lg),
+            SelectableText(
+              'No scenarios in ${core.directoryFor(package)}.\n\n'
+              '${scenarioAuthoringHint(core.directoryFor(package))}',
+              style: context.type.caption.copyWith(color: context.colors.mut),
+            ),
+          ],
         ),
       );
     }
@@ -260,6 +305,64 @@ class _ScenarioListPane extends StatelessWidget {
             ),
         ],
       ],
+    );
+  }
+}
+
+/// The list pane's header: which directory this suite lives in, and the way to
+/// add to it.
+///
+/// Above every state the pane has — loading, failed, empty, populated — because
+/// "write another one" is not a question you only have when there are none.
+class _ListPaneHeader extends StatelessWidget {
+  const _ListPaneHeader({required this.directory, required this.onNew});
+
+  final String directory;
+  final VoidCallback onNew;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        FwSpacing.lg,
+        FwSpacing.sm,
+        FwSpacing.sm,
+        FwSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Tooltip(
+              message: directory,
+              waitDuration: const Duration(milliseconds: 500),
+              child: Text(
+                directory,
+                style: context.type.sectionLabel,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          Tooltip(
+            message: 'New scenario',
+            child: Tappable.builder(
+              onTap: onNew,
+              builder: (context, hovered) => Container(
+                padding: const EdgeInsets.all(FwSpacing.xs),
+                decoration: BoxDecoration(
+                  color: hovered ? colors.panel : Colors.transparent,
+                  borderRadius: BorderRadius.circular(context.radii.radius),
+                ),
+                child: Icon(
+                  Icons.add,
+                  size: 16,
+                  color: hovered ? colors.ink : colors.mut,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

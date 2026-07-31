@@ -767,7 +767,7 @@ class ScenariosCore extends PluginCore {
       );
     }
     var relative =
-        (file as String?) ?? '${directoryFor(path)}/${_fileNameFor(name)}';
+        (file as String?) ?? '${directoryFor(path)}/${scenarioFileName(name)}';
     if (p.isAbsolute(relative) || p.split(relative).contains('..')) {
       throw ArgumentError.value(
         relative,
@@ -811,15 +811,6 @@ class ScenariosCore extends PluginCore {
           'fw run scenarios run --package=$path --file=$relative '
           '--scenario="$name"',
     );
-  }
-
-  /// `Around the shop` → `around_the_shop_test.dart`.
-  static String _fileNameFor(String name) {
-    var slug = name
-        .toLowerCase()
-        .replaceAll(RegExp('[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_+|_+$'), '');
-    return '${slug.isEmpty ? 'scenario' : slug}_test.dart';
   }
 
   Future<ScenarioRestartResult> _restart(Map<String, Object?> arguments) async {
