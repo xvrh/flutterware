@@ -1,8 +1,14 @@
 # Flutterware — design notes
 
+> **Historical (2026-07-31):** the bash bits described here are gone —
+> `bin/fw` never shipped and `tool/fw` was retired in favor of fvm
+> (`.fvmrc` pins the SDK). Superseded by
+> `docs/superpowers/specs/2026-07-28-cli-adoption-story.md`.
+
 Forward-looking design doc for the `fw` tooling. The bash bits (`bin/fw`,
-`tool/fw`) are landed and being dogfooded; everything past "What's landed
-today" is roadmap, captured here so we don't lose the thinking.
+`tool/fw`) were landed and dogfooded at the time of writing — both are gone
+now, per the banner above; everything past "What's landed today" is roadmap,
+captured here so we don't lose the thinking.
 
 This document is meant to evolve. Where decisions are tentative, they are
 marked **[OPEN]** with the alternatives we considered.

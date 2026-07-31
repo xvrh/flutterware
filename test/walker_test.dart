@@ -49,11 +49,46 @@ void main() {
     expect(findInitializedRoot(deep)?.path, inner.path);
   });
 
+  test('finds a project whose sdk entry is a directory, not a link', () {
+    // Windows-style: the SDK was copied in rather than symlinked. Still a
+    // recorded SDK; the bin decides from there whether it actually works.
+    var project = Directory(p.join(root.path, 'copied'))..createSync();
+    Directory(p.join(project.path, sdkLinkPath)).createSync(recursive: true);
+
+    expect(findInitializedRoot(project)?.path, project.path);
+  });
+
   test('the message names the rule, not just a command', () {
     // The after-clone case is every teammate, every time, because the
     // directory is machine-specific and therefore ignored. What they need to
     // understand is why `fw` alone cannot work yet.
     expect(noProjectMessage, contains('dart run flutterware'));
     expect(noProjectMessage, contains('your own Flutter SDK'));
+  });
+
+  test('the message states the dependency prerequisite', () {
+    // Without it, a user in a project that never added flutterware follows
+    // the advice and hits pub's "Could not find package" with no guidance.
+    expect(noProjectMessage, contains('dart pub add flutterware'));
+  });
+
+  test('the broken-sdk message names the path as a path', () {
+    var message = brokenSdkMessage('/Users/x/myapp');
+    expect(message, contains('/Users/x/myapp/$sdkLinkPath'));
+    // Interpolating the Directory itself once printed "Directory: '/path'".
+    expect(message, isNot(contains("Directory: '")));
+    expect(message, contains('dart run flutterware init'));
+  });
+
+  test('help without a project explains the redirect and the setup', () {
+    expect(noProjectHelp, contains(sdkLinkPath));
+    expect(noProjectHelp, contains('dart run flutterware'));
+    expect(noProjectHelp, contains('dart pub add flutterware'));
+  });
+
+  test('the help spellings match what the CLI accepts', () {
+    // Mirrors FwCli's dispatcher, which the walker cannot import; this pins
+    // the copy so a drift shows up here instead of as a silent exit 64.
+    expect(helpArguments, {'help', '--help', '-h'});
   });
 }

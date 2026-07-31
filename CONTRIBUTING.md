@@ -2,14 +2,21 @@
 
 ## Development setup
 
+The Flutter SDK is pinned in `.fvmrc` and managed with [fvm](https://fvm.app).
+The `flutter`/`dart` on PATH are usually older than the pin and fail the
+workspace's SDK constraints — always go through `fvm flutter ...` /
+`fvm dart ...` (equivalently `.fvm/flutter_sdk/bin/...`).
+
 ```sh
-flutter pub get
-dart tool/install_hooks.dart
+fvm install                      # once per machine: installs the .fvmrc-pinned SDK
+fvm use --skip-pub-get           # once per clone/worktree: creates .fvm/flutter_sdk
+fvm flutter pub get
+git config core.hooksPath hooks  # once per clone; worktrees inherit it
 ```
 
-`install_hooks.dart` points git at the version-controlled `hooks/` directory
-(`core.hooksPath=hooks`). Run it once per clone — and once per added worktree,
-since `core.hooksPath` is shared but each worktree needs it set.
+`core.hooksPath hooks` points git at the version-controlled `hooks/` directory.
+The value is relative, so it resolves against each worktree's own root — added
+worktrees inherit it from the shared config and need no extra step.
 
 ## Pre-commit hook
 
@@ -22,5 +29,6 @@ The hook uses the same formatter configuration as `tool/prepare_submit.dart`
 (which CI runs); keep the two in sync. Code style beyond formatting (analyzer
 lints) is still enforced by CI, not the hook.
 
-If dependencies aren't resolved yet, the hook skips itself gracefully and lets
-the commit through — run `flutter pub get` to enable it.
+If dependencies aren't resolved yet, or the pinned SDK isn't installed, the
+hook skips itself gracefully and lets the commit through — run
+`fvm flutter pub get` (and `fvm install` + `fvm use` if needed) to enable it.

@@ -64,7 +64,12 @@ class ProjectInit {
   /// Deliberately not what decides whether [run] happens. It names one
   /// artifact, and standing it in for "everything init writes" is what used to
   /// keep later additions out of any project that had run once already.
-  bool get isInitialized => sdkLink.existsSync();
+  ///
+  /// Same question the walker asks: anything at the path counts, including a
+  /// real directory copied in on a machine without symlinks.
+  bool get isInitialized =>
+      FileSystemEntity.typeSync(sdkLink.path, followLinks: false) !=
+      FileSystemEntityType.notFound;
 
   Future<int> run({bool quiet = false}) async {
     var sdk = await FlutterSdkPath.tryFind(dartExecutable);
@@ -114,6 +119,15 @@ class ProjectInit {
   /// quietly go on naming the old SDK. A relative target for the same reason —
   /// it survives the repo being moved.
   String _recordSdk(FlutterSdkPath sdk) {
+    // A real directory (or file) here is an SDK someone copied in on a machine
+    // without symlinks. It is theirs to manage — replacing it with a link
+    // would delete an SDK we did not write.
+    var existing = FileSystemEntity.typeSync(sdkLink.path, followLinks: false);
+    if (existing != FileSystemEntityType.link &&
+        existing != FileSystemEntityType.notFound) {
+      return p.relative(sdkLink.path, from: root);
+    }
+
     var fvm = Link(p.join(root, '.fvm', 'flutter_sdk'));
     var target = fvm.existsSync() && _realPath(fvm.path) == _realPath(sdk.root)
         ? p.join('..', '.fvm', 'flutter_sdk')
@@ -122,7 +136,7 @@ class ProjectInit {
     // Leave an unchanged link alone. This runs before every command now, and
     // delete-then-create is a write where nothing has moved — briefly, a
     // window with no link at all.
-    if (sdkLink.existsSync()) {
+    if (existing == FileSystemEntityType.link) {
       if (sdkLink.targetSync() == target) return target;
       sdkLink.deleteSync();
     }

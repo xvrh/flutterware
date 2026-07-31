@@ -19,6 +19,38 @@ relevant_lockhash() {
   ' pubspec.lock | cksum | awk '{print $1"-"$2}'
 }
 
+# Dart from the SDK pinned in .fvmrc, not whatever is on PATH. The package's
+# resolved language version (from the pinned beta SDK) can be higher than a
+# globally-installed stable dart, which fails AOT compilation with "language
+# version too high". Trusts the fvm-managed .fvm/flutter_sdk symlink only
+# when it still points at the pinned version — it may predate a pin bump —
+# and otherwise reads fvm's cache directly so a worktree works before
+# `fvm use` has run. Never invokes the fvm CLI: it can prompt, and a hook
+# must not.
+pinned_dart() {
+  local version=""
+  if [ -f .fvmrc ]; then
+    version="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc | head -n1)"
+  fi
+  local link="$REPO_ROOT/.fvm/flutter_sdk"
+  if [ -x "$link/bin/dart" ]; then
+    local target
+    target="$(readlink "$link" || true)"
+    if [ -z "$version" ] || [ "$(basename "$target")" = "$version" ]; then
+      echo "$link/bin/dart"
+      return 0
+    fi
+  fi
+  [ -n "$version" ] || return 1
+  local base d
+  for base in "${FVM_CACHE_PATH:-}" "${FVM_HOME:-}" "$HOME/fvm"; do
+    [ -n "$base" ] || continue
+    d="$base/versions/$version/bin/dart"
+    [ -x "$d" ] && { echo "$d"; return 0; }
+  done
+  return 1
+}
+
 CURRENT_LOCKHASH=$(relevant_lockhash)
 
 needs_build=0
@@ -31,19 +63,23 @@ elif [ "$SOURCE" -nt "$BIN" ]; then
 fi
 
 if [ "$needs_build" = 1 ]; then
-  # Compiling needs resolved deps. If they're missing, skip the hook
-  # gracefully rather than block the commit — CI still catches formatting.
+  # Compiling needs resolved deps and the pinned SDK. If either is missing,
+  # skip the hook gracefully rather than block the commit — CI still catches
+  # formatting.
   if [ ! -f .dart_tool/package_config.json ]; then
-    echo "pre-commit: deps not resolved — run 'flutter pub get' to enable the format hook"
+    echo "pre-commit: deps not resolved — run 'fvm flutter pub get' to enable the format hook"
+    exit 0
+  fi
+  if ! DART="$(pinned_dart)"; then
+    echo "pre-commit: pinned Flutter SDK not found — run 'fvm install' then 'fvm use' to enable the format hook"
     exit 0
   fi
   echo "pre-commit: building $BIN..."
   mkdir -p build
-  # Compile with the project's pinned Flutter SDK, not whatever `dart` is on
-  # PATH. The package's resolved language version (from the pinned beta SDK)
-  # can be higher than a globally-installed stable dart, which fails AOT
-  # compilation with "language version too high".
-  "$REPO_ROOT/tool/fw" dart compile exe "$SOURCE" -o "$BIN"
+  if ! "$DART" compile exe "$SOURCE" -o "$BIN"; then
+    echo "pre-commit: build failed — skipping the format hook; CI still checks formatting"
+    exit 0
+  fi
   echo "$CURRENT_LOCKHASH" > "$LOCKHASH"
 fi
 

@@ -31,7 +31,7 @@ jobs:
       - name: "check for uncommitted changes"
         run: |
           git diff --exit-code --stat -- . ':(exclude)*pubspec.lock' \
-          || (echo "##[error] found changed files after build. please run 'dart tool/prepare_submit.dart'" \
+          || (echo "##[error] found changed files after build. please run 'fvm dart tool/prepare_submit.dart'" \
                    "and check in all changes" \
               && exit 1)
         shell: bash

@@ -17,7 +17,7 @@ published artifact rather than a shell script.
 ## The story
 
 ```sh
-flutter pub add dev:flutterware
+dart pub add flutterware
 dart run flutterware                 # or: fvm dart run flutterware
 ```
 
@@ -419,14 +419,15 @@ without acquiring the logic that makes it unsafe to freeze.
 So the message is the fix, and it has to teach the actual rule:
 
 ```
-fw: no .flutterware/ found in this directory or any parent.
+fw: no project set up for fw in this directory or any parent.
 
 The first run has to go through your own Flutter SDK, so flutterware can
-record which one to use:
+record which one to use. From the project root:
 
-    fvm dart run flutterware        (or: dart run flutterware)
+    dart pub add flutterware      (skip if pubspec.yaml already has it)
+    dart run flutterware          (or: fvm dart run flutterware)
 
-After that, `fw` works here and in any subdirectory.
+After that, `fw` works here and in every subdirectory.
 ```
 
 It says *why* rather than only *what*, because the thing a user needs to
@@ -442,7 +443,9 @@ writes it down.
    machine per version instead of once per project; `.flutterware/` then holds
    the SDK symlink and a pointer. Leaning shared, undecided.
 2. **`fw` with no arguments** — GUI, or help? `dart run flutterware` launches
-   the GUI today; `tool/fw` prints help. It is the first thing everyone types.
+   the GUI today. It is the first thing everyone types. *Partially resolved:*
+   outside a set-up project, `fw help` prints walker-owned static help and
+   bare `fw` prints the setup message; inside one, both forward as before.
 3. **Uninstall.** `.flutterware/`, the global binary, the `PATH` line. One
    command should undo all three, and its absence is the kind of thing that
    makes people hesitate at step one.

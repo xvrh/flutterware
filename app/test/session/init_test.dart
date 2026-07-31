@@ -355,4 +355,19 @@ void main() {
     await initWith().run();
     expect(initWith().isInitialized, isTrue);
   });
+
+  test('leaves a copied-in SDK directory alone', () async {
+    // Windows-style: the walker accepts a real directory at .flutterware/sdk,
+    // so init must survive it — Link.createSync over a directory throws.
+    var copied = Directory(sdkLink().path)..createSync(recursive: true);
+    File(p.join(copied.path, 'marker')).writeAsStringSync('');
+
+    expect(await initWith().run(), 0);
+    expect(
+      FileSystemEntity.typeSync(sdkLink().path, followLinks: false),
+      FileSystemEntityType.directory,
+    );
+    expect(File(p.join(copied.path, 'marker')).existsSync(), isTrue);
+    expect(initWith().isInitialized, isTrue);
+  });
 }
