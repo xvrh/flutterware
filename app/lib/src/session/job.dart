@@ -120,10 +120,15 @@ class JobController {
 
   /// Records what the action produced and closes the job.
   JobResult succeed(Object? value) {
-    var artifacts = <Artifact>[];
-    if (value is Artifact) {
-      artifacts.add(value);
-      emit(JobArtifactProduced(value));
+    var artifacts = <Artifact>[
+      if (value is Artifact) value,
+      // A result whose answer is data, carrying the one file worth looking at
+      // — the failing frame of a run, say. The data is still the result; these
+      // only give a surface that can render a picture something to render.
+      if (value is ProducesArtifacts) ...value.artifacts,
+    ];
+    for (var artifact in artifacts) {
+      emit(JobArtifactProduced(artifact));
     }
     return _finish(
       JobResult(value: value, artifacts: artifacts, duration: elapsed),

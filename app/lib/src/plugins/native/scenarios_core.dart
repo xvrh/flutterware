@@ -8,6 +8,7 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../../catalog/devices.dart';
+import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/runner.dart';
@@ -512,6 +513,50 @@ class ScenariosCore extends PluginCore {
           ],
         ),
         PluginAction(
+          'new',
+          'New scenario',
+          returns: ScenarioNewResult,
+          description:
+              'Writes a runnable scenario file where the package keeps them, '
+              'and reports the command that runs it. The scaffold pumps a stub '
+              'app and drives it, so it passes as written — replace the stub '
+              'with your own widget. Start here when you have never written '
+              'one: it is the API, in a file that already works.',
+          parameters: [
+            ActionParameter(
+              'package',
+              'Package',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  'Which declared package; the only one when there is one',
+              options: [
+                for (var path in packages)
+                  ActionOption(path, label: path == '.' ? 'root' : path),
+              ],
+            ),
+            const ActionParameter(
+              'name',
+              'Name',
+              kind: ActionParameterKind.string,
+              required: true,
+              description:
+                  "The scenario's name — what `run --scenario=` takes and what "
+                  'the panel lists',
+            ),
+            const ActionParameter(
+              'file',
+              'File',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Package-relative path to write. Defaults to a snake_cased '
+                  "`_test.dart` from the name, under the package's scenario "
+                  'directory. Never overwrites.',
+            ),
+          ],
+        ),
+        PluginAction(
           'restart',
           'Restart',
           returns: ScenarioRestartResult,
@@ -663,12 +708,18 @@ class ScenariosCore extends PluginCore {
     return switch (actionId) {
       'list' => _list(arguments),
       'run' => _run(arguments),
+      'new' => _new(arguments),
       'restart' => _restart(arguments),
       _ => super.invoke(actionId, arguments: arguments),
     };
   }
 
-  Future<ScenarioRestartResult> _restart(Map<String, Object?> arguments) async {
+  /// The package an action names, checked against the manifest.
+  ///
+  /// The message names what *is* declared, so a caller that guessed can
+  /// correct itself without a second round-trip — the same courtesy
+  /// `Session.invoke` extends for a plugin id.
+  List<String> _requested(Map<String, Object?> arguments) {
     var requested = arguments['package'];
     if (requested != null && requested is! String) {
       throw ArgumentError.value(requested, 'package', 'must be a package path');
@@ -682,6 +733,98 @@ class ScenariosCore extends PluginCore {
           'not declared for this plugin. Declared: ${packages.join(', ')}',
         );
       }
+    }
+    return paths;
+  }
+
+  /// Writes a scenario file and says how to run it.
+  ///
+  /// The authoring door. Everything else here operates scenarios that already
+  /// exist, which left "how do I write one" answerable only by reading
+  /// flutterware's source — a question the GUI answered in an empty state that
+  /// no other surface could see.
+  Future<ScenarioNewResult> _new(Map<String, Object?> arguments) async {
+    var paths = _requested(arguments);
+    if (paths.length > 1) {
+      throw ArgumentError(
+        'Which package? `new` writes one file. Declared: ${packages.join(', ')}',
+      );
+    }
+    var path = paths.single;
+
+    var name = arguments['name'];
+    if (name is! String || name.trim().isEmpty) {
+      throw ArgumentError.value(name, 'name', 'required — the scenario name');
+    }
+    name = name.trim();
+
+    var file = arguments['file'];
+    if (file != null && file is! String) {
+      throw ArgumentError.value(
+        file,
+        'file',
+        'must be a package-relative path',
+      );
+    }
+    var relative =
+        (file as String?) ?? '${directoryFor(path)}/${_fileNameFor(name)}';
+    if (p.isAbsolute(relative) || p.split(relative).contains('..')) {
+      throw ArgumentError.value(
+        relative,
+        'file',
+        'must be relative to the package and stay inside it',
+      );
+    }
+    if (!relative.endsWith('.dart')) {
+      throw ArgumentError.value(relative, 'file', 'must end in `.dart`');
+    }
+    // `flutter test` collects `*_test.dart` and nothing else, so a scenario
+    // spelled otherwise runs here and silently never runs in CI.
+    if (!relative.endsWith('_test.dart')) {
+      throw ArgumentError.value(
+        relative,
+        'file',
+        'must end in `_test.dart` — `flutter test` collects nothing else, and '
+            'a scenario CI never runs is worse than one that does not exist',
+      );
+    }
+
+    var target = File(p.join(packageRootFor(path), relative));
+    if (target.existsSync()) {
+      throw ArgumentError.value(
+        relative,
+        'file',
+        'already exists. Add the scenario to it, or name another file.',
+      );
+    }
+    target.parent.createSync(recursive: true);
+    target.writeAsStringSync(scenarioScaffold(name));
+
+    // The scan is now stale by exactly this file.
+    _rescan(path);
+
+    return ScenarioNewResult(
+      package: path,
+      file: relative,
+      name: name,
+      next:
+          'fw run scenarios run --package=$path --file=$relative '
+          '--scenario="$name"',
+    );
+  }
+
+  /// `Around the shop` → `around_the_shop_test.dart`.
+  static String _fileNameFor(String name) {
+    var slug = name
+        .toLowerCase()
+        .replaceAll(RegExp('[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    return '${slug.isEmpty ? 'scenario' : slug}_test.dart';
+  }
+
+  Future<ScenarioRestartResult> _restart(Map<String, Object?> arguments) async {
+    var paths = _requested(arguments);
+    for (var path in paths) {
       restartRunner(path);
     }
     return ScenarioRestartResult(restarted: paths);
@@ -692,21 +835,7 @@ class ScenariosCore extends PluginCore {
   /// **Loads what it needs** — a report may never start work; an action asked
   /// for by name may, and must.
   Future<ScenarioListResult> _list(Map<String, Object?> arguments) async {
-    var requested = arguments['package'];
-    if (requested != null && requested is! String) {
-      throw ArgumentError.value(requested, 'package', 'must be a package path');
-    }
-    var paths = requested == null ? packages : [requested as String];
-    for (var path in paths) {
-      if (!packages.contains(path)) {
-        throw ArgumentError.value(
-          path,
-          'package',
-          'not declared for this plugin. Declared: ${packages.join(', ')}',
-        );
-      }
-    }
-
+    var paths = _requested(arguments);
     for (var path in paths) {
       track(path);
     }
@@ -734,6 +863,11 @@ class ScenariosCore extends PluginCore {
                   ),
               ],
               diagnostics: _results[path]!.diagnostics,
+              // Only when there are none: an empty list is the one moment the
+              // reader is certainly asking "so how do I write one".
+              authoring: _results[path]!.scenarios.isEmpty
+                  ? scenarioAuthoringHint(directoryFor(path))
+                  : null,
             ),
       ],
     );
@@ -746,20 +880,7 @@ class ScenariosCore extends PluginCore {
   /// a one-shot `fw` process it lives for the request and dies with the
   /// session.
   Future<ScenarioRunResult> _run(Map<String, Object?> arguments) async {
-    var requested = arguments['package'];
-    if (requested != null && requested is! String) {
-      throw ArgumentError.value(requested, 'package', 'must be a package path');
-    }
-    var paths = requested == null ? packages : [requested as String];
-    for (var path in paths) {
-      if (!packages.contains(path)) {
-        throw ArgumentError.value(
-          path,
-          'package',
-          'not declared for this plugin. Declared: ${packages.join(', ')}',
-        );
-      }
-    }
+    var paths = _requested(arguments);
     var file = arguments['file'] as String?;
     var scenario = arguments['scenario'] as String?;
     if (scenario != null && file == null) {
@@ -807,7 +928,22 @@ class ScenariosCore extends PluginCore {
           captureScale: captureScale ?? captureScaleFor(path),
           captureRaw: format == 'raw',
         );
-        results.add(_describeRun(path, outDir, report, axes: axes));
+        var described = _describeRun(path, outDir, report, axes: axes);
+        // A selector that matched nothing used to come back as an empty list
+        // and exit 0 — a typo reading as a green run. The harness compiled
+        // from disk just now, so a fresh scan is the honest list to offer
+        // back.
+        if (described.scenarios.isEmpty && (file != null || scenario != null)) {
+          results.add(
+            ScenarioRunPackage(
+              path: path,
+              output: outDir,
+              error: await _selectorMiss(path, file: file, scenario: scenario),
+            ),
+          );
+        } else {
+          results.add(described);
+        }
       } catch (error) {
         results.add(
           ScenarioRunPackage(path: path, output: outDir, error: '$error'),
@@ -819,6 +955,39 @@ class ScenariosCore extends PluginCore {
       axes: axes.isEmpty ? null : axes.toParams(),
     );
   }
+
+  /// Why a `file`/`scenario` selector ran nothing, naming what it could have
+  /// named instead — so a misspelling costs one round-trip and not a debugging
+  /// session against a result that looked like a pass.
+  Future<String> _selectorMiss(
+    String path, {
+    required String? file,
+    required String? scenario,
+  }) async {
+    _rescan(path);
+    await _scans[path];
+    var result = _results[path];
+    if (result == null) {
+      return 'Nothing matched ${_describeSelector(file, scenario)}, and the '
+          'scan that would say what does failed: ${_errors[path]}';
+    }
+    if (result.scenarios.isEmpty) {
+      return 'Nothing matched ${_describeSelector(file, scenario)} — this '
+          'package has no scenarios at all.\n\n'
+          '${scenarioAuthoringHint(directoryFor(path))}';
+    }
+    var inFile = result.scenarios.where((ref) => ref.file == file).toList();
+    if (scenario != null && inFile.isNotEmpty) {
+      return 'No scenario "$scenario" in $file. It declares: '
+          '${inFile.map((ref) => '"${ref.name}"').join(', ')}.';
+    }
+    var files = {for (var ref in result.scenarios) ref.file};
+    return 'No scenarios in "$file". This package declares them in: '
+        '${files.join(', ')}.';
+  }
+
+  static String _describeSelector(String? file, String? scenario) =>
+      scenario == null ? 'file "$file"' : 'scenario "$scenario" in "$file"';
 
   /// The escape hatch: drops [path]'s warm harness, so the next run
   /// cold-starts from nothing — fresh asset bundle, fresh kernel, fresh
@@ -868,6 +1037,15 @@ class ScenariosCore extends PluginCore {
   void debugInstallRunner(String path, ScenarioRunner runner) =>
       _runners[path] = runner;
 
+  /// An artifact path as every surface reports it: relative to the worktree,
+  /// so it survives being read on another machine and an agent whose tools are
+  /// scoped to the repo can open it. A `--output` outside the worktree has no
+  /// relative spelling, and keeps its absolute one.
+  String _relative(String path) {
+    var root = host.worktree.path;
+    return p.isWithin(root, path) ? p.relative(path, from: root) : path;
+  }
+
   /// One step of the harness's vocabulary — the same map whether it arrived
   /// in the final report or as a mid-run event — with its `fw://` address,
   /// carrying [axes] as query parameters since the picture depends on them.
@@ -885,11 +1063,12 @@ class ScenariosCore extends PluginCore {
       name: step['name'] as String?,
       auto: step['auto'] == true,
       tags: (step['tags'] as List?)?.cast<String>() ?? const [],
-      image: step['image']! as String,
+      root: host.worktree.path,
+      image: _relative(step['image']! as String),
       format: step['format'] as String? ?? 'png',
       width: step['width'] as int? ?? 0,
       height: step['height'] as int? ?? 0,
-      tree: step['tree']! as String,
+      tree: _relative(step['tree']! as String),
       texts: (step['texts']! as List).cast<String>(),
       statusBrightness: step['statusBrightness'] as String?,
       navBrightness: step['navBrightness'] as String?,

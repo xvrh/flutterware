@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:device_frame/device_frame.dart';
@@ -82,9 +81,9 @@ class FramedShot extends StatelessWidget {
     Widget image = Image(
       image: step.format == 'raw'
           ? RawImageProvider(
-              RawImageData(File(step.image), step.width, step.height),
+              RawImageData(step.imageFile, step.width, step.height),
             )
-          : FileImage(File(step.image)),
+          : FileImage(step.imageFile),
       fit: BoxFit.fill,
       filterQuality: FilterQuality.medium,
     );

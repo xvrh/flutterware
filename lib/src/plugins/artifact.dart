@@ -71,3 +71,18 @@ class Artifact implements PluginResult {
   @override
   String toString() => 'Artifact($kind, $address, ${path ?? 'inline'})';
 }
+
+/// A result that also produced files worth handing over as files.
+///
+/// An action whose whole answer is one file returns an [Artifact] and is done.
+/// This is for the other shape: a result that is mostly data and has a picture
+/// in it somewhere — a run of fifty steps where one frame is the one to look
+/// at. The data still travels; these ride alongside, so a surface that can
+/// show an image shows it and one that cannot is no worse off.
+///
+/// Keep it to what the caller actually needs to see. Every artifact here is a
+/// picture an agent pays for in context, so a run returns the frame that
+/// explains the failure — not all fifty.
+abstract interface class ProducesArtifacts {
+  List<Artifact> get artifacts;
+}

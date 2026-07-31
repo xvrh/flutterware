@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -100,7 +99,7 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
     _highlight.value = null;
     try {
       _tree = InspectTree.fromJson(
-        (jsonDecode(File(path).readAsStringSync()) as Map)
+        (jsonDecode(widget.step.treeFile.readAsStringSync()) as Map)
             .cast<String, Object?>(),
       );
       _treeError = null;

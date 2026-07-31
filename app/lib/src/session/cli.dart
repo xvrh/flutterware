@@ -214,7 +214,7 @@ const fwHelpFooter =
 /// What `fw` exits with — here because the document lists them too.
 const fwExitCodes = {
   0: 'success',
-  1: 'the action ran and failed',
+  1: 'the action failed, or what it ran did not pass',
   64: 'a usage error: unknown plugin, bad argument, malformed command line',
 };
 
@@ -705,8 +705,11 @@ class FwCli {
       // shell script does not have to parse anything. Everything else it knows
       // — the address, the resolved axes — is a `--json` away rather than noise
       // on a line something is piping.
-      if (result.artifacts.isNotEmpty) {
-        var artifact = result.artifacts.first;
+      //
+      // The *value*, not `result.artifacts`: a result that merely carries one
+      // (a run, with its failing frame) is still data, and printing that path
+      // instead of the run would throw away the answer to keep the footnote.
+      if (result.value case Artifact artifact) {
         if (json) {
           _printJson(artifact.toJson());
         } else {
@@ -734,7 +737,10 @@ class FwCli {
       } else if (value != null) {
         out.writeln(json ? jsonEncode(value) : value);
       }
-      return 0;
+      // The action ran; what it ran did not pass. The data above is the answer
+      // and still prints in full — this only decides what a shell sees, so
+      // `fw run scenarios run && deploy` stops on a red suite.
+      return value is ReportsFailure && !value.ok ? 1 : 0;
     } finally {
       session.dispose();
     }

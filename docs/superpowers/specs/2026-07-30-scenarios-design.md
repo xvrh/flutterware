@@ -253,6 +253,12 @@ both registries / capability regeneration):
 - **Actions**: `list` (scenarios, steps, named screens — from scan + last run),
   `run` (params: `scenario`, `language`, `device`, `text-scale`,
   `brightness`; returns a `PluginResult` with per-step artifacts).
+  *Shipped as four, 2026-07-31: `restart` drops the warm harness, and `new`
+  writes a runnable scenario file. `new` exists because everything else here
+  operates scenarios that already exist — an agent could run them and could
+  not find out how to write one, since the only statement of the API was the
+  panel's empty state, which no other surface can see. `docs/capabilities.md`
+  is the current list; this paragraph is the intent it grew out of.*
 - **Artifacts, the step triple**: PNG + widget-tree JSON + extracted texts,
   each an `Artifact` with an address. The tree format is `lib/src/inspect/`'s
   node model — the same vocabulary an agent already reads from the catalog,
@@ -269,6 +275,10 @@ both registries / capability regeneration):
   return with images inline (`ImageContent`), trees, texts → failures return
   the post-mortem pair. `fw run scenarios run --scenario=onboarding` is the
   same door.
+  *Shipped 2026-07-31 as: every step's PNG and tree on the wire as
+  worktree-relative paths, and the frame before each failure inline as
+  `ImageContent`. Not every step inline — fifty pictures per call is context
+  an agent pays for and did not ask for.*
 
 The panel is dev_studio's proven GUI shape — flow graph (splits fan out into a
 DAG), step detail with tree/text overlays, language/device/accessibility

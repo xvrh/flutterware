@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware_app/src/scenarios/authoring.dart';
 import 'package:flutterware_app/src/scenarios/axes.dart';
 import 'package:flutterware_app/src/scenarios/harness_entrypoint.dart';
 import 'package:flutterware_app/src/scenarios/runner.dart';
@@ -129,6 +130,34 @@ void main() {
         );
       } finally {
         scratch.deleteSync();
+      }
+
+      // The `new` action's scaffold, run as written. It is the only
+      // documentation of the scenario API that executes, so it is checked
+      // where a real tester already is: change `tap` or `Shot` and this is
+      // what says the template now teaches something that does not exist.
+      var scaffold = File(
+        p.join(packageRoot, 'test', 'scenarios', 'scaffold_check_test.dart'),
+      );
+      scaffold.writeAsStringSync(scenarioScaffold('Scaffold check'));
+      try {
+        await runner.refresh();
+        var scaffolded = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/scaffold_check_test.dart',
+          scenario: 'Scaffold check',
+        );
+        var outcome = (scaffolded['scenarios']! as List).single as Map;
+        expect(outcome['ok'], isTrue, reason: '${outcome['errors']}');
+        expect(
+          [
+            for (var step in (outcome['steps']! as List).cast<Map>())
+              step['name'],
+          ],
+          [null, 'Tapped continue'],
+        );
+      } finally {
+        scaffold.deleteSync();
       }
 
       // Axes: the same warm harness, run as an iPhone in French, dark and

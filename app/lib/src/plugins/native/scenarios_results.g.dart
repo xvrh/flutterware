@@ -19,6 +19,7 @@ Map<String, dynamic> _$ScenarioListPackageToJson(
   'scenarios': instance.scenarios.map((e) => e.toJson()).toList(),
   'diagnostics': instance.diagnostics,
   'error': ?instance.error,
+  'authoring': ?instance.authoring,
 };
 
 Map<String, dynamic> _$ScenarioListEntryToJson(ScenarioListEntry instance) =>
@@ -31,6 +32,7 @@ Map<String, dynamic> _$ScenarioListEntryToJson(ScenarioListEntry instance) =>
 Map<String, dynamic> _$ScenarioRunResultToJson(ScenarioRunResult instance) =>
     <String, dynamic>{
       'packages': instance.packages.map((e) => e.toJson()).toList(),
+      'ok': instance.ok,
       'axes': ?instance.axes,
     };
 
@@ -74,6 +76,14 @@ Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
 
 Map<String, dynamic> _$ScenarioRunErrorToJson(ScenarioRunError instance) =>
     <String, dynamic>{'error': instance.error, 'stack': ?instance.stack};
+
+Map<String, dynamic> _$ScenarioNewResultToJson(ScenarioNewResult instance) =>
+    <String, dynamic>{
+      'package': instance.package,
+      'file': instance.file,
+      'name': instance.name,
+      'next': instance.next,
+    };
 
 Map<String, dynamic> _$ScenarioRestartResultToJson(
   ScenarioRestartResult instance,

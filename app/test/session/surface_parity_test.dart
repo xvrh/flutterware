@@ -148,6 +148,34 @@ void main() {
     );
   });
 
+  group('a result that reports failure', () {
+    // The action succeeded — it ran, it answered, and the answer is the
+    // point. Only the shell's view differs, so that `fw run … && deploy`
+    // stops.
+    test('exits 1 from `fw`, and still prints the result', () async {
+      var red = await surfaces.cliRun(['run', 'fake', 'red']);
+
+      expect(red.code, 1);
+      expect(jsonDecode(red.out), {'ok': false});
+    });
+
+    test('leaves a passing result at 0', () async {
+      var plain = await surfaces.cliRun(['run', 'fake', 'plain']);
+
+      expect(plain.code, 0);
+      expect(jsonDecode(plain.out), {'ok': true});
+    });
+
+    test('is not an MCP error — the data is the answer', () async {
+      var mcp = await surfaces.mcpCall('flutterware_invoke', {
+        'plugin': 'fake',
+        'action': 'red',
+      });
+
+      expect(mcp.isError ?? false, isFalse);
+    });
+  });
+
   group('failure', () {
     test(
       'an unknown plugin is legible on both, and names what exists',
@@ -413,6 +441,16 @@ class _Surfaces {
     return out.toString();
   }
 
+  Future<({int code, String out})> cliRun(List<String> arguments) async {
+    var out = StringBuffer();
+    var code = await FwCli(
+      openSession: _open,
+      out: out,
+      err: StringBuffer(),
+    ).run(arguments);
+    return (code: code, out: out.toString());
+  }
+
   Future<Map<String, Object?>> cliJson(List<String> arguments) async =>
       (jsonDecode(await cli(arguments)) as Map).cast<String, Object?>();
 
@@ -457,9 +495,10 @@ class _Surfaces {
 
 /// A typed result, so the matrix covers the [PluginResult] branch as well as
 /// the plain-map one `query` still returns.
-class _FakeResult implements PluginResult {
+class _FakeResult implements PluginResult, ReportsFailure {
   _FakeResult({required this.ok});
 
+  @override
   final bool ok;
 
   @override
@@ -515,6 +554,12 @@ class _FakeCore extends PluginCore {
       ],
     ),
     PluginAction('plain', 'Plain', returns: _FakeResult),
+    PluginAction(
+      'red',
+      'Red',
+      returns: _FakeResult,
+      description: 'Succeeds as an action; what it ran did not pass',
+    ),
     PluginAction('explode', 'Explode', description: 'Always fails'),
     PluginAction(
       'liar',
@@ -542,6 +587,8 @@ class _FakeCore extends PluginCore {
         throw StateError('boom');
       case 'plain':
         return _FakeResult(ok: true);
+      case 'red':
+        return _FakeResult(ok: false);
       case 'liar':
         return {'ok': true};
       case 'query':

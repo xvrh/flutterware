@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutterware/plugins.dart';
 import 'package:json_annotation/json_annotation.dart';
+import 'package:path/path.dart' as p;
 
 part 'scenarios_results.g.dart';
 
@@ -31,6 +34,7 @@ class ScenarioListPackage {
     this.scenarios = const [],
     this.diagnostics = const [],
     this.error,
+    this.authoring,
   });
 
   final String path;
@@ -47,6 +51,12 @@ class ScenarioListPackage {
   /// Set when the package could not be scanned, in which case [scenarios]
   /// means nothing.
   final String? error;
+
+  /// How to write one — present only when this package has none, which is
+  /// exactly when the reader needs it and never when it would be noise. The
+  /// answer to "an agent can run scenarios but cannot find out how to write
+  /// one".
+  final String? authoring;
 
   Map<String, Object?> toJson() => _$ScenarioListPackageToJson(this);
 }
@@ -80,10 +90,48 @@ class ScenarioListEntry {
   includeIfNull: false,
   createFactory: false,
 )
-class ScenarioRunResult implements PluginResult {
+class ScenarioRunResult
+    implements PluginResult, ReportsFailure, ProducesArtifacts {
   ScenarioRunResult({required this.packages, this.axes});
 
   final List<ScenarioRunPackage> packages;
+
+  /// False when any package failed to run at all, or any scenario it ran came
+  /// back red — what makes `fw run scenarios run` exit 1.
+  @override
+  bool get ok => packages.every(
+    (p) => p.error == null && p.scenarios.every((scenario) => scenario.ok),
+  );
+
+  /// The frame just before each failure, and nothing else.
+  ///
+  /// Every step's PNG is on the wire as a path already; the reader that can
+  /// open files opens them. This is for the reader that cannot — an MCP client
+  /// with no filesystem — and for the one that can but should not have to
+  /// guess which of fifty pictures matters. A green run offers none: there is
+  /// nothing to look at.
+  @override
+  @JsonKey(includeToJson: false)
+  List<Artifact> get artifacts => [
+    for (var package in packages)
+      for (var scenario in package.scenarios)
+        if (!scenario.ok && scenario.steps.isNotEmpty)
+          if (scenario.steps.last case var step when step.format == 'png')
+            Artifact(
+              kind: Artifact.png,
+              address: Address.parse(step.address),
+              path: step.image,
+              meta: {
+                'scenario': scenario.name,
+                'file': scenario.file,
+                'step': step.index,
+                'name': ?step.name,
+                'texts': step.texts,
+                if (scenario.errors.firstOrNull case var error?)
+                  'error': error.error,
+              },
+            ),
+  ];
 
   /// The axis assignment the whole request ran under —
   /// `{device: iphone-se, language: fr}` — or null for the test defaults.
@@ -170,6 +218,7 @@ class ScenarioRunStep {
     required this.tree,
     required this.texts,
     required this.address,
+    required this.root,
     this.parent,
     this.branch,
     this.name,
@@ -197,7 +246,10 @@ class ScenarioRunStep {
 
   final List<String> tags;
 
-  /// Path to the captured image, in [format].
+  /// The captured image, in [format], **relative to the worktree root** — the
+  /// same convention the catalog's artifacts follow, so the value survives
+  /// being read on another machine and an agent whose tools are scoped to the
+  /// repo can open it. [imageFile] is the local absolute path.
   final String image;
 
   /// `png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes. Raw is
@@ -209,8 +261,23 @@ class ScenarioRunStep {
   final int width;
   final int height;
 
-  /// Path to the widget-tree JSON captured at the same moment.
+  /// The widget-tree JSON captured at the same moment, relative like [image].
   final String tree;
+
+  /// The worktree the two paths above are relative to.
+  ///
+  /// Not on the wire: a reader on another machine has its own checkout, and a
+  /// path naming this one is the thing being avoided. It is here so the panel,
+  /// which is in-process and does need to open the files, does not have to be
+  /// handed the root separately at four call sites.
+  @JsonKey(includeToJson: false)
+  final String root;
+
+  @JsonKey(includeToJson: false)
+  File get imageFile => File(p.join(root, image));
+
+  @JsonKey(includeToJson: false)
+  File get treeFile => File(p.join(root, tree));
 
   /// The visible texts — the projection an agent reads next to the pixels.
   final List<String> texts;
@@ -239,6 +306,36 @@ class ScenarioRunError {
   final String? stack;
 
   Map<String, Object?> toJson() => _$ScenarioRunErrorToJson(this);
+}
+
+/// `new` — a runnable scenario file written where the package keeps them.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioNewResult implements PluginResult {
+  ScenarioNewResult({
+    required this.package,
+    required this.file,
+    required this.name,
+    required this.next,
+  });
+
+  final String package;
+
+  /// The written file, package-relative — the same spelling `list` reports and
+  /// `run --file=` takes, so the next call needs no translation.
+  final String file;
+
+  final String name;
+
+  /// The command that runs what was just written. A scaffold that does not say
+  /// how to run itself sends the reader back to `actions`.
+  final String next;
+
+  @override
+  Map<String, Object?> toJson() => _$ScenarioNewResultToJson(this);
 }
 
 /// `restart` — the warm harness dropped, so the next run cold-starts from
