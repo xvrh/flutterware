@@ -38,12 +38,21 @@ class FramedShot extends StatelessWidget {
     required this.step,
     required this.device,
     this.fallbackBrightness = Brightness.dark,
+    this.screenOverlay,
   });
 
   final ScenarioRunStep step;
 
   /// The device the run was framed as, or null for the bare surface.
   final CatalogDevice? device;
+
+  /// Drawn over the screen, inside the frame — **in the screen's own logical
+  /// coordinates**, which are exactly the guest coordinates a capture and its
+  /// tree were taken in. The inspector's highlight and picker live here, and
+  /// because the box is the guest's logical size they need no transform: they
+  /// inherit the `FittedBox` and the device body above, like the catalog's
+  /// overlay does.
+  final Widget? screenOverlay;
 
   /// Icon brightness when the app declared no `SystemUiOverlayStyle` —
   /// derived from the brightness axis by the caller, so a dark-mode run
@@ -88,7 +97,7 @@ class FramedShot extends StatelessWidget {
         child: SizedBox(
           width: step.width.toDouble(),
           height: step.height.toDouble(),
-          child: image,
+          child: Stack(fit: StackFit.expand, children: [image, ?screenOverlay]),
         ),
       );
     }
@@ -104,6 +113,7 @@ class FramedShot extends StatelessWidget {
             statusBrightness: _brightness(step.statusBrightness),
             navBrightness: _brightness(step.navBrightness),
           ),
+          ?screenOverlay,
         ],
       ),
     );

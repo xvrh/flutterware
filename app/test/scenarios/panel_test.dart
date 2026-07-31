@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -96,10 +97,27 @@ void main() {
     expect(find.text('iPhone SE'), findsOneWidget);
     expect(find.text('Dark'), findsOneWidget);
 
-    // Opening a step is an address write that pushes the detail page.
+    // Opening a step is an address write that pushes the detail page — with
+    // the inspect dock under the shot, open on Elements: the step's tree,
+    // read from the file the fake wrote.
     await tester.tap(find.text('0 · shot'), warnIfMissed: false);
     await tester.pump();
     expect(address.value.segments.last, '0');
+    expect(find.text('Elements'), findsOneWidget);
+    expect(find.text('ShotRoot'), findsOneWidget);
+    expect(find.text('ChildBox'), findsOneWidget);
+    expect(find.text('VISIBLE TEXTS'), findsNothing);
+
+    // Selecting a row is an address write; the detail pane answers.
+    expect(find.text('Select a widget'), findsOneWidget);
+    await tester.tap(find.text('ChildBox'));
+    await tester.pump();
+    expect(address.value.axes['node'], '0');
+    expect(find.text('Select a widget'), findsNothing);
+
+    // The texts moved into the dock, one tab over.
+    await tester.tap(find.text('Texts'));
+    await tester.pump();
     expect(find.text('VISIBLE TEXTS'), findsOneWidget);
     expect(find.text('hello', findRichText: true), findsOneWidget);
 
@@ -194,6 +212,26 @@ class _FakeRunner extends ScenarioRunner {
     Map<String, Object?> step(int index, String name, String text) {
       var png = '$outDir/$index-$name.png';
       File(png).writeAsBytesSync(_transparentPng);
+      // A real tree file, as the harness writes one — the step page's
+      // Elements tab reads it from disk.
+      var tree = '$outDir/$index-$name.tree.json';
+      File(tree).writeAsStringSync(
+        jsonEncode({
+          'root': {
+            'id': '',
+            'type': 'ShotRoot',
+            'local': true,
+            'children': [
+              {
+                'id': '0',
+                'type': 'ChildBox',
+                'local': true,
+                'layout': {'x': 0, 'y': 0, 'width': 1, 'height': 1},
+              },
+            ],
+          },
+        }),
+      );
       return {
         'index': index,
         if (index > 0) 'parent': index - 1,
@@ -203,7 +241,7 @@ class _FakeRunner extends ScenarioRunner {
         'format': 'png',
         'width': 1,
         'height': 1,
-        'tree': '$outDir/$index-$name.tree.json',
+        'tree': tree,
         'texts': [text],
       };
     }

@@ -133,6 +133,11 @@ class ScenariosCore extends PluginCore {
     return null;
   }
 
+  /// The absolute root of [path]'s package — what the step page shortens a
+  /// node's source paths against.
+  String packageRootFor(String path) =>
+      host.workspace.packageFor(path).directory.path;
+
   /// Whether [path] has been scanned (or is scanning) — the laziness rule,
   /// made observable.
   bool isRealised(String path) => _scans.containsKey(path);

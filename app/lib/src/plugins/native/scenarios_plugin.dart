@@ -433,6 +433,9 @@ class _ScenarioPageState extends State<_ScenarioPage> {
           onBack: _closeStep,
           onOpenStep: _openStep,
           statusFallback: statusFallback,
+          // Source paths in the node detail shorten against the package —
+          // the same string the scenario file itself is addressed by.
+          displayRoot: widget.core.packageRootFor(widget.package),
         );
       }
     }
