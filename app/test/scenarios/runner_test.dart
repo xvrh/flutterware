@@ -211,6 +211,18 @@ void main() {
         );
         expect(_pngSize(_lastPng(sharp)), (750, 1334));
 
+        // Native resolution is resolved **in the guest**, at capture time —
+        // the device may have come from a folder profile the host never saw,
+        // so a ratio computed here would be a guess.
+        var native = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/axes_probe_test.dart',
+          scenario: 'Probe',
+          axes: const ScenarioAxes(device: 'iphone-16'),
+          captureNative: true,
+        );
+        expect(_pngSize(_lastPng(native)), (393 * 3, 852 * 3));
+
         // Raw skips PNG encoding — ~80% of a capture's cost — and writes
         // bare rgba8888, width×height×4, exactly as the step reports.
         var raw = await runner.run(
@@ -298,6 +310,286 @@ void main() {
         grouped.deleteSync();
       }
 
+      // `setUpAll` and `tearDownAll`: stored on the group rather than among
+      // its entries, so a walk over entries alone never ran them — the one
+      // way a file could pass under `flutter test` and capture the wrong
+      // screens here. The fixture writes what its hooks did into the app, so
+      // the assertion is what the scenario actually saw.
+      var hooks = File(
+        p.join(packageRoot, 'test', 'scenarios', 'hooks_test.dart'),
+      );
+      hooks.writeAsStringSync(_hooksSource.replaceAll('OUT_DIR', outDir));
+      try {
+        await runner.refresh();
+        var whole = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/hooks_test.dart',
+        );
+        var ran = (whole['scenarios']! as List).cast<Map<String, dynamic>>();
+        expect(ran.map((s) => s['name']), ['Seeded', 'Also seeded']);
+        expect(ran.every((s) => s['ok'] == true), isTrue, reason: '$ran');
+        // Once for the group, not once per scenario, and the tear-down ran
+        // after the last one.
+        expect(
+          [
+            for (var s in ran)
+              ((s['steps']! as List).last as Map)['texts']! as List,
+          ],
+          [
+            ['setUpAll:1'],
+            ['setUpAll:1'],
+          ],
+        );
+        expect(
+          File(p.join(outDir, 'teardown.txt')).readAsStringSync(),
+          'torn down',
+        );
+
+        // One scenario asked for by name still gets the group's fixtures.
+        // `setUpAll:2`, not `1`: the fixture is built once per *run request*,
+        // and the counter lives in a guest that outlives the request — which
+        // is the scope this harness owes a user who edits a fixture and hits
+        // Run again.
+        File(p.join(outDir, 'teardown.txt')).deleteSync();
+        var one = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/hooks_test.dart',
+          scenario: 'Also seeded',
+        );
+        expect(_scratchTexts(one), ['setUpAll:2']);
+        expect(File(p.join(outDir, 'teardown.txt')).existsSync(), isTrue);
+      } finally {
+        hooks.deleteSync();
+      }
+
+      // A `setUpAll` that throws: the scenarios under it do not run against
+      // half-built state, and each one that would have run says why.
+      var brokenHook = File(
+        p.join(packageRoot, 'test', 'scenarios', 'broken_hook_test.dart'),
+      );
+      brokenHook.writeAsStringSync(_brokenHookSource);
+      try {
+        await runner.refresh();
+        var report = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/broken_hook_test.dart',
+        );
+        var outcome =
+            ((report['scenarios']! as List).single) as Map<String, dynamic>;
+        expect(outcome['name'], 'never runs');
+        expect(outcome['ok'], isFalse);
+        expect(outcome['steps'], isEmpty);
+        expect('${outcome['errors']}', contains('the fixture is broken'));
+      } finally {
+        brokenHook.deleteSync();
+      }
+
+      // A folder with its own `flutter_test_config.dart`: the harness runs it
+      // — the same file `flutter test` would run — and reports what it says
+      // the folder is for. Executed, never parsed, so a profile imported from
+      // somewhere else reads exactly as well as one written in place.
+      var folder = Directory(
+        p.join(packageRoot, 'test', 'scenarios', 'profiled'),
+      )..createSync(recursive: true);
+      File(
+        p.join(folder.path, 'flutter_test_config.dart'),
+      ).writeAsStringSync(_folderConfigSource);
+      File(
+        p.join(folder.path, 'profiled_test.dart'),
+      ).writeAsStringSync(_profiledSource);
+      // The same scenario outside the folder, to prove the framing is worked
+      // out per file rather than per request.
+      var unprofiled = File(
+        p.join(packageRoot, 'test', 'scenarios', 'unprofiled_test.dart'),
+      )..writeAsStringSync(_profiledSource);
+      try {
+        await runner.refresh();
+        var listed = await runner.list();
+        var profiled = listed.firstWhere((s) => s.name == 'Profiled');
+        expect(profiled.profile, 'phones');
+        expect(profiled.devices, ['iphone-se', 'android-tall']);
+        expect(profiled.languages, ['fr', 'en']);
+        // A scenario outside that folder is not governed by it.
+        expect(listed.firstWhere((s) => s.name == 'Counter').profile, isNull);
+
+        // The run itself is the runner's, not the config's: one pass, at the
+        // axes the request named rather than the profile's head.
+        var report = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/profiled/profiled_test.dart',
+          scenario: 'Profiled',
+          axes: const ScenarioAxes(device: 'iphone-se'),
+        );
+        var outcome = (report['scenarios']! as List).single as Map;
+        expect(outcome['ok'], isTrue, reason: '${outcome['errors']}');
+        expect(outcome['steps']! as List, hasLength(1));
+        expect(_scratchTexts(report), ['375.0x667.0']);
+        expect(outcome['device'], 'iphone-se');
+
+        // And a request that names *no* device leaves the folder to answer:
+        // the profile's head, not the fallback the host would otherwise
+        // apply. The two are different sizes, which is the whole assertion.
+        var byFolder = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/profiled/profiled_test.dart',
+          scenario: 'Profiled',
+          unspecifiedDevice: 'iphone-13',
+        );
+        expect(_scratchTexts(byFolder), ['375.0x667.0']);
+        expect(
+          ((byFolder['scenarios']! as List).single as Map)['device'],
+          'iphone-se',
+        );
+
+        // A scenario the folder does not govern takes the fallback instead —
+        // one run, two framings, worked out per file.
+        var elsewhere = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/unprofiled_test.dart',
+          scenario: 'Profiled',
+          unspecifiedDevice: 'iphone-13',
+        );
+        expect(_scratchTexts(elsewhere), ['390.0x844.0']);
+        expect(
+          ((elsewhere['scenarios']! as List).single as Map)['device'],
+          'iphone-13',
+        );
+      } finally {
+        folder.deleteSync(recursive: true);
+        unprofiled.deleteSync();
+      }
+
+      // An ordinary `testWidgets` living in the scenario folder: it produces
+      // no steps and cannot be opened in the panel, so `list` never showed it
+      // — and `run` used to execute it anyway. Both now agree it is not a
+      // scenario.
+      var strayTest = File(
+        p.join(packageRoot, 'test', 'scenarios', 'stray_test.dart'),
+      )..writeAsStringSync(_straySource);
+      try {
+        await runner.refresh();
+        var listed = await runner.list();
+        expect([for (var s in listed) s.name], contains('A real scenario'));
+        expect([for (var s in listed) s.name], isNot(contains('Plain widget')));
+
+        var report = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/stray_test.dart',
+        );
+        expect(
+          [
+            for (var s
+                in (report['scenarios']! as List).cast<Map<String, dynamic>>())
+              s['name'],
+          ],
+          ['A real scenario'],
+        );
+      } finally {
+        strayTest.deleteSync();
+      }
+
+      // Tags: declared on the scenario, reported by the listing, and the one
+      // thing `run --tag` filters on. The syntactic scan cannot see them —
+      // it never evaluates an argument — so the live listing is the only
+      // place they exist.
+      var tagged = File(
+        p.join(packageRoot, 'test', 'scenarios', 'tagged_test.dart'),
+      )..writeAsStringSync(_taggedSource);
+      try {
+        await runner.refresh();
+        var listed = await runner.list();
+        expect(listed.firstWhere((s) => s.name == 'Smoke tagged').tags, [
+          'smoke',
+        ]);
+        expect(listed.firstWhere((s) => s.name == 'Untagged').tags, isEmpty);
+
+        var filtered = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/tagged_test.dart',
+          tag: 'smoke',
+        );
+        expect(
+          [
+            for (var s
+                in (filtered['scenarios']! as List)
+                    .cast<Map<String, dynamic>>())
+              s['name'],
+          ],
+          ['Smoke tagged'],
+        );
+      } finally {
+        tagged.deleteSync();
+      }
+
+      // The verbs past tap and enterText, through the real substrate: a list
+      // walked until an off-screen row is on screen, a scoped icon tapped
+      // inside that row, and a clock moved past a timer no settle would wait
+      // for.
+      var verbs = File(
+        p.join(packageRoot, 'test', 'scenarios', 'verbs_test.dart'),
+      );
+      verbs.writeAsStringSync(_verbsSource);
+      try {
+        await runner.refresh();
+        var outcome =
+            (await runner.run(
+                  outDir: outDir,
+                  file: 'test/scenarios/verbs_test.dart',
+                  scenario: 'Verbs',
+                ))['scenarios']!
+                as List;
+        var run = outcome.single as Map;
+        expect(run['ok'], isTrue, reason: '${run['errors']}');
+        var last = (run['steps']! as List).last as Map;
+        expect((last['texts']! as List).cast<String>(), contains('starred 30'));
+      } finally {
+        verbs.deleteSync();
+      }
+
+      // A screen that never stops animating, and a scenario that breaks in a
+      // split branch — the two things a run says about itself when it is not
+      // simply fine. Both travel as step fields, so the panel and an agent
+      // read them the same way.
+      var unhappy = File(
+        p.join(packageRoot, 'test', 'scenarios', 'unhappy_test.dart'),
+      );
+      unhappy.writeAsStringSync(_unhappySource);
+      try {
+        await runner.refresh();
+        var spinning =
+            (await runner.run(
+                  outDir: outDir,
+                  file: 'test/scenarios/unhappy_test.dart',
+                  scenario: 'Spinning',
+                ))['scenarios']!
+                as List;
+        var outcome = spinning.single as Map;
+        // Never settling is not a failure: the run passes, and the steps say
+        // the app was still animating.
+        expect(outcome['ok'], isTrue, reason: '${outcome['errors']}');
+        var steps = (outcome['steps']! as List).cast<Map<String, dynamic>>();
+        expect(steps.map((s) => s['settled']), everyElement(isFalse));
+
+        var broken =
+            (await runner.run(
+                  outDir: outDir,
+                  file: 'test/scenarios/unhappy_test.dart',
+                  scenario: 'Broken',
+                ))['scenarios']!
+                as List;
+        var failed = broken.single as Map;
+        expect(failed['ok'], isFalse);
+        expect('${failed['errors']}', contains('in split branch "by card"'));
+        var last = (failed['steps']! as List).last as Map;
+        expect(last['failure'], contains('in split branch "by card"'));
+        expect(last['failure'], contains('nothing matches "Pay now"'));
+        // The failure has a picture, and it is of the screen it broke on.
+        expect(File(last['image']! as String).existsSync(), isTrue);
+        expect((last['texts']! as List).cast<String>(), contains('Checkout'));
+      } finally {
+        unhappy.deleteSync();
+      }
+
       // A guest that dies mid-session is noticed: the next run respawns one
       // instead of talking to a service that is gone. (Killing it from here
       // is the same thing the OS does when a scenario blows the isolate up.)
@@ -375,11 +667,28 @@ void main() {
       "import '../../test/scenarios/a_test.dart' as s0;\n"
       "import '../../test/scenarios/b_test.dart' as s1;\n"
       '\n'
-      'void main() => harness.runHarness({\n'
-      "  'test/scenarios/a_test.dart': s0.main,\n"
-      "  'test/scenarios/b_test.dart': s1.main,\n"
-      '});\n',
+      'void main() => harness.runHarness(\n'
+      '  {\n'
+      "    'test/scenarios/a_test.dart': s0.main,\n"
+      "    'test/scenarios/b_test.dart': s1.main,\n"
+      '  },\n'
+      ');\n',
     );
+  });
+
+  test('a folder config is imported and keyed by the folder it governs', () {
+    var source = generateHarnessEntrypoint(
+      ['test/scenarios/mobile/a_test.dart'],
+      configs: ['test/scenarios/mobile/flutter_test_config.dart'],
+    );
+
+    expect(
+      source,
+      contains(
+        "import '../../test/scenarios/mobile/flutter_test_config.dart' as c0;",
+      ),
+    );
+    expect(source, contains("    'test/scenarios/mobile': c0.testExecutable,"));
   });
 }
 
@@ -478,6 +787,221 @@ void main() {
       },
     });
     await s.screen('tail');
+  });
+}
+''';
+
+/// A group with both `all` hooks, counting its own runs so the scenarios can
+/// report whether the fixture was built once or once each.
+const _hooksSource = r'''
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+var setUps = 0;
+
+void main() {
+  setUpAll(() => setUps++);
+  tearDownAll(() {
+    // Written where the test can find it: the harness outlives the run, so a
+    // tear-down that never ran would otherwise leave no trace either way.
+    File('OUT_DIR/teardown.txt').writeAsStringSync('torn down');
+  });
+
+  scenario('Seeded', (s) async {
+    await s.pumpWidget(
+      MaterialApp(home: Scaffold(body: Text('setUpAll:$setUps'))),
+    );
+  });
+
+  scenario('Also seeded', (s) async {
+    await s.pumpWidget(
+      MaterialApp(home: Scaffold(body: Text('setUpAll:$setUps'))),
+    );
+  });
+}
+''';
+
+/// A `setUpAll` that throws — the fixture every scenario under it needed.
+const _brokenHookSource = r'''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  setUpAll(() => throw StateError('the fixture is broken'));
+
+  scenario('never runs', (s) async {
+    await s.pumpWidget(
+      const MaterialApp(home: Scaffold(body: Text('unreachable'))),
+    );
+  });
+}
+''';
+
+/// A folder that declares what it is for. The profile is imported rather than
+/// written inline, which is the case a syntactic scan could not have read.
+const _folderConfigSource = '''
+import 'dart:async';
+
+import 'package:flutterware/flutter_test.dart';
+
+const phones = ScenarioProfile(
+  'phones',
+  devices: [Devices.iphoneSe, Devices.androidTall],
+  languages: ['fr', 'en'],
+);
+
+Future<void> testExecutable(FutureOr<void> Function() testMain) =>
+    runScenarios(testMain, profile: phones);
+''';
+
+const _profiledSource = r'''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Profiled', (s) async {
+    await s.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            var size = MediaQuery.sizeOf(context);
+            return Scaffold(body: Text('${size.width}x${size.height}'));
+          },
+        ),
+      ),
+    );
+  });
+}
+''';
+
+/// A scenario and a plain `testWidgets` in the same file — what `list` and
+/// `run` used to disagree about.
+const _straySource = r'''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('A real scenario', (s) async {
+    await s.pumpWidget(const MaterialApp(home: Scaffold(body: Text('real'))));
+  });
+
+  testWidgets('Plain widget', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: Text('plain'))),
+    );
+    expect(find.text('plain'), findsOneWidget);
+  });
+}
+''';
+
+/// Two scenarios, one tagged — the fixture for `--tag` and for what a
+/// listing reports about it.
+const _taggedSource = r'''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Smoke tagged', tags: ['smoke'], (s) async {
+    await s.pumpWidget(
+      const MaterialApp(home: Scaffold(body: Text('tagged'))),
+    );
+  });
+
+  scenario('Untagged', (s) async {
+    await s.pumpWidget(
+      const MaterialApp(home: Scaffold(body: Text('untagged'))),
+    );
+  });
+}
+''';
+
+/// The verbs past tap and enterText: a list scrolled to an off-screen row, a
+/// target scoped to that row, and a timer waited out.
+const _verbsSource = r'''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Verbs', (s) async {
+    await s.pumpWidget(const _App(), shot: Shot.skip);
+    await s.scrollTo('Item 30');
+    await s.tap(const Target.within(ValueKey('row-30'), Icons.star));
+    await s.wait(const Duration(seconds: 2));
+    await s.screen('done');
+  });
+}
+
+class _App extends StatefulWidget {
+  const _App();
+  @override
+  State<_App> createState() => _AppState();
+}
+
+class _AppState extends State<_App> {
+  var note = 'none';
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: Scaffold(
+      // The note above the list, not in it: the last step's texts are what
+      // the assertion reads, and a widget scrolled off the bottom is not
+      // among them.
+      body: Column(
+        children: [
+          Text(note),
+          Expanded(
+            child: ListView(
+              children: [
+                for (var i = 0; i < 40; i++)
+                  SizedBox(
+                    key: ValueKey('row-$i'),
+                    height: 80,
+                    child: Row(
+                      children: [
+                        Text('Item $i'),
+                        IconButton(
+                          icon: const Icon(Icons.star),
+                          onPressed: () => setState(() => note = 'starred $i'),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+''';
+
+/// The two unhappy shapes: a screen holding a spinner, where the settle
+const _unhappySource = r'''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Spinning', (s) async {
+    await s.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: Column(children: [Text('Loading'), CircularProgressIndicator()]),
+      ),
+    ));
+    await s.screen('still going');
+  });
+
+  scenario('Broken', (s) async {
+    await s.pumpWidget(
+      const MaterialApp(home: Scaffold(body: Text('Checkout'))),
+    );
+    await s.split({
+      'by card': () async {
+        await s.tap('Pay now');
+      },
+    });
   });
 }
 ''';

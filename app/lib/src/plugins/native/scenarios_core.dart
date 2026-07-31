@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -7,7 +8,6 @@ import 'package:flutterware/plugins.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
-import '../../catalog/devices.dart';
 import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
@@ -28,6 +28,7 @@ class ScenarioPanelRun {
   ScenarioPanelRun({
     required this.running,
     required this.axes,
+    this.device,
     this.steps = const [],
     this.outcome,
     this.error,
@@ -36,10 +37,16 @@ class ScenarioPanelRun {
 
   final bool running;
 
-  /// The axis assignment of the latest *attempt*. Recorded on failure too,
-  /// so the page can see "these axes were tried" and not retry them in a
-  /// loop.
+  /// The axis assignment of the latest *attempt*, **exactly as asked**.
+  /// Recorded on failure too, so the page can see "these axes were tried" and
+  /// not retry them in a loop — which is also why an unspecified device is
+  /// not patched in here once the run answers it. That answer is [device].
   final ScenarioAxes axes;
+
+  /// The device the run actually used — the folder profile's, where [axes]
+  /// named none. What the page frames its pictures with, and what the device
+  /// chip reports back.
+  final String? device;
 
   /// The run's steps as the page draws them: **growing while the run
   /// executes** — each one announced by the harness the moment its artifacts
@@ -76,6 +83,11 @@ class ScenariosCore extends PluginCore {
   final _scans = <String, Future<void>>{};
   final _results = <String, ScenarioScanResult>{};
   final _errors = <String, Object>{};
+
+  /// The live listing per package — in flight, landed, and failed.
+  final _listings = <String, Future<void>>{};
+  final _listed = <String, List<ScenarioListing>>{};
+  final _listingErrors = <String, Object>{};
 
   /// One warm runner per package, created by the first `run` and kept — a
   /// second run reuses the compiled harness and the live tester.
@@ -171,6 +183,55 @@ class ScenariosCore extends PluginCore {
   /// A scan result is cheap and kept — releasing it would only buy a rescan.
   void untrack(String path) {}
 
+  /// What the **live harness** says a package has: profiles, the devices and
+  /// languages they offer, and each scenario's tags. None of it is visible to
+  /// the syntactic scan — a profile is Dart in a `flutter_test_config.dart`,
+  /// and tags are arguments the scanner never evaluates.
+  ///
+  /// Started on demand like everything else here, and by the one caller that
+  /// is about to pay for a compiled harness anyway: opening a scenario runs
+  /// it. Both calls queue on the runner's single turn, so listing first costs
+  /// the ordering and nothing else.
+  void trackListings(String path) {
+    if (_listings.containsKey(path)) return;
+    _listings[path] = _runnerFor(path)
+        .list()
+        .then<void>((listed) => _listed[path] = listed)
+        .catchError((Object error) => _listingErrors[path] = error)
+        .whenComplete(notifyChanged);
+  }
+
+  /// The live listing of [path], or null while nothing has asked or the ask
+  /// has not landed. A failed listing reads as null too — the run that
+  /// follows reports the same failure with the room to explain it.
+  List<ScenarioListing>? listingsFor(String path) => _listed[path];
+
+  /// The listing for one scenario, by the names the panel addresses it with.
+  ScenarioListing? listingFor(
+    String path, {
+    required String file,
+    required String scenario,
+  }) => _listed[path]?.firstWhereOrNull(
+    (l) => l.file == file && l.name == scenario,
+  );
+
+  /// The devices the profile governing [file] offers — the picker's pool, in
+  /// the profile's own order, empty where the folder declares none.
+  List<String> offeredDevicesFor(String path, String file) =>
+      _listed[path]?.firstWhereOrNull((l) => l.file == file)?.devices ??
+      const [];
+
+  /// The languages to offer for [file]: the profile's, and the package's
+  /// `tool/flutterware.dart` declaration where no profile speaks.
+  List<String> offeredLanguagesFor(String path, String file) {
+    var profiled = _listed[path]
+        ?.firstWhereOrNull((l) => l.file == file)
+        ?.languages;
+    return (profiled == null || profiled.isEmpty)
+        ? languagesFor(path)
+        : profiled;
+  }
+
   /// The panel's latest run of one scenario, or null when it has never run.
   ScenarioPanelRun? panelRunFor(
     String package, {
@@ -214,16 +275,21 @@ class ScenariosCore extends PluginCore {
       var key = (package, file, scenario);
       var state = _panelRuns[key];
       if (state == null || !state.running) return;
+      // Every step says what it is running as, so a request that named no
+      // device frames its first picture correctly rather than snapping into a
+      // phone when the run ends.
+      var device = event['device'] as String? ?? state.axes.device;
       var step = _stepFrom(
         (event['step']! as Map).cast<String, dynamic>(),
         package,
         file: file,
         scenario: scenario,
-        axes: state.axes,
+        axes: state.axes.copyWith(device: device),
       );
       _panelRuns[key] = ScenarioPanelRun(
         running: true,
         axes: state.axes,
+        device: device,
         steps: [...state.steps, step],
       );
       notifyChanged();
@@ -252,16 +318,22 @@ class ScenariosCore extends PluginCore {
         file: file,
         scenario: scenario,
         axes: axes,
+        unspecifiedDevice: defaultScenarioDeviceId,
         captureScale: captureScaleFor(package),
         captureRaw: true,
       );
-      var outcome = _describeRun(package, outDir, report, axes: axes).scenarios
+      var described = _describeRun(package, outDir, report, axes: axes);
+      var outcome = described.scenarios
           .where((s) => s.file == file && s.name == scenario)
           .firstOrNull;
+      // The run says what it ran as, which the request may have left to the
+      // folder's profile — and the page frames its pictures from this.
+      var device = outcome?.device ?? axes.device;
       if (outcome == null) {
         _panelRuns[key] = ScenarioPanelRun(
           running: false,
           axes: axes,
+          device: device,
           steps: _panelRuns[key]?.steps ?? const [],
           output: outDir,
           error:
@@ -273,6 +345,7 @@ class ScenariosCore extends PluginCore {
       _panelRuns[key] = ScenarioPanelRun(
         running: false,
         axes: axes,
+        device: device,
         steps: outcome.steps,
         outcome: outcome,
         output: outDir,
@@ -285,6 +358,7 @@ class ScenariosCore extends PluginCore {
       _panelRuns[key] = ScenarioPanelRun(
         running: false,
         axes: axes,
+        device: _panelRuns[key]?.device,
         steps: _panelRuns[key]?.steps ?? const [],
         output: outDir,
         error: '$error',
@@ -306,7 +380,20 @@ class ScenariosCore extends PluginCore {
       // The run compiled the suite as it is on disk, which is newer truth
       // than the list pane's scan — catch the pane up.
       _rescan(package);
+      _relist(package);
     }
+  }
+
+  /// Replaces the cached listing after a run, so an edited
+  /// `flutter_test_config.dart` or a re-tagged scenario shows up without a
+  /// restart. Only for a package somebody already asked about.
+  void _relist(String path) {
+    if (!_listings.containsKey(path)) return;
+    _listings[path] = _runnerFor(path)
+        .list()
+        .then<void>((listed) => _listed[path] = listed)
+        .catchError((Object error) => _listingErrors[path] = error)
+        .whenComplete(notifyChanged);
   }
 
   /// Replaces the cached scan — what [track] deliberately never does.
@@ -373,7 +460,7 @@ class ScenariosCore extends PluginCore {
               'flutter_tester, capturing a PNG, a widget tree and the visible '
               'texts per step. The paths in the result point at the '
               'artifacts; a failing scenario reports its error with the frame '
-              'captured just before it.',
+              'captured **at** the failure, whatever the capture policy.',
           parameters: [
             ActionParameter(
               'package',
@@ -423,12 +510,14 @@ class ScenariosCore extends PluginCore {
               description:
                   'Run as a device: its screen, its pixel ratio, its safe '
                   'areas and its platform, so the app reads the phone from '
-                  '`MediaQuery`. Omitted means the default form factor '
-                  '($defaultScenarioDeviceId); `fit` means the bare 800×600 '
-                  'test surface. The same vocabulary the UI catalog frames '
-                  'with.',
+                  '`MediaQuery`. Omitted lets each scenario run as its own '
+                  'folder says — the first device of the profile its '
+                  '`flutter_test_config.dart` declares, or '
+                  '$defaultScenarioDeviceId where a folder declares none. '
+                  '`fit` means the bare 800×600 test surface. The same '
+                  'vocabulary the UI catalog frames with.',
               options: [
-                for (var device in catalogDevices)
+                for (var device in Devices.all)
                   ActionOption(device.id, label: device.label),
                 ActionOption(fitDeviceId, label: 'Bare test surface'),
               ],
@@ -441,6 +530,38 @@ class ScenariosCore extends PluginCore {
               description:
                   'A locale tag — `fr`, `fr-CA` — applied as the platform '
                   'locale for the whole run',
+            ),
+            const ActionParameter(
+              'devices',
+              'Devices',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'A comma-separated matrix — `iphone-se,android-tall`. Runs '
+                  'everything once per device, each into its own '
+                  '`<output>/<device>-<language>/` directory with an '
+                  '`index.json` beside them. The same plural vocabulary as '
+                  '`flutter test --dart-define=fw.devices=`. Overrides '
+                  '`device`.',
+            ),
+            const ActionParameter(
+              'languages',
+              'Languages',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'The other half of the matrix — `en,fr,de`. Crossed with '
+                  '`devices`, and overrides `language`.',
+            ),
+            const ActionParameter(
+              'tag',
+              'Tag',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Run only scenarios carrying this tag — the same tag '
+                  '`scenario(tags: [...])` declares and `flutter test --tags` '
+                  'filters on',
             ),
             const ActionParameter(
               'text-scale',
@@ -498,6 +619,20 @@ class ScenariosCore extends PluginCore {
                   'sees.',
             ),
             const ActionParameter(
+              'clock',
+              'Clock origin',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'An ISO-8601 timestamp `clock.now()` starts at — '
+                  '`2026-01-01T09:00:00Z`. A scenario clock already '
+                  'advances deterministically under FakeAsync, but it starts '
+                  'at the wall time of the run, so any screen showing a date '
+                  'differs run to run. Pinning it is what makes two runs '
+                  'comparable. Reaches code that reads `package:clock`; a '
+                  'direct `DateTime.now()` cannot be intercepted by anything.',
+            ),
+            const ActionParameter(
               'format',
               'Image format',
               kind: ActionParameterKind.choice,
@@ -553,6 +688,78 @@ class ScenariosCore extends PluginCore {
                   'Package-relative path to write. Defaults to a snake_cased '
                   "`_test.dart` from the name, under the package's scenario "
                   'directory. Never overwrites.',
+            ),
+          ],
+        ),
+        PluginAction(
+          'shots',
+          'Store screenshots',
+          returns: ScenarioShotsResult,
+          description:
+              'The store/documentation lane: runs the scenarios and keeps '
+              'only their **named** shots, at the pixel ratio each device '
+              'really has, '
+              'into `<output>/<language>/<device>/NN-name.png`. Everything a '
+              '`run` leaves behind — the automatic steps, the widget trees — '
+              'is dropped. A separate action because every default differs; '
+              '`run` stays the debugging lane.',
+          parameters: [
+            ActionParameter(
+              'package',
+              'Package',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'Which declared package; all of them when omitted',
+              options: [
+                for (var path in packages)
+                  ActionOption(path, label: path == '.' ? 'root' : path),
+              ],
+            ),
+            const ActionParameter(
+              'output',
+              'Output directory',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Where the tree is written; '
+                  '`build/flutterware/screenshots` '
+                  'under the package when omitted. Emptied first, so what is '
+                  'there afterwards is exactly this run.',
+            ),
+            const ActionParameter(
+              'devices',
+              'Devices',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'A comma-separated list — one directory per device. Omitted '
+                  "runs each scenario on its folder profile's first device.",
+            ),
+            const ActionParameter(
+              'languages',
+              'Languages',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'A comma-separated list — one directory per language, '
+                  'crossed with `devices`',
+            ),
+            const ActionParameter(
+              'tag',
+              'Shot tag',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Keep only shots carrying this tag — '
+                  "`Shot('Home', tags: ['store'])`. Omitted keeps every named "
+                  'shot, which is what a project that tags nothing wants.',
+            ),
+            const ActionParameter(
+              'file',
+              'File',
+              kind: ActionParameterKind.string,
+              required: false,
+              description: 'Only this scenario file, package-relative',
             ),
           ],
         ),
@@ -636,7 +843,7 @@ class ScenariosCore extends PluginCore {
     }
 
     return ScenarioAxes(
-      device: resolveScenarioDevice(device as String?),
+      device: device as String?,
       language: language as String?,
       textScale: textScale,
       brightness: brightness as String?,
@@ -709,10 +916,147 @@ class ScenariosCore extends PluginCore {
       'list' => _list(arguments),
       'run' => _run(arguments),
       'new' => _new(arguments),
+      'shots' => _shots(arguments),
       'restart' => _restart(arguments),
       _ => super.invoke(actionId, arguments: arguments),
     };
   }
+
+  /// Runs the scenarios and keeps only what a store listing or a manual can
+  /// use: the named shots, at the device's own resolution, in a tree laid out
+  /// by language and device.
+  ///
+  /// The run itself goes to a scratch directory under the output and is
+  /// deleted afterwards — a store run should leave the images and nothing
+  /// else, and copying out of a live run directory would leave both.
+  Future<ScenarioShotsResult> _shots(Map<String, Object?> arguments) async {
+    var paths = _requested(arguments);
+    var file = arguments['file'] as String?;
+    var tag = arguments['tag'] as String?;
+    var devices = _axisList(arguments['devices'], 'devices');
+    for (var id in devices) {
+      if (!isDeviceId(id)) {
+        throw ArgumentError.value(
+          id,
+          'devices',
+          'no such device. Accepted: ${deviceIds.join(', ')}',
+        );
+      }
+    }
+    var languages = _axisList(arguments['languages'], 'languages');
+    for (var locale in languages) {
+      if (!_localePattern.hasMatch(locale)) {
+        throw ArgumentError.value(
+          locale,
+          'languages',
+          'not a locale tag — expected e.g. `fr` or `fr-CA`',
+        );
+      }
+    }
+    var assignments = <ScenarioAxes>[
+      for (var device in devices.isEmpty ? [null] : devices)
+        for (var language in languages.isEmpty ? [null] : languages)
+          ScenarioAxes(device: device, language: language),
+    ];
+
+    var results = <ScenarioShotsPackage>[];
+    var total = 0;
+    for (var path in paths) {
+      var packageRoot = host.workspace.packageFor(path).directory.path;
+      var output =
+          arguments['output'] as String? ??
+          p.join(packageRoot, 'build', 'flutterware', 'screenshots');
+      var root = Directory(output);
+      // Emptied first: a store tree is a statement about the app as it is
+      // now, and yesterday's screenshot of a screen that no longer exists
+      // would ship beside today's.
+      if (root.existsSync()) root.deleteSync(recursive: true);
+      root.createSync(recursive: true);
+      var scratch = p.join(output, '.runs');
+
+      // Keyed by the directory the shot lands in — `<language>/<device>` —
+      // which is worked out per *outcome*, because with no `devices` the
+      // device comes from each scenario's own folder profile and a mixed
+      // suite writes into more than one.
+      var images = <String, List<String>>{};
+      var failures = <String, int>{};
+      var axesOf = <String, Map<String, String>>{};
+      try {
+        for (var assignment in assignments) {
+          var report = await _runnerFor(path).run(
+            outDir: p.join(scratch, axisSlug(assignment)),
+            file: file,
+            axes: assignment,
+            unspecifiedDevice: defaultScenarioDeviceId,
+            captureNative: true,
+          );
+          var described = _describeRun(
+            path,
+            p.join(scratch, axisSlug(assignment)),
+            report,
+            axes: assignment,
+          );
+          for (var outcome in described.scenarios) {
+            var language = assignment.language ?? 'default';
+            var device = outcome.device ?? fitDeviceId;
+            var key = p.join(language, device);
+            axesOf[key] = {'language': ?assignment.language, 'device': device};
+            var into = Directory(p.join(output, key))
+              ..createSync(recursive: true);
+            var kept = images.putIfAbsent(key, () => []);
+            if (!outcome.ok) {
+              failures[key] = (failures[key] ?? 0) + 1;
+            }
+            for (var step in outcome.steps) {
+              // Named shots only, and only the tag asked for: an automatic
+              // capture is a debugging artefact, not a screenshot somebody
+              // chose to show.
+              if (step.name == null) continue;
+              if (tag != null && !step.tags.contains(tag)) continue;
+              var number = (kept.length + 1).toString().padLeft(2, '0');
+              var name = '$number-${_shotSlug(step.name!)}.png';
+              // `step.image` is relative to the worktree, which is what keeps
+              // a result portable — the file itself is `imageFile`.
+              step.imageFile.copySync(p.join(into.path, name));
+              kept.add(name);
+              total++;
+            }
+          }
+        }
+        results.add(
+          ScenarioShotsPackage(
+            path: path,
+            output: output,
+            sets: [
+              for (var key in images.keys.toList()..sort())
+                ScenarioShotSet(
+                  directory: key,
+                  axes: axesOf[key] ?? const {},
+                  images: images[key]!,
+                  failed: failures[key] ?? 0,
+                ),
+            ],
+          ),
+        );
+      } catch (error) {
+        results.add(
+          ScenarioShotsPackage(path: path, output: output, error: '$error'),
+        );
+      } finally {
+        if (Directory(scratch).existsSync()) {
+          Directory(scratch).deleteSync(recursive: true);
+        }
+      }
+    }
+    return ScenarioShotsResult(packages: results, count: total);
+  }
+
+  /// `01-order-placed.png` from `Order placed` — a name that sorts, survives
+  /// every filesystem, and still reads as what it shows.
+  static String _shotSlug(String name) => name
+      .toLowerCase()
+      .replaceAll(RegExp('[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
 
   /// The package an action names, checked against the manifest.
   ///
@@ -882,6 +1226,50 @@ class ScenariosCore extends PluginCore {
     }
     var output = arguments['output'] as String?;
     var axes = _axesFrom(arguments);
+    var rawTag = arguments['tag'];
+    if (rawTag != null && rawTag is! String) {
+      throw ArgumentError.value(rawTag, 'tag', 'must be a tag name');
+    }
+    var tag = rawTag as String?;
+    // The matrix, as CI writes it — the same plural vocabulary
+    // `--dart-define=fw.devices=` uses in the bare `flutter test` lane, so a
+    // project learns one and gets both.
+    var devices = _axisList(arguments['devices'], 'devices');
+    for (var id in devices) {
+      if (!isDeviceId(id)) {
+        throw ArgumentError.value(
+          id,
+          'devices',
+          'no such device. Accepted: ${deviceIds.join(', ')}',
+        );
+      }
+    }
+    var languages = _axisList(arguments['languages'], 'languages');
+    for (var tag in languages) {
+      if (!_localePattern.hasMatch(tag)) {
+        throw ArgumentError.value(
+          tag,
+          'languages',
+          'not a locale tag — expected e.g. `fr` or `fr-CA`',
+        );
+      }
+    }
+    // One point when nothing fanned out, which is every panel run and every
+    // `fw run scenarios run` that names at most one of each.
+    var assignments = <ScenarioAxes>[
+      for (var device in devices.isEmpty ? [axes.device] : devices)
+        for (var language in languages.isEmpty ? [axes.language] : languages)
+          ScenarioAxes(
+            device: device,
+            language: language,
+            textScale: axes.textScale,
+            brightness: axes.brightness,
+            boldText: axes.boldText,
+            highContrast: axes.highContrast,
+            invertColors: axes.invertColors,
+          ),
+    ];
+    var fannedOut = assignments.length > 1;
     double? captureScale;
     if (arguments['capture-scale'] case var raw?) {
       captureScale = switch (raw) {
@@ -897,11 +1285,22 @@ class ScenariosCore extends PluginCore {
     if (format != null && format != 'png' && format != 'raw') {
       throw ArgumentError.value(format, 'format', 'accepted: png, raw');
     }
+    DateTime? clock;
+    if (arguments['clock'] case var raw?) {
+      clock = raw is String ? DateTime.tryParse(raw) : null;
+      if (clock == null) {
+        throw ArgumentError.value(
+          raw,
+          'clock',
+          'not an ISO-8601 timestamp — expected e.g. `2026-01-01T09:00:00Z`',
+        );
+      }
+    }
 
     var results = <ScenarioRunPackage>[];
     for (var path in paths) {
       var packageRoot = host.workspace.packageFor(path).directory.path;
-      var outDir =
+      var base =
           output ??
           p.join(
             packageRoot,
@@ -910,40 +1309,68 @@ class ScenariosCore extends PluginCore {
             'scenario_runs',
             '${DateTime.now().millisecondsSinceEpoch}',
           );
-      try {
-        var report = await _runnerFor(path).run(
-          outDir: outDir,
-          file: file,
-          scenario: scenario,
-          axes: axes,
-          captureScale: captureScale ?? captureScaleFor(path),
-          captureRaw: format == 'raw',
-        );
-        var described = _describeRun(path, outDir, report, axes: axes);
-        // A selector that matched nothing used to come back as an empty list
-        // and exit 0 — a typo reading as a green run. The harness compiled
-        // from disk just now, so a fresh scan is the honest list to offer
-        // back.
-        if (described.scenarios.isEmpty && (file != null || scenario != null)) {
+      for (var assignment in assignments) {
+        // One directory per point of the matrix. Without it the second
+        // assignment overwrites the first — same file, same scenario, same
+        // step names — and only the last language survives on disk.
+        var outDir = fannedOut ? p.join(base, axisSlug(assignment)) : base;
+        try {
+          var report = await _runnerFor(path).run(
+            outDir: outDir,
+            file: file,
+            scenario: scenario,
+            tag: tag,
+            axes: assignment,
+            unspecifiedDevice: defaultScenarioDeviceId,
+            captureScale: captureScale ?? captureScaleFor(path),
+            captureRaw: format == 'raw',
+            clock: clock,
+          );
+          var described = _describeRun(
+            path,
+            outDir,
+            report,
+            axes: assignment,
+            recordAxes: fannedOut,
+          );
+          // A selector that matched nothing used to come back as an empty list
+          // and exit 0 — a typo reading as a green run. The harness compiled
+          // from disk just now, so a fresh scan is the honest list to offer
+          // back.
+          if (described.scenarios.isEmpty &&
+              (file != null || scenario != null || tag != null)) {
+            results.add(
+              ScenarioRunPackage(
+                path: path,
+                output: outDir,
+                axes: fannedOut ? assignment.toParams() : null,
+                error: await _selectorMiss(
+                  path,
+                  file: file,
+                  scenario: scenario,
+                  tag: tag,
+                ),
+              ),
+            );
+          } else {
+            results.add(described);
+          }
+        } catch (error) {
           results.add(
             ScenarioRunPackage(
               path: path,
               output: outDir,
-              error: await _selectorMiss(path, file: file, scenario: scenario),
+              axes: fannedOut ? assignment.toParams() : null,
+              error: '$error',
             ),
           );
-        } else {
-          results.add(described);
         }
-      } catch (error) {
-        results.add(
-          ScenarioRunPackage(path: path, output: outDir, error: '$error'),
-        );
       }
+      if (fannedOut) _writeIndex(base, results.where((r) => r.path == path));
     }
     return ScenarioRunResult(
       packages: results,
-      axes: axes.isEmpty ? null : axes.toParams(),
+      axes: fannedOut || axes.isEmpty ? null : axes.toParams(),
     );
   }
 
@@ -954,18 +1381,26 @@ class ScenariosCore extends PluginCore {
     String path, {
     required String? file,
     required String? scenario,
+    String? tag,
   }) async {
     _rescan(path);
     await _scans[path];
     var result = _results[path];
     if (result == null) {
-      return 'Nothing matched ${_describeSelector(file, scenario)}, and the '
+      return 'Nothing matched ${_describeSelector(file, scenario, tag)}, and the '
           'scan that would say what does failed: ${_errors[path]}';
     }
     if (result.scenarios.isEmpty) {
-      return 'Nothing matched ${_describeSelector(file, scenario)} — this '
+      return 'Nothing matched ${_describeSelector(file, scenario, tag)} — this '
           'package has no scenarios at all.\n\n'
           '${scenarioAuthoringHint(directoryFor(path))}';
+    }
+    // A tag-only miss: the scan cannot say which tags exist — it never
+    // evaluates an argument — so this says what a tag is rather than guessing
+    // at a list it does not have.
+    if (file == null && tag != null) {
+      return 'Nothing carries the tag "$tag". A scenario declares its tags as '
+          "`scenario('…', tags: ['$tag'], (s) async { … })`.";
     }
     var inFile = result.scenarios.where((ref) => ref.file == file).toList();
     if (scenario != null && inFile.isNotEmpty) {
@@ -977,8 +1412,60 @@ class ScenariosCore extends PluginCore {
         '${files.join(', ')}.';
   }
 
-  static String _describeSelector(String? file, String? scenario) =>
-      scenario == null ? 'file "$file"' : 'scenario "$scenario" in "$file"';
+  static String _describeSelector(String? file, String? scenario, String? tag) {
+    var selector = switch ((file, scenario)) {
+      (null, _) => null,
+      (var f, null) => 'file "$f"',
+      (var f, var s) => 'scenario "$s" in "$f"',
+    };
+    // A tag is a selector like any other, and a `--tag` nobody declared is
+    // exactly as silent as a misspelled file was.
+    return [?selector, if (tag != null) 'tag "$tag"'].join(' with ');
+  }
+
+  /// A comma-separated axis list, trimmed and emptied of blanks.
+  static List<String> _axisList(Object? raw, String name) {
+    if (raw == null) return const [];
+    if (raw is List) return [for (var item in raw) '$item'.trim()];
+    if (raw is! String) {
+      throw ArgumentError.value(raw, name, 'a comma-separated list');
+    }
+    return [
+      for (var part in raw.split(','))
+        if (part.trim().isNotEmpty) part.trim(),
+    ];
+  }
+
+  static final _localePattern = RegExp(
+    r'^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})?$',
+  );
+
+  /// The map from assignment to directory, written beside them.
+  ///
+  /// A matrix's artifacts are a tree a CI job has to *find* things in; the
+  /// result of the call says the same thing, but the call is gone by the time
+  /// the upload step runs. Paths are relative to the index, which is what
+  /// makes the whole directory movable.
+  void _writeIndex(String base, Iterable<ScenarioRunPackage> runs) {
+    var index = {
+      'runs': [
+        for (var run in runs)
+          {
+            'package': run.path,
+            'axes': ?run.axes,
+            'output': p.relative(run.output, from: base),
+            'ok': run.error == null && run.scenarios.every((s) => s.ok),
+            'scenarios': run.scenarios.length,
+            'failed': run.scenarios.where((s) => !s.ok).length,
+            'error': ?run.error,
+          },
+      ],
+    };
+    Directory(base).createSync(recursive: true);
+    File(
+      p.join(base, 'index.json'),
+    ).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(index));
+  }
 
   /// The escape hatch: drops [path]'s warm harness, so the next run
   /// cold-starts from nothing — fresh asset bundle, fresh kernel, fresh
@@ -1063,6 +1550,11 @@ class ScenariosCore extends PluginCore {
       texts: (step['texts']! as List).cast<String>(),
       statusBrightness: step['statusBrightness'] as String?,
       navBrightness: step['navBrightness'] as String?,
+      // Absent means settled: the harness writes the field only when it is
+      // not, so a healthy step's record stays the size it was.
+      settled: step['settled'] as bool? ?? true,
+      strayFrames: step['strayFrames'] as int? ?? 0,
+      failure: step['failure'] as String?,
       address: Address(
         worktree: host.worktree.name,
         plugin: host.id,
@@ -1078,10 +1570,12 @@ class ScenariosCore extends PluginCore {
     String outDir,
     Map<String, Object?> report, {
     ScenarioAxes axes = const ScenarioAxes(),
+    bool recordAxes = false,
   }) {
     return ScenarioRunPackage(
       path: path,
       output: outDir,
+      axes: recordAxes ? axes.toParams() : null,
       ms: report['ms'] as int? ?? 0,
       scenarios: [
         for (var outcome
@@ -1090,6 +1584,7 @@ class ScenariosCore extends PluginCore {
             file: outcome['file']! as String,
             name: outcome['name']! as String,
             ok: outcome['ok'] == true,
+            device: outcome['device'] as String?,
             ms: outcome['ms'] as int? ?? 0,
             steps: [
               for (var step
@@ -1099,7 +1594,10 @@ class ScenariosCore extends PluginCore {
                   path,
                   file: outcome['file']! as String,
                   scenario: outcome['name']! as String,
-                  axes: axes,
+                  // The address on an artifact says what produced it, so an
+                  // unspecified device is filled in with what the folder
+                  // resolved it to — a link that reopens the same picture.
+                  axes: axes.copyWith(device: outcome['device'] as String?),
                 ),
             ],
             errors: [

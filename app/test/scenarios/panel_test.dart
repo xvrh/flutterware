@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
@@ -147,7 +148,8 @@ void main() {
     expect(find.byTooltip('New scenario'), findsOneWidget);
   });
 
-  testWidgets('an unset device runs as the default phone', (tester) async {
+  testWidgets('an unset device is left for the folder to answer, and the '
+      'chip says what it answered', (tester) async {
     var core = ScenariosCore(
       PluginHost(
         id: scenariosPluginId,
@@ -190,8 +192,110 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    expect(runner.seenAxes.single.device, 'iphone-13');
-    expect(find.text('iPhone 13'), findsOneWidget);
+    // Nothing chosen, so nothing is sent — only the fallback the host would
+    // like used where a folder declares no profile.
+    expect(runner.seenAxes.single.device, isNull);
+    expect(runner.seenUnspecified.single, 'iphone-13');
+    // And the chip reports what the run came back as, marked as not the
+    // reader's own choice.
+    expect(find.text('iPhone 13 (default)'), findsOneWidget);
+  });
+
+  testWidgets('a device is remembered per pool, so a desktop scenario is '
+      'never opened on the phone the last one used', (tester) async {
+    // Two folders, each with a `flutter_test_config.dart` — which is all the
+    // panel needs to tell two pools apart. What the configs *say* lives in
+    // the guest; the folder is the identity.
+    for (var folder in ['mobile', 'desktop']) {
+      var directory = Directory(p.join(root.path, 'test', 'scenarios', folder))
+        ..createSync(recursive: true);
+      File(
+        p.join(directory.path, 'flutter_test_config.dart'),
+      ).writeAsStringSync('// this folder is a pool');
+    }
+
+    var core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: Worktree(path: root.path),
+        workspace: Workspace(
+          root: root.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    var runner = _FakeRunner();
+    core.debugInstallRunner('.', runner);
+    var plugin = ScenariosPlugin(core);
+
+    var address = ValueNotifier(
+      Address(
+        worktree: 'wt',
+        plugin: scenariosPluginId,
+        segments: ['.', 'test', 'scenarios', 'mobile', 'shop_test.dart', 'A'],
+        axes: {'device': 'iphone-13'},
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: AddressRoot(
+          address: address,
+          onChanged: (a) => address.value = a,
+          child: Builder(builder: plugin.buildPanel),
+        ),
+      ),
+    );
+    // The list pane spins while the scan runs, so this pumps a fixed number
+    // of frames rather than settling.
+    Future<void> pumpFrames() async {
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+    }
+
+    await pumpFrames();
+    // A pasted link is honoured as it stands: the first pool adopts it.
+    expect(address.value.axes['device'], 'iphone-13');
+    expect(runner.seenAxes.last.device, 'iphone-13');
+
+    // Crossing into the other pool drops the phone rather than carrying it —
+    // this is the overflow the memory exists to prevent.
+    address.value = address.value.copyWith(
+      segments: ['.', 'test', 'scenarios', 'desktop', 'window_test.dart', 'A'],
+    );
+    await pumpFrames();
+    expect(address.value.axes.containsKey('device'), isFalse);
+    expect(runner.seenAxes.last.device, isNull);
+
+    // Picking one here belongs to *this* pool — the device chip writes the
+    // address, which is all a pick is.
+    address.value = address.value.copyWith(axes: {'device': 'macbook-pro'});
+    await pumpFrames();
+    expect(runner.seenAxes.last.device, 'macbook-pro');
+
+    // ...and going back restores the phone, not the laptop.
+    address.value = address.value.copyWith(
+      segments: ['.', 'test', 'scenarios', 'mobile', 'shop_test.dart', 'A'],
+    );
+    await pumpFrames();
+    expect(address.value.axes['device'], 'iphone-13');
+
+    // Then forward again, to the laptop this pool last used.
+    address.value = address.value.copyWith(
+      segments: ['.', 'test', 'scenarios', 'desktop', 'window_test.dart', 'A'],
+    );
+    await pumpFrames();
+    expect(address.value.axes['device'], 'macbook-pro');
   });
 
   // A package with nothing in it is the moment the reader is certainly asking
@@ -546,18 +650,29 @@ class _FakeRunner extends ScenarioRunner {
 
   var runs = 0;
   final seenAxes = <ScenarioAxes>[];
+  final seenUnspecified = <String?>[];
+
+  /// What the harness reports it resolved an unnamed device to. The real one
+  /// asks the folder's profile first; this one just echoes the fallback.
+  String? resolvedDevice;
 
   @override
   Future<Map<String, Object?>> run({
     required String outDir,
     String? file,
     String? scenario,
+    String? tag,
     ScenarioAxes axes = const ScenarioAxes(),
+    String? unspecifiedDevice,
     double? captureScale,
     bool captureRaw = false,
+    bool captureNative = false,
+    DateTime? clock,
   }) async {
     runs++;
     seenAxes.add(axes);
+    seenUnspecified.add(unspecifiedDevice);
+    resolvedDevice = axes.device ?? unspecifiedDevice;
     Directory(outDir).createSync(recursive: true);
     Map<String, Object?> step(int index, String name, String text) {
       var png = '$outDir/$index-$name.png';
@@ -602,6 +717,7 @@ class _FakeRunner extends ScenarioRunner {
         {
           'file': file,
           'name': scenario,
+          'device': resolvedDevice,
           'ok': true,
           'ms': 3,
           'steps': [step(0, 'shot', 'hello'), step(1, 'end', 'bye')],
@@ -609,6 +725,12 @@ class _FakeRunner extends ScenarioRunner {
       ],
     };
   }
+
+  /// Nothing to list, and nothing spawned to find out: the panel asks for a
+  /// listing the moment a scenario is open, and the base implementation would
+  /// try to compile a harness against a Flutter SDK that is not there.
+  @override
+  Future<List<ScenarioListing>> list() async => const [];
 
   @override
   Future<void> dispose() async {}

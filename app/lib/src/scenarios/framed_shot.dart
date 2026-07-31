@@ -4,7 +4,8 @@ import 'package:device_frame/device_frame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 
-import '../catalog/catalog_devices.dart';
+// Ours hidden here, not theirs: this file names `device_frame`'s bodies.
+import '../catalog/catalog_devices.dart' hide Devices;
 import '../plugins/native/scenarios_results.dart';
 import '../utils/raw_image_provider.dart';
 import '../ui/theme.dart';
@@ -43,7 +44,7 @@ class FramedShot extends StatelessWidget {
   final ScenarioRunStep step;
 
   /// The device the run was framed as, or null for the bare surface.
-  final CatalogDevice? device;
+  final Device? device;
 
   /// Drawn over the screen, inside the frame — **in the screen's own logical
   /// coordinates**, which are exactly the guest coordinates a capture and its
@@ -139,7 +140,7 @@ class _StatusChrome extends StatelessWidget {
     required this.navBrightness,
   });
 
-  final CatalogDevice device;
+  final Device device;
   final Brightness statusBrightness;
   final Brightness navBrightness;
 

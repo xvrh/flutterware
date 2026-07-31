@@ -8,8 +8,6 @@ import '../icon/model/service.dart';
 import '../icon/screen.dart';
 import '../overview/screen.dart';
 import '../project.dart';
-import '../test_runner/menu.dart';
-import '../test_runner/screen.dart';
 import '../ui/side_menu.dart';
 import '../utils/async_value.dart';
 import '../utils/value_stream_builder.dart';
@@ -76,7 +74,6 @@ class ProjectView extends StatelessWidget {
                 MenuLink(url: paths.icon, title: Text('Launcher icon')),
               ],
             ),
-            TestMenu(project),
             if (enableDrawingPath.dependsOnValue(context)) DrawingMenu(project),
           ],
         ),
@@ -87,7 +84,6 @@ class ProjectView extends StatelessWidget {
             // which package it is on and where inside itself it is, and this
             // pre-shell view has no address to give it. It lives in the
             // `flutterware.dependencies` plugin now.
-            paths.tests: (route) => TestRunnerScreen(project),
             paths.icon: (route) => IconScreen(project),
             paths.drawing: (route) => DrawingScreen(project),
           }, onNotFound: (_) => paths.home),

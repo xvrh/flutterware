@@ -10,6 +10,7 @@ import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/flow_view.dart';
+import '../../scenarios/harness_entrypoint.dart';
 import '../../scenarios/new_scenario_dialog.dart';
 import '../../scenarios/step_page.dart';
 import '../../ui/empty_state.dart';
@@ -61,6 +62,60 @@ class _ScenariosPanel extends StatefulWidget {
 class _ScenariosPanelState extends State<_ScenariosPanel> {
   ScenariosCore get _core => widget.plugin.core;
 
+  /// The device last used in each **pool** of scenarios, keyed by the folder
+  /// whose `flutter_test_config.dart` governs it (`''` for an ungoverned
+  /// one). dev_studio's `_mobileDevice` / `_desktopDevice`, generalised to
+  /// however many folders a project has.
+  ///
+  /// Without it the device is one sticky address parameter: pick an iPhone on
+  /// a phone scenario, open a desktop one, and it renders a laptop layout at
+  /// 390 points wide — overflow stripes rather than a picture. A pool is
+  /// exactly the scope that choice makes sense in, and the folder is its
+  /// identity, readable off the filesystem without compiling anything.
+  final _deviceByPool = <String, String?>{};
+
+  /// The pool the address's `?device=` currently belongs to, or null before
+  /// the first scenario is opened.
+  String? _pool;
+
+  /// Memoised because [testConfigFolderFor] stats the disk and the answer
+  /// changes only when a config file is added.
+  final _poolCache = <(String, String), String>{};
+
+  String _poolFor(String package, String file) =>
+      _poolCache.putIfAbsent((package, file), () {
+        return testConfigFolderFor(_core.packageRootFor(package), file) ?? '';
+      });
+
+  /// Swaps the remembered device when the opened scenario belongs to another
+  /// pool: what was on screen is kept under the pool being left, and the pool
+  /// being entered gets back whatever it last used — or nothing, which lets
+  /// its own profile answer.
+  ///
+  /// The first pool observed **adopts** the address as it stands, so a pasted
+  /// `?device=` link opens on the device it names.
+  void _followPool(ScenarioPlace place) {
+    if (place.file case var file?) {
+      var pool = _poolFor(place.package, file);
+      if (pool == _pool) return;
+      var current = AddressScope.param(context, 'device');
+      if (_pool case var leaving?) {
+        _deviceByPool[leaving] = current;
+      } else {
+        _deviceByPool[pool] = current;
+      }
+      _pool = pool;
+      var wanted = _deviceByPool[pool];
+      if (wanted != current) {
+        // After the frame: this runs from didChangeDependencies, and the
+        // address is somebody else's state.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) AddressScope.write(context).setParam('device', wanted);
+        });
+      }
+    }
+  }
+
   /// The place the address names, or the first declared package when it names
   /// none — where selecting the plugin off the rail leaves you.
   ScenarioPlace? _resolve() {
@@ -74,7 +129,13 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_resolve() case var place?) _core.track(place.package);
+    if (_resolve() case var place?) {
+      _core.track(place.package);
+      _followPool(place);
+      // Only once a scenario is open: listing compiles the harness, and the
+      // page that opens one is about to pay for that anyway.
+      if (place.file != null) _core.trackListings(place.package);
+    }
   }
 
   @override
@@ -93,12 +154,13 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
 
     // The axes ride the address as plain parameters, above the segments —
     // pick French and an iPhone once, and every scenario you open runs that
-    // way. The device defaults to the phone form factor; an unknown one is
-    // reported by the page, not repaired here.
+    // way. No `?device=` stays no device: the scenario's own folder answers
+    // that, inside the harness. An unknown one is reported by the page, not
+    // repaired here.
     var axes = ScenarioAxes(
       device: switch (AddressScope.param(context, 'device')) {
-        var id? when !isDeviceId(id) => defaultScenarioDeviceId,
-        var id => resolveScenarioDevice(id),
+        var id? when !isDeviceId(id) => null,
+        var id => id,
       },
       language: AddressScope.param(context, 'language'),
       textScale: double.tryParse(
@@ -644,9 +706,9 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   @override
   Widget build(BuildContext context) {
     var run = _run;
-    var device = run?.axes.device == null
-        ? null
-        : deviceById(run!.axes.device!);
+    // Framed by what the run *did*, which for an unspecified device is what
+    // its folder answered.
+    var device = run?.device == null ? null : deviceById(run!.device!);
 
     // Dark runs default to light chrome, like a real phone would show.
     var statusFallback = run?.axes.brightness == 'dark'
@@ -679,7 +741,18 @@ class _ScenarioPageState extends State<_ScenarioPage> {
         _header(context, run),
         _AxesBar(
           axes: widget.axes,
-          languages: widget.core.languagesFor(widget.package),
+          // What the last run resolved an unspecified device to — the only
+          // way the panel learns a folder's default, since the profile lives
+          // in the guest.
+          resolved: run?.device,
+          // What this scenario's folder profile offers, once the live listing
+          // has landed: the pool goes to the top of the menu, and everything
+          // else stays reachable below it.
+          offered: widget.core.offeredDevicesFor(widget.package, widget.file),
+          languages: widget.core.offeredLanguagesFor(
+            widget.package,
+            widget.file,
+          ),
         ),
         const Divider(height: 1),
         // Said out loud rather than repaired, with the accepted values — the
@@ -687,7 +760,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
         if (unknownDeviceIn(AddressScope.param(context, 'device'))
             case var bad?)
           _ErrorBanner(
-            'No device "$bad" — running as $defaultScenarioDeviceId. '
+            'No device "$bad" — running as the folder says instead. '
             'Accepted: ${deviceIds.join(', ')}.',
           ),
         Expanded(child: _body(context, run, device, statusFallback)),
@@ -762,7 +835,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   Widget _body(
     BuildContext context,
     ScenarioPanelRun? run,
-    CatalogDevice? device,
+    Device? device,
     Brightness statusFallback,
   ) {
     var steps = run?.steps ?? const <ScenarioRunStep>[];
@@ -945,9 +1018,24 @@ class _ErrorBanner extends StatelessWidget {
 /// once and every scenario you open runs French, exactly like the catalog's
 /// device framing.
 class _AxesBar extends StatelessWidget {
-  const _AxesBar({required this.axes, required this.languages});
+  const _AxesBar({
+    required this.axes,
+    required this.languages,
+    this.offered = const [],
+    this.resolved,
+  });
 
   final ScenarioAxes axes;
+
+  /// The devices this scenario's folder profile offers, its first one the
+  /// default. Empty where no profile governs it, and before the live listing
+  /// lands — in which case the menu is the whole table, as it was.
+  final List<String> offered;
+
+  /// What the last run made of an unspecified device — the folder profile's
+  /// first device, or the global default. Null before the first run, when the
+  /// honest answer is that the panel does not know yet.
+  final String? resolved;
 
   /// The locale tags the project's config declares — the whole language menu.
   final List<String> languages;
@@ -955,6 +1043,7 @@ class _AxesBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var device = axes.device == null ? null : deviceById(axes.device!);
+    var byFolder = resolved == null ? null : deviceById(resolved!);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         FwSpacing.lg,
@@ -971,7 +1060,9 @@ class _AxesBar extends StatelessWidget {
           Menu(
             entries: [
               MenuItem(
-                'Default · ${deviceById(defaultScenarioDeviceId)!.label}',
+                // Named by what the folder resolved it to, once a run has
+                // said — "Default" alone is true but useless.
+                byFolder == null ? 'Default' : 'Default · ${byFolder.label}',
                 onSelected: () =>
                     AddressScope.write(context).setParam('device', null),
               ),
@@ -980,9 +1071,25 @@ class _AxesBar extends StatelessWidget {
                 onSelected: () =>
                     AddressScope.write(context).setParam('device', fitDeviceId),
               ),
-              for (var group in {for (var d in catalogDevices) d.group}) ...[
+              // The folder's own pool first — the short list somebody meant
+              // when they wrote the profile.
+              if (offered.isNotEmpty) ...[
+                const MenuHeader('This folder'),
+                for (var id in offered)
+                  if (deviceById(id) case var d?)
+                    MenuItem(
+                      d.label,
+                      shortcut: describeDevice(d),
+                      onSelected: () =>
+                          AddressScope.write(context).setParam('device', d.id),
+                    ),
+              ],
+              // …then everything, because "show me this phone screen at
+              // desktop width" is a real question and a profile is an offer,
+              // not a fence.
+              for (var group in {for (var d in Devices.all) d.group}) ...[
                 MenuHeader(group),
-                for (var d in catalogDevices.where((d) => d.group == group))
+                for (var d in Devices.all.where((d) => d.group == group))
                   MenuItem(
                     d.label,
                     shortcut: describeDevice(d),
@@ -993,8 +1100,15 @@ class _AxesBar extends StatelessWidget {
             ],
             builder: (context, controller) => _AxisChip(
               label: 'Device',
-              value: device?.label ?? 'Bare surface',
-              active: axes.device != defaultScenarioDeviceId,
+              value: switch (axes.device) {
+                // Unspecified reads as what it ran as, marked as not yours —
+                // the chip lights up only when *you* picked something.
+                null =>
+                  byFolder == null ? 'Default' : '${byFolder.label} (default)',
+                fitDeviceId => 'Bare surface',
+                _ => device?.label ?? 'Default',
+              },
+              active: axes.device != null,
               onTap: controller.toggle,
             ),
           ),

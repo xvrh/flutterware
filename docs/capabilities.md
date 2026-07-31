@@ -319,10 +319,10 @@ packages: List<ScenarioListPackage>
 
 #### `run` — Run
 
-Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured just before it.
+Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured **at** the failure, whatever the capture policy.
 
 ```sh
-fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--format=…]
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--devices=…] [--languages=…] [--tag=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…]
 ```
 
 Returns `ScenarioRunResult`:
@@ -331,11 +331,13 @@ Returns `ScenarioRunResult`:
 packages: List<ScenarioRunPackage>
   path: String
   output: String   # Where this run's artifacts were written.
+  axes: Map<String, String>?   # The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].
   ms: int   # Whole-run wall time inside the harness.
   scenarios: List<ScenarioRunOutcome>
     file: String
     name: String
     ok: bool
+    device: String?   # The device it actually ran as.
     ms: int
     steps: List<ScenarioRunStep>
       index: int   # 1-based position in the scenario's capture sequence.
@@ -356,6 +358,9 @@ packages: List<ScenarioRunPackage>
       address: String   # The step's `fw://` address.
       statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
       navBrightness: String?
+      settled: bool   # False when the verb's settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.
+      strayFrames: int   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
+      failure: String?   # The error, when this is the step a scenario broke on.
     errors: List<ScenarioRunError>   # The failure, when [ok] is false.
       error: String
       stack: String?
@@ -376,14 +381,18 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it |
 | `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
 | `output` | string | no | — | Where step artifacts are written; a fresh directory under the package's build/ when omitted |
-| `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted means the default form factor (iphone-13); `fit` means the bare 800×600 test surface. The same vocabulary the UI catalog frames with. |
+| `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted lets each scenario run as its own folder says — the first device of the profile its `flutter_test_config.dart` declares, or iphone-13 where a folder declares none. `fit` means the bare 800×600 test surface. The same vocabulary the UI catalog frames with. |
 | `language` | string | no | — | A locale tag — `fr`, `fr-CA` — applied as the platform locale for the whole run |
+| `devices` | string | no | — | A comma-separated matrix — `iphone-se,android-tall`. Runs everything once per device, each into its own `<output>/<device>-<language>/` directory with an `index.json` beside them. The same plural vocabulary as `flutter test --dart-define=fw.devices=`. Overrides `device`. |
+| `languages` | string | no | — | The other half of the matrix — `en,fr,de`. Crossed with `devices`, and overrides `language`. |
+| `tag` | string | no | — | Run only scenarios carrying this tag — the same tag `scenario(tags: [...])` declares and `flutter test --tags` filters on |
 | `text-scale` | string | no | — | The platform text scale factor — `1.3` is a common accessibility setting |
 | `brightness` | choice | no | — | The platform brightness the app sees |
 | `bold-text` | choice | no | — | The bold-text accessibility switch |
 | `high-contrast` | choice | no | — | The high-contrast accessibility switch |
 | `invert-colors` | choice | no | — | The invert-colors accessibility switch |
 | `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. Omitted means the package's configured captureScale (tool/flutterware.dart), or 1. The device's own ratio gives a true screenshot; 1 is ~10× faster and smaller, which is what keeps a long FakeAsync run instantaneous. Not an axis: it changes the artifact, never what the app sees. |
+| `clock` | string | no | — | An ISO-8601 timestamp `clock.now()` starts at — `2026-01-01T09:00:00Z`. A scenario clock already advances deterministically under FakeAsync, but it starts at the wall time of the run, so any screen showing a date differs run to run. Pinning it is what makes two runs comparable. Reaches code that reads `package:clock`; a direct `DateTime.now()` cannot be intercepted by anything. |
 | `format` | choice | no | — | `png` (the default) is what everything opens. `raw` — bare rgba8888 rows, width×height×4 bytes as the result reports them — skips PNG encoding, which is ~80% of a capture's cost; for pipelines that consume pixels directly. |
 
 #### `new` — New scenario
@@ -408,6 +417,38 @@ next: String   # The command that runs what was just written.
 | `package` | choice | no | — | Which declared package; the only one when there is one |
 | `name` | string | yes | — | The scenario's name — what `run --scenario=` takes and what the panel lists |
 | `file` | string | no | — | Package-relative path to write. Defaults to a snake_cased `_test.dart` from the name, under the package's scenario directory. Never overwrites. |
+
+#### `shots` — Store screenshots
+
+The store/documentation lane: runs the scenarios and keeps only their **named** shots, at the pixel ratio each device really has, into `<output>/<language>/<device>/NN-name.png`. Everything a `run` leaves behind — the automatic steps, the widget trees — is dropped. A separate action because every default differs; `run` stays the debugging lane.
+
+```sh
+fw run scenarios shots [--package=…] [--output=…] [--devices=…] [--languages=…] [--tag=…] [--file=…]
+```
+
+Returns `ScenarioShotsResult`:
+
+```
+packages: List<ScenarioShotsPackage>
+  path: String
+  output: String   # The root of the tree — `<language>/<device>/` beneath it.
+  sets: List<ScenarioShotSet>
+    directory: String   # Relative to `ScenarioShotsPackage.output`, so the whole tree can be moved or uploaded as it stands.
+    axes: Map<String, String>
+    images: List<String>   # File names, in the order they were captured — which is the order they were numbered with.
+    failed: int   # Scenarios that failed while producing this set.
+  error: String?   # Set when the package could not be run at all.
+count: int   # How many images were written, over every package and assignment.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+| `output` | string | no | — | Where the tree is written; `build/flutterware/screenshots` under the package when omitted. Emptied first, so what is there afterwards is exactly this run. |
+| `devices` | string | no | — | A comma-separated list — one directory per device. Omitted runs each scenario on its folder profile's first device. |
+| `languages` | string | no | — | A comma-separated list — one directory per language, crossed with `devices` |
+| `tag` | string | no | — | Keep only shots carrying this tag — `Shot('Home', tags: ['store'])`. Omitted keeps every named shot, which is what a project that tags nothing wants. |
+| `file` | string | no | — | Only this scenario file, package-relative |
 
 #### `restart` — Restart
 

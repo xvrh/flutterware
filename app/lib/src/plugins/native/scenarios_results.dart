@@ -152,6 +152,7 @@ class ScenarioRunPackage {
   ScenarioRunPackage({
     required this.path,
     required this.output,
+    this.axes,
     this.ms = 0,
     this.scenarios = const [],
     this.error,
@@ -161,6 +162,12 @@ class ScenarioRunPackage {
 
   /// Where this run's artifacts were written.
   final String output;
+
+  /// The assignment **this** entry ran under, when the request asked for a
+  /// matrix (`devices=` / `languages=`): one entry per package per point of
+  /// it, each with its own [output]. Null for a single-assignment run, where
+  /// `ScenarioRunResult.axes` already says it once.
+  final Map<String, String>? axes;
 
   /// Whole-run wall time inside the harness.
   final int ms;
@@ -184,6 +191,7 @@ class ScenarioRunOutcome {
     required this.file,
     required this.name,
     required this.ok,
+    this.device,
     this.ms = 0,
     this.steps = const [],
     this.errors = const [],
@@ -192,6 +200,13 @@ class ScenarioRunOutcome {
   final String file;
   final String name;
   final bool ok;
+
+  /// The device it actually ran as. Worth saying because a run that named no
+  /// device gets one per folder — whatever profile the scenario's
+  /// `flutter_test_config.dart` declares — so two scenarios of the same run
+  /// can differ here.
+  final String? device;
+
   final int ms;
   final List<ScenarioRunStep> steps;
 
@@ -225,6 +240,9 @@ class ScenarioRunStep {
     this.tags = const [],
     this.statusBrightness,
     this.navBrightness,
+    this.settled = true,
+    this.strayFrames = 0,
+    this.failure,
   });
 
   /// 1-based position in the scenario's capture sequence.
@@ -291,6 +309,21 @@ class ScenarioRunStep {
   final String? statusBrightness;
   final String? navBrightness;
 
+  /// False when the verb's settle policy gave up with frames still scheduled:
+  /// something on this screen animates indefinitely — a spinner, a shimmer —
+  /// and the capture is of a moving picture. Not a failure.
+  final bool settled;
+
+  /// Frames drawn before this step that none of the scenario's verbs drew —
+  /// the scenario reached for the raw `tester`, and whatever the app did in
+  /// those frames is not in the flow. Zero is the healthy case.
+  final int strayFrames;
+
+  /// The error, when this is the step a scenario broke on. The frame is the
+  /// state at the failure, and the message carries the `split` branch that
+  /// reached it.
+  final String? failure;
+
   Map<String, Object?> toJson() => _$ScenarioRunStepToJson(this);
 }
 
@@ -353,4 +386,88 @@ class ScenarioRestartResult implements PluginResult {
 
   @override
   Map<String, Object?> toJson() => _$ScenarioRestartResultToJson(this);
+}
+
+/// `shots` — the store/documentation lane: named shots only, at the device's
+/// own pixel ratio, laid out by language and device.
+///
+/// A separate action rather than five flags on `run`, and rather than a
+/// profile: store shots come from the same scenarios a `mobile` profile
+/// already governs, so a `store` profile would overlap it and profiles would
+/// stop partitioning. What differs is every default — native resolution, a
+/// tag filter, an ordered naming scheme and its own output tree — which is
+/// what an action is for.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioShotsResult implements PluginResult {
+  ScenarioShotsResult({required this.packages, this.count = 0});
+
+  final List<ScenarioShotsPackage> packages;
+
+  /// How many images were written, over every package and assignment.
+  final int count;
+
+  @override
+  Map<String, Object?> toJson() => _$ScenarioShotsResultToJson(this);
+}
+
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioShotsPackage {
+  ScenarioShotsPackage({
+    required this.path,
+    required this.output,
+    this.sets = const [],
+    this.error,
+  });
+
+  final String path;
+
+  /// The root of the tree — `<language>/<device>/` beneath it.
+  final String output;
+
+  final List<ScenarioShotSet> sets;
+
+  /// Set when the package could not be run at all.
+  final String? error;
+
+  Map<String, Object?> toJson() => _$ScenarioShotsPackageToJson(this);
+}
+
+/// One point of the matrix, and the images it produced.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioShotSet {
+  ScenarioShotSet({
+    required this.directory,
+    this.axes = const {},
+    this.images = const [],
+    this.failed = 0,
+  });
+
+  /// Relative to `ScenarioShotsPackage.output`, so the whole tree can be
+  /// moved or uploaded as it stands.
+  final String directory;
+
+  final Map<String, String> axes;
+
+  /// File names, in the order they were captured — which is the order they
+  /// were numbered with.
+  final List<String> images;
+
+  /// Scenarios that failed while producing this set. Their shots up to the
+  /// failure are still here; a store run that silently shipped a half suite
+  /// would be worse than one that says so.
+  final int failed;
+
+  Map<String, Object?> toJson() => _$ScenarioShotSetToJson(this);
 }

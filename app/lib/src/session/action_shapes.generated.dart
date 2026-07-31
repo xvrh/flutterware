@@ -1883,6 +1883,12 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'file', 'type': 'String'},
       <String, Object?>{'name': 'name', 'type': 'String'},
       <String, Object?>{'name': 'ok', 'type': 'bool'},
+      <String, Object?>{
+        'name': 'device',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The device it actually ran as.',
+      },
       <String, Object?>{'name': 'ms', 'type': 'int'},
       <String, Object?>{
         'name': 'steps',
@@ -1972,6 +1978,24 @@ final resultShapes = <String, ResultShape>{
               'type': 'String',
               'optional': true,
             },
+            <String, Object?>{
+              'name': 'settled',
+              'type': 'bool',
+              'doc':
+                  'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+            },
+            <String, Object?>{
+              'name': 'strayFrames',
+              'type': 'int',
+              'doc':
+                  'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
+            },
+            <String, Object?>{
+              'name': 'failure',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The error, when this is the step a scenario broke on.',
+            },
           ],
         },
       },
@@ -2003,6 +2027,13 @@ final resultShapes = <String, ResultShape>{
         'doc': 'Where this run\'s artifacts were written.',
       },
       <String, Object?>{
+        'name': 'axes',
+        'type': 'Map<String, String>',
+        'optional': true,
+        'doc':
+            'The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].',
+      },
+      <String, Object?>{
         'name': 'ms',
         'type': 'int',
         'doc': 'Whole-run wall time inside the harness.',
@@ -2016,6 +2047,12 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{'name': 'file', 'type': 'String'},
             <String, Object?>{'name': 'name', 'type': 'String'},
             <String, Object?>{'name': 'ok', 'type': 'bool'},
+            <String, Object?>{
+              'name': 'device',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The device it actually ran as.',
+            },
             <String, Object?>{'name': 'ms', 'type': 'int'},
             <String, Object?>{
               'name': 'steps',
@@ -2106,6 +2143,25 @@ final resultShapes = <String, ResultShape>{
                     'type': 'String',
                     'optional': true,
                   },
+                  <String, Object?>{
+                    'name': 'settled',
+                    'type': 'bool',
+                    'doc':
+                        'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+                  },
+                  <String, Object?>{
+                    'name': 'strayFrames',
+                    'type': 'int',
+                    'doc':
+                        'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
+                  },
+                  <String, Object?>{
+                    'name': 'failure',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The error, when this is the step a scenario broke on.',
+                  },
                 ],
               },
             },
@@ -2153,6 +2209,13 @@ final resultShapes = <String, ResultShape>{
               'doc': 'Where this run\'s artifacts were written.',
             },
             <String, Object?>{
+              'name': 'axes',
+              'type': 'Map<String, String>',
+              'optional': true,
+              'doc':
+                  'The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].',
+            },
+            <String, Object?>{
               'name': 'ms',
               'type': 'int',
               'doc': 'Whole-run wall time inside the harness.',
@@ -2166,6 +2229,12 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{'name': 'file', 'type': 'String'},
                   <String, Object?>{'name': 'name', 'type': 'String'},
                   <String, Object?>{'name': 'ok', 'type': 'bool'},
+                  <String, Object?>{
+                    'name': 'device',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'The device it actually ran as.',
+                  },
                   <String, Object?>{'name': 'ms', 'type': 'int'},
                   <String, Object?>{
                     'name': 'steps',
@@ -2260,6 +2329,25 @@ final resultShapes = <String, ResultShape>{
                           'name': 'navBrightness',
                           'type': 'String',
                           'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'settled',
+                          'type': 'bool',
+                          'doc':
+                              'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+                        },
+                        <String, Object?>{
+                          'name': 'strayFrames',
+                          'type': 'int',
+                          'doc':
+                              'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
+                        },
+                        <String, Object?>{
+                          'name': 'failure',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The error, when this is the step a scenario broke on.',
                         },
                       ],
                     },
@@ -2426,6 +2514,154 @@ final resultShapes = <String, ResultShape>{
         'name': 'navBrightness',
         'type': 'String',
         'optional': true,
+      },
+      <String, Object?>{
+        'name': 'settled',
+        'type': 'bool',
+        'doc':
+            'False when the verb\'s settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.',
+      },
+      <String, Object?>{
+        'name': 'strayFrames',
+        'type': 'int',
+        'doc':
+            'Frames drawn before this step that none of the scenario\'s verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.',
+      },
+      <String, Object?>{
+        'name': 'failure',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The error, when this is the step a scenario broke on.',
+      },
+    ],
+  }),
+  'ScenarioShotSet': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioShotSet',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'directory',
+        'type': 'String',
+        'doc':
+            'Relative to `ScenarioShotsPackage.output`, so the whole tree can be moved or uploaded as it stands.',
+      },
+      <String, Object?>{'name': 'axes', 'type': 'Map<String, String>'},
+      <String, Object?>{
+        'name': 'images',
+        'type': 'List<String>',
+        'doc':
+            'File names, in the order they were captured — which is the order they were numbered with.',
+      },
+      <String, Object?>{
+        'name': 'failed',
+        'type': 'int',
+        'doc': 'Scenarios that failed while producing this set.',
+      },
+    ],
+  }),
+  'ScenarioShotsPackage': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioShotsPackage',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'path', 'type': 'String'},
+      <String, Object?>{
+        'name': 'output',
+        'type': 'String',
+        'doc': 'The root of the tree — `<language>/<device>/` beneath it.',
+      },
+      <String, Object?>{
+        'name': 'sets',
+        'type': 'List<ScenarioShotSet>',
+        'shape': <String, Object?>{
+          'type': 'ScenarioShotSet',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'directory',
+              'type': 'String',
+              'doc':
+                  'Relative to `ScenarioShotsPackage.output`, so the whole tree can be moved or uploaded as it stands.',
+            },
+            <String, Object?>{'name': 'axes', 'type': 'Map<String, String>'},
+            <String, Object?>{
+              'name': 'images',
+              'type': 'List<String>',
+              'doc':
+                  'File names, in the order they were captured — which is the order they were numbered with.',
+            },
+            <String, Object?>{
+              'name': 'failed',
+              'type': 'int',
+              'doc': 'Scenarios that failed while producing this set.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'error',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Set when the package could not be run at all.',
+      },
+    ],
+  }),
+  'ScenarioShotsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioShotsResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'packages',
+        'type': 'List<ScenarioShotsPackage>',
+        'shape': <String, Object?>{
+          'type': 'ScenarioShotsPackage',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'path', 'type': 'String'},
+            <String, Object?>{
+              'name': 'output',
+              'type': 'String',
+              'doc':
+                  'The root of the tree — `<language>/<device>/` beneath it.',
+            },
+            <String, Object?>{
+              'name': 'sets',
+              'type': 'List<ScenarioShotSet>',
+              'shape': <String, Object?>{
+                'type': 'ScenarioShotSet',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'directory',
+                    'type': 'String',
+                    'doc':
+                        'Relative to `ScenarioShotsPackage.output`, so the whole tree can be moved or uploaded as it stands.',
+                  },
+                  <String, Object?>{
+                    'name': 'axes',
+                    'type': 'Map<String, String>',
+                  },
+                  <String, Object?>{
+                    'name': 'images',
+                    'type': 'List<String>',
+                    'doc':
+                        'File names, in the order they were captured — which is the order they were numbered with.',
+                  },
+                  <String, Object?>{
+                    'name': 'failed',
+                    'type': 'int',
+                    'doc': 'Scenarios that failed while producing this set.',
+                  },
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'error',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Set when the package could not be run at all.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'count',
+        'type': 'int',
+        'doc':
+            'How many images were written, over every package and assignment.',
       },
     ],
   }),

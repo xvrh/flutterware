@@ -422,7 +422,7 @@ class UiCatalogCore extends PluginCore {
                   id,
                   label: id == fitDeviceId
                       ? 'Fit'
-                      : catalogDevices.firstWhere((d) => d.id == id).label,
+                      : Devices.all.firstWhere((d) => d.id == id).label,
                 ),
             ],
           ),
@@ -625,7 +625,7 @@ class UiCatalogCore extends PluginCore {
                   id,
                   label: id == fitDeviceId
                       ? 'Fit'
-                      : catalogDevices.firstWhere((d) => d.id == id).label,
+                      : Devices.all.firstWhere((d) => d.id == id).label,
                 ),
             ],
           ),

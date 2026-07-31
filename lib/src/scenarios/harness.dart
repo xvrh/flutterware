@@ -16,7 +16,9 @@ import 'package:test_api/src/backend/suite_platform.dart';
 import 'package:test_api/src/backend/test.dart';
 
 import '../inspect/guest_inspect.dart';
+import 'profile.dart';
 import 'run_args.dart';
+import 'scenario.dart';
 import 'run_listener.dart';
 
 // ignore_for_file: implementation_imports
@@ -48,7 +50,11 @@ import 'run_listener.dart';
 ///
 /// Fonts load once at startup from the asset bundle's `FontManifest.json` —
 /// the harness's job, not every user's (S4's fonts finding).
-Future<void> runHarness(Map<String, void Function()> scenarioMains) async {
+Future<void> runHarness(
+  Map<String, void Function()> scenarioMains, {
+  Map<String, Future<void> Function(FutureOr<void> Function())> configs =
+      const {},
+}) async {
   // The whole harness — including every extension handler, which runs in the
   // zone it was registered in — is guarded: a failing scenario can leak an
   // async error after its LiveTest completes, and unguarded that reaches
@@ -56,15 +62,19 @@ Future<void> runHarness(Map<String, void Function()> scenarioMains) async {
   // harness dying because one scenario failed is the one outcome this may
   // never have.
   unawaited(
-    runZonedGuarded(() => _runHarness(scenarioMains), (error, stack) {
+    runZonedGuarded(() => _runHarness(scenarioMains, configs), (error, stack) {
       stderr.writeln('[harness] uncaught: $error\n$stack');
     }),
   );
 }
 
-Future<void> _runHarness(Map<String, void Function()> scenarioMains) async {
+Future<void> _runHarness(
+  Map<String, void Function()> scenarioMains,
+  Map<String, Future<void> Function(FutureOr<void> Function())> configs,
+) async {
   var binding = _HarnessBinding();
   var fonts = await _loadBundleFonts();
+  var profiles = await _probeProfiles(configs);
 
   var inspector = GuestInspector(
     rootOf: () => binding.rootElement,
@@ -73,7 +83,7 @@ Future<void> _runHarness(Map<String, void Function()> scenarioMains) async {
 
   developer.registerExtension('ext.flutterware.scenarios.list', (_, _) async {
     return developer.ServiceExtensionResponse.result(
-      jsonEncode({'scenarios': _list(scenarioMains)}),
+      jsonEncode({'scenarios': _list(scenarioMains, profiles)}),
     );
   });
 
@@ -85,7 +95,14 @@ Future<void> _runHarness(Map<String, void Function()> scenarioMains) async {
         outDir: args['out']!,
         file: args['file'],
         scenario: args['scenario'],
+        tag: args['tag'],
         runArgs: _parseRunArgs(args),
+        profiles: profiles,
+        // The host resolved a device id to geometry, or said it had nobody's
+        // choice to resolve — in which case the folder's profile speaks and
+        // the geometry that did arrive is only the host's fallback.
+        device: args['device'],
+        deviceUnspecified: args['deviceUnspecified'] == 'true',
       );
       return developer.ServiceExtensionResponse.result(jsonEncode(report));
     } catch (error, stack) {
@@ -139,23 +156,105 @@ Future<List<String>> _loadBundleFonts() async {
 /// could not be run. Declaring registers closures, it does not execute them,
 /// so the filtering costs nothing where it now happens: in the walk, against
 /// the same leaf name the listing reports.
-Group _declare(Map<String, void Function()> scenarioMains) {
+/// The declared tree, plus which of its tests are **scenarios**.
+///
+/// A `test/scenarios/` folder may hold ordinary `testWidgets` — a helper, a
+/// unit test that drifted in — and those produce no steps, cannot be opened
+/// in the panel, and used to be run anyway: `list` (the syntactic scan) and
+/// `run` (this walk) disagreed about what the folder contained. `scenario()`
+/// announces itself as it declares, which is the only reading that cannot be
+/// wrong about a name the scan could not evaluate.
+({Group root, Map<String, Set<String>> scenarios}) _declare(
+  Map<String, void Function()> scenarioMains,
+) {
   var declarer = Declarer();
+  var scenarios = <String, Set<String>>{};
   declarer.declare(() {
     for (var entry in scenarioMains.entries) {
-      group(entry.key, entry.value);
+      group(entry.key, () {
+        var sink = <String>[];
+        scenarioDeclarationSink = sink;
+        try {
+          entry.value();
+        } finally {
+          scenarioDeclarationSink = null;
+        }
+        scenarios[entry.key] = sink.toSet();
+      });
     }
   });
-  return declarer.build();
+  return (root: declarer.build(), scenarios: scenarios);
 }
 
-List<Map<String, Object?>> _list(Map<String, void Function()> scenarioMains) {
+/// Asks each folder's `flutter_test_config.dart` what it is for.
+///
+/// The config is *run*, not parsed: it is Dart, it may import its profile from
+/// anywhere, and executing it is the only reading that cannot be wrong. Its
+/// own setup runs too — the same setup `flutter test` gives that folder, which
+/// this runner skipped entirely until now.
+Future<Map<String, ScenarioProfile>> _probeProfiles(
+  Map<String, Future<void> Function(FutureOr<void> Function())> configs,
+) async {
+  var profiles = <String, ScenarioProfile>{};
+  for (var MapEntry(key: directory, value: config) in configs.entries) {
+    scenarioProbing = true;
+    scenarioProbedProfile = null;
+    try {
+      await config(() {});
+      if (scenarioProbedProfile case var profile?) {
+        profiles[directory] = profile;
+      }
+    } catch (error, stack) {
+      stderr.writeln('[harness] $directory config: $error\n$stack');
+    } finally {
+      scenarioProbing = false;
+      scenarioProbedProfile = null;
+    }
+  }
+  return profiles;
+}
+
+/// The profile whose folder contains [file] — the nearest one above it, which
+/// is the rule `flutter test` itself resolves configs by.
+ScenarioProfile? _profileFor(
+  String file,
+  Map<String, ScenarioProfile> profiles,
+) {
+  ScenarioProfile? best;
+  var bestLength = -1;
+  for (var MapEntry(key: directory, value: profile) in profiles.entries) {
+    if ((file == directory || file.startsWith('$directory/')) &&
+        directory.length > bestLength) {
+      best = profile;
+      bestLength = directory.length;
+    }
+  }
+  return best;
+}
+
+List<Map<String, Object?>> _list(
+  Map<String, void Function()> scenarioMains,
+  Map<String, ScenarioProfile> profiles,
+) {
+  var declared = _declare(scenarioMains);
   var scenarios = <Map<String, Object?>>[];
   void walk(Group group, String? file) {
     for (var entry in group.entries) {
       switch (entry) {
         case Test():
-          scenarios.add({'file': file ?? '', 'name': _leafName(entry, group)});
+          if (!_isScenario(declared.scenarios, file, entry, group)) break;
+          var profile = _profileFor(file ?? '', profiles);
+          scenarios.add({
+            'file': file ?? '',
+            'name': _leafName(entry, group),
+            if (entry.metadata.tags.isNotEmpty)
+              'tags': entry.metadata.tags.toList()..sort(),
+            if (profile != null) ...{
+              'profile': profile.name,
+              'devices': [for (var d in profile.devices) d.id],
+              'languages': profile.languages,
+            },
+          });
         case Group():
           walk(entry, file ?? entry.name);
         case GroupEntry():
@@ -164,9 +263,18 @@ List<Map<String, Object?>> _list(Map<String, void Function()> scenarioMains) {
     }
   }
 
-  walk(_declare(scenarioMains), null);
+  walk(declared.root, null);
   return scenarios;
 }
+
+/// Whether a declared test came from `scenario()` rather than a plain
+/// `testWidgets` that happens to live in the same folder.
+bool _isScenario(
+  Map<String, Set<String>> scenarios,
+  String? file,
+  Test test,
+  Group group,
+) => scenarios[file ?? '']?.contains(_leafName(test, group)) ?? false;
 
 /// The scenario's own name, with the enclosing groups' prefix stripped —
 /// `test_api` composes full names with spaces.
@@ -228,6 +336,11 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
     ),
     captureScale: number('captureScale'),
     captureRaw: args['captureRaw'] == 'true',
+    captureNative: args['captureNative'] == 'true',
+    clockOrigin: switch (args['clock']) {
+      null => null,
+      var raw => DateTime.parse(raw),
+    },
   );
   var untouched =
       runArgs.size == null &&
@@ -239,7 +352,9 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       runArgs.brightness == null &&
       runArgs.accessibility.isDefault &&
       runArgs.captureScale == null &&
-      !runArgs.captureRaw;
+      !runArgs.captureRaw &&
+      !runArgs.captureNative &&
+      runArgs.clockOrigin == null;
   return untouched ? null : runArgs;
 }
 
@@ -249,7 +364,11 @@ Future<Map<String, Object?>> _run(
   required String outDir,
   String? file,
   String? scenario,
+  String? tag,
   ScenarioRunArgs? runArgs,
+  Map<String, ScenarioProfile> profiles = const {},
+  String? device,
+  bool deviceUnspecified = false,
 }) async {
   var mains = file == null
       ? scenarioMains
@@ -257,12 +376,54 @@ Future<Map<String, Object?>> _run(
           for (var entry in scenarioMains.entries)
             if (entry.key == file) entry.key: entry.value,
         };
-  var root = _declare(mains);
+  var declared = _declare(mains);
+  var root = declared.root;
 
   var outcomes = <Map<String, Object?>>[];
   var watch = Stopwatch()..start();
 
-  Future<void> walk(Group group, Suite suite, String? groupFile) async {
+  // What each file runs as, worked out once per file. A request that named a
+  // device is that device everywhere; a request that named none takes what the
+  // file's folder profile puts first — which is how one run over a mixed suite
+  // frames the mobile folder as a phone and the desktop folder as a window,
+  // without the caller having to know either folder exists.
+  var framings = <String, (ScenarioRunArgs?, String?)>{};
+  (ScenarioRunArgs?, String?) framingFor(String file) =>
+      framings.putIfAbsent(file, () {
+        if (!deviceUnspecified) return (runArgs, device);
+        var chosen = _profileFor(file, profiles)?.devices.firstOrNull;
+        if (chosen == null) return (runArgs, device);
+        return (
+          (runArgs ?? const ScenarioRunArgs()).withDevice(chosen),
+          chosen.id,
+        );
+      });
+
+  /// Mirrors `test_core`'s engine (`runner/engine.dart`, `_runGroup`): the
+  /// group's `setUpAll` before its entries, its entries only if that passed,
+  /// and its `tearDownAll` afterwards **whatever happened** — cleanup a
+  /// failure skipped is cleanup that never runs, and this harness outlives the
+  /// run by design.
+  Future<void> walk(
+    Group group,
+    Suite suite,
+    List<Group> parents,
+    String? groupFile,
+  ) async {
+    // Before paying for a group's `setUpAll`, ask whether anything in it will
+    // run at all. `test_core` never has to: it filters by rebuilding the group
+    // tree, so an empty group never reaches the engine. We filter as we walk,
+    // and the panel runs one scenario at a time — without this, running one
+    // scenario would start every other file's fixtures.
+    if (!_runsAnything(declared.scenarios, group, groupFile, scenario, tag)) {
+      return;
+    }
+    var scope = [...parents, group];
+
+    var setUpAllError = group.setUpAll == null
+        ? null
+        : await _runHook(group.setUpAll!, suite, scope);
+
     for (var entry in group.entries) {
       switch (entry) {
         case Test():
@@ -272,36 +433,152 @@ Future<Map<String, Object?>> _run(
           // in one file both run, which is the honest reading of a request
           // that names only what the panel displays.
           var name = _leafName(entry, group);
-          if (scenario == null || name == scenario) {
-            outcomes.add(
-              await _runOne(
-                entry.load(suite, groups: [group]),
-                file: groupFile ?? '',
-                name: name,
-                inspector: inspector,
-                outDir: outDir,
-              ),
-            );
+          if (!_isScenario(declared.scenarios, groupFile, entry, group)) break;
+          if (!_selects(entry, group, scenario, tag)) break;
+          var (framedArgs, framedDevice) = framingFor(groupFile ?? '');
+          if (setUpAllError != null) {
+            // Reported against each scenario that would have run, not once
+            // against the group: a caller who asked for one scenario must find
+            // that scenario in the answer, failed and saying why.
+            outcomes.add({
+              'file': groupFile ?? '',
+              'name': name,
+              'device': ?framedDevice,
+              'ok': false,
+              'ms': 0,
+              'steps': <Map<String, Object?>>[],
+              'errors': [setUpAllError],
+            });
+            break;
           }
+          // Read by `scenario()` inside the test body, applied through the
+          // binding's own test values, reset by its tearDown — the run-args
+          // zone of the design. Set per scenario rather than per request,
+          // because the framing is per folder.
+          scenarioRunArgs = framedArgs;
+          outcomes.add(
+            await _runOne(
+              entry.load(suite, groups: scope),
+              file: groupFile ?? '',
+              name: name,
+              device: framedDevice,
+              inspector: inspector,
+              outDir: outDir,
+            ),
+          );
         case Group():
-          await walk(entry, suite, groupFile ?? entry.name);
+          if (setUpAllError == null) {
+            await walk(entry, suite, scope, groupFile ?? entry.name);
+          }
         case GroupEntry():
           break;
+      }
+    }
+
+    if (group.tearDownAll case var hook?) {
+      if (await _runHook(hook, suite, scope) case var error?) {
+        // Its own outcome: a cleanup failure belongs to nobody's scenario, and
+        // marking a scenario that passed as failed would be a lie.
+        outcomes.add({
+          'file': groupFile ?? '',
+          'name': 'tearDownAll',
+          'ok': false,
+          'ms': 0,
+          'steps': <Map<String, Object?>>[],
+          'errors': [error],
+        });
       }
     }
   }
 
   var suite = Suite(root, SuitePlatform(Runtime.vm));
-  // Read by `scenario()` inside each test body, applied through the binding's
-  // own test values, reset by its tearDown — the run-args zone of the design.
-  scenarioRunArgs = runArgs;
   try {
-    await walk(root, suite, null);
+    await walk(root, suite, const [], null);
   } finally {
     scenarioRunArgs = null;
   }
 
   return {'ms': watch.elapsedMilliseconds, 'scenarios': outcomes};
+}
+
+/// Whether anything under [group] survives the scenario filter — the question
+/// that decides whether its `setUpAll` is worth running.
+bool _runsAnything(
+  Map<String, Set<String>> scenarios,
+  Group group,
+  String? file,
+  String? scenario,
+  String? tag,
+) {
+  for (var entry in group.entries) {
+    switch (entry) {
+      case Test():
+        if (_isScenario(scenarios, file, entry, group) &&
+            _selects(entry, group, scenario, tag)) {
+          return true;
+        }
+      case Group():
+        if (_runsAnything(
+          scenarios,
+          entry,
+          file ?? entry.name,
+          scenario,
+          tag,
+        )) {
+          return true;
+        }
+      case GroupEntry():
+        break;
+    }
+  }
+  return false;
+}
+
+/// Whether a request naming [scenario] and/or [tag] wants this test.
+///
+/// The tag is `test_api`'s own — what `scenario(tags: …)` passes to
+/// `testWidgets`, which is also what `flutter test --tags` filters on, so a
+/// suite tagged for one runner is tagged for both.
+bool _selects(Test test, Group group, String? scenario, String? tag) {
+  if (scenario != null && _leafName(test, group) != scenario) return false;
+  if (tag != null && !test.metadata.tags.contains(tag)) return false;
+  return true;
+}
+
+/// Runs a group's `setUpAll` or `tearDownAll` — a synthetic test `test_api`
+/// hangs off the group rather than putting in its entries, which is exactly
+/// why a walk over `entries` alone never ran them.
+///
+/// Returns the failure, or null when it passed.
+Future<Map<String, Object?>?> _runHook(
+  Test hook,
+  Suite suite,
+  List<Group> scope,
+) async {
+  var live = hook.load(suite, groups: scope);
+  // `test_api` builds both hooks as **unguarded** tests (`guarded: false`):
+  // they run no error zone of their own, on the understanding that whoever
+  // runs them has one. Ours would be `runHarness`'s outermost guard, which
+  // logs and swallows — and the LiveTest stays green, so the group would run
+  // against a fixture that never got built. So the hook gets a zone here, and
+  // what escapes into it is what failed.
+  Object? escaped;
+  StackTrace? escapedStack;
+  await runZonedGuarded(() => live.run(), (error, stack) {
+    escaped ??= error;
+    escapedStack ??= stack;
+  });
+  // One turn of the event loop for an error raised on the way out.
+  await Future<void>.delayed(Duration.zero);
+
+  if (escaped == null && live.state.result.isPassing && live.errors.isEmpty) {
+    return null;
+  }
+  var error = live.errors.firstOrNull;
+  return {
+    'error': '${hook.name}: ${escaped ?? error?.error ?? 'failed'}',
+    'stack': '${escapedStack ?? error?.stackTrace}',
+  };
 }
 
 Future<Map<String, Object?>> _runOne(
@@ -310,6 +587,7 @@ Future<Map<String, Object?>> _runOne(
   required String name,
   required GuestInspector inspector,
   required String outDir,
+  String? device,
 }) async {
   var steps = <Map<String, Object?>>[];
   var directory = Directory('$outDir/${_fileSafe(file)}/${_fileSafe(name)}')
@@ -318,7 +596,7 @@ Future<Map<String, Object?>> _runOne(
   scenarioRunListener = (capture) {
     var base =
         '${directory.path}/${capture.index}-'
-        '${_fileSafe(capture.name ?? 'step ${capture.index}')}';
+        '${_fileSafe(capture.failure != null ? 'failed' : capture.name ?? 'step ${capture.index}')}';
     var imagePath = '$base.${capture.format == 'raw' ? 'raw' : 'png'}';
     File(imagePath).writeAsBytesSync(capture.bytes);
     // The tree next to the pixels — the step triple's third leg. Written to a
@@ -341,6 +619,11 @@ Future<Map<String, Object?>> _runOne(
       'texts': capture.texts,
       'statusBrightness': ?capture.statusBrightness,
       'navBrightness': ?capture.navBrightness,
+      // Both omitted in the healthy case, so a normal step's record stays the
+      // size it was.
+      if (!capture.settled) 'settled': false,
+      if (capture.strayFrames > 0) 'strayFrames': capture.strayFrames,
+      'failure': ?capture.failure,
     };
     steps.add(step);
     // Announced the moment it exists — the artifacts are already on disk —
@@ -350,6 +633,10 @@ Future<Map<String, Object?>> _runOne(
     developer.postEvent('flutterware.scenarios.step', {
       'file': file,
       'scenario': name,
+      // Said on every step, not only in the final report: a host drawing the
+      // flow live has to frame the first picture, and by then the answer is
+      // already known.
+      'device': ?device,
       'step': step,
     });
   };
@@ -385,6 +672,9 @@ Future<Map<String, Object?>> _runOne(
   return {
     'file': file,
     'name': name,
+    // What it actually ran as — which the caller may not have said, having
+    // left the folder's profile to answer.
+    'device': ?device,
     'ok': passed,
     'ms': watch.elapsedMilliseconds,
     'steps': steps,
