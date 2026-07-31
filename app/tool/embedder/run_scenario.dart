@@ -9,6 +9,7 @@ import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/frontend_server.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart';
+import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:path/path.dart' as p;
 
 /// S1 spike host: builds and spawns the embedder guest running
@@ -36,8 +37,15 @@ Future<void> main(List<String> args) async {
     'embedder',
     'scenario_scene.dart',
   );
-  var guestSocketPath = p.join(buildDir, 'scenario_guest.sock');
-  var controlSocketPath = p.join(buildDir, 'scenario_control.sock');
+  // Not under the build directory: a unix socket path is capped at 104 bytes
+  // on macOS, which a long checkout path overflows. Pid so parallel runs
+  // don't unlink each other's sockets.
+  var guestSocketPath = checkSocketPath(
+    p.join(flutterwareRunDir(), 'sc-g-$pid.sock'),
+  );
+  var controlSocketPath = checkSocketPath(
+    p.join(flutterwareRunDir(), 'sc-c-$pid.sock'),
+  );
 
   Directory(buildDir).createSync(recursive: true);
   var out = Directory(outDir);
