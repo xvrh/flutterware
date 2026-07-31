@@ -252,7 +252,12 @@ class RunPackage extends PluginPackage {
 
 /// One `main()` a package can be launched from.
 class Entrypoint {
-  const Entrypoint(this.path, {this.name, this.knobs = const []});
+  const Entrypoint(
+    this.path, {
+    this.name,
+    this.description,
+    this.knobs = const [],
+  });
 
   /// Package-relative, `/`-separated — `lib/main_staging.dart`.
   final String path;
@@ -260,12 +265,20 @@ class Entrypoint {
   /// What a human and an agent call it. The file's name when null.
   final String? name;
 
+  /// What this entry point *is*, in a line.
+  ///
+  /// `Kiosk` and `Onboarding` are unguessable from their file names, and the
+  /// picker is where that costs you. An agent choosing between entry points
+  /// reads the same field, so it pays twice.
+  final String? description;
+
   /// What has to be decided before this can be built.
   final List<LaunchKnob> knobs;
 
   Map<String, Object?> toJson() => {
     'path': path,
-    if (name != null) 'name': name,
+    'name': ?name,
+    'description': ?description,
     if (knobs.isNotEmpty) 'knobs': [for (var k in knobs) k.toJson()],
   };
 }

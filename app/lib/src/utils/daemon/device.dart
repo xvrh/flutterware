@@ -66,6 +66,23 @@ class DaemonDevice {
 
   bool get isWireless => connectionInterface == 'wireless';
 
+  /// Which of the three kinds this is.
+  ///
+  /// The list treated these as one thing and the difference is exactly what a
+  /// row has to say — most visibly, that a *host* cannot be taken from you, so
+  /// calling this Mac `free` or `busy` as though somebody else might have it is
+  /// simply false.
+  ///
+  /// Read off `ephemeral` and `emulator`, which are the daemon's own words for
+  /// it: measured, `macos` and `chrome` are both `ephemeral=false`, a cabled
+  /// iPhone is `ephemeral=true emulator=false`, and a simulator is
+  /// `ephemeral=true emulator=true`.
+  DeviceKind get kind => !ephemeral
+      ? DeviceKind.host
+      : emulator
+      ? DeviceKind.virtual
+      : DeviceKind.physical;
+
   /// What to call it when the daemon sent no name.
   String get displayName => name ?? id;
 
@@ -112,4 +129,24 @@ class DaemonDevice {
 
   @override
   String toString() => 'DaemonDevice($id, $name)';
+}
+
+/// The three kinds of device, which differ in every way a row cares about.
+///
+/// | kind | comes and goes | contended | can be started |
+/// |---|---|---|---|
+/// | [physical] | unplugged, asleep, roaming | yes, across worktrees *and* repos | no |
+/// | [virtual] | you start and stop it | yes, once booted | yes |
+/// | [host] | always there | no — a run owns a window, not a slot | n/a |
+enum DeviceKind {
+  /// A phone or tablet on the end of a cable or a wifi link.
+  physical,
+
+  /// An emulator or a simulator: absent until somebody boots it, contended
+  /// once they have.
+  virtual,
+
+  /// This machine, or a browser on it. Cannot be taken, and stopping the run
+  /// closes the window — so the honest words are about the run, not the slot.
+  host,
 }

@@ -54,6 +54,22 @@ Future<RunHandle> launchApp({
     runDir,
     '${runHandleKey(worktree, device, entrypoint)}.log',
   );
+  // **Emptied here, not by the shell's `>` below.** The key is stable across
+  // relaunch by design, so a second run of the same entry point on the same
+  // device writes to the same file — and the redirect only truncates it once
+  // the child is actually running. Between `Process.start` returning and that
+  // moment, the *previous* run's log is still on disk, complete with its
+  // `app.debugPort` and `app.started`. [awaitLaunch] starts polling
+  // immediately, reads them, and reports the new app as up at the old app's VM
+  // service address, which is dead. Measured: a relaunch inherited a URI from a
+  // run two hours older.
+  try {
+    File(logPath).writeAsStringSync('');
+  } on FileSystemException catch (e) {
+    // Not fatal on its own — the shell redirect will still create it — so this
+    // must not stop a launch. It only means the window above is open again.
+    _logger.warning('Could not clear $logPath before launching: $e');
+  }
   var command = [
     sdk.flutter,
     'run',
@@ -235,7 +251,12 @@ class LaunchLog {
 RunHandle refreshFromLog(RunHandle handle) {
   var path = handle.logPath;
   if (path == null) return handle;
-  if (handle.vmService != null && handle.appId != null) return handle;
+  // **The log wins, even when the handle already has an answer.** This used to
+  // return early once both fields were set, which made a wrong value permanent:
+  // a handle that started life with a stale URI could never be corrected, and
+  // the app looked dead to everything that probed it. The early return also
+  // saved nothing — `_probeAll` reads this same file for every handle on every
+  // pass regardless, to show the progress line.
   var log = LaunchLog.read(path);
   if (log.vmService == null && log.appId == null) return handle;
   if (log.vmService == handle.vmService && log.appId == handle.appId) {

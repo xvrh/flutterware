@@ -48,6 +48,7 @@ void main() => Flutterware.configure((fw) {
             Entrypoint(
               'lib/main.dart',
               name: 'App',
+              description: 'The example app, with the devbar mounted',
               knobs: [
                 LaunchKnob(
                   'FW_MARKER',
@@ -57,8 +58,16 @@ void main() => Flutterware.configure((fw) {
                 ),
               ],
             ),
-            Entrypoint('lib/devbar_example.dart', name: 'Devbar'),
-            Entrypoint('lib/ui_book.dart', name: 'UI book'),
+            Entrypoint(
+              'lib/devbar_example.dart',
+              name: 'Devbar',
+              description: 'Every devbar plugin, on a demo screen',
+            ),
+            Entrypoint(
+              'lib/ui_book.dart',
+              name: 'UI book',
+              description: 'The component gallery, no backend',
+            ),
           ],
         ),
       ],

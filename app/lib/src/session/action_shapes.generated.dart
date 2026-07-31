@@ -1984,6 +1984,12 @@ final resultShapes = <String, ResultShape>{
             'False for the always-there targets — this desktop, the browser — which cannot be unplugged and are never contended for in the way a phone is.',
       },
       <String, Object?>{
+        'name': 'kind',
+        'type': 'String',
+        'doc':
+            '`physical`, `virtual` or `host` — the distinction [physical] cannot make on its own.',
+      },
+      <String, Object?>{
         'name': 'connected',
         'type': 'bool',
         'doc': 'Known but not reachable right now.',
@@ -2080,6 +2086,12 @@ final resultShapes = <String, ResultShape>{
               'type': 'bool',
               'doc':
                   'False for the always-there targets — this desktop, the browser — which cannot be unplugged and are never contended for in the way a phone is.',
+            },
+            <String, Object?>{
+              'name': 'kind',
+              'type': 'String',
+              'doc':
+                  '`physical`, `virtual` or `host` — the distinction [physical] cannot make on its own.',
             },
             <String, Object?>{
               'name': 'connected',
@@ -2183,6 +2195,12 @@ final resultShapes = <String, ResultShape>{
       },
       <String, Object?>{'name': 'name', 'type': 'String'},
       <String, Object?>{
+        'name': 'description',
+        'type': 'String',
+        'optional': true,
+        'doc': 'What it is, in a line, when the config said.',
+      },
+      <String, Object?>{
         'name': 'knobs',
         'type': 'List<RunKnobEntry>',
         'shape': <String, Object?>{
@@ -2247,6 +2265,12 @@ final resultShapes = <String, ResultShape>{
                   'Package-relative — what `launch` takes as its `entrypoint`.',
             },
             <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'description',
+              'type': 'String',
+              'optional': true,
+              'doc': 'What it is, in a line, when the config said.',
+            },
             <String, Object?>{
               'name': 'knobs',
               'type': 'List<RunKnobEntry>',
@@ -2321,6 +2345,12 @@ final resultShapes = <String, ResultShape>{
                         'Package-relative — what `launch` takes as its `entrypoint`.',
                   },
                   <String, Object?>{'name': 'name', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'description',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'What it is, in a line, when the config said.',
+                  },
                   <String, Object?>{
                     'name': 'knobs',
                     'type': 'List<RunKnobEntry>',

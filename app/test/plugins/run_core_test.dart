@@ -143,11 +143,19 @@ void main() {
 
       expect(report.status.message, contains('2 devices'));
       expect(report.status.message, contains('1 busy'));
-      expect([for (var c in report.children) c.id], ['phone', 'sim']);
-      expect(report.children.first.status.message, contains('main.dart'));
-      expect(report.children.last.status.message, 'free');
-      // The dead handle is still on disk: computeAll may not open a socket, so
-      // it cannot know the run is gone, and must not guess.
+      // **The children are runs, not devices.** A child's id becomes the first
+      // address segment, and since the panel became run-centric those are the
+      // only things it can be pointed at. Devices are counted in the status
+      // line above and listed in the desk.
+      expect(
+        [for (var c in report.children) c.id],
+        [runHandleKey(worktree.path, 'phone', 'lib/main.dart')],
+      );
+      expect(report.children.single.label, contains('main.dart'));
+      // Nothing has been probed, and computeAll may not open a socket to find
+      // out — so the row says it does not know rather than guessing.
+      expect(report.children.single.status.message, contains('not probed'));
+      // The dead handle is still on disk, for the same reason.
       expect(scanRunHandles(runDir.path), hasLength(1));
     });
 
@@ -511,6 +519,42 @@ void main() {
         'ws://127.0.0.1:9/t=/ws',
       );
     });
+
+    test('corrects a handle whose service address is stale', () {
+      // The regression that made a relaunch look dead. The key is stable across
+      // relaunch by design, so two runs of the same entry point on the same
+      // device share one log file — and a handle written during the window
+      // before the new launcher truncated it carries the *previous* run's URI.
+      // `refreshFromLog` used to return early once the handle had both fields,
+      // which made that wrong value permanent.
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        launcherPid: pid,
+        logPath: p.join(runDir.path, 'app-w.log'),
+        vmService: 'ws://127.0.0.1:1111/old=/ws',
+        appId: 'previous',
+      );
+      File(handle.logPath!).writeAsStringSync(
+        _event('app.debugPort', {
+          'appId': 'current',
+          'port': 2222,
+          'wsUri': 'ws://127.0.0.1:2222/new=/ws',
+          'baseUri': 'http://127.0.0.1:2222/new=/',
+        }),
+      );
+
+      var updated = refreshFromLog(handle);
+
+      expect(updated.vmService, 'ws://127.0.0.1:2222/new=/ws');
+      expect(updated.appId, 'current');
+      expect(
+        scanRunHandles(runDir.path).single.vmService,
+        'ws://127.0.0.1:2222/new=/ws',
+      );
+    });
   });
 
   group('control', () {
@@ -615,6 +659,7 @@ RunHandle _writeHandle(
   String? entrypointName,
   String? worktreeName,
   String? vmService,
+  String? appId,
   int launcherPid = 1,
   DateTime? startedAt,
 }) {
@@ -627,6 +672,7 @@ RunHandle _writeHandle(
     entrypointName: entrypointName,
     launcherPid: launcherPid,
     vmService: vmService,
+    appId: appId,
     logPath: logPath,
     startedAt: startedAt ?? DateTime.now(),
   ).publish(runDir.path);

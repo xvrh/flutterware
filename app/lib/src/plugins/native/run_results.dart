@@ -56,6 +56,7 @@ class RunDeviceEntry {
     this.sdk,
     this.emulator = false,
     this.physical = true,
+    this.kind = 'physical',
     this.connection,
     this.running = const [],
   });
@@ -76,6 +77,15 @@ class RunDeviceEntry {
   /// False for the always-there targets — this desktop, the browser — which
   /// cannot be unplugged and are never contended for in the way a phone is.
   final bool physical;
+
+  /// `physical`, `virtual` or `host` — the distinction [physical] cannot make
+  /// on its own.
+  ///
+  /// `physical: false` covers both this Mac and a booted simulator, and they
+  /// are nothing alike: one cannot be taken from you and stops when the run
+  /// stops, the other is a contended slot somebody had to boot. A caller
+  /// choosing words for a row needs to know which.
+  final String kind;
 
   /// Known but not reachable right now. A wireless phone that went to sleep
   /// stays in the list and stops being launchable.
@@ -191,6 +201,7 @@ class RunEntrypointEntry {
   RunEntrypointEntry({
     required this.path,
     required this.name,
+    this.description,
     this.knobs = const [],
   });
 
@@ -198,6 +209,11 @@ class RunEntrypointEntry {
   final String path;
 
   final String name;
+
+  /// What it is, in a line, when the config said. `Kiosk` and `Onboarding`
+  /// cannot be told apart by their file names, and this is the field that
+  /// tells them apart — for a picker and for an agent alike.
+  final String? description;
 
   final List<RunKnobEntry> knobs;
 

@@ -254,6 +254,7 @@ devices: List<RunDeviceEntry>
   sdk: String?   # `iOS 18.5`, `Android 12 (API 31)`.
   emulator: bool
   physical: bool   # False for the always-there targets — this desktop, the browser — which cannot be unplugged and are never contended for in the way a phone is.
+  kind: String   # `physical`, `virtual` or `host` — the distinction [physical] cannot make on its own.
   connected: bool   # Known but not reachable right now.
   connection: String?   # `attached` for a cable or a built-in target, `wireless` over the network.
   running: List<RunHolder>   # The runs currently holding this device, from any worktree.
@@ -323,6 +324,7 @@ packages: List<RunEntrypointPackage>
   entrypoints: List<RunEntrypointEntry>
     path: String   # Package-relative — what `launch` takes as its `entrypoint`.
     name: String
+    description: String?   # What it is, in a line, when the config said.
     knobs: List<RunKnobEntry>
       define: String   # The define's name, as `String.fromEnvironment` reads it.
       label: String?

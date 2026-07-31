@@ -153,6 +153,17 @@ class RunHandle {
   /// What to call the entry point on screen.
   String get entrypointLabel => entrypointName ?? p.basename(entrypoint);
 
+  /// What to call the device on screen. The id when the launcher never learned
+  /// a name for it — a handle written by a process that had no daemon.
+  String get deviceLabel => deviceName ?? device;
+
+  /// This run's stable name — see [runHandleKey].
+  ///
+  /// Stable across relaunch, which is what makes it usable as an address: the
+  /// same entry point on the same device from the same worktree is the same
+  /// run, whatever pid is carrying it this time.
+  String get key => runHandleKey(worktree, device, entrypoint);
+
   /// The same run, now that its VM service is known.
   RunHandle withService({String? vmService, String? appId}) => RunHandle(
     worktree: worktree,

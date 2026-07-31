@@ -131,12 +131,42 @@ question about artifacts, not about runs.
 
 ## The build list, for when slice 3 starts
 
-1. `Entrypoint.description` in `lib/src/plugins/first_party.dart`, through
-   `declaredEntrypoints` and into `RunEntrypointEntry`.
-2. `run_address.dart` — `<runHandleKey>/<tab>`, artifacts under it.
-3. Panel: subject chips + tab strip + run header, replacing the device cards.
-4. The New run page as a subject alongside the runs.
-5. The desk widget, in the panel's empty state first; promote to shell chrome
-   with the worktree-jump when that is wanted.
-6. Fix the `host` labels.
-7. `emulator.getEmulators` / `emulator.launch` in the daemon client.
+1. ~~`Entrypoint.description`~~ **built** — through `declaredEntrypoints`,
+   `EntrypointRef` and `RunEntrypointEntry`, and shown in the picker.
+2. ~~`run_address.dart`~~ **built** — `<runHandleKey>/<tab>`, round-trip tested.
+   Artifacts are *not* under it: the screenshot action writes a file and
+   returns its path, which left the artifact question open (below).
+3. ~~Panel: subject chips + tab strip + run header~~ **built**.
+4. ~~The New run page as a subject~~ **built**.
+5. ~~The desk widget in the panel's empty state~~ **built**. Still to promote to
+   shell chrome with the worktree-jump.
+6. ~~Fix the `host` labels~~ **built**, and the fix went deeper than labels: the
+   distinction is now `DaemonDevice.kind` (`physical`/`virtual`/`host`) and it
+   is reported by the `devices` action, because `physical: false` covered both
+   this Mac and a booted simulator and a caller could not tell them apart.
+7. `emulator.getEmulators` / `emulator.launch` in the daemon client. **Not
+   built** — device management rather than panel work.
+
+### What the build changed about the design
+
+- **The rail lists runs, not devices.** A `PluginChild.id` becomes the first
+  address segment, so the children have to be things the panel can be pointed
+  at. Devices moved to the desk and the status line.
+- **The tabs are `Screen`, `Tree`, `Logs`** rather than the `Screen`/`Logs` the
+  design named. The tree earns its own pane: it is the only artifact that
+  carries source locations, which is what makes it actionable.
+- **A run's log opens at its newest line**, and the app's output is separable
+  from the build's. That split had to be measured rather than designed — see
+  `2026-07-31-sl3-inspect-surface-findings.md`.
+
+### A bug the rebuild surfaced
+
+Worth recording because it was invisible until runs became subjects. The handle
+key is stable across relaunch *by design*, so two runs of the same entry point
+on the same device share one `app-<key>.log`. The shell redirect only truncates
+that file once the child is running — and `awaitLaunch` starts polling the
+moment `Process.start` returns. In that window it read the **previous** run's
+`app.debugPort` and published the new run at a dead VM service address.
+`refreshFromLog` then returned early because the handle already had both fields,
+which made the wrong value permanent. Fixed at both ends: the log is emptied
+before the spawn, and the log now always wins over the handle.

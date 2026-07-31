@@ -11,6 +11,7 @@ class EntrypointRef {
     required this.path,
     required this.name,
     required this.declared,
+    this.description,
     this.knobs = const [],
   });
 
@@ -20,6 +21,11 @@ class EntrypointRef {
   /// What to call it. The declared name, or the file's own when the scan
   /// found it.
   final String name;
+
+  /// The one line the config gave it. Null for a scanned entry point: a
+  /// description is something somebody wrote, never something guessed from a
+  /// file name.
+  final String? description;
 
   /// True when `tool/flutterware.dart` named it. A discovered entry point is
   /// still launchable; the difference is that nobody vouched for it, and it
@@ -46,6 +52,7 @@ List<EntrypointRef> declaredEntrypoints(Map<String, Object?> config) => [
         EntrypointRef(
           path: path,
           name: entry['name'] as String? ?? _nameFor(path),
+          description: entry['description'] as String?,
           declared: true,
           knobs: _knobsOf(entry['knobs']),
         ),

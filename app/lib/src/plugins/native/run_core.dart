@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutterware/plugins.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart';
 import 'package:flutterware/server.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
@@ -295,12 +298,20 @@ class RunCore extends PluginCore {
           : busy.isNotEmpty
           ? StatusBadge.count(busy.length, tone: Tone.good)
           : StatusBadge.none,
+      // **Runs, not devices.** A child's id becomes the first address segment
+      // (`_childAddress`), so these have to be the things the panel can be
+      // pointed at — and since the rebuild the panel's subjects are runs. A
+      // device list in the rail would have been a row of links to nowhere.
+      //
+      // Devices have not gone anywhere: they are the desk, which the panel
+      // renders when nothing is running and which belongs in the shell's
+      // chrome. The status line below still counts them.
       children: [
-        for (var device in devices)
+        for (var handle in _handles)
           PluginChild(
-            id: device.id,
-            label: device.displayName,
-            status: _deviceStatus(device),
+            id: handle.key,
+            label: '${handle.entrypointLabel} · ${handle.deviceLabel}',
+            status: _handleStatus(handle),
           ),
       ],
       actions: [
@@ -608,15 +619,21 @@ class RunCore extends PluginCore {
     return Status.good('$count, ${busy.length} busy$freshness');
   }
 
-  Status _deviceStatus(DaemonDevice device) {
-    var holders = _handles.where((h) => h.device == device.id).toList();
-    if (!device.isConnected) return Status.warn('not connected');
-    if (holders.isEmpty) return Status.neutral('free');
-    var first = holders.first;
-    var suffix = holders.length > 1 ? ' +${holders.length - 1}' : '';
-    return Status.info(
-      '${first.entrypointLabel} · ${first.worktreeName}$suffix',
-    );
+  /// What a run says about itself in the rail — capability, not liveness.
+  ///
+  /// The same distinction the panel header makes: an app whose launcher died
+  /// keeps its tree and its screenshots and loses hot reload, and a row saying
+  /// only "running" would hide it.
+  Status _handleStatus(RunHandle handle) {
+    var probe = probeOf(handle);
+    var mine = handle.worktreeName == host.worktree.name;
+    var where = mine ? '' : ' · ${handle.worktreeName}';
+    if (probe == null) return Status.neutral('not probed$where');
+    if (!probe.canInspect) {
+      return Status.neutral('${logOf(handle)?.progress ?? 'building'}$where');
+    }
+    if (!probe.launcher) return Status.warn('no launcher$where');
+    return Status.good('live$where');
   }
 
   String _deviceDetail(DaemonDevice device) => [
@@ -732,6 +749,7 @@ class RunCore extends PluginCore {
                 RunEntrypointEntry(
                   path: entry.path,
                   name: entry.name,
+                  description: entry.description,
                   knobs: [for (var knob in entry.knobs) _knobEntry(knob)],
                 ),
             ],
@@ -1035,6 +1053,43 @@ class RunCore extends PluginCore {
     );
   }
 
+  /// What the last launch from this panel chose.
+  ///
+  /// Held here rather than in the page's state so it survives the page being
+  /// closed and reopened, which is the whole point: running the same thing
+  /// again should be opening the page and pressing Start. Deliberately not
+  /// persisted to disk — "what I ran a minute ago" is a fact about this
+  /// session, and restoring it from last week would be a worse guess than the
+  /// first device in the list.
+  ({
+    String device,
+    String package,
+    String entrypoint,
+    Map<String, String> knobs,
+  })?
+  lastLaunch;
+
+  /// The widget tree of one run. The panel's entry point, and `tree`'s.
+  Future<InspectTree> inspectTree(RunHandle handle, {bool summary = true}) =>
+      _withInspector(handle, (i) => i.tree(summary: summary));
+
+  /// A picture of one run.
+  Future<Uint8List> screenshot(RunHandle handle, {int? maxSide}) =>
+      _withInspector(handle, (i) => i.screenshot(maxSide: maxSide));
+
+  /// One run's log, read from the file rather than the app — so it works while
+  /// the app is still building and after it has died.
+  List<RunLogLine> readLogs(
+    RunHandle handle, {
+    RunLogSource? only,
+    bool errorsOnly = false,
+    int? tail,
+  }) {
+    var path = handle.logPath;
+    if (path == null) return const [];
+    return readRunLog(path, only: only, errorsOnly: errorsOnly, tail: tail);
+  }
+
   /// Opens a connection for reading rather than for driving.
   ///
   /// **Waits for no registration, and that is the point.** Reload and restart
@@ -1249,6 +1304,7 @@ class RunCore extends PluginCore {
             sdk: device.sdk,
             emulator: device.emulator,
             physical: device.ephemeral && !device.emulator,
+            kind: device.kind.name,
             connected: device.isConnected,
             connection: device.connectionInterface,
             running: [
