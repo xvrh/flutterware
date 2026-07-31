@@ -5,6 +5,7 @@ import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart';
 import 'package:flutterware_app/src/embedder/raw_frame.dart';
+import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
@@ -23,7 +24,12 @@ Future<void> main() async {
   var engineDir = p.join(packageRoot, '.engine');
   var rawFrame = p.join(buildDir, 'scene.rawframe');
   var pngPath = p.join(buildDir, 'scene.png');
-  var socketPath = p.join(buildDir, 'embedder.sock');
+  // Not under the build directory: a unix socket path is capped at 104 bytes
+  // on macOS, which a long checkout path overflows. Pid so parallel runs
+  // don't unlink each other's socket.
+  var socketPath = checkSocketPath(
+    p.join(flutterwareRunDir(), 'emb-$pid.sock'),
+  );
 
   Directory(buildDir).createSync(recursive: true);
 
