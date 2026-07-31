@@ -114,3 +114,41 @@ Map<String, dynamic> _$RunAppEntryToJson(RunAppEntry instance) =>
       'log': ?instance.log,
       'error': ?instance.error,
     };
+
+Map<String, dynamic> _$RunTreeResultToJson(RunTreeResult instance) =>
+    <String, dynamic>{
+      'device': instance.device,
+      'entrypoint': instance.entrypoint,
+      'nodes': instance.nodes,
+      'summary': instance.summary,
+      'root': ?instance.root,
+      'note': ?instance.note,
+    };
+
+Map<String, dynamic> _$RunScreenshotResultToJson(
+  RunScreenshotResult instance,
+) => <String, dynamic>{
+  'device': instance.device,
+  'entrypoint': instance.entrypoint,
+  'path': instance.path,
+  'bytes': instance.bytes,
+  'ms': instance.ms,
+  'note': ?instance.note,
+};
+
+Map<String, dynamic> _$RunLogsResultToJson(RunLogsResult instance) =>
+    <String, dynamic>{
+      'device': instance.device,
+      'entrypoint': instance.entrypoint,
+      'lines': instance.lines.map((e) => e.toJson()).toList(),
+      'total': instance.total,
+      'path': ?instance.path,
+      'note': ?instance.note,
+    };
+
+Map<String, dynamic> _$RunLogEntryToJson(RunLogEntry instance) =>
+    <String, dynamic>{
+      'source': instance.source,
+      'text': instance.text,
+      'error': instance.error,
+    };

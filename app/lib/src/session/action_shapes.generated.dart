@@ -2538,6 +2538,111 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
   }),
+  'RunLogEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunLogEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'source',
+        'type': 'String',
+        'doc':
+            '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+      },
+      <String, Object?>{'name': 'text', 'type': 'String'},
+      <String, Object?>{
+        'name': 'error',
+        'type': 'bool',
+        'doc': 'The launcher marked it as an error.',
+      },
+    ],
+  }),
+  'RunLogsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunLogsResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{
+        'name': 'lines',
+        'type': 'List<RunLogEntry>',
+        'shape': <String, Object?>{
+          'type': 'RunLogEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'source',
+              'type': 'String',
+              'doc':
+                  '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+            },
+            <String, Object?>{'name': 'text', 'type': 'String'},
+            <String, Object?>{
+              'name': 'error',
+              'type': 'bool',
+              'doc': 'The launcher marked it as an error.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'total',
+        'type': 'int',
+        'doc':
+            'How many lines matched before [lines] was cut to the tail, so a caller can tell "that is all of it" from "that is the end of it".',
+      },
+      <String, Object?>{
+        'name': 'path',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The log file, for anyone who would rather tail it themselves.',
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunScreenshotResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunScreenshotResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{
+        'name': 'path',
+        'type': 'String',
+        'doc': 'Where the PNG was written.',
+      },
+      <String, Object?>{'name': 'bytes', 'type': 'int'},
+      <String, Object?>{'name': 'ms', 'type': 'int'},
+      <String, Object?>{
+        'name': 'note',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Said out loud when the picture may not be the whole story — a run with platform views in it, which Flutter\'s layer tree cannot photograph.',
+      },
+    ],
+  }),
+  'RunTreeResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunTreeResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{
+        'name': 'nodes',
+        'type': 'int',
+        'doc':
+            'How many nodes the tree has, so a caller can tell an empty answer from a small one without walking it.',
+      },
+      <String, Object?>{
+        'name': 'summary',
+        'type': 'bool',
+        'doc': 'False when the whole tree was asked for.',
+      },
+      <String, Object?>{
+        'name': 'root',
+        'type': 'Map<String, Object?>',
+        'optional': true,
+        'doc':
+            'The tree itself, or null when the app has not built a frame yet.',
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
   'ScenarioListEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'ScenarioListEntry',
     'fields': <Object?>[

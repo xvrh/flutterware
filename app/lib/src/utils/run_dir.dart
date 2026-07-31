@@ -144,9 +144,12 @@ Future<int> sweepRunDir({
   for (var entity in entries) {
     var name = p.basename(entity.path);
     var isServerHandle = name.startsWith('srv-') && name.endsWith('.json');
+    // `.png` is a run's last screenshot, written beside its log and swept on
+    // the same terms: an observation of a moment nobody asked to keep.
     if (!name.endsWith('.log') &&
         !name.endsWith('.lock') &&
         !name.endsWith('.failed') &&
+        !name.endsWith('.png') &&
         !isServerHandle) {
       continue;
     }

@@ -9,7 +9,14 @@ sealed class Event {
     switch (event) {
       case 'daemon.connected':
         return DaemonConnectedEvent.fromJson(params);
+      // Two names, one payload. `daemon.log` is the daemon domain's own —
+      // "Failed to parse project metadata" and the like — and `app.log` is the
+      // app domain's, which `flutter run --machine` sends when a stop or a
+      // restart fails. It is *not* how the app's own output arrives: that comes
+      // as plain `flutter: ` lines on stdout, interleaved with this protocol
+      // rather than carried by it. See `RunLogSource.app`.
       case 'daemon.log':
+      case 'app.log':
         return DaemonLogEvent.fromJson(params);
       case 'daemon.logMessage':
         return DaemonLogMessageEvent.fromJson(params);

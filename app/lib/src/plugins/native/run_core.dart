@@ -9,8 +9,10 @@ import 'package:path/path.dart' as p;
 import '../../run/connection.dart';
 import '../../run/entrypoints.dart';
 import '../../run/handle.dart';
+import '../../run/inspect.dart';
 import '../../run/inventory.dart';
 import '../../run/launch.dart';
+import '../../run/logs.dart';
 import '../../utils/daemon/device.dart';
 import '../../utils/run_dir.dart';
 import '../plugin_core.dart';
@@ -447,6 +449,105 @@ class RunCore extends PluginCore {
               'leaves the app running on the phone.',
           parameters: _appSelector,
         ),
+        PluginAction(
+          'tree',
+          'Widget tree',
+          returns: RunTreeResult,
+          description:
+              'The widget tree of a running app, with the file, line and '
+              'column each widget was constructed at. Read from the app '
+              'itself, so it works whether or not the launcher is still alive. '
+              'The summary tree — the widgets the framework attributes to your '
+              'code — unless full is asked for.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'full',
+              'Full tree',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  "Every widget, including the framework's own. Large: a "
+                  'one-screen app is 25 summary nodes and about 517 full '
+                  'ones, six megabytes of them.',
+            ),
+          ],
+        ),
+        PluginAction(
+          'screenshot',
+          'Screenshot',
+          returns: RunScreenshotResult,
+          description:
+              'Photographs a running app and writes a PNG. Rendered by the '
+              'app itself rather than captured from the device, so it works '
+              'on hardware that cannot be asked for a screen grab — and it is '
+              'the current frame, not a cached one. Platform views (native '
+              'maps, webviews, video) will not appear.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'out',
+              'Output path',
+              required: false,
+              description:
+                  'Where to write the PNG. Defaults to a file beside the '
+                  "run's log, overwritten on each call.",
+            ),
+            const ActionParameter(
+              'maxSide',
+              'Maximum side',
+              kind: ActionParameterKind.integer,
+              required: false,
+              description:
+                  'Scale the picture down so its longest side is at most this '
+                  'many logical pixels. Full device size when omitted.',
+            ),
+          ],
+        ),
+        PluginAction(
+          'logs',
+          'Logs',
+          returns: RunLogsResult,
+          description:
+              "What a run's launcher has written: the app's own print output "
+              'and the tool talking about the build, kept apart because they '
+              'answer different questions. Read from the log file, so it '
+              'covers the build before the app existed and survives the app '
+              'itself — a crashed run can still be read.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'source',
+              'Source',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'Whose lines to return; both when omitted',
+              options: [
+                ActionOption('app', label: 'The app'),
+                ActionOption('tool', label: 'flutter run'),
+              ],
+            ),
+            const ActionParameter(
+              'errors',
+              'Errors only',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'Only lines the launcher marked as errors. Never guessed '
+                  'from the text.',
+            ),
+            const ActionParameter(
+              'lines',
+              'Lines',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '200',
+              description: 'How many of the most recent lines to return',
+            ),
+          ],
+        ),
       ],
       view: PluginView([
         if (_daemonError != null)
@@ -596,6 +697,9 @@ class RunCore extends PluginCore {
       'reload' => _controlAction('reload', arguments),
       'restart' => _controlAction('restart', arguments),
       'stop' => _controlAction('stop', arguments),
+      'tree' => _treeAction(arguments),
+      'screenshot' => _screenshotAction(arguments),
+      'logs' => _logsAction(arguments),
       _ => super.invoke(actionId, arguments: arguments),
     };
   }
@@ -917,6 +1021,149 @@ class RunCore extends PluginCore {
   }
 
   /// The one running app a control action means.
+  /// Refreshes the ledger and picks the one app the arguments name.
+  ///
+  /// The same opening as [_controlAction]: a handle is a cache of its
+  /// launcher's log, so topping it up is what lets a run started by somebody
+  /// else — another `fw`, a GUI that has since closed — be read here.
+  Future<RunHandle> _selectRunningApp(Map<String, Object?> arguments) async {
+    _handles = scanRunHandles(runDirProvider());
+    await _probeAll();
+    return _selectApp(
+      arguments['device'] as String?,
+      arguments['entrypoint'] as String?,
+    );
+  }
+
+  /// Opens a connection for reading rather than for driving.
+  ///
+  /// **Waits for no registration, and that is the point.** Reload and restart
+  /// have to wait for the `flutter run` to register them; the inspector is the
+  /// *app's* own and exists the moment its isolate does. So everything built on
+  /// this keeps working on a run whose launcher has died — the surviving half
+  /// of the two-tier split.
+  Future<T> _withInspector<T>(
+    RunHandle handle,
+    Future<T> Function(RunInspector inspector) body,
+  ) async {
+    var uri = handle.vmService;
+    if (uri == null) {
+      throw StateError(
+        '${handle.entrypointLabel} has no VM service yet — it is still '
+        'building. Watch ${handle.logPath}.',
+      );
+    }
+    var connection = await RunConnection.connect(uri);
+    try {
+      return await body(RunInspector(connection));
+    } finally {
+      await connection.close();
+    }
+  }
+
+  Future<RunTreeResult> _treeAction(Map<String, Object?> arguments) async {
+    var handle = await _selectRunningApp(arguments);
+    var full = _boolArgument(arguments['full']);
+    var tree = await _withInspector(handle, (i) => i.tree(summary: !full));
+    return RunTreeResult(
+      device: handle.device,
+      entrypoint: handle.entrypoint,
+      summary: !full,
+      nodes: tree.length,
+      root: tree.root?.toJson(),
+      note: tree.root == null
+          ? 'The app has not built a frame yet, so it has no tree. This is '
+                'normal for the first moment after a launch.'
+          : null,
+    );
+  }
+
+  Future<RunScreenshotResult> _screenshotAction(
+    Map<String, Object?> arguments,
+  ) async {
+    var handle = await _selectRunningApp(arguments);
+    // One file per run, overwritten. A screenshot is an observation of a
+    // moment, and keeping every one of them would fill the run dir with
+    // pictures nobody asked to keep; a caller that wants to keep one says
+    // where.
+    var out =
+        arguments['out'] as String? ??
+        // `runHandleKey` already carries the `app-` stem the handle and the log
+        // share, so the picture joins them rather than starting a third naming
+        // scheme.
+        p.join(
+          runDirProvider(),
+          '${runHandleKey(handle.worktree, handle.device, handle.entrypoint)}.png',
+        );
+    var maxSide = switch (arguments['maxSide']) {
+      null => null,
+      var value => _intArgument(value, 0),
+    };
+    var started = DateTime.now();
+    var bytes = await _withInspector(
+      handle,
+      (i) => i.screenshot(
+        maxSide: maxSide == null || maxSide <= 0 ? null : maxSide,
+      ),
+    );
+    var file = File(out);
+    file.parent.createSync(recursive: true);
+    file.writeAsBytesSync(bytes);
+    return RunScreenshotResult(
+      device: handle.device,
+      entrypoint: handle.entrypoint,
+      path: file.absolute.path,
+      bytes: bytes.length,
+      ms: DateTime.now().difference(started).inMilliseconds,
+    );
+  }
+
+  Future<RunLogsResult> _logsAction(Map<String, Object?> arguments) async {
+    var handle = await _selectRunningApp(arguments);
+    var path = handle.logPath;
+    if (path == null) {
+      return RunLogsResult(
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        lines: const [],
+        total: 0,
+        note: 'This run has no log file recorded against it.',
+      );
+    }
+    var source = switch (arguments['source']) {
+      'app' => RunLogSource.app,
+      'tool' => RunLogSource.tool,
+      _ => null,
+    };
+    var matched = readRunLog(
+      path,
+      only: source,
+      errorsOnly: _boolArgument(arguments['errors']),
+    );
+    var limit = _intArgument(arguments['lines'], 200);
+    var kept = limit > 0 && matched.length > limit
+        ? matched.sublist(matched.length - limit)
+        : matched;
+    return RunLogsResult(
+      device: handle.device,
+      entrypoint: handle.entrypoint,
+      path: path,
+      total: matched.length,
+      lines: [
+        for (var line in kept)
+          RunLogEntry(
+            source: line.source.name,
+            text: line.text,
+            error: line.error,
+          ),
+      ],
+      note: matched.isEmpty && source == RunLogSource.app
+          ? 'The app has printed nothing. The build output is there under '
+                'source=tool.'
+          : null,
+    );
+  }
+
   RunHandle _selectApp(String? device, String? entrypoint) {
     var matches = [
       for (var handle in _handles)

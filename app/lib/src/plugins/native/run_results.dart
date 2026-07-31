@@ -402,3 +402,139 @@ class RunAppEntry {
 
   Map<String, Object?> toJson() => _$RunAppEntryToJson(this);
 }
+
+/// `tree` — the widget tree of one running app.
+///
+/// Read through the framework's own inspector, which needs nothing in the
+/// user's app. Every node carries where its widget was constructed, so a caller
+/// can go from "this is wrong" to the line that built it without a second
+/// lookup.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunTreeResult implements PluginResult {
+  RunTreeResult({
+    required this.device,
+    required this.entrypoint,
+    required this.nodes,
+    required this.summary,
+    this.root,
+    this.note,
+  });
+
+  final String device;
+  final String entrypoint;
+
+  /// How many nodes the tree has, so a caller can tell an empty answer from a
+  /// small one without walking it.
+  final int nodes;
+
+  /// False when the whole tree was asked for.
+  ///
+  /// Worth reporting because the difference is three orders of magnitude: a
+  /// one-screen demo is 25 summary nodes and 517 full ones, and the full read
+  /// was six megabytes.
+  final bool summary;
+
+  /// The tree itself, or null when the app has not built a frame yet.
+  final Map<String, Object?>? root;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunTreeResultToJson(this);
+}
+
+/// `screenshot` — a picture of one running app.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunScreenshotResult implements PluginResult {
+  RunScreenshotResult({
+    required this.device,
+    required this.entrypoint,
+    required this.path,
+    required this.bytes,
+    required this.ms,
+    this.note,
+  });
+
+  final String device;
+  final String entrypoint;
+
+  /// Where the PNG was written.
+  ///
+  /// A path rather than the bytes: a screenshot is tens of kilobytes of base64
+  /// on a wire that also carries the rest of the answer, and every consumer —
+  /// a terminal, an MCP client, the panel — wants a file in the end anyway.
+  final String path;
+
+  final int bytes;
+  final int ms;
+
+  /// Said out loud when the picture may not be the whole story — a run with
+  /// platform views in it, which Flutter's layer tree cannot photograph.
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunScreenshotResultToJson(this);
+}
+
+/// `logs` — what one run's launcher has written.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunLogsResult implements PluginResult {
+  RunLogsResult({
+    required this.device,
+    required this.entrypoint,
+    required this.lines,
+    required this.total,
+    this.path,
+    this.note,
+  });
+
+  final String device;
+  final String entrypoint;
+
+  final List<RunLogEntry> lines;
+
+  /// How many lines matched before [lines] was cut to the tail, so a caller can
+  /// tell "that is all of it" from "that is the end of it".
+  final int total;
+
+  /// The log file, for anyone who would rather tail it themselves.
+  final String? path;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunLogsResultToJson(this);
+}
+
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunLogEntry {
+  RunLogEntry({required this.source, required this.text, this.error = false});
+
+  /// `app` for what the app printed, `tool` for what `flutter run` said about
+  /// itself. A launcher log interleaves them and they answer different
+  /// questions.
+  final String source;
+
+  final String text;
+
+  /// The launcher marked it as an error. Never inferred from the text.
+  final bool error;
+
+  Map<String, Object?> toJson() => _$RunLogEntryToJson(this);
+}
