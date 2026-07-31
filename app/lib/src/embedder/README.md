@@ -71,14 +71,29 @@ The guest announces surfaces by `IOSurfaceID`, signals each frame with
 
 The GUI texture path is verified manually via the harness.
 
-## Text input
+## Keyboard and text input
 
-Plain typing works: key events carry the character the host's layout produced,
-and the guest builds editing state from them in Dart — `GuestTextInput`
-(`package:flutterware/ui_catalog_guest.dart`), installed by the generated
-catalog entrypoint in place of the platform IME nothing is behind. Editing
-keys — deletion, caret, selection — are the framework's own shortcuts and need
-nothing from us.
+Two guest-side replacements for platform plumbing this embedder does not have,
+both installed by the generated catalog entrypoint and both in
+`package:flutterware/ui_catalog_guest.dart`:
+
+- **`GuestKeyboard`** — delivery. `FlutterEngineSendKeyEvent` alone reaches
+  nothing: `KeyEventManager` infers a `keyDataThenRawKeyData` embedder from the
+  first event and then queues every key, waiting for the legacy
+  `flutter/keyevent` platform message that normally follows and flushes the
+  queue. With no platform channels there is no flush, so **no key reached a
+  demo at all** — not a shortcut, not an arrow. This replaces `onKeyData` and
+  dispatches to both destinations itself.
+- **`GuestTextInput`** — insertion. A `TextField` gets its text from the
+  platform IME, and there is none; this is a `TextInputControl` that builds
+  editing state from the character each key carries. Editing keys — deletion,
+  caret, selection — are the framework's own shortcuts and need nothing from
+  us once delivery works.
+
+`tool/embedder/input_probe.dart` is what proves the chain end to end: it types
+into a real guest and scrolls one, then reads back what the demo shows.
+`input_smoke.dart` only proves the guest survives the messages — which is
+exactly how keyboard input looked fine while every key sat queued.
 
 ## Not yet implemented
 
