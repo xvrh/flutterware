@@ -820,6 +820,7 @@ class _RequestDetail extends StatelessWidget {
               ),
               Text(_ms(p['ms']), style: _mono(context, fontSize: 15)),
               const SizedBox(width: 8),
+              _CopyAsCurlButton(server: server, request: request),
               IconButton(
                 icon: const Icon(Icons.close, size: 18),
                 tooltip: 'Back to the request list',
@@ -894,6 +895,46 @@ class _RequestDetail extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+/// One click from "I see the request" to "I can reproduce it in a terminal":
+/// copies a curl built from the event summary plus the lazily-held headers
+/// and body ([curlCommand]). Needs the server to have published its base URL
+/// — a relative path is not a runnable command — and says so when it has not.
+class _CopyAsCurlButton extends StatelessWidget {
+  const _CopyAsCurlButton({required this.server, required this.request});
+
+  final TrackedServer server;
+  final ServerEvent request;
+
+  @override
+  Widget build(BuildContext context) {
+    var enabled =
+        server.info.baseUrl != null && request.payload['path'] is String;
+    // Wrapped manually because a disabled IconButton swallows its tooltip,
+    // and the disabled state is exactly when the tooltip has to explain.
+    return Tooltip(
+      message: enabled
+          ? 'Copy as curl'
+          : 'Copy as curl — needs a published baseUrl '
+                '(FlutterwareServer.info)',
+      child: IconButton(
+        icon: const Icon(Icons.terminal, size: 18),
+        onPressed: !enabled
+            ? null
+            : () async {
+                var details = await server.detailsFor(request);
+                var command = curlCommand(
+                  server.info,
+                  request,
+                  details: details,
+                );
+                if (command == null) return;
+                await Clipboard.setData(ClipboardData(text: command));
+              },
+      ),
     );
   }
 }

@@ -328,9 +328,53 @@ class ServerInspector {
     while (ring.length > ringSize) {
       ring.removeFirst();
     }
+    if (channel == infoChannel) _mirrorInfo(payload);
     if (_attached.isNotEmpty) {
       _broadcast(encodeFrame(event.toFrame()));
     }
+  }
+
+  String? _mirroredBaseUrl;
+  String? _mirroredEnvironment;
+
+  /// Copies `baseUrl` and `environment` from an `info` publish into the
+  /// handle file, so scan-only readers see them. Before [_publish] finishes
+  /// there is no file yet — the values are held and land in the initial
+  /// write, which matters because the very first event of a server's life
+  /// is often the `info` call that activates it.
+  void _mirrorInfo(Map<String, Object?> payload) {
+    var baseUrl = payload['baseUrl'];
+    var environment = payload['environment'];
+    var changed = false;
+    if (baseUrl is String && baseUrl != _mirroredBaseUrl) {
+      _mirroredBaseUrl = baseUrl;
+      changed = true;
+    }
+    if (environment is String && environment != _mirroredEnvironment) {
+      _mirroredEnvironment = environment;
+      changed = true;
+    }
+    if (changed && _handlePath != null) {
+      try {
+        _writeHandle(_handlePath!);
+      } on Object {
+        // The mirror is decoration; failing to refresh it must not cost the
+        // server anything.
+      }
+    }
+  }
+
+  void _writeHandle(String handlePath) {
+    var handle = ServerHandle(
+      projectRoot: projectRoot,
+      name: name,
+      socketPath: _socketPath!,
+      pid: pid,
+      startedAt: startedAt,
+      baseUrl: _mirroredBaseUrl,
+      environment: _mirroredEnvironment,
+    );
+    File(handlePath).writeAsStringSync(jsonEncode(handle.toJson()));
   }
 
   /// Insertion order is the eviction order: `_details` is a plain map, and
@@ -371,15 +415,8 @@ class ServerInspector {
         0,
       );
       _socket!.listen(_onConnection);
-      var handle = ServerHandle(
-        projectRoot: projectRoot,
-        name: name,
-        socketPath: socketPath,
-        pid: pid,
-        startedAt: startedAt,
-      );
       var handlePath = p.join(runDir, '$_baseName.json');
-      File(handlePath).writeAsStringSync(jsonEncode(handle.toJson()));
+      _writeHandle(handlePath);
       _handlePath = handlePath;
     } on Object {
       await stop();

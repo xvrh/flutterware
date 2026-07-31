@@ -109,6 +109,13 @@ String serverHandleBaseName({
 }) => 'srv-${projectRootHash(projectRoot)}-${sanitizeServerName(name)}-$pid';
 
 /// The published announcement: one JSON file per live server process.
+///
+/// [baseUrl] and [environment] are mirrored in from the server's
+/// self-description (`FlutterwareServer.info`) so scan-only readers —
+/// `fw status`, the GUI rail — can say where a server listens without
+/// opening a socket. The mirror is a convenience copy: the `info` channel
+/// stays the source of truth, and a handle written before the server
+/// described itself simply lacks them.
 class ServerHandle {
   ServerHandle({
     required this.projectRoot,
@@ -116,6 +123,8 @@ class ServerHandle {
     required this.socketPath,
     required this.pid,
     required this.startedAt,
+    this.baseUrl,
+    this.environment,
     this.protocol = protocolVersion,
     this.handlePath,
   });
@@ -125,6 +134,8 @@ class ServerHandle {
   final String socketPath;
   final int pid;
   final DateTime startedAt;
+  final String? baseUrl;
+  final String? environment;
   final int protocol;
 
   /// Where this handle was read from — null on the publishing side.
@@ -136,6 +147,8 @@ class ServerHandle {
     'socketPath': socketPath,
     'pid': pid,
     'startedAt': startedAt.toUtc().toIso8601String(),
+    if (baseUrl != null) 'baseUrl': baseUrl,
+    if (environment != null) 'environment': environment,
     'protocol': protocol,
   };
 
@@ -144,12 +157,18 @@ class ServerHandle {
       var json = jsonDecode(file.readAsStringSync());
       if (json is! Map) return null;
       var map = json.cast<String, Object?>();
+      var baseUrl = map['baseUrl'];
+      var environment = map['environment'];
       return ServerHandle(
         projectRoot: map['projectRoot']! as String,
         name: map['name']! as String,
         socketPath: map['socketPath']! as String,
         pid: map['pid']! as int,
         startedAt: DateTime.parse(map['startedAt']! as String),
+        // Tolerant, unlike the required fields: the mirror is decoration, and
+        // a wrong-typed one must not unread an otherwise live handle.
+        baseUrl: baseUrl is String ? baseUrl : null,
+        environment: environment is String ? environment : null,
         protocol: map['protocol'] as int? ?? protocolVersion,
         handlePath: file.path,
       );

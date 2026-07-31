@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutterware/server.dart';
 import 'package:path/path.dart' as p;
@@ -140,6 +141,78 @@ void main() {
       expect(isSecretLikeKey('key'), isTrue);
       expect(isSecretLikeKey('monkey'), isFalse);
       expect(isSecretLikeKey('timeout'), isFalse);
+    });
+  });
+
+  group('handle mirror', () {
+    test(
+      'info published before the handle lands in the initial write',
+      () async {
+        var runDir = await shortTempDir();
+        addTearDown(() => runDir.delete(recursive: true));
+        var inspector = ServerInspector.start(
+          runDir: runDir.path,
+          projectRoot: '/repo/app',
+          name: 'api',
+        );
+        addTearDown(inspector.stop);
+        // Before `published` — the first event of a server's life is often the
+        // info call that activated it.
+        inspector.addEvent(infoChannel, {
+          'baseUrl': 'http://localhost:8080',
+          'environment': 'dev',
+        });
+        await inspector.published;
+
+        var handle = scanServerHandles(runDir.path).single;
+        expect(handle.baseUrl, 'http://localhost:8080');
+        expect(handle.environment, 'dev');
+      },
+    );
+
+    test(
+      'a later publish rewrites the handle; untouched fields survive',
+      () async {
+        var runDir = await shortTempDir();
+        addTearDown(() => runDir.delete(recursive: true));
+        var inspector = ServerInspector.start(
+          runDir: runDir.path,
+          projectRoot: '/repo/app',
+          name: 'api',
+        );
+        addTearDown(inspector.stop);
+        await inspector.published;
+        expect(scanServerHandles(runDir.path).single.baseUrl, isNull);
+
+        inspector.addEvent(infoChannel, {
+          'baseUrl': 'http://localhost:8080',
+          'environment': 'dev',
+        });
+        inspector.addEvent(infoChannel, {'baseUrl': 'http://localhost:9090'});
+
+        var handle = scanServerHandles(runDir.path).single;
+        expect(handle.baseUrl, 'http://localhost:9090');
+        expect(handle.environment, 'dev');
+      },
+    );
+
+    test('a handle from before the mirror still reads', () async {
+      var runDir = await shortTempDir();
+      addTearDown(() => runDir.delete(recursive: true));
+      var old = ServerHandle(
+        projectRoot: '/repo/app',
+        name: 'api',
+        socketPath: p.join(runDir.path, 'x.sock'),
+        pid: 1,
+        startedAt: DateTime.now(),
+      );
+      File(
+        p.join(runDir.path, 'srv-00000000-api-1.json'),
+      ).writeAsStringSync(jsonEncode(old.toJson()));
+
+      var read = scanServerHandles(runDir.path).single;
+      expect(read.baseUrl, isNull);
+      expect(read.environment, isNull);
     });
   });
 

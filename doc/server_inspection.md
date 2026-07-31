@@ -48,6 +48,12 @@ Passwords in a DSN and secret-shaped config keys (`apiKey`, `token`, …) are
 masked wherever they are displayed, with click-to-reveal in the GUI; still,
 publish only what you are willing to have on a developer's screen.
 
+`baseUrl` and `environment` are also mirrored into the server's handle
+file, so `fw status` and the GUI's sidebar can say
+`pid 4242 · http://localhost:8080 · dev` without attaching — and a request
+in the GUI gains a **copy as curl** button, built from `baseUrl` plus the
+captured headers and body.
+
 ## HTTP in: shelf middleware
 
 One `runZoned` is the whole correlation story: every query and log line
