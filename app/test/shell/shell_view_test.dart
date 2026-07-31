@@ -307,6 +307,34 @@ void main() {
     expect(find.byKey(worktreeTabKey(shell.worktrees.last)), findsOneWidget);
   });
 
+  testWidgets('the switcher filters, and an emptied section disappears', (
+    tester,
+  ) async {
+    await _pumpShell(tester);
+    await tester.tap(find.byTooltip('Switch worktree'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'expl');
+    await tester.pumpAndSettle();
+
+    // `main` matched nothing, so the OPEN section has nothing to head.
+    expect(find.text('OPEN · 1'), findsNothing);
+    expect(find.text('NOT OPEN · 1'), findsOneWidget);
+    expect(find.text('feature/explorer'), findsOneWidget);
+  });
+
+  testWidgets('↵ in the switcher filter opens the first match', (tester) async {
+    var shell = await _pumpShell(tester);
+    await tester.tap(find.byTooltip('Switch worktree'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'expl');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(shell.openWorktrees, hasLength(2));
+  });
+
   testWidgets('closing a tab removes it and releases the session', (
     tester,
   ) async {

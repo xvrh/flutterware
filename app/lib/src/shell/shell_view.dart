@@ -19,6 +19,7 @@ import 'shell_controller.dart';
 import 'shell_search.dart';
 import 'sidebar_row.dart';
 import 'worktree.dart';
+import 'worktree_filter.dart';
 import 'worktree_home.dart';
 
 /// The transient "what the last reload did" line in the band.
@@ -768,6 +769,11 @@ class _CloseButton extends StatelessWidget {
 }
 
 /// Lists every worktree git reports, split by whether it is open.
+///
+/// Opens on a filter field — the same one the address bar's switcher has, with
+/// the same ↵-picks-the-first contract. Here the field sits at the *top*: this
+/// menu grows down from the band, so the top edge is the one that stays put
+/// while the list narrows below it.
 class _SwitcherButton extends StatefulWidget {
   const _SwitcherButton(this.shell);
 
@@ -779,15 +785,63 @@ class _SwitcherButton extends StatefulWidget {
 
 class _SwitcherButtonState extends State<_SwitcherButton> {
   final _menuController = MenuController();
+  final _filter = TextEditingController();
+  final _filterFocus = FocusNode();
+  var _query = '';
 
   ShellController get shell => widget.shell;
+
+  @override
+  void dispose() {
+    _filter.dispose();
+    _filterFocus.dispose();
+    super.dispose();
+  }
 
   /// Opening the menu is the only moment this list is read, so it is also the
   /// only moment worth rescanning. Not awaited: the last known worktrees are
   /// shown immediately and git's answer folds in when it arrives.
   void _open() {
+    _filter.clear();
+    _query = '';
     _menuController.open();
     unawaited(shell.rescanWorktrees());
+    // Once the menu has an overlay to focus into.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _filterFocus.requestFocus();
+    });
+  }
+
+  /// Every name the row can be known by: the label it shows, the branch its
+  /// caption may show, and the identity the address would use.
+  List<(Worktree, FilterMatch?)> _filtered(List<Worktree> worktrees) {
+    if (_query.trim().isEmpty) {
+      return [for (var worktree in worktrees) (worktree, null)];
+    }
+    return [
+      for (var worktree in worktrees)
+        if (matchWorktreeFilter(_query, [
+              worktree.displayName,
+              worktree.branch,
+              worktree.name,
+            ])
+            case var match?)
+          (worktree, match),
+    ];
+  }
+
+  /// The same move as tapping the first row still listed: selecting an open
+  /// worktree, opening a closed one.
+  void _pickFirst() {
+    var first =
+        _filtered(shell.openWorktrees).firstOrNull ??
+        _filtered(shell.closedWorktrees).firstOrNull;
+    if (first == null) return;
+    _menuController.close();
+    var worktree = first.$1;
+    shell.isOpen(worktree)
+        ? shell.select(worktree)
+        : unawaited(shell.open(worktree));
   }
 
   @override
@@ -812,7 +866,20 @@ class _SwitcherButtonState extends State<_SwitcherButton> {
               ),
             ),
           ),
-          menuChildren: [_SwitcherMenu(shell, _menuController)],
+          menuChildren: [
+            WorktreeFilterField(
+              controller: _filter,
+              focusNode: _filterFocus,
+              onChanged: (value) => setState(() => _query = value),
+              onSubmitted: (_) => _pickFirst(),
+            ),
+            _SwitcherMenu(
+              shell,
+              _menuController,
+              open: _filtered(shell.openWorktrees),
+              closed: _filtered(shell.closedWorktrees),
+            ),
+          ],
           builder: (context, controller, child) => Tooltip(
             message: 'Switch worktree',
             child: IconButton(
@@ -829,28 +896,36 @@ class _SwitcherButtonState extends State<_SwitcherButton> {
 }
 
 class _SwitcherMenu extends StatelessWidget {
-  const _SwitcherMenu(this.shell, this.menu);
+  const _SwitcherMenu(
+    this.shell,
+    this.menu, {
+    required this.open,
+    required this.closed,
+  });
 
   final ShellController shell;
   final MenuController menu;
+  final List<(Worktree, FilterMatch?)> open;
+  final List<(Worktree, FilterMatch?)> closed;
 
   @override
   Widget build(BuildContext context) {
-    var open = shell.openWorktrees;
-    var closed = shell.closedWorktrees;
     return SizedBox(
       width: 360,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (open.isEmpty && closed.isEmpty) const NoWorktreeMatches(),
           if (open.isNotEmpty) ...[
             _MenuHeading('OPEN · ${open.length}'),
-            for (var worktree in open) _SwitcherRow(shell, worktree, menu),
+            for (var (worktree, match) in open)
+              _SwitcherRow(shell, worktree, menu, match: match),
           ],
           if (closed.isNotEmpty) ...[
             const Gap(FwSpacing.md),
             _MenuHeading('NOT OPEN · ${closed.length}'),
-            for (var worktree in closed) _SwitcherRow(shell, worktree, menu),
+            for (var (worktree, match) in closed)
+              _SwitcherRow(shell, worktree, menu, match: match),
           ],
         ],
       ),
@@ -874,11 +949,14 @@ class _MenuHeading extends StatelessWidget {
 }
 
 class _SwitcherRow extends StatelessWidget {
-  const _SwitcherRow(this.shell, this.worktree, this.menu);
+  const _SwitcherRow(this.shell, this.worktree, this.menu, {this.match});
 
   final ShellController shell;
   final Worktree worktree;
   final MenuController menu;
+
+  /// Where the filter found this row, so the run that kept it here is lit.
+  final FilterMatch? match;
 
   @override
   Widget build(BuildContext context) {
@@ -910,14 +988,22 @@ class _SwitcherRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  matchedName(
+                    context,
                     worktree.displayName,
-                    style: isOpen ? context.type.bodyStrong : context.type.body,
+                    isOpen ? context.type.bodyStrong : context.type.body,
+                    match: match,
                   ),
                   // Only when it adds something: with no contributed title,
                   // displayName *is* the branch, and showing it twice is noise.
                   if (worktree.title != null && worktree.branch != null)
-                    Text(worktree.branch!, style: context.type.caption),
+                    matchedName(
+                      context,
+                      worktree.branch!,
+                      context.type.caption,
+                      match: match,
+                      field: 1,
+                    ),
                 ],
               ),
             ),
