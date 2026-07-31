@@ -5,6 +5,7 @@ import 'package:flutterware/plugins.dart';
 import '../address/address_scope.dart';
 import '../ui/design/design.dart';
 import 'shell_controller.dart';
+import 'worktree_filter.dart';
 
 /// Height of the strip. Deliberately smaller than the band: this is a readout,
 /// and the tabs above it are the thing you aim at.
@@ -23,18 +24,16 @@ const addressBarHeight = 24.0;
 /// Tabs are aimed at; this is glanced at, and a full-width strip also means the
 /// address rarely needs shortening at all.
 ///
-/// **The whole strip is one tap target, and that is the thing to change next.**
-/// It works while the bar is a readout with one exception — the worktree
-/// chevron, which has to draw itself as a control to escape it. A second
-/// interactive part would not be so lucky: clicking the plugin to jump to it, or
-/// a segment to truncate the address there, is a breadcrumb, and a breadcrumb
-/// cannot live inside a button.
-///
-/// The move is to give editing its own affordance — the `click to edit` hint at
-/// the right is already sitting where that button goes — and let the readout be
-/// a row of independently live parts. Deliberately not done for one control: the
-/// gain is in the second one, and building the general shape before there is a
-/// second is how you get a shape that fits nothing.
+/// **The readout is a row of independently live parts.** The bar used to be one
+/// tap target that opened the editor, with the worktree chevron as the single
+/// exception; the second live part would have been a mode you discover by being
+/// surprised, so editing got its own affordance instead — the `edit` button on
+/// the right, sitting where its hint used to appear — and each part now answers
+/// for itself: the worktree opens the switcher, the plugin jumps to its root,
+/// a middle segment truncates the address there, a chip removes its axis. Each
+/// lights under its own pointer, which is what keeps five behaviours from being
+/// five surprises. Blank space still opens the editor — the parts win the arena
+/// where they are, and a dead strip would read as a broken one.
 class AddressBar extends StatefulWidget {
   const AddressBar(this.shell, {super.key});
 
@@ -56,8 +55,6 @@ class _AddressBarState extends State<AddressBar> {
 
   /// Why the last submission went nowhere, or null.
   String? _problem;
-
-  var _hovered = false;
 
   @override
   void dispose() {
@@ -123,6 +120,7 @@ class _AddressBarState extends State<AddressBar> {
       });
     }
 
+    var shell = widget.shell;
     var colors = context.colors;
     return Container(
       height: addressBarHeight,
@@ -147,18 +145,30 @@ class _AddressBarState extends State<AddressBar> {
         menuChildren: [_Editor(this, address)],
         builder: (context, controller, child) => MouseRegion(
           cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hovered = true),
-          onExit: (_) => setState(() => _hovered = false),
           child: GestureDetector(
             onTap: () =>
                 controller.isOpen ? controller.close() : _open(address),
             behavior: HitTestBehavior.opaque,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
-              child: _Readout(
-                shell: widget.shell,
+              child: AddressReadout(
                 address: address,
-                lit: _hovered || controller.isOpen,
+                worktrees: [
+                  for (var worktree in shell.worktrees)
+                    WorktreeChoice(
+                      name: worktree.name,
+                      displayName: worktree.displayName,
+                      isOpen: shell.isOpen(worktree),
+                    ),
+                ],
+                onGo: (destination) => shell.go(destination),
+                onPickWorktree: (choice) {
+                  var worktree = shell.worktreeNamed(choice.name);
+                  if (worktree != null) shell.goToWorktree(worktree);
+                },
+                onEdit: () =>
+                    controller.isOpen ? controller.close() : _open(address),
+                editing: controller.isOpen,
               ),
             ),
           ),
@@ -168,23 +178,66 @@ class _AddressBarState extends State<AddressBar> {
   }
 }
 
-/// The address as parts rather than as a string.
+/// A worktree as the switcher menu needs it: nothing of the shell, so the
+/// readout can be exercised in the catalog with a made-up repo.
+class WorktreeChoice {
+  const WorktreeChoice({
+    required this.name,
+    required this.displayName,
+    required this.isOpen,
+  });
+
+  /// The identity that goes in the address (`Worktree.name`).
+  final String name;
+
+  /// The branch or title a human knows the checkout by.
+  final String displayName;
+
+  /// Whether picking it navigates, or first opens it.
+  final bool isOpen;
+}
+
+/// The address as parts rather than as a string, each part live on its own.
 ///
 /// Only the middle collapses. The worktree says which checkout you are in and
 /// the last segment says what you are looking at; the path between them is
 /// usually the same one it was a minute ago, so that is what gives way when the
-/// window is narrow. A single `Text` with an ellipsis would drop the tail,
-/// which is the one part worth keeping.
-class _Readout extends StatelessWidget {
-  const _Readout({
-    required this.shell,
+/// window is narrow — segment by segment now, so a squeezed breadcrumb keeps
+/// its joints where a single ellipsized string would lose them.
+///
+/// What each part does when clicked is the breadcrumb reading of the address:
+/// the worktree switches checkout, the plugin drops the path below it, a middle
+/// segment truncates there. The last segment is where you already are, so it is
+/// the one piece of the path that stays text.
+class AddressReadout extends StatelessWidget {
+  const AddressReadout({
+    super.key,
     required this.address,
-    required this.lit,
+    required this.worktrees,
+    required this.onGo,
+    required this.onPickWorktree,
+    required this.onEdit,
+    this.editing = false,
   });
 
-  final ShellController shell;
   final Address address;
-  final bool lit;
+
+  /// Everything the switcher offers, current one included.
+  final List<WorktreeChoice> worktrees;
+
+  /// A part asking the app to become [Address] — a truncated path, a plugin
+  /// root, an address with one axis fewer.
+  final ValueChanged<Address> onGo;
+
+  /// The switcher menu choosing a checkout. Separate from [onGo] because
+  /// switching keeps the place and the axes, which is the shell's move to make.
+  final ValueChanged<WorktreeChoice> onPickWorktree;
+
+  /// The `edit` button. The bar behind the readout is the other way in.
+  final VoidCallback onEdit;
+
+  /// Whether the editor is open, so its button stays lit while it is.
+  final bool editing;
 
   @override
   Widget build(BuildContext context) {
@@ -202,81 +255,175 @@ class _Readout extends StatelessWidget {
       child: part('/', colors.mut3),
     );
 
-    // `fw://` then the empty project then the leading slash — drawn as one
-    // piece because there is nothing to click or read in the middle of it.
-    var head = <Widget>[
-      part('fw://${address.project ?? ''}/', lit ? colors.mut2 : colors.mut3),
-    ];
+    // `fw://` then the empty project then the leading slash — one inert piece,
+    // because there is nothing to click or read in the middle of it.
+    var head = <Widget>[part('fw://${address.project ?? ''}/', colors.mut3)];
     if (address.worktree case var worktree?) {
-      head
-        ..add(part(worktree, lit ? colors.ink2 : colors.mut))
-        ..add(_WorktreeSwitcher(shell: shell, current: worktree, style: mono));
+      head.add(
+        _WorktreeSwitcher(
+          current: worktree,
+          worktrees: worktrees,
+          onPick: onPickWorktree,
+          style: mono,
+        ),
+      );
     }
     if (address.plugin case var plugin?) {
       head
         ..add(separator())
-        ..add(part(plugin, lit ? colors.ink2 : colors.mut));
+        ..add(
+          _Part(
+            onTap: () => onGo(
+              Address(
+                project: address.project,
+                worktree: address.worktree,
+                plugin: plugin,
+              ),
+            ),
+            child: (lit) => part(plugin, lit ? colors.ink2 : colors.mut),
+          ),
+        );
     }
 
     // Everything but the last segment gives way; the last never does.
-    var middle = address.segments.length > 1
-        ? address.segments.sublist(0, address.segments.length - 1).join('/')
-        : null;
-    var last = address.segments.lastOrNull;
+    var segments = address.segments;
+    var last = segments.lastOrNull;
 
     return Row(
       children: [
-        ...head,
-        if (middle != null) ...[
-          separator(),
-          Flexible(
-            child: Text(
-              middle,
-              style: mono.copyWith(color: colors.mut3),
-              softWrap: false,
-              overflow: TextOverflow.ellipsis,
-            ),
+        // Its own row inside the Expanded, rather than parts and a Spacer in
+        // one flex pool: a Spacer is flex too, and sharing with it squeezed
+        // the middle segments long before the window did.
+        Expanded(
+          child: Row(
+            children: [
+              ...head,
+              for (var i = 0; i < segments.length - 1; i++) ...[
+                separator(),
+                Flexible(
+                  child: _Part(
+                    onTap: () => onGo(
+                      address.copyWith(
+                        segments: segments.sublist(0, i + 1),
+                        // The axes applied to the leaf do not describe its
+                        // parents.
+                        axes: const {},
+                      ),
+                    ),
+                    child: (lit) => Text(
+                      segments[i],
+                      style: mono.copyWith(
+                        color: lit ? colors.ink2 : colors.mut3,
+                      ),
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
+              if (last != null) ...[separator(), part(last, colors.ink2)],
+              for (var axis in address.axes.entries) ...[
+                const Gap(FwSpacing.sm),
+                _AxisChip(
+                  axis.key,
+                  axis.value,
+                  onRemove: () => onGo(
+                    address.copyWith(axes: {...address.axes}..remove(axis.key)),
+                  ),
+                ),
+              ],
+            ],
           ),
-        ],
-        if (last != null) ...[
-          separator(),
-          part(last, lit ? context.colors.accent : colors.ink2),
-        ],
-        for (var axis in address.axes.entries) ...[
-          const Gap(FwSpacing.sm),
-          _AxisChip(axis.key, axis.value),
-        ],
-        const Spacer(),
-        if (lit) part('click to edit', colors.mut3),
+        ),
+        _Part(
+          onTap: onEdit,
+          lit: editing,
+          child: (lit) => Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.edit_outlined,
+                size: 10,
+                color: lit ? colors.ink2 : colors.mut3,
+              ),
+              const Gap(3),
+              part('edit', lit ? colors.ink2 : colors.mut3),
+            ],
+          ),
+        ),
       ],
     );
   }
 }
 
-/// The one control inside the readout: switch which checkout the address names.
+/// One live part of the readout: quiet text until the pointer is on it, its
+/// hit box padded to the strip's height so nothing here has to be aimed at.
+class _Part extends StatefulWidget {
+  const _Part({required this.onTap, required this.child, this.lit = false});
+
+  final VoidCallback onTap;
+
+  /// Lit from outside — a menu this part opened being open counts as hovered.
+  final bool lit;
+
+  final Widget Function(bool lit) child;
+
+  @override
+  State<_Part> createState() => _PartState();
+}
+
+class _PartState extends State<_Part> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: SystemMouseCursors.click,
+    onEnter: (_) => setState(() => _hovered = true),
+    onExit: (_) => setState(() => _hovered = false),
+    // Its own detector, so a tap here is this part rather than the editor the
+    // whole bar sits under: the inner one wins the arena.
+    child: GestureDetector(
+      onTap: widget.onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        // Most of the target, and none of the weight.
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+        child: widget.child(_hovered || widget.lit),
+      ),
+    ),
+  );
+}
+
+/// The worktree segment: switch which checkout the address names.
 ///
-/// **A chevron rather than the segment itself.** The bar is one tap target that
-/// opens the editor, so anything inside it that behaves differently has to *look*
-/// different or it is a mode you discover by being surprised. Drawn as its own
-/// small affordance, there is exactly one thing here that is not text, and it is
-/// the one thing that does not open the editor. The worktree stays text, and
-/// clicking it edits the address like everything else.
+/// The name and the chevron are one target now that every part is live — the
+/// chevron stays drawn because it is what says "this one opens a menu" where
+/// its neighbours navigate, not because it is the only place to click.
+///
+/// The menu opens on a filter field, because a repo with a worktree per
+/// branch-in-flight has too many rows to scan: type a few letters of the
+/// branch or the name, press ↵, and the first match is picked — the same
+/// contract as the address editor's "↵ to go there". The field sits at the
+/// *bottom*: this menu grows up from the bar, so the bottom edge is the one
+/// that stays put, and a filter that narrows the list must not move under the
+/// cursor that is typing into it.
 ///
 /// Quiet on purpose. The bar is glanced at far more often than it is used, so
-/// the chevron is mut3 until the pointer is on it and its hit box is padded well
-/// past the glyph — the worktree may be a single `~`, and a control you have to
-/// aim at is worse than one you cannot see.
+/// the chevron is mut3 until the pointer is on the part.
 class _WorktreeSwitcher extends StatefulWidget {
   const _WorktreeSwitcher({
-    required this.shell,
     required this.current,
+    required this.worktrees,
+    required this.onPick,
     required this.style,
   });
 
-  final ShellController shell;
-
   /// The worktree the address names, which may not be one that exists.
   final String current;
+
+  final List<WorktreeChoice> worktrees;
+
+  final ValueChanged<WorktreeChoice> onPick;
 
   /// The readout's type, so the identities in the menu line up with the bar.
   final TextStyle style;
@@ -286,15 +433,58 @@ class _WorktreeSwitcher extends StatefulWidget {
 }
 
 class _WorktreeSwitcherState extends State<_WorktreeSwitcher> {
-  var _hovered = false;
+  final _menu = MenuController();
+  final _filter = TextEditingController();
+  final _filterFocus = FocusNode();
+  var _query = '';
+
+  @override
+  void dispose() {
+    _filter.dispose();
+    _filterFocus.dispose();
+    super.dispose();
+  }
+
+  /// Both names, because both are on the rows: you filter by whichever of the
+  /// branch or the git name you happen to remember.
+  List<(WorktreeChoice, FilterMatch?)> get _matches {
+    if (_query.trim().isEmpty) {
+      return [for (var worktree in widget.worktrees) (worktree, null)];
+    }
+    return [
+      for (var worktree in widget.worktrees)
+        if (matchWorktreeFilter(_query, [worktree.displayName, worktree.name])
+            case var match?)
+          (worktree, match),
+    ];
+  }
+
+  void _open() {
+    _filter.clear();
+    _query = '';
+    _menu.open();
+    // Once the menu has an overlay to focus into.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _filterFocus.requestFocus();
+    });
+  }
+
+  void _pickFirst() {
+    var first = _matches.firstOrNull;
+    if (first == null) return;
+    _menu.close();
+    widget.onPick(first.$1);
+  }
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var shell = widget.shell;
-    var here = shell.worktreeNamed(widget.current);
+    var here = widget.worktrees
+        .where((w) => w.name == widget.current)
+        .firstOrNull;
 
     return MenuAnchor(
+      controller: _menu,
       alignmentOffset: const Offset(0, -4),
       style: MenuStyle(
         alignment: Alignment.topLeft,
@@ -307,30 +497,42 @@ class _WorktreeSwitcherState extends State<_WorktreeSwitcher> {
         ),
       ),
       menuChildren: [
-        for (var worktree in shell.worktrees)
+        // Rows first, field last: the menu grows upward, so document order
+        // puts the field on the fixed bottom edge, beside the bar it came
+        // from, with the list narrowing away above it.
+        if (_matches.isEmpty) const NoWorktreeMatches(),
+        for (var (worktree, match) in _matches)
           MenuItemButton(
             leadingIcon: Icon(
               worktree.name == widget.current ? Icons.check : null,
               size: 14,
               color: colors.accent,
             ),
-            onPressed: () => shell.goToWorktree(worktree),
+            onPressed: () => widget.onPick(worktree),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 // The branch, because that is what a checkout is known by, with
                 // git's name for it alongside, because that is what the address
                 // will say once you have picked it.
-                Text(worktree.displayName, style: context.type.bodySmall),
+                matchedName(
+                  context,
+                  worktree.displayName,
+                  context.type.bodySmall,
+                  match: match,
+                ),
                 const Gap(FwSpacing.sm),
-                Text(
+                matchedName(
+                  context,
                   worktree.name,
-                  style: widget.style.copyWith(color: colors.mut3),
+                  widget.style.copyWith(color: colors.mut3),
+                  match: match,
+                  field: 1,
                 ),
                 // Choosing it opens it, which costs a config subprocess and a
                 // cold compile. Cheap enough to be worth doing and dear enough
                 // to be worth knowing about first.
-                if (!shell.isOpen(worktree)) ...[
+                if (!worktree.isOpen) ...[
                   const Gap(FwSpacing.sm),
                   Text(
                     'opens',
@@ -340,6 +542,12 @@ class _WorktreeSwitcherState extends State<_WorktreeSwitcher> {
               ],
             ),
           ),
+        WorktreeFilterField(
+          controller: _filter,
+          focusNode: _filterFocus,
+          onChanged: (value) => setState(() => _query = value),
+          onSubmitted: (_) => _pickFirst(),
+        ),
       ],
       builder: (context, controller, child) => Tooltip(
         // Says what `~` means, which the address deliberately does not, and says
@@ -349,26 +557,26 @@ class _WorktreeSwitcherState extends State<_WorktreeSwitcher> {
             ? 'Show this in another worktree'
             : 'On ${here.displayName} — show this in another worktree',
         waitDuration: const Duration(milliseconds: 400),
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hovered = true),
-          onExit: (_) => setState(() => _hovered = false),
-          // Its own detector, so a tap here opens this rather than the editor
-          // the whole bar sits under: the inner one wins the arena.
-          child: GestureDetector(
-            onTap: controller.isOpen ? controller.close : controller.open,
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              // Most of the target, and none of the weight.
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
-              child: Icon(
+        child: _Part(
+          onTap: () => controller.isOpen ? controller.close() : _open(),
+          lit: controller.isOpen,
+          child: (lit) => Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.current,
+                style: widget.style.copyWith(
+                  color: lit ? colors.ink2 : colors.mut,
+                ),
+                softWrap: false,
+              ),
+              const Gap(2),
+              Icon(
                 Icons.expand_more,
                 size: 11,
-                color: _hovered || controller.isOpen
-                    ? colors.ink2
-                    : colors.mut3,
+                color: lit ? colors.ink2 : colors.mut3,
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -379,28 +587,46 @@ class _WorktreeSwitcherState extends State<_WorktreeSwitcher> {
 /// One applied axis. A chip rather than `?theme=dark` run together, because
 /// what a demo is set to is worth reading at a glance and this is where knobs
 /// will land next.
+///
+/// Clicking it removes the axis — the value came from a picker somewhere, and
+/// the chip is the one place the *application* of it is visible, so it is the
+/// natural place to undo it. The × only draws under the pointer; read, it is a
+/// label, and only touched is it a control.
 class _AxisChip extends StatelessWidget {
-  const _AxisChip(this.name, this.value);
+  const _AxisChip(this.name, this.value, {required this.onRemove});
 
   final String name;
   final String value;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        color: colors.panel2,
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        '${name.split('.').last} $value',
-        style: context.type.micro.copyWith(
-          fontFamily: 'monospace',
-          fontWeight: FontWeight.w400,
-          letterSpacing: 0,
-          color: colors.mut,
+    return _Part(
+      onTap: onRemove,
+      child: (lit) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+        decoration: BoxDecoration(
+          color: colors.panel2,
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${name.split('.').last} $value',
+              style: context.type.micro.copyWith(
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w400,
+                letterSpacing: 0,
+                color: lit ? colors.ink2 : colors.mut,
+              ),
+            ),
+            if (lit) ...[
+              const Gap(3),
+              Icon(Icons.close, size: 9, color: colors.ink2),
+            ],
+          ],
         ),
       ),
     );
@@ -477,10 +703,12 @@ class _Editor extends StatelessWidget {
       ),
     );
   }
-
-  OutlineInputBorder _border(BuildContext context, Color color) =>
-      OutlineInputBorder(
-        borderRadius: BorderRadius.circular(context.radii.radius),
-        borderSide: BorderSide(color: color),
-      );
 }
+
+/// The field chrome both menus share — the editor's address field and the
+/// switcher's filter.
+OutlineInputBorder _border(BuildContext context, Color color) =>
+    OutlineInputBorder(
+      borderRadius: BorderRadius.circular(context.radii.radius),
+      borderSide: BorderSide(color: color),
+    );

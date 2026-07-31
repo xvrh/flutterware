@@ -76,8 +76,11 @@ Future<ShellController> _pumpShell(WidgetTester tester) async {
   return shell;
 }
 
+/// Opens the editor by its own affordance, the `edit` button on the right.
 Future<void> _expand(WidgetTester tester) async {
-  await tester.tap(find.byType(AddressBar));
+  await tester.tap(
+    find.descendant(of: find.byType(AddressBar), matching: find.text('edit')),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -118,8 +121,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('a.deps'), findsOneWidget);
-      // The middle collapses under pressure; the last segment never does.
-      expect(find.text('app/tool/demos'), findsOneWidget);
+      // Each middle segment is its own part — and its own ellipsis under
+      // pressure; the last segment never gives way.
+      expect(find.text('app'), findsOneWidget);
+      expect(find.text('tool/demos'), findsOneWidget);
       expect(find.text('avatar.dart#members'), findsOneWidget);
     });
 
@@ -257,21 +262,128 @@ void main() {
 
       await _openSwitcher(tester);
 
-      // The bar underneath is one big tap target for the editor; the chevron
-      // has to win the arena or the switcher can never be reached.
-      expect(find.byType(TextField), findsNothing);
+      // The bar underneath opens the editor; the switcher part has to win the
+      // arena or it can never be reached. The field on screen is the filter,
+      // not the editor's address field.
+      expect(find.text('Press ↵ to go there.'), findsNothing);
+      expect(find.widgetWithText(MenuItemButton, 'main'), findsOneWidget);
     });
 
-    testWidgets('the worktree text still edits, like the rest of the bar', (
-      tester,
-    ) async {
+    testWidgets('the worktree text opens it too — name and chevron are one '
+        'target', (tester) async {
       await _pumpShell(tester);
 
       await tester.tap(find.text('~'));
       await tester.pumpAndSettle();
 
-      // Exactly one thing in the readout behaves differently, and it is the one
-      // thing drawn differently. The text is text.
+      expect(find.widgetWithText(MenuItemButton, 'main'), findsOneWidget);
+      expect(find.text('Press ↵ to go there.'), findsNothing);
+    });
+
+    testWidgets('it filters as you type, on either name', (tester) async {
+      await _pumpShell(tester);
+      await _openSwitcher(tester);
+
+      await tester.enterText(find.byType(TextField), 'expl');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(MenuItemButton, 'feature/explorer'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(MenuItemButton, 'main'), findsNothing);
+
+      // The run that kept the row in the list is lit: the label is rich text
+      // now, with the matched characters washed amber.
+      var label = tester.widget<Text>(
+        find.descendant(
+          of: find.byType(MenuItemButton),
+          matching: find.text('feature/explorer'),
+        ),
+      );
+      expect(label.textSpan, isNotNull);
+    });
+
+    testWidgets('↵ picks the first match', (tester) async {
+      var shell = await _pumpShell(tester);
+      await _openSwitcher(tester);
+
+      await tester.enterText(find.byType(TextField), 'expl');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(shell.address.worktree, 'repo-explorer');
+    });
+
+    testWidgets('nothing matching says so, and ↵ does nothing', (tester) async {
+      var shell = await _pumpShell(tester);
+      await _openSwitcher(tester);
+
+      await tester.enterText(find.byType(TextField), 'zzz');
+      await tester.pumpAndSettle();
+
+      expect(find.text('No worktree matches.'), findsOneWidget);
+      expect(find.byType(MenuItemButton), findsNothing);
+
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(shell.address.worktree, '~');
+    });
+  });
+
+  group('the readout is a row of live parts', () {
+    testWidgets('the plugin segment jumps to the plugin root', (tester) async {
+      var shell = await _pumpShell(tester);
+      shell.go(
+        Address.parse('fw:///~/a.deps/packages%2Fapp/lib?axis.theme=dark'),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('a.deps'));
+      await tester.pumpAndSettle();
+
+      expect(shell.address.toString(), 'fw:///~/a.deps');
+    });
+
+    testWidgets('a middle segment truncates the address there', (tester) async {
+      var shell = await _pumpShell(tester);
+      shell.go(
+        Address(
+          worktree: '~',
+          plugin: 'a.deps',
+          segments: ['app', 'tool/demos', 'avatar.dart#members'],
+          axes: {'axis.theme': 'dark'},
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('tool/demos'));
+      await tester.pumpAndSettle();
+
+      // The path up to the clicked segment; the leaf's axes do not describe
+      // its parents, so they go too.
+      expect(shell.address.toString(), 'fw:///~/a.deps/app/tool%2Fdemos');
+    });
+
+    testWidgets('an axis chip removes its axis', (tester) async {
+      var shell = await _pumpShell(tester);
+      shell.go(Address.parse('fw:///~/a.deps/packages%2Fapp?axis.theme=dark'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('theme dark'));
+      await tester.pumpAndSettle();
+
+      expect(shell.address.toString(), 'fw:///~/a.deps/packages%2Fapp');
+    });
+
+    testWidgets('blank space still opens the editor', (tester) async {
+      await _pumpShell(tester);
+
+      // The middle of a bar showing only `fw:///~` is empty strip.
+      await tester.tap(find.byType(AddressBar));
+      await tester.pumpAndSettle();
+
       expect(find.byType(TextField), findsOneWidget);
     });
   });
