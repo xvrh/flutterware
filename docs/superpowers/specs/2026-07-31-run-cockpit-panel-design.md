@@ -129,6 +129,34 @@ question about artifacts, not about runs.
   a mirror wants to stay up while you work elsewhere. Whether that is a real
   window or a pinned pane is a slice-3 decision.
 
+## Revised after seeing it built (2026-07-31)
+
+The mockup drew the run list **twice** — as rail sub-items under `Run`, and as
+the chip row above the tab strip — and building it made the duplication
+obvious. The chips go. The rail is the list.
+
+That was queried with "we can teach anything to the rail or any place we want,
+we should not be driven by artificial constraints", against an earlier answer
+here that treated `PluginChild` as fixed. It is not: it is our own API, and
+`NativePlugin.childCommands` already proves the shell takes per-row affordances
+from a plugin. So:
+
+- **Runs live only in the rail.** Failures go into `report.children` too —
+  putting them in the chips alone was the wrong half.
+- **`+ New run` becomes an affordance on the plugin's own rail row**, which is
+  the scenarios pattern (`+` in a section header, big button in the empty
+  state) applied one level up. It needs a plugin-level command hook beside the
+  existing child-level one — a small, general addition, not a special case.
+- **Reload and restart need feedback.** They are wired and measured (275ms /
+  727ms) but the panel says nothing on success and nothing while pending, so a
+  working button is indistinguishable from a dead one.
+- **The tab strip and the tree are `InspectDock` and `ElementsView`**
+  (`app/lib/src/inspect/`), already shared by ui_catalog and scenarios. The
+  cockpit's `RunInspector` emits the same `InspectNode`, so this is a swap that
+  deletes `_ViewTabs`, `_TreeTab`, `_TreeRow` and `_sourceLabel` — including
+  the per-row source paths, which `ElementsView` correctly keeps in the detail
+  pane, shortened against a display root.
+
 ## The build list, for when slice 3 starts
 
 1. ~~`Entrypoint.description`~~ **built** — through `declaredEntrypoints`,
@@ -237,9 +265,16 @@ against.
 - **The rail lists runs, not devices.** A `PluginChild.id` becomes the first
   address segment, so the children have to be things the panel can be pointed
   at. Devices moved to the desk and the status line.
-- **The tabs are `Screen`, `Tree`, `Logs`** rather than the `Screen`/`Logs` the
-  design named. The tree earns its own pane: it is the only artifact that
-  carries source locations, which is what makes it actionable.
+- ~~**The tabs are `Screen`, `Tree`, `Logs`** rather than the `Screen`/`Logs`
+  the design named. The tree earns its own pane.~~ **Wrong, and reverted**
+  (2026-07-31). The mockup's run page has `Screen` and `Logs`, and the *Screen
+  tab is a split*: a narrow phone pane on the left with `Screenshot` / `Pop
+  out`, the widget tree filling the rest on the right, with the driving verbs
+  under it. Splitting the tree into a third tab separated the picture from the
+  tree it describes — the two things you look at together — and this entry
+  wrote the deviation up as an improvement instead of flagging it. The rule it
+  broke is the standing one: **diff against the announced shape before styling,
+  and a deviation needs the owner's word.**
 - **A run's log opens at its newest line**, and the app's output is separable
   from the build's. That split had to be measured rather than designed — see
   `2026-07-31-sl3-inspect-surface-findings.md`.
