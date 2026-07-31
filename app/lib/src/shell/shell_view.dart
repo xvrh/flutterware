@@ -397,7 +397,18 @@ class _ConfigLoadLine extends StatefulWidget {
 class _ConfigLoadLineState extends State<_ConfigLoadLine> {
   static const _linger = Duration(seconds: 4);
 
+  /// What is on screen, and what has already been said.
+  ///
+  /// **Two fields for what looks like one thing.** [_showing] goes back to null
+  /// when the line fades, so deciding what to show from it meant every later
+  /// notification — a plugin changing state, a dependency finishing a load, any
+  /// save at all — found a `lastLoad` still recorded and nothing on screen, and
+  /// put the same line back up for another four seconds. The band then reads as
+  /// a config that re-runs on every unrelated edit, which is exactly the
+  /// impression this whole surface exists to prevent. A load is announced once,
+  /// keyed on the load itself.
   ConfigLoad? _showing;
+  ConfigLoad? _announced;
   Timer? _hide;
 
   @override
@@ -417,10 +428,11 @@ class _ConfigLoadLineState extends State<_ConfigLoadLine> {
     var worktree = widget.shell.selected;
     var load = worktree == null ? null : widget.shell.lastLoad(worktree);
     if (load == null ||
-        load == _showing ||
+        identical(load, _announced) ||
         load.outcome == ConfigLoadOutcome.built) {
       return;
     }
+    _announced = load;
     setState(() => _showing = load);
     _hide?.cancel();
     _hide = Timer(_linger, () {
