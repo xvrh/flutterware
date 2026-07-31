@@ -63,6 +63,25 @@ Future<void> main(List<String> args) async {
       if (echo(after) != 'zq') {
         failures.add('typing did not reach the field (echo "${echo(after)}")');
       }
+
+      // Backspace and the arrows, which reach a field only as named IME
+      // commands on macOS — the whole reason GuestTextInput maps selectors.
+      guest.press(logical: _backspace.$1, physical: _backspace.$2);
+      await guest.settle();
+      var deleted = echo(await guest.tree());
+      stdout.writeln('[probe] echo after backspace: "$deleted"');
+      if (deleted != 'z') {
+        failures.add('backspace did not delete (echo "$deleted")');
+      }
+
+      guest.press(logical: _arrowLeft.$1, physical: _arrowLeft.$2);
+      await guest.settle();
+      var tree = await guest.tree();
+      var caret = RegExp(r'sel: ?(\d+),').firstMatch(tree)?.group(1);
+      stdout.writeln('[probe] caret after arrow-left: $caret');
+      if (caret != '0') {
+        failures.add('the arrow did not move the caret (at $caret)');
+      }
     });
 
     await _withGuest(daemon, ready, 'scrolling', (guest) async {
@@ -103,6 +122,13 @@ Future<void> main(List<String> args) async {
   }
   exit(1);
 }
+
+/// (logical, physical) for the editing keys this probe presses. Spelled out
+/// because a pure-Dart tool cannot import `LogicalKeyboardKey`, and a wrong id
+/// looks exactly like a broken feature — it did, once, during this
+/// investigation.
+const _backspace = (0x00100000008, 0x0007002A);
+const _arrowLeft = (0x00100000302, 0x00070050);
 
 Future<void> _withGuest(
   CompilerDaemonClient daemon,
@@ -224,6 +250,22 @@ class _Guest {
         timestampMicros: now,
       ),
     );
+  }
+
+  /// A key with no character — an editing key, not text.
+  void press({required int logical, required int physical}) {
+    var now = DateTime.now().microsecondsSinceEpoch;
+    for (var kind in [wire.KeyEventKind.down, wire.KeyEventKind.up]) {
+      _send(
+        wire.KeyEventMessage(
+          kind: kind,
+          physicalKey: physical,
+          logicalKey: logical,
+          modifiers: 0,
+          timestampMicros: now,
+        ),
+      );
+    }
   }
 
   void scroll({required double x, required double y, required double deltaY}) {

@@ -38,7 +38,7 @@ Widget textFields() => Scaffold(
 /// The echo is not decoration: a field's content lives in `EditableText`'s
 /// render object, where an inspecting tool cannot read it, while a `Text` is
 /// right there in the widget tree. It is what lets a headless check assert
-/// that typing landed — see `app/tool/embedder/typing_probe.dart`.
+/// that typing landed — see `app/tool/embedder/input_probe.dart`.
 class _EchoField extends StatefulWidget {
   const _EchoField();
 
@@ -50,7 +50,19 @@ class _EchoFieldState extends State<_EchoField> {
   final _controller = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    // The controller, not `onChanged`: that one fires on text only, so a caret
+    // that moved without typing would leave the readout showing where the
+    // caret used to be — which reads exactly like an arrow key doing nothing.
+    _controller.addListener(_onChanged);
+  }
+
+  void _onChanged() => setState(() {});
+
+  @override
   void dispose() {
+    _controller.removeListener(_onChanged);
     _controller.dispose();
     super.dispose();
   }
@@ -64,7 +76,6 @@ class _EchoFieldState extends State<_EchoField> {
         controller: _controller,
         autofocus: true,
         decoration: const InputDecoration(labelText: 'Single line'),
-        onChanged: (_) => setState(() {}),
       ),
       Text('echo: ${_controller.text}'),
       Text('sel: ${_controller.selection.start},${_controller.selection.end}'),

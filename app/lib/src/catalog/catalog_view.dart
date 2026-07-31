@@ -14,6 +14,7 @@ import '../embedder/embedded_engine.dart';
 import '../embedder/input_region.dart';
 import '../ui/design/design.dart';
 import '../utils/image_clipboard.dart';
+import 'app_chords.dart';
 import 'catalog_params.dart';
 import 'catalog_devices.dart';
 import 'catalog_entry.dart';
@@ -211,15 +212,8 @@ class _CatalogViewState extends State<CatalogView> {
     engine.resize(width, height, dpr, insets: safeAreas * dpr);
   }
 
-  /// Whether a key belongs to the app rather than to the guest.
-  ///
-  /// The canvas forwards everything else and reports it handled, so without
-  /// this no shortcut survives a click on the demo — not the panel's own
-  /// reload, and not the shell's. Command chords are the app's; a demo that
-  /// wants one is rarer than a user who wants their window back.
   bool _isAppChord(KeyEvent event) =>
-      HardwareKeyboard.instance.isMetaPressed ||
-      HardwareKeyboard.instance.isControlPressed;
+      isReservedAppChord(event, HardwareKeyboard.instance);
 
   @override
   Widget build(BuildContext context) {

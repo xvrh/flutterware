@@ -84,11 +84,18 @@ both installed by the generated catalog entrypoint and both in
   queue. With no platform channels there is no flush, so **no key reached a
   demo at all** — not a shortcut, not an arrow. This replaces `onKeyData` and
   dispatches to both destinations itself.
-- **`GuestTextInput`** — insertion. A `TextField` gets its text from the
-  platform IME, and there is none; this is a `TextInputControl` that builds
-  editing state from the character each key carries. Editing keys — deletion,
-  caret, selection — are the framework's own shortcuts and need nothing from
-  us once delivery works.
+- **`GuestTextInput`** — insertion *and the editing commands*. A `TextField`
+  gets its text from the platform IME, and there is none; this is a
+  `TextInputControl` that builds editing state from the character each key
+  carries. It also names the commands: on Apple platforms the framework
+  refuses backspace, delete, the arrows, home, end and page while a field is
+  focused and waits for the IME to send `deleteBackward:`, `moveLeft:` and
+  friends, so the control maps key plus modifiers to those selectors.
+
+The panel decides what a demo is allowed to hear — `isReservedAppChord`
+(`catalog/app_chords.dart`). It keeps only the chords the host actually binds;
+everything else, modifier keys included, goes to the guest, which is what makes
+⌘A and ⌘Z work inside a demo.
 
 `tool/embedder/input_probe.dart` is what proves the chain end to end: it types
 into a real guest and scrolls one, then reads back what the demo shows.
