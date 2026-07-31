@@ -12,6 +12,18 @@ import 'handle.dart';
 
 final _logger = Logger('run_launch');
 
+/// Enough for an Xcode signing failure with its four remediation steps, which
+/// is the longest real one measured. Past that it is a build log, not a reason.
+const _maxFailureLines = 40;
+
+/// Lines that name a fault rather than narrate one. Used only to pick a
+/// headline out of a block that is reported in full either way, so a miss
+/// costs a worse first line and never a lost reason.
+final _saysError = RegExp(
+  r'^\s*(error|exception|failed|failure|could not|unable to|no such)\b',
+  caseSensitive: false,
+);
+
 /// Starts `flutter run --machine` as a process nobody is waiting on, and
 /// announces it in the run dir.
 ///
@@ -37,6 +49,7 @@ Future<RunHandle> launchApp({
   String? package,
   String? entrypointName,
   String? deviceName,
+  String? flavor,
   Map<String, String> knobs = const {},
 }) async {
   if (Platform.isWindows) {
@@ -52,7 +65,7 @@ Future<RunHandle> launchApp({
 
   var logPath = p.join(
     runDir,
-    '${runHandleKey(worktree, device, entrypoint)}.log',
+    '${runHandleKey(worktree, device, entrypoint, flavor)}.log',
   );
   // **Emptied here, not by the shell's `>` below.** The key is stable across
   // relaunch by design, so a second run of the same entry point on the same
@@ -78,6 +91,9 @@ Future<RunHandle> launchApp({
     device,
     '--target',
     entrypoint,
+    // Before the defines, because a flavor decides which variant is built and
+    // the defines only decide what goes into it.
+    if (flavor != null) ...['--flavor', flavor],
     for (var knob in knobs.entries) ...[
       '--dart-define',
       '${knob.key}=${knob.value}',
@@ -105,6 +121,7 @@ Future<RunHandle> launchApp({
     entrypoint: entrypoint,
     entrypointName: entrypointName,
     package: package,
+    flavor: flavor,
     launcherPid: process.pid,
     knobs: knobs,
     logPath: logPath,
@@ -131,6 +148,7 @@ class LaunchLog {
     this.progress,
     this.error,
     this.output,
+    this.trailing = const [],
     this.started = false,
     this.stopped = false,
   });
@@ -161,6 +179,22 @@ class LaunchLog {
   /// while one is still alive it means nothing at all.
   final String? output;
 
+  /// Every plain line since the last structured event, in order.
+  ///
+  /// **A build failure's last line is its least useful one.** Measured, an iOS
+  /// signing failure ends `App failed to start` — and the reason, `No Account
+  /// for Team "B7V224LKE4"`, is twenty lines above it, along with the four
+  /// steps that fix it. [output] alone reported the summary and threw the cause
+  /// away.
+  ///
+  /// Delimited by the last structured event rather than by matching words in
+  /// the text, because `flutter run --machine` emits **nothing structured at
+  /// all** for a build failure — no `daemon.logMessage`, no error on
+  /// `app.stop`, measured on the log this was written for. The tool's last
+  /// event is its final `app.progress`, so everything plain after it is the
+  /// failure and nothing else is.
+  final List<String> trailing;
+
   /// `app.started` has arrived: the build is done and the app is up.
   final bool started;
 
@@ -182,13 +216,33 @@ class LaunchLog {
     String? appId, vmService, progress, error, plain;
     var started = false;
     var stopped = false;
+    var trailing = <String>[];
     for (var line in lines) {
-      var object = DaemonProtocol.tryReadLine(line);
+      Map<String, dynamic>? object;
+      try {
+        object = DaemonProtocol.tryReadLine(line);
+      } on FormatException {
+        // A line the launcher is still writing can be `[{`-shaped and not yet
+        // valid JSON. This method is read repeatedly *while* another process
+        // appends to the file, so that is a normal thing to see and not an
+        // error — treat it as plain text and let the next read have the whole
+        // line.
+        object = null;
+      }
       if (object == null) {
         // Not an event. Kept as context, never as a verdict — see [output].
-        if (line.trim().isNotEmpty) plain = line.trim();
+        if (line.trim().isNotEmpty) {
+          plain = line.trim();
+          trailing.add(line.trimRight());
+        }
         continue;
       }
+      // A structured line closes the plain block before it: whatever the tool
+      // was narrating is finished, and anything printed after this belongs to
+      // what comes next. `app.stop` is the exception because it is emitted
+      // *before* the tool's parting words, so honouring it would clear the
+      // very block those words are being collected into.
+      if (object['event'] != 'app.stop') trailing.clear();
       switch (DaemonProtocol.tryReadEvent(object)) {
         case AppStartEvent(appId: var id):
           appId = id;
@@ -219,6 +273,7 @@ class LaunchLog {
       progress: progress,
       error: error,
       output: plain,
+      trailing: trailing,
       started: started,
       stopped: stopped,
     );
@@ -226,11 +281,42 @@ class LaunchLog {
 
   /// Why this run is not going to work, or null.
   ///
-  /// [error] when the launcher said something structured, and the last plain
-  /// line only once the launcher is gone — at which point a stray sentence is
-  /// a worse answer than a real error and a much better one than silence.
-  String? failure({required bool launcherAlive}) =>
-      error ?? (launcherAlive || started ? null : output);
+  /// [error] when the launcher said something structured, and the plain block
+  /// only once the launcher is gone or the app stopped before it ever started —
+  /// at which point stray sentences are a worse answer than a real error and a
+  /// much better one than silence.
+  String? failure({required bool launcherAlive}) {
+    if (error != null) return error;
+    if (started || (launcherAlive && !stopped)) return null;
+    var block = _failureBlock();
+    return block.isEmpty ? output : block.join('\n');
+  }
+
+  /// The one line a row has room for.
+  ///
+  /// The first line of the block that names something gone wrong, because the
+  /// summary line the tool ends on — `App failed to start` — is true of every
+  /// failure and tells you which one you have in no case at all.
+  String? get failureHeadline {
+    if (error != null) return error!.split('\n').first;
+    var block = _failureBlock();
+    for (var line in block) {
+      if (_saysError.hasMatch(line)) return line.trim();
+    }
+    return block.isNotEmpty ? block.first.trim() : output;
+  }
+
+  /// The trailing plain lines, minus the blank ones a terminal used for
+  /// spacing, capped so a runaway build log cannot become the error message.
+  List<String> _failureBlock() {
+    var kept = [
+      for (var line in trailing)
+        if (line.trim().isNotEmpty) line,
+    ];
+    return kept.length <= _maxFailureLines
+        ? kept
+        : kept.sublist(kept.length - _maxFailureLines);
+  }
 
   /// The launcher's own last word, for a row that has to say something.
   String get summary {
@@ -240,6 +326,68 @@ class LaunchLog {
     if (vmService != null) return 'started';
     return progress ?? 'starting';
   }
+}
+
+/// A run that ended before it ever started, kept after its handle is gone.
+///
+/// **The handle has to go and the reason has to stay.** A launcher that never
+/// came up is not holding the device, so leaving its handle in the ledger would
+/// tell the next person a phone is busy running something that is not there —
+/// which is why both the sweeper and a failed `launch` delete it. But the chip
+/// deleted with it was the only thing on screen, so a failed launch bounced you
+/// back to the form with nothing said. This is what the panel shows instead.
+///
+/// Held in memory rather than written next to the log: the log *is* the durable
+/// record, [logPath] points at it, and a failure worth surviving a restart is
+/// one you should be reading the log for anyway.
+class RunFailure {
+  const RunFailure({
+    required this.key,
+    required this.device,
+    required this.entrypoint,
+    required this.at,
+    this.deviceName,
+    this.entrypointName,
+    this.package,
+    this.flavor,
+    this.headline,
+    this.detail,
+    this.logPath,
+  });
+
+  /// [runHandleKey], so the address that pointed at the run still points at
+  /// the reason it is gone.
+  final String key;
+
+  final String device;
+  final String? deviceName;
+  final String entrypoint;
+  final String? entrypointName;
+  final String? package;
+  final String? flavor;
+
+  /// One line naming the fault, for a chip or a row.
+  final String? headline;
+
+  /// The launcher's parting words in full, newline-separated.
+  final String? detail;
+
+  final String? logPath;
+
+  final DateTime at;
+
+  String get deviceLabel => deviceName ?? device;
+  String get entrypointLabel => entrypointName ?? entrypoint;
+
+  /// Matches [RunHandle.runLabel], so the chip does not rename itself when the
+  /// run it stands for dies.
+  String get runLabel =>
+      flavor == null ? entrypointLabel : '$entrypointLabel ($flavor)';
+
+  /// What to say when the log yielded nothing at all — a launcher killed with
+  /// `SIGKILL` writes no parting words, and silence is still an answer.
+  String get message =>
+      detail ?? headline ?? 'The launcher stopped before the app started.';
 }
 
 /// Brings [handle] up to date from its log, rewriting the file when it learns
@@ -286,16 +434,40 @@ Future<(RunHandle, LaunchLog)> awaitLaunch(
   while (true) {
     current = refreshFromLog(current);
     var log = LaunchLog.read(current.logPath ?? '');
-    if (log.started || log.stopped || log.error != null) return (current, log);
-    if (!isProcessAlive(current.launcherPid)) {
-      // The launcher is gone and the log never said anything structured. That
-      // is its own answer, and a more useful one than timing out on it — and
-      // the log is now complete, so the plain lines in it can be trusted to be
-      // the whole story rather than the first sentence of one.
-      await Future<void>.delayed(poll);
-      return (current, LaunchLog.read(current.logPath ?? ''));
+    // Only a started app is worth returning on the spot. Every other way out
+    // of here is a failure, and a failure's reason is still being written.
+    if (log.started) return (current, log);
+    if (log.stopped ||
+        log.error != null ||
+        !isProcessAlive(current.launcherPid)) {
+      return (current, await _readWhenSettled(current, poll));
     }
     if (DateTime.now().isAfter(deadline)) return (current, log);
     await Future<void>.delayed(poll);
   }
+}
+
+/// Reads [handle]'s log once its launcher has stopped adding to it.
+///
+/// **A launcher is not finished talking when it says it stopped.** `app.stop`
+/// arrives *before* the tool prints why — measured on an iOS signing failure,
+/// where everything that explains it comes after that event. Returning at the
+/// event caught the log mid-sentence, and worse, caught the launcher still
+/// alive, which made `failure(launcherAlive: true)` answer null and turned a
+/// failed launch into a bare `stopped` with no reason attached to it.
+///
+/// Bounded, because this is only ever tidying up an answer we already have: if
+/// the launcher lingers, the log as it stands is still returned.
+Future<LaunchLog> _readWhenSettled(
+  RunHandle handle,
+  Duration poll, {
+  Duration grace = const Duration(seconds: 3),
+}) async {
+  var until = DateTime.now().add(grace);
+  while (isProcessAlive(handle.launcherPid) && DateTime.now().isBefore(until)) {
+    await Future<void>.delayed(poll);
+  }
+  // One more poll after it goes, for the lines already in the pipe.
+  await Future<void>.delayed(poll);
+  return LaunchLog.read(handle.logPath ?? '');
 }

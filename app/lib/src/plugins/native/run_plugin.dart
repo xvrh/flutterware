@@ -100,23 +100,50 @@ class _RunPanelState extends State<_RunPanel> {
       animation: widget.plugin,
       builder: (context, _) {
         var handles = _core.handles;
+        var failures = _core.failures;
         var place = _resolve(context);
-        var shown = place.isNew ? null : _select(handles, place);
+        // A failure is looked up before a handle is fallen back to, so the
+        // address you were already watching turns into the reason it died
+        // rather than bouncing you to the form with nothing said.
+        var failed = place.isNew || place.runKey == null
+            ? null
+            : _core.failureFor(place.runKey!);
+        var shown = place.isNew || failed != null
+            ? null
+            : _select(handles, place);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _SubjectBar(handles: handles, shown: shown, isNew: place.isNew),
+            _SubjectBar(
+              handles: handles,
+              failures: failures,
+              shown: shown,
+              shownFailure: failed,
+              isNew: place.isNew,
+            ),
             const Divider(height: 1),
             Expanded(
-              child: shown == null
-                  ? _NewRunPage(core: _core, onLaunched: _goTo)
-                  : _RunView(
-                      core: _core,
-                      handle: shown,
-                      view: place.view,
-                      onControl: _control,
-                    ),
+              child: switch ((failed, shown)) {
+                (var failure?, _) => _FailedRunPage(
+                  failure: failure,
+                  onDismiss: () {
+                    _core.dismissFailure(failure.key);
+                    if (mounted) {
+                      AddressScope.write(
+                        context,
+                      ).setSegments(const [newRunSegment]);
+                    }
+                  },
+                ),
+                (_, var handle?) => _RunView(
+                  core: _core,
+                  handle: handle,
+                  view: place.view,
+                  onControl: _control,
+                ),
+                _ => _NewRunPage(core: _core, onLaunched: _goTo),
+              },
             ),
           ],
         );
@@ -151,12 +178,22 @@ class _RunPanelState extends State<_RunPanel> {
 class _SubjectBar extends StatelessWidget {
   const _SubjectBar({
     required this.handles,
+    required this.failures,
     required this.shown,
+    required this.shownFailure,
     required this.isNew,
   });
 
   final List<RunHandle> handles;
+
+  /// Runs that died before they started. Chipped alongside the live ones
+  /// because a launch that failed is still something you asked for, and the
+  /// bar going empty was the whole of what "it closed without explanation"
+  /// looked like from here.
+  final List<RunFailure> failures;
+
   final RunHandle? shown;
+  final RunFailure? shownFailure;
   final bool isNew;
 
   @override
@@ -172,12 +209,22 @@ class _SubjectBar extends StatelessWidget {
               children: [
                 for (var handle in handles)
                   _Pill(
-                    label: '${handle.entrypointLabel} · ${handle.deviceLabel}',
+                    label: '${handle.runLabel} · ${handle.deviceLabel}',
                     selected: !isNew && handle.key == shown?.key,
                     dot: true,
                     onTap: () => AddressScope.write(
                       context,
                     ).setSegments(runSegments(handle.key)),
+                  ),
+                for (var failure in failures)
+                  _Pill(
+                    label: '${failure.runLabel} · ${failure.deviceLabel}',
+                    selected: !isNew && failure.key == shownFailure?.key,
+                    dot: true,
+                    dotColor: context.colors.red,
+                    onTap: () => AddressScope.write(
+                      context,
+                    ).setSegments(runSegments(failure.key)),
                   ),
               ],
             ),
@@ -187,7 +234,9 @@ class _SubjectBar extends StatelessWidget {
             label: '+ New run',
             // Selected when it is what is showing, which includes the case
             // where nothing is running and there was nothing else to show.
-            selected: isNew || (handles.isEmpty && shown == null),
+            selected:
+                isNew ||
+                (handles.isEmpty && shown == null && shownFailure == null),
             onTap: () =>
                 AddressScope.write(context).setSegments(const [newRunSegment]),
           ),
@@ -203,11 +252,17 @@ class _Pill extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.dot = false,
+    this.dotColor,
   });
 
   final String label;
   final bool selected;
   final bool dot;
+
+  /// Green when absent — a live run. Red says the run is a failed one whose
+  /// chip is being kept so its reason has somewhere to live.
+  final Color? dotColor;
+
   final VoidCallback onTap;
 
   @override
@@ -232,7 +287,7 @@ class _Pill extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (dot) ...[
-              Icon(Icons.circle, size: 8, color: colors.grn),
+              Icon(Icons.circle, size: 8, color: dotColor ?? colors.grn),
               const SizedBox(width: 6),
             ],
             Text(label, style: context.type.bodySmall),
@@ -392,7 +447,7 @@ class _RunHeader extends StatelessWidget {
           Flexible(
             flex: 0,
             child: Text(
-              handle.entrypointLabel,
+              handle.runLabel,
               style: context.type.bodyStrong,
               overflow: TextOverflow.ellipsis,
             ),
@@ -905,6 +960,7 @@ class _NewRunPageState extends State<_NewRunPage> {
   String? _device;
   ({String package, EntrypointRef entry})? _entry;
   final _knobs = <String, TextEditingController>{};
+  final _flavor = TextEditingController();
   var _launching = false;
   String? _error;
 
@@ -921,6 +977,7 @@ class _NewRunPageState extends State<_NewRunPage> {
     for (var field in _knobs.values) {
       field.dispose();
     }
+    _flavor.dispose();
     super.dispose();
   }
 
@@ -948,6 +1005,10 @@ class _NewRunPageState extends State<_NewRunPage> {
               .firstOrNull ??
           entries.first;
       _rebuildKnobs(last?.knobs ?? const {});
+      // The entry point's declaration is the default; what was actually run
+      // last time wins over it, because overriding a flavor once usually means
+      // overriding it again.
+      _flavor.text = last?.flavor ?? _entry?.entry.flavor ?? '';
     }
   }
 
@@ -999,7 +1060,25 @@ class _NewRunPageState extends State<_NewRunPage> {
             onChanged: (choice) => setState(() {
               _entry = choice;
               _rebuildKnobs(const {});
+              _flavor.text = choice.entry.flavor ?? '';
             }),
+          ),
+        ),
+        // Always offered, not only when the entry point declared one: whether
+        // this project has flavors is not something the cockpit knows, and a
+        // flavoured project cannot be launched at all without the right word
+        // here. Empty means no `--flavor` is passed.
+        const Gap(FwSpacing.lg),
+        _Field(
+          label: 'Flavor',
+          hint: 'the --flavor to build; leave empty if the project has none',
+          child: TextField(
+            controller: _flavor,
+            style: context.type.bodySmall,
+            decoration: const InputDecoration(
+              isDense: true,
+              hintText: 'dev, staging…',
+            ),
           ),
         ),
         if (_knobs.isNotEmpty) ...[
@@ -1072,6 +1151,7 @@ class _NewRunPageState extends State<_NewRunPage> {
       for (var entry in _knobs.entries)
         if (entry.value.text.isNotEmpty) entry.key: entry.value.text,
     };
+    var flavor = _flavor.text.trim();
     setState(() {
       _launching = true;
       _error = null;
@@ -1081,12 +1161,14 @@ class _NewRunPageState extends State<_NewRunPage> {
         device: device,
         package: choice.package,
         entry: choice.entry,
+        flavor: flavor.isEmpty ? null : flavor,
         knobs: knobs,
       );
       _core.lastLaunch = (
         device: device,
         package: choice.package,
         entrypoint: choice.entry.path,
+        flavor: flavor.isEmpty ? null : flavor,
         knobs: knobs,
       );
       widget.onLaunched(handle);
@@ -1371,8 +1453,8 @@ class _DeskState extends State<_Desk> {
     }
     var first = holders.first;
     return device.kind == MachineKind.host
-        ? 'running ${first.entrypointLabel}'
-        : '${first.entrypointLabel} · ${first.worktreeName}';
+        ? 'running ${first.runLabel}'
+        : '${first.runLabel} · ${first.worktreeName}';
   }
 
   static IconData _iconFor(DaemonDevice device) => switch (device.kind) {
@@ -1462,6 +1544,80 @@ class _TabBar extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Where a run's page goes when the run never started.
+///
+/// Left-aligned, monospaced and scrollable rather than the centred one-liner
+/// [_Failed] uses, because what goes here is a build failure: a fault, the file
+/// it is in, and often the numbered steps that fix it. Centring that turns
+/// instructions into a shrug.
+class _FailedRunPage extends StatelessWidget {
+  const _FailedRunPage({required this.failure, required this.onDismiss});
+
+  final RunFailure failure;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(FwSpacing.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.error_outline, size: 16, color: colors.red),
+              const Gap(FwSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      failure.headline ?? 'The run did not start',
+                      style: context.type.bodyStrong.copyWith(
+                        color: colors.red,
+                      ),
+                    ),
+                    const Gap(FwSpacing.xs),
+                    Text(
+                      '${failure.runLabel} on ${failure.deviceLabel} — '
+                      'never started, so nothing is holding the device.',
+                      style: context.type.bodyMuted,
+                    ),
+                  ],
+                ),
+              ),
+              const Gap(FwSpacing.sm),
+              TextButton(onPressed: onDismiss, child: const Text('Dismiss')),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(FwSpacing.md),
+            child: SelectableText(
+              failure.message,
+              style: _mono(context, color: colors.mut),
+            ),
+          ),
+        ),
+        if (failure.logPath case var path?) ...[
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(FwSpacing.sm),
+            child: SelectableText(
+              path,
+              style: context.type.micro.copyWith(color: colors.mut3),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _Failed extends StatelessWidget {

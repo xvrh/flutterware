@@ -35,6 +35,7 @@ class RunHandle {
     this.package,
     this.entrypointName,
     this.deviceName,
+    this.flavor,
     this.vmService,
     this.appId,
     this.logPath,
@@ -68,6 +69,13 @@ class RunHandle {
 
   /// The package it belongs to, relative to [worktree].
   final String? package;
+
+  /// The `--flavor` it was built with, when the project has them.
+  ///
+  /// Part of what makes a run *this* run and not another: two flavors of one
+  /// entry point are two apps, usually with different bundle ids, and both can
+  /// be on the phone at once. See [runHandleKey].
+  final String? flavor;
 
   /// The `flutter run` child. It owns the port forward and registers
   /// `reloadSources`/`hotRestart` on the app's VM service, so its death is a
@@ -107,6 +115,7 @@ class RunHandle {
     'entrypoint': entrypoint,
     if (entrypointName != null) 'entrypointName': entrypointName,
     if (package != null) 'package': package,
+    if (flavor != null) 'flavor': flavor,
     'launcherPid': launcherPid,
     if (vmService != null) 'vmService': vmService,
     if (appId != null) 'appId': appId,
@@ -133,6 +142,7 @@ class RunHandle {
         deviceName: map['deviceName'] as String?,
         entrypointName: map['entrypointName'] as String?,
         package: map['package'] as String?,
+        flavor: map['flavor'] as String?,
         vmService: map['vmService'] as String?,
         appId: map['appId'] as String?,
         logPath: map['logPath'] as String?,
@@ -162,7 +172,12 @@ class RunHandle {
   /// Stable across relaunch, which is what makes it usable as an address: the
   /// same entry point on the same device from the same worktree is the same
   /// run, whatever pid is carrying it this time.
-  String get key => runHandleKey(worktree, device, entrypoint);
+  String get key => runHandleKey(worktree, device, entrypoint, flavor);
+
+  /// What to call the run on screen: the entry point, and the flavor when
+  /// there is one to tell it apart from.
+  String get runLabel =>
+      flavor == null ? entrypointLabel : '$entrypointLabel ($flavor)';
 
   /// The same run, now that its VM service is known.
   RunHandle withService({String? vmService, String? appId}) => RunHandle(
@@ -173,6 +188,7 @@ class RunHandle {
     entrypoint: entrypoint,
     entrypointName: entrypointName,
     package: package,
+    flavor: flavor,
     launcherPid: launcherPid,
     vmService: vmService ?? this.vmService,
     appId: appId ?? this.appId,
@@ -192,6 +208,7 @@ class RunHandle {
         worktree: worktree,
         device: device,
         entrypoint: entrypoint,
+        flavor: flavor,
         launcherPid: launcherPid,
       ),
     );
@@ -205,6 +222,7 @@ class RunHandle {
       entrypoint: entrypoint,
       entrypointName: entrypointName,
       package: package,
+      flavor: flavor,
       launcherPid: launcherPid,
       vmService: vmService,
       appId: appId,
@@ -264,15 +282,31 @@ String runHandleFileName({
   required String device,
   required String entrypoint,
   required int launcherPid,
-}) => '${runHandleKey(worktree, device, entrypoint)}-$launcherPid.json';
+  String? flavor,
+}) => '${runHandleKey(worktree, device, entrypoint, flavor)}-$launcherPid.json';
 
 /// The `app-<hash>` stem shared by a run's handle and its log.
 ///
 /// Shared so the two are recognisably one run in a directory listing, and so
 /// the sweeper's existing `*.log` rule ages the log out on its own.
-String runHandleKey(String worktree, String device, String entrypoint) {
+///
+/// **[flavor] is part of the identity, not a decoration.** `dev` and `prod` of
+/// one entry point install as different bundle ids and sit on the phone
+/// together, so keying without it would give two live runs one handle and one
+/// log — the same collision that once had a relaunch publishing the previous
+/// run's VM service address, only permanent.
+///
+/// A null flavor hashes exactly as before, so every key written by a build
+/// that had no idea what a flavor was still names the same run.
+String runHandleKey(
+  String worktree,
+  String device,
+  String entrypoint, [
+  String? flavor,
+]) {
+  var seed = '$worktree|$device|$entrypoint';
   var key = sha1
-      .convert(utf8.encode('$worktree|$device|$entrypoint'))
+      .convert(utf8.encode(flavor == null ? seed : '$seed|$flavor'))
       .toString()
       .substring(0, 12);
   return 'app-$key';

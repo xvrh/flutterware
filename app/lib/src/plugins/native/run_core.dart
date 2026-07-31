@@ -26,6 +26,11 @@ import 'ui_catalog_core.dart' show UiCatalogCore;
 /// The registered id — also what `tool/flutterware.dart` declares.
 const runPluginId = 'flutterware.run';
 
+/// How many dead runs to keep the reason for. Enough to cover a morning of
+/// fighting one signing problem across two devices, and far short of a list
+/// nobody reads.
+const _maxRememberedFailures = 8;
+
 /// Which devices exist, which are already running something — from any
 /// worktree of the repo, not just this one — and launching an entry point onto
 /// one.
@@ -244,6 +249,49 @@ class RunCore extends PluginCore {
 
   String? _daemonError;
 
+  final _failures = <String, RunFailure>{};
+
+  /// Runs that ended before they started, newest first.
+  ///
+  /// Keyed by [runHandleKey] and replaced rather than accumulated, because that
+  /// key is stable across relaunch: trying the same thing again should correct
+  /// the reason it failed, not stack a second copy of it underneath.
+  List<RunFailure> get failures {
+    var all = _failures.values.toList()..sort((a, b) => b.at.compareTo(a.at));
+    return all;
+  }
+
+  RunFailure? failureFor(String key) => _failures[key];
+
+  /// Notes why a run is gone, so the panel has something to show where the
+  /// chip used to be. See [RunFailure] for why the handle cannot simply stay.
+  @visibleForTesting
+  void recordFailure(RunHandle handle, LaunchLog log) {
+    if (_failures.length >= _maxRememberedFailures &&
+        !_failures.containsKey(handle.key)) {
+      var oldest = failures.last;
+      _failures.remove(oldest.key);
+    }
+    _failures[handle.key] = RunFailure(
+      key: handle.key,
+      device: handle.device,
+      deviceName: handle.deviceName,
+      entrypoint: handle.entrypoint,
+      entrypointName: handle.entrypointName,
+      package: handle.package,
+      flavor: handle.flavor,
+      headline: log.failureHeadline,
+      detail: log.failure(launcherAlive: false),
+      logPath: handle.logPath,
+      at: DateTime.now(),
+    );
+  }
+
+  /// Forgets a failure, for when the panel's user has read it.
+  void dismissFailure(String key) {
+    if (_failures.remove(key) != null) notifyChanged();
+  }
+
   /// Probes every announced run and deletes the handles nothing answers.
   ///
   /// Returns how many were swept. A dead handle is one where neither the app
@@ -266,6 +314,11 @@ class RunCore extends PluginCore {
     for (var (index, handle) in handles.indexed) {
       var probe = probes[index];
       if (probe.isDead) {
+        // Read before deleting, and only for a run that never started: an app
+        // that ran and was stopped is not a failure and must leave nothing
+        // behind, or every ordinary `stop` would post an obituary.
+        var log = LaunchLog.read(handle.logPath ?? '');
+        if (!log.started) recordFailure(handle, log);
         handle.delete();
         _probes.remove(handle.handlePath);
         _logs.remove(handle.handlePath);
@@ -394,6 +447,16 @@ class RunCore extends PluginCore {
                   for (var entry in entrypointsFor(path))
                     ActionOption(entry.path, label: entry.name),
               ],
+            ),
+            const ActionParameter(
+              'flavor',
+              'Flavor',
+              required: false,
+              description:
+                  'The `--flavor` to build. Defaults to what the entry point '
+                  'declares. A project with product flavors cannot be built '
+                  'without one at all — unlike a knob, leaving it out is a '
+                  'build failure rather than a default value.',
             ),
             const ActionParameter(
               'knobs',
@@ -801,6 +864,7 @@ class RunCore extends PluginCore {
                   path: entry.path,
                   name: entry.name,
                   description: entry.description,
+                  flavor: entry.flavor,
                   knobs: [for (var knob in entry.knobs) _knobEntry(knob)],
                 ),
             ],
@@ -867,6 +931,12 @@ class RunCore extends PluginCore {
       device: device,
       package: package,
       entry: entry,
+      // The caller's word beats the declaration, and an empty string is how a
+      // caller says "no flavor" about an entry point that declares one.
+      flavor: switch (arguments['flavor']) {
+        String given => given.isEmpty ? null : given,
+        _ => entry.flavor,
+      },
       knobs: knobs,
     );
 
@@ -882,7 +952,10 @@ class RunCore extends PluginCore {
     var probe = probeOf(handle) ?? await probeRunHandle(handle);
     var failure = log.failure(launcherAlive: probe.launcher);
     var status = switch (log) {
-      _ when failure != null => 'failed',
+      // A run that stopped without ever starting did not stop, it failed —
+      // and saying `stopped` for it was how an iOS build that could not be
+      // signed came back looking like something somebody had turned off.
+      _ when failure != null || (log.stopped && !log.started) => 'failed',
       _ when log.stopped => 'stopped',
       _ when log.started => 'running',
       _ => 'starting',
@@ -890,7 +963,9 @@ class RunCore extends PluginCore {
     if (status == 'failed') {
       // A launcher that never came up is not holding the device, and leaving
       // its handle behind would make the next person's `devices` say a phone
-      // is busy running something that is not there.
+      // is busy running something that is not there. The log stays: it is
+      // where the reason is, and [logPath] below is what points at it.
+      recordFailure(handle, log);
       handle.delete();
       _handles = scanRunHandles(runDirProvider());
     }
@@ -898,7 +973,10 @@ class RunCore extends PluginCore {
       status: status,
       waited: wait,
       progress: log.progress,
-      error: failure,
+      error:
+          failure ?? (status == 'failed' ? 'the app stopped starting' : null),
+      headline: status == 'failed' ? log.failureHeadline : null,
+      logPath: status == 'failed' ? handle.logPath : null,
       note: status == 'starting' && wait
           ? 'Still building after the timeout. It has not failed — follow it '
                 'with the apps action, or read ${handle.logPath}.'
@@ -914,6 +992,7 @@ class RunCore extends PluginCore {
     required String device,
     required String package,
     required EntrypointRef entry,
+    String? flavor,
     Map<String, String> knobs = const {},
   }) async {
     var deviceName = devices
@@ -931,6 +1010,7 @@ class RunCore extends PluginCore {
       deviceName: deviceName,
       entrypoint: entry.path,
       entrypointName: entry.declared ? entry.name : null,
+      flavor: flavor ?? entry.flavor,
       knobs: knobs,
     );
     _handles = [handle, ..._handles];
@@ -1190,6 +1270,7 @@ class RunCore extends PluginCore {
     String device,
     String package,
     String entrypoint,
+    String? flavor,
     Map<String, String> knobs,
   })?
   lastLaunch;

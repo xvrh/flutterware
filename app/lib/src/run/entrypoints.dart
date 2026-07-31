@@ -12,6 +12,7 @@ class EntrypointRef {
     required this.name,
     required this.declared,
     this.description,
+    this.flavor,
     this.knobs = const [],
   });
 
@@ -31,6 +32,10 @@ class EntrypointRef {
   /// still launchable; the difference is that nobody vouched for it, and it
   /// carries no knobs.
   final bool declared;
+
+  /// The `--flavor` this entry point is built with, when the project has them.
+  /// A flavoured project cannot be run without one — see [Entrypoint.flavor].
+  final String? flavor;
 
   final List<LaunchKnob> knobs;
 
@@ -53,6 +58,7 @@ List<EntrypointRef> declaredEntrypoints(Map<String, Object?> config) => [
           path: path,
           name: entry['name'] as String? ?? _nameFor(path),
           description: entry['description'] as String?,
+          flavor: entry['flavor'] as String?,
           declared: true,
           knobs: _knobsOf(entry['knobs']),
         ),

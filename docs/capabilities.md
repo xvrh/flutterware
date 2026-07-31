@@ -325,6 +325,7 @@ packages: List<RunEntrypointPackage>
     path: String   # Package-relative — what `launch` takes as its `entrypoint`.
     name: String
     description: String?   # What it is, in a line, when the config said.
+    flavor: String?   # The `--flavor` this entry point declares, when the project has them.
     knobs: List<RunKnobEntry>
       define: String   # The define's name, as `String.fromEnvironment` reads it.
       label: String?
@@ -343,7 +344,7 @@ note: String?
 Builds an entry point and runs it on a device. The launcher is detached and its output goes to a log file, so this can return while the app keeps running. A cold build is slow — about ten seconds warm on Android and a minute and a half cold — and on a wireless device it can stall on an OS permission dialog that nobody is looking at.
 
 ```sh
-fw run run launch --device=<choice> [--package=…] [--entrypoint=…] [--knobs=…] [--wait=…] [--timeout=…]
+fw run run launch --device=<choice> [--package=…] [--entrypoint=…] [--flavor=…] [--knobs=…] [--wait=…] [--timeout=…]
 ```
 
 Returns `RunLaunchResult`:
@@ -367,7 +368,9 @@ app: RunAppEntry   # The run as the ledger now holds it — the same shape `apps
 status: String   # `running`, `starting`, `stopped`, or `failed`.
 waited: bool   # False when the call returned without waiting for the app to come up, so [status] is what was true a moment after spawning and nothing more.
 progress: String?   # The launcher's most recent narration — `Installing and launching…`.
-error: String?
+error: String?   # Why it failed, in the launcher's own words and in full.
+headline: String?   # [error]'s first line that names a fault, for a row with no room for the rest.
+logPath: String?   # Where the whole thing is, since [error] is bounded and a launcher that died in an unusual way may have put the interesting part above the cut.
 note: String?
 ```
 
@@ -376,6 +379,7 @@ note: String?
 | `device` | choice | yes | — | Which device to run on |
 | `package` | choice | no | — | Which declared package; the only one when there is one |
 | `entrypoint` | choice | no | — | Package-relative path, as `entrypoints` reports it. The package's only entry point when omitted. |
+| `flavor` | string | no | — | The `--flavor` to build. Defaults to what the entry point declares. A project with product flavors cannot be built without one at all — unlike a knob, leaving it out is a build failure rather than a default value. |
 | `knobs` | string | no | — | Launch knobs to bake in: `NAME=value,NAME=value`, or a JSON object. Each becomes a `--dart-define`, so changing one costs a rebuild — which is why the entry point declares which ones it wants and what values are worth using. |
 | `wait` | boolean | no | true | Wait for the app to come up before answering. Off returns as soon as the launcher is spawned, and `apps` is how you find out how it went. |
 | `timeout` | integer | no | 300 | Seconds to wait. A timeout is not a failure — the build carries on and the answer says how far it got. |

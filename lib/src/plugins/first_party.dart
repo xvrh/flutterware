@@ -256,6 +256,7 @@ class Entrypoint {
     this.path, {
     this.name,
     this.description,
+    this.flavor,
     this.knobs = const [],
   });
 
@@ -272,6 +273,25 @@ class Entrypoint {
   /// reads the same field, so it pays twice.
   final String? description;
 
+  /// The `--flavor` this entry point is built with — `dev`, `staging`.
+  ///
+  /// **A flavoured project cannot be run without one at all.** Where a missing
+  /// `--dart-define` merely gives you the fallback value, a missing `--flavor`
+  /// on a project that declares product flavors is a hard failure before
+  /// anything is compiled: Gradle has no such variant, and Xcode has no such
+  /// scheme. So this is not a convenience — for those projects it is the
+  /// difference between an entry point that launches and one that cannot.
+  ///
+  /// Declared per entry point because that is how the pairing actually works:
+  /// `main_dev.dart` goes with `dev`, and it is the same fact twice. To run one
+  /// entry point under several flavors, declare it several times with different
+  /// [name]s, or pass `flavor` to the launch action.
+  ///
+  /// Android and Apple platforms only — `flutter run` rejects `--flavor` for
+  /// web, Linux and Windows, so leave it null for an entry point that targets
+  /// those.
+  final String? flavor;
+
   /// What has to be decided before this can be built.
   final List<LaunchKnob> knobs;
 
@@ -279,6 +299,7 @@ class Entrypoint {
     'path': path,
     'name': ?name,
     'description': ?description,
+    'flavor': ?flavor,
     if (knobs.isNotEmpty) 'knobs': [for (var k in knobs) k.toJson()],
   };
 }

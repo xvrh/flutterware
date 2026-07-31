@@ -179,6 +179,59 @@ exactly when nothing else is. So `up` is a field, not an error, and a call
 during a build returns the progress line and the logs instead of refusing.
 Verified against a cold Chrome build.
 
+### A failed launch has to leave something behind
+
+The first launch onto real hardware failed, and the cockpit said nothing —
+the chip appeared, vanished, and the panel was back at the form. Three separate
+faults, each of which alone was enough to lose the reason:
+
+1. **The log kept only its last plain line.** An iOS signing failure ends `App
+   failed to start`; the cause — `No Account for Team "B7V224LKE4"` — is twenty
+   lines above it, with the four Xcode steps that fix it. `LaunchLog` now keeps
+   the plain block since the last structured event and reports all of it.
+   Delimited by events rather than by matching words, because **`flutter run
+   --machine` emits nothing structured at all for a build failure**: no
+   `daemon.logMessage`, no error on `app.stop`. Measured, not assumed.
+2. **`awaitLaunch` returned at `app.stop`,** which the tool emits *before* it
+   explains itself — and while the launcher was still alive, so
+   `failure(launcherAlive: true)` answered null. A failed launch came back as a
+   bare `stopped` with no error at all. It now waits for the launcher to exit
+   (bounded at 3s) so the log is whole, and a stop before `app.started` is a
+   `failed`, not a `stopped`.
+3. **The handle is deleted on failure and that is correct** — a launcher that
+   never came up is not holding the phone, and leaving it would tell the next
+   person a device is busy. But the chip went with it. `RunFailure` is what
+   stays: in memory, keyed by the run key, so the address you were watching
+   turns into the reason rather than bouncing you to the form. The log is the
+   durable record and the failure points at it.
+
+### Flavors are entry point config
+
+`flutter run --flavor` selects a build variant — a Gradle product flavor on
+Android, an Xcode scheme on Apple platforms. It matters more than a knob does:
+**a project with flavors cannot be built without one at all.** Where a missing
+`--dart-define` gives you the fallback value, a missing `--flavor` fails before
+anything compiles.
+
+So it is declared on the entry point (`Entrypoint(..., flavor: 'dev')`), which
+is how the pairing already works in practice — `main_dev.dart` goes with `dev`.
+It is reported by `entrypoints`, overridable per launch, and offered in the New
+run page as a field that is always present, because whether *this* project has
+flavors is not something the cockpit knows.
+
+**It is part of a run's identity, not a decoration.** `dev` and `prod` install
+as different bundle ids and sit on one phone together, so `runHandleKey` takes
+it; without that, two live runs would share one handle and one log — the
+collision that already published a dead VM service address once. A null flavor
+hashes exactly as before, so nothing written earlier is orphaned.
+
+Not built: **offering the flavors a project actually has.** The tool knows them
+— its own error names the schemes it found — so reading `productFlavors` from
+gradle and the `xcshareddata/xcschemes` directory would let the picker list them
+and let a wrong one be caught before a build. Worth doing; it needs two parsers
+and neither is guessable, so it waits for a real flavoured project to test
+against.
+
 ### What the build changed about the design
 
 - **The rail lists runs, not devices.** A `PluginChild.id` becomes the first

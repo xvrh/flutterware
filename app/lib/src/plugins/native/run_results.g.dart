@@ -59,6 +59,7 @@ Map<String, dynamic> _$RunEntrypointEntryToJson(RunEntrypointEntry instance) =>
       'path': instance.path,
       'name': instance.name,
       'description': ?instance.description,
+      'flavor': ?instance.flavor,
       'knobs': instance.knobs.map((e) => e.toJson()).toList(),
     };
 
@@ -78,6 +79,8 @@ Map<String, dynamic> _$RunLaunchResultToJson(RunLaunchResult instance) =>
       'waited': instance.waited,
       'progress': ?instance.progress,
       'error': ?instance.error,
+      'headline': ?instance.headline,
+      'logPath': ?instance.logPath,
       'note': ?instance.note,
     };
 

@@ -2283,6 +2283,13 @@ final resultShapes = <String, ResultShape>{
         'doc': 'What it is, in a line, when the config said.',
       },
       <String, Object?>{
+        'name': 'flavor',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The `--flavor` this entry point declares, when the project has them.',
+      },
+      <String, Object?>{
         'name': 'knobs',
         'type': 'List<RunKnobEntry>',
         'shape': <String, Object?>{
@@ -2352,6 +2359,13 @@ final resultShapes = <String, ResultShape>{
               'type': 'String',
               'optional': true,
               'doc': 'What it is, in a line, when the config said.',
+            },
+            <String, Object?>{
+              'name': 'flavor',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The `--flavor` this entry point declares, when the project has them.',
             },
             <String, Object?>{
               'name': 'knobs',
@@ -2432,6 +2446,13 @@ final resultShapes = <String, ResultShape>{
                     'type': 'String',
                     'optional': true,
                     'doc': 'What it is, in a line, when the config said.',
+                  },
+                  <String, Object?>{
+                    'name': 'flavor',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The `--flavor` this entry point declares, when the project has them.',
                   },
                   <String, Object?>{
                     'name': 'knobs',
@@ -2765,7 +2786,26 @@ final resultShapes = <String, ResultShape>{
         'doc':
             'The launcher\'s most recent narration — `Installing and launching…`.',
       },
-      <String, Object?>{'name': 'error', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'error',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Why it failed, in the launcher\'s own words and in full.',
+      },
+      <String, Object?>{
+        'name': 'headline',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            '[error]\'s first line that names a fault, for a row with no room for the rest.',
+      },
+      <String, Object?>{
+        'name': 'logPath',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Where the whole thing is, since [error] is bounded and a launcher that died in an unusual way may have put the interesting part above the cut.',
+      },
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
   }),

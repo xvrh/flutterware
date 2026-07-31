@@ -202,6 +202,7 @@ class RunEntrypointEntry {
     required this.path,
     required this.name,
     this.description,
+    this.flavor,
     this.knobs = const [],
   });
 
@@ -214,6 +215,13 @@ class RunEntrypointEntry {
   /// cannot be told apart by their file names, and this is the field that
   /// tells them apart — for a picker and for an agent alike.
   final String? description;
+
+  /// The `--flavor` this entry point declares, when the project has them.
+  ///
+  /// Reported because a flavoured project **cannot be launched without one** —
+  /// it is not a preference the caller may skip, and an agent that does not
+  /// pass it gets a build failure rather than a default.
+  final String? flavor;
 
   final List<RunKnobEntry> knobs;
 
@@ -266,6 +274,8 @@ class RunLaunchResult implements PluginResult {
     required this.waited,
     this.progress,
     this.error,
+    this.headline,
+    this.logPath,
     this.note,
   });
 
@@ -284,7 +294,23 @@ class RunLaunchResult implements PluginResult {
   /// dialog waits for somebody to notice it.
   final String? progress;
 
+  /// Why it failed, in the launcher's own words and in full.
+  ///
+  /// Multi-line on purpose. A build failure is a block — the fault, the file
+  /// it is in, and usually the steps that fix it — and the one line the tool
+  /// ends on (`App failed to start`) is the only part of it that says nothing.
   final String? error;
+
+  /// [error]'s first line that names a fault, for a row with no room for the
+  /// rest.
+  final String? headline;
+
+  /// Where the whole thing is, since [error] is bounded and a launcher that
+  /// died in an unusual way may have put the interesting part above the cut.
+  ///
+  /// Present only on a failure — the handle is deleted when a launch fails, so
+  /// this path is the last thing pointing at what happened.
+  final String? logPath;
 
   final String? note;
 

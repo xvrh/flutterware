@@ -243,6 +243,51 @@ void main() {
       expect(scanRunHandles(runDir.path), isEmpty);
     });
 
+    test('sweeping a run that never started keeps why', () async {
+      // The handle must go — a dead launcher is not holding the phone — but
+      // deleting it was also deleting the only thing on screen, which is what
+      // a failed launch closing "without explanation" actually was.
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        logPath: p.join(runDir.path, 'app-failed.log'),
+        launcherPid: await _deadPid(),
+      );
+      File(
+        handle.logPath!,
+      ).writeAsStringSync('Error: could not code sign the application\n');
+
+      await core.invoke('apps');
+
+      expect(scanRunHandles(runDir.path), isEmpty);
+      var failure = core.failureFor(handle.key)!;
+      expect(failure.headline, 'Error: could not code sign the application');
+      expect(failure.deviceLabel, 'phone');
+      expect(failure.logPath, handle.logPath);
+      expect(core.failures, hasLength(1));
+    });
+
+    test('a run that started and was stopped leaves no obituary', () async {
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        logPath: p.join(runDir.path, 'app-ran.log'),
+        launcherPid: await _deadPid(),
+      );
+      File(
+        handle.logPath!,
+      ).writeAsStringSync('${_event('app.started', {'appId': 'a1'})}\n');
+
+      await core.invoke('apps');
+
+      expect(scanRunHandles(runDir.path), isEmpty);
+      expect(core.failures, isEmpty);
+    });
+
     test(
       'reports why an app did not answer while its launcher lives',
       () async {
@@ -487,6 +532,148 @@ void main() {
       );
     });
 
+    test('two flavors of one entry point are two runs', () {
+      // Not cosmetic: `dev` and `prod` install as different bundle ids and sit
+      // on the phone together. One key would give them one handle and one log,
+      // which is the collision that already published a dead VM service once.
+      var base = runHandleKey(worktree.path, 'phone', 'lib/main.dart');
+      var dev = runHandleKey(worktree.path, 'phone', 'lib/main.dart', 'dev');
+      var prod = runHandleKey(worktree.path, 'phone', 'lib/main.dart', 'prod');
+
+      expect(dev, isNot(prod));
+      expect(dev, isNot(base));
+      // A run with no flavor keeps the key it always had, so nothing written
+      // before flavors existed is orphaned.
+      expect(runHandleKey(worktree.path, 'phone', 'lib/main.dart', null), base);
+    });
+
+    test('a flavor survives the handle file and the label says it', () {
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        entrypointName: 'App',
+        flavor: 'staging',
+      );
+
+      var read = scanRunHandles(runDir.path).single;
+      expect(read.flavor, 'staging');
+      expect(read.key, handle.key);
+      expect(read.runLabel, 'App (staging)');
+      // And a run without one is unchanged.
+      expect(
+        _writeHandle(
+          runDir,
+          worktree,
+          device: 'sim',
+          entrypoint: 'lib/main.dart',
+          entrypointName: 'App',
+        ).runLabel,
+        'App',
+      );
+    });
+
+    test('an iOS build failure reports its reason, not its last line', () {
+      // Trimmed from a real log: `fw run run launch` on a cabled iPhone 16
+      // against a project whose signing team has no account on this machine.
+      // The tool emits **nothing structured** for any of it — no
+      // `daemon.logMessage`, no error on `app.stop` — so the reason is only in
+      // the plain lines, and the last of them is the one that says nothing.
+      var path = p.join(runDir.path, 'app-ios.log');
+      File(path).writeAsStringSync(
+        [
+          _event('app.start', {
+            'appId': 'a1',
+            'deviceId': '00008140-0011296E1E60801C',
+            'directory': '/tmp/app',
+            'launchMode': 'run',
+          }),
+          _event('app.progress', {
+            'appId': 'a1',
+            'id': '0',
+            'message': 'Running Xcode build...',
+            'finished': false,
+          }),
+          _event('app.progress', {'appId': 'a1', 'id': '0', 'finished': true}),
+          'Xcode build done.                                            3.1s',
+          'Failed to build iOS app',
+          'Could not build the precompiled application for the device.',
+          'Error (Xcode): No Account for Team "B7V224LKE4".',
+          '/tmp/app/ios/Runner.xcodeproj',
+          '',
+          'Error: could not code sign the application.',
+          '',
+          'To resolve this issue, try the following steps:',
+          '  1. Open the project in Xcode:',
+          '     open ios/Runner.xcworkspace',
+          "Error launching application on Xavier's iPhone16.",
+          _event('app.stop', {'appId': 'a1'}),
+          'App failed to start',
+        ].join('\n'),
+      );
+
+      var log = LaunchLog.read(path);
+
+      // Nothing structured said a word about it.
+      expect(log.error, isNull);
+      expect(log.stopped, isTrue);
+      expect(log.started, isFalse);
+
+      var failure = log.failure(launcherAlive: false)!;
+      // The cause, which used to be dropped entirely.
+      expect(failure, contains('No Account for Team "B7V224LKE4"'));
+      expect(failure, contains('could not code sign the application'));
+      // And the fix, which is the reason a block beats a line.
+      expect(failure, contains('open ios/Runner.xcworkspace'));
+      // The summary line is still there, just no longer the whole answer.
+      expect(failure, contains('App failed to start'));
+      // A row gets one line, and it is not the useless one.
+      expect(log.failureHeadline, 'Failed to build iOS app');
+    });
+
+    test('app.stop does not clear the words printed after it', () {
+      // The ordering that made this subtle: `app.stop` arrives *before* the
+      // tool explains itself, so a rule of "a structured event ends the block"
+      // applied to it would throw away the whole reason.
+      var path = p.join(runDir.path, 'app-order.log');
+      File(path).writeAsStringSync(
+        [
+          _event('app.stop', {'appId': 'a1'}),
+          'Error: something went wrong afterwards',
+        ].join('\n'),
+      );
+
+      expect(
+        LaunchLog.read(path).failure(launcherAlive: false),
+        contains('something went wrong afterwards'),
+      );
+    });
+
+    test('a started run that later stops is not a failure', () {
+      var path = p.join(runDir.path, 'app-stopped.log');
+      File(path).writeAsStringSync(
+        [
+          _event('app.started', {'appId': 'a1'}),
+          _event('app.stop', {'appId': 'a1'}),
+          'Application finished.',
+        ].join('\n'),
+      );
+
+      var log = LaunchLog.read(path);
+
+      expect(log.started, isTrue);
+      expect(log.failure(launcherAlive: false), isNull);
+    });
+
+    test('a half-written event line is a log that says less, not a crash', () {
+      // Read while another process appends to it, so a torn line is normal.
+      var path = p.join(runDir.path, 'app-torn.log');
+      File(path).writeAsStringSync('[{"event":"app.st}]\nstill building\n');
+
+      expect(LaunchLog.read(path).output, 'still building');
+    });
+
     test('tops a handle up from its log and rewrites the file', () {
       var handle = _writeHandle(
         runDir,
@@ -660,6 +847,7 @@ RunHandle _writeHandle(
   String? worktreeName,
   String? vmService,
   String? appId,
+  String? flavor,
   int launcherPid = 1,
   DateTime? startedAt,
 }) {
@@ -670,6 +858,7 @@ RunHandle _writeHandle(
     deviceName: device,
     entrypoint: entrypoint,
     entrypointName: entrypointName,
+    flavor: flavor,
     launcherPid: launcherPid,
     vmService: vmService,
     appId: appId,
