@@ -77,11 +77,11 @@ class DaemonDevice {
   /// it: measured, `macos` and `chrome` are both `ephemeral=false`, a cabled
   /// iPhone is `ephemeral=true emulator=false`, and a simulator is
   /// `ephemeral=true emulator=true`.
-  DeviceKind get kind => !ephemeral
-      ? DeviceKind.host
+  MachineKind get kind => !ephemeral
+      ? MachineKind.host
       : emulator
-      ? DeviceKind.virtual
-      : DeviceKind.physical;
+      ? MachineKind.virtual
+      : MachineKind.physical;
 
   /// What to call it when the daemon sent no name.
   String get displayName => name ?? id;
@@ -131,14 +131,19 @@ class DaemonDevice {
   String toString() => 'DaemonDevice($id, $name)';
 }
 
-/// The three kinds of device, which differ in every way a row cares about.
+/// The three kinds of machine, which differ in every way a row cares about.
+///
+/// Named `MachineKind` and not `DeviceKind` because the package publishes that
+/// name for something else entirely — `lib/src/devices.dart`'s form-factor
+/// vocabulary, phone/tablet/desktop, which is about the silhouette to draw
+/// around a screenshot. This one is about who can take the thing away from you.
 ///
 /// | kind | comes and goes | contended | can be started |
 /// |---|---|---|---|
 /// | [physical] | unplugged, asleep, roaming | yes, across worktrees *and* repos | no |
 /// | [virtual] | you start and stop it | yes, once booted | yes |
 /// | [host] | always there | no — a run owns a window, not a slot | n/a |
-enum DeviceKind {
+enum MachineKind {
   /// A phone or tablet on the end of a cable or a wifi link.
   physical,
 

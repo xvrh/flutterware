@@ -188,6 +188,13 @@ cockpit's device list is a different thing with an unfortunately identical name;
 the two will need distinguishing (`CatalogDevice` vs `TargetDevice`, say) or
 they will be confused forever.
 
+**Settled, and not by choice** (2026-07-31): #65 promoted that vocabulary to
+`lib/src/devices.dart` and exported it, so `DeviceKind` is now published API and
+the collision became a compile error the moment this branch rebased. The
+cockpit's enum is `MachineKind` — physical/virtual/host, about who can take a
+machine away from you, as against a silhouette to draw around a screenshot. The
+wire strings did not change.
+
 ## Physical devices are the target
 
 Taking iOS and Android hardware from day one is not a wider port of the same

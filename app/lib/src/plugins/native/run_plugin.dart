@@ -1157,7 +1157,7 @@ class _DevicePicker extends StatelessWidget {
   static String _detail(DaemonDevice device) => [
     ?device.platformType,
     ?device.sdk,
-    if (device.kind == DeviceKind.virtual) 'simulator',
+    if (device.kind == MachineKind.virtual) 'simulator',
     if (device.isWireless) 'wireless',
     if (!device.isConnected) 'not connected',
   ].join(' · ');
@@ -1367,21 +1367,21 @@ class _DeskState extends State<_Desk> {
     ];
     if (!device.isConnected) return 'not connected';
     if (holders.isEmpty) {
-      return device.kind == DeviceKind.host ? 'not running' : 'free';
+      return device.kind == MachineKind.host ? 'not running' : 'free';
     }
     var first = holders.first;
-    return device.kind == DeviceKind.host
+    return device.kind == MachineKind.host
         ? 'running ${first.entrypointLabel}'
         : '${first.entrypointLabel} · ${first.worktreeName}';
   }
 
   static IconData _iconFor(DaemonDevice device) => switch (device.kind) {
-    DeviceKind.host =>
+    MachineKind.host =>
       device.platformType == 'web'
           ? Icons.language_outlined
           : Icons.desktop_windows_outlined,
-    DeviceKind.virtual => Icons.phone_iphone_outlined,
-    DeviceKind.physical => Icons.smartphone_outlined,
+    MachineKind.virtual => Icons.phone_iphone_outlined,
+    MachineKind.physical => Icons.smartphone_outlined,
   };
 }
 
