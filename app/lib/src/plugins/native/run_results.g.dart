@@ -38,6 +38,58 @@ Map<String, dynamic> _$RunHolderToJson(RunHolder instance) => <String, dynamic>{
   'canInspect': instance.canInspect,
 };
 
+Map<String, dynamic> _$RunEntrypointsResultToJson(
+  RunEntrypointsResult instance,
+) => <String, dynamic>{
+  'packages': instance.packages.map((e) => e.toJson()).toList(),
+  'note': ?instance.note,
+};
+
+Map<String, dynamic> _$RunEntrypointPackageToJson(
+  RunEntrypointPackage instance,
+) => <String, dynamic>{
+  'path': instance.path,
+  'declared': instance.declared,
+  'entrypoints': instance.entrypoints.map((e) => e.toJson()).toList(),
+};
+
+Map<String, dynamic> _$RunEntrypointEntryToJson(RunEntrypointEntry instance) =>
+    <String, dynamic>{
+      'path': instance.path,
+      'name': instance.name,
+      'knobs': instance.knobs.map((e) => e.toJson()).toList(),
+    };
+
+Map<String, dynamic> _$RunKnobEntryToJson(RunKnobEntry instance) =>
+    <String, dynamic>{
+      'define': instance.define,
+      'label': ?instance.label,
+      'description': ?instance.description,
+      'default': ?instance.defaultValue,
+      'options': instance.options,
+    };
+
+Map<String, dynamic> _$RunLaunchResultToJson(RunLaunchResult instance) =>
+    <String, dynamic>{
+      'app': instance.app.toJson(),
+      'status': instance.status,
+      'waited': instance.waited,
+      'progress': ?instance.progress,
+      'error': ?instance.error,
+      'note': ?instance.note,
+    };
+
+Map<String, dynamic> _$RunControlResultToJson(RunControlResult instance) =>
+    <String, dynamic>{
+      'action': instance.action,
+      'device': instance.device,
+      'entrypoint': instance.entrypoint,
+      'ok': instance.ok,
+      'ms': instance.ms,
+      'error': ?instance.error,
+      'note': ?instance.note,
+    };
+
 Map<String, dynamic> _$RunAppsResultToJson(RunAppsResult instance) =>
     <String, dynamic>{
       'apps': instance.apps.map((e) => e.toJson()).toList(),

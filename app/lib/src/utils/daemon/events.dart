@@ -19,6 +19,8 @@ sealed class Event {
         return AppDebugPortEvent.fromJson(params);
       case 'app.started':
         return AppStartedEvent.fromJson(params);
+      case 'app.stop':
+        return AppStopEvent.fromJson(params);
       case 'app.progress':
         return AppProgressEvent.fromJson(params);
       case 'device.added':
@@ -170,4 +172,21 @@ class AppStartedEvent implements Event {
 
   factory AppStartedEvent.fromJson(Map<String, dynamic> json) =>
       _$AppStartedEventFromJson(json);
+}
+
+/// The run ended — cleanly, or with the exception that ended it.
+///
+/// The last thing a launcher's log ever says, which is what makes it the
+/// answer to "why is that app not there any more" for a process that was not
+/// watching at the time.
+@JsonSerializable(createToJson: false)
+class AppStopEvent implements Event {
+  final String appId;
+  final String? error;
+  final String? trace;
+
+  AppStopEvent(this.appId, this.error, this.trace);
+
+  factory AppStopEvent.fromJson(Map<String, dynamic> json) =>
+      _$AppStopEventFromJson(json);
 }

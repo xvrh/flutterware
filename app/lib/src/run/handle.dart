@@ -153,6 +153,71 @@ class RunHandle {
   /// What to call the entry point on screen.
   String get entrypointLabel => entrypointName ?? p.basename(entrypoint);
 
+  /// The same run, now that its VM service is known.
+  RunHandle withService({String? vmService, String? appId}) => RunHandle(
+    worktree: worktree,
+    worktreeName: worktreeName,
+    device: device,
+    deviceName: deviceName,
+    entrypoint: entrypoint,
+    entrypointName: entrypointName,
+    package: package,
+    launcherPid: launcherPid,
+    vmService: vmService ?? this.vmService,
+    appId: appId ?? this.appId,
+    knobs: knobs,
+    logPath: logPath,
+    startedAt: startedAt,
+    protocol: protocol,
+    handlePath: handlePath,
+  );
+
+  /// Writes this handle into [runDir] under its own name, and returns it
+  /// knowing where it went.
+  RunHandle publish(String runDir) {
+    var path = p.join(
+      runDir,
+      runHandleFileName(
+        worktree: worktree,
+        device: device,
+        entrypoint: entrypoint,
+        launcherPid: launcherPid,
+      ),
+    );
+    Directory(runDir).createSync(recursive: true);
+    File(path).writeAsStringSync(jsonEncode(toJson()));
+    return RunHandle(
+      worktree: worktree,
+      worktreeName: worktreeName,
+      device: device,
+      deviceName: deviceName,
+      entrypoint: entrypoint,
+      entrypointName: entrypointName,
+      package: package,
+      launcherPid: launcherPid,
+      vmService: vmService,
+      appId: appId,
+      knobs: knobs,
+      logPath: logPath,
+      startedAt: startedAt,
+      protocol: protocol,
+      handlePath: path,
+    );
+  }
+
+  /// Rewrites the file this handle was read from. A no-op for one that has no
+  /// file yet — use [publish] for those.
+  void save() {
+    var path = handlePath;
+    if (path == null) return;
+    try {
+      File(path).writeAsStringSync(jsonEncode(toJson()));
+    } on FileSystemException {
+      // The handle was swept while this was being written, which means the run
+      // is already believed dead. Losing the update is the right outcome.
+    }
+  }
+
   /// Removes this handle from the ledger. Called when a probe says nothing is
   /// there, so a device stops looking held by an app that died.
   void delete() {
@@ -188,12 +253,18 @@ String runHandleFileName({
   required String device,
   required String entrypoint,
   required int launcherPid,
-}) {
+}) => '${runHandleKey(worktree, device, entrypoint)}-$launcherPid.json';
+
+/// The `app-<hash>` stem shared by a run's handle and its log.
+///
+/// Shared so the two are recognisably one run in a directory listing, and so
+/// the sweeper's existing `*.log` rule ages the log out on its own.
+String runHandleKey(String worktree, String device, String entrypoint) {
   var key = sha1
       .convert(utf8.encode('$worktree|$device|$entrypoint'))
       .toString()
       .substring(0, 12);
-  return 'app-$key-$launcherPid.json';
+  return 'app-$key';
 }
 
 /// The `app-*.json` handles in [runDir], newest first, optionally filtered to

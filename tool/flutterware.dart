@@ -34,7 +34,36 @@ void main() => Flutterware.configure((fw) {
   fw.use(ServerInspection());
   // `example` only: it is the one package here that is an app you would put on
   // a phone. `app` is this GUI and `root` is a library.
-  fw.use(Run(packages: [.new(example)]));
+  //
+  // Named rather than left to the scan, which would find four `main()`s under
+  // `lib/` and offer them by file name. `FW_MARKER` is a real define — see
+  // `examples/example/lib/main.dart` — and is here because a launch knob the
+  // app does not read is a control that does nothing.
+  fw.use(
+    Run(
+      packages: [
+        .new(
+          example,
+          entrypoints: [
+            Entrypoint(
+              'lib/main.dart',
+              name: 'App',
+              knobs: [
+                LaunchKnob(
+                  'FW_MARKER',
+                  description:
+                      'Shown on the home page, to prove which build '
+                      'is on the device',
+                ),
+              ],
+            ),
+            Entrypoint('lib/devbar_example.dart', name: 'Devbar'),
+            Entrypoint('lib/ui_book.dart', name: 'UI book'),
+          ],
+        ),
+      ],
+    ),
+  );
   // `example` only, for now — the sample scenarios live there.
   fw.use(
     Scenarios(

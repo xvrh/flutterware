@@ -64,3 +64,9 @@ AppProgressEvent _$AppProgressEventFromJson(Map<String, dynamic> json) =>
 
 AppStartedEvent _$AppStartedEventFromJson(Map<String, dynamic> json) =>
     AppStartedEvent(json['appId'] as String);
+
+AppStopEvent _$AppStopEventFromJson(Map<String, dynamic> json) => AppStopEvent(
+  json['appId'] as String,
+  json['error'] as String?,
+  json['trace'] as String?,
+);

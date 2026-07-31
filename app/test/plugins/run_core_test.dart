@@ -8,8 +8,10 @@ import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/run_core.dart';
 import 'package:flutterware_app/src/plugins/native/run_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
+import 'package:flutterware_app/src/run/entrypoints.dart';
 import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/inventory.dart';
+import 'package:flutterware_app/src/run/launch.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/daemon/device.dart';
@@ -271,15 +273,314 @@ void main() {
       expect(result.apps.single.worktree, 'feature-x');
     });
   });
+
+  group('entry points', () {
+    test('a scan finds top-level mains and nothing below them', () {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': 'void main() {}',
+        'lib/main_staging.dart': 'Future<void> main() async {}',
+        'lib/widget.dart': 'class Widget {}',
+        // A `main()` under `lib/src/` is somebody's helper or a generated
+        // harness, and offering it in a launch menu is noise.
+        'lib/src/tool.dart': 'void main() {}',
+      });
+
+      var found = scanEntrypoints(p.join(worktree.path, 'app'));
+
+      expect(
+        [for (var e in found) e.path],
+        ['lib/main.dart', 'lib/main_staging.dart'],
+      );
+      expect(found.every((e) => !e.declared), isTrue);
+    });
+
+    test('a declaration wins over the scan, and carries the knobs', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': 'void main() {}',
+        'lib/other.dart': 'void main() {}',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main.dart',
+                  'name': 'Staging',
+                  'knobs': [
+                    {'define': 'API_BASE_URL', 'from': 'hostAddresses'},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+
+      var package = result.packages.single;
+      expect(package.declared, isTrue);
+      // `lib/other.dart` has a main() and is not offered: naming two entry
+      // points meant those two.
+      expect(package.entrypoints.single.name, 'Staging');
+      expect(package.entrypoints.single.knobs.single.define, 'API_BASE_URL');
+    });
+
+    test('a knob offers the servers that are running right now', () async {
+      _writePackage(worktree, 'app', {'lib/main.dart': 'void main() {}'});
+      File(p.join(runDir.path, 'srv-abc-api-42.json')).writeAsStringSync(
+        jsonEncode({
+          'projectRoot': worktree.path,
+          'name': 'api',
+          'socketPath': p.join(runDir.path, 'srv-abc-api-42.sock'),
+          'pid': 42,
+          'startedAt': DateTime.now().toUtc().toIso8601String(),
+          'baseUrl': 'http://192.168.1.20:8080',
+        }),
+      );
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main.dart',
+                  'knobs': [
+                    {'define': 'API', 'from': 'servers', 'default': 'x'},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+
+      var knob = result.packages.single.entrypoints.single.knobs.single;
+      expect(knob.options, contains('http://192.168.1.20:8080'));
+      expect(knob.defaultValue, 'x');
+    });
+
+    test('launching refuses a knob the entry point does not declare', () async {
+      _writePackage(worktree, 'app', {'lib/main.dart': 'void main() {}'});
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main.dart',
+                  'knobs': [
+                    {'define': 'API'},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      );
+
+      // A misspelled define compiles perfectly and does nothing — the app
+      // reads its fallback and behaves as though nobody set anything.
+      await expectLater(
+        core.invoke(
+          'launch',
+          arguments: {'device': 'phone', 'knobs': 'APII=x'},
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            contains('declares no such knob'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('the launcher log', () {
+    test('reads the app id, the VM service and the outcome', () {
+      var path = p.join(runDir.path, 'app-x.log');
+      File(path).writeAsStringSync(
+        [
+          _event('app.start', {
+            'appId': 'a1',
+            'deviceId': 'phone',
+            'directory': '/tmp/app',
+            'supportsRestart': true,
+            'launchMode': 'run',
+          }),
+          _event('app.progress', {
+            'appId': 'a1',
+            'id': '0',
+            'progressId': 'launch',
+            'message': 'Installing and launching…',
+            'finished': false,
+          }),
+          _event('app.debugPort', {
+            'appId': 'a1',
+            'port': 4242,
+            'wsUri': 'ws://127.0.0.1:4242/tok=/ws',
+            'baseUri': 'http://127.0.0.1:4242/tok=/',
+          }),
+          _event('app.started', {'appId': 'a1'}),
+        ].join('\n'),
+      );
+
+      var log = LaunchLog.read(path);
+
+      expect(log.appId, 'a1');
+      expect(log.vmService, 'ws://127.0.0.1:4242/tok=/ws');
+      expect(log.progress, 'Installing and launching…');
+      expect(log.started, isTrue);
+      expect(log.summary, 'running');
+    });
+
+    test('a plain line is context, not a verdict', () {
+      // `flutter run` opens with this, every time, before it has done anything
+      // wrong. Treating it as a failure ended a wait on the first poll and
+      // reported a launch as failed while it was still starting.
+      var path = p.join(runDir.path, 'app-y.log');
+      File(path).writeAsStringSync(
+        'No devices found yet. Checking for wireless devices...\n',
+      );
+
+      var log = LaunchLog.read(path);
+
+      expect(log.error, isNull);
+      expect(log.output, startsWith('No devices found yet'));
+      expect(log.failure(launcherAlive: true), isNull);
+      // Once the launcher is gone it is the only account there is.
+      expect(log.failure(launcherAlive: false), startsWith('No devices'));
+    });
+
+    test('a structured error is a verdict even while the launcher lives', () {
+      var path = p.join(runDir.path, 'app-z.log');
+      File(path).writeAsStringSync(
+        _event('daemon.logMessage', {
+          'level': 'error',
+          'message': 'Gradle task assembleDebug failed',
+        }),
+      );
+
+      var log = LaunchLog.read(path);
+
+      expect(
+        log.failure(launcherAlive: true),
+        'Gradle task assembleDebug failed',
+      );
+    });
+
+    test('tops a handle up from its log and rewrites the file', () {
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        launcherPid: pid,
+        logPath: p.join(runDir.path, 'app-w.log'),
+      );
+      File(handle.logPath!).writeAsStringSync(
+        [
+          _event('app.debugPort', {
+            'appId': 'a9',
+            'port': 1,
+            'wsUri': 'ws://127.0.0.1:9/t=/ws',
+            'baseUri': 'http://127.0.0.1:9/t=/',
+          }),
+        ].join('\n'),
+      );
+
+      var updated = refreshFromLog(handle);
+
+      expect(updated.vmService, 'ws://127.0.0.1:9/t=/ws');
+      expect(updated.appId, 'a9');
+      // Rewritten, so the next process to read the ledger does not have to
+      // parse the log again — and a process that never watched the launch can
+      // still drive the app.
+      expect(
+        scanRunHandles(runDir.path).single.vmService,
+        'ws://127.0.0.1:9/t=/ws',
+      );
+    });
+  });
+
+  group('control', () {
+    // "I cannot tell what you meant" throws, the way a bad argument does
+    // anywhere else; "I tried and it did not work" comes back as ok: false.
+    // The difference is whether anything was attempted.
+    test('says what is running when nothing is', () async {
+      await expectLater(
+        core.invoke('reload'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Nothing is running'),
+          ),
+        ),
+      );
+    });
+
+    test('refuses to guess between two running apps', () async {
+      for (var entrypoint in ['lib/a.dart', 'lib/b.dart']) {
+        _writeHandle(
+          runDir,
+          worktree,
+          device: 'phone',
+          entrypoint: entrypoint,
+          launcherPid: pid,
+        );
+      }
+
+      await expectLater(
+        core.invoke('restart'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('More than one app matches'),
+          ),
+        ),
+      );
+    });
+
+    test('reports a reload it could not do rather than throwing', () async {
+      // The app is unreachable, so the attempt is real and it fails. That is
+      // an outcome, not a mistake by the caller.
+      _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        launcherPid: pid,
+        vmService: 'ws://127.0.0.1:1/ws',
+      );
+
+      var result = (await core.invoke('reload'))! as RunControlResult;
+
+      expect(result.ok, isFalse);
+      expect(result.error, isNotNull);
+    });
+  });
 }
 
-RunCore _coreFor(Directory worktree) {
+RunCore _coreFor(Directory worktree, {Map<String, Object?> config = const {}}) {
   var tree = Worktree(path: worktree.path, isMain: true);
   return RunCore(
     PluginHost(
       id: runPluginId,
       label: 'Run',
       worktree: tree,
+      config: config,
       workspace: Workspace(
         root: tree.path,
         declared: [],
@@ -291,18 +592,33 @@ RunCore _coreFor(Directory worktree) {
   );
 }
 
-void _writeHandle(
+/// A package directory with [files] in it, keyed by package-relative path.
+void _writePackage(Directory worktree, String path, Map<String, String> files) {
+  for (var file in files.entries) {
+    File(p.join(worktree.path, path, file.key))
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync(file.value);
+  }
+}
+
+/// One `--machine` line, as the launcher writes them.
+String _event(String name, Map<String, Object?> params) => jsonEncode([
+  {'event': name, 'params': params},
+]);
+
+RunHandle _writeHandle(
   Directory runDir,
   Directory worktree, {
   required String device,
   required String entrypoint,
+  String? logPath,
   String? entrypointName,
   String? worktreeName,
   String? vmService,
   int launcherPid = 1,
   DateTime? startedAt,
 }) {
-  var handle = RunHandle(
+  return RunHandle(
     worktree: worktree.path,
     worktreeName: worktreeName ?? '~',
     device: device,
@@ -311,19 +627,9 @@ void _writeHandle(
     entrypointName: entrypointName,
     launcherPid: launcherPid,
     vmService: vmService,
+    logPath: logPath,
     startedAt: startedAt ?? DateTime.now(),
-  );
-  File(
-    p.join(
-      runDir.path,
-      runHandleFileName(
-        worktree: worktree.path,
-        device: device,
-        entrypoint: entrypoint,
-        launcherPid: launcherPid,
-      ),
-    ),
-  ).writeAsStringSync(jsonEncode(handle.toJson()));
+  ).publish(runDir.path);
 }
 
 /// A pid that is certainly gone: a process started and waited for.

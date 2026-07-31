@@ -1,25 +1,31 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutterware/plugins.dart';
+import 'package:flutterware/server.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../../run/connection.dart';
+import '../../run/entrypoints.dart';
 import '../../run/handle.dart';
 import '../../run/inventory.dart';
+import '../../run/launch.dart';
 import '../../utils/daemon/device.dart';
 import '../../utils/run_dir.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
 import 'run_results.dart';
+import 'ui_catalog_core.dart' show UiCatalogCore;
 
 /// The registered id — also what `tool/flutterware.dart` declares.
 const runPluginId = 'flutterware.run';
 
-/// Which devices exist, and which are already running something — from any
-/// worktree of the repo, not just this one.
+/// Which devices exist, which are already running something — from any
+/// worktree of the repo, not just this one — and launching an entry point onto
+/// one.
 ///
-/// See `docs/superpowers/specs/2026-07-31-app-launcher-cockpit-brainstorm.md`;
-/// this is the first slice of it, and it deliberately launches nothing.
+/// See `docs/superpowers/specs/2026-07-31-app-launcher-cockpit-brainstorm.md`.
 ///
 /// Two sources, and the difference between them is the whole design:
 ///
@@ -33,9 +39,14 @@ const runPluginId = 'flutterware.run';
 ///   know connects to find out whether it is still there, and a handle nothing
 ///   answers is deleted by whoever noticed.
 ///
+/// A launch is the third: a detached `flutter run --machine` whose output goes
+/// to a log file beside its handle. Nobody waits on it, and the handle is a
+/// *cache* of what the log says — so any process can bring one up to date and
+/// then drive the app, whether or not it was there when the app started.
+///
 /// Holds to the [PluginCore.computeAll] budget: this class reads files and
 /// nothing else until somebody either mounts the panel ([track]) or names an
-/// action. Sockets and the daemon live behind both.
+/// action. Sockets, subprocesses and the daemon live behind both.
 class RunCore extends PluginCore {
   RunCore(super.host);
 
@@ -72,11 +83,90 @@ class RunCore extends PluginCore {
   RunProbe? probeOf(RunHandle handle) =>
       handle.handlePath == null ? null : _probes[handle.handlePath];
 
+  /// What [handle]'s launcher log said at the last probe.
+  ///
+  /// Read on the probe loop rather than on demand, because a panel that read a
+  /// file every time it built would read it sixty times a second while an
+  /// animation ran.
+  LaunchLog? logOf(RunHandle handle) =>
+      handle.handlePath == null ? null : _logs[handle.handlePath];
+
+  final _logs = <String, LaunchLog>{};
+
+  /// True while any announced run has not come up yet — a build in flight.
+  bool get isStarting => _handles.any(
+    (handle) => handle.vmService == null && !(logOf(handle)?.stopped ?? false),
+  );
+
+  /// Declared packages, filtered to those the workspace knows about.
+  late final List<String> packages = [
+    for (var path in host.packagePaths)
+      if (host.workspace.exists(path)) path,
+  ];
+
+  /// The entry points of [path]: what the config declared, or what a scan of
+  /// its `lib/` found. Cached, because both are file reads and the report asks
+  /// on every keystroke.
+  List<EntrypointRef> entrypointsFor(String path) =>
+      _entrypoints[path] ?? const [];
+
+  final _entrypoints = <String, List<EntrypointRef>>{};
+
+  /// True when [path]'s entry points came from `tool/flutterware.dart` rather
+  /// than from scanning.
+  bool isDeclared(String path) =>
+      entrypointsFor(path).any((entry) => entry.declared);
+
+  /// This machine's addresses on the local network — what a phone has to be
+  /// told, since `localhost` on a phone is the phone.
+  ///
+  /// Cached from [computeAll] because a knob's offered values are built inside
+  /// [report], which may not do I/O of any kind.
+  List<String> get hostAddresses => _hostAddresses;
+  var _hostAddresses = <String>[];
+
   @override
   Future<void> computeAll() async {
     _cache = DeviceCache.read(runDirProvider());
     _handles = scanRunHandles(runDirProvider());
+    for (var path in packages) {
+      var declared = declaredEntrypoints(_configFor(path));
+      _entrypoints[path] = declared.isNotEmpty
+          ? declared
+          : scanEntrypoints(host.workspace.absolutePathOf(path));
+    }
+    _hostAddresses = await _readHostAddresses();
     _scanned = true;
+  }
+
+  Map<String, Object?> _configFor(String path) {
+    for (var config in host.packageConfigs) {
+      if (config['path'] == path) return config;
+    }
+    return const {};
+  }
+
+  /// The IPv4 addresses of this machine's real interfaces.
+  ///
+  /// A syscall rather than a socket, and it is here rather than behind an
+  /// action because "which address can the phone reach me at" is the answer a
+  /// knob has to offer *before* anybody presses anything.
+  static Future<List<String>> _readHostAddresses() async {
+    try {
+      var interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        includeLinkLocal: false,
+        type: InternetAddressType.IPv4,
+      );
+      return [
+        for (var interface in interfaces)
+          for (var address in interface.addresses) address.address,
+      ];
+    } on Object {
+      // No permission, no interfaces, an OS that refuses — none of it is worth
+      // failing a report over. The knob simply offers less.
+      return const [];
+    }
   }
 
   /// Starts the daemon and keeps probing the ledger. Idempotent; called by the
@@ -90,10 +180,24 @@ class RunCore extends PluginCore {
     unawaited(computeAll().then((_) => notifyChanged()));
     unawaited(_startDaemon());
     unawaited(_probeAll());
-    _probeTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _handles = scanRunHandles(runDirProvider());
-      unawaited(_probeAll());
-    });
+    _scheduleProbe();
+  }
+
+  /// Polls fast while something is building and slowly otherwise.
+  ///
+  /// A cold build's only narration is the launcher's progress line, and five
+  /// seconds between readings makes a ninety-second build look like a frozen
+  /// panel. Once everything is up there is nothing to watch that closely.
+  void _scheduleProbe() {
+    if (isDisposed || !_tracking) return;
+    _probeTimer?.cancel();
+    _probeTimer = Timer(
+      isStarting ? const Duration(seconds: 1) : const Duration(seconds: 5),
+      () {
+        _handles = scanRunHandles(runDirProvider());
+        unawaited(_probeAll().then((_) => _scheduleProbe()));
+      },
+    );
   }
 
   /// Takes this core's one lease on the shared daemon, starting it if nobody
@@ -142,7 +246,12 @@ class RunCore extends PluginCore {
   /// build*, which on Android takes a minute and a half, and sweeping it would
   /// free a device that is very much in use.
   Future<int> _probeAll() async {
-    var handles = _handles;
+    // Top each handle up from its launcher's log first. The log is the source
+    // of truth about a run and the handle is a cache of it, so a run launched
+    // by somebody else — another `fw`, a GUI that has since closed — becomes
+    // connectable here without this process ever having watched it start.
+    var handles = [for (var handle in _handles) refreshFromLog(handle)];
+    _handles = handles;
     var probes = await Future.wait([
       for (var handle in handles) probeRunHandle(handle),
     ]);
@@ -154,10 +263,16 @@ class RunCore extends PluginCore {
       if (probe.isDead) {
         handle.delete();
         _probes.remove(handle.handlePath);
+        _logs.remove(handle.handlePath);
         swept++;
         continue;
       }
-      if (handle.handlePath != null) _probes[handle.handlePath!] = probe;
+      if (handle.handlePath != null) {
+        _probes[handle.handlePath!] = probe;
+        if (handle.logPath case var path?) {
+          _logs[handle.handlePath!] = LaunchLog.read(path);
+        }
+      }
       alive.add(handle);
     }
     _handles = alive;
@@ -218,6 +333,119 @@ class RunCore extends PluginCore {
               'answers, whether the launcher that can hot-reload it is still '
               'alive, and where its log is. Handles nothing answers are '
               'deleted.',
+        ),
+        PluginAction(
+          'entrypoints',
+          'Entry points',
+          returns: RunEntrypointsResult,
+          description:
+              'The main() files each package can be launched from, with the '
+              'dart-defines each one declares and the values worth offering '
+              'for them. Declared in tool/flutterware.dart when the project '
+              'says so, found by scanning lib/ when it does not.',
+          parameters: [_packageParameter],
+        ),
+        PluginAction(
+          'launch',
+          'Launch',
+          returns: RunLaunchResult,
+          description:
+              'Builds an entry point and runs it on a device. The launcher is '
+              'detached and its output goes to a log file, so this can return '
+              'while the app keeps running. A cold build is slow — about ten '
+              'seconds warm on Android and a minute and a half cold — and on a '
+              'wireless device it can stall on an OS permission dialog that '
+              'nobody is looking at.',
+          parameters: [
+            ActionParameter(
+              'device',
+              'Device',
+              kind: ActionParameterKind.choice,
+              description: 'Which device to run on',
+              options: [
+                for (var device in devices)
+                  ActionOption(device.id, label: device.displayName),
+              ],
+            ),
+            _packageParameter,
+            ActionParameter(
+              'entrypoint',
+              'Entry point',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  'Package-relative path, as `entrypoints` reports it. The '
+                  "package's only entry point when omitted.",
+              options: [
+                for (var path in packages)
+                  for (var entry in entrypointsFor(path))
+                    ActionOption(entry.path, label: entry.name),
+              ],
+            ),
+            const ActionParameter(
+              'knobs',
+              'Knobs',
+              required: false,
+              description:
+                  'Launch knobs to bake in: `NAME=value,NAME=value`, or a '
+                  'JSON object. Each becomes a `--dart-define`, so changing '
+                  'one costs a rebuild — which is why the entry point declares '
+                  'which ones it wants and what values are worth using.',
+            ),
+            const ActionParameter(
+              'wait',
+              'Wait',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'true',
+              description:
+                  'Wait for the app to come up before answering. Off returns '
+                  'as soon as the launcher is spawned, and `apps` is how you '
+                  'find out how it went.',
+            ),
+            const ActionParameter(
+              'timeout',
+              'Timeout',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '300',
+              description:
+                  'Seconds to wait. A timeout is not a failure — the build '
+                  'carries on and the answer says how far it got.',
+            ),
+          ],
+        ),
+        PluginAction(
+          'reload',
+          'Hot reload',
+          returns: RunControlResult,
+          description:
+              'Applies edited sources to a running app, in a few hundred '
+              'milliseconds. Needs the `flutter run` that launched it to still '
+              'be alive: hot reload is registered by the tool, not by the app, '
+              'so it goes away with it while the app keeps running.',
+          parameters: _appSelector,
+        ),
+        PluginAction(
+          'restart',
+          'Hot restart',
+          returns: RunControlResult,
+          description:
+              'Restarts a running app from its main(), in about a second, '
+              'without rebuilding or reinstalling. Same requirement as reload: '
+              'the launcher has to be alive.',
+          parameters: _appSelector,
+        ),
+        PluginAction(
+          'stop',
+          'Stop',
+          returns: RunControlResult,
+          danger: true,
+          description:
+              'Asks a running app to exit, kills its launcher, and frees the '
+              'device. Asking the app first matters: killing only the launcher '
+              'leaves the app running on the phone.',
+          parameters: _appSelector,
         ),
       ],
       view: PluginView([
@@ -315,6 +543,46 @@ class RunCore extends PluginCore {
 
   Set<String> _busyDeviceIds() => {for (var handle in _handles) handle.device};
 
+  ActionParameter get _packageParameter => ActionParameter(
+    'package',
+    'Package',
+    kind: ActionParameterKind.choice,
+    required: false,
+    description: 'Which declared package; the only one when there is one',
+    options: [
+      for (var path in packages)
+        ActionOption(path, label: path == '.' ? 'root' : path),
+    ],
+  );
+
+  /// Which running app a control action acts on.
+  ///
+  /// The device is the key because a device usually runs one app, and naming
+  /// the entry point as well is only needed when it does not. Both optional:
+  /// with exactly one app running there is nothing to disambiguate, and making
+  /// the caller say so anyway is ceremony.
+  List<ActionParameter> get _appSelector => [
+    ActionParameter(
+      'device',
+      'Device',
+      kind: ActionParameterKind.choice,
+      required: false,
+      description:
+          'Which device the app is on; the only running app when omitted',
+      options: [
+        for (var device in devices)
+          ActionOption(device.id, label: device.displayName),
+      ],
+    ),
+    const ActionParameter(
+      'entrypoint',
+      'Entry point',
+      required: false,
+      description:
+          'Package-relative path, when one device is running more than one',
+    ),
+  ];
+
   @override
   Future<Object?> invoke(
     String actionId, {
@@ -323,9 +591,379 @@ class RunCore extends PluginCore {
     return switch (actionId) {
       'devices' => _devicesAction(refresh: _boolArgument(arguments['refresh'])),
       'apps' => _appsAction(),
+      'entrypoints' => _entrypointsAction(arguments['package'] as String?),
+      'launch' => _launchAction(arguments),
+      'reload' => _controlAction('reload', arguments),
+      'restart' => _controlAction('restart', arguments),
+      'stop' => _controlAction('stop', arguments),
       _ => super.invoke(actionId, arguments: arguments),
     };
   }
+
+  Future<RunEntrypointsResult> _entrypointsAction(String? package) async {
+    await computeAll();
+    var wanted = package == null
+        ? packages
+        : [
+            for (var path in packages)
+              if (path == package) path,
+          ];
+    if (wanted.isEmpty) {
+      return RunEntrypointsResult(
+        packages: const [],
+        note: package == null
+            ? 'No packages are declared for this plugin. Add them in '
+                  'tool/flutterware.dart: fw.use(Run(packages: [...])).'
+            : 'No declared package at "$package".',
+      );
+    }
+    return RunEntrypointsResult(
+      packages: [
+        for (var path in wanted)
+          RunEntrypointPackage(
+            path: path,
+            declared: isDeclared(path),
+            entrypoints: [
+              for (var entry in entrypointsFor(path))
+                RunEntrypointEntry(
+                  path: entry.path,
+                  name: entry.name,
+                  knobs: [for (var knob in entry.knobs) _knobEntry(knob)],
+                ),
+            ],
+          ),
+      ],
+      note: wanted.every((path) => entrypointsFor(path).isEmpty)
+          ? 'Nothing found. Entry points are declared in tool/flutterware.dart '
+                'or discovered as a top-level main() in lib/*.dart.'
+          : null,
+    );
+  }
+
+  /// Everything worth offering for [knob] — the config's own list plus
+  /// whatever its `from:` points at right now.
+  ///
+  /// This is what makes "inject the local server's address" a choice rather
+  /// than something to go and look up: the running servers and this machine's
+  /// LAN addresses are both things the tool already knows. Public because the
+  /// panel's dialog and the `entrypoints` action must offer the same values —
+  /// a list only one surface had would be a capability the others could not
+  /// see.
+  List<String> optionsFor(LaunchKnob knob) {
+    var options = [...knob.options];
+    switch (knob.from) {
+      case KnobSource.servers:
+        for (var handle in scanServerHandles(runDirProvider())) {
+          var url = handle.baseUrl;
+          if (url != null && !options.contains(url)) options.add(url);
+        }
+      case KnobSource.hostAddresses:
+        for (var address in hostAddresses) {
+          if (!options.contains(address)) options.add(address);
+        }
+      case null:
+        break;
+    }
+    return options;
+  }
+
+  RunKnobEntry _knobEntry(LaunchKnob knob) => RunKnobEntry(
+    define: knob.define,
+    label: knob.label,
+    description: knob.description,
+    defaultValue: knob.defaultValue,
+    options: optionsFor(knob),
+  );
+
+  Future<RunLaunchResult> _launchAction(Map<String, Object?> arguments) async {
+    await computeAll();
+    var device = arguments['device'] as String?;
+    if (device == null) {
+      throw ArgumentError.value(device, 'device', 'which device to run on');
+    }
+    var (package, entry) = _resolveEntrypoint(
+      arguments['package'] as String?,
+      arguments['entrypoint'] as String?,
+    );
+    var knobs = _resolveKnobs(
+      entry,
+      UiCatalogCore.parseKnobs(arguments['knobs']),
+    );
+
+    var handle = await launch(
+      device: device,
+      package: package,
+      entry: entry,
+      knobs: knobs,
+    );
+
+    var wait = _boolArgument(arguments['wait'] ?? true);
+    var log = LaunchLog.read(handle.logPath ?? '');
+    if (wait) {
+      var timeout = Duration(seconds: _intArgument(arguments['timeout'], 300));
+      (handle, log) = await awaitLaunch(handle, timeout);
+    }
+    _handles = scanRunHandles(runDirProvider());
+    await _probeAll();
+
+    var probe = probeOf(handle) ?? await probeRunHandle(handle);
+    var failure = log.failure(launcherAlive: probe.launcher);
+    var status = switch (log) {
+      _ when failure != null => 'failed',
+      _ when log.stopped => 'stopped',
+      _ when log.started => 'running',
+      _ => 'starting',
+    };
+    if (status == 'failed') {
+      // A launcher that never came up is not holding the device, and leaving
+      // its handle behind would make the next person's `devices` say a phone
+      // is busy running something that is not there.
+      handle.delete();
+      _handles = scanRunHandles(runDirProvider());
+    }
+    return RunLaunchResult(
+      status: status,
+      waited: wait,
+      progress: log.progress,
+      error: failure,
+      note: status == 'starting' && wait
+          ? 'Still building after the timeout. It has not failed — follow it '
+                'with the apps action, or read ${handle.logPath}.'
+          : null,
+      app: _appEntry(handle, probe),
+    );
+  }
+
+  /// Starts a run. The panel's entry point too — a button that could only be
+  /// reached through `invoke` would be behaviour the other surfaces could not
+  /// see.
+  Future<RunHandle> launch({
+    required String device,
+    required String package,
+    required EntrypointRef entry,
+    Map<String, String> knobs = const {},
+  }) async {
+    var deviceName = devices
+        .where((candidate) => candidate.id == device)
+        .map((candidate) => candidate.displayName)
+        .firstOrNull;
+    var handle = await launchApp(
+      sdk: host.workspace.flutterSdk,
+      runDir: runDirProvider(),
+      worktree: host.worktree.path,
+      worktreeName: host.worktree.name,
+      packageRoot: host.workspace.absolutePathOf(package),
+      package: package,
+      device: device,
+      deviceName: deviceName,
+      entrypoint: entry.path,
+      entrypointName: entry.declared ? entry.name : null,
+      knobs: knobs,
+    );
+    _handles = [handle, ..._handles];
+    notifyChanged();
+    return handle;
+  }
+
+  /// The package and entry point a launch means, or an [ArgumentError] naming
+  /// what it could have meant.
+  (String, EntrypointRef) _resolveEntrypoint(String? package, String? path) {
+    var candidates = package == null
+        ? packages
+        : [
+            for (var candidate in packages)
+              if (candidate == package) candidate,
+          ];
+    if (candidates.isEmpty) {
+      throw ArgumentError.value(
+        package,
+        'package',
+        'not a declared package; declared: ${packages.join(', ')}',
+      );
+    }
+    var matches = [
+      for (var candidate in candidates)
+        for (var entry in entrypointsFor(candidate))
+          if (path == null || entry.path == path || entry.name == path)
+            (candidate, entry),
+    ];
+    if (matches.isEmpty) {
+      throw ArgumentError.value(
+        path,
+        'entrypoint',
+        'no such entry point; known: ${[for (var candidate in candidates)
+          for (var entry in entrypointsFor(candidate)) entry.path].join(', ')}',
+      );
+    }
+    if (matches.length > 1) {
+      throw ArgumentError.value(
+        path,
+        'entrypoint',
+        'ambiguous; name one of: ${[for (var (_, entry) in matches) entry.path].join(', ')}',
+      );
+    }
+    return matches.single;
+  }
+
+  /// The knobs a launch will bake in: what the caller gave, over the declared
+  /// defaults, with anything the entry point did not declare refused.
+  ///
+  /// Refused rather than passed through, because a misspelled define compiles
+  /// perfectly and does nothing — the app reads the fallback and behaves as if
+  /// nobody set anything, which is a very long way from a legible failure.
+  Map<String, String> _resolveKnobs(
+    EntrypointRef entry,
+    Map<String, String> given,
+  ) {
+    var declared = {for (var knob in entry.knobs) knob.define: knob};
+    if (declared.isNotEmpty) {
+      for (var name in given.keys) {
+        if (!declared.containsKey(name)) {
+          throw ArgumentError.value(
+            name,
+            'knobs',
+            '${entry.name} declares no such knob; it declares '
+                '${declared.keys.join(', ')}',
+          );
+        }
+      }
+    }
+    return {
+      for (var knob in entry.knobs) knob.define: ?knob.defaultValue,
+      ...given,
+    };
+  }
+
+  Future<RunControlResult> _controlAction(
+    String action,
+    Map<String, Object?> arguments,
+  ) async {
+    _handles = scanRunHandles(runDirProvider());
+    await _probeAll();
+    var handle = _selectApp(
+      arguments['device'] as String?,
+      arguments['entrypoint'] as String?,
+    );
+    var started = DateTime.now();
+    try {
+      await control(action, handle);
+      return RunControlResult(
+        action: action,
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        ok: true,
+        ms: DateTime.now().difference(started).inMilliseconds,
+      );
+    } on Object catch (e) {
+      return RunControlResult(
+        action: action,
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        ok: false,
+        ms: DateTime.now().difference(started).inMilliseconds,
+        error: '$e',
+      );
+    }
+  }
+
+  /// Does one thing to one running app. The panel's entry point as well.
+  Future<void> control(String action, RunHandle handle) async {
+    var uri = handle.vmService;
+    if (uri == null && action != 'stop') {
+      throw StateError(
+        '${handle.entrypointLabel} has no VM service yet — it is still '
+        'building. Watch ${handle.logPath}.',
+      );
+    }
+    RunConnection? connection;
+    try {
+      if (uri != null) {
+        connection = await RunConnection.connect(
+          uri,
+          // Stopping needs no registration at all — `ext.flutter.exit` is the
+          // app's own — so it should not wait for one.
+          waitFor: switch (action) {
+            'reload' => const {'reloadSources'},
+            'restart' => const {'hotRestart'},
+            _ => const {},
+          },
+        );
+      }
+      switch (action) {
+        case 'reload':
+          await connection!.reload();
+        case 'restart':
+          await connection!.restart();
+        case 'stop':
+          // The app first, then its launcher. The other order leaves an
+          // orphaned app running on the phone with nothing able to reload it,
+          // which is the worst of both.
+          await connection?.exitApp();
+          if (isProcessAlive(handle.launcherPid)) {
+            Process.killPid(handle.launcherPid, ProcessSignal.sigterm);
+          }
+          handle.delete();
+          _handles = [
+            for (var other in _handles)
+              if (other.handlePath != handle.handlePath) other,
+          ];
+        default:
+          throw ArgumentError.value(action, 'action', 'unknown');
+      }
+    } finally {
+      unawaited(connection?.close());
+      notifyChanged();
+    }
+  }
+
+  /// The one running app a control action means.
+  RunHandle _selectApp(String? device, String? entrypoint) {
+    var matches = [
+      for (var handle in _handles)
+        if (device == null || handle.device == device)
+          if (entrypoint == null ||
+              handle.entrypoint == entrypoint ||
+              handle.entrypointName == entrypoint)
+            handle,
+    ];
+    if (matches.isEmpty) {
+      throw StateError(
+        device == null
+            ? 'Nothing is running.'
+            : 'Nothing is running on "$device".',
+      );
+    }
+    if (matches.length > 1) {
+      throw StateError(
+        'More than one app matches. Name a device and an entry point: '
+        '${matches.map((h) => '${h.device}/${h.entrypoint}').join(', ')}',
+      );
+    }
+    return matches.single;
+  }
+
+  RunAppEntry _appEntry(RunHandle handle, RunProbe? probe) => RunAppEntry(
+    device: handle.device,
+    deviceName: handle.deviceName,
+    worktree: handle.worktreeName,
+    mine: p.canonicalize(handle.worktree) == p.canonicalize(host.worktree.path),
+    package: handle.package,
+    entrypoint: handle.entrypoint,
+    entrypointName: handle.entrypointName,
+    knobs: handle.knobs,
+    since: handle.startedAt.toUtc().toIso8601String(),
+    app: probe?.app ?? false,
+    launcher: probe?.launcher ?? false,
+    vmService: handle.vmService,
+    log: handle.logPath,
+    error: probe?.error,
+  );
+
+  static int _intArgument(Object? value, int fallback) => switch (value) {
+    int n => n,
+    String s => int.tryParse(s) ?? fallback,
+    _ => fallback,
+  };
 
   Future<RunDevicesResult> _devicesAction({required bool refresh}) async {
     if (refresh) {
@@ -405,32 +1043,13 @@ class RunCore extends PluginCore {
   Future<RunAppsResult> _appsAction() async {
     _handles = scanRunHandles(runDirProvider());
     var swept = await _probeAll();
-    var here = p.canonicalize(host.worktree.path);
     return RunAppsResult(
       swept: swept,
       note: _handles.isEmpty
           ? 'Nothing is running. This lists apps launched through flutterware, '
                 'which announce themselves in ${runDirProvider()}.'
           : null,
-      apps: [
-        for (var handle in _handles)
-          RunAppEntry(
-            device: handle.device,
-            deviceName: handle.deviceName,
-            worktree: handle.worktreeName,
-            mine: p.canonicalize(handle.worktree) == here,
-            package: handle.package,
-            entrypoint: handle.entrypoint,
-            entrypointName: handle.entrypointName,
-            knobs: handle.knobs,
-            since: handle.startedAt.toUtc().toIso8601String(),
-            app: probeOf(handle)?.app ?? false,
-            launcher: probeOf(handle)?.launcher ?? false,
-            vmService: handle.vmService,
-            log: handle.logPath,
-            error: probeOf(handle)?.error,
-          ),
-      ],
+      apps: [for (var handle in _handles) _appEntry(handle, probeOf(handle))],
     );
   }
 

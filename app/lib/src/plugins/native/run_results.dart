@@ -140,6 +140,180 @@ class RunHolder {
   Map<String, Object?> toJson() => _$RunHolderToJson(this);
 }
 
+/// `entrypoints` — the `main()`s each package can be launched from.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunEntrypointsResult implements PluginResult {
+  RunEntrypointsResult({required this.packages, this.note});
+
+  final List<RunEntrypointPackage> packages;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunEntrypointsResultToJson(this);
+}
+
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunEntrypointPackage {
+  RunEntrypointPackage({
+    required this.path,
+    required this.declared,
+    this.entrypoints = const [],
+  });
+
+  /// Package path, relative to the worktree.
+  final String path;
+
+  /// True when `tool/flutterware.dart` listed these, false when they came from
+  /// scanning `lib/`. Worth carrying: a scanned list is a guess that happens to
+  /// be right most of the time, and a caller choosing from it should know.
+  final bool declared;
+
+  final List<RunEntrypointEntry> entrypoints;
+
+  Map<String, Object?> toJson() => _$RunEntrypointPackageToJson(this);
+}
+
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunEntrypointEntry {
+  RunEntrypointEntry({
+    required this.path,
+    required this.name,
+    this.knobs = const [],
+  });
+
+  /// Package-relative — what `launch` takes as its `entrypoint`.
+  final String path;
+
+  final String name;
+
+  final List<RunKnobEntry> knobs;
+
+  Map<String, Object?> toJson() => _$RunEntrypointEntryToJson(this);
+}
+
+/// One `--dart-define` an entry point declares, with whatever values the tool
+/// can offer for it.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunKnobEntry {
+  RunKnobEntry({
+    required this.define,
+    this.label,
+    this.description,
+    this.defaultValue,
+    this.options = const [],
+  });
+
+  /// The define's name, as `String.fromEnvironment` reads it.
+  final String define;
+
+  final String? label;
+  final String? description;
+
+  @JsonKey(name: 'default')
+  final String? defaultValue;
+
+  /// Everything worth offering — what the config listed, plus whatever its
+  /// `from:` resolved to right now: the base URLs of the servers currently
+  /// running, or this machine's addresses on the local network.
+  final List<String> options;
+
+  Map<String, Object?> toJson() => _$RunKnobEntryToJson(this);
+}
+
+/// `launch` — one run started, and how far it got.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunLaunchResult implements PluginResult {
+  RunLaunchResult({
+    required this.app,
+    required this.status,
+    required this.waited,
+    this.progress,
+    this.error,
+    this.note,
+  });
+
+  /// The run as the ledger now holds it — the same shape `apps` reports.
+  final RunAppEntry app;
+
+  /// `running`, `starting`, `stopped`, or `failed`.
+  final String status;
+
+  /// False when the call returned without waiting for the app to come up, so
+  /// [status] is what was true a moment after spawning and nothing more.
+  final bool waited;
+
+  /// The launcher's most recent narration — `Installing and launching…`. On a
+  /// wireless device this can sit still for a long time while an OS permission
+  /// dialog waits for somebody to notice it.
+  final String? progress;
+
+  final String? error;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunLaunchResultToJson(this);
+}
+
+/// `reload` / `restart` / `stop` — one thing done to one running app.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunControlResult implements PluginResult {
+  RunControlResult({
+    required this.action,
+    required this.device,
+    required this.entrypoint,
+    required this.ok,
+    this.ms = 0,
+    this.error,
+    this.note,
+  });
+
+  /// `reload`, `restart` or `stop`.
+  final String action;
+
+  final String device;
+  final String entrypoint;
+
+  final bool ok;
+
+  /// Wall time, which is the number that decides whether this is worth doing
+  /// instead of relaunching: a hot restart is about a second where a warm
+  /// relaunch is ten on Android and twenty-three on a cabled iPhone.
+  final int ms;
+
+  final String? error;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunControlResultToJson(this);
+}
+
 /// `apps` — every run announcing itself under the run dir, probed.
 @JsonSerializable(
   explicitToJson: true,

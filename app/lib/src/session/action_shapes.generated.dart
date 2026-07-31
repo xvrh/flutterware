@@ -1933,6 +1933,27 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
   }),
+  'RunControlResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunControlResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'action',
+        'type': 'String',
+        'doc': '`reload`, `restart` or `stop`.',
+      },
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
+      <String, Object?>{
+        'name': 'ms',
+        'type': 'int',
+        'doc':
+            'Wall time, which is the number that decides whether this is worth doing instead of relaunching: a hot restart is about a second where a warm relaunch is ten on Android and twenty-three on a cabled iPhone.',
+      },
+      <String, Object?>{'name': 'error', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
   'RunDeviceEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'RunDeviceEntry',
     'fields': <Object?>[
@@ -2152,6 +2173,199 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'RunEntrypointEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunEntrypointEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'path',
+        'type': 'String',
+        'doc': 'Package-relative — what `launch` takes as its `entrypoint`.',
+      },
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{
+        'name': 'knobs',
+        'type': 'List<RunKnobEntry>',
+        'shape': <String, Object?>{
+          'type': 'RunKnobEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'define',
+              'type': 'String',
+              'doc':
+                  'The define\'s name, as `String.fromEnvironment` reads it.',
+            },
+            <String, Object?>{
+              'name': 'label',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'description',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'default',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'options',
+              'type': 'List<String>',
+              'doc':
+                  'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'RunEntrypointPackage': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunEntrypointPackage',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'path',
+        'type': 'String',
+        'doc': 'Package path, relative to the worktree.',
+      },
+      <String, Object?>{
+        'name': 'declared',
+        'type': 'bool',
+        'doc':
+            'True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.',
+      },
+      <String, Object?>{
+        'name': 'entrypoints',
+        'type': 'List<RunEntrypointEntry>',
+        'shape': <String, Object?>{
+          'type': 'RunEntrypointEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'path',
+              'type': 'String',
+              'doc':
+                  'Package-relative — what `launch` takes as its `entrypoint`.',
+            },
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'knobs',
+              'type': 'List<RunKnobEntry>',
+              'shape': <String, Object?>{
+                'type': 'RunKnobEntry',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'define',
+                    'type': 'String',
+                    'doc':
+                        'The define\'s name, as `String.fromEnvironment` reads it.',
+                  },
+                  <String, Object?>{
+                    'name': 'label',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'description',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'default',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'options',
+                    'type': 'List<String>',
+                    'doc':
+                        'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'RunEntrypointsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunEntrypointsResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'packages',
+        'type': 'List<RunEntrypointPackage>',
+        'shape': <String, Object?>{
+          'type': 'RunEntrypointPackage',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'path',
+              'type': 'String',
+              'doc': 'Package path, relative to the worktree.',
+            },
+            <String, Object?>{
+              'name': 'declared',
+              'type': 'bool',
+              'doc':
+                  'True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.',
+            },
+            <String, Object?>{
+              'name': 'entrypoints',
+              'type': 'List<RunEntrypointEntry>',
+              'shape': <String, Object?>{
+                'type': 'RunEntrypointEntry',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'path',
+                    'type': 'String',
+                    'doc':
+                        'Package-relative — what `launch` takes as its `entrypoint`.',
+                  },
+                  <String, Object?>{'name': 'name', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'knobs',
+                    'type': 'List<RunKnobEntry>',
+                    'shape': <String, Object?>{
+                      'type': 'RunKnobEntry',
+                      'fields': <Object?>[
+                        <String, Object?>{
+                          'name': 'define',
+                          'type': 'String',
+                          'doc':
+                              'The define\'s name, as `String.fromEnvironment` reads it.',
+                        },
+                        <String, Object?>{
+                          'name': 'label',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'description',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'default',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'options',
+                          'type': 'List<String>',
+                          'doc':
+                              'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
   'RunHolder': ResultShape.fromJson(<String, Object?>{
     'type': 'RunHolder',
     'fields': <Object?>[
@@ -2194,6 +2408,134 @@ final resultShapes = <String, ResultShape>{
         'doc':
             'The app answers on its VM service: it can be inspected and driven even if its launcher is gone.',
       },
+    ],
+  }),
+  'RunKnobEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunKnobEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'define',
+        'type': 'String',
+        'doc': 'The define\'s name, as `String.fromEnvironment` reads it.',
+      },
+      <String, Object?>{'name': 'label', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'description',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{'name': 'default', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'options',
+        'type': 'List<String>',
+        'doc':
+            'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+      },
+    ],
+  }),
+  'RunLaunchResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunLaunchResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'app',
+        'type': 'RunAppEntry',
+        'doc':
+            'The run as the ledger now holds it — the same shape `apps` reports.',
+        'shape': <String, Object?>{
+          'type': 'RunAppEntry',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'device', 'type': 'String'},
+            <String, Object?>{
+              'name': 'deviceName',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'worktree',
+              'type': 'String',
+              'doc': 'The worktree name — `~` for the main checkout.',
+            },
+            <String, Object?>{
+              'name': 'mine',
+              'type': 'bool',
+              'doc':
+                  'True when that worktree is the one this call was made from.',
+            },
+            <String, Object?>{
+              'name': 'package',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+            <String, Object?>{
+              'name': 'entrypointName',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'knobs',
+              'type': 'Map<String, String>',
+              'doc': 'The dart-defines it was built with.',
+            },
+            <String, Object?>{
+              'name': 'since',
+              'type': 'String',
+              'doc': 'When it started, ISO-8601.',
+            },
+            <String, Object?>{
+              'name': 'app',
+              'type': 'bool',
+              'doc':
+                  'The app answered on its VM service — it can be inspected and driven.',
+            },
+            <String, Object?>{
+              'name': 'launcher',
+              'type': 'bool',
+              'doc':
+                  'The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.',
+            },
+            <String, Object?>{
+              'name': 'vmService',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'log',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Where the launcher\'s output is being written, for a client that arrived after the interesting part scrolled past.',
+            },
+            <String, Object?>{
+              'name': 'error',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'status',
+        'type': 'String',
+        'doc': '`running`, `starting`, `stopped`, or `failed`.',
+      },
+      <String, Object?>{
+        'name': 'waited',
+        'type': 'bool',
+        'doc':
+            'False when the call returned without waiting for the app to come up, so [status] is what was true a moment after spawning and nothing more.',
+      },
+      <String, Object?>{
+        'name': 'progress',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The launcher\'s most recent narration — `Installing and launching…`.',
+      },
+      <String, Object?>{'name': 'error', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
   }),
   'ScenarioListEntry': ResultShape.fromJson(<String, Object?>{

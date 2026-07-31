@@ -570,13 +570,19 @@ If they never converge, nothing was spent.
    **4.6s** for the cached read and 4.6s for `fw status` — so the daemon itself
    is ~3s and the rest is `dart run`. Cheap enough that the cache exists for
    convenience rather than necessity, and no supervisor is implied.
-3. **Where journeys are stored, and in what.** D10 says "in the repo"; whether
-   that is JSON under `.flutterware/`, a committed Dart file, or something the
-   scenario runner would recognise is open — and is the one D10 decision that is
-   awkward to change later, because agents will have written the files.
-4. **Wireless devices.** `useDeviceIPAsHost` exists and works, but a device on
-   wifi can roam, sleep and change address. Worth deciding whether v1 supports
-   only cabled devices and says so, rather than half-supporting wireless.
+3. ~~**Where journeys are stored, and in what.**~~ **Parked, deliberately —
+   journeys are the last thing this feature does** (settled 2026-07-31). Not
+   only the storage question: recording them, replaying them, and an agent
+   writing them are all after everything else. The reason to park it rather
+   than answer it early is that the format is the one D10 decision that is hard
+   to change once agents have written files, and the way to know what it should
+   hold is to have driven a real app first. Nothing before this depends on it.
+4. **Wireless devices — great to have, allowed to be a known gap** (settled
+   2026-07-31). `useDeviceIPAsHost` works, but a wifi device roams, sleeps,
+   changes address, and every wireless run in S-L1 stalled on an OS permission
+   dialog. So: try, and if it proves complex or unstable, **say so in the
+   product** rather than half-supporting it. The one thing not allowed is a UI
+   that offers a wireless device as if it were a cabled one.
 5. **Web.** DWDS is a different VM-service story and may never earn the work.
    Not in scope unless someone asks.
 
@@ -709,10 +715,39 @@ Order chosen so each slice is useful alone and the risky parts come early.
      protocol down. The enum is now the real set *and* `tryReadEvent` swallows
      what it cannot decode, because losing one event is a bug and losing the
      connection is an outage.
-2. **Launch and lifecycle.** Declared + discovered entry points, launch knobs as
-   dart-defines, detached child, log file, `stop` / `restart` / `reload`, the
-   panel's device × entry-point grid, and honest reporting when hardware goes
-   away mid-session.
+2. ~~**Launch and lifecycle.**~~ **Built 2026-07-31.** Declared entry points
+   with a `lib/*.dart` scan as the fallback, launch knobs as dart-defines,
+   a detached child writing to a log file, `launch` / `reload` / `restart` /
+   `stop`, and a panel where every device carries a button per entry point.
+   Measured against a real run: launch 23s warm, reload **275ms**, restart
+   **727ms**, stop 14ms — every one of them from a `fw` process that had
+   nothing to do with the launch.
+
+   What the build settled:
+
+   - **The log is the source of truth and the handle is a cache of it.** The
+     launcher's `--machine` stream goes to `app-<key>.log`; `refreshFromLog`
+     tops a handle up from it and rewrites the file. That is what makes a run
+     drivable by a process that was not there when it started — no supervisor,
+     no handoff, just a file that says what happened.
+   - **A plain log line is context, never a verdict.** `flutter run` opens with
+     `No devices found yet. Checking for wireless devices…`, and treating that
+     as an error ended the wait on the first poll and reported a launch as
+     failed while it was still starting. Only a *structured* error — a
+     `daemon.logMessage` at error level, an errored `app.log`, the exception on
+     `app.stop` — is terminal; the plain lines explain a launcher that died
+     without saying anything, and nothing else.
+   - **Waiting for what you need beats waiting a fixed interval.** Registered
+     service names arrive asynchronously with no snapshot RPC, so a connection
+     has to wait for them. Sleeping a flat 800ms made an 86ms hot reload cost
+     886ms; waiting for `reloadSources` specifically brought the round trip to
+     275ms, and the full budget is still spent in the one case that needs it —
+     deciding that the launcher is gone.
+   - **A knob's values are a list the tool already has.** `from:
+     KnobSource.servers` fills a launch knob with the base URLs of the servers
+     announcing themselves right now, and `hostAddresses` with this machine's
+     LAN addresses. Ask 3 — "inject the local server IP" — is then picking
+     rather than looking up.
 3. **Inspect.** `installGuestRuntime` extracted and mounted via `Devbar`; tree,
    screenshot, logs, errors as the artifact triple with addresses; MCP loop
    working with no GUI running (the server plugin's exit criterion, reused).
