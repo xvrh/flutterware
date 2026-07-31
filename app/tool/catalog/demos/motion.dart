@@ -3,234 +3,22 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutterware/motion.dart';
 import 'package:flutterware/ui_catalog.dart';
 
 import 'shell.dart';
 
-/// Spike S5 — hardcoded Motion, driven from the host.
+/// Spike S5, now driving the published runtime rather than a sketch of it.
 ///
-/// Everything here is throwaway per the spike brief in
-/// `docs/superpowers/specs/2026-07-31-motion-design.md`: no plugin, no scan, no
-/// file writer, no generated code. The const below stands in for what the
-/// editor would write; the call sites in [_Stage] are the real proposal, and
-/// are the whole of spike A.
+/// The const below stands in for what the editor will write to
+/// `<screen>.motion.dart`; everything else is `package:flutterware/motion.dart`.
+/// The transport extensions are the spike's own — the real ones belong in the
+/// guest half of the plugin, which does not exist yet.
 ///
 /// Extensions the host drives:
 ///   `ext.flutterware.motion.seek`   `t=<ms>`      → sets the playhead
 ///   `ext.flutterware.motion.probe`                → builds, reads, clock
 ///   `ext.flutterware.motion.dilate` `value=<n>`   → timeDilation
-
-// ---------------------------------------------------------------- the runtime
-
-class Seg<T> {
-  final Duration start;
-  final Duration end;
-  final T from;
-  final T to;
-  final Curve curve;
-
-  const Seg({
-    required this.start,
-    required this.end,
-    required this.from,
-    required this.to,
-    this.curve = Curves.linear,
-  });
-}
-
-class MotionValues {
-  final Duration duration;
-
-  /// anchor → property → segments. Heterogeneous on purpose: the doc claims
-  /// this costs exactly one cast at the lookup boundary, and this is where
-  /// that claim is either true or not.
-  final Map<String, Map<String, List<Seg<Object?>>>> anchors;
-
-  const MotionValues({required this.duration, required this.anchors});
-}
-
-/// What `builder: (m)` hands you.
-class MotionRuntime {
-  MotionRuntime(this.values);
-
-  final MotionValues values;
-  double t = 0;
-
-  /// Which `anchor.property` pairs the last build actually read — the
-  /// three-state panel depends on this being observable, so the spike records
-  /// it rather than assuming it.
-  final reads = <String>{};
-
-  /// Never cleared, so an empty [reads] can be told apart from a read that
-  /// never happened.
-  final readsEver = <String>{};
-
-  MotionAnchor anchor(String name) => MotionAnchor._(this, name);
-
-  Object? _valueAt(String anchor, String property) {
-    reads.add('$anchor.$property');
-    readsEver.add('$anchor.$property');
-    var segs = values.anchors[anchor]?[property];
-    if (segs == null || segs.isEmpty) return null;
-
-    var ms = t;
-    var first = segs.first;
-    var last = segs.last;
-    // Hold: before the first segment a property is its `from`, after the last
-    // it is its `to`.
-    if (ms <= first.start.inMilliseconds) return first.from;
-    if (ms >= last.end.inMilliseconds) return last.to;
-
-    for (var seg in segs) {
-      var a = seg.start.inMilliseconds.toDouble();
-      var b = seg.end.inMilliseconds.toDouble();
-      if (ms >= a && ms <= b) {
-        var u = b == a ? 1.0 : seg.curve.transform((ms - a) / (b - a));
-        return _lerp(seg.from, seg.to, u);
-      }
-    }
-    // In a gap between two segments, hold the earlier one's end.
-    Seg<Object?>? previous;
-    for (var seg in segs) {
-      if (seg.end.inMilliseconds <= ms) previous = seg;
-    }
-    return previous?.to ?? first.from;
-  }
-
-  static Object? _lerp(Object? a, Object? b, double u) {
-    if (a is double && b is double) return a + (b - a) * u;
-    if (a is Color && b is Color) return Color.lerp(a, b, u);
-    if (a is Offset && b is Offset) return Offset.lerp(a, b, u);
-    throw StateError('no interpolation for ${a.runtimeType}');
-  }
-}
-
-/// The framework class that declares the whole vocabulary, so `title.` offers
-/// everything and nothing has to be generated.
-class MotionAnchor {
-  MotionAnchor._(this._runtime, this.name);
-
-  final MotionRuntime _runtime;
-  final String name;
-
-  double get opacity => _number('opacity', 1);
-  double get translate => _number('translate', 0);
-  double get scale => _number('scale', 1);
-  double get rotate => _number('rotate', 0);
-
-  /// No natural identity, so nullable — `?? Colors.white` at the read site is
-  /// where the un-animated value is stated.
-  Color? get color {
-    var value = _runtime._valueAt(name, 'color');
-    return value is Color ? value : null;
-  }
-
-  double _number(String property, double fallback) {
-    var value = _runtime._valueAt(name, property);
-    return value is double ? value : fallback;
-  }
-}
-
-class MotionScope extends StatefulWidget {
-  const MotionScope({super.key, required this.motion, required this.builder});
-
-  final MotionValues motion;
-  final Widget Function(MotionRuntime m) builder;
-
-  @override
-  State<MotionScope> createState() => _MotionScopeState();
-}
-
-class _MotionScopeState extends State<MotionScope> {
-  late final _runtime = MotionRuntime(widget.motion);
-  var builds = 0;
-  var lastFrameMs = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _registerExtensions(this);
-  }
-
-  void seek(double ms) => setState(() => _runtime.t = ms);
-
-  @override
-  Widget build(BuildContext context) {
-    builds++;
-    // NOT `currentFrameTimeStamp` — it asserts when no frame is in flight, and
-    // in this guest builds happen outside the frame pipeline, so reading it
-    // here threw and cost a spike run.
-    lastFrameMs =
-        SchedulerBinding.instance.currentSystemFrameTimeStamp.inMilliseconds;
-    _runtime.reads.clear();
-    return widget.builder(_runtime);
-  }
-}
-
-// ------------------------------------------------------------ the host's door
-
-_MotionScopeState? _live;
-var _registered = false;
-
-/// Set by a free-running ticker nobody rebuilds on — the clock probe. If this
-/// advances between two host calls with no seek in between, the guest's clock
-/// runs on wall time and the stage's own animations are not ours to freeze.
-var _freeRunning = 0.0;
-var _freeTicks = 0;
-
-void _registerExtensions(_MotionScopeState state) {
-  _live = state;
-  if (_registered) return;
-  _registered = true;
-
-  developer.registerExtension('ext.flutterware.motion.seek', (
-    method,
-    parameters,
-  ) async {
-    var live = _live;
-    if (live == null) {
-      return developer.ServiceExtensionResponse.result(
-        jsonEncode({'ok': false}),
-      );
-    }
-    live.seek(double.parse(parameters['t'] ?? '0'));
-    return developer.ServiceExtensionResponse.result(
-      jsonEncode({'ok': true, 'builds': live.builds}),
-    );
-  });
-
-  developer.registerExtension('ext.flutterware.motion.probe', (
-    method,
-    parameters,
-  ) async {
-    var live = _live;
-    return developer.ServiceExtensionResponse.result(
-      jsonEncode({
-        'builds': live?.builds,
-        't': live?._runtime.t,
-        'reads': live?._runtime.reads.toList(),
-        'readsEver': live?._runtime.readsEver.toList(),
-        'anchors': live?._runtime.values.anchors.keys.toList(),
-        'lastFrameMs': live?.lastFrameMs,
-        'freeRunning': _freeRunning,
-        'freeTicks': _freeTicks,
-        'timeDilation': timeDilation,
-      }),
-    );
-  });
-
-  developer.registerExtension('ext.flutterware.motion.dilate', (
-    method,
-    parameters,
-  ) async {
-    timeDilation = double.parse(parameters['value'] ?? '1');
-    return developer.ServiceExtensionResponse.result(
-      jsonEncode({'timeDilation': timeDilation}),
-    );
-  });
-}
-
-// ------------------------------------------------------- the generated values
 
 /// Stands in for `onboarding.motion.dart` — the only thing the editor writes.
 const onboardingMotion = MotionValues(
@@ -246,7 +34,7 @@ const onboardingMotion = MotionValues(
           curve: Curves.easeInOutCubic,
         ),
       ],
-      'translate': [
+      'translateY': [
         Seg<double>(
           start: Duration(milliseconds: 100),
           end: Duration(milliseconds: 500),
@@ -266,11 +54,20 @@ const onboardingMotion = MotionValues(
           curve: Curves.easeInOutCubic,
         ),
       ],
-      'translate': [
+      'translateY': [
         Seg<double>(
           start: Duration(milliseconds: 250),
           end: Duration(milliseconds: 600),
           from: 16,
+          to: 0,
+          curve: Curves.easeOutCubic,
+        ),
+      ],
+      'blur': [
+        Seg<double>(
+          start: Duration(milliseconds: 250),
+          end: Duration(milliseconds: 600),
+          from: 6,
           to: 0,
           curve: Curves.easeOutCubic,
         ),
@@ -283,7 +80,7 @@ const onboardingMotion = MotionValues(
           end: Duration(milliseconds: 700),
           from: 0.92,
           to: 1,
-          curve: Curves.easeOutCubic,
+          curve: Curves.easeOutBack,
         ),
       ],
       'color': [
@@ -299,6 +96,65 @@ const onboardingMotion = MotionValues(
   },
 );
 
+// ------------------------------------------------------------ the host's door
+
+final _scopeKey = GlobalKey<MotionScopeState>();
+final _controller = MotionController(autoplay: false);
+var _registered = false;
+var _builds = 0;
+
+/// Driven by a ticker nobody rebuilds on — the S5b clock probe.
+var _freeRunning = 0.0;
+var _freeTicks = 0;
+
+void _registerExtensions() {
+  if (_registered) return;
+  _registered = true;
+
+  developer.registerExtension('ext.flutterware.motion.seek', (
+    method,
+    parameters,
+  ) async {
+    _controller.position = Duration(
+      microseconds: (double.parse(parameters['t'] ?? '0') * 1000).round(),
+    );
+    return developer.ServiceExtensionResponse.result(
+      jsonEncode({'ok': true, 'progress': _controller.progress}),
+    );
+  });
+
+  developer.registerExtension('ext.flutterware.motion.probe', (
+    method,
+    parameters,
+  ) async {
+    var state = _scopeKey.currentState;
+    return developer.ServiceExtensionResponse.result(
+      jsonEncode({
+        'builds': _builds,
+        't': _controller.position.inMilliseconds,
+        'progress': _controller.progress,
+        'reads': state?.reads.toList(),
+        'offered': state?.offered.toList(),
+        'anchors': state?.anchorsNamed.toList(),
+        'lastFrameMs': 0,
+        'freeRunning': _freeRunning,
+        'freeTicks': _freeTicks,
+        'timeDilation': timeDilation,
+      }),
+    );
+  });
+
+  developer.registerExtension('ext.flutterware.motion.dilate', (
+    method,
+    parameters,
+  ) async {
+    timeDilation = double.parse(parameters['value'] ?? '1');
+    return developer.ServiceExtensionResponse.result(
+      jsonEncode({'timeDilation': timeDilation}),
+    );
+  });
+}
+
 // ------------------------------------------------------------------ the stage
 
 @Demo(name: 'Onboarding', group: 'Motion', wrapper: wrapInApp)
@@ -312,13 +168,12 @@ class _Stage extends StatefulWidget {
 }
 
 class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
-  /// Nothing rebuilds on this. It exists to answer S5b: is the guest's clock
-  /// ours, or does it run free?
+  /// Nothing rebuilds on this. It answers S5b: does the guest's clock run free?
   ///
-  /// Constructed in [initState] rather than as a `late final` initializer,
-  /// because lazy initialisation meant it was never built at all — and the
-  /// obvious fix, touching `_free.value`, calls `stop()` in its setter and
-  /// killed the ticker instead. Two spike runs.
+  /// Constructed here rather than as a `late final` initialiser, because lazy
+  /// initialisation meant it was never built at all — and the obvious fix,
+  /// touching `_free.value`, calls `stop()` in its setter and killed the ticker
+  /// instead. Two spike runs.
   late final AnimationController _free;
 
   var _wide = false;
@@ -326,6 +181,7 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _registerExtensions();
     _free =
         AnimationController(vsync: this, duration: const Duration(seconds: 2))
           ..addListener(() {
@@ -343,10 +199,12 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    // ---- spike A starts here: this is the proposal, written by hand ----
     return MotionScope(
+      key: _scopeKey,
       motion: onboardingMotion,
+      controller: _controller,
       builder: (m) {
+        _builds++;
         var title = m.anchor('title');
         var field = m.anchor('field');
         var cta = m.anchor('cta');
@@ -358,33 +216,24 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
               mainAxisAlignment: MainAxisAlignment.center,
               spacing: 20,
               children: [
-                Opacity(
-                  opacity: title.opacity,
-                  child: Transform.translate(
-                    offset: Offset(0, title.translate),
-                    child: const Text(
-                      'Welcome back',
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w600,
-                      ),
+                MotionBox(
+                  title,
+                  child: const Text(
+                    'Welcome back',
+                    style: TextStyle(fontSize: 30, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                MotionBox(
+                  field,
+                  child: const TextField(
+                    decoration: InputDecoration(
+                      hintText: 'you@example.com',
+                      border: OutlineInputBorder(),
                     ),
                   ),
                 ),
-                Opacity(
-                  opacity: field.opacity,
-                  child: Transform.translate(
-                    offset: Offset(0, field.translate),
-                    child: const TextField(
-                      decoration: InputDecoration(
-                        hintText: 'you@example.com',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                ),
-                Transform.scale(
-                  scale: cta.scale,
+                MotionBox(
+                  cta,
                   child: FilledButton(
                     onPressed: () => setState(() => _wide = !_wide),
                     style: FilledButton.styleFrom(
@@ -394,8 +243,8 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
                     child: const Text('Continue'),
                   ),
                 ),
-                // ---- spike A ends. Below is S5b's implicit animation, which
-                // the Motion does not own and cannot see. ----
+                // S5b's implicit animation, which the Motion does not own and
+                // cannot see. `timeDilation` is the lever that freezes it.
                 AnimatedContainer(
                   duration: const Duration(seconds: 1),
                   width: _wide ? 240 : 80,

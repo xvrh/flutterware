@@ -111,7 +111,7 @@ Future<void> _reportRegistration(_Guest guest) async {
   var probe = await _probe(guest);
   stdout.writeln('anchors in the const:      ${probe['anchors']}');
   stdout.writeln('reads, last build:         ${probe['reads']}');
-  stdout.writeln('reads, ever:               ${probe['readsEver']}');
+  stdout.writeln('offered by MotionBox:      ${probe['offered']}');
   stdout.writeln('builds so far:             ${probe['builds']}');
 
   // A build that increments its counter but records no reads means the builder
