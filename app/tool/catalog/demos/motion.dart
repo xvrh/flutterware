@@ -23,7 +23,7 @@ import 'shell.dart';
 /// Stands in for `onboarding.motion.dart` — the only thing the editor writes.
 const onboardingMotion = MotionValues(
   duration: Duration(milliseconds: 700),
-  anchors: {
+  targets: {
     'title': {
       'opacity': [
         Seg<double>(
@@ -135,7 +135,7 @@ void _registerExtensions() {
         'progress': _controller.progress,
         'reads': state?.reads.toList(),
         'offered': state?.offered.toList(),
-        'anchors': state?.anchorsNamed.toList(),
+        'targets': state?.targetsNamed.toList(),
         'lastFrameMs': 0,
         'freeRunning': _freeRunning,
         'freeTicks': _freeTicks,
@@ -205,9 +205,9 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
       controller: _controller,
       builder: (m) {
         _builds++;
-        var title = m.anchor('title');
-        var field = m.anchor('field');
-        var cta = m.anchor('cta');
+        var title = m.target('title');
+        var field = m.target('field');
+        var cta = m.target('cta');
 
         return Scaffold(
           body: Padding(

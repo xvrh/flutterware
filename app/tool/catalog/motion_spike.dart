@@ -109,7 +109,7 @@ Future<void> _reportRegistration(_Guest guest) async {
   }
 
   var probe = await _probe(guest);
-  stdout.writeln('anchors in the const:      ${probe['anchors']}');
+  stdout.writeln('targets in the const:      ${probe['targets']}');
   stdout.writeln('reads, last build:         ${probe['reads']}');
   stdout.writeln('offered by MotionBox:      ${probe['offered']}');
   stdout.writeln('builds so far:             ${probe['builds']}');

@@ -24,7 +24,7 @@ view is called that), not *Animation* (`package:flutter/animation.dart` owns
 | surface | name |
 |---|---|
 | scope widget | `MotionScope` |
-| anchor handle | `MotionAnchor`, obtained by `m.anchor('title')` |
+| target handle | `MotionTarget`, obtained by `m.target('title')` |
 | generated file | `<screen>.motion.dart` |
 | plugin id | `flutterware.motion` |
 | CLI | `fw run motion capture …` |
@@ -80,8 +80,8 @@ editor is for, but it has to be said in the README rather than discovered.
 MotionScope(
   motion: onboardingMotion,
   builder: (m) {
-    var title = m.anchor('title');
-    var cta = m.anchor('cta');
+    var title = m.target('title');
+    var cta = m.target('cta');
     return Column(children: [
       Opacity(
         opacity: title.opacity,
@@ -95,7 +95,7 @@ MotionScope(
 
 Four properties hold this together:
 
-1. **`MotionAnchor` is a framework class** declaring the whole closed
+1. **`MotionTarget` is a framework class** declaring the whole closed
    vocabulary. `title.` autocompletes everything. **Nothing is generated on the
    read path**, so no member can fail to resolve and no editor ever has to
    repair your file to make it compile.
@@ -176,7 +176,7 @@ internal representation is normalised.
 
 const onboardingMotion = MotionValues(
   duration: Duration(milliseconds: 700),
-  anchors: {
+  targets: {
     'title': {
       'opacity': [
         Seg<double>(start: Duration(milliseconds: 100),
@@ -233,7 +233,7 @@ catalog.
 
 Walked through:
 
-0. Panel open on the demo, guest live, no anchors.
+0. Panel open on the demo, guest live, no targets.
 1. You type `opacity: title.opacity`. Save.
 2. Reload (~130ms). The read is recorded; the panel shows a **dashed** row.
    It is already animating on the default.
@@ -276,7 +276,7 @@ guest ground truth, disagreement is the diagnostic.
 One scanner, the established three sources:
 
 - **Config** — `MotionPackage(directory:)`.
-- **Syntactic scan** — `m.anchor('<literal>')` inside a `MotionScope` builder,
+- **Syntactic scan** — `m.target('<literal>')` inside a `MotionScope` builder,
   plus `<var>.<property>` reads against that local. Both are local to one
   closure, so no resolution is needed. Gives badges and `fw list` with nothing
   running. Provisional.
@@ -293,7 +293,7 @@ catalog's entrypoint already imports it.
 - **Stage** — a `@Demo`, so discovery, the accumulating entrypoint, the hot
   switch, devices and axes all come for free. The link is found by scanning the
   demo for `MotionScope(motion: <identifier>`; the warm guest is ground truth.
-- **Actions** — `list` (motions, anchors, properties, states), `capture --at=`,
+- **Actions** — `list` (motions, targets, properties, states), `capture --at=`,
   `filmstrip --frames=N`, `new`.
 - **Artifacts** — PNG at `t`, the widget tree at `t`, and a **filmstrip contact
   sheet**, which is what an agent should get instead of a video: one image, N
@@ -349,11 +349,11 @@ timeline editor of this fidelity is buildable in Flutter, since its editor is.
 
 ### Layout decisions
 
-- **No separate anchor rail.** An outline panel plus lane names is the same
-  information twice. The sequencer's gutter *is* the anchor list: state badge,
-  anchor, indented properties, `+ add property`. Theatre keeps them separate
+- **No separate target rail.** An outline panel plus lane names is the same
+  information twice. The sequencer's gutter *is* the target list: state badge,
+  target, indented properties, `+ add property`. Theatre keeps them separate
   because its Outline is a scene graph it owns; ours is a registry we read.
-- **Two lane levels with an aggregate bar**, so an 8-anchor screen collapses to
+- **Two lane levels with an aggregate bar**, so an 8-target screen collapses to
   8 rows for judging choreography and expands one for tuning.
 - **Inspector on the right** (AE/Rive convention), which also gives the
   "tuned but never read" snippet a permanent home instead of a toast.
@@ -582,9 +582,9 @@ feasibility.
 Two catalog entries under `Motion`, deliberately split so that between them they
 exercise the whole API:
 
-- **`motion_inbox.dart`** — a staggered entrance. Six anchors, every element in a
+- **`motion_inbox.dart`** — a staggered entrance. Six targets, every element in a
   `MotionBox`, no transform maths anywhere. The `MotionBox` half.
-- **`motion_player.dart`** — a card that blooms into a player. Seven anchors,
+- **`motion_player.dart`** — a card that blooms into a player. Seven targets,
   twenty tuned properties, **not one `MotionBox`**: `art.width` on a `SizedBox`,
   `sheet.color` on a `BoxDecoration`, `reveal.progress` on an
   `Align.heightFactor`. The call-site half.
@@ -632,41 +632,90 @@ The third is worth keeping in mind when the panel is built. A filmstrip is not a
 nicety on top of the playhead — it is the view that would have caught this
 without anybody thinking to look.
 
-## The word `anchor` — evaluated 2026-07-31, after the fact
+## The word — settled 2026-07-31, on the second pass
 
-The seven variants above evaluated the **shape** exhaustively. None of them
-evaluated the **word**, which arrived in variant 7 and survived by inertia. Two
-things were checked when that was noticed.
+The seven variants above evaluated the **shape** exhaustively and the **word**
+not at all: `anchor` arrived in variant 7 and survived by inertia. Everything
+dated before this section uses it; the API says `target`.
 
-**`m.<method>('name')` versus `m['name']`.** The subscript form was proposed and
-is not recorded above; it loses on discovery. Someone who has just typed
-`MotionScope(builder: (m) {` learns the entire vocabulary from `m.` and
+### The shape, confirmed
+
+`m.<method>('name')` over `m['name']`, which was proposed and is not recorded
+above. It loses on discovery: someone who has just typed
+`MotionScope(builder: (m) {` learns the whole vocabulary from `m.` and
 autocomplete, and `m[` offers nothing. The scan also wants a string literal at a
-named call, which the subscript would give but less legibly. Shape confirmed.
+named call.
 
-**`anchor` itself has a real collision.** In Flutter — `MenuAnchor`,
-`targetAnchor:`, `followerAnchor:`, `DragAnchorStrategy` — and in every
-pre-existing use of the word in flutterware, *anchor* means **a positioning
-point**, and its type is `Alignment`. Ours is the moving subject, not a fixed
-point, so the word names the wrong half.
+### What the thing is
 
-Kept anyway, because every word that reads better collides harder: `Layer` and
-`Element` are real Flutter classes, `node` is render/semantics vocabulary, and
-`target` appears in the very same `targetAnchor` API. There is no `Anchor`
-*class*, so the collision is connotative rather than a type clash.
+A `(Motion, String)` pair with no state, rebuilt every build and thrown away —
+a **lens onto a named bundle of tuned properties**. It plays three roles: a
+storage key in the values file, a namespace with autocomplete at the read site,
+and a group header in the panel. It is *not* a widget (two widgets may read one,
+one widget may read two), not a position in the tree, not a layer (no z-order),
+and not a track (that is one level down).
 
-One concrete fix, since the sore spot was inside our own API:
-**`MotionBox.alignment` is now `MotionBox.origin`.** A parameter that is the
-anchor point of a thing called an anchor is a sentence nobody should have to
-read twice.
+It exists because a file rewritten wholesale by a tool must join to hand-written
+code through a stable string. Everything else about it is so that string is
+written once and the vocabulary hangs off it.
 
-The live alternative, if the word is ever revisited, is **`m.actor('title')`** —
-absent from Flutter and from this repo, consistent with the "stage" vocabulary
-the plugin already uses, and it says *the thing that moves*. The cost rises once
-the syntactic scan matches `m.anchor('…')` as a literal.
+### What everyone else calls it
 
-And a correction to variant 7's stated reason: it was rejected partly because
-"the name is written twice", and `var title = m.anchor('title')` still writes it
+| tool | word |
+|---|---|
+| After Effects, Lottie, Figma, Principle | **layer** |
+| GSAP, anime.js, Velocity | **target** |
+| Web Animations API | **target** (`KeyframeEffect(target, keyframes)`) |
+| Theatre.js | **object** (`sheet.object('name', props)`) |
+| Blender | **object**, with an **action** as the named bundle of F-curves |
+| Unity Timeline | **binding** — a track is bound to a GameObject |
+| Spine | **slot** |
+| Jetpack Compose | **label**, which its Animation Preview groups by |
+| Flutter's `Hero` | **tag** |
+
+Two families: subject-words (layer, object, target) name the thing that moves;
+key-words (label, tag, binding, slot) name the string. Nearly every library
+picks a subject-word, and so do we — at the call site the model is "this is my
+title and I am animating it", not "this is a lookup key".
+
+### The collision filter, checked against the SDK and this repo
+
+| word | verdict |
+|---|---|
+| `object` | no type clash (`MotionObject`), but the least informative word available, and in Dart it is the root of the type system — "an object with nothing tuned" reads ambiguously in a way it does not in Theatre.js's JavaScript |
+| `element` | `Element` is a Flutter class. Dead. |
+| `layer` | `Layer` is a Flutter class, and promises z-order we do not have. Dead. |
+| `subject` | **rxdart is a dependency of `app/`**; `BehaviorSubject` is live here. Dead. |
+| `node` | `FocusNode`, `SemanticsNode`, `DiagnosticsNode`; implies tree position. |
+| `part` | Dart directive. Dead. |
+| `label` | means *user-visible text* across dozens of Flutter names; ours is invisible. Dead. |
+| `slot` | already used in this repo; "slot API" means a child-content hole. |
+| `tag` | good precedent (`Hero(tag:)`) but says nothing about properties hanging off it. |
+| `group` | grouping was ruled an editor decision, not a runtime one. |
+| `anchor` | no `Anchor` class, but `MenuAnchor`, `targetAnchor:`, `DragAnchorStrategy` — all meaning `Alignment`. It also names the wrong half: an anchor is the part that does **not** move. |
+| `actor` | zero occurrences in the Flutter SDK and zero in flutterware; finishes the stage/playhead/filmstrip metaphor. |
+| `target` | **chosen.** |
+
+### Why `target`
+
+It is the word in animation *code* — GSAP, anime.js, Velocity, the Web
+Animations API — which is the register a Dart author is in, as against `layer`,
+which is the word in motion *design* tools. It is also correct about direction:
+the values file is applied **to** it. Against it: `DragTarget`,
+`CompositedTransformTarget` and our own `CompilationTarget` make "target" read
+as a drop destination in Flutter, and no bare `Target` class exists to clash
+with, so the cost is connotative only.
+
+`actor` was the runner-up and the only candidate with zero collisions anywhere.
+It lost on register: it asks the reader to buy a metaphor before reading the
+API, and `target` asks nothing.
+
+One consequence kept from the earlier pass: **`MotionBox.origin`, not
+`alignment`** — it is the fixed point the transform is taken about, and
+`Transform` only calls that `alignment` for want of a better word.
+
+And a correction to variant 7's stated reason: it was rejected partly for
+writing the name twice, and `var title = m.target('title')` still writes it
 twice. Only the declaration *site* moved. The duplication is inherent to
-no-codegen plus string keys — the price of blast radius zero, and it costs one
-local per element.
+no-codegen plus string keys — the price of blast radius zero, at one local per
+element.

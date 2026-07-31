@@ -2,9 +2,9 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 
-import 'anchor.dart';
+import 'target.dart';
 
-/// Applies an anchor's transform-shaped properties in one widget.
+/// Applies a target's transform-shaped properties in one widget.
 ///
 /// ```dart
 /// MotionBox(title, child: const Text('Welcome back'))
@@ -12,7 +12,7 @@ import 'anchor.dart';
 ///
 /// Exists because an element that fades *and* moves is otherwise
 /// `Opacity(child: Transform.translate(child: …))`, and a five-element screen
-/// nests deeply enough to read badly. Taking the anchor rather than a list of
+/// nests deeply enough to read badly. Taking the target rather than a list of
 /// values keeps the call site to one line; the reads still happen through the
 /// same getters, so a host watching which properties are wired sees exactly
 /// what it would have seen written out by hand.
@@ -27,26 +27,24 @@ import 'anchor.dart';
 /// read at the call site — which is the honest signal that it is doing
 /// something structural rather than cosmetic.
 ///
-/// Each layer is skipped when its property is at rest, so an anchor that only
+/// Each layer is skipped when its property is at rest, so a target that only
 /// fades costs one `Opacity` and no `Transform`, and a `blur` of zero adds no
 /// image filter at all.
 class MotionBox extends StatelessWidget {
   const MotionBox(
-    this.anchor, {
+    this.target, {
     super.key,
     this.origin = Alignment.center,
     required this.child,
   });
 
-  final MotionAnchor anchor;
+  final MotionTarget target;
 
   /// The point `rotate` and the scales work about.
   ///
-  /// Named `origin` rather than `alignment` because *anchor* already means
-  /// exactly this everywhere else — `MenuAnchor`, `targetAnchor:`,
-  /// `followerAnchor:`, and every use of the word elsewhere in flutterware, all
-  /// of which are an `Alignment`. A parameter that is the anchor point of a
-  /// thing called an anchor is one sentence nobody should have to read twice.
+  /// `origin` rather than `alignment`, because this is not where the widget
+  /// sits — it is the fixed point the transform is taken about, and `Transform`
+  /// only calls it `alignment` for want of a better word.
   final AlignmentGeometry origin;
 
   final Widget child;
@@ -69,16 +67,16 @@ class MotionBox extends StatelessWidget {
       scaleY,
       rotate,
       blur,
-    ) = anchor.motion.offering(
+    ) = target.motion.offering(
       () => (
-        anchor.opacity,
-        anchor.translateX,
-        anchor.translateY,
-        anchor.scale,
-        anchor.scaleX,
-        anchor.scaleY,
-        anchor.rotate,
-        anchor.blur,
+        target.opacity,
+        target.translateX,
+        target.translateY,
+        target.scale,
+        target.scaleX,
+        target.scaleY,
+        target.rotate,
+        target.blur,
       ),
     );
 

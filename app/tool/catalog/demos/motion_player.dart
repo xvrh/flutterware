@@ -13,7 +13,7 @@ import 'shell.dart';
 /// site that uses it — `art.width` on a `SizedBox`, `sheet.color` on a
 /// `BoxDecoration`, `reveal.progress` on an `Align.heightFactor` — which is the
 /// half of the API that has to hold up before the convenience wrapper is worth
-/// anything. Seven anchors, twenty tuned properties, and no transform maths
+/// anything. Seven targets, twenty tuned properties, and no transform maths
 /// anywhere: the properties the box would have applied are exactly the ones it
 /// turned out not to need here.
 ///
@@ -68,8 +68,8 @@ class _PlayerState extends State<_Player> {
       motion: playerMotion,
       controller: _controller,
       builder: (m) {
-        var glow = m.anchor('glow');
-        var sheet = m.anchor('sheet');
+        var glow = m.target('glow');
+        var sheet = m.target('sheet');
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -115,15 +115,15 @@ class _PlayerState extends State<_Player> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _Cover(m.anchor('art')),
+                          _Cover(m.target('art')),
                           const SizedBox(height: 14),
                           _Titles(
-                            title: m.anchor('title'),
-                            artist: m.anchor('artist'),
+                            title: m.target('title'),
+                            artist: m.target('artist'),
                           ),
                           _Reveal(
-                            anchor: m.anchor('reveal'),
-                            child: _Controls(m.anchor('play')),
+                            target: m.target('reveal'),
+                            child: _Controls(m.target('play')),
                           ),
                         ],
                       ),
@@ -140,22 +140,22 @@ class _PlayerState extends State<_Player> {
 }
 
 class _Cover extends StatelessWidget {
-  const _Cover(this.anchor);
+  const _Cover(this.target);
 
-  final MotionAnchor anchor;
+  final MotionTarget target;
 
   @override
   Widget build(BuildContext context) {
-    var size = anchor.width ?? 64;
-    var radius = BorderRadius.circular(anchor.borderRadius ?? 14);
+    var size = target.width ?? 64;
+    var radius = BorderRadius.circular(target.borderRadius ?? 14);
     return Transform.rotate(
-      angle: anchor.rotate,
+      angle: target.rotate,
       child: Container(
         width: size,
-        height: anchor.height ?? size,
+        height: target.height ?? size,
         decoration: BoxDecoration(
           borderRadius: radius,
-          boxShadow: shadowFor(anchor.elevation, Colors.black),
+          boxShadow: shadowFor(target.elevation, Colors.black),
         ),
         child: ClipRRect(
           borderRadius: radius,
@@ -191,8 +191,8 @@ class _Cover extends StatelessWidget {
 class _Titles extends StatelessWidget {
   const _Titles({required this.title, required this.artist});
 
-  final MotionAnchor title;
-  final MotionAnchor artist;
+  final MotionTarget title;
+  final MotionTarget artist;
 
   @override
   Widget build(BuildContext context) {
@@ -225,9 +225,9 @@ class _Titles extends StatelessWidget {
 
 /// The lower half, revealed by a number that means nothing until here.
 class _Reveal extends StatelessWidget {
-  const _Reveal({required this.anchor, required this.child});
+  const _Reveal({required this.target, required this.child});
 
-  final MotionAnchor anchor;
+  final MotionTarget target;
   final Widget child;
 
   @override
@@ -235,11 +235,11 @@ class _Reveal extends StatelessWidget {
     return ClipRect(
       child: Align(
         alignment: Alignment.topCenter,
-        heightFactor: anchor.progress,
+        heightFactor: target.progress,
         child: Opacity(
-          opacity: anchor.opacity,
+          opacity: target.opacity,
           child: Transform.translate(
-            offset: Offset(0, anchor.translateY),
+            offset: Offset(0, target.translateY),
             child: child,
           ),
         ),
@@ -251,7 +251,7 @@ class _Reveal extends StatelessWidget {
 class _Controls extends StatelessWidget {
   const _Controls(this.play);
 
-  final MotionAnchor play;
+  final MotionTarget play;
 
   @override
   Widget build(BuildContext context) {

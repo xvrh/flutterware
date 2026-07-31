@@ -8,7 +8,7 @@ import 'shell.dart';
 /// A staggered entrance, written the way a screen actually gets written.
 ///
 /// This is the `MotionBox` half of the demonstration: every element wears one,
-/// nothing here computes a transform, and the six anchors below are the entire
+/// nothing here computes a transform, and the six targets below are the entire
 /// wiring. Its counterpart, `motion_player.dart`, uses no `MotionBox` at all
 /// and reads every property at the call site — between them they cover the
 /// whole of the API.
@@ -65,9 +65,9 @@ class _InboxState extends State<_Inbox> {
       motion: inboxMotion,
       controller: _controller,
       builder: (m) {
-        var header = m.anchor('header');
-        var search = m.anchor('search');
-        var fab = m.anchor('fab');
+        var header = m.target('header');
+        var search = m.target('search');
+        var fab = m.target('fab');
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -128,7 +128,7 @@ class _InboxState extends State<_Inbox> {
                             const SizedBox(height: 2),
                             for (var (index, message) in _messages.indexed)
                               MotionBox(
-                                m.anchor('msg${index + 1}'),
+                                m.target('msg${index + 1}'),
                                 child: _MessageRow(message),
                               ),
                           ],
@@ -253,21 +253,21 @@ class _MessageRow extends StatelessWidget {
 }
 
 class _Compose extends StatelessWidget {
-  const _Compose(this.anchor);
+  const _Compose(this.target);
 
-  final MotionAnchor anchor;
+  final MotionTarget target;
 
   @override
   Widget build(BuildContext context) {
     // `color` and `elevation` are read here rather than applied by the box: one
     // is a paint, the other is a shadow this widget composes itself.
-    var elevation = anchor.elevation;
+    var elevation = target.elevation;
     return Container(
       width: 56,
       height: 56,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: anchor.color ?? _garnet,
+        color: target.color ?? _garnet,
         shape: BoxShape.circle,
         boxShadow: shadowFor(elevation, _garnet),
       ),

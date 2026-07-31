@@ -6,12 +6,12 @@ import 'package:flutterware/motion.dart';
 /// Hand-written today, written by the Motion panel tomorrow — and the point of
 /// the demo is that this is the **only** file the editor will ever touch.
 ///
-/// Nothing here says what an anchor is or which widget it reaches. That comes
+/// Nothing here says what a target is or which widget it reaches. That comes
 /// from `motion_inbox.dart` reading it, which is why an edit in the panel can
 /// never break a build.
 const inboxMotion = MotionValues(
   duration: Duration(milliseconds: 780),
-  anchors: {
+  targets: {
     'header': {
       'opacity': [
         Seg<double>(

@@ -26,11 +26,11 @@ class Seg<T> {
 
 /// Everything the editor tuned, and nothing else.
 ///
-/// Structure — which anchors exist, which properties they have — comes from the
+/// Structure — which targets exist, which properties they have — comes from the
 /// code that reads them. This carries only the numbers, which is why it can be
 /// a whole-file rewrite by a tool without ever touching what somebody wrote.
 ///
-/// Keyed anchor → property → segments. A list per property because several
+/// Keyed target → property → segments. A list per property because several
 /// spans of one property *is* the keyframe case.
 class MotionValues {
   /// Null means "as long as the last segment ends", which is almost always
@@ -38,18 +38,18 @@ class MotionValues {
   /// [resolveDuration] rather than a computed field.
   final Duration? duration;
 
-  final Map<String, Map<String, List<Seg<Object?>>>> anchors;
+  final Map<String, Map<String, List<Seg<Object?>>>> targets;
 
-  const MotionValues({this.duration, required this.anchors});
+  const MotionValues({this.duration, required this.targets});
 
-  static const empty = MotionValues(anchors: {});
+  static const empty = MotionValues(targets: {});
 
   /// The declared duration, or the end of the last segment.
   Duration resolveDuration() {
     var declared = duration;
     if (declared != null) return declared;
     var end = Duration.zero;
-    for (var properties in anchors.values) {
+    for (var properties in targets.values) {
       for (var segments in properties.values) {
         for (var segment in segments) {
           if (segment.end > end) end = segment.end;
@@ -59,8 +59,8 @@ class MotionValues {
     return end;
   }
 
-  List<Seg<Object?>>? segmentsFor(String anchor, String property) =>
-      anchors[anchor]?[property];
+  List<Seg<Object?>>? segmentsFor(String target, String property) =>
+      targets[target]?[property];
 }
 
 /// What [segments] is worth at [at].

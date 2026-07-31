@@ -1,14 +1,14 @@
 /// Choreography a tool can edit and a person can read.
 ///
-/// A motion is declared where it is read: you name an anchor, you read its
+/// A motion is declared where it is read: you name a target, you read its
 /// properties, you plug the values where only you know they go.
 ///
 /// ```dart
 /// MotionScope(
 ///   motion: onboardingMotion,          // a const the editor writes
 ///   builder: (m) {
-///     var title = m.anchor('title');
-///     var cta = m.anchor('cta');
+///     var title = m.target('title');
+///     var cta = m.target('cta');
 ///     return Column(children: [
 ///       MotionBox(title, child: const Text('Welcome back')),
 ///       FilledButton(
@@ -38,7 +38,7 @@
 /// physics and data-driven reorders are outside it.
 library;
 
-export 'src/motion/anchor.dart' show Motion, MotionAnchor;
+export 'src/motion/target.dart' show Motion, MotionTarget;
 export 'src/motion/controller.dart' show MotionController, MotionSource;
 export 'src/motion/motion_box.dart' show MotionBox;
 export 'src/motion/scope.dart' show MotionScope, MotionScopeState;

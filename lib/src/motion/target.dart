@@ -16,7 +16,7 @@ class Motion {
   /// Where the playhead is, in the same units the segments are written in.
   Duration position = Duration.zero;
 
-  /// `anchor.property` pairs read at a call site during the current build.
+  /// `target.property` pairs read at a call site during the current build.
   ///
   /// A panel shows one lane per entry here: tuned or not, somebody asked for
   /// this value and it reaches a widget.
@@ -33,14 +33,14 @@ class Motion {
 
   var _offering = false;
 
-  /// Anchors named by [anchor] during the current build, whether or not any of
-  /// their properties were read. A panel needs the difference: an anchor with
-  /// no reads is a wiring mistake, an anchor that was never named is gone.
+  /// Targets named by [target] during the current build, whether or not any of
+  /// their properties were read. A panel needs the difference: a target with
+  /// no reads is a wiring mistake, a target that was never named is gone.
   final named = <String>{};
 
-  MotionAnchor anchor(String name) {
+  MotionTarget target(String name) {
     named.add(name);
-    return MotionAnchor._(this, name);
+    return MotionTarget._(this, name);
   }
 
   void beginBuild() {
@@ -63,9 +63,9 @@ class Motion {
     }
   }
 
-  Object? read(String anchor, String property) {
-    (_offering ? offered : reads).add('$anchor.$property');
-    var segments = values.segmentsFor(anchor, property);
+  Object? read(String target, String property) {
+    (_offering ? offered : reads).add('$target.$property');
+    var segments = values.segmentsFor(target, property);
     if (segments == null || segments.isEmpty) return null;
     return evaluateSegments(segments, position);
   }
@@ -74,15 +74,15 @@ class Motion {
 /// One animated element, and the whole vocabulary it could carry.
 ///
 /// Every property is declared here rather than generated, which is what lets
-/// `title.` offer the full set the moment you have an anchor, and is why
+/// `title.` offer the full set the moment you have a target, and is why
 /// nothing about this API needs a build step.
-class MotionAnchor {
-  MotionAnchor._(this._motion, this.name);
+class MotionTarget {
+  MotionTarget._(this._motion, this.name);
 
   final Motion _motion;
   final String name;
 
-  /// The scope this anchor belongs to. Widgets that read a fixed set of
+  /// The scope this target belongs to. Widgets that read a fixed set of
   /// properties wrap themselves in [Motion.offering] through this.
   Motion get motion => _motion;
 
@@ -135,5 +135,5 @@ class MotionAnchor {
   }
 
   @override
-  String toString() => 'MotionAnchor($name)';
+  String toString() => 'MotionTarget($name)';
 }

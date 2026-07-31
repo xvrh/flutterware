@@ -5,7 +5,7 @@ import 'package:flutterware/motion.dart';
 Duration ms(int value) => Duration(milliseconds: value);
 
 final _values = MotionValues(
-  anchors: {
+  targets: {
     'title': {
       'opacity': [Seg<double>(start: ms(0), end: ms(400), from: 0, to: 1)],
       'translateY': [Seg<double>(start: ms(0), end: ms(400), from: 40, to: 0)],
@@ -19,12 +19,12 @@ MotionScopeState _stateOf(WidgetTester tester) =>
 Widget _scope({
   MotionController? controller,
   MotionValues? values,
-  Widget Function(MotionAnchor title)? child,
+  Widget Function(MotionTarget title)? child,
 }) => MotionScope(
   motion: values ?? _values,
   controller: controller,
   builder: (m) {
-    var title = m.anchor('title');
+    var title = m.target('title');
     return (child ?? (a) => MotionBox(a, child: const SizedBox(width: 10)))(
       title,
     );
@@ -59,7 +59,7 @@ void main() {
       );
       var state = _stateOf(tester);
       expect(state.reads, {'title.opacity'});
-      expect(state.anchorsNamed, {'title'});
+      expect(state.targetsNamed, {'title'});
     });
 
     testWidgets("MotionBox's sweep is offered, not read", (tester) async {
@@ -90,18 +90,18 @@ void main() {
       expect(state.offered, contains('title.translateY'));
     });
 
-    testWidgets('an unread anchor is still reported as named', (tester) async {
+    testWidgets('an unread target is still reported as named', (tester) async {
       await tester.pumpWidget(
         MotionScope(
           motion: _values,
           builder: (m) {
-            m.anchor('ghost');
+            m.target('ghost');
             return const SizedBox();
           },
         ),
       );
       var state = _stateOf(tester);
-      expect(state.anchorsNamed, {'ghost'});
+      expect(state.targetsNamed, {'ghost'});
       expect(state.reads, isEmpty);
     });
 
@@ -132,7 +132,7 @@ void main() {
       await tester.pumpWidget(
         _scope(
           values: MotionValues(
-            anchors: {
+            targets: {
               'title': {
                 'opacity': [
                   Seg<double>(start: ms(0), end: ms(400), from: 1, to: 0),
@@ -220,7 +220,7 @@ void main() {
         MotionScope(
           motion: MotionValues.empty,
           builder: (m) =>
-              MotionBox(m.anchor('title'), child: const SizedBox(width: 10)),
+              MotionBox(m.target('title'), child: const SizedBox(width: 10)),
         ),
       );
       expect(find.byType(Opacity), findsNothing);
@@ -244,7 +244,7 @@ void main() {
       await tester.pumpWidget(
         MotionScope(
           motion: MotionValues(
-            anchors: {
+            targets: {
               'title': {
                 'blur': [
                   Seg<double>(start: ms(0), end: ms(100), from: 8, to: 0),
@@ -254,7 +254,7 @@ void main() {
           ),
           controller: MotionController(autoplay: false),
           builder: (m) =>
-              MotionBox(m.anchor('title'), child: const SizedBox(width: 10)),
+              MotionBox(m.target('title'), child: const SizedBox(width: 10)),
         ),
       );
       expect(find.byType(ImageFiltered), findsOneWidget);

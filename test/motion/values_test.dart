@@ -96,7 +96,7 @@ void main() {
   group('duration', () {
     test('is the end of the last segment when not declared', () {
       var values = MotionValues(
-        anchors: {
+        targets: {
           'a': {
             'opacity': _fade,
             'translateY': [
@@ -111,7 +111,7 @@ void main() {
     test('a declared duration wins, even a shorter one', () {
       var values = MotionValues(
         duration: ms(200),
-        anchors: {
+        targets: {
           'a': {'opacity': _fade},
         },
       );

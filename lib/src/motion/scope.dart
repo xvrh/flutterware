@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import 'anchor.dart';
+import 'target.dart';
 import 'controller.dart';
 import 'values.dart';
 
@@ -10,7 +10,7 @@ import 'values.dart';
 /// MotionScope(
 ///   motion: onboardingMotion,
 ///   builder: (m) {
-///     var title = m.anchor('title');
+///     var title = m.target('title');
 ///     return MotionBox(title, child: const Text('Welcome back'));
 ///   },
 /// )
@@ -58,11 +58,11 @@ class MotionScopeState extends State<MotionScope>
   /// rather than the [Motion] so it survives the next `beginBuild`.
   Set<String> get reads => _motion.reads;
 
-  /// Properties a blanket reader swept — available on an anchor, but not
+  /// Properties a blanket reader swept — available on a target, but not
   /// evidence that anybody wired them. See [Motion.offered].
   Set<String> get offered => _motion.offered;
 
-  Set<String> get anchorsNamed => _motion.named;
+  Set<String> get targetsNamed => _motion.named;
 
   MotionController get controller => _controller;
 

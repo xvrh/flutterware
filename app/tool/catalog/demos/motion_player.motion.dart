@@ -12,7 +12,7 @@ import 'package:flutterware/motion.dart';
 /// them and still show something coherent.
 const playerMotion = MotionValues(
   duration: Duration(milliseconds: 620),
-  anchors: {
+  targets: {
     // The light behind the card, which is doing more work than it looks like.
     'glow': {
       'opacity': [
