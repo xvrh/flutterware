@@ -31,7 +31,18 @@ enum MessageType {
 
 /// Pointer phases; the index order matches `FlutterPointerPhase` in
 /// `flutter_embedder.h` so the guest can cast the index directly.
-enum PointerPhase { cancel, up, down, move, add, remove, hover }
+enum PointerPhase {
+  cancel,
+  up,
+  down,
+  move,
+  add,
+  remove,
+  hover,
+  panZoomStart,
+  panZoomUpdate,
+  panZoomEnd,
+}
 
 enum KeyEventKind { down, up, repeat }
 
@@ -134,6 +145,10 @@ class PointerEventMessage extends EmbedderMessage {
     required this.scrollDeltaX,
     required this.scrollDeltaY,
     required this.timestampMicros,
+    this.panX = 0,
+    this.panY = 0,
+    this.scale = 1,
+    this.rotation = 0,
   });
 
   final PointerPhase phase;
@@ -143,6 +158,16 @@ class PointerEventMessage extends EmbedderMessage {
   final double scrollDeltaX;
   final double scrollDeltaY;
   final int timestampMicros;
+
+  /// Trackpad gesture state, for the `panZoom*` phases only.
+  ///
+  /// Cumulative since [PointerPhase.panZoomStart] — pan in physical pixels,
+  /// scale as a multiplier from 1.0, rotation in radians — matching the
+  /// embedder API's own `pan_x`/`pan_y`/`scale`/`rotation` fields.
+  final double panX;
+  final double panY;
+  final double scale;
+  final double rotation;
 }
 
 class KeyEventMessage extends EmbedderMessage {
@@ -152,6 +177,7 @@ class KeyEventMessage extends EmbedderMessage {
     required this.logicalKey,
     required this.modifiers,
     required this.timestampMicros,
+    this.character,
   });
 
   final KeyEventKind kind;
@@ -159,6 +185,15 @@ class KeyEventMessage extends EmbedderMessage {
   final int logicalKey;
   final int modifiers;
   final int timestampMicros;
+
+  /// The character this key produced under the host's keyboard layout, or
+  /// null when it produced none — key-ups, and non-printing keys.
+  ///
+  /// The host is the only one who can know it: the layout lives with the real
+  /// keyboard, and a guest deriving text from [logicalKey] would type as if
+  /// every keyboard were US English. Never the empty string on the wire —
+  /// encoded as a zero length, which decodes back to null.
+  final String? character;
 }
 
 class ShutdownMessage extends EmbedderMessage {
@@ -224,6 +259,10 @@ Uint8List encodeMessage(EmbedderMessage message) {
       _f64(body, message.scrollDeltaX);
       _f64(body, message.scrollDeltaY);
       _u64(body, message.timestampMicros);
+      _f64(body, message.panX);
+      _f64(body, message.panY);
+      _f64(body, message.scale);
+      _f64(body, message.rotation);
     case KeyEventMessage():
       body.addByte(MessageType.keyEvent.tag);
       _u32(body, message.kind.index);
@@ -231,6 +270,14 @@ Uint8List encodeMessage(EmbedderMessage message) {
       _u64(body, message.logicalKey);
       _u32(body, message.modifiers);
       _u64(body, message.timestampMicros);
+      var character = message.character;
+      if (character == null || character.isEmpty) {
+        _u32(body, 0);
+      } else {
+        var bytes = utf8.encode(character);
+        _u32(body, bytes.length);
+        body.add(bytes);
+      }
     case ShutdownMessage():
       body.addByte(MessageType.shutdown.tag);
     case CaptureMessage():
@@ -306,14 +353,22 @@ EmbedderMessage decodeMessageBody(Uint8List body) {
         scrollDeltaX: data.getFloat64(24, Endian.little),
         scrollDeltaY: data.getFloat64(32, Endian.little),
         timestampMicros: data.getUint64(40, Endian.little),
+        panX: data.getFloat64(48, Endian.little),
+        panY: data.getFloat64(56, Endian.little),
+        scale: data.getFloat64(64, Endian.little),
+        rotation: data.getFloat64(72, Endian.little),
       );
     case MessageType.keyEvent:
+      var characterLength = data.getUint32(32, Endian.little);
       return KeyEventMessage(
         kind: KeyEventKind.values[data.getUint32(0, Endian.little)],
         physicalKey: data.getUint64(4, Endian.little),
         logicalKey: data.getUint64(12, Endian.little),
         modifiers: data.getUint32(20, Endian.little),
         timestampMicros: data.getUint64(24, Endian.little),
+        character: characterLength == 0
+            ? null
+            : utf8.decode(body.sublist(1 + 36, 1 + 36 + characterLength)),
       );
   }
 }

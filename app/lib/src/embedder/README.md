@@ -6,7 +6,8 @@ Experimental Flutter engine embedder, part of `flutterware_app`.
 animated, interactive scene with the **Metal renderer**, directly into shared
 `IOSurface`-backed Metal textures — a zero-copy path with no per-frame copy.
 The flutterware desktop GUI displays it live in an external `Texture`. The
-panel is resizable and forwards pointer/keyboard input.
+panel is resizable and forwards pointer, keyboard, scroll-wheel and trackpad
+pan/zoom input (`input_region.dart`).
 
 ## Run the GUI harness
 
@@ -70,7 +71,38 @@ The guest announces surfaces by `IOSurfaceID`, signals each frame with
 
 The GUI texture path is verified manually via the harness.
 
+## Keyboard and text input
+
+Two guest-side replacements for platform plumbing this embedder does not have,
+both installed by the generated catalog entrypoint and both in
+`package:flutterware/ui_catalog_guest.dart`:
+
+- **`GuestKeyboard`** — delivery. `FlutterEngineSendKeyEvent` alone reaches
+  nothing: `KeyEventManager` infers a `keyDataThenRawKeyData` embedder from the
+  first event and then queues every key, waiting for the legacy
+  `flutter/keyevent` platform message that normally follows and flushes the
+  queue. With no platform channels there is no flush, so **no key reached a
+  demo at all** — not a shortcut, not an arrow. This replaces `onKeyData` and
+  dispatches to both destinations itself.
+- **`GuestTextInput`** — insertion *and the editing commands*. A `TextField`
+  gets its text from the platform IME, and there is none; this is a
+  `TextInputControl` that builds editing state from the character each key
+  carries. It also names the commands: on Apple platforms the framework
+  refuses backspace, delete, the arrows, home, end and page while a field is
+  focused and waits for the IME to send `deleteBackward:`, `moveLeft:` and
+  friends, so the control maps key plus modifiers to those selectors.
+
+The panel decides what a demo is allowed to hear — `isReservedAppChord`
+(`catalog/app_chords.dart`). It keeps only the chords the host actually binds;
+everything else, modifier keys included, goes to the guest, which is what makes
+⌘A and ⌘Z work inside a demo.
+
+`tool/embedder/input_probe.dart` is what proves the chain end to end: it types
+into a real guest and scrolls one, then reads back what the demo shows.
+`input_smoke.dart` only proves the guest survives the messages — which is
+exactly how keyboard input looked fine while every key sat queued.
+
 ## Not yet implemented
 
-Hot reload (step 4), text input/IME, multiple embedded engines, non-macOS
-platforms.
+Hot reload (step 4), IME composition (dead keys, CJK), guest clipboard,
+multiple embedded engines, non-macOS platforms.

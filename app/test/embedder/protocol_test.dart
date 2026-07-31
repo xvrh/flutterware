@@ -81,6 +81,33 @@ void main() {
     expect(msg.buttons, 1);
     expect(msg.scrollDeltaY, -3.5);
     expect(msg.timestampMicros, 123456);
+    expect(msg.panX, 0);
+    expect(msg.panY, 0);
+    expect(msg.scale, 1);
+    expect(msg.rotation, 0);
+  });
+
+  test('round-trips a pan-zoom PointerEvent', () {
+    var msg = roundTrip(
+      const PointerEventMessage(
+        phase: PointerPhase.panZoomUpdate,
+        x: 100,
+        y: 200,
+        buttons: 0,
+        scrollDeltaX: 0,
+        scrollDeltaY: 0,
+        timestampMicros: 42,
+        panX: -18.5,
+        panY: 240.75,
+        scale: 1.25,
+        rotation: 0.5,
+      ),
+    );
+    expect(msg.phase, PointerPhase.panZoomUpdate);
+    expect(msg.panX, -18.5);
+    expect(msg.panY, 240.75);
+    expect(msg.scale, 1.25);
+    expect(msg.rotation, 0.5);
   });
 
   test('round-trips KeyEvent', () {
@@ -97,6 +124,21 @@ void main() {
     expect(msg.physicalKey, 0x00070004);
     expect(msg.logicalKey, 0x00000061);
     expect(msg.timestampMicros, 999);
+    expect(msg.character, isNull);
+  });
+
+  test('round-trips a KeyEvent character, multi-byte included', () {
+    var msg = roundTrip(
+      const KeyEventMessage(
+        kind: KeyEventKind.down,
+        physicalKey: 0x00070004,
+        logicalKey: 0x00000061,
+        modifiers: 0,
+        timestampMicros: 999,
+        character: 'é',
+      ),
+    );
+    expect(msg.character, 'é');
   });
 
   test('FrameReader splits two concatenated frames', () {

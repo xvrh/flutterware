@@ -161,6 +161,12 @@ String get _entryId => r'${active.id}';
 // would print into the root zone and be captured by nothing at all.
 void main() => GuestLogs.instance.install(() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Before anything can be typed, keys have to arrive at all: the framework
+  // parks every one of them waiting for a legacy platform message this guest
+  // cannot send. Both of these are replacements for platform plumbing the
+  // guest does not have, and both must be up before the first frame.
+  GuestKeyboard.instance.install();
+  GuestTextInput.instance.install();
   // Before runApp, and once: the panel may ask what knobs exist before the
   // first frame, and the extensions have to outlive every entry switch.
   CatalogParameters.instance.registerExtensions();

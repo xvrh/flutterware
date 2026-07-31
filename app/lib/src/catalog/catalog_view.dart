@@ -11,9 +11,10 @@ import 'package:flutter/services.dart';
 import '../address/address_scope.dart';
 import '../capture/capture_mode.dart';
 import '../embedder/embedded_engine.dart';
-import '../embedder/protocol.dart';
+import '../embedder/input_region.dart';
 import '../ui/design/design.dart';
 import '../utils/image_clipboard.dart';
+import 'app_chords.dart';
 import 'catalog_params.dart';
 import 'catalog_devices.dart';
 import 'catalog_entry.dart';
@@ -211,15 +212,8 @@ class _CatalogViewState extends State<CatalogView> {
     engine.resize(width, height, dpr, insets: safeAreas * dpr);
   }
 
-  /// Whether a key belongs to the app rather than to the guest.
-  ///
-  /// The canvas forwards everything else and reports it handled, so without
-  /// this no shortcut survives a click on the demo — not the panel's own
-  /// reload, and not the shell's. Command chords are the app's; a demo that
-  /// wants one is rarer than a user who wants their window back.
   bool _isAppChord(KeyEvent event) =>
-      HardwareKeyboard.instance.isMetaPressed ||
-      HardwareKeyboard.instance.isControlPressed;
+      isReservedAppChord(event, HardwareKeyboard.instance);
 
   @override
   Widget build(BuildContext context) {
@@ -503,8 +497,8 @@ class _CatalogViewState extends State<CatalogView> {
     _highlight.value = null;
   }
 
-  /// Everything the guest needs to be driven: keys, hover, and pointers, in
-  /// [dpr] — the panel's when it fills the panel, the device's when it is one.
+  /// Everything the guest needs to be driven — see [EmbedderInputRegion] — in
+  /// [dpr]: the panel's when it fills the panel, the device's when it is one.
   ///
   /// While [_picking] the guest is given **nothing**: not the click, which
   /// would tap the button you were trying to inspect, and not the hover, which
@@ -559,70 +553,14 @@ class _CatalogViewState extends State<CatalogView> {
   }
 
   Widget _demoInput(EmbeddedEngine engine, double dpr, Widget picture) {
-    return Focus(
+    return EmbedderInputRegion(
+      engine: engine,
+      dpr: dpr,
       focusNode: _focusNode,
-      onKeyEvent: (node, event) {
-        // Ignored, not handled: it carries on up to whichever
-        // `CallbackShortcuts` claims it — this panel's, or the shell's.
-        if (_isAppChord(event)) return KeyEventResult.ignored;
-        engine.sendKey(
-          kind: event is KeyDownEvent
-              ? KeyEventKind.down
-              : event is KeyRepeatEvent
-              ? KeyEventKind.repeat
-              : KeyEventKind.up,
-          physicalKey: event.physicalKey.usbHidUsage,
-          logicalKey: event.logicalKey.keyId,
-        );
-        return KeyEventResult.handled;
-      },
-      // Hover is not a [Listener]'s business: with no button held the engine
-      // sends `PointerHoverEvent`, which `onPointerMove` never sees. Without
-      // this the demo is blind to the mouse unless you are dragging — no ink
-      // highlight, no `MouseRegion`, no hover tooltip, every demo frozen in
-      // its resting state.
-      child: MouseRegion(
-        onEnter: (e) => engine.sendPointer(
-          phaseKind: PointerPhase.add,
-          x: e.localPosition.dx * dpr,
-          y: e.localPosition.dy * dpr,
-        ),
-        onHover: (e) => engine.sendPointer(
-          phaseKind: PointerPhase.hover,
-          x: e.localPosition.dx * dpr,
-          y: e.localPosition.dy * dpr,
-        ),
-        // Paired with the add: the guest is tracking a device that has left
-        // the window, and a hover state left behind never lifts.
-        onExit: (e) => engine.sendPointer(
-          phaseKind: PointerPhase.remove,
-          x: e.localPosition.dx * dpr,
-          y: e.localPosition.dy * dpr,
-        ),
-        child: Listener(
-          onPointerDown: (e) {
-            _focusNode.requestFocus();
-            engine.sendPointer(
-              phaseKind: PointerPhase.down,
-              x: e.localPosition.dx * dpr,
-              y: e.localPosition.dy * dpr,
-              buttons: 1,
-            );
-          },
-          onPointerMove: (e) => engine.sendPointer(
-            phaseKind: PointerPhase.move,
-            x: e.localPosition.dx * dpr,
-            y: e.localPosition.dy * dpr,
-            buttons: 1,
-          ),
-          onPointerUp: (e) => engine.sendPointer(
-            phaseKind: PointerPhase.up,
-            x: e.localPosition.dx * dpr,
-            y: e.localPosition.dy * dpr,
-          ),
-          child: _withOverlay(picture),
-        ),
-      ),
+      // Ignored, not handled: an app chord carries on up to whichever
+      // `CallbackShortcuts` claims it — this panel's, or the shell's.
+      shouldIgnoreKey: _isAppChord,
+      child: _withOverlay(picture),
     );
   }
 

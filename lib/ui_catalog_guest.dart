@@ -12,6 +12,8 @@ library;
 
 export 'src/ui_catalog/guest.dart' show CatalogGuest, CatalogParameters;
 export 'src/ui_catalog/axes.dart' show CatalogAxes;
+export 'src/ui_catalog/guest_keyboard.dart' show GuestKeyboard;
+export 'src/ui_catalog/guest_text_input.dart' show GuestTextInput;
 export 'src/ui_catalog/knob.dart' show KnobDescriptor, KnobKind, KnobReport;
 export 'src/ui_catalog/axis.dart' show AxisReport;
 export 'src/inspect/error.dart' show InspectError, InspectErrors;
