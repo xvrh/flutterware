@@ -769,3 +769,49 @@ The wider lesson is the one the demos already taught in a different costume: the
 states at the ends were right, and it was the case in the middle — a property
 applied by a wrapper rather than by a call site — that was wrong. Both bugs
 were found by looking at real output rather than by reasoning about the model.
+
+## The plugin, step 2 — 2026-08-01
+
+`flutterware.motion` is in both registries, declared in this repo's own
+`tool/flutterware.dart` (pointed at `app/tool/catalog/demos`, because a motion
+needs a mounted screen and in this repo the screens that mount one are the
+demos), and answers `fw run motion list`.
+
+**The panel owns no truth.** The list on the left is the syntactic scan; every
+number under the preview — targets, properties, states, current values, tuned
+spans — is `ext.flutterware.motion.list` against the live guest. It reaches
+that guest through one new door, `CatalogSession.callGuestExtension`, rather
+than by widening `InspectClient`: that class is the catalog's vocabulary, and
+growing it whenever another plugin needs a call is how one class ends up owning
+every plugin's protocol.
+
+### How much the scan actually sees, measured on our own demos
+
+Running `list` against this repo is the honest answer, and it is lower than the
+design implied:
+
+| motion | targets | with properties the scan can see |
+|---|---|---|
+| `inboxMotion` | 3 of 7 | header (`fontSize`), search (`borderRadius`), fab (`color`, `elevation`) |
+| `playerMotion` | 2 of 7 | glow, sheet |
+
+Two separate limits, both real, both in the second and third files anybody
+wrote against this API:
+
+1. **Computed names.** `motion_inbox`'s four staggered rows are
+   `m.target('msg${index + 1}')` in a loop. The parser reports a diagnostic
+   rather than guessing; the guest lists all four.
+2. **Helper widgets.** `motion_player` reads `art.width` inside `_Cover`, not in
+   the builder closure. Five of its seven targets therefore show *zero*
+   properties statically and full wiring at run time.
+
+This is not a defect in the scan — it is the boundary the design named, arriving
+sooner and wider than expected. The consequence for the panel is a rule:
+**never present the scan as complete.** It is a list that exists before a guest
+does, and the diagnostics belong on screen beside it, not folded away.
+
+### Not yet done
+
+The lanes are read-only — no drag, no keyframe selection, no writing
+`X.motion.dart`. That is step 3. The panel has not been looked at running; every
+claim above is from tests, `fw`, and the probe.
