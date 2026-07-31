@@ -241,11 +241,58 @@ void main() {
       } finally {
         forked.deleteSync();
       }
+
+      // A guest that dies mid-session is noticed: the next run respawns one
+      // instead of talking to a service that is gone. (Killing it from here
+      // is the same thing the OS does when a scenario blows the isolate up.)
+      await runner.debugKillGuest();
+      var revived = await runner.run(
+        outDir: outDir,
+        file: 'test/scenarios/counter_test.dart',
+        scenario: 'Counter',
+      );
+      expect(((revived['scenarios']! as List).single as Map)['ok'], isTrue);
     } finally {
       await runner.dispose();
       Directory(outDir).deleteSync(recursive: true);
     }
   });
+
+  test(
+    'a failed cold start is forgotten, not memoized',
+    () async {
+      var flutterRoot = Platform.environment['FLUTTER_ROOT']!;
+      var repoRoot = Directory.current.parent.path;
+      var packageRoot = p.join(repoRoot, 'examples', 'example');
+      var outDir = Directory.systemTemp.createTempSync('scenario_cold').path;
+
+      // An empty directory is the cheapest cold-start failure there is — no
+      // compile, same lane.
+      var empty = Directory(p.join(packageRoot, 'test', 'scenarios_cold'))
+        ..createSync(recursive: true);
+      var runner = ScenarioRunner(
+        packageRoot: packageRoot,
+        directory: 'test/scenarios_cold',
+        flutterSdkRoot: flutterRoot,
+      );
+      try {
+        await expectLater(runner.list(), throwsA(isA<StateError>()));
+
+        // The fix: writing the scenario the runner complained about and asking
+        // again starts it, rather than replaying the old complaint forever.
+        File(
+          p.join(empty.path, 'cold_test.dart'),
+        ).writeAsStringSync(_scratchSource('cold'));
+        var listed = await runner.list();
+        expect([for (var s in listed) s.name], contains('Scratch'));
+      } finally {
+        await runner.dispose();
+        empty.deleteSync(recursive: true);
+        Directory(outDir).deleteSync(recursive: true);
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 4)),
+  );
 
   test('the entrypoint file is left alone when its content is right', () {
     var root = Directory.systemTemp.createTempSync('scenario_entrypoint');

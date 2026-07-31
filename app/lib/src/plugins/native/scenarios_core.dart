@@ -262,6 +262,7 @@ class ScenariosCore extends PluginCore {
           running: false,
           axes: axes,
           steps: _panelRuns[key]?.steps ?? const [],
+          output: outDir,
           error:
               'The harness ran nothing named "$scenario" in $file — '
               'renamed since this page was opened?',
@@ -275,9 +276,24 @@ class ScenariosCore extends PluginCore {
         outcome: outcome,
         output: outDir,
       );
-      // The superseded run's artifacts. The images already on screen are
-      // decoded, so pulling the files is safe — and keeping them would grow a
-      // directory per click.
+    } catch (error) {
+      // The steps captured before the failure stay: the last one is the
+      // frame just before it died — and its directory is recorded like any
+      // other, or the next run would have nothing to supersede and both
+      // would be stranded.
+      _panelRuns[key] = ScenarioPanelRun(
+        running: false,
+        axes: axes,
+        steps: _panelRuns[key]?.steps ?? const [],
+        output: outDir,
+        error: '$error',
+      );
+    } finally {
+      // The superseded run's artifacts, **whatever this attempt did**: a
+      // failed attempt supersedes the previous one just as a successful one
+      // does, and deleting only on success let a single failure strand two
+      // directories. The images already on screen are decoded, so pulling the
+      // files is safe — and keeping them would grow a directory per click.
       if (previous?.output case var old? when old != outDir) {
         try {
           Directory(old).deleteSync(recursive: true);
@@ -285,16 +301,6 @@ class ScenariosCore extends PluginCore {
           // Somebody looking at it, or already gone — either way not ours.
         }
       }
-    } catch (error) {
-      // The steps captured before the failure stay: the last one is the
-      // frame just before it died.
-      _panelRuns[key] = ScenarioPanelRun(
-        running: false,
-        axes: axes,
-        steps: _panelRuns[key]?.steps ?? const [],
-        error: '$error',
-      );
-    } finally {
       notifyChanged();
       // The run compiled the suite as it is on disk, which is newer truth
       // than the list pane's scan — catch the pane up.

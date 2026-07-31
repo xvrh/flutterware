@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
@@ -75,6 +76,12 @@ class ScenarioRunner {
   Future<void>? _starting;
   var _disposed = false;
 
+  /// Whether the spawned guest is still running. Watched because a tester that
+  /// dies mid-session is otherwise invisible: the VM service simply starts
+  /// refusing calls, and every later run fails with a disposed-connection
+  /// error instead of a fresh process.
+  var _guestAlive = false;
+
   /// The scenario files the running harness was generated from, sorted.
   var _files = const <String>[];
 
@@ -103,7 +110,35 @@ class ScenarioRunner {
   /// Builds everything and leaves a warm guest behind: scan → generated
   /// entrypoint → asset bundle → compile → spawn → connect. Idempotent, and
   /// concurrent callers share the one startup.
-  Future<void> start() => _starting ??= _start();
+  ///
+  /// A **failed** start is forgotten rather than remembered: what it choked on
+  /// — a compile error, an empty directory — is exactly what the user goes and
+  /// fixes, so memoizing the failure would make every later Run replay a
+  /// diagnostic that is no longer true.
+  Future<void> start() => _starting ??= _startOnce();
+
+  Future<void> _startOnce() async {
+    try {
+      await _start();
+    } catch (_) {
+      _starting = null;
+      // Whatever the attempt did spawn before it threw goes with it, or the
+      // retry would leave a compiler (and possibly a tester) behind.
+      await _teardown();
+      rethrow;
+    }
+  }
+
+  /// A live guest, whatever it takes: the one-time cold start, plus a respawn
+  /// when the guest is gone. It can be gone two ways — a [_restartGuest] that
+  /// failed after its teardown but before its compile succeeded, or a process
+  /// that died on its own after startup — and both used to leave every later
+  /// call dereferencing a dead service until somebody found the restart
+  /// action.
+  Future<void> _ensureGuest() async {
+    await start();
+    if (_vm == null || !_guestAlive) await _restartGuest();
+  }
 
   Future<void> _start() async {
     _files = _scanFiles();
@@ -160,6 +195,7 @@ class ScenarioRunner {
   }
 
   Future<void> _spawnGuest(String dill) async {
+    _guestAlive = true;
     var guest = _guest = await Process.start(
       _cache.flutterTester,
       [
@@ -202,10 +238,15 @@ class ScenarioRunner {
     );
     unawaited(
       guest.exitCode.then((code) {
+        // Identity-checked: a later guest's life is not this listener's to
+        // end.
+        if (identical(_guest, guest)) _guestAlive = false;
         if (!ready.isCompleted) {
           ready.completeError(
             StateError('flutter_tester exited with $code before ready'),
           );
+        } else {
+          onLog?.call('[scenarios] the harness exited ($code)');
         }
       }),
     );
@@ -349,8 +390,11 @@ class ScenarioRunner {
     }
     // A changed asset — edited, added to a declared directory, or a pubspec
     // edit — restarts too: the guest holds the bundle directory open, so the
-    // rebuild happens around a fresh process, never under a live one.
-    if (filesChanged || !_assetBundleFresh(_assetsDir!)) {
+    // rebuild happens around a fresh process, never under a live one. So does
+    // a guest that is simply gone (see [_ensureGuest]) — the reload lane below
+    // would talk to a dead service.
+    var guestGone = _vm == null || !_guestAlive;
+    if (filesChanged || guestGone || !_assetBundleFresh(_assetsDir!)) {
       await _restartGuest();
       return;
     }
@@ -386,6 +430,13 @@ class ScenarioRunner {
   /// Kills the guest and starts a fresh one from a full kernel, reusing the
   /// warm compiler and the asset bundle.
   Future<void> _restartGuest() async {
+    // From what is on disk *now*: a restart is the lane that rebuilds the
+    // program, and it is reachable without a preceding refresh (a dead guest,
+    // the restart action), so compiling the previous file set would fail on a
+    // scenario file deleted since — or silently omit one added.
+    _files = _scanFiles();
+    writeHarnessEntrypoint(packageRoot, _files);
+
     await _stepEvents?.cancel();
     _stepEvents = null;
     await _vm?.close();
@@ -420,7 +471,7 @@ class ScenarioRunner {
   }
 
   Future<List<ScenarioListing>> list() => _exclusive(() async {
-    await start();
+    await _ensureGuest();
     var response = await _vm!.requireExtension(
       'ext.flutterware.scenarios.list',
     );
@@ -448,7 +499,7 @@ class ScenarioRunner {
     bool captureRaw = false,
   }) => _exclusive(() async {
     var wasWarm = _starting != null;
-    await start();
+    await _ensureGuest();
     if (wasWarm) await _refresh();
     Directory(outDir).createSync(recursive: true);
     var response = await _vm!.requireExtension(
@@ -468,13 +519,38 @@ class ScenarioRunner {
     return response.cast<String, Object?>();
   });
 
+  /// Kills the guest out from under the runner, so a test can assert that the
+  /// next call notices and respawns rather than talking to a dead service.
+  /// Awaits the exit, so what follows is testing the recovery rather than
+  /// racing the kill.
+  @visibleForTesting
+  Future<void> debugKillGuest() async {
+    if (_guest case var guest?) {
+      guest.kill();
+      await guest.exitCode;
+    }
+  }
+
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    await _teardown();
+  }
+
+  /// Everything this runner spawned, gone. Shared with the failed-start path,
+  /// which has the same job and no business marking the runner disposed.
+  Future<void> _teardown() async {
     await _stepEvents?.cancel();
+    _stepEvents = null;
     await _vm?.close();
-    _guest?.kill();
-    if (_guest != null) await _guest!.exitCode;
-    if (_compiler != null) await _compiler!.shutdown();
+    _vm = null;
+    if (_guest case var guest?) {
+      guest.kill();
+      await guest.exitCode;
+    }
+    _guest = null;
+    _guestAlive = false;
+    if (_compiler case var compiler?) await compiler.shutdown();
+    _compiler = null;
   }
 }

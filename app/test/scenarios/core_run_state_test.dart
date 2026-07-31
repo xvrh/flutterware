@@ -160,6 +160,32 @@ void main() {
     expect(oldDir.existsSync(), isFalse);
   });
 
+  test('a failed run supersedes the previous one too, so nothing is '
+      'stranded', () async {
+    var runner = _FakeRunner();
+    var subject = core(runner: runner);
+    start(subject);
+    var first = await settled(subject);
+    var firstDir = Directory(first.output!)..createSync(recursive: true);
+
+    // The failure records its own directory — otherwise the next run has
+    // nothing to supersede — and takes the previous one with it.
+    await Future<void>.delayed(const Duration(milliseconds: 2));
+    runner.failure = 'the harness died';
+    start(subject);
+    var failed = await settled(subject);
+    expect(failed.error, contains('the harness died'));
+    expect(failed.output, isNotNull);
+    expect(firstDir.existsSync(), isFalse);
+    var failedDir = Directory(failed.output!)..createSync(recursive: true);
+
+    await Future<void>.delayed(const Duration(milliseconds: 2));
+    runner.failure = null;
+    start(subject);
+    await settled(subject);
+    expect(failedDir.existsSync(), isFalse);
+  });
+
   test('starting while running is a no-op', () async {
     var runner = _FakeRunner()..gate = Completer<void>();
     var subject = core(runner: runner);
