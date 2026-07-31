@@ -65,6 +65,16 @@ class Motion {
 
   Object? read(String target, String property) {
     (_offering ? offered : reads).add('$target.$property');
+    return peek(target, property);
+  }
+
+  /// What a property is worth right now, **without recording a read**.
+  ///
+  /// For a host asking what things are currently worth. Going through [read]
+  /// would make the panel's own questions look like wiring, so the answer to
+  /// "which properties reach a widget" would depend on whether anyone was
+  /// looking.
+  Object? peek(String target, String property) {
     var segments = values.segmentsFor(target, property);
     if (segments == null || segments.isEmpty) return null;
     return evaluateSegments(segments, position);

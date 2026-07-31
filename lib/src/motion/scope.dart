@@ -1,7 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-import 'target.dart';
 import 'controller.dart';
+import 'guest.dart';
+import 'target.dart';
 import 'values.dart';
 
 /// Runs a motion over a subtree.
@@ -49,28 +50,44 @@ class MotionScope extends StatefulWidget {
 }
 
 class MotionScopeState extends State<MotionScope>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin
+    implements MotionSurface {
   late Motion _motion;
   late MotionController _controller;
   var _ownsController = false;
+  String? _registryId;
 
   /// What the last build read, for a host that is looking. Kept on the state
   /// rather than the [Motion] so it survives the next `beginBuild`.
+  @override
   Set<String> get reads => _motion.reads;
 
   /// Properties a blanket reader swept — available on a target, but not
   /// evidence that anybody wired them. See [Motion.offered].
+  @override
   Set<String> get offered => _motion.offered;
 
+  @override
   Set<String> get targetsNamed => _motion.named;
 
+  @override
   MotionController get controller => _controller;
+
+  @override
+  MotionValues get motionValues => widget.motion;
+
+  @override
+  Object? peek(String target, String property) =>
+      _motion.peek(target, property);
 
   @override
   void initState() {
     super.initState();
     _motion = Motion(widget.motion);
     _adoptController(widget.controller);
+    // Registered on mount rather than before `runApp`: a motion lives in
+    // somebody's screen, and there is no entrypoint of ours to hang it on.
+    _registryId = MotionRegistry.instance.attach(this);
   }
 
   void _adoptController(MotionController? given) {
@@ -111,6 +128,7 @@ class MotionScopeState extends State<MotionScope>
 
   @override
   void dispose() {
+    if (_registryId case var id?) MotionRegistry.instance.detach(id);
     _releaseController();
     super.dispose();
   }

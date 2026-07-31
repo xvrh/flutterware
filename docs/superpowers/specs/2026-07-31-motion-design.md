@@ -719,3 +719,53 @@ writing the name twice, and `var title = m.target('title')` still writes it
 twice. Only the declaration *site* moved. The duplication is inherent to
 no-codegen plus string keys — the price of blast radius zero, at one local per
 element.
+
+## The transport, shipped — 2026-08-01
+
+`ext.flutterware.motion.{list,seek,transport}` now live in the published
+runtime (`lib/src/motion/guest.dart`) rather than in a spike's stage. The
+bespoke S5 demo is gone and `app/tool/catalog/motion_probe.dart` drives the
+real extensions against an ordinary demo, so what it measures is what a panel
+gets.
+
+**Registered on the first `MotionScope` mount**, not before `runApp` — a motion
+lives in somebody's screen and there is no entrypoint of ours to hang it on. A
+host that connects first sees no extension and waits, which is the late
+registration the catalog's guest already handles.
+
+**`seek` answers after the frame.** A reply means the picture has caught up. A
+scrubber answering earlier would report positions the screen had not reached,
+which looks exactly like a slow guest and is much harder to diagnose.
+
+Measured against `motion_inbox`, one blur layer on screen:
+
+```
+seek RPC (waits for the frame)  median 16.62ms  p90 18.05ms
+seek + capture                  median 16.63ms  p90 18.47ms
+```
+
+One 60Hz frame, and the capture is free against it. The earlier 0.29ms figure
+was the RPC *not* waiting for the frame — the same work, measured before the
+part that matters.
+
+### The three states are three states, and `offered` is half of two of them
+
+The first live run reported **seven of nine visibly animating targets as
+prunable**. `MotionBox` records its sweep as `offered` rather than `reads`, so
+every property it applies has `read: false`, and "tuned and unread" is exactly
+the state that means *nothing uses this*.
+
+The rule the sweep did not break, now stated where it cannot be re-derived
+differently by each consumer:
+
+> **`offered` counts as wiring for a property that is tuned, and does not create
+> a lane for one that is not.**
+
+Those are different questions and `offered` is the right answer to both. The
+guest now sends `state` per property — `wired`, `dead`, `untuned` — decided
+once, in the runtime. The panel and `fw` read it; neither gets to invent it.
+
+The wider lesson is the one the demos already taught in a different costume: the
+states at the ends were right, and it was the case in the middle — a property
+applied by a wrapper rather than by a call site — that was wrong. Both bugs
+were found by looking at real output rather than by reasoning about the model.

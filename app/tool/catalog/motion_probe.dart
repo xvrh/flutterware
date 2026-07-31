@@ -13,25 +13,27 @@ import 'package:flutterware_app/src/embedder/protocol.dart' as ipc;
 import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:path/path.dart' as p;
 
-/// Spike S5 — `docs/superpowers/specs/2026-07-31-motion-design.md`.
+/// The Motion transport, checked against a live guest.
 ///
-/// Two questions, both upstream of the Motion API:
+/// Began as spike S5 with its extensions faked inside a bespoke stage; it now
+/// drives the published ones — `ext.flutterware.motion.list`, `.seek`,
+/// `.transport` — against an ordinary demo, so what it measures is what a panel
+/// will get. The two questions are still the ones the editor rests on:
 ///
-///   1. Does a seek cost one frame? The whole editor rests on scrubbing being
-///      a transport RPC plus a rebuild, never a compile or a reload.
-///   2. Is the guest's clock ours? If a free-running ticker in the stage
-///      advances on wall time, the stage's own implicit animations fight the
-///      playhead and v1 has to say so out loud.
+///   1. Does a seek cost one frame? Scrubbing must be a transport RPC and a
+///      rebuild, never a compile or a reload.
+///   2. Does the guest report the three states — tuned, read, offered — well
+///      enough that a panel can draw lanes off it and nothing else?
 ///
 /// ```sh
-/// cd app && dart run tool/catalog/motion_spike.dart
+/// cd app && dart run tool/catalog/motion_probe.dart [entry-substring]
 /// ```
 Future<void> main(List<String> args) async {
+  var wanted = args.isEmpty ? 'motion_inbox' : args.first;
   var appPackageRoot = p.dirname(
     p.dirname(p.dirname(p.fromUri(Platform.script))),
   );
   var cache = FlutterCache.fromRunningSdk();
-  stdout.writeln('[s5] app $appPackageRoot');
 
   var watch = Stopwatch()..start();
   var (daemon, ready) = await CompilerDaemonClient.connect(
@@ -46,25 +48,24 @@ Future<void> main(List<String> args) async {
     ),
   );
   stdout.writeln(
-    '[s5] daemon ready in ${watch.elapsedMilliseconds}ms '
+    '[motion] daemon ready in ${watch.elapsedMilliseconds}ms '
     '(${ready.reused ? 'attached' : 'started'})',
   );
 
   var ids = [for (var entry in ready.entries) entry.id]..sort();
-  var motion = ids.where((id) => id.contains('motion')).toList();
-  if (motion.isEmpty) {
-    stderr.writeln('[s5] no motion entry found among ${ids.length} entries');
-    stderr.writeln(ids.join('\n'));
+  var matched = ids.where((id) => id.contains(wanted)).toList();
+  if (matched.isEmpty) {
+    stderr.writeln('[motion] nothing matched "$wanted" among ${ids.length}');
     exit(1);
   }
-  var entryId = motion.first;
-  stdout.writeln('[s5] entry $entryId');
+  var entryId = matched.first;
+  stdout.writeln('[motion] entry $entryId');
 
   _Guest? guest;
   try {
     var compiled = await daemon.select(entryId, full: true);
     if (!compiled.ok) {
-      stderr.writeln('[s5] did not compile:\n${compiled.error}');
+      stderr.writeln('[motion] did not compile:\n${compiled.error}');
       exit(1);
     }
     guest = await _Guest.start(
@@ -76,9 +77,9 @@ Future<void> main(List<String> args) async {
     await guest.renderScratchFrame();
 
     await _reportRegistration(guest);
+    await _reportStates(guest);
     await _reportSeekCost(guest);
-    await _reportBuildScope(guest);
-    await _reportClock(guest);
+    await _reportTransport(guest);
   } finally {
     await guest?.close();
     await daemon.close();
@@ -86,14 +87,23 @@ Future<void> main(List<String> args) async {
   exit(0);
 }
 
-Future<Map<String, dynamic>> _probe(_Guest guest) async {
+Future<Map<String, dynamic>> _list(_Guest guest) async {
   var response = await guest.vmService.callExtension(
-    'ext.flutterware.motion.probe',
+    'ext.flutterware.motion.list',
   );
   return (response ?? const {}).cast<String, dynamic>();
 }
 
-/// Did the guest register the transport at all, and does it see the reads?
+Map<String, dynamic> _sole(Map<String, dynamic> listed) {
+  var scopes = (listed['scopes'] as List).cast<Map<String, dynamic>>();
+  if (scopes.length != 1) {
+    throw StateError('expected one mounted scope, got ${scopes.length}');
+  }
+  return scopes.single;
+}
+
+/// A `MotionScope` registers when it mounts, not before `runApp` — so the
+/// question is whether the extensions are there by the time a host looks.
 Future<void> _reportRegistration(_Guest guest) async {
   stdout.writeln('\n=== registration ===');
   var isolate = await guest.vmService.service.getIsolate(
@@ -101,30 +111,58 @@ Future<void> _reportRegistration(_Guest guest) async {
   );
   var rpcs = isolate.extensionRPCs ?? const <String>[];
   for (var wanted in const [
+    'ext.flutterware.motion.list',
     'ext.flutterware.motion.seek',
-    'ext.flutterware.motion.probe',
-    'ext.flutterware.motion.dilate',
+    'ext.flutterware.motion.transport',
   ]) {
     stdout.writeln('${rpcs.contains(wanted) ? 'YES' : 'no '}  $wanted');
   }
 
-  var probe = await _probe(guest);
-  stdout.writeln('targets in the const:      ${probe['targets']}');
-  stdout.writeln('reads, last build:         ${probe['reads']}');
-  stdout.writeln('offered by MotionBox:      ${probe['offered']}');
-  stdout.writeln('builds so far:             ${probe['builds']}');
-
-  // A build that increments its counter but records no reads means the builder
-  // threw. Ask rather than guess.
   var errors = await guest.vmService.callExtension('ext.flutterware.errors');
   var list = errors?['errors'];
-  stdout.writeln(
-    'guest errors:              '
-    '${list is List ? '${list.length}' : errors}',
-  );
+  stdout.writeln('guest errors: ${list is List ? list.length : errors}');
   if (list is List) {
-    for (var error in list.take(3)) {
+    for (var error in list.take(2)) {
       stdout.writeln('  ${jsonEncode(error).replaceAll(r'\n', '\n  ')}');
+    }
+  }
+}
+
+/// Everything a lane is drawn from, printed as the panel will group it.
+Future<void> _reportStates(_Guest guest) async {
+  stdout.writeln('\n=== what the panel gets ===');
+  var scope = _sole(await _list(guest));
+  stdout.writeln(
+    'scope ${scope['id']}  ${scope['durationMs']}ms  '
+    't=${scope['progress']}  playing=${scope['playing']}',
+  );
+  for (var target in (scope['targets'] as List).cast<Map<String, dynamic>>()) {
+    var offered = (target['offered'] as List).length;
+    stdout.writeln(
+      '  ${target['name']}'
+      '${target['named'] == true ? '' : '  (tuned, never named - prunable)'}'
+      '${offered == 0 ? '' : '  +$offered offered'}',
+    );
+    for (var property
+        in (target['properties'] as List).cast<Map<String, dynamic>>()) {
+      var segments = (property['segments'] as List)
+          .cast<Map<String, dynamic>>();
+      // The guest decides this, not us: `offered` counts as wiring for a
+      // tuned property, and the first run of this probe re-derived it wrong.
+      var state =
+          '${property['state']}'
+          '${property['read'] == true ? ' (read)' : ' (MotionBox)'}';
+      var spans = segments
+          .map(
+            (s) =>
+                '[${s['startMs']}-${s['endMs']}ms ${s['curve'] ?? 'custom'}]',
+          )
+          .join(' ');
+      stdout.writeln(
+        '      ${property['name'].toString().padRight(13)} '
+        '${state.padRight(16)} = ${property['value']}'
+        '${spans.isEmpty ? '' : '  $spans'}',
+      );
     }
   }
 }
@@ -142,84 +180,66 @@ Future<void> _reportSeekCost(_Guest guest) async {
     return watch.elapsedMicroseconds;
   }
 
-  // Warm the path — the first RPC on a fresh connection is not the loop.
+  // The first RPC on a fresh connection is not the loop.
   for (var i = 0; i < 5; i++) {
-    await seek(i * 10);
+    await seek(i / 10);
   }
 
   var rpcOnly = <int>[];
   for (var i = 0; i < 60; i++) {
-    rpcOnly.add(await seek((i * 700 / 60).toDouble()));
+    rpcOnly.add(await seek(i / 60));
   }
-  _summarise('seek RPC only          ', rpcOnly);
+  _summarise('seek RPC (waits for the frame)', rpcOnly);
 
-  var withFrame = <int>[];
+  var withCapture = <int>[];
   for (var i = 0; i < 30; i++) {
     var watch = Stopwatch()..start();
     await guest.vmService.callExtension(
       'ext.flutterware.motion.seek',
-      args: {'t': '${i * 700 / 30}'},
+      args: {'t': '${i / 30}'},
     );
     await guest.renderScratchFrame();
-    withFrame.add(watch.elapsedMicroseconds);
+    withCapture.add(watch.elapsedMicroseconds);
   }
-  _summarise('seek + frame + capture ', withFrame);
+  _summarise('seek + capture               ', withCapture);
 
-  var captureOnly = <int>[];
-  for (var i = 0; i < 30; i++) {
-    var watch = Stopwatch()..start();
-    await guest.renderScratchFrame();
-    captureOnly.add(watch.elapsedMicroseconds);
-  }
-  _summarise('frame + capture alone  ', captureOnly);
+  var scope = _sole(await _list(guest));
+  stdout.writeln('landed at t=${scope['progress']} (${scope['ms']}ms)');
 }
 
-/// One seek should dirty the scope and nothing else.
-Future<void> _reportBuildScope(_Guest guest) async {
-  stdout.writeln('\n=== build scope ===');
-  var before = await _probe(guest);
-  for (var i = 0; i < 10; i++) {
-    await guest.vmService.callExtension(
-      'ext.flutterware.motion.seek',
-      args: {'t': '${i * 70}'},
-    );
-    await guest.renderScratchFrame();
-  }
-  var after = await _probe(guest);
-  var builds = (after['builds'] as num) - (before['builds'] as num);
-  stdout.writeln('10 seeks -> $builds builds of the scope');
-  stdout.writeln('t landed at ${after['t']}');
-}
-
-/// S5b. Does anything move when we are not looking?
-Future<void> _reportClock(_Guest guest) async {
-  stdout.writeln('\n=== the guest clock (S5b) ===');
-
-  Future<void> sample(String label) async {
-    var first = await _probe(guest);
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    var second = await _probe(guest);
-    var ticks = (second['freeTicks'] as num) - (first['freeTicks'] as num);
-    var frameDelta =
-        (second['lastFrameMs'] as num) - (first['lastFrameMs'] as num);
-    stdout.writeln(
-      '$label: free-running ticker ${first['freeRunning']} -> '
-      '${second['freeRunning']}, $ticks ticks in 600ms, '
-      'frame stamp advanced ${frameDelta}ms',
-    );
-  }
-
-  await sample('timeDilation 1  ');
+/// `ms` and `t` are two ways of saying one thing, and transport is the third.
+Future<void> _reportTransport(_Guest guest) async {
+  stdout.writeln('\n=== transport ===');
 
   await guest.vmService.callExtension(
-    'ext.flutterware.motion.dilate',
-    args: {'value': '100000'},
+    'ext.flutterware.motion.seek',
+    args: {'ms': '390'},
   );
-  await sample('timeDilation 1e5');
+  var seeked = _sole(await _list(guest));
+  stdout.writeln('seek ms=390 -> ${seeked['ms']}ms, t=${seeked['progress']}');
 
   await guest.vmService.callExtension(
-    'ext.flutterware.motion.dilate',
-    args: {'value': '1'},
+    'ext.flutterware.motion.transport',
+    args: {'verb': 'restart'},
+  );
+  var started = _sole(await _list(guest));
+  await Future<void>.delayed(const Duration(milliseconds: 300));
+  var later = _sole(await _list(guest));
+  stdout.writeln(
+    'restart -> playing=${started['playing']}, '
+    't ${started['progress']} then ${later['progress']} 300ms on',
+  );
+
+  await guest.vmService.callExtension(
+    'ext.flutterware.motion.transport',
+    args: {'verb': 'pause'},
+  );
+  var paused = _sole(await _list(guest));
+  await Future<void>.delayed(const Duration(milliseconds: 200));
+  var stillPaused = _sole(await _list(guest));
+  stdout.writeln(
+    'pause -> playing=${paused['playing']}, '
+    't ${paused['progress']} still ${stillPaused['progress']} 200ms on',
   );
 }
 
@@ -235,7 +255,7 @@ void _summarise(String label, List<int> micros) {
   );
 }
 
-/// The `_GuestSession` dance from `headless_catalog`, reduced to what a spike
+/// The `_GuestSession` dance from `headless_catalog`, reduced to what a probe
 /// needs. Lifted from `inspect_spike.dart`, deliberately unshared.
 class _Guest {
   _Guest._(
