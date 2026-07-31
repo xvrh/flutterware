@@ -191,6 +191,15 @@ class ServerCore extends PluginCore {
           ],
         ),
         PluginAction(
+          'info',
+          'Server info',
+          description:
+              'What a running server published about itself: base URL, '
+              'environment, pages worth opening, connections (passwords '
+              'masked) and config groups.',
+          parameters: [_serverParameter],
+        ),
+        PluginAction(
           'sql',
           'Query statistics',
           description:
@@ -268,6 +277,9 @@ class ServerCore extends PluginCore {
             _intArgument(arguments['top'], 20),
           ),
         };
+      }),
+      'info' => _collect(name, (client) {
+        return {'info': _shapeInfo(ServerInfo.fromEvents(client.received))};
       }),
       _ => super.invoke(actionId),
     };
@@ -407,6 +419,51 @@ class ServerCore extends PluginCore {
     return false;
   }
 
+  /// The published self-description, for eyes that are not the panel's: links
+  /// resolved to absolute URLs where possible, DSN passwords and secret-like
+  /// config values masked — action output ends up in terminals and agent
+  /// transcripts, where there is no reveal click.
+  static Map<String, Object?> _shapeInfo(ServerInfo info) {
+    if (info.isEmpty) {
+      return {
+        'note':
+            'Nothing published. The server can describe itself with '
+            'FlutterwareServer.info (package:flutterware/server.dart).',
+      };
+    }
+    return {
+      if (info.baseUrl != null) 'baseUrl': info.baseUrl,
+      if (info.environment != null) 'environment': info.environment,
+      if (info.links != null)
+        'links': [
+          for (var link in info.links!)
+            {
+              'label': link.label,
+              'url':
+                  resolveLinkUrl(link.url, baseUrl: info.baseUrl) ?? link.url,
+              'description': ?link.description,
+            },
+        ],
+      if (info.connections != null)
+        'connections': [
+          for (var connection in info.connections!)
+            {
+              'kind': connection.kind,
+              'label': ?connection.label,
+              'dsn': maskDsn(connection.dsn),
+            },
+        ],
+      if (info.config != null)
+        'config': {
+          for (var group in info.config!.entries)
+            group.key: {
+              for (var entry in group.value.entries)
+                entry.key: isSecretLikeKey(entry.key) ? '••••' : entry.value,
+            },
+        },
+    };
+  }
+
   /// [sqlStats], flattened for the wire — same aggregation the panel shows.
   static List<Map<String, Object?>> _shapeSqlStats(
     List<ServerEvent> events,
@@ -457,6 +514,10 @@ class TrackedServer {
   List<ServerEvent> get events => List.unmodifiable(_events);
   final _events = <ServerEvent>[];
   var _lastEventId = 0;
+
+  /// The latest self-description this server published — computed from the
+  /// events like [sqlStats], so it survives drops and restarts with them.
+  ServerInfo get info => ServerInfo.fromEvents(_events);
 
   /// Takes ownership of a fresh attachment. Subscribes before draining
   /// [ServerAttachClient.received] so nothing can slip between the two; the

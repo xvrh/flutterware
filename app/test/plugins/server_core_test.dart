@@ -269,6 +269,63 @@ void main() {
     expect(queries.last['query'], 'select ?');
   });
 
+  test('the info action masks secrets and resolves links', () async {
+    inspector.addEvent(infoChannel, {
+      'baseUrl': 'http://localhost:8080',
+      'links': [
+        {'label': 'Health', 'url': '/health'},
+      ],
+      'connections': [
+        {'kind': 'postgres', 'dsn': 'postgres://app:s3cret@localhost/app'},
+      ],
+      'config': {
+        'Auth': {'apiKey': 'real-key', 'timeoutMs': 250},
+      },
+    });
+    // A later publish updates one section, leaving the rest.
+    inspector.addEvent(infoChannel, {'environment': 'dev'});
+
+    await core.computeAll();
+    var result = (await core.invoke('info'))! as Map<String, Object?>;
+    var servers = result['servers']! as List;
+    var info = ((servers.single as Map)['info']! as Map)
+        .cast<String, Object?>();
+
+    expect(info['baseUrl'], 'http://localhost:8080');
+    expect(info['environment'], 'dev', reason: 'sections merge across events');
+    var link = ((info['links']! as List).single as Map).cast<String, Object?>();
+    expect(
+      link['url'],
+      'http://localhost:8080/health',
+      reason: 'relative links leave here absolute',
+    );
+    var connection = ((info['connections']! as List).single as Map)
+        .cast<String, Object?>();
+    expect(connection['dsn'], 'postgres://app:••••@localhost/app');
+    var auth = (((info['config']! as Map)['Auth']!) as Map)
+        .cast<String, Object?>();
+    expect(auth['apiKey'], '••••');
+    expect(auth['timeoutMs'], 250, reason: 'only secret-like keys mask');
+  });
+
+  test('the info action says so when nothing was published', () async {
+    inspector.addEvent('log', {'message': 'no info here'});
+    await core.computeAll();
+    var result = (await core.invoke('info'))! as Map<String, Object?>;
+    var servers = result['servers']! as List;
+    var info = ((servers.single as Map)['info']! as Map)
+        .cast<String, Object?>();
+    expect(info['note'], contains('FlutterwareServer.info'));
+  });
+
+  test('a tracked server exposes the reduced info to the panel', () async {
+    inspector.addEvent(infoChannel, {'environment': 'staging'});
+    await core.computeAll();
+    core.track();
+    await _until(() => core.servers.single.events.isNotEmpty);
+    expect(core.servers.single.info.environment, 'staging');
+  });
+
   test('details are fetched lazily through the tracked server', () async {
     inspector.addEvent(
       'http',

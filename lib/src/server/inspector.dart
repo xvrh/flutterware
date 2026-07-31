@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:io' as io show pid;
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
+import 'info.dart';
 import 'protocol.dart';
 
 /// What a command handler receives and returns. A returned map becomes the
@@ -69,6 +70,19 @@ class FlutterwareServer {
     Map<String, Object?>? details,
   }) {
     _active?.addEvent(channel, payload, rid: _rid(), details: details);
+  }
+
+  /// Publishes the server's self-description — base URL, environment, links,
+  /// connections, config. Call it once startup knows its facts (after `serve`
+  /// returns, so the port is real); call it again any time to update only the
+  /// sections the new [value] names ([ServerInfo.fromEvents] merges per
+  /// section on the attacher side).
+  ///
+  /// Like every primitive, this activates the inspector on first use and is a
+  /// no-op when the gates say no — an `info` call is safe in code that also
+  /// runs in production.
+  static void info(ServerInfo value) {
+    event(infoChannel, value.toJson());
   }
 
   /// Runs [body] and reports it as a timed event on [channel] — duration in

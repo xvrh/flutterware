@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutterware/server.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../address/address_scope.dart';
 import '../../ui/design/tokens.dart';
@@ -100,6 +102,7 @@ class _ServerPanelState extends State<_ServerPanel> {
                   .firstOrNull;
 
         var view = place?.view ?? ServerViewKind.overview;
+        var info = server.info;
         // The rail already lists every server (report.children) — repeating
         // that here for one healthy server is noise. The bar appears only
         // when it says something the rail row beside it does not: several
@@ -110,7 +113,7 @@ class _ServerPanelState extends State<_ServerPanel> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (showBar) _ServerBar(servers, shown: server),
-            _ViewTabs(server: server, view: view),
+            _ViewTabs(server: server, view: view, info: info),
             const Divider(height: 1),
             Expanded(
               child: switch (view) {
@@ -121,6 +124,7 @@ class _ServerPanelState extends State<_ServerPanel> {
                           server: server,
                           queryKey: place!.queryKey!,
                         ),
+                ServerViewKind.info => _InfoView(info: info),
                 ServerViewKind.events => _EventTimeline(events),
                 // No selection: the request list has the whole width. The raw
                 // stream lives under Events, not behind an unselected detail.
@@ -232,18 +236,26 @@ class _ServerBar extends StatelessWidget {
   }
 }
 
-/// Requests | SQL — which pane of the shown server, written into the address.
+/// Requests | SQL | Info | Events — which pane of the shown server, written
+/// into the address. The right edge promotes what the server said about
+/// itself: the environment chip and the base URL, visible whichever pane is
+/// open, because "which server, pointed where" is context for all of them.
 class _ViewTabs extends StatelessWidget {
-  const _ViewTabs({required this.server, required this.view});
+  const _ViewTabs({
+    required this.server,
+    required this.view,
+    required this.info,
+  });
 
   final TrackedServer server;
   final ServerViewKind view;
+  final ServerInfo info;
 
   @override
   Widget build(BuildContext context) {
     var name = server.handle.name;
     return Padding(
-      padding: const EdgeInsets.only(left: 8, bottom: 4),
+      padding: const EdgeInsets.only(left: 8, right: 12, bottom: 4),
       child: Row(
         children: [
           for (var (label, segments, selected) in [
@@ -253,6 +265,7 @@ class _ViewTabs extends StatelessWidget {
               view == ServerViewKind.overview || view == ServerViewKind.request,
             ),
             ('SQL', sqlSegments(name), view == ServerViewKind.sql),
+            ('Info', infoSegments(name), view == ServerViewKind.info),
             ('Events', eventsSegments(name), view == ServerViewKind.events),
           ])
             Padding(
@@ -270,7 +283,70 @@ class _ViewTabs extends StatelessWidget {
                 child: Text(label),
               ),
             ),
+          const Spacer(),
+          if (info.environment != null) ...[
+            _EnvironmentChip(info.environment!),
+            const SizedBox(width: 8),
+          ],
+          if (info.baseUrl != null) _UrlLink(info.baseUrl!),
         ],
+      ),
+    );
+  }
+}
+
+/// The declared environment, colored by how much it should worry you: quiet
+/// for dev-shaped names, loud for production-shaped ones — an inspector
+/// forced on with `FW_SERVER_INSPECT=1` should say where it is pointed.
+class _EnvironmentChip extends StatelessWidget {
+  const _EnvironmentChip(this.environment);
+
+  final String environment;
+
+  @override
+  Widget build(BuildContext context) {
+    var lower = environment.toLowerCase();
+    var color = const {'prod', 'production', 'live'}.contains(lower)
+        ? Colors.red
+        : const {'dev', 'development', 'local', 'debug', 'test'}.contains(lower)
+        ? Colors.grey
+        : Colors.orange;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        environment,
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall!.copyWith(color: color.shade700),
+      ),
+    );
+  }
+}
+
+/// An absolute URL as a clickable piece of text.
+class _UrlLink extends StatelessWidget {
+  const _UrlLink(this.url, {this.label});
+
+  final String url;
+
+  /// Shown instead of the URL itself when given.
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    return Tappable.builder(
+      onTap: () => launchUrl(Uri.parse(url)),
+      builder: (context, hovered) => Text(
+        label ?? url,
+        style: _mono(context).copyWith(
+          color: theme.colorScheme.primary,
+          decoration: hovered ? TextDecoration.underline : null,
+        ),
       ),
     );
   }
@@ -1286,6 +1362,319 @@ class _Waterfall extends StatelessWidget {
 /// The per-server flat timeline — what the panel shows when no request is
 /// selected, so events outside any request (startup logs, background work)
 /// stay visible.
+/// The self-description pane — what the server published with
+/// `FlutterwareServer.info`, made actionable: links open in the browser,
+/// DSN passwords and secret-like config values are masked until clicked,
+/// copy always copies the real value.
+class _InfoView extends StatefulWidget {
+  const _InfoView({required this.info});
+
+  final ServerInfo info;
+
+  @override
+  State<_InfoView> createState() => _InfoViewState();
+}
+
+class _InfoViewState extends State<_InfoView> {
+  /// What the user chose to see in the clear — masking guards screen shares,
+  /// so it yields to one deliberate click, per value.
+  final _revealed = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    var info = widget.info;
+    if (info.isEmpty) return const _NoInfoHint();
+    var links = info.links ?? const [];
+    var connections = info.connections ?? const [];
+    var config = info.config ?? const {};
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (links.isNotEmpty) ...[
+          Text('Links', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          for (var link in links) _LinkRow(link, baseUrl: info.baseUrl),
+          const SizedBox(height: 16),
+        ],
+        if (connections.isNotEmpty) ...[
+          Text('Connections', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          for (var (index, connection) in connections.indexed)
+            _connectionRow(context, 'conn-$index', connection),
+          const SizedBox(height: 16),
+        ],
+        for (var group in config.entries) ...[
+          Text(group.key, style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          for (var entry in group.value.entries)
+            _configRow(context, '${group.key}/${entry.key}', entry),
+          const SizedBox(height: 16),
+        ],
+      ],
+    );
+  }
+
+  Widget _connectionRow(
+    BuildContext context,
+    String key,
+    ServerConnection connection,
+  ) {
+    var masked = maskDsn(connection.dsn);
+    var secret = masked != connection.dsn;
+    var revealed = _revealed.contains(key);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          _KindChip(connection.kind),
+          const SizedBox(width: 8),
+          if (connection.label != null) ...[
+            Text(
+              connection.label!,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: SelectableText(
+              revealed ? connection.dsn : masked,
+              maxLines: 1,
+              style: _mono(context),
+            ),
+          ),
+          if (secret)
+            _SmallIconButton(
+              revealed ? Icons.visibility_off : Icons.visibility,
+              tooltip: revealed ? 'Mask' : 'Reveal',
+              onTap: () => setState(() {
+                revealed ? _revealed.remove(key) : _revealed.add(key);
+              }),
+            ),
+          _SmallIconButton(
+            Icons.copy,
+            tooltip: 'Copy',
+            onTap: () => Clipboard.setData(ClipboardData(text: connection.dsn)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _configRow(
+    BuildContext context,
+    String key,
+    MapEntry<String, Object?> entry,
+  ) {
+    var value = entry.value;
+    var secret = isSecretLikeKey(entry.key);
+    var revealed = _revealed.contains(key);
+    if (secret && !revealed) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: Row(
+          children: [
+            Text('${entry.key}: ••••', style: _mono(context)),
+            _SmallIconButton(
+              Icons.visibility,
+              tooltip: 'Reveal',
+              onTap: () => setState(() => _revealed.add(key)),
+            ),
+          ],
+        ),
+      );
+    }
+    if (value is Map || value is List) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${entry.key}:', style: _mono(context)),
+            Padding(
+              padding: const EdgeInsets.only(left: 16),
+              child: JsonView(
+                data: value,
+                showToolbar: false,
+                searchable: false,
+                maxHeight: 240,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        children: [
+          Flexible(
+            child: SelectableText(
+              '${entry.key}: $value',
+              maxLines: 1,
+              style: _mono(context),
+            ),
+          ),
+          if (secret)
+            _SmallIconButton(
+              Icons.visibility_off,
+              tooltip: 'Mask',
+              onTap: () => setState(() => _revealed.remove(key)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One published link: the label opens it, the resolved URL sits beside it.
+/// A relative URL with no base to resolve against renders as plain text —
+/// an honest "the server did not say where it listens".
+class _LinkRow extends StatelessWidget {
+  const _LinkRow(this.link, {required this.baseUrl});
+
+  final ServerLink link;
+  final String? baseUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    var resolved = resolveLinkUrl(link.url, baseUrl: baseUrl);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          resolved == null
+              ? Text(link.label, style: theme.textTheme.bodySmall)
+              : _UrlLink(resolved, label: link.label),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              resolved ?? link.url,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _mono(context, color: theme.hintColor),
+            ),
+          ),
+          if (link.description != null) ...[
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                link.description!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall!.copyWith(
+                  color: theme.hintColor,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A connection's kind — `postgres`, `redis` — as a colored tag. A word the
+/// GUI does not need to understand, per [ServerConnection.kind].
+class _KindChip extends StatelessWidget {
+  const _KindChip(this.kind);
+
+  final String kind;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: Colors.teal.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        kind,
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall!.copyWith(color: Colors.teal.shade700),
+      ),
+    );
+  }
+}
+
+class _SmallIconButton extends StatelessWidget {
+  const _SmallIconButton(
+    this.icon, {
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Tooltip(
+        message: tooltip,
+        child: Tappable.builder(
+          onTap: onTap,
+          builder: (context, hovered) => Icon(
+            icon,
+            size: 14,
+            color: hovered
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).hintColor,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoInfoHint extends StatelessWidget {
+  const _NoInfoHint();
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'This server has not published anything about itself.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'It can, in one call after `serve` returns:',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.5,
+              ),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: SelectableText(
+              'FlutterwareServer.info(ServerInfo(\n'
+              "  baseUrl: 'http://localhost:\$port',\n"
+              "  environment: 'dev',\n"
+              "  links: [ServerLink('Health', '/health')],\n"
+              '));',
+              style: _mono(context),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EventTimeline extends StatelessWidget {
   const _EventTimeline(this.events);
 
