@@ -114,7 +114,27 @@ void main() {
   late StreamController<WatchEvent> events;
   late ShellController shell;
 
+  /// Saves and waits for the reload it causes to land. Waiting on the recorded
+  /// load rather than the clock: a fixed delay was a bet on the CI runner's
+  /// timer latency, and it lost.
   Future<void> save(String contents) async {
+    var worktree = shell.selected!;
+    var before = shell.lastLoad(worktree);
+    config.writeAsStringSync(contents);
+    events.add(WatchEvent(ChangeType.MODIFY, config.path));
+    var deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (identical(shell.lastLoad(worktree), before)) {
+      if (DateTime.now().isAfter(deadline)) {
+        fail('no reload landed within 10s of the save');
+      }
+      await Future<void>.delayed(_debounce);
+    }
+  }
+
+  /// For saves that must cause no load at all. There is nothing to wait on, so
+  /// give the debounce ample room to have fired if it was going to. Slowness
+  /// here can only produce a false pass, not a flake.
+  Future<void> saveExpectingNothing(String contents) async {
     config.writeAsStringSync(contents);
     events.add(WatchEvent(ChangeType.MODIFY, config.path));
     await Future<void>.delayed(_debounce * 6);
@@ -180,7 +200,7 @@ void main() {
     var worktree = shell.selected!;
     var before = shell.lastLoad(worktree);
 
-    await save(_one);
+    await saveExpectingNothing(_one);
 
     expect(
       identical(shell.lastLoad(worktree), before),
@@ -275,7 +295,7 @@ void main() {
 
     expect(shell.watchingFor(worktree), isNull);
     // And a save afterwards must not resurrect anything.
-    await save(_two);
+    await saveExpectingNothing(_two);
     expect(shell.sessionFor(worktree), isNull);
     expect(shell.isOpen(worktree), isFalse);
   });
