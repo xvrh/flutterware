@@ -34,14 +34,20 @@ class MotionBox extends StatelessWidget {
   const MotionBox(
     this.anchor, {
     super.key,
-    this.alignment = Alignment.center,
+    this.origin = Alignment.center,
     required this.child,
   });
 
   final MotionAnchor anchor;
 
-  /// The origin `rotate` and the scales work about.
-  final AlignmentGeometry alignment;
+  /// The point `rotate` and the scales work about.
+  ///
+  /// Named `origin` rather than `alignment` because *anchor* already means
+  /// exactly this everywhere else — `MenuAnchor`, `targetAnchor:`,
+  /// `followerAnchor:`, and every use of the word elsewhere in flutterware, all
+  /// of which are an `Alignment`. A parameter that is the anchor point of a
+  /// thing called an anchor is one sentence nobody should have to read twice.
+  final AlignmentGeometry origin;
 
   final Widget child;
 
@@ -94,7 +100,7 @@ class MotionBox extends StatelessWidget {
         ..scaleByDouble(x, y, 1, 1);
       result = Transform(
         transform: transform,
-        alignment: alignment,
+        alignment: origin,
         child: result,
       );
     }

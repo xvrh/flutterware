@@ -90,7 +90,7 @@ class _InboxState extends State<_Inbox> {
                           children: [
                             MotionBox(
                               header,
-                              alignment: Alignment.centerLeft,
+                              origin: Alignment.centerLeft,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [

@@ -631,3 +631,42 @@ Three fixes that no test would have produced, and one that no *still* would have
 The third is worth keeping in mind when the panel is built. A filmstrip is not a
 nicety on top of the playhead — it is the view that would have caught this
 without anybody thinking to look.
+
+## The word `anchor` — evaluated 2026-07-31, after the fact
+
+The seven variants above evaluated the **shape** exhaustively. None of them
+evaluated the **word**, which arrived in variant 7 and survived by inertia. Two
+things were checked when that was noticed.
+
+**`m.<method>('name')` versus `m['name']`.** The subscript form was proposed and
+is not recorded above; it loses on discovery. Someone who has just typed
+`MotionScope(builder: (m) {` learns the entire vocabulary from `m.` and
+autocomplete, and `m[` offers nothing. The scan also wants a string literal at a
+named call, which the subscript would give but less legibly. Shape confirmed.
+
+**`anchor` itself has a real collision.** In Flutter — `MenuAnchor`,
+`targetAnchor:`, `followerAnchor:`, `DragAnchorStrategy` — and in every
+pre-existing use of the word in flutterware, *anchor* means **a positioning
+point**, and its type is `Alignment`. Ours is the moving subject, not a fixed
+point, so the word names the wrong half.
+
+Kept anyway, because every word that reads better collides harder: `Layer` and
+`Element` are real Flutter classes, `node` is render/semantics vocabulary, and
+`target` appears in the very same `targetAnchor` API. There is no `Anchor`
+*class*, so the collision is connotative rather than a type clash.
+
+One concrete fix, since the sore spot was inside our own API:
+**`MotionBox.alignment` is now `MotionBox.origin`.** A parameter that is the
+anchor point of a thing called an anchor is a sentence nobody should have to
+read twice.
+
+The live alternative, if the word is ever revisited, is **`m.actor('title')`** —
+absent from Flutter and from this repo, consistent with the "stage" vocabulary
+the plugin already uses, and it says *the thing that moves*. The cost rises once
+the syntactic scan matches `m.anchor('…')` as a literal.
+
+And a correction to variant 7's stated reason: it was rejected partly because
+"the name is written twice", and `var title = m.anchor('title')` still writes it
+twice. Only the declaration *site* moved. The duplication is inherent to
+no-codegen plus string keys — the price of blast radius zero, and it costs one
+local per element.
