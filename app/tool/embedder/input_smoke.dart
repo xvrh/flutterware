@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:async/async.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart';
+import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:path/path.dart' as p;
 
 /// Drives an already-built guest (see `run.dart` / the live-bridge test for
@@ -18,12 +19,14 @@ Future<void> main() async {
   var assetsDir = p.join(buildDir, 'assets');
   var icuData = FlutterCache.fromRunningSdk().icuData;
 
-  // Not under the build dir: a worktree's absolute path overflows the 104-byte
-  // unix socket cap.
-  var socketPath = p.join(
-    Directory.systemTemp.createTempSync('fw-smoke').path,
-    's.sock',
+  // Not under the build directory: a unix socket path is capped at 104 bytes
+  // and a worktree spends most of that. Keyed by pid so concurrent runs don't
+  // unlink each other's socket — the same shape as `run.dart`.
+  var socketPath = checkSocketPath(
+    p.join(flutterwareRunDir(), 'smoke-$pid.sock'),
   );
+  var socketFile = File(socketPath);
+  if (socketFile.existsSync()) socketFile.deleteSync();
   var server = await ServerSocket.bind(
     InternetAddress(socketPath, type: InternetAddressType.unix),
     0,
