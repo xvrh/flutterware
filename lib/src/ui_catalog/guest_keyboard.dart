@@ -51,14 +51,10 @@ class GuestKeyboard {
     // itself, so it remains the only way to reach the focus tree. When the
     // framework finally retires it, `FocusManager` will have moved to a
     // `HardwareKeyboard` handler and the line above will already be enough.
-    // ignore: deprecated_member_use
-    var messageHandler = ServicesBinding
-        .instance
-        .keyEventManager
-        // ignore: deprecated_member_use
-        .keyMessageHandler;
+    // ignore_for_file: deprecated_member_use
+    var messageHandler =
+        ServicesBinding.instance.keyEventManager.keyMessageHandler;
     if (messageHandler != null) {
-      // ignore: deprecated_member_use
       handled = messageHandler(KeyMessage([event], null)) || handled;
     }
     return handled;

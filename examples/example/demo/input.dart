@@ -67,6 +67,7 @@ class _EchoFieldState extends State<_EchoField> {
         onChanged: (_) => setState(() {}),
       ),
       Text('echo: ${_controller.text}'),
+      Text('sel: ${_controller.selection.start},${_controller.selection.end}'),
     ],
   );
 }

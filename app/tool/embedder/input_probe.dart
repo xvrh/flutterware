@@ -120,8 +120,9 @@ Future<void> _withGuest(
       .id;
   stdout.writeln('[probe] entry: $entry');
   var compiled = await daemon.select(entry, full: true);
-  if (!compiled.ok)
+  if (!compiled.ok) {
     throw StateError('$entry did not compile: ${compiled.error}');
+  }
 
   var guest = await _Guest.start(ready);
   try {
