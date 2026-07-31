@@ -576,3 +576,58 @@ because `timeDilation` freezes them.
 
 Nothing found argues against the shape. The next real decision is scope, not
 feasibility.
+
+## The demos — written 2026-07-31, against the published runtime
+
+Two catalog entries under `Motion`, deliberately split so that between them they
+exercise the whole API:
+
+- **`motion_inbox.dart`** — a staggered entrance. Six anchors, every element in a
+  `MotionBox`, no transform maths anywhere. The `MotionBox` half.
+- **`motion_player.dart`** — a card that blooms into a player. Seven anchors,
+  twenty tuned properties, **not one `MotionBox`**: `art.width` on a `SizedBox`,
+  `sheet.color` on a `BoxDecoration`, `reveal.progress` on an
+  `Align.heightFactor`. The call-site half.
+
+Each is a pair — `X.dart` hand-written, `X.motion.dart` holding nothing but
+numbers. Delete the values file and the screen still builds, still lays out, and
+simply does not move. That is the blast-radius-zero claim, demonstrated rather
+than asserted.
+
+### The `t` knob is the panel, early
+
+Both demos drive their playhead from a `parameters.double('t', …)` knob:
+
+```dart
+_controller.progress = context.uiCatalog.parameters.double('t', 1, min: 0, max: 1);
+```
+
+One line, and it buys three things before the panel exists. You can scrub in the
+catalog today. A capture with `knobs: {'t': '0.45'}` is a *frame of an
+animation*, headlessly — which is the whole of what `filmstrip` will be. And it
+is the only proof anybody needs that a motion really is a pure function of `t`,
+because nothing else is feeding it.
+
+`app/tool/catalog/motion_shots.dart` is that loop with the argument parsing left
+out: `auditAll` to find the entries, then one capture per `t`. It is how both
+demos were actually looked at, and it is the shape the plugin's `filmstrip`
+action should take.
+
+### What looking at them changed
+
+Three fixes that no test would have produced, and one that no *still* would have:
+
+1. The player rendered with **yellow-underlined text** — a `ColoredBox` where a
+   `Material` was needed, which is the failure `shell.dart` already carries a
+   note about. Nothing in the code said so; the picture did.
+2. The player's dark ground covered only the top third: a `Stack` sizing to its
+   largest child rather than the screen.
+3. `reveal.opacity` started 140ms behind `reveal.progress`, so a playhead parked
+   mid-run showed **an empty box opening**. The ends were both fine. This is the
+   argument for a scrubber in one sentence: a two-state animation is only ever
+   wrong in the middle, and the middle is the part you cannot reach by running
+   it.
+
+The third is worth keeping in mind when the panel is built. A filmstrip is not a
+nicety on top of the playhead — it is the view that would have caught this
+without anybody thinking to look.
