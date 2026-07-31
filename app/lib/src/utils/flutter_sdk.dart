@@ -1,5 +1,12 @@
 import 'dart:io';
+
+// The frozen name of the link `init` writes, taken from the walker rather than
+// spelled a second time here.
+// ignore: implementation_imports
+import 'package:flutterware/src/walker.dart' show sdkLinkPath;
 import 'package:path/path.dart' as p;
+
+import '../constants.dart';
 
 class FlutterSdkPath {
   final String root;
@@ -50,43 +57,86 @@ class FlutterSdkPath {
     return File(sdk.flutter).existsSync() && File(sdk.dart).existsSync();
   }
 
-  static Future<Set<FlutterSdkPath>> findSdks() async {
+  /// Every SDK this project could run under, best answer first: callers that
+  /// need one take it, and the GUI offers the set.
+  ///
+  /// **Recorded before discovered, and the project before the machine.** A
+  /// recorded answer was written by something that was already running under
+  /// the right SDK; everything below it is a convention that may not hold.
+  ///
+  /// 1. [dartExecutableEnvironmentKey], set by the launcher — the same "record,
+  ///    do not discover" rule `.flutterware/sdk` follows, and the only source
+  ///    that survives `fw` being an AOT binary.
+  /// 2. `.flutterware/sdk`, what `init` wrote down.
+  /// 3. `.fvm/flutter_sdk`, for a project that pins with fvm and has not run
+  ///    flutterware yet.
+  /// 4. The SDK running us: `fvm dart app/bin/fw.dart` resolves to
+  ///    `<flutter>/bin/cache/dart-sdk/bin/dart`, and walking up from it finds
+  ///    the Flutter root three levels above. Null when the running executable
+  ///    is not inside an SDK — the AOT `fw` and the GUI, where it is the app.
+  /// 5. `FLUTTER_HOME`, which describes the machine rather than this project,
+  ///    so it answers only when nothing above it did.
+  ///
+  /// Both [from] and [environment] exist so a test can ask about a directory
+  /// and an environment it built, rather than the one it happens to run in.
+  static Future<Set<FlutterSdkPath>> findSdks({
+    Directory? from,
+    Map<String, String>? environment,
+  }) async {
+    var env = environment ?? Platform.environment;
+    var start = from ?? Directory.current;
     var sdks = <FlutterSdkPath?>[];
 
-    var homeEnvironment = Platform.environment['FLUTTER_HOME'];
-    if (homeEnvironment != null && homeEnvironment.isNotEmpty) {
-      sdks.add(await tryFind(homeEnvironment));
+    var launcherDart = env[dartExecutableEnvironmentKey];
+    if (launcherDart != null && launcherDart.isNotEmpty) {
+      sdks.add(await tryFind(launcherDart));
     }
 
-    // The SDK running us, which for `fw` is the one the user picked: `fvm dart
-    // bin/fw.dart` resolves to `<flutter>/bin/cache/dart-sdk/bin/dart`, and
-    // walking up from it finds the Flutter root three levels above.
-    //
-    // Without this, `fw` in this repo finds nothing at all — [_findProjectRoot]
-    // looks for a `flutter_version` file, and this project pins with `.fvmrc`.
-    // Null when the running executable is not inside a Flutter SDK, which is
-    // the case inside the GUI, where the executable is the app.
+    sdks.add(await _findAbove(start, sdkLinkPath));
+    sdks.add(await _findAbove(start, p.join('.fvm', 'flutter_sdk')));
+
     sdks.add(await tryFind(Platform.resolvedExecutable));
 
-    var projectRoot = _findProjectRoot();
-    if (projectRoot != null) {
-      sdks.add(await tryFind(p.join(projectRoot.path, '.fvm/flutter_sdk')));
+    var homeEnvironment = env['FLUTTER_HOME'];
+    if (homeEnvironment != null && homeEnvironment.isNotEmpty) {
+      sdks.add(await tryFind(homeEnvironment));
     }
 
     return sdks.nonNulls.toSet();
   }
 
-  static Directory? _findProjectRoot() {
-    var dir = Directory.current;
-    while (dir.parent.path != dir.path) {
-      var rootFile = File(p.join(dir.path, 'flutter_version'));
-      if (rootFile.existsSync()) {
-        return dir;
-      }
-
-      dir = dir.parent;
+  /// The nearest `<ancestor>/[relative]` that is an SDK, walking up from
+  /// [start].
+  ///
+  /// Walking rather than testing one directory because neither pointer is
+  /// written where a command is typed: both sit at the repo root, and `fw` in
+  /// `app/` or in `examples/example` has to find them from there.
+  ///
+  /// Unlike [tryFind] this does not walk up *from the pointer*. A pointer
+  /// either leads to an SDK or it does not; climbing out of a stale one until
+  /// some ancestor happens to look like an SDK answers a question nobody asked.
+  /// The link is resolved, so the same SDK reached through here and through
+  /// `FLUTTER_HOME` is one entry rather than two.
+  static Future<FlutterSdkPath?> _findAbove(
+    Directory start,
+    String relative,
+  ) async {
+    var dir = start.absolute;
+    while (true) {
+      var candidate = FlutterSdkPath(_resolve(p.join(dir.path, relative)));
+      if (await isValid(candidate)) return candidate;
+      var parent = dir.parent;
+      if (parent.path == dir.path) return null;
+      dir = parent;
     }
-    return null;
+  }
+
+  static String _resolve(String path) {
+    try {
+      return Directory(path).resolveSymbolicLinksSync();
+    } on FileSystemException {
+      return path;
+    }
   }
 }
 
