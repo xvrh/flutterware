@@ -14,6 +14,7 @@ import 'package:flutterware_app/src/scenarios/axes.dart';
 import 'package:flutterware_app/src/scenarios/runner.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
+import 'package:flutterware_app/src/ui/matched_text.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 
@@ -343,6 +344,130 @@ void main() {
     ]);
     await tester.pump();
     expect(runner.runs, 1);
+  });
+
+  // A suite is a list you scan with your eyes until it isn't. The filter
+  // narrows it on both of the things a row is known by — its own name and the
+  // file it lives in — and lights what answered.
+  testWidgets('the filter narrows on name and on file', (tester) async {
+    var core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: Worktree(path: root.path),
+        workspace: Workspace(
+          root: root.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    core.debugInstallRunner('.', _FakeRunner());
+    var plugin = ScenariosPlugin(core);
+
+    Directory('${root.path}/test/scenarios').createSync(recursive: true);
+    File('${root.path}/test/scenarios/checkout_test.dart').writeAsStringSync('''
+void main() {
+  scenario('Pays with a card', () {});
+  scenario('Abandons the basket', () {});
+}
+''');
+    File('${root.path}/test/scenarios/login_test.dart').writeAsStringSync('''
+void main() {
+  scenario('Signs in with email', () {});
+}
+''');
+
+    await tester.runAsync(() async {
+      core.track('.');
+      while (core.scanResultFor('.') == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        // The field is a `TextField`, which wants the Material the shell puts
+        // under every panel.
+        home: Scaffold(
+          body: AddressRoot(
+            address: ValueNotifier(
+              Address(worktree: 'wt', plugin: scenariosPluginId),
+            ),
+            onChanged: (_) {},
+            child: Builder(builder: plugin.buildPanel),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Pays with a card'), findsOneWidget);
+    expect(find.text('Abandons the basket'), findsOneWidget);
+    expect(find.text('Signs in with email'), findsOneWidget);
+
+    // A scenario's own name keeps that row and drops the rest — including the
+    // file heading of a group that lost every row.
+    await tester.enterText(find.byType(TextField), 'card');
+    await tester.pump();
+    expect(find.text('Pays with a card', findRichText: true), findsOneWidget);
+    expect(find.text('Abandons the basket'), findsNothing);
+    expect(find.text('Signs in with email'), findsNothing);
+    expect(find.text('login_test.dart'), findsNothing);
+
+    // Fuzzy, not substring: `pwc` is a subsequence of the name and no
+    // substring search would keep the row at all.
+    await tester.enterText(find.byType(TextField), 'pwc');
+    await tester.pump();
+    expect(find.text('Pays with a card', findRichText: true), findsOneWidget);
+    var name = tester.widget<Text>(
+      find
+          .descendant(of: find.byType(MatchedText), matching: find.byType(Text))
+          .last,
+    );
+    var spans = (name.textSpan! as TextSpan).children!.cast<TextSpan>();
+    expect(
+      [
+        for (var span in spans)
+          if (span.style?.backgroundColor != null) span.text,
+      ],
+      ['P', 'w', 'c'],
+    );
+
+    // The file answers for everything in it: nothing here is called `login`,
+    // and the whole file stays — with the heading lit, since that is where the
+    // reason lives.
+    await tester.enterText(find.byType(TextField), 'login');
+    await tester.pump();
+    expect(find.text('Signs in with email'), findsOneWidget);
+    expect(find.text('Pays with a card'), findsNothing);
+    var heading = tester.widget<Text>(
+      find
+          .descendant(of: find.byType(MatchedText), matching: find.byType(Text))
+          .first,
+    );
+    var headingSpans = (heading.textSpan! as TextSpan).children!
+        .cast<TextSpan>();
+    expect(
+      [
+        for (var span in headingSpans)
+          if (span.style?.backgroundColor != null) span.text,
+      ].join(),
+      'login',
+    );
+
+    // And a query nothing answers says so rather than showing an empty box.
+    await tester.enterText(find.byType(TextField), 'zzz');
+    await tester.pump();
+    expect(find.text('No scenario matches “zzz”.'), findsOneWidget);
   });
 
   // The action refuses to overwrite, and the dialog stays open saying so —

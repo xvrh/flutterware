@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterware/plugins.dart' show fuzzyMatch;
 
 import '../../address/address_scope.dart';
 import '../../catalog/devices.dart';
@@ -12,6 +13,7 @@ import '../../scenarios/flow_view.dart';
 import '../../scenarios/new_scenario_dialog.dart';
 import '../../scenarios/step_page.dart';
 import '../../ui/empty_state.dart';
+import '../../ui/matched_text.dart';
 import '../../ui/menu.dart';
 import '../../ui/popover.dart';
 import '../../ui/popover_menu.dart';
@@ -158,7 +160,7 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
 /// The master pane: every scenario of the package, grouped by file, the
 /// selected one highlighted. Always visible — running a scenario never hides
 /// where you are in the suite.
-class _ScenarioListPane extends StatelessWidget {
+class _ScenarioListPane extends StatefulWidget {
   const _ScenarioListPane(
     this.core,
     this.package, {
@@ -169,6 +171,25 @@ class _ScenarioListPane extends StatelessWidget {
   final ScenariosCore core;
   final String package;
   final ScenarioPlace selected;
+
+  @override
+  State<_ScenarioListPane> createState() => _ScenarioListPaneState();
+}
+
+class _ScenarioListPaneState extends State<_ScenarioListPane> {
+  /// The filter, owned here and nowhere else. It names no place, so it does
+  /// not belong in the address — and the pane is keyed by package, so it
+  /// survives opening scenario after scenario and resets when the suite does.
+  final _query = TextEditingController();
+
+  ScenariosCore get core => widget.core;
+  String get package => widget.package;
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
 
   /// Writes a scenario and goes straight to it — which runs it, since opening
   /// a scenario is the demand. The whole point of the button over the command
@@ -187,6 +208,9 @@ class _ScenarioListPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Nothing to narrow until the scan has found something: a filter over a
+    // suite of none is a control that can only disappoint.
+    var scanned = core.scanResultFor(package)?.scenarios ?? const [];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -194,6 +218,8 @@ class _ScenarioListPane extends StatelessWidget {
           directory: core.directoryFor(package),
           onNew: () => unawaited(_newScenario(context)),
         ),
+        if (scanned.isNotEmpty)
+          _FilterField(controller: _query, onChanged: (_) => setState(() {})),
         const Divider(height: 1),
         Expanded(child: _body(context)),
       ],
@@ -243,16 +269,49 @@ class _ScenarioListPane extends StatelessWidget {
       );
     }
 
-    var byFile = <String, List<ScenarioRef>>{};
-    for (var ref in result.scenarios) {
-      byFile.putIfAbsent(ref.file, () => []).add(ref);
-    }
-
     // Every file lives under the configured directory, so the prefix says
-    // nothing — the header drops it and the tooltip keeps the whole path.
+    // nothing — the header drops it and the tooltip keeps the whole path. It
+    // is also what the filter matches on, for the same reason: nobody types
+    // the part every row shares.
     var prefix = '${core.directoryFor(package)}/';
     String sectionLabel(String file) =>
         file.startsWith(prefix) ? file.substring(prefix.length) : file;
+
+    var query = _query.text.trim();
+    var filtering = query.isNotEmpty;
+
+    // Null means the file's own name did not answer the query — which is not
+    // the same as an empty highlight, so the map keeps the distinction.
+    var fileMarks = <String, List<int>?>{};
+    List<int>? fileMark(String file) => fileMarks.putIfAbsent(
+      file,
+      () => filtering ? fuzzyMatch(query, sectionLabel(file))?.matched : null,
+    );
+
+    // A file answers for every scenario in it: `checkout_test` keeps the whole
+    // group, a scenario's own name keeps just that row. Grouping and scan
+    // order are left alone — ranking by score would shuffle the suite out of
+    // the shape the reader knows it by.
+    var byFile = <String, List<(ScenarioRef, List<int>)>>{};
+    for (var ref in result.scenarios) {
+      var marks = const <int>[];
+      if (filtering) {
+        var onName = fuzzyMatch(query, ref.name);
+        if (onName == null && fileMark(ref.file) == null) continue;
+        marks = onName?.matched ?? const [];
+      }
+      byFile.putIfAbsent(ref.file, () => []).add((ref, marks));
+    }
+
+    if (byFile.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(FwSpacing.lg),
+        child: Text(
+          'No scenario matches “$query”.',
+          style: context.type.caption.copyWith(color: context.colors.mut3),
+        ),
+      );
+    }
 
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: FwSpacing.md),
@@ -287,18 +346,20 @@ class _ScenarioListPane extends StatelessWidget {
             child: Tooltip(
               message: entry.key,
               waitDuration: const Duration(milliseconds: 500),
-              child: Text(
+              child: MatchedText(
                 sectionLabel(entry.key),
+                matched: fileMark(entry.key) ?? const [],
                 style: context.type.sectionLabel,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
-          for (var ref in entry.value)
+          for (var (ref, marks) in entry.value)
             _ScenarioRow(
               ref,
+              matched: marks,
               selected:
-                  selected.file == ref.file && selected.scenario == ref.name,
+                  widget.selected.file == ref.file &&
+                  widget.selected.scenario == ref.name,
               onTap: () => AddressScope.write(context).setSegments(
                 scenarioSegments(package, file: ref.file, scenario: ref.name),
               ),
@@ -367,12 +428,81 @@ class _ListPaneHeader extends StatelessWidget {
   }
 }
 
+/// One size for both of the field's icon slots, filled or not. An
+/// `InputDecorator` sizes itself around its icons, so a clear button that comes
+/// and goes with the text takes the field's height with it.
+const _iconSlot = BoxConstraints.tightFor(width: 24, height: 22);
+
+/// The filter, as the catalog's tree filter wears it: short, a search glyph, a
+/// clear button that only appears once there is something to clear.
+///
+/// The caller owns the controller and rebuilds on change, which is also what
+/// makes the clear button appear — there is no state here worth keeping.
+class _FilterField extends StatelessWidget {
+  const _FilterField({required this.controller, required this.onChanged});
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        FwSpacing.md,
+        0,
+        FwSpacing.md,
+        FwSpacing.md,
+      ),
+      child: SizedBox(
+        height: 28,
+        child: TextField(
+          controller: controller,
+          onChanged: onChanged,
+          style: context.type.caption.copyWith(color: colors.ink),
+          decoration: InputDecoration(
+            hintText: 'Filter',
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: FwSpacing.md,
+            ),
+            prefixIcon: Icon(Icons.search, size: 14, color: colors.mut2),
+            prefixIconConstraints: _iconSlot,
+            suffixIconConstraints: _iconSlot,
+            suffixIcon: controller.text.isEmpty
+                ? const SizedBox.shrink()
+                : IconButton(
+                    icon: Icon(Icons.close, size: 14, color: colors.mut2),
+                    padding: EdgeInsets.zero,
+                    constraints: _iconSlot,
+                    onPressed: () {
+                      controller.clear();
+                      onChanged('');
+                    },
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ScenarioRow extends StatelessWidget {
-  const _ScenarioRow(this.ref, {required this.selected, required this.onTap});
+  const _ScenarioRow(
+    this.ref, {
+    required this.selected,
+    required this.onTap,
+    this.matched = const [],
+  });
 
   final ScenarioRef ref;
   final bool selected;
   final VoidCallback onTap;
+
+  /// Which characters of the name the filter matched. Empty when it matched
+  /// the file instead — the row is on screen for a reason the row cannot show,
+  /// and the lit file header above it is where that reason is.
+  final List<int> matched;
 
   @override
   Widget build(BuildContext context) {
@@ -398,9 +528,9 @@ class _ScenarioRow extends StatelessWidget {
             ),
             const Gap(FwSpacing.md),
             Expanded(
-              child: Text(
+              child: MatchedText(
                 ref.name,
-                overflow: TextOverflow.ellipsis,
+                matched: matched,
                 style: context.type.body.copyWith(
                   color: selected ? colors.ink : colors.mut,
                 ),
