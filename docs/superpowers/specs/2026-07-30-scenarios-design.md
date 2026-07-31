@@ -305,6 +305,40 @@ From dev_studio: the flow-graph collapse model, translation-capture *hooks*
 (overridable, no vendor links), network-image mocking, the status bar,
 device presets, split-path replay.
 
+## Known gaps in the flutter_test superset (found by review, 2026-07-31)
+
+The API promises a strict superset: an existing widget-test file compiles and
+runs with only its import changed. Two constructs the superset re-exports are
+not honoured by the harness's own walk, and both fail **silently** — which is
+what makes them worth writing down rather than leaving to be rediscovered.
+
+1. **`scenario()` inside a `group()` cannot be run individually.** The scan and
+   the harness's `list` both report the *leaf* name, while `_run` filters with
+   `Declarer(fullTestName: '<file> <scenario>')` and `test_api` composes the
+   full name as `<file> <group> <scenario>` — so the filter matches nothing,
+   zero tests are declared, and the panel reports "The harness ran nothing
+   named …, renamed since this page was opened?". Running the whole file works,
+   so the listing looks healthy while every per-scenario run — the panel's only
+   run path — fails. **Fix, ~10 lines:** stop passing `fullTestName` and filter
+   inside the walk that already exists, comparing `(file, _leafName(entry))`.
+   That also drops the dependency on `test_api`'s name composition. Two
+   scenarios sharing a leaf name in one file would then both run, which is the
+   right answer for a filter that speaks the vocabulary the panel shows.
+
+2. **`setUpAll`/`tearDownAll` never execute.** `test_api` stores them as
+   `Group` fields outside `entries`, and the engine runs them around the
+   group's tests; our walk iterates `entries` only. Per-test `setUp`/`tearDown`
+   are unaffected (the declarer folds those into each test body), which makes
+   the divergence harder to spot: the same file passes under `flutter test` and
+   captures wrong screens under the runner. **Fix, ~15 lines:** mirror
+   `test_core`'s engine — run `group.setUpAll` as a LiveTest before the group's
+   entries and `tearDownAll` after, skipping both when the filter leaves the
+   group with nothing to run, and failing the group's scenarios if the hook
+   fails.
+
+Until fixed, they are documented limitations rather than surprises. Neither
+blocks the plugin's use for the shape of suite this branch demonstrates.
+
 ## Post-parity roadmap
 
 1. **Per-step inspector** — the tree dump is captured anyway; the GUI renders
