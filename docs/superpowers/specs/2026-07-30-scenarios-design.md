@@ -308,22 +308,23 @@ device presets, split-path replay.
 ## Known gaps in the flutter_test superset (found by review, 2026-07-31)
 
 The API promises a strict superset: an existing widget-test file compiles and
-runs with only its import changed. Two constructs the superset re-exports are
-not honoured by the harness's own walk, and both fail **silently** — which is
+runs with only its import changed. Two constructs the superset re-exports were
+not honoured by the harness's own walk, and both failed **silently** — which is
 what makes them worth writing down rather than leaving to be rediscovered.
 
-1. **`scenario()` inside a `group()` cannot be run individually.** The scan and
-   the harness's `list` both report the *leaf* name, while `_run` filters with
-   `Declarer(fullTestName: '<file> <scenario>')` and `test_api` composes the
-   full name as `<file> <group> <scenario>` — so the filter matches nothing,
-   zero tests are declared, and the panel reports "The harness ran nothing
-   named …, renamed since this page was opened?". Running the whole file works,
-   so the listing looks healthy while every per-scenario run — the panel's only
-   run path — fails. **Fix, ~10 lines:** stop passing `fullTestName` and filter
-   inside the walk that already exists, comparing `(file, _leafName(entry))`.
-   That also drops the dependency on `test_api`'s name composition. Two
-   scenarios sharing a leaf name in one file would then both run, which is the
-   right answer for a filter that speaks the vocabulary the panel shows.
+1. ~~**`scenario()` inside a `group()` cannot be run individually.**~~ **Fixed
+   2026-07-31.** The scan and the harness's `list` report the *leaf* name,
+   while `_run` used to filter with
+   `Declarer(fullTestName: '<file> <scenario>')` — and `test_api` composes the
+   full name as `<file> <group> <scenario>`, so the filter matched nothing,
+   zero tests were declared, and the panel reported "The harness ran nothing
+   named …, renamed since this page was opened?". Running the whole file
+   worked, so the listing looked healthy while every per-scenario run — the
+   panel's only run path — failed. The declarer no longer filters at all;
+   the walk does, against the same leaf name the listing shows, which also
+   drops our dependency on `test_api`'s name composition. Two scenarios
+   sharing a leaf name in one file both run, the honest reading of a request
+   that names only what the panel displays.
 
 2. **`setUpAll`/`tearDownAll` never execute.** `test_api` stores them as
    `Group` fields outside `entries`, and the engine runs them around the
@@ -336,8 +337,9 @@ what makes them worth writing down rather than leaving to be rediscovered.
    group with nothing to run, and failing the group's scenarios if the hook
    fails.
 
-Until fixed, they are documented limitations rather than surprises. Neither
-blocks the plugin's use for the shape of suite this branch demonstrates.
+Gap 2 remains a documented limitation rather than a surprise; it does not
+block the shape of suite this branch demonstrates, and nothing about it
+corrupts a run that passes.
 
 ## Post-parity roadmap
 

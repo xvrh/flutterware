@@ -130,9 +130,17 @@ Future<List<String>> _loadBundleFonts() async {
 }
 
 /// Declares every scenario file as a group named by its path, so a test's
-/// full name is `<file> <scenario>` and both halves are recoverable.
-Group _declare(Map<String, void Function()> scenarioMains, {String? only}) {
-  var declarer = Declarer(fullTestName: only);
+/// file is recoverable from the group it sits in.
+///
+/// Deliberately **not** `Declarer(fullTestName:)`: `test_api` composes a full
+/// name out of every enclosing group, so a scenario the author wrapped in a
+/// `group('…')` of their own is named `<file> <group> <scenario>` and never
+/// matched the `<file> <scenario>` a caller asks with — it listed fine and
+/// could not be run. Declaring registers closures, it does not execute them,
+/// so the filtering costs nothing where it now happens: in the walk, against
+/// the same leaf name the listing reports.
+Group _declare(Map<String, void Function()> scenarioMains) {
+  var declarer = Declarer();
   declarer.declare(() {
     for (var entry in scenarioMains.entries) {
       group(entry.key, entry.value);
@@ -243,14 +251,13 @@ Future<Map<String, Object?>> _run(
   String? scenario,
   ScenarioRunArgs? runArgs,
 }) async {
-  var only = file != null && scenario != null ? '$file $scenario' : null;
   var mains = file == null
       ? scenarioMains
       : {
           for (var entry in scenarioMains.entries)
             if (entry.key == file) entry.key: entry.value,
         };
-  var root = _declare(mains, only: only);
+  var root = _declare(mains);
 
   var outcomes = <Map<String, Object?>>[];
   var watch = Stopwatch()..start();
@@ -259,15 +266,23 @@ Future<Map<String, Object?>> _run(
     for (var entry in group.entries) {
       switch (entry) {
         case Test():
-          outcomes.add(
-            await _runOne(
-              entry.load(suite, groups: [group]),
-              file: groupFile ?? '',
-              name: _leafName(entry, group),
-              inspector: inspector,
-              outDir: outDir,
-            ),
-          );
+          // The name the listing shows, matched against the name the caller
+          // asks for — the same vocabulary at both ends, whatever groups the
+          // author nested the scenario in. Two scenarios sharing a leaf name
+          // in one file both run, which is the honest reading of a request
+          // that names only what the panel displays.
+          var name = _leafName(entry, group);
+          if (scenario == null || name == scenario) {
+            outcomes.add(
+              await _runOne(
+                entry.load(suite, groups: [group]),
+                file: groupFile ?? '',
+                name: name,
+                inspector: inspector,
+                outDir: outDir,
+              ),
+            );
+          }
         case Group():
           await walk(entry, suite, groupFile ?? entry.name);
         case GroupEntry():

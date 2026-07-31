@@ -242,6 +242,33 @@ void main() {
         forked.deleteSync();
       }
 
+      // A scenario the author wrapped in a `group()` — listed by its own
+      // name, and runnable by it. `test_api` composes the full name out of
+      // the enclosing groups, so filtering by that name is the harness's job
+      // rather than the declarer's.
+      var grouped = File(
+        p.join(packageRoot, 'test', 'scenarios', 'grouped_test.dart'),
+      );
+      grouped.writeAsStringSync(_groupedSource);
+      try {
+        await runner.refresh();
+        expect([
+          for (var s in await runner.list()) s.name,
+        ], containsAll(['inside a group', 'outside any group']));
+        expect(
+          _scratchTexts(
+            await runner.run(
+              outDir: outDir,
+              file: 'test/scenarios/grouped_test.dart',
+              scenario: 'inside a group',
+            ),
+          ),
+          contains('grouped'),
+        );
+      } finally {
+        grouped.deleteSync();
+      }
+
       // A guest that dies mid-session is noticed: the next run respawns one
       // instead of talking to a service that is gone. (Killing it from here
       // is the same thing the OS does when a scenario blows the isolate up.)
@@ -367,6 +394,30 @@ String _lastPng(Map<String, Object?> report) {
       bytes[offset + 3];
   return (word(16), word(20));
 }
+
+/// A scenario nested in a user `group()`, beside one that is not.
+const _groupedSource = r'''
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  group('checkout', () {
+    scenario('inside a group', (s) async {
+      await s.pumpWidget(
+        const MaterialApp(home: Scaffold(body: Text('grouped'))),
+        shot: Shot('shot'),
+      );
+    });
+  });
+
+  scenario('outside any group', (s) async {
+    await s.pumpWidget(
+      const MaterialApp(home: Scaffold(body: Text('plain'))),
+      shot: Shot('shot'),
+    );
+  });
+}
+''';
 
 /// A nested split: three paths (left→x, left→y, right), a shared prefix
 /// (`root`), and a step after the split (`tail`) that runs once per path.

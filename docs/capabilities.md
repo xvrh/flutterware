@@ -242,28 +242,6 @@ The latest HTTP requests a running server reported, each with the SQL queries an
 
 ```sh
 fw run server requests [--name=…] [--last=…]
-### `flutterware.scenarios`
-
-#### `list` — List
-
-Every scenario of a package, with its source location — from the syntactic scan, without compiling or running anything
-
-```sh
-fw run scenarios list [--package=…]
-```
-
-Returns `ScenarioListResult`:
-
-```
-packages: List<ScenarioListPackage>
-  path: String
-  directory: String   # The scanned directory, relative to the package.
-  scenarios: List<ScenarioListEntry>
-    name: String
-    file: String   # Package-relative source file.
-    line: int
-  diagnostics: List<String>   # What the scan noticed but could not act on — non-literal names, duplicates.
-  error: String?   # Set when the package could not be scanned, in which case [scenarios] means nothing.
 ```
 
 | parameter | kind | required | default | |
@@ -308,6 +286,34 @@ fw run server sql [--name=…] [--top=…]
 |---|---|---|---|---|
 | `name` | string | no | — | Which server, when several are running. |
 | `top` | integer | no | 20 | — |
+
+
+### `flutterware.scenarios`
+
+#### `list` — List
+
+Every scenario of a package, with its source location — from the syntactic scan, without compiling or running anything
+
+```sh
+fw run scenarios list [--package=…]
+```
+
+Returns `ScenarioListResult`:
+
+```
+packages: List<ScenarioListPackage>
+  path: String
+  directory: String   # The scanned directory, relative to the package.
+  scenarios: List<ScenarioListEntry>
+    name: String
+    file: String   # Package-relative source file.
+    line: int
+  diagnostics: List<String>   # What the scan noticed but could not act on — non-literal names, duplicates.
+  error: String?   # Set when the package could not be scanned, in which case [scenarios] means nothing.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 
 #### `run` — Run
