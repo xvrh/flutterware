@@ -52,6 +52,30 @@ Future<void> main() async {
     8080,
   );
   _log.info('listening on http://localhost:${server.port}');
+
+  // The self-description — published after `serve` so the port is real.
+  // Sections merge per publish: calling `info` again later with only
+  // `config:` set would update config and leave the links alone.
+  FlutterwareServer.info(
+    ServerInfo(
+      baseUrl: 'http://localhost:${server.port}',
+      environment: 'dev',
+      links: [
+        ServerLink('Health', '/health', description: 'liveness probe'),
+        ServerLink('Users', '/users', description: 'the N+1 demo'),
+        ServerLink('flutterware', 'https://pub.dev/packages/flutterware'),
+      ],
+      connections: [
+        // The password is fake, and shows up masked in the GUI anyway —
+        // attachers mask password-shaped parts of a DSN for display.
+        ServerConnection('toy', 'toy://app:s3cret@memory/toydb', label: 'main'),
+      ],
+      config: {
+        'Feature flags': {'newCheckout': true, 'betaBanner': false},
+        'Toy database': {'queryLatencyMs': 2, 'apiKey': 'not-a-real-key'},
+      },
+    ),
+  );
 }
 
 /// Adapter: the shelf middleware. One `runZoned` is the whole correlation
@@ -172,6 +196,8 @@ Future<Response> _route(Request request) async {
   switch ('/${request.url.path}') {
     case '/':
       return Response.ok('example server\n');
+    case '/health':
+      return Response.ok('ok\n');
     case '/users':
       var users = _query('select id, name from users');
       // Deliberately N+1: one query per user, inside one request — the shape

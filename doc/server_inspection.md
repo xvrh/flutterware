@@ -15,6 +15,39 @@ Everything below is inert in release builds (`dart compile` / `dart build`)
 and on machines without `~/.flutterware/run`; there is no init call — the
 first event publishes the server.
 
+## Describe the server: `FlutterwareServer.info`
+
+The one piece that is typed API rather than a snippet, because both halves
+speak it: where the server listens, which environment, what it talks to,
+and the pages worth a click. The GUI's Info tab renders it, the environment
+chip and base URL sit beside the panel tabs, and `flutterware_invoke`'s
+`info` action returns it to agents.
+
+```dart
+var server = await shelf_io.serve(handler, InternetAddress.loopbackIPv4, 8080);
+
+FlutterwareServer.info(ServerInfo(
+  baseUrl: 'http://localhost:${server.port}',   // after serve — the real port
+  environment: 'dev',
+  links: [
+    ServerLink('Health', '/health'),            // relative resolves via baseUrl
+    ServerLink('API docs', '/docs', description: 'OpenAPI UI'),
+  ],
+  connections: [
+    ServerConnection('postgres', connectionString, label: 'main'),
+  ],
+  config: {
+    'Feature flags': {'newCheckout': true},
+  },
+));
+```
+
+Call it again any time — each call replaces only the sections it names, so
+re-publishing `config:` after a flag flips leaves the links alone.
+Passwords in a DSN and secret-shaped config keys (`apiKey`, `token`, …) are
+masked wherever they are displayed, with click-to-reveal in the GUI; still,
+publish only what you are willing to have on a developer's screen.
+
 ## HTTP in: shelf middleware
 
 One `runZoned` is the whole correlation story: every query and log line

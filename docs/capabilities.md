@@ -262,6 +262,18 @@ fw run server errors [--name=…] [--last=…]
 | `name` | string | no | — | Which server, when several are running. |
 | `last` | integer | no | 20 | — |
 
+#### `info` — Server info
+
+What a running server published about itself: base URL, environment, pages worth opening, connections (passwords masked) and config groups.
+
+```sh
+fw run server info [--name=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `name` | string | no | — | Which server, when several are running. |
+
 #### `sql` — Query statistics
 
 Every recorded query grouped by its normalized shape — count, total, average and max duration — heaviest first. The same aggregation the SQL panel shows.

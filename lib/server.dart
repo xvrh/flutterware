@@ -1,8 +1,10 @@
 /// Live inspection for Dart servers.
 ///
 /// The server side is [FlutterwareServer] — four primitives (`event`,
-/// `span`/`spanSync`, `handle`) plus zone correlation, inert in release
-/// builds and on machines without flutterware. Adapters for shelf, SQL
+/// `span`/`spanSync`, `handle`) plus zone correlation and a typed
+/// self-description ([ServerInfo], published with `FlutterwareServer.info`),
+/// inert in release builds and on machines without flutterware. Adapters for
+/// shelf, SQL
 /// drivers and `package:logging` are copy-paste snippets over these
 /// primitives; see the design doc and `examples/example/bin/example_server.dart`.
 ///
@@ -19,6 +21,15 @@ export 'src/server/attach_client.dart'
         ServerHello,
         ServerRequestException,
         attachToServer;
+export 'src/server/info.dart'
+    show
+        ServerConnection,
+        ServerInfo,
+        ServerLink,
+        infoChannel,
+        isSecretLikeKey,
+        maskDsn,
+        resolveLinkUrl;
 export 'src/server/inspector.dart'
     show FlutterwareServer, ServerCommandHandler, ServerInspector;
 export 'src/server/normalize_sql.dart' show normalizeSql;

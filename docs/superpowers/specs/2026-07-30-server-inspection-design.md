@@ -397,12 +397,78 @@ and `runZonedGuarded` plus one `event('error', …)` is four lines in the
 example. A `FlutterwareServer.run(…)` wrapper would be the first
 required-looking call in a library whose pitch is "no init call".
 
+## Third round of decisions (2026-07-31): the server describes itself
+
+A server wants to publish more than traffic: where it listens, which
+environment it is, its connection strings, arbitrary config, and the pages
+worth a click (health, API docs, an admin UI). Decided in the 2026-07-31
+brainstorm and built the same day.
+
+### 14. Metadata is state carried as `info` events; the attacher reduces
+
+Everything on the wire so far is a timeline; metadata is last-write-wins
+state. Rather than a second mechanism, it rides the existing ring as an
+`info` channel (new feature = new channel, decision 2): each event carries
+whole *sections* — `baseUrl`, `environment`, `links`, `connections`,
+`config` — and `ServerInfo.fromEvents` keeps the latest value per section.
+Publishing again with only `config:` set updates config and leaves the links
+alone. Replay-on-attach means a late-opened GUI still has it, dedupe
+(decision 10) makes reattach a no-op, and the ring keeps the raw events, so
+a feature flag flipping mid-session is visible in the Events tab for free.
+
+### 15. A typed vocabulary, defined once for both halves
+
+Not a freeform map: `ServerInfo` / `ServerLink` / `ServerConnection` in
+`lib/src/server/info.dart`, published with `FlutterwareServer.info(…)` —
+thin sugar over `event('info', …)`, so there is still no init call and an
+`info` call in production code is a no-op like every primitive. The classes
+serialize on the server side and parse (tolerantly, the `tryDecodeFrame`
+stance) on the attacher side, so the vocabulary cannot fork. Typed is what
+makes the display *useful*: links resolve relative URLs against `baseUrl`
+and open in a browser, connections render with kind chips, config groups
+render as tables. Publish after `serve` returns, so the port is real.
+
+### 16. Secrets mask at display time, not on the wire
+
+Connection strings are exactly what people paste from
+`Platform.environment` without thinking. The wire — a local unix socket on
+the developer's own machine — carries what the server chose to publish;
+masking is an attacher concern, the same side as SQL normalization
+(decision 12) and improving with releases the same way. `maskDsn` masks
+URL-userinfo and `password=` segments; `isSecretLikeKey` masks config
+values under secret-shaped keys. The GUI reveals per value on click and
+copy copies the real string; action output (`fw`, MCP) masks without a
+reveal, because terminals and agent transcripts have no click. True
+redaction — what must not leave the process — still belongs to the
+middleware snippet the user owns (decision 11's reasoning, unchanged).
+
+### 17. Nothing mirrors into the handle file, for now
+
+Mirroring `baseUrl` into `srv-*.json` would let `fw status` and the sidebar
+row say `example_server :8080` without a socket (`report` may not connect,
+fact 4). Deferred: it adds file churn and a second source of truth, the
+panel attaches anyway, and the `info` action attaches ephemerally like its
+siblings. The retrofit is understood — rewrite the handle on `info`
+updates; watchers already debounce and `tryRead` tolerates torn writes —
+and waits for someone to actually miss the port in `fw status`.
+
+### The surfaces
+
+The panel gains an Info tab (`<name>/info` in the address vocabulary) with
+links, connections and config groups, plus a promotion: the environment
+chip and clickable base URL sit at the right edge of the tab row, visible
+from every pane — quiet colors for dev-shaped names, red for
+production-shaped ones, because an inspector forced on with
+`FW_SERVER_INSPECT=1` should say where it is pointed. `fw` and MCP gain a
+fourth action, `info`, masked as above.
+
 ## Where to pick up
 
 **All five slices landed 2026-07-31**, plus a UI-review pass the plan did not
 foresee: request detail became tabbed (waterfall / sql / request / response /
 logs, the tab as an axis), the raw stream moved to an Events tab, and JSON
-bodies render in a `JsonView` ported from the cms project's admin_ui. What
+bodies render in a `JsonView` ported from the cms project's admin_ui. **The
+self-description round (decisions 14–17) landed 2026-07-31 too.** What
 remains beyond this spec is usage-driven: more adapters as real servers adopt
 it, request replay, and whatever the next review round surfaces.
 
