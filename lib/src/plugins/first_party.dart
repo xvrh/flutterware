@@ -5,7 +5,7 @@
 /// const app = Pkg('packages/app');
 ///
 /// void main() => Flutterware.configure((fw) {
-///   fw.use(UiCatalog(packages: [.new(app, entrypoint: 'lib/catalog.dart')]));
+///   fw.use(UiCatalog(packages: [.new(app, directory: 'demo')]));
 /// });
 /// ```
 ///
@@ -66,6 +66,9 @@ class AssetsPackage extends PluginPackage {
 }
 
 /// The UI catalog — entries rendered in the embedded engine.
+///
+/// Demos live in `demo/` unless a package says otherwise with
+/// [UiCatalogPackage.directory].
 class UiCatalog extends Plugin {
   UiCatalog({this.packages = const [], String? label})
     : super('flutterware.ui_catalog', label: label ?? 'UI catalog');
@@ -79,16 +82,28 @@ class UiCatalog extends Plugin {
 }
 
 class UiCatalogPackage extends PluginPackage {
-  const UiCatalogPackage(super.pkg, {this.entrypoint});
+  const UiCatalogPackage(super.pkg, {this.directory, this.previewAnnotations});
 
-  /// Where this package declares its catalog entries; the plugin's convention
-  /// applies when null.
-  final String? entrypoint;
+  /// The directory this package keeps its demos in, relative to the package —
+  /// every `.dart` file under it is scanned for `@Demo` and `@Preview`.
+  /// `demo/` when null.
+  final String? directory;
+
+  /// The annotation names that mark an entry, without their `@`.
+  ///
+  /// `['Preview', 'Demo']` when null. A project that defines its own — e.g.
+  /// `base class Tablet extends Demo` — registers it here, which is what makes
+  /// recognition **by registration** rather than by resolving the class
+  /// hierarchy: discovery parses, and a parser cannot know what a name extends.
+  /// Naming a subclass here does not drop the defaults; list them if you want
+  /// them.
+  final List<String>? previewAnnotations;
 
   @override
   Map<String, Object?> toJson() => {
     ...super.toJson(),
-    if (entrypoint != null) 'entrypoint': entrypoint,
+    if (directory != null) 'directory': directory,
+    if (previewAnnotations != null) 'previewAnnotations': previewAnnotations,
   };
 
   static List<UiCatalogPackage> each(List<Pkg> packages) => [

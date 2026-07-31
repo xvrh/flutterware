@@ -36,6 +36,11 @@ String flutterwareDir() {
 /// it large, all of it permanent, and `_tailLog` reads a whole log on every
 /// failed connect.
 ///
+/// `<key>.failed` is swept on the same rule. It is normally consumed by the
+/// client waiting for it, but a client that had already connected hears the
+/// failure over the socket and never reads the file — so it is orphaned exactly
+/// when a daemon fails with somebody attached.
+///
 /// Two rules, and the difference between them is what makes this safe to run
 /// while other flutterware processes are up:
 ///
@@ -124,7 +129,10 @@ Future<int> sweepRunDir({
   for (var entity in entries) {
     var name = p.basename(entity.path);
     var isServerHandle = name.startsWith('srv-') && name.endsWith('.json');
-    if (!name.endsWith('.log') && !name.endsWith('.lock') && !isServerHandle) {
+    if (!name.endsWith('.log') &&
+        !name.endsWith('.lock') &&
+        !name.endsWith('.failed') &&
+        !isServerHandle) {
       continue;
     }
     var key = name.substring(0, name.lastIndexOf('.'));

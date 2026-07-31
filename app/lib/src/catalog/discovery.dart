@@ -4,6 +4,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:path/path.dart' as p;
 
+import 'authoring.dart';
 import 'catalog_entry.dart';
 
 /// How a scan went: what it found, and what it noticed but did not act on.
@@ -42,8 +43,8 @@ class ScanDiagnostic {
 class CatalogScanner {
   CatalogScanner({
     required this.projectRoot,
-    this.roots = const ['demo'],
-    this.previewAnnotations = const ['Preview', 'Demo'],
+    this.roots = const [defaultCatalogDirectory],
+    this.previewAnnotations = defaultPreviewAnnotations,
   });
 
   /// Entry paths are recorded relative to this, so a generated file is the same

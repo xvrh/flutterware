@@ -6,9 +6,12 @@ import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
+import '../../catalog/authoring.dart';
 import '../../catalog/catalog_devices.dart';
 import '../../catalog/catalog_session.dart';
 import '../../catalog/catalog_view.dart';
+import '../../catalog/discovery.dart';
+import '../../catalog/new_demo_dialog.dart';
 import '../../catalog/web_build_dialog.dart';
 import '../../catalog/web_server.dart';
 import '../native_plugin.dart';
@@ -82,6 +85,7 @@ class UiCatalogPlugin extends NativePlugin<UiCatalogCore> {
       // address, so a panel resolving it independently would open a different
       // daemon than `fw run ui_catalog` does for the same package.
       roots: [core.rootFor(path)],
+      previewAnnotations: core.previewAnnotationsFor(path),
     )..addListener(core.notifyChanged);
     unawaited(session.start());
     return session;
@@ -236,8 +240,11 @@ class _CatalogPanelState extends State<_CatalogPanel> {
       _release();
       _package = package;
       if (package != null) {
+        // The scan, always. The compile loop only once the scan has found
+        // something to compile — see [_startSessionIfReady], which is also
+        // called from `build` because the scan usually lands after this.
         widget.plugin.core.track(package);
-        _session = widget.plugin.sessionFor(package)..addListener(_settled);
+        _startSessionIfReady(package);
       }
     }
 
@@ -257,6 +264,49 @@ class _CatalogPanelState extends State<_CatalogPanel> {
       _followed = place?.entryId;
       _session?.wantedEntryId = place?.entryId;
     }
+  }
+
+  /// Starts the compile loop for [package], but only once the scan says there
+  /// is something to compile.
+  ///
+  /// **This is the thirty seconds.** A package with no entries used to get a
+  /// session like any other: the daemon bound its socket, scanned the same
+  /// directory this one did, refused in about a millisecond, and exited before
+  /// the client's first 25ms poll had connected — so the `DaemonFailed` it sent
+  /// reached nobody, and the client polled a deleted socket until its
+  /// 30-second deadline before reporting that the daemon "never started
+  /// listening". The fastest failure in the system produced the slowest
+  /// feedback, for a fact the scan already held.
+  ///
+  /// Idempotent, and called from both [_follow] and `build`: the scan is
+  /// asynchronous, so on a cold open it is the rebuild that follows it — not
+  /// the mount — that first knows the answer.
+  void _startSessionIfReady(String package) {
+    if (_session != null) return;
+    if (widget.plugin.core.setupFor(package) != CatalogSetup.ready) return;
+    _session = widget.plugin.sessionFor(package)..addListener(_settled);
+    // A fresh session has never been told anything, so whatever the address
+    // asked for has to be restated to it. [_follow] would otherwise only do
+    // this when the address *moves*, and it has not moved since the mount.
+    if (_hasFollowed) _session!.wantedEntryId = _followed;
+  }
+
+  /// Writes the first demo, then goes to it.
+  ///
+  /// The address move is what starts the compile loop: `newDemo` rescans, the
+  /// package becomes [CatalogSetup.ready], and the rebuild that follows calls
+  /// [_startSessionIfReady] — so the demo somebody just asked for is the entry
+  /// their session opens on.
+  Future<void> _newDemo(BuildContext context, String package) async {
+    var result = await showNewDemoDialog(
+      context,
+      core: widget.plugin.core,
+      package: package,
+    );
+    if (result == null || !context.mounted) return;
+    AddressScope.write(
+      context,
+    ).setSegments(catalogSegments(package, result.id));
   }
 
   void _release() {
@@ -349,7 +399,25 @@ class _CatalogPanelState extends State<_CatalogPanel> {
           );
         }
 
-        var session = widget.plugin.sessionFor(path);
+        // Before the compile loop, because the compile loop is what this
+        // decides. `unknown` is the scan still running — a moment, and not the
+        // same claim as "there are none".
+        var setup = widget.plugin.core.setupFor(path);
+        if (setup == CatalogSetup.unknown) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (setup != CatalogSetup.ready) {
+          return _NoDemos(
+            directory: widget.plugin.core.rootFor(path),
+            directoryExists: setup != CatalogSetup.missing,
+            package: widget.plugin.packages.length == 1 ? null : path,
+            diagnostics: widget.plugin.core.diagnosticsFor(path),
+            onNew: () => unawaited(_newDemo(context, path)),
+          );
+        }
+
+        _startSessionIfReady(path);
+        var session = _session!;
         return Column(
           children: [
             // Said out loud rather than repaired. The address is left naming
@@ -373,6 +441,91 @@ class _CatalogPanelState extends State<_CatalogPanel> {
           ],
         );
       },
+    );
+  }
+}
+
+/// The screen a project sees before it has written a demo.
+///
+/// Not an error screen. This is what every project looks like on the day it
+/// first opens the catalog, and it used to be thirty seconds of spinner
+/// followed by a stack trace. It says where we looked, why there is nothing,
+/// how to write one, and offers to write it.
+class _NoDemos extends StatelessWidget {
+  const _NoDemos({
+    required this.directory,
+    required this.directoryExists,
+    required this.package,
+    required this.diagnostics,
+    required this.onNew,
+  });
+
+  final String directory;
+  final bool directoryExists;
+  final String? package;
+
+  /// What the scan rejected. Empty for a project that has genuinely written
+  /// nothing — and decidedly not empty for one whose first attempt was turned
+  /// away, which is the case this screen used to answer with "no demos yet".
+  final List<ScanDiagnostic> diagnostics;
+
+  final VoidCallback onNew;
+
+  @override
+  Widget build(BuildContext context) {
+    var scheme = Theme.of(context).colorScheme;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SelectableText(
+            catalogEmptyReason(
+              directory: directory,
+              directoryExists: directoryExists,
+              package: package,
+            ),
+            style: TextStyle(fontSize: 13, color: scheme.onSurface),
+          ),
+          // Above the button and the hint, because it outranks both: somebody
+          // whose annotation was rejected does not need to be taught how to
+          // write one, they need to be told what was wrong with theirs.
+          if (diagnostics.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            for (var diagnostic in diagnostics)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: SelectableText(
+                  '$diagnostic',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: diagnostic.isError
+                        ? scheme.error
+                        : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+          ],
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: onNew,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('New demo'),
+            ),
+          ),
+          const SizedBox(height: 24),
+          SelectableText(
+            catalogAuthoringHint(directory),
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -21,7 +21,6 @@ Future<void> main() async {
   var assetsDir = p.join(buildDir, 'assets');
   var kernelBlob = p.join(assetsDir, 'kernel_blob.bin');
   var nativeBuildDir = p.join(buildDir, 'native');
-  var engineDir = p.join(packageRoot, '.engine');
   var rawFrame = p.join(buildDir, 'scene.rawframe');
   var pngPath = p.join(buildDir, 'scene.png');
   // Not under the build directory: a unix socket path is capped at 104 bytes
@@ -33,7 +32,7 @@ Future<void> main() async {
 
   Directory(buildDir).createSync(recursive: true);
 
-  await ensureEmbedderFramework(cache, engineDir);
+  var engineDir = await ensureEmbedderFramework(cache);
   await compileScene(
     scenePath: p.join(packageRoot, 'tool', 'embedder', 'scene.dart'),
     kernelBlob: kernelBlob,

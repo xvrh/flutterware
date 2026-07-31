@@ -284,8 +284,9 @@ const app = Pkg('.');
 void main() => Flutterware.configure((fw) {
   fw.use(Dependencies(packages: [.new(app)]));
 
-  // Renders the widgets you have annotated with `@Demo`.
-  // `fw run ui_catalog entries` lists them.
+  // Renders the widgets you have annotated with `@Demo`, from `demo/` — add
+  // `directory: 'examples'` to point it elsewhere.
+  // `fw run ui_catalog new --name="Buttons"` writes your first one.
   fw.use(UiCatalog(packages: [.new(app)]));
 
   // Widget tests that screenshot every step, from `test/scenarios/`.

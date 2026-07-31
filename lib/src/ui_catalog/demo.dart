@@ -26,9 +26,15 @@ enum FormFactor {
 /// serves both the flutterware catalog and Flutter's own widget previewer.
 ///
 /// ```dart
+/// // demo/member_list.dart
 /// @Demo(name: 'Empty')
 /// Widget memberListEmpty() => MemberListView(items: const []);
 /// ```
+///
+/// **Where the file goes matters.** Discovery scans one directory per package —
+/// `demo/` unless the project declared another with
+/// `UiCatalog(packages: [.new(app, directory: '...')])` in
+/// `tool/flutterware.dart` — so an annotation outside it is never found.
 ///
 /// Hierarchy is derived from the file's path; [Preview.name] is the leaf's
 /// display name, and [Preview.group] is derived from the filename when a file

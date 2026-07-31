@@ -16,10 +16,21 @@ Map<String, dynamic> _$CatalogPackageEntriesToJson(
   CatalogPackageEntries instance,
 ) => <String, dynamic>{
   'path': instance.path,
+  'directory': instance.directory,
   'entries': instance.entries.map((e) => e.toJson()).toList(),
   'diagnostics': instance.diagnostics,
   'error': ?instance.error,
+  'authoring': ?instance.authoring,
 };
+
+Map<String, dynamic> _$CatalogNewResultToJson(CatalogNewResult instance) =>
+    <String, dynamic>{
+      'package': instance.package,
+      'file': instance.file,
+      'name': instance.name,
+      'id': instance.id,
+      'next': instance.next,
+    };
 
 Map<String, dynamic> _$CatalogEntrySummaryToJson(
   CatalogEntrySummary instance,

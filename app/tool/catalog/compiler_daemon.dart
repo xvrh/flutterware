@@ -176,6 +176,17 @@ class _Daemon {
   /// Entries the compiler could not build, by id. See [_compileServingWhatWorks].
   final _quarantine = <String, _Quarantined>{};
 
+  /// Set when a compile **failed** before one succeeded, which is what makes
+  /// the success a delta on top of a broken whole-program kernel.
+  ///
+  /// Not the same question as "is the quarantine non-empty", and the difference
+  /// is the point of persisting it: a daemon that starts already knowing which
+  /// demos are broken generates an entrypoint without them, so round zero
+  /// succeeds and there is no delta to repair. Testing the quarantine instead
+  /// would pay the whole-program rebuild on every start precisely to undo a
+  /// failure that no longer happens.
+  var _blamedWhilePreparing = false;
+
   /// What the daemon will actually serve.
   List<CatalogEntry> get _entries => [
     for (var entry in _discovered)
@@ -337,12 +348,32 @@ class _Daemon {
       for (var session in [..._sessions]) {
         session.send(failure);
       }
+      // For everybody else — which on a quick failure is *everybody*. Preparing
+      // can fail in a millisecond, well before the client that spawned us has
+      // connected, so the sends above routinely reach an empty list and the
+      // socket is unlinked below. Without this the client polls a path that
+      // will never come back and reports a timeout instead of the reason.
+      // See [DaemonAddress.failurePath].
+      _recordFailure(failure);
       _prepared.completeError(e, s);
       await _shutdown();
       exit(1);
     }
     for (var session in [..._sessions]) {
       unawaited(session.sendReady());
+    }
+  }
+
+  /// Leaves [failure] where a client that never connected will find it.
+  ///
+  /// Best effort by construction: this runs on the way out of a process that is
+  /// already failing, and a run directory that cannot be written is not worth a
+  /// second exception on top of the first.
+  void _recordFailure(DaemonFailed failure) {
+    try {
+      File(address.failurePath).writeAsStringSync(jsonEncode(failure.toJson()));
+    } catch (e) {
+      stderr.writeln('[catalog] could not record the failure: $e');
     }
   }
 
@@ -428,13 +459,48 @@ class _Daemon {
       for (var d in scan.diagnostics)
         if (!d.isError) '$d',
     ];
-    if (_entries.isEmpty) {
+    if (_discovered.isEmpty) {
+      // Names the directories absolutely and says which of them are even there.
+      // The old message named `demo` — a bare relative root — so it answered
+      // neither "where did you look" nor "does that place exist", which are the
+      // only two questions a reader has. The GUI no longer gets this far (its
+      // own scan gates the session), so whoever reads this is on the CLI or is
+      // an agent, and has no panel to look at instead.
+      var looked = [
+        for (var root in config.roots)
+          [
+            '  ${p.join(config.projectRoot, root)}',
+            if (!Directory(p.join(config.projectRoot, root)).existsSync())
+              '  (does not exist)',
+          ].join(),
+      ].join('\n');
       throw StateError(
-        'no catalog entries found under ${config.roots.join(', ')} — is the '
-        'annotation registered? (looking for '
-        '${config.previewAnnotations.map((a) => '@$a').join(', ')})',
+        'no catalog entries found. Looked for '
+        '${config.previewAnnotations.map((a) => '@$a').join(' and ')} in every '
+        '.dart file under:\n$looked\n'
+        'Demos live in `demo/` unless the project says otherwise — set '
+        r"`UiCatalog(packages: [.new(app, directory: '...')])` in "
+        'tool/flutterware.dart, or run `fw run ui_catalog new '
+        r"--name='Buttons'` to write the first one.",
       );
     }
+    // **Before** the quarantine is read, not merely before the compiler starts.
+    // Resolving the warm kernel is also what decides whether the last run's
+    // knowledge still applies, and it clears the quarantine file when it does
+    // not — so leaving it to `_startCompiler` would delete the file after this
+    // had already loaded it, and the daemon would hold entries back on evidence
+    // it had just thrown away.
+    var warm = _warmDill;
+    stderr.writeln('[catalog] warm kernel: ${warm ?? 'none'}');
+
+    // Before the entrypoint is generated, so the first compile is already the
+    // one that works. Rediscovering a broken demo costs three compiles — the
+    // one that fails, the one that succeeds without it, and the whole-program
+    // rebuild that follows — and measured on this repo's own catalog that is
+    // 4.5s against 0.6s. Paid on every start, for a fact the last run knew.
+    _loadQuarantine();
+    mark('quarantine');
+
     _generator = EntrypointGenerator(
       outputDir: p.join(_buildDir, 'entrypoint'),
       projectRoot: config.projectRoot,
@@ -443,58 +509,34 @@ class _Daemon {
     _generator.registerAll(_entries);
     _makeActive(_entries.first);
 
-    var engineDir = p.join(config.appPackageRoot, '.engine');
-    await ensureEmbedderFramework(_cache, engineDir);
-    mark('engine framework');
-    await _ensureAssetBundle();
-    mark('asset bundle');
+    // **Three lanes, not one queue.** The remaining work divides into three
+    // chains that need nothing from each other: the embedder framework and the
+    // C host that links against it; the asset bundle; and the compiler. Run in
+    // sequence the start costs their sum, which on a first-ever run is
+    // dominated by two independent things waiting for each other — a ~93MB
+    // framework download (~4.3s) and a cold compile (up to ~8s). Overlapped,
+    // the start costs the longest chain instead.
+    //
+    // The only ordering that survives is the one that is real: the kernel is
+    // published into the asset bundle, so that copy waits for both.
+    //
+    // `Future.wait` rather than three bare awaits, because the lanes are
+    // started before any of them is awaited: a lane that fails while another is
+    // still running would otherwise become an unhandled async error. `wait`
+    // observes every one of them and rethrows the first, which `serve` turns
+    // into the `DaemonFailed` a client is waiting for.
+    await Future.wait([
+      _hostLane(),
+      _timed('asset bundle', _ensureAssetBundle),
+      _compileLane(),
+    ]);
 
-    var watch = Stopwatch()..start();
-    var compiler = _compiler = await _startCompiler();
-    mark('compiler start');
-    var cold = await _compileServingWhatWorks();
-    mark('cold compile');
-    if (!cold.ok) {
-      throw StateError(
-        'the catalog did not compile, and no single entry could be blamed:\n'
-        '${cold.output.join('\n')}',
-      );
-    }
-    if (_quarantine.isNotEmpty) {
-      stderr.writeln(
-        '[catalog] quarantined ${_quarantine.length} entries that do not '
-        'compile: ${_quarantine.keys.join(', ')}',
-      );
-      // The successful compile was a *recompile* — round zero failed — so it
-      // wrote a delta, and the whole-program file still holds the kernel of
-      // the compile that failed. Publishing that gives every guest an
-      // incomplete program: reloads then fail to resolve libraries it never
-      // had, and appear to heal as later deltas patch them in one by one.
-      cold = await _fullCompile();
-      if (!cold.ok) {
-        throw StateError(
-          'the catalog compiled, but rebuilding it whole did not:\n'
-          '${cold.output.join('\n')}',
-        );
-      }
-      mark('rebuild after quarantine');
-    }
-    _coldCompile = watch.elapsed;
-    // The baseline every later sweep reads against. Taken here rather than on
-    // the first request: a file edited between startup and that request would
-    // otherwise be recorded *as* the baseline, and the edit would never compile.
-    _invalidator.sweep(compiler.sources);
-    mark('source baseline (${_invalidator.watched} files)');
-    compiler.saveWarmStart();
+    // Its own stopwatch, not `mark`: `mark` measures the gap since the last
+    // one, and the last one is now on the far side of three concurrent lanes —
+    // so it would report the whole overlapped section as the cost of a copy.
+    var publish = Stopwatch()..start();
     File(_outputDill).copySync(p.join(_sharedAssetsDir, 'kernel_blob.bin'));
-    mark('publish prepared kernel');
-
-    _hostPath = await buildHost(
-      nativeSourceDir: p.join(config.appPackageRoot, 'native'),
-      nativeBuildDir: p.join(_buildDir, 'native'),
-      engineDir: engineDir,
-    );
-    mark('host build');
+    _timings['publish prepared kernel'] = publish.elapsedMilliseconds;
 
     // Sessions from a previous daemon are meaningless now.
     var sessions = Directory(p.join(_buildDir, 'sessions'));
@@ -729,7 +771,9 @@ class _Daemon {
           sourceModified: _sourceModified(entry),
         );
       }
+      _blamedWhilePreparing = !_prepared.isCompleted;
       _catalogChanged();
+      _saveQuarantine();
 
       pending = _generator.drop(broken);
       if (_entries.isEmpty) return outcome;
@@ -738,6 +782,193 @@ class _Daemon {
       }
     }
     return outcome;
+  }
+
+  /// Times one phase and records it under [what].
+  ///
+  /// Replaced the shared reset-on-every-mark stopwatch for the phases that now
+  /// overlap: with three lanes in flight, "time since the last mark" measures
+  /// the gap between two unrelated events rather than the cost of either.
+  Future<T> _timed<T>(String what, Future<T> Function() body) async {
+    var watch = Stopwatch()..start();
+    var result = await body();
+    _timings[what] = watch.elapsedMilliseconds;
+    stderr.writeln('[catalog] $what ${watch.elapsedMilliseconds}ms');
+    return result;
+  }
+
+  /// The embedder framework, then the C host that links against it.
+  ///
+  /// One lane because the second genuinely needs the first — and neither needs
+  /// the compiler, which is the whole reason they can run beside it.
+  Future<void> _hostLane() async {
+    var engineDir = await _timed('engine framework', () async {
+      var dir = await ensureEmbedderFramework(_cache);
+      // Only once the shared copy is known good, so a failed download never
+      // leaves an install with neither.
+      removeLegacyEngineDir(config.appPackageRoot);
+      return dir;
+    });
+    _hostPath = await _timed(
+      'host build',
+      () => buildHost(
+        nativeSourceDir: p.join(config.appPackageRoot, 'native'),
+        nativeBuildDir: p.join(_buildDir, 'native'),
+        engineDir: engineDir,
+      ),
+    );
+  }
+
+  /// Everything the compiler owns: start, compile what works, and record what
+  /// the next daemon can start from.
+  Future<void> _compileLane() async {
+    var watch = Stopwatch()..start();
+    // Assigned through a local so the type stays non-null: `_compiler` is
+    // nullable, and the value of an assignment carries the field's type.
+    var compiler = await _timed('compiler start', _startCompiler);
+    _compiler = compiler;
+    var cold = await _timed('cold compile', _compileServingWhatWorks);
+    if (!cold.ok) {
+      throw StateError(
+        'the catalog did not compile, and no single entry could be blamed:\n'
+        '${cold.output.join('\n')}',
+      );
+    }
+    if (_blamedWhilePreparing) {
+      stderr.writeln(
+        '[catalog] quarantined ${_quarantine.length} entries that do not '
+        'compile: ${_quarantine.keys.join(', ')}',
+      );
+      // The successful compile was a *recompile* — round zero failed — so it
+      // wrote a delta, and the whole-program file still holds the kernel of
+      // the compile that failed. Publishing that gives every guest an
+      // incomplete program: reloads then fail to resolve libraries it never
+      // had, and appear to heal as later deltas patch them in one by one.
+      cold = await _timed('rebuild after quarantine', _fullCompile);
+      if (!cold.ok) {
+        throw StateError(
+          'the catalog compiled, but rebuilding it whole did not:\n'
+          '${cold.output.join('\n')}',
+        );
+      }
+    }
+    _coldCompile = watch.elapsed;
+    // The baseline every later sweep reads against. Taken here rather than on
+    // the first request: a file edited between startup and that request would
+    // otherwise be recorded *as* the baseline, and the edit would never compile.
+    var sweep = Stopwatch()..start();
+    _invalidator.sweep(compiler.sources);
+    _timings['source baseline (${_invalidator.watched} files)'] =
+        sweep.elapsedMilliseconds;
+    compiler.saveWarmStart();
+    // Written beside the kernel it belongs to: the warm kernel and the
+    // quarantine describe the same compile, and a quarantine recorded against a
+    // kernel that was never saved would be read next to a stale one.
+    _saveQuarantine();
+  }
+
+  /// Where the last run's quarantine is kept, beside the kernel it produced.
+  String get _quarantinePath => p.join(_buildDir, 'quarantine.json');
+
+  /// Restores what the previous daemon learned, for entries it still applies to.
+  ///
+  /// An entry is only held back again when its **source is byte-for-byte as old
+  /// as it was when it failed**. Anything edited since is left servable and
+  /// gets compiled like any other — so fixing a demo and restarting shows it
+  /// working, and this can never wedge a repaired entry out of the catalog.
+  /// That is the same rule [_readmitRepairedEntries] applies mid-session; this
+  /// is only the door it comes through at startup.
+  ///
+  /// Validity beyond the mtimes is [_resolveWarmDill]'s business: it deletes
+  /// this file whenever the engine, the package resolution or the
+  /// creation-location setting moved, because a demo that failed against one
+  /// toolchain has said nothing about another. The two are one fact — what the
+  /// last compile learned — and are discarded together.
+  ///
+  /// A quarantine covering *everything* is dropped rather than applied. It
+  /// leaves nothing to generate an entrypoint from, and the honest recovery is
+  /// to compile and find out rather than to start from a claim that the whole
+  /// catalog is broken.
+  void _loadQuarantine() {
+    var file = File(_quarantinePath);
+    if (!file.existsSync()) return;
+
+    List<Object?> recorded;
+    try {
+      recorded = jsonDecode(file.readAsStringSync()) as List<Object?>;
+    } catch (e) {
+      // The delete is inside the guard too. This is a cache, and the recovery
+      // for a cache we cannot read must not be an exception that escapes into
+      // `_prepare` and fails the daemon start — a read-only build directory
+      // would then stop the catalog working over a file it was free to ignore.
+      stderr.writeln('[catalog] ignoring an unreadable quarantine: $e');
+      try {
+        file.deleteSync();
+      } catch (_) {
+        // Left where it is; the next run reads it and lands here again.
+      }
+      return;
+    }
+
+    var byId = {for (var entry in _discovered) entry.id: entry};
+    var restored = <String, _Quarantined>{};
+    for (var row in recorded) {
+      if (row is! Map) continue;
+      var entry = byId[row['id']];
+      if (entry == null) continue; // Deleted or renamed since.
+      var was = row['sourceModified'];
+      if (was is! int) continue;
+      var now = _sourceModified(entry);
+      if (now == null || now.millisecondsSinceEpoch != was) continue;
+      restored[entry.id] = _Quarantined(
+        entry: entry,
+        error: row['error'] is String
+            ? row['error']! as String
+            : 'did not compile',
+        sourceModified: now,
+      );
+    }
+
+    if (restored.isEmpty) return;
+    if (restored.length == _discovered.length) {
+      stderr.writeln(
+        '[catalog] the recorded quarantine covers every entry; compiling '
+        'instead of trusting it',
+      );
+      return;
+    }
+    _quarantine.addAll(restored);
+    stderr.writeln(
+      '[catalog] holding back ${restored.length} unchanged entries the last '
+      'run could not compile: ${restored.keys.join(', ')}',
+    );
+  }
+
+  /// Records the quarantine for the next daemon.
+  ///
+  /// Best effort: this is a cache, and a run directory that cannot be written
+  /// costs a slow start rather than a wrong one.
+  void _saveQuarantine() {
+    try {
+      var file = File(_quarantinePath);
+      if (_quarantine.isEmpty) {
+        if (file.existsSync()) file.deleteSync();
+        return;
+      }
+      file.parent.createSync(recursive: true);
+      file.writeAsStringSync(
+        jsonEncode([
+          for (var q in _quarantine.values)
+            {
+              'id': q.entry.id,
+              'error': q.error,
+              'sourceModified': q.sourceModified?.millisecondsSinceEpoch,
+            },
+        ]),
+      );
+    } catch (e) {
+      stderr.writeln('[catalog] could not record the quarantine: $e');
+    }
   }
 
   /// Brings back quarantined entries whose source has been edited since it
@@ -755,6 +986,8 @@ class _Daemon {
     }
     if (repaired.isEmpty) return [];
     _catalogChanged();
+    // The recorded quarantine is now wrong by exactly these entries.
+    _saveQuarantine();
     return _generator.registerAll(repaired);
   }
 
@@ -809,6 +1042,11 @@ class _Daemon {
 
     if (stamp.existsSync() && stamp.readAsStringSync() == current) return dill;
     if (File(dill).existsSync()) File(dill).deleteSync();
+    // The quarantine goes with it. A demo that failed against one engine, one
+    // package resolution or one creation-location setting has said nothing
+    // about another, and holding it back on that evidence would keep a working
+    // demo out of the catalog until somebody happened to edit it.
+    if (File(_quarantinePath).existsSync()) File(_quarantinePath).deleteSync();
     stamp.parent.createSync(recursive: true);
     stamp.writeAsStringSync(current);
     return dill;

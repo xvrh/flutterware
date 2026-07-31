@@ -117,11 +117,11 @@ void main() => runApp(
   ),
 );
 ''');
-    await ensureEmbedderFramework(cache, p.join(appRoot, '.engine'));
+    var engineDir = await ensureEmbedderFramework(cache);
     var hostPath = await buildHost(
       nativeSourceDir: p.join(appRoot, 'native'),
       nativeBuildDir: p.join(appRoot, 'build', 'catalog', 'native'),
-      engineDir: p.join(appRoot, '.engine'),
+      engineDir: engineDir,
     );
     await compileScene(
       scenePath: scene.path,

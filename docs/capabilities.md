@@ -583,6 +583,7 @@ Returns `CatalogEntriesResult`:
 ```
 packages: List<CatalogPackageEntries>
   path: String   # Package path as declared in `tool/flutterware.dart`.
+  directory: String   # Where this package's demos were looked for, relative to the package.
   entries: List<CatalogEntrySummary>
     id: String   # What `screenshot --entry` and `describe --entry` take.
     name: String
@@ -591,11 +592,36 @@ packages: List<CatalogPackageEntries>
     formFactor: String?   # `mobile`, `desktop`, `all` — what the demo says it is *for*, when it says.
   diagnostics: List<String>   # Discovery's complaints — a duplicate id, an uncallable target.
   error: String?   # Set when the scan failed, in which case [entries] is empty and means nothing.
+  authoring: String?   # How to write the first demo.
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
+
+#### `new` — New demo
+
+Writes a demo file where the package keeps them, creating the directory if it is not there, and reports the id that renders it. The scaffold renders as written, so start here when you have never written one: it is the API, in a file that already works.
+
+```sh
+fw run ui_catalog new [--package=…] --name=<string> [--file=…]
+```
+
+Returns `CatalogNewResult`:
+
+```
+package: String
+file: String   # The written file, package-relative.
+name: String
+id: String   # What `screenshot --entry` and `describe --entry` take for it, so the next call needs no translation.
+next: String   # The command that renders what was just written.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the only one when there is one |
+| `name` | string | yes | — | The demo's name — what the panel lists and what `@Demo(name:)` carries |
+| `file` | string | no | — | Package-relative path to write. Defaults to a snake_cased `.dart` file under the package's demo directory. Never overwrites. |
 
 #### `check` — Check
 

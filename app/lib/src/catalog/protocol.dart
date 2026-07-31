@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:json_annotation/json_annotation.dart';
 
+import 'authoring.dart';
 import 'catalog_entry.dart';
 import 'package_config_locator.dart';
 
@@ -419,8 +420,10 @@ class DaemonConfig {
     required String packageRoot,
     required String flutterSdkRoot,
     required List<String> roots,
+    List<String> previewAnnotations = defaultPreviewAnnotations,
     bool emitProbe = false,
   }) => DaemonConfig(
+    previewAnnotations: previewAnnotations,
     appPackageRoot: appToolDirectory,
     projectRoot: packageRoot,
     // The *project's* config, not the app's: it is the one that resolves the
