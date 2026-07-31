@@ -751,6 +751,11 @@ Order chosen so each slice is useful alone and the risky parts come early.
 3. **Inspect.** `installGuestRuntime` extracted and mounted via `Devbar`; tree,
    screenshot, logs, errors as the artifact triple with addresses; MCP loop
    working with no GUI running (the server plugin's exit criterion, reused).
+
+   > **The panel is rebuilt at the start of this slice**, not during it —
+   > device-centric to run-centric, with launching on its own page and the
+   > desk in the shell's chrome. Settled 2026-07-31; see
+   > `2026-07-31-run-cockpit-panel-design.md`, which ends with the build list.
 4. **Act, and reach.** The verb set, the settle barrier, node-id addressing —
    and D10's rung 1 in the same slice, because "navigate to this location" is
    both the most reliable way to reach a screen and much less work than the
