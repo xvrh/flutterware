@@ -807,6 +807,33 @@ void main() {
       expect(find.byKey(configLoadLineKey), findsNothing);
     });
 
+    testWidgets('a faded line does not return on an unrelated notification', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+
+      _loader.manifest = changedTests;
+      await shell.reloadConfig();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(find.byKey(configLoadLineKey), findsNothing);
+
+      // Anything that notifies the shell — a plugin finishing a load, a save
+      // some plugin watched, navigation — used to find `lastLoad` still
+      // recorded and the line hidden, and put the old load back up for another
+      // four seconds. From the outside that is a config re-running on every
+      // unrelated edit.
+      await openConfig(tester);
+
+      expect(find.byKey(configLoadLineKey), findsNothing);
+      expect(
+        shell.lastLoad(shell.selected!)!.outcome,
+        ConfigLoadOutcome.rebuilt,
+        reason: 'still recorded — it is the announcing that must not repeat',
+      );
+    });
+
     testWidgets('a failed load shows a banner and keeps the plugins', (
       tester,
     ) async {
