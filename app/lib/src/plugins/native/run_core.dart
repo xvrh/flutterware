@@ -1275,7 +1275,24 @@ class RunCore extends PluginCore {
   })?
   lastLaunch;
 
-  /// The widget tree of one run. The panel's entry point, and `tree`'s.
+  /// The picture and the widget tree of one run, from **one** reading.
+  ///
+  /// What the panel's Screen tab calls, and the reason `inspect` was merged
+  /// into one action: the two are shown side by side, so they have to be the
+  /// same frame. Two calls would be two moments, and a live app animates,
+  /// fires timers and takes in data between them — the tree would describe a
+  /// screen the picture no longer shows.
+  Future<InspectRead> inspectRead(
+    RunHandle handle, {
+    bool tree = true,
+    bool screenshot = true,
+    bool summary = true,
+  }) => _withInspector(
+    handle,
+    (i) => i.read(tree: tree, screenshot: screenshot, summary: summary),
+  );
+
+  /// The widget tree of one run, on its own.
   Future<InspectTree> inspectTree(RunHandle handle, {bool summary = true}) =>
       _withInspector(handle, (i) => i.tree(summary: summary));
 

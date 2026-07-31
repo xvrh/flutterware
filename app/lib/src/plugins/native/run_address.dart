@@ -11,7 +11,6 @@
 ///     …/flutterware.run/new              the page that starts one
 ///     …/flutterware.run/<key>            a run, on its screen
 ///     …/flutterware.run/<key>/screen     the same, said out loud
-///     …/flutterware.run/<key>/tree       its widget tree
 ///     …/flutterware.run/<key>/logs       its output
 ///
 /// **`<key>` is [runHandleKey] — `app-` and twelve hex characters.** It hashes
@@ -22,18 +21,27 @@
 /// ephemeral — what agents write down for the long term are journeys, and
 /// those are deliberately last.
 ///
-/// The tab list is open on purpose. `Screen`, `Tree` and `Logs` arrive with the
-/// inspect slice; `Network` and `Data` are devbar plugins reporting into the
-/// cockpit later. [RunViewKind.byName] answers null for a tab this build has
-/// never heard of, and the panel falls back rather than throwing — an address
-/// is a thing people type, and one from a newer build should degrade to the
-/// run rather than to an error.
+/// The tab list is open on purpose. `Screen` and `Logs` arrive with the inspect
+/// slice; `Network` and `Data` are devbar plugins reporting into the cockpit
+/// later.
+///
+/// **There is no `tree` tab**, and there was one for a day. The design's Screen
+/// tab is a split — the picture on the left, the widget tree filling the rest —
+/// and pulling the tree out into a third tab separated the two things you look
+/// at together. An address written against that build reads back as the screen,
+/// which is where the tree now is.
+///
+/// [RunViewKind.byName] answers null for a tab this build has never heard of,
+/// and the panel falls back rather than throwing — an address is a thing people
+/// type, and one from a newer build should degrade to the run rather than to an
+/// error.
 library;
 
 /// Which pane of one run the address names.
 enum RunViewKind {
+  /// The picture and the widget tree, side by side.
   screen,
-  tree,
+
   logs;
 
   static RunViewKind? byName(String name) {

@@ -130,13 +130,85 @@ class _InspectDockState extends State<InspectDock> {
   }
 
   Widget _strip(BuildContext context) {
+    return InspectTabStrip(
+      tabs: widget.tabs,
+      // Null while collapsed: no tab is open, so none of them is lit.
+      current: widget.collapsed ? null : widget.current,
+      onSelect: (id) {
+        // Clicking the tab you are on is how you get the panel back without
+        // hunting for the chevron.
+        if (id == widget.current && !widget.collapsed) {
+          widget.onChanged(widget.current, true);
+        } else {
+          widget.onChanged(id, false);
+        }
+      },
+      leading: widget.leading,
+      trailing: [
+        if (!widget.collapsed)
+          if (widget.onRefresh case var refresh?)
+            InspectStripButton(
+              icon: Icons.refresh,
+              tooltip: 'Read it all again',
+              onTap: () => refresh(),
+            ),
+        InspectStripButton(
+          icon: widget.collapsed ? Icons.expand_less : Icons.expand_more,
+          tooltip: widget.collapsed ? 'Show the panel' : 'Hide the panel',
+          onTap: () => widget.onChanged(widget.current, !widget.collapsed),
+        ),
+      ],
+    );
+  }
+}
+
+/// The tab strip on its own, without the dock around it.
+///
+/// Split out because a host can want these tabs at the *top* of a pane rather
+/// than docked under a canvas — the run cockpit's run page is the first, and
+/// its own hand-rolled row of `TextButton`s was the reason: three surfaces
+/// showing a widget tree, two of them matching and one of them not.
+///
+/// [InspectDock] is now a composition of this, a drag grip and a sized body,
+/// so what ui_catalog and scenarios draw is unchanged.
+class InspectTabStrip extends StatelessWidget {
+  const InspectTabStrip({
+    super.key,
+    required this.tabs,
+    required this.current,
+    required this.onSelect,
+    this.leading,
+    this.trailing = const [],
+  });
+
+  /// Only [InspectDockTab.id], [InspectDockTab.label] and
+  /// [InspectDockTab.badge] are read here — a strip does not build bodies.
+  final List<InspectDockTab> tabs;
+
+  /// The open tab's id, or null for none — which is what the dock passes while
+  /// it is collapsed.
+  final String? current;
+
+  final void Function(String id) onSelect;
+
+  /// Before the tabs. Not a tab because it is not one: it changes what the
+  /// surface around the strip does.
+  final Widget? leading;
+
+  /// After them, hard right — a refresh, a collapse chevron.
+  final List<Widget> trailing;
+
+  static const height = _InspectDockState._stripHeight;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      height: _stripHeight,
+      height: height,
       color: context.colors.panel,
       padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
       child: Row(
         children: [
-          ?widget.leading,
+          ?leading,
           // Scrolls rather than overflows: the panel is as narrow as its
           // window allows, and a tab strip that paints Flutter's stripes over
           // itself in an inspector is a poor advertisement.
@@ -145,37 +217,18 @@ class _InspectDockState extends State<InspectDock> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  for (var tab in widget.tabs)
+                  for (var tab in tabs)
                     _Tab(
                       label: tab.label,
-                      selected: !widget.collapsed && tab.id == widget.current,
+                      selected: tab.id == current,
                       badge: tab.badge,
-                      onTap: () {
-                        // Clicking the tab you are on is how you get the
-                        // panel back without hunting for the chevron.
-                        if (tab.id == widget.current && !widget.collapsed) {
-                          widget.onChanged(widget.current, true);
-                        } else {
-                          widget.onChanged(tab.id, false);
-                        }
-                      },
+                      onTap: () => onSelect(tab.id),
                     ),
                 ],
               ),
             ),
           ),
-          if (!widget.collapsed)
-            if (widget.onRefresh case var refresh?)
-              InspectStripButton(
-                icon: Icons.refresh,
-                tooltip: 'Read it all again',
-                onTap: () => refresh(),
-              ),
-          InspectStripButton(
-            icon: widget.collapsed ? Icons.expand_less : Icons.expand_more,
-            tooltip: widget.collapsed ? 'Show the panel' : 'Hide the panel',
-            onTap: () => widget.onChanged(widget.current, !widget.collapsed),
-          ),
+          ...trailing,
         ],
       ),
     );

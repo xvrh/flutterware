@@ -12,6 +12,8 @@ import '../../run/handle.dart';
 import '../../run/inventory.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
+import '../../inspect/elements_view.dart';
+import '../../inspect/inspect_dock.dart';
 import '../../ui/design/design.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/tappable.dart';
@@ -324,23 +326,26 @@ class _RunView extends StatelessWidget {
       handle: handle,
     );
 
+    // Tabs above the header, as the design draws them: the strip says which
+    // *view* of the run you are in, the header says what the run is and what
+    // can be done to it. Nesting the second under the first would imply the
+    // buttons belong to the tab, and they do not.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _ViewTabs(runKey: handle.key, view: view, enabled: state.canInspect),
+        const Divider(height: 1),
         _RunHeader(
           handle: handle,
           state: state,
           mine: mine,
           onControl: onControl,
         ),
-        _ViewTabs(runKey: handle.key, view: view, enabled: state.canInspect),
-        const Divider(height: 1),
         Expanded(
           child: !state.canInspect
               ? _NotYet(state: state, handle: handle)
               : switch (view) {
                   RunViewKind.screen => _ScreenTab(core: core, handle: handle),
-                  RunViewKind.tree => _TreeTab(core: core, handle: handle),
                   RunViewKind.logs => _LogsTab(core: core, handle: handle),
                 },
         ),
@@ -500,12 +505,16 @@ class _RunHeader extends StatelessWidget {
   }
 }
 
-/// Screen | Tree | Logs, written into the address.
+/// Screen | Logs, written into the address.
 ///
 /// **The strip is the extension point.** `Network` and `Data` are devbar
 /// plugins reporting into the cockpit later, so it has to accept tabs this
 /// build does not know about — which is why the address carries a tab *name*
 /// and reading an unknown one falls back to the screen.
+///
+/// [InspectTabStrip] rather than a row of buttons: it is what ui_catalog and
+/// scenarios already draw above a widget tree, and three surfaces showing the
+/// same thing should not be two designs.
 class _ViewTabs extends StatelessWidget {
   const _ViewTabs({
     required this.runKey,
@@ -515,41 +524,32 @@ class _ViewTabs extends StatelessWidget {
 
   final String runKey;
   final RunViewKind view;
+
+  /// False while the app has nothing to read. The tabs stay visible and stop
+  /// responding — hiding them would move the page's furniture around every
+  /// time a build started.
   final bool enabled;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: FwSpacing.md, right: FwSpacing.md),
-      child: Row(
-        children: [
-          for (var kind in RunViewKind.values)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: TextButton(
-                style: kind == view
-                    ? TextButton.styleFrom(
-                        backgroundColor: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.1),
-                      )
-                    : null,
-                onPressed: enabled
-                    ? () => AddressScope.write(
-                        context,
-                      ).setSegments(runSegments(runKey, view: kind))
-                    : null,
-                child: Text(switch (kind) {
-                  RunViewKind.screen => 'Screen',
-                  RunViewKind.tree => 'Tree',
-                  RunViewKind.logs => 'Logs',
-                }),
-              ),
-            ),
-        ],
-      ),
+    return InspectTabStrip(
+      tabs: const [
+        InspectDockTab(id: 'screen', label: 'Screen', body: _unused),
+        InspectDockTab(id: 'logs', label: 'Logs', body: _unused),
+      ],
+      current: view.name,
+      onSelect: (id) {
+        if (!enabled) return;
+        AddressScope.write(context).setSegments(
+          runSegments(runKey, view: RunViewKind.byName(id) ?? view),
+        );
+      },
     );
   }
+
+  /// The strip reads ids, labels and badges and never builds a body — the run
+  /// page keeps its panes, because only one of them is cheap to rebuild.
+  static Widget _unused(BuildContext context) => const SizedBox.shrink();
 }
 
 /// Shown while a run has no app to ask — a build in flight, or one that failed.
@@ -596,7 +596,12 @@ class _NotYet extends StatelessWidget {
   );
 }
 
-/// A picture of the app, on demand.
+/// The picture and the widget tree, side by side — the design's Screen tab.
+///
+/// **One reading, not two.** Both come off a single `getRootWidgetTree` in one
+/// object group, which is what merging `inspect` into one action bought: a live
+/// app animates and takes in data between calls, so two reads would put a tree
+/// beside a picture of a different frame.
 ///
 /// **Not a live mirror, and it says so.** Each capture is a render and a PNG —
 /// 66ms on this Mac, 42 on a simulator — so polling one would be a cost paid
@@ -614,13 +619,23 @@ class _ScreenTab extends StatefulWidget {
 
 class _ScreenTabState extends State<_ScreenTab> {
   Uint8List? _image;
+  InspectTree? _tree;
   String? _error;
   var _loading = false;
+
+  /// What the tree hovers, for a box drawn over the picture.
+  ///
+  /// Nothing draws one yet and that is not an oversight: the inspector surface
+  /// carries **no position at all** — `getLayoutExplorerNode` gives size and
+  /// constraints, `parentData` is `<none>` — so global rects wait for the
+  /// Devbar installer. [ElementsView] requires the notifier, so it gets a real
+  /// one rather than a widget bent around the gap.
+  final _highlight = ValueNotifier<String?>(null);
 
   @override
   void initState() {
     super.initState();
-    _capture();
+    _read();
   }
 
   @override
@@ -630,104 +645,26 @@ class _ScreenTabState extends State<_ScreenTab> {
     // picture of this one.
     if (old.handle.key != widget.handle.key) {
       _image = null;
-      _error = null;
-      _capture();
-    }
-  }
-
-  Future<void> _capture() async {
-    setState(() => _loading = true);
-    try {
-      var bytes = await widget.core.screenshot(widget.handle);
-      if (!mounted) return;
-      setState(() {
-        _image = bytes;
-        _error = null;
-      });
-    } on Object catch (e) {
-      if (!mounted) return;
-      setState(() => _error = '$e');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _TabBar(
-          loading: _loading,
-          onRefresh: _capture,
-          note: 'rendered by the app, so platform views will not appear',
-        ),
-        Expanded(
-          child: _error != null
-              ? _Failed(_error!)
-              : _image == null
-              ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.all(FwSpacing.lg),
-                  child: Center(
-                    child: Image.memory(
-                      _image!,
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.medium,
-                      gaplessPlayback: true,
-                    ),
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-}
-
-/// The widget tree, indented, with the file and line each widget came from.
-///
-/// The source is the point. It is what makes the tree actionable rather than
-/// decorative, and it is the field the guest runtime could never read —
-/// `_HasCreationLocation` is private to `package:flutter` — but the service
-/// extension hands out freely.
-class _TreeTab extends StatefulWidget {
-  const _TreeTab({required this.core, required this.handle});
-
-  final RunCore core;
-  final RunHandle handle;
-
-  @override
-  State<_TreeTab> createState() => _TreeTabState();
-}
-
-class _TreeTabState extends State<_TreeTab> {
-  InspectTree? _tree;
-  String? _error;
-  var _loading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _read();
-  }
-
-  @override
-  void didUpdateWidget(_TreeTab old) {
-    super.didUpdateWidget(old);
-    if (old.handle.key != widget.handle.key) {
       _tree = null;
       _error = null;
       _read();
     }
   }
 
+  @override
+  void dispose() {
+    _highlight.dispose();
+    super.dispose();
+  }
+
   Future<void> _read() async {
     setState(() => _loading = true);
     try {
-      var tree = await widget.core.inspectTree(widget.handle);
+      var read = await widget.core.inspectRead(widget.handle);
       if (!mounted) return;
       setState(() {
-        _tree = tree;
+        _image = read.image;
+        _tree = read.tree;
         _error = null;
       });
     } on Object catch (e) {
@@ -740,96 +677,79 @@ class _TreeTabState extends State<_TreeTab> {
 
   @override
   Widget build(BuildContext context) {
-    var tree = _tree;
-    var nodes = tree == null
-        ? const <(InspectNode, int)>[]
-        : _flatten(tree.root, 0).toList();
+    if (_error case var error?) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _TabBar(loading: _loading, onRefresh: _read),
+          Expanded(child: _Failed(error)),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _TabBar(
           loading: _loading,
           onRefresh: _read,
-          note: tree == null ? null : '${nodes.length} widgets from your code',
+          note: 'rendered by the app, so platform views will not appear',
         ),
         Expanded(
-          child: _error != null
-              ? _Failed(_error!)
-              : tree != null && tree.root == null
-              ? const _Hint('The app has not built a frame yet.')
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: FwSpacing.lg,
-                    vertical: FwSpacing.sm,
-                  ),
-                  itemCount: nodes.length,
-                  itemBuilder: (context, i) => _TreeRow(
-                    node: nodes[i].$1,
-                    depth: nodes[i].$2,
-                    worktree: widget.core.host.worktree.path,
-                  ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Fixed and narrow, as the design draws it. A phone is tall and
+              // thin and a tree row is wide, so an even split would waste the
+              // half that cannot use it.
+              SizedBox(
+                width: 240,
+                child: _Picture(image: _image, loading: _loading),
+              ),
+              VerticalDivider(width: 1, color: context.colors.line),
+              Expanded(
+                child: ElementsView(
+                  root: _tree?.root,
+                  placeholder: _loading
+                      ? 'Reading the app…'
+                      : 'The app has not built a frame yet.',
+                  highlight: _highlight,
+                  // Paths are shortened against the worktree, and live in the
+                  // detail pane rather than on every row — which is what the
+                  // shared view does and what the run panel's own tree did not.
+                  displayRoot: widget.core.host.worktree.path,
                 ),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
-
-  static Iterable<(InspectNode, int)> _flatten(
-    InspectNode? node,
-    int depth,
-  ) sync* {
-    if (node == null) return;
-    yield (node, depth);
-    for (var child in node.children) {
-      yield* _flatten(child, depth + 1);
-    }
-  }
 }
 
-class _TreeRow extends StatelessWidget {
-  const _TreeRow({
-    required this.node,
-    required this.depth,
-    required this.worktree,
-  });
+class _Picture extends StatelessWidget {
+  const _Picture({required this.image, required this.loading});
 
-  final InspectNode node;
-  final int depth;
-  final String worktree;
+  final Uint8List? image;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Padding(
-      padding: EdgeInsets.only(left: depth * 14.0, top: 1, bottom: 1),
-      child: Row(
-        children: [
-          Flexible(
-            flex: 0,
-            child: Text(
-              node.description ?? node.type,
-              style: context.type.bodySmall.copyWith(
-                // The framework's own widgets are context, yours are the
-                // subject. `createdByLocalProject` is the framework's verdict,
-                // not a guess from the path.
-                color: node.createdByLocalProject ? colors.ink : colors.mut2,
-              ),
-              overflow: TextOverflow.ellipsis,
+    return Container(
+      color: context.colors.panel,
+      padding: const EdgeInsets.all(FwSpacing.md),
+      alignment: Alignment.topCenter,
+      child: image == null
+          ? Text(
+              loading ? '' : 'No picture yet',
+              style: context.type.caption.copyWith(color: context.colors.mut2),
+            )
+          : Image.memory(
+              image!,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.medium,
+              gaplessPlayback: true,
             ),
-          ),
-          if (node.source case var source?) ...[
-            const Gap(FwSpacing.sm),
-            Flexible(
-              child: Text(
-                _sourceLabel(source, worktree),
-                style: context.type.micro.copyWith(color: colors.mut3),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.left,
-              ),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }
@@ -1762,18 +1682,3 @@ TextStyle _mono(BuildContext context, {Color? color}) =>
       fontFeatures: const [FontFeature.tabularFigures()],
       color: color,
     );
-
-/// `examples/example/lib/main.dart:66:11` — the part anybody reads.
-///
-/// The framework reports an absolute `file://` URI, which is the truth and is
-/// also three times the width of the widget name beside it. Anything inside the
-/// worktree becomes relative to it; anything outside is the SDK's own, where
-/// the file and line are the only part that carries meaning.
-String _sourceLabel(InspectSource source, String worktree) {
-  var text = source.describe(relativeTo: worktree);
-  if (!text.startsWith('/')) return text;
-  var parts = text.split('/');
-  return parts.length <= 2
-      ? text
-      : '…/${parts.sublist(parts.length - 2).join('/')}';
-}

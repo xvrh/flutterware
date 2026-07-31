@@ -7,7 +7,6 @@ void main() {
       const RunPlace.first(),
       const RunPlace.newRun(),
       const RunPlace('app-03109c1723af'),
-      const RunPlace('app-03109c1723af', view: RunViewKind.tree),
       const RunPlace('app-03109c1723af', view: RunViewKind.logs),
     ]) {
       test('$place', () {
@@ -59,8 +58,20 @@ void main() {
   });
 
   test('RunViewKind.byName refuses what it does not know', () {
-    expect(RunViewKind.byName('tree'), RunViewKind.tree);
+    expect(RunViewKind.byName('logs'), RunViewKind.logs);
     expect(RunViewKind.byName('Screen'), isNull);
     expect(RunViewKind.byName(''), isNull);
   });
+
+  test(
+    'an address to the tree tab that briefly existed lands on the screen',
+    () {
+      // `tree` shipped as a third tab for a day before the design was re-read:
+      // the Screen tab is a split, picture beside tree, and separating them was
+      // the deviation. Anyone holding that address keeps their run.
+      var place = runPlace(['app-abc', 'tree']);
+      expect(place.runKey, 'app-abc');
+      expect(place.view, RunViewKind.screen);
+    },
+  );
 }
