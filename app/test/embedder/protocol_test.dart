@@ -124,6 +124,21 @@ void main() {
     expect(msg.physicalKey, 0x00070004);
     expect(msg.logicalKey, 0x00000061);
     expect(msg.timestampMicros, 999);
+    expect(msg.character, isNull);
+  });
+
+  test('round-trips a KeyEvent character, multi-byte included', () {
+    var msg = roundTrip(
+      const KeyEventMessage(
+        kind: KeyEventKind.down,
+        physicalKey: 0x00070004,
+        logicalKey: 0x00000061,
+        modifiers: 0,
+        timestampMicros: 999,
+        character: 'é',
+      ),
+    );
+    expect(msg.character, 'é');
   });
 
   test('FrameReader splits two concatenated frames', () {

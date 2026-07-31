@@ -69,6 +69,19 @@ void input_handle_key(FlutterEngine engine, const uint8_t* p, size_t len) {
   // modifiers (offset 20, u32) are not part of FlutterKeyEvent; ignored in 3a.
   ev.timestamp = (double)rd_u64(p, 24);
   ev.character = NULL;
+  // The character the host's layout produced, as u32 length + UTF-8; a
+  // 32-byte frame is from a GUI that predates it. One keystroke's text — a
+  // grapheme at most — so a small stack buffer holds any real one, and the
+  // engine copies during the send. Ignored for up events per the embedder API.
+  char character[16];
+  if (len >= 36 && ev.type != kFlutterKeyEventTypeUp) {
+    uint32_t char_len = rd_u32(p, 32);
+    if (char_len > 0 && char_len < sizeof(character) && 36 + char_len <= len) {
+      memcpy(character, p + 36, char_len);
+      character[char_len] = '\0';
+      ev.character = character;
+    }
+  }
   ev.synthesized = false;
   // device_type has no zero enumerator; the engine rejects an unset value.
   ev.device_type = kFlutterKeyEventDeviceTypeKeyboard;

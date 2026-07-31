@@ -49,6 +49,10 @@ class EmbedderInputRegion extends StatelessWidget {
               : KeyEventKind.up,
           physicalKey: event.physicalKey.usbHidUsage,
           logicalKey: event.logicalKey.keyId,
+          // The host's layout resolved this keystroke to text; the guest's
+          // text input builds editing state from it and can get it nowhere
+          // else. Null on ups and non-printing keys.
+          character: event.character,
         );
         return KeyEventResult.handled;
       },

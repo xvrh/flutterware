@@ -354,6 +354,7 @@ class EmbeddedEngine extends ChangeNotifier {
     required KeyEventKind kind,
     required int physicalKey,
     required int logicalKey,
+    String? character,
   }) {
     _send(
       KeyEventMessage(
@@ -362,6 +363,7 @@ class EmbeddedEngine extends ChangeNotifier {
         logicalKey: logicalKey,
         modifiers: 0,
         timestampMicros: DateTime.now().microsecondsSinceEpoch,
+        character: character,
       ),
     );
   }

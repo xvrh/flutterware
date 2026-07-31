@@ -106,6 +106,30 @@ Future<void> main() async {
   await conn.flush();
   await expectFramesAfter('trackpad pan-zoom');
 
+  // 'a' down with its character — the frame layout text input rides on — and
+  // the character-less up.
+  send(
+    KeyEventMessage(
+      kind: KeyEventKind.down,
+      physicalKey: 0x00070004,
+      logicalKey: 0x00000061,
+      modifiers: 0,
+      timestampMicros: now,
+      character: 'a',
+    ),
+  );
+  send(
+    KeyEventMessage(
+      kind: KeyEventKind.up,
+      physicalKey: 0x00070004,
+      logicalKey: 0x00000061,
+      modifiers: 0,
+      timestampMicros: now,
+    ),
+  );
+  await conn.flush();
+  await expectFramesAfter('keystroke with character');
+
   send(const ShutdownMessage());
   await conn.flush();
   await conn.close();

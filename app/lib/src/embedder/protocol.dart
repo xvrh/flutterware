@@ -177,6 +177,7 @@ class KeyEventMessage extends EmbedderMessage {
     required this.logicalKey,
     required this.modifiers,
     required this.timestampMicros,
+    this.character,
   });
 
   final KeyEventKind kind;
@@ -184,6 +185,15 @@ class KeyEventMessage extends EmbedderMessage {
   final int logicalKey;
   final int modifiers;
   final int timestampMicros;
+
+  /// The character this key produced under the host's keyboard layout, or
+  /// null when it produced none — key-ups, and non-printing keys.
+  ///
+  /// The host is the only one who can know it: the layout lives with the real
+  /// keyboard, and a guest deriving text from [logicalKey] would type as if
+  /// every keyboard were US English. Never the empty string on the wire —
+  /// encoded as a zero length, which decodes back to null.
+  final String? character;
 }
 
 class ShutdownMessage extends EmbedderMessage {
@@ -260,6 +270,14 @@ Uint8List encodeMessage(EmbedderMessage message) {
       _u64(body, message.logicalKey);
       _u32(body, message.modifiers);
       _u64(body, message.timestampMicros);
+      var character = message.character;
+      if (character == null || character.isEmpty) {
+        _u32(body, 0);
+      } else {
+        var bytes = utf8.encode(character);
+        _u32(body, bytes.length);
+        body.add(bytes);
+      }
     case ShutdownMessage():
       body.addByte(MessageType.shutdown.tag);
     case CaptureMessage():
@@ -341,12 +359,16 @@ EmbedderMessage decodeMessageBody(Uint8List body) {
         rotation: data.getFloat64(72, Endian.little),
       );
     case MessageType.keyEvent:
+      var characterLength = data.getUint32(32, Endian.little);
       return KeyEventMessage(
         kind: KeyEventKind.values[data.getUint32(0, Endian.little)],
         physicalKey: data.getUint64(4, Endian.little),
         logicalKey: data.getUint64(12, Endian.little),
         modifiers: data.getUint32(20, Endian.little),
         timestampMicros: data.getUint64(24, Endian.little),
+        character: characterLength == 0
+            ? null
+            : utf8.decode(body.sublist(1 + 36, 1 + 36 + characterLength)),
       );
   }
 }

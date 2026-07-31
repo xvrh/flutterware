@@ -161,6 +161,9 @@ String get _entryId => r'${active.id}';
 // would print into the root zone and be captured by nothing at all.
 void main() => GuestLogs.instance.install(() {
   WidgetsFlutterBinding.ensureInitialized();
+  // The guest has no platform IME; typing in a demo's field is this or
+  // nothing. Before runApp so the first field to focus finds it installed.
+  GuestTextInput.instance.install();
   // Before runApp, and once: the panel may ask what knobs exist before the
   // first frame, and the extensions have to outlive every entry switch.
   CatalogParameters.instance.registerExtensions();

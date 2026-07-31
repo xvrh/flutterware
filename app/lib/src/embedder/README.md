@@ -71,7 +71,16 @@ The guest announces surfaces by `IOSurfaceID`, signals each frame with
 
 The GUI texture path is verified manually via the harness.
 
+## Text input
+
+Plain typing works: key events carry the character the host's layout produced,
+and the guest builds editing state from them in Dart — `GuestTextInput`
+(`package:flutterware/ui_catalog_guest.dart`), installed by the generated
+catalog entrypoint in place of the platform IME nothing is behind. Editing
+keys — deletion, caret, selection — are the framework's own shortcuts and need
+nothing from us.
+
 ## Not yet implemented
 
-Hot reload (step 4), text input/IME, multiple embedded engines, non-macOS
-platforms.
+Hot reload (step 4), IME composition (dead keys, CJK), guest clipboard,
+multiple embedded engines, non-macOS platforms.
