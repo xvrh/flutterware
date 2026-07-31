@@ -748,9 +748,18 @@ Order chosen so each slice is useful alone and the risky parts come early.
      announcing themselves right now, and `hostAddresses` with this machine's
      LAN addresses. Ask 3 — "inject the local server IP" — is then picking
      rather than looking up.
-3. **Inspect.** `installGuestRuntime` extracted and mounted via `Devbar`; tree,
-   screenshot, logs, errors as the artifact triple with addresses; MCP loop
-   working with no GUI running (the server plugin's exit criterion, reused).
+3. **Inspect.** Tree, screenshot, logs, errors as the artifact triple with
+   addresses; MCP loop working with no GUI running (the server plugin's exit
+   criterion, reused).
+
+   > **Over the VM service, not a guest runtime.** S-L3 measured what a plain
+   > `flutter run` app already exposes: the whole triple, plus source locations
+   > on every tree node and the debug flags. `installGuestRuntime` comes *off*
+   > this slice's critical path and becomes an opt-in Devbar install for the
+   > two things the VM service provably lacks — global rects and hit-testing.
+   > `_flutter.screenshot` is dead under Impeller; the working call is
+   > `ext.flutter.inspector.screenshot`. See
+   > `2026-07-31-sl3-inspect-surface-findings.md`.
 
    > **The panel is rebuilt at the start of this slice**, not during it —
    > device-centric to run-centric, with launching on its own page and the
