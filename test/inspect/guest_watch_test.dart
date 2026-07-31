@@ -157,6 +157,77 @@ void main() {
       expect(probe.pushes, hasLength(1));
     });
 
+    testWidgets('a scroll is reported, and is neither of the other two', (
+      tester,
+    ) async {
+      var probe = await _Probe.start(tester);
+      await probe.rebuild();
+
+      // The case the tier exists for: the same widgets at the same depths in a
+      // demo of the same size, and every rect under the scrollable somewhere
+      // else. Both the tiers above are blind to it by construction.
+      probe.scrolls++;
+      await probe.rebuild();
+
+      expect(probe.pushes, hasLength(1));
+      expect(probe.pushes.single.scrolled, isTrue);
+      expect(probe.pushes.single.structureChanged, isFalse);
+      expect(probe.pushes.single.resized, isFalse);
+
+      // And a frame that scrolls no further is silence again: the host reads
+      // once the pushes stop, so a tier that kept reporting would be a tier
+      // that never let it.
+      await probe.rebuild();
+      expect(probe.pushes, hasLength(1));
+    });
+
+    testWidgets('a scroll dropped by the debounce is reported after it', (
+      tester,
+    ) async {
+      // Real milliseconds, waited out with a real delay: the window is a
+      // [Stopwatch], which reads the wall clock and which `pump` does not move.
+      var probe = await _Probe.start(
+        tester,
+        minInterval: const Duration(milliseconds: 50),
+      );
+      await probe.rebuild();
+
+      // Spends the window on a shape change, so the scroll that follows lands
+      // inside it and is dropped.
+      await probe.rebuild(extra: 1);
+      expect(probe.pushes, hasLength(1));
+      probe.scrolls++;
+      await probe.rebuild();
+      expect(probe.pushes, hasLength(1), reason: 'inside the window');
+
+      // Held rather than forgotten, which the other tiers do not do — and here
+      // it matters: a scroll nobody was told about leaves the panel drawing the
+      // picker's rectangle over what used to be there, with nothing else ever
+      // coming to correct it.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 120)),
+      );
+      await probe.rebuild();
+
+      expect(probe.pushes.map((p) => p.scrolled), [false, true]);
+    });
+
+    testWidgets('an entry switch is not a scroll', (tester) async {
+      var probe = await _Probe.start(tester);
+      await probe.rebuild();
+
+      // The counter belongs to the guest rather than to the entry, so it does
+      // not restart with the demo. The frame it is compared against does: a
+      // demo scrolled on its way out would otherwise be reported as the next
+      // one scrolling on its way in, and the host would read a tree it had just
+      // read.
+      probe.scrolls++;
+      probe.entryId = 'demo.dart#second';
+      await probe.rebuild();
+
+      expect(probe.pushes, isEmpty);
+    });
+
     testWidgets('an entry switch is not a structure change', (tester) async {
       var probe = await _Probe.start(tester);
       await probe.rebuild();
@@ -237,6 +308,7 @@ void main() {
         hashMicros: 137,
         structureChanged: true,
         resized: true,
+        scrolled: true,
         geometry: WatchBox(id: '0/1', x: 4, y: 8, width: 120, height: 40),
       );
       var back = WatchPush.fromJson(push.toJson());
@@ -247,6 +319,7 @@ void main() {
       expect(back.hashMicros, 137);
       expect(back.structureChanged, isTrue);
       expect(back.resized, isTrue);
+      expect(back.scrolled, isTrue);
       expect(back.geometry?.id, '0/1');
       expect(back.geometry?.width, 120);
     });
@@ -263,6 +336,7 @@ void main() {
 
       expect(back.structureChanged, isFalse);
       expect(back.resized, isFalse);
+      expect(back.scrolled, isFalse);
       expect(back.geometry, isNull);
     });
 
@@ -312,6 +386,7 @@ class _Probe {
       rootOf: root,
       entryIdOf: () => probe.entryId,
       emit: probe.pushes.add,
+      scrollsOf: () => probe.scrolls,
     )..watch(nodeId: nodeId, minInterval: minInterval);
     return probe;
   }
@@ -326,6 +401,11 @@ class _Probe {
   /// How many times the watch asked what a node id points at. The expensive
   /// half, so the number of times it is paid is the thing worth asserting.
   var lookups = 0;
+
+  /// What the demo has scrolled, stood in for. The real counter is bumped by a
+  /// `NotificationListener` above the demo; driving it by hand here is what
+  /// lets a scroll be told apart from a rebuild that happens to follow one.
+  var scrolls = 0;
 
   var _extra = 0;
   var _wrap = false;

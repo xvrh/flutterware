@@ -13,6 +13,7 @@ class WatchPush {
     required this.hashMicros,
     this.structureChanged = false,
     this.resized = false,
+    this.scrolled = false,
     this.geometry,
   });
 
@@ -55,6 +56,15 @@ class WatchPush {
   /// overflowed.
   final bool resized;
 
+  /// Something in the demo scrolled — so the rects below it have all moved,
+  /// though the shape did not change and neither did the demo's box.
+  ///
+  /// **Still moving, not finished moving.** This arrives on every frame of a
+  /// fling, and a host that re-read the tree on each one would queue walks
+  /// faster than they complete. What it says is "wait for me": read once the
+  /// pushes stop.
+  final bool scrolled;
+
   /// The watched node's box, when it moved.
   final WatchBox? geometry;
 
@@ -65,6 +75,7 @@ class WatchPush {
     hashMicros: (json['hashMicros'] as num?)?.toInt() ?? 0,
     structureChanged: json['structure'] == true,
     resized: json['resized'] == true,
+    scrolled: json['scrolled'] == true,
     geometry: switch (json['geometry']) {
       Map box => WatchBox.fromJson(box.cast<String, Object?>()),
       _ => null,
@@ -78,6 +89,7 @@ class WatchPush {
     'hashMicros': hashMicros,
     if (structureChanged) 'structure': true,
     if (resized) 'resized': true,
+    if (scrolled) 'scrolled': true,
     if (geometry case var box?) 'geometry': box.toJson(),
   };
 }

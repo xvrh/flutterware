@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/widgets.dart';
 
 import 'guest_inspect.dart';
+import 'guest_scrolls.dart';
 import 'watch.dart';
 
 /// Tells the host when what it is looking at has moved, without being asked.
@@ -25,6 +26,7 @@ import 'watch.dart';
 /// | geometry | the watched node's box | the box |
 /// | structure | the shape of the element tree | a flag — the host re-reads |
 /// | resize | the demo's own box | a flag — every rect is stale at once |
+/// | scroll | the offsets under a scrollable | a flag — the host waits, then re-reads |
 ///
 /// The structure tier pushes a **flag, not a tree**. The host already knows how
 /// to read `ext.flutterware.tree`; what it cannot do is know when to. Shipping
@@ -39,7 +41,11 @@ class GuestWatch {
     required this.rootOf,
     required this.entryIdOf,
     void Function(WatchPush)? emit,
-  }) : _emit = emit ?? _post;
+    int Function()? scrollsOf,
+  }) : _emit = emit ?? _post,
+       _scrollsOf = scrollsOf ?? _scrollTicks;
+
+  static int _scrollTicks() => GuestScrolls.instance.ticks;
 
   static void _post(WatchPush push) =>
       developer.postEvent(eventKind, push.toJson());
@@ -49,6 +55,12 @@ class GuestWatch {
   /// this could only ever assert that *something* was pushed — never which
   /// tier fired, which is the whole distinction this class exists to draw.
   final void Function(WatchPush) _emit;
+
+  /// Where the scroll tier's number comes from. Injectable for the reason
+  /// [_emit] is: the counter is a singleton the demo writes to, and a test that
+  /// could not substitute it would have to build a scrollable and fling it to
+  /// assert anything about when this class speaks.
+  final int Function() _scrollsOf;
 
   final GuestInspector inspector;
 
@@ -97,6 +109,10 @@ class GuestWatch {
 
   int? _shape;
   Size? _size;
+
+  /// The scroll count as of the last frame that was *reported*, which is not
+  /// the same as the last frame that was read — see [_onFrame].
+  int? _scrolls;
   Rect? _box;
   String? _watchedEntry;
 
@@ -131,6 +147,7 @@ class GuestWatch {
     _watching = true;
     _shape = null;
     _size = null;
+    _scrolls = null;
     _frames = 0;
     _pushes = 0;
     _hashMicrosTotal = 0;
@@ -153,6 +170,7 @@ class GuestWatch {
     _box = null;
     _shape = null;
     _size = null;
+    _scrolls = null;
   }
 
   /// Waits for the next frame, once.
@@ -179,6 +197,11 @@ class GuestWatch {
       _watchedEntry = entryId;
       _shape = null;
       _size = null;
+      // The count is the guest's, not the entry's, so it does not restart with
+      // the demo — but the frame it is compared against belongs to the previous
+      // one, and a demo that scrolled on its way out would otherwise be
+      // reported as this one scrolling on its way in.
+      _scrolls = null;
       _node = null;
       _resolved = false;
       _box = null;
@@ -218,6 +241,18 @@ class GuestWatch {
     var resized = _size != null && size != _size;
     _size = size;
 
+    // One integer compare, and it catches what neither of the two above can:
+    // scrolling moves every rect under the scrollable while leaving the shape
+    // and the demo's box exactly as they were. Assigned *after* the debounce
+    // below rather than here, so a push dropped inside the window is caught
+    // again on the next frame — the other tiers overwrite here and lose it,
+    // which is survivable for a shape change nobody is drawing and is not
+    // survivable for this, whose whole purpose is to say the rectangles on
+    // screen are lies.
+    var scrolls = _scrollsOf();
+    var scrolled = _scrolls != null && scrolls != _scrolls;
+    _scrolls ??= scrolls;
+
     var box = _boxOf();
     WatchBox? geometry;
     if (box != null && box != _box) {
@@ -231,7 +266,7 @@ class GuestWatch {
     }
     _box = box;
 
-    if (!structureMoved && !resized && geometry == null) return;
+    if (!structureMoved && !resized && !scrolled && geometry == null) return;
     // Debounced *after* the comparison, never before: skipping the read would
     // mean comparing the next frame against a state two frames old, and a
     // change that reverted inside the window would go unreported for ever.
@@ -242,6 +277,7 @@ class GuestWatch {
       ..reset()
       ..start();
     _pushes++;
+    _scrolls = scrolls;
 
     _emit(
       WatchPush(
@@ -251,6 +287,7 @@ class GuestWatch {
         hashMicros: _hashMicrosLast,
         structureChanged: structureMoved,
         resized: resized,
+        scrolled: scrolled,
         geometry: geometry,
       ),
     );
