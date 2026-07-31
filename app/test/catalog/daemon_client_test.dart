@@ -34,6 +34,20 @@ import 'package:test/test.dart';
 /// than a path of the test's choosing. That keeps `DaemonAddress` in the loop and
 /// means the attach is the real one; the config is rooted in a temp directory, so
 /// the key cannot collide with a daemon the developer is actually running.
+/// Polls until [condition] holds. What the daemon says crosses a real socket,
+/// so its arrival is on the kernel's schedule, not the event queue's —
+/// `pumpEventQueue` alone was a bet that delivery had already happened, and on
+/// a loaded CI runner it loses.
+Future<void> _waitUntil(bool Function() condition) async {
+  var deadline = DateTime.now().add(const Duration(seconds: 10));
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail('condition not reached within 10s');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}
+
 void main() {
   late Directory root;
   late _FakeDaemon daemon;
@@ -201,7 +215,7 @@ void main() {
       daemon.say(
         encodeLine(const CatalogChanged(entries: [], quarantined: [])),
       );
-      await pumpEventQueue();
+      await _waitUntil(() => client.lastChange != null);
 
       expect(client.lastChange, isA<CatalogChanged>());
     });
@@ -223,6 +237,8 @@ void main() {
       daemon.say(
         encodeLine(const CatalogChanged(entries: [], quarantined: [])),
       );
+      await _waitUntil(() => seen.isNotEmpty);
+      // One more drain, so a duplicate would have landed before the count.
       await pumpEventQueue();
 
       expect(seen, hasLength(1));
@@ -243,7 +259,7 @@ void main() {
           encodeLine(const CatalogChanged(entries: [], quarantined: [])),
         );
       }
-      await pumpEventQueue();
+      await _waitUntil(() => seen.length >= 3);
 
       expect(seen, hasLength(3));
     });
