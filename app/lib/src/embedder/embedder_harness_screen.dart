@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'embedded_engine.dart';
-import 'protocol.dart';
+import 'input_region.dart';
 
 /// A standalone dev harness that runs the embedder guest and shows its live
 /// output in an external texture.
@@ -50,20 +49,6 @@ class _EmbedderHarnessScreenState extends State<EmbedderHarnessScreen> {
     _engine.resize(width, height, dpr);
   }
 
-  void _sendPointer(
-    PointerPhase phase,
-    Offset local,
-    double dpr, {
-    int buttons = 0,
-  }) {
-    _engine.sendPointer(
-      phaseKind: phase,
-      x: local.dx * dpr,
-      y: local.dy * dpr,
-      buttons: buttons,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     var dpr = MediaQuery.of(context).devicePixelRatio;
@@ -100,49 +85,14 @@ class _EmbedderHarnessScreenState extends State<EmbedderHarnessScreen> {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     _maybeResize(constraints.biggest, dpr);
                   });
-                  return Focus(
+                  return EmbedderInputRegion(
+                    engine: _engine,
+                    dpr: dpr,
                     focusNode: _focusNode,
-                    onKeyEvent: (node, event) {
-                      var kind = event is KeyDownEvent
-                          ? KeyEventKind.down
-                          : event is KeyRepeatEvent
-                          ? KeyEventKind.repeat
-                          : KeyEventKind.up;
-                      _engine.sendKey(
-                        kind: kind,
-                        physicalKey: event.physicalKey.usbHidUsage,
-                        logicalKey: event.logicalKey.keyId,
-                      );
-                      return KeyEventResult.handled;
-                    },
-                    child: Listener(
-                      onPointerDown: (e) {
-                        _focusNode.requestFocus();
-                        _sendPointer(
-                          PointerPhase.down,
-                          e.localPosition,
-                          dpr,
-                          buttons: 1,
-                        );
-                      },
-                      onPointerMove: (e) => _sendPointer(
-                        PointerPhase.move,
-                        e.localPosition,
-                        dpr,
-                        buttons: 1,
-                      ),
-                      onPointerHover: (e) => _sendPointer(
-                        PointerPhase.hover,
-                        e.localPosition,
-                        dpr,
-                      ),
-                      onPointerUp: (e) =>
-                          _sendPointer(PointerPhase.up, e.localPosition, dpr),
-                      child: SizedBox.expand(
-                        child: _engine.textureId == null
-                            ? const SizedBox()
-                            : Texture(textureId: _engine.textureId!),
-                      ),
+                    child: SizedBox.expand(
+                      child: _engine.textureId == null
+                          ? const SizedBox()
+                          : Texture(textureId: _engine.textureId!),
                     ),
                   );
                 },

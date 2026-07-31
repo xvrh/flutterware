@@ -328,6 +328,10 @@ class EmbeddedEngine extends ChangeNotifier {
     int buttons = 0,
     double scrollDeltaX = 0,
     double scrollDeltaY = 0,
+    double panX = 0,
+    double panY = 0,
+    double scale = 1,
+    double rotation = 0,
   }) {
     _send(
       PointerEventMessage(
@@ -338,6 +342,10 @@ class EmbeddedEngine extends ChangeNotifier {
         scrollDeltaX: scrollDeltaX,
         scrollDeltaY: scrollDeltaY,
         timestampMicros: DateTime.now().microsecondsSinceEpoch,
+        panX: panX,
+        panY: panY,
+        scale: scale,
+        rotation: rotation,
       ),
     );
   }

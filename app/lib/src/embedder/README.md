@@ -6,7 +6,8 @@ Experimental Flutter engine embedder, part of `flutterware_app`.
 animated, interactive scene with the **Metal renderer**, directly into shared
 `IOSurface`-backed Metal textures — a zero-copy path with no per-frame copy.
 The flutterware desktop GUI displays it live in an external `Texture`. The
-panel is resizable and forwards pointer/keyboard input.
+panel is resizable and forwards pointer, keyboard, scroll-wheel and trackpad
+pan/zoom input (`input_region.dart`).
 
 ## Run the GUI harness
 

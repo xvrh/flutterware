@@ -31,7 +31,18 @@ enum MessageType {
 
 /// Pointer phases; the index order matches `FlutterPointerPhase` in
 /// `flutter_embedder.h` so the guest can cast the index directly.
-enum PointerPhase { cancel, up, down, move, add, remove, hover }
+enum PointerPhase {
+  cancel,
+  up,
+  down,
+  move,
+  add,
+  remove,
+  hover,
+  panZoomStart,
+  panZoomUpdate,
+  panZoomEnd,
+}
 
 enum KeyEventKind { down, up, repeat }
 
@@ -134,6 +145,10 @@ class PointerEventMessage extends EmbedderMessage {
     required this.scrollDeltaX,
     required this.scrollDeltaY,
     required this.timestampMicros,
+    this.panX = 0,
+    this.panY = 0,
+    this.scale = 1,
+    this.rotation = 0,
   });
 
   final PointerPhase phase;
@@ -143,6 +158,16 @@ class PointerEventMessage extends EmbedderMessage {
   final double scrollDeltaX;
   final double scrollDeltaY;
   final int timestampMicros;
+
+  /// Trackpad gesture state, for the `panZoom*` phases only.
+  ///
+  /// Cumulative since [PointerPhase.panZoomStart] — pan in physical pixels,
+  /// scale as a multiplier from 1.0, rotation in radians — matching the
+  /// embedder API's own `pan_x`/`pan_y`/`scale`/`rotation` fields.
+  final double panX;
+  final double panY;
+  final double scale;
+  final double rotation;
 }
 
 class KeyEventMessage extends EmbedderMessage {
@@ -224,6 +249,10 @@ Uint8List encodeMessage(EmbedderMessage message) {
       _f64(body, message.scrollDeltaX);
       _f64(body, message.scrollDeltaY);
       _u64(body, message.timestampMicros);
+      _f64(body, message.panX);
+      _f64(body, message.panY);
+      _f64(body, message.scale);
+      _f64(body, message.rotation);
     case KeyEventMessage():
       body.addByte(MessageType.keyEvent.tag);
       _u32(body, message.kind.index);
@@ -306,6 +335,10 @@ EmbedderMessage decodeMessageBody(Uint8List body) {
         scrollDeltaX: data.getFloat64(24, Endian.little),
         scrollDeltaY: data.getFloat64(32, Endian.little),
         timestampMicros: data.getUint64(40, Endian.little),
+        panX: data.getFloat64(48, Endian.little),
+        panY: data.getFloat64(56, Endian.little),
+        scale: data.getFloat64(64, Endian.little),
+        rotation: data.getFloat64(72, Endian.little),
       );
     case MessageType.keyEvent:
       return KeyEventMessage(
