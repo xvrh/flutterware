@@ -14,6 +14,7 @@ import '../context.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/native/assets_core.dart';
 import '../plugins/native/dependencies_core.dart';
+import '../plugins/native/run_core.dart';
 import '../plugins/native/server_core.dart';
 import '../plugins/native/scenarios_core.dart';
 import '../plugins/native/splash_core.dart';
@@ -442,6 +443,7 @@ class Session {
 PluginCoreRegistry defaultCoreRegistry() => PluginCoreRegistry({
   assetsPluginId: assetsCoreFactory,
   dependenciesPluginId: dependenciesCoreFactory,
+  runPluginId: runCoreFactory,
   serverPluginId: serverCoreFactory,
   scenariosPluginId: scenariosCoreFactory,
   splashPluginId: splashCoreFactory,

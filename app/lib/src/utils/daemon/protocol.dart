@@ -63,14 +63,24 @@ class DaemonProtocol {
     return null;
   }
 
+  /// The event [object] carries, or null when there is none to read.
+  ///
+  /// Decoding failures are swallowed, deliberately. This runs inside the
+  /// stdout subscription, so a throw here does not fail one event — it takes
+  /// the whole subscription down and the daemon goes silent for the rest of
+  /// its life. The flutter tool is not a protocol we version, and it has
+  /// already added a log level we did not know about; the next addition must
+  /// cost one dropped event, not the connection.
   static Event? tryReadEvent(Map<String, dynamic> object) {
     var eventName = object['event'] as String?;
-    if (eventName != null) {
+    if (eventName == null) return null;
+    try {
       var params = object['params'] as Map<String, dynamic>;
-      var decodedEvent = Event.decode(eventName, params);
-      return decodedEvent;
+      return Event.decode(eventName, params);
+    } on Object catch (e) {
+      _logger.warning('Could not decode a "$eventName" daemon event: $e');
+      return null;
     }
-    return null;
   }
 
   Stream<Event> get onEvent => _eventController.stream;

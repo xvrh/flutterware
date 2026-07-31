@@ -234,6 +234,79 @@ packages: List<DependencyListPackage>
 | `transitive` | boolean | no | false | List what the package pulls in indirectly too. The counts are reported either way. |
 
 
+### `flutterware.run`
+
+#### `devices` — Devices
+
+Every device an app could run on, with what is already running on it and from which worktree. Reads a cached list and says how old it is; pass refresh to start a flutter daemon and take a fresh one, which costs a few seconds.
+
+```sh
+fw run run devices [--refresh=…]
+```
+
+Returns `RunDevicesResult`:
+
+```
+devices: List<RunDeviceEntry>
+  id: String   # What `flutter run -d` takes.
+  name: String
+  platform: String?   # `ios`, `android`, `macos`, `web` — the family, not the architecture.
+  sdk: String?   # `iOS 18.5`, `Android 12 (API 31)`.
+  emulator: bool
+  physical: bool   # False for the always-there targets — this desktop, the browser — which cannot be unplugged and are never contended for in the way a phone is.
+  connected: bool   # Known but not reachable right now.
+  connection: String?   # `attached` for a cable or a built-in target, `wireless` over the network.
+  running: List<RunHolder>   # The runs currently holding this device, from any worktree.
+    worktree: String   # The worktree name — `~` for the main checkout.
+    entrypoint: String   # Package-relative entry point, `lib/main.dart`.
+    entrypointName: String?   # Its declared name, when it has one.
+    package: String?   # The package, relative to the worktree.
+    since: String   # When the run started, ISO-8601.
+    canReload: bool   # Reload and restart are still on offer — meaning both the app and the `flutter run` that launched it are alive.
+    canInspect: bool   # The app answers on its VM service: it can be inspected and driven even if its launcher is gone.
+live: bool   # True when a `flutter daemon` is running in this process, so the list is what it saw rather than what somebody wrote down earlier.
+updatedAt: String?   # When the list was taken, ISO-8601.
+age: String?   # [updatedAt] as a phrase — `just now`, `12m ago`.
+note: String?   # Said out loud when the list is empty or stale enough to explain, rather than left for the caller to infer from an empty array.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `refresh` | boolean | no | false | Ask a live flutter daemon instead of reading the cache |
+
+#### `apps` — Running apps
+
+Every app announcing itself under this machine's run directory, from any worktree, probed: whether the app still answers, whether the launcher that can hot-reload it is still alive, and where its log is. Handles nothing answers are deleted.
+
+```sh
+fw run run apps
+```
+
+Returns `RunAppsResult`:
+
+```
+apps: List<RunAppEntry>
+  device: String
+  deviceName: String?
+  worktree: String   # The worktree name — `~` for the main checkout.
+  mine: bool   # True when that worktree is the one this call was made from.
+  package: String?
+  entrypoint: String
+  entrypointName: String?
+  knobs: Map<String, String>   # The dart-defines it was built with.
+  since: String   # When it started, ISO-8601.
+  app: bool   # The app answered on its VM service — it can be inspected and driven.
+  launcher: bool   # The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.
+  vmService: String?
+  log: String?   # Where the launcher's output is being written, for a client that arrived after the interesting part scrolled past.
+  error: String?   # Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.
+swept: int   # Handles deleted during this call because nothing answered them.
+note: String?
+```
+
+Takes no parameters.
+
+
 ### `flutterware.server`
 
 #### `requests` — Recent requests

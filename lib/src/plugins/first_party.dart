@@ -197,6 +197,33 @@ class ServerInspection extends Plugin {
     : super('flutterware.server', label: label ?? 'Server');
 }
 
+/// Running the app on a device: what is connected, what is free, and what is
+/// already running where — across every worktree of the repo, not just this
+/// one.
+///
+/// The packages are the apps it will be able to launch. Nothing about a launch
+/// is configured here yet — entry points and their knobs arrive with the
+/// launching half; see
+/// `docs/superpowers/specs/2026-07-31-app-launcher-cockpit-brainstorm.md`.
+///
+/// Offers no `each`, like [LauncherIcon] and for the same reason: only a
+/// package that is an app can be run onto a phone.
+class Run extends Plugin {
+  Run({this.packages = const [], String? label})
+    : super('flutterware.run', label: label ?? 'Run');
+
+  final List<RunPackage> packages;
+
+  @override
+  Map<String, Object?> get config => {
+    'packages': [for (var p in packages) p.toJson()],
+  };
+}
+
+class RunPackage extends PluginPackage {
+  const RunPackage(super.pkg);
+}
+
 /// The launcher-icon editor. Only meaningful for packages that are apps, so it
 /// deliberately offers no `each` — naming them is the point.
 class LauncherIcon extends Plugin {

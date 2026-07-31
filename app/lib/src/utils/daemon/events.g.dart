@@ -19,12 +19,18 @@ DaemonLogEvent _$DaemonLogEventFromJson(Map<String, dynamic> json) =>
 DaemonLogMessageEvent _$DaemonLogMessageEventFromJson(
   Map<String, dynamic> json,
 ) => DaemonLogMessageEvent(
-  $enumDecode(_$MessageLevelEnumMap, json['level']),
+  $enumDecode(
+    _$MessageLevelEnumMap,
+    json['level'],
+    unknownValue: MessageLevel.status,
+  ),
   json['message'] as String,
   json['stackTrace'] as String?,
 );
 
 const _$MessageLevelEnumMap = {
+  MessageLevel.trace: 'trace',
+  MessageLevel.status: 'status',
   MessageLevel.info: 'info',
   MessageLevel.warning: 'warning',
   MessageLevel.error: 'error',

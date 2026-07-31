@@ -1,5 +1,7 @@
 import 'package:json_annotation/json_annotation.dart';
 
+import 'device.dart';
+
 part 'events.g.dart';
 
 sealed class Event {
@@ -19,8 +21,41 @@ sealed class Event {
         return AppStartedEvent.fromJson(params);
       case 'app.progress':
         return AppProgressEvent.fromJson(params);
+      case 'device.added':
+        return DeviceAddedEvent.tryRead(params);
+      case 'device.removed':
+        return DeviceRemovedEvent.tryRead(params);
     }
     return null;
+  }
+}
+
+/// A device appeared — plugged in, booted, or found on the network.
+///
+/// The event's params *are* the device map, not a wrapper around one.
+class DeviceAddedEvent implements Event {
+  DeviceAddedEvent(this.device);
+
+  final DaemonDevice device;
+
+  /// Null for a device map with no id, which is nothing we can act on. An
+  /// unreadable event is dropped rather than raised: the next `getDevices`
+  /// is the authority anyway.
+  static DeviceAddedEvent? tryRead(Map<String, dynamic> json) {
+    var device = DaemonDevice.tryRead(json);
+    return device == null ? null : DeviceAddedEvent(device);
+  }
+}
+
+/// A device went away — unplugged, shut down, or off the network.
+class DeviceRemovedEvent implements Event {
+  DeviceRemovedEvent(this.device);
+
+  final DaemonDevice device;
+
+  static DeviceRemovedEvent? tryRead(Map<String, dynamic> json) {
+    var device = DaemonDevice.tryRead(json);
+    return device == null ? null : DeviceRemovedEvent(device);
   }
 }
 
@@ -46,11 +81,25 @@ class DaemonLogEvent implements Event {
       _$DaemonLogEventFromJson(json);
 }
 
-enum MessageLevel { info, warning, error }
+/// What the daemon's own logger tags a line with.
+///
+/// The full set the tool actually sends is `trace`, `status`, `warning` and
+/// `error` — see `NotifyingLogger` in `commands/daemon.dart`. `info` is here
+/// only because this enum was written before anyone read that list; nothing
+/// emits it, and removing it would be a breaking change for no gain.
+///
+/// It used to stop at `info, warning, error`, and the first `status` line the
+/// device daemon sent threw out of `Event.decode` and killed the whole
+/// protocol subscription.
+enum MessageLevel { trace, status, info, warning, error }
 
 @JsonSerializable(createToJson: false)
 class DaemonLogMessageEvent implements Event {
+  /// A level this build has never heard of reads as [MessageLevel.status] —
+  /// the tool's own "ordinary progress" — rather than failing the decode.
+  @JsonKey(unknownEnumValue: MessageLevel.status)
   final MessageLevel level;
+
   final String message;
   final String? stackTrace;
 
