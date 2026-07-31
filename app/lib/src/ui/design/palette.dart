@@ -116,6 +116,15 @@ class FwPalette {
   /// Keyboard-focus ring colour.
   Color get focusRing => primary.withValues(alpha: 0.3);
 
+  /// The wash behind the characters a filter matched. Derived from [amber]
+  /// rather than authored per theme, and see-through, so it reads as a
+  /// highlighter drawn over the row instead of a second background colour.
+  ///
+  /// A token because every list that filters lights its matches the same
+  /// yellow, and four call sites picking their own alpha is how they stopped
+  /// looking the same.
+  Color get searchMark => amber.withValues(alpha: 0.35);
+
   // ── status surfaces ── (soft fill / border derived from a status accent like
   // [grn]/[amber]/[red]/[info], so themes only author the accent)
   Color statusFill(Color accent) => Color.lerp(accent, bg, 0.88)!;

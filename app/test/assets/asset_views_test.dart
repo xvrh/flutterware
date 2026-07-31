@@ -8,6 +8,7 @@ import 'package:flutterware_app/src/assets/list.dart';
 import 'package:flutterware_app/src/assets/model/asset_catalog.dart';
 import 'package:flutterware_app/src/assets/model/asset_scan.dart';
 import 'package:flutterware_app/src/assets/preview.dart';
+import 'package:flutterware_app/src/ui/matched_text.dart';
 
 /// The views, pumped with data that never came off a disk.
 ///
