@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/shell/config_watcher.dart';
@@ -83,23 +84,33 @@ void main() {
     ], reason: 'one fire, for the content it settled on');
   });
 
-  test('sustained churn defers the fire until it stops', () async {
-    await watcher.start();
-    config.writeAsStringSync('void main() { print(1); }');
+  // The one test here on fake time, because it is the only one whose subject
+  // *is* the timing. The others assert an outcome and can afford to wait for
+  // it; this one asserts what has not happened yet at a moment defined by the
+  // clock, and on a loaded CI runner a 3ms delay outlasted the 10ms debounce,
+  // firing mid-churn and failing it for a reason that had nothing to do with
+  // the watcher. Virtual time makes the gaps exactly the fraction of the
+  // debounce the test means them to be.
+  test('sustained churn defers the fire until it stops', () {
+    fakeAsync((async) {
+      unawaited(watcher.start());
+      async.flushMicrotasks();
+      config.writeAsStringSync('void main() { print(1); }');
 
-    // What `git rebase` looks like: events arriving faster than the debounce,
-    // for longer than the debounce. Each one must *reset* the timer. Without
-    // the cancel the first timer survives and fires mid-churn — and every later
-    // one is then absorbed by the hash gate, so only the timing tells them
-    // apart.
-    for (var i = 0; i < 10; i++) {
-      events.add(WatchEvent(ChangeType.MODIFY, config.path));
-      await Future<void>.delayed(const Duration(milliseconds: 3));
-    }
-    expect(seen, isEmpty, reason: 'still churning');
+      // What `git rebase` looks like: events arriving faster than the debounce,
+      // for longer than the debounce. Each one must *reset* the timer. Without
+      // the cancel the first timer survives and fires mid-churn — and every
+      // later one is then absorbed by the hash gate, so only the timing tells
+      // them apart.
+      for (var i = 0; i < 10; i++) {
+        events.add(WatchEvent(ChangeType.MODIFY, config.path));
+        async.elapse(const Duration(milliseconds: 3));
+      }
+      expect(seen, isEmpty, reason: 'still churning');
 
-    await Future<void>.delayed(_debounce * 6);
-    expect(seen, hasLength(1), reason: 'and once it settles, exactly one');
+      async.elapse(_debounce * 6);
+      expect(seen, hasLength(1), reason: 'and once it settles, exactly one');
+    });
   });
 
   test('an event for a sibling file is ignored', () async {
