@@ -461,17 +461,32 @@ class RunCore extends PluginCore {
           parameters: _appSelector,
         ),
         PluginAction(
-          'tree',
-          'Widget tree',
-          returns: RunTreeResult,
+          'inspect',
+          'Inspect',
+          returns: RunInspectResult,
           description:
-              'The widget tree of a running app, with the file, line and '
-              'column each widget was constructed at. Read from the app '
-              'itself, so it works whether or not the launcher is still alive. '
-              'The summary tree — the widgets the framework attributes to your '
-              'code — unless full is asked for.',
+              'One reading of a running app — whether it is up, whether it can '
+              'still be reloaded, and whatever you ask about it: its widget '
+              'tree, a picture, what it printed. With no flags it answers the '
+              'question worth asking first, whether anything has gone wrong. '
+              'Everything else is opt-in and every flag you add is answered '
+              'from the **same** connection, and the tree and the picture from '
+              'the same reading — two calls against a live app are two moments '
+              'that only happen to agree. Answers even while the app is still '
+              'building, when the logs are the only thing there is to read.',
           parameters: [
             ..._appSelector,
+            const ActionParameter(
+              'tree',
+              'Widget tree',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'Report the widget tree, with the file, line and column '
+                  'each widget was constructed at. Off by default because a '
+                  'real app is thousands of tokens of tree.',
+            ),
             const ActionParameter(
               'full',
               'Full tree',
@@ -479,75 +494,54 @@ class RunCore extends PluginCore {
               required: false,
               defaultValue: 'false',
               description:
-                  "Every widget, including the framework's own. Large: a "
-                  'one-screen app is 25 summary nodes and about 517 full '
-                  'ones, six megabytes of them.',
+                  "Include the framework's own widgets, not just yours. "
+                  'Large: a one-screen app is 25 summary nodes and about 517 '
+                  'full ones, six megabytes of them.',
             ),
-          ],
-        ),
-        PluginAction(
-          'screenshot',
-          'Screenshot',
-          returns: RunScreenshotResult,
-          description:
-              'Photographs a running app and writes a PNG. Rendered by the '
-              'app itself rather than captured from the device, so it works '
-              'on hardware that cannot be asked for a screen grab — and it is '
-              'the current frame, not a cached one. Platform views (native '
-              'maps, webviews, video) will not appear.',
-          parameters: [
-            ..._appSelector,
+            const ActionParameter(
+              'screenshot',
+              'Screenshot',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'Write a PNG of the same reading everything else comes from, '
+                  'and hand back its path. Rendered by the app rather than '
+                  'grabbed from the device, so it works on hardware that '
+                  'cannot be asked for a screen grab — and platform views '
+                  '(native maps, webviews, video) will not appear.',
+            ),
             const ActionParameter(
               'out',
               'Output path',
               required: false,
               description:
-                  'Where to write the PNG. Defaults to a file beside the '
-                  "run's log, overwritten on each call.",
+                  "Where to write the PNG. A file beside the run's log when "
+                  'omitted, overwritten on each call.',
             ),
             const ActionParameter(
-              'maxSide',
-              'Maximum side',
-              kind: ActionParameterKind.integer,
-              required: false,
-              description:
-                  'Scale the picture down so its longest side is at most this '
-                  'many logical pixels. Full device size when omitted.',
-            ),
-          ],
-        ),
-        PluginAction(
-          'logs',
-          'Logs',
-          returns: RunLogsResult,
-          description:
-              "What a run's launcher has written: the app's own print output "
-              'and the tool talking about the build, kept apart because they '
-              'answer different questions. Read from the log file, so it '
-              'covers the build before the app existed and survives the app '
-              'itself — a crashed run can still be read.',
-          parameters: [
-            ..._appSelector,
-            const ActionParameter(
-              'source',
-              'Source',
-              kind: ActionParameterKind.choice,
-              required: false,
-              description: 'Whose lines to return; both when omitted',
-              options: [
-                ActionOption('app', label: 'The app'),
-                ActionOption('tool', label: 'flutter run'),
-              ],
-            ),
-            const ActionParameter(
-              'errors',
-              'Errors only',
+              'logs',
+              'What it printed',
               kind: ActionParameterKind.boolean,
               required: false,
               defaultValue: 'false',
               description:
-                  'Only lines the launcher marked as errors. Never guessed '
-                  'from the text.',
+                  "Report the run's output. Read from the launcher's log file "
+                  'rather than from the app, so it covers the build and '
+                  'survives a crash.',
+            ),
+            const ActionParameter(
+              'source',
+              'Log source',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  "Whose lines: the app's own output, or `flutter run` talking "
+                  'about the build. Both when omitted.',
+              options: [
+                ActionOption('app', label: 'The app'),
+                ActionOption('tool', label: 'flutter run'),
+              ],
             ),
             const ActionParameter(
               'lines',
@@ -556,6 +550,17 @@ class RunCore extends PluginCore {
               required: false,
               defaultValue: '200',
               description: 'How many of the most recent lines to return',
+            ),
+            const ActionParameter(
+              'errors',
+              'What broke',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'true',
+              description:
+                  'Report the lines the launcher marked as errors — never '
+                  'guessed from the text. On by default, and with no other '
+                  'flag it is the whole answer.',
             ),
           ],
         ),
@@ -759,9 +764,8 @@ class RunCore extends PluginCore {
       'reload' => _controlAction('reload', arguments),
       'restart' => _controlAction('restart', arguments),
       'stop' => _controlAction('stop', arguments),
-      'tree' => _treeAction(arguments),
+      'inspect' => _inspectAction(arguments),
       'screenshot' => _screenshotAction(arguments),
-      'logs' => _logsAction(arguments),
       'emulators' => _emulatorsAction(),
       'bootEmulator' => _bootEmulatorAction(arguments),
       _ => super.invoke(actionId, arguments: arguments),
@@ -1237,40 +1241,26 @@ class RunCore extends PluginCore {
     }
   }
 
-  Future<RunTreeResult> _treeAction(Map<String, Object?> arguments) async {
-    var handle = await _selectRunningApp(arguments);
-    var full = _boolArgument(arguments['full']);
-    var tree = await _withInspector(handle, (i) => i.tree(summary: !full));
-    return RunTreeResult(
-      device: handle.device,
-      entrypoint: handle.entrypoint,
-      summary: !full,
-      nodes: tree.length,
-      root: tree.root?.toJson(),
-      note: tree.root == null
-          ? 'The app has not built a frame yet, so it has no tree. This is '
-                'normal for the first moment after a launch.'
-          : null,
-    );
-  }
+  /// One file per run, overwritten. A screenshot is an observation of a
+  /// moment, and keeping every one would fill the run dir with pictures nobody
+  /// asked to keep; a caller that wants to keep one says where.
+  ///
+  /// `runHandleKey` already carries the `app-` stem the handle and the log
+  /// share, so the picture joins them rather than starting a third naming
+  /// scheme.
+  String _screenshotPathFor(RunHandle handle, Object? given) =>
+      given is String && given.isNotEmpty
+      ? given
+      : p.join(
+          runDirProvider(),
+          '${runHandleKey(handle.worktree, handle.device, handle.entrypoint)}.png',
+        );
 
   Future<RunScreenshotResult> _screenshotAction(
     Map<String, Object?> arguments,
   ) async {
     var handle = await _selectRunningApp(arguments);
-    // One file per run, overwritten. A screenshot is an observation of a
-    // moment, and keeping every one of them would fill the run dir with
-    // pictures nobody asked to keep; a caller that wants to keep one says
-    // where.
-    var out =
-        arguments['out'] as String? ??
-        // `runHandleKey` already carries the `app-` stem the handle and the log
-        // share, so the picture joins them rather than starting a third naming
-        // scheme.
-        p.join(
-          runDirProvider(),
-          '${runHandleKey(handle.worktree, handle.device, handle.entrypoint)}.png',
-        );
+    var out = _screenshotPathFor(handle, arguments['out']);
     var maxSide = switch (arguments['maxSide']) {
       null => null,
       var value => _intArgument(value, 0),
@@ -1294,50 +1284,95 @@ class RunCore extends PluginCore {
     );
   }
 
-  Future<RunLogsResult> _logsAction(Map<String, Object?> arguments) async {
+  Future<RunInspectResult> _inspectAction(
+    Map<String, Object?> arguments,
+  ) async {
     var handle = await _selectRunningApp(arguments);
-    var path = handle.logPath;
-    if (path == null) {
-      return RunLogsResult(
-        device: handle.device,
-        entrypoint: handle.entrypoint,
-        lines: const [],
-        total: 0,
-        note: 'This run has no log file recorded against it.',
-      );
-    }
+    var probe = probeOf(handle);
+    var log = logOf(handle);
+    var mine = handle.worktreeName == host.worktree.name;
+    var wantsTree = _boolArgument(arguments['tree']);
+    var full = _boolArgument(arguments['full']);
+    var wantsShot = _boolArgument(arguments['screenshot']);
+    var wantsLogs = _boolArgument(arguments['logs']);
+    var wantsErrors = arguments['errors'] == null
+        ? true
+        : _boolArgument(arguments['errors']);
+    var limit = _intArgument(arguments['lines'], 200);
     var source = switch (arguments['source']) {
       'app' => RunLogSource.app,
       'tool' => RunLogSource.tool,
       _ => null,
     };
-    var matched = readRunLog(
-      path,
-      only: source,
-      errorsOnly: _boolArgument(arguments['errors']),
-    );
-    var limit = _intArgument(arguments['lines'], 200);
-    var kept = limit > 0 && matched.length > limit
-        ? matched.sublist(matched.length - limit)
-        : matched;
-    return RunLogsResult(
+
+    // The log first, and unconditionally reachable: it needs no connection, so
+    // it is the half that still answers while the app is building or gone.
+    var lines = wantsLogs
+        ? readLogs(handle, only: source, tail: limit)
+        : const <RunLogLine>[];
+    var errors = wantsErrors
+        ? readLogs(handle, errorsOnly: true, tail: limit)
+        : const <RunLogLine>[];
+
+    var up = probe?.canInspect ?? false;
+    InspectTree? tree;
+    String? shotPath;
+    String? failure;
+    if (up && (wantsTree || wantsShot)) {
+      try {
+        var read = await _withInspector(
+          handle,
+          (inspector) => inspector.read(
+            tree: wantsTree,
+            screenshot: wantsShot,
+            summary: !full,
+          ),
+        );
+        tree = read.tree;
+        if (read.image case var bytes?) {
+          var file = File(_screenshotPathFor(handle, arguments['out']));
+          file.parent.createSync(recursive: true);
+          file.writeAsBytesSync(bytes);
+          shotPath = file.absolute.path;
+        }
+      } on Object catch (e) {
+        // Reported rather than thrown: the logs and the liveness in this same
+        // answer are often what explains the failure.
+        failure = '$e';
+      }
+    }
+
+    return RunInspectResult(
       device: handle.device,
       entrypoint: handle.entrypoint,
-      path: path,
-      total: matched.length,
-      lines: [
-        for (var line in kept)
-          RunLogEntry(
-            source: line.source.name,
-            text: line.text,
-            error: line.error,
-          ),
-      ],
-      note: matched.isEmpty && source == RunLogSource.app
-          ? 'The app has printed nothing. The build output is there under '
-                'source=tool.'
+      worktree: handle.worktreeName,
+      mine: mine,
+      up: up,
+      reloadable: (probe?.canReload ?? false) && mine,
+      progress: up ? null : log?.progress,
+      tree: tree?.root?.toJson(),
+      nodes: tree?.length,
+      summary: wantsTree ? !full : null,
+      screenshot: shotPath,
+      logs: wantsLogs ? [for (var line in lines) _logEntry(line)] : null,
+      logLines: wantsLogs ? lines.length : null,
+      errors: wantsErrors && errors.isNotEmpty
+          ? [for (var line in errors) _logEntry(line)]
           : null,
+      log: handle.logPath,
+      note: failure ?? _inspectNote(up: up, wanted: wantsTree || wantsShot),
     );
+  }
+
+  static RunLogEntry _logEntry(RunLogLine line) =>
+      RunLogEntry(source: line.source.name, text: line.text, error: line.error);
+
+  static String? _inspectNote({required bool up, required bool wanted}) {
+    if (up) return null;
+    return wanted
+        ? 'The app is not answering, so there is no tree and no picture. It is '
+              'either still building or it died — the logs say which.'
+        : 'The app is not answering yet.';
   }
 
   RunHandle _selectApp(String? device, String? entrypoint) {

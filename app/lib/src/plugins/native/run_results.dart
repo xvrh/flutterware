@@ -419,50 +419,6 @@ class RunAppEntry {
   Map<String, Object?> toJson() => _$RunAppEntryToJson(this);
 }
 
-/// `tree` — the widget tree of one running app.
-///
-/// Read through the framework's own inspector, which needs nothing in the
-/// user's app. Every node carries where its widget was constructed, so a caller
-/// can go from "this is wrong" to the line that built it without a second
-/// lookup.
-@JsonSerializable(
-  explicitToJson: true,
-  includeIfNull: false,
-  createFactory: false,
-)
-class RunTreeResult implements PluginResult {
-  RunTreeResult({
-    required this.device,
-    required this.entrypoint,
-    required this.nodes,
-    required this.summary,
-    this.root,
-    this.note,
-  });
-
-  final String device;
-  final String entrypoint;
-
-  /// How many nodes the tree has, so a caller can tell an empty answer from a
-  /// small one without walking it.
-  final int nodes;
-
-  /// False when the whole tree was asked for.
-  ///
-  /// Worth reporting because the difference is three orders of magnitude: a
-  /// one-screen demo is 25 summary nodes and 517 full ones, and the full read
-  /// was six megabytes.
-  final bool summary;
-
-  /// The tree itself, or null when the app has not built a frame yet.
-  final Map<String, Object?>? root;
-
-  final String? note;
-
-  @override
-  Map<String, Object?> toJson() => _$RunTreeResultToJson(this);
-}
-
 /// `screenshot` — a picture of one running app.
 @JsonSerializable(
   explicitToJson: true,
@@ -498,40 +454,6 @@ class RunScreenshotResult implements PluginResult {
 
   @override
   Map<String, Object?> toJson() => _$RunScreenshotResultToJson(this);
-}
-
-/// `logs` — what one run's launcher has written.
-@JsonSerializable(
-  explicitToJson: true,
-  includeIfNull: false,
-  createFactory: false,
-)
-class RunLogsResult implements PluginResult {
-  RunLogsResult({
-    required this.device,
-    required this.entrypoint,
-    required this.lines,
-    required this.total,
-    this.path,
-    this.note,
-  });
-
-  final String device;
-  final String entrypoint;
-
-  final List<RunLogEntry> lines;
-
-  /// How many lines matched before [lines] was cut to the tail, so a caller can
-  /// tell "that is all of it" from "that is the end of it".
-  final int total;
-
-  /// The log file, for anyone who would rather tail it themselves.
-  final String? path;
-
-  final String? note;
-
-  @override
-  Map<String, Object?> toJson() => _$RunLogsResultToJson(this);
 }
 
 @JsonSerializable(
@@ -643,4 +565,99 @@ class RunBootResult implements PluginResult {
 
   @override
   Map<String, Object?> toJson() => _$RunBootResultToJson(this);
+}
+
+/// `inspect` — one reading of one run.
+///
+/// **One action rather than three, and the reason is the app moves.** A tree
+/// read by one call and a picture taken by the next are two moments of a live
+/// app — two readings that happen to agree, or quietly do not. Everything here
+/// comes off a single connection, and the tree and the picture off a single
+/// inspector group. The catalog reached the same conclusion first; see
+/// `ui_catalog_core.dart`'s `inspect`.
+///
+/// **Answers something even when the app is not up.** A cold build is minutes
+/// during which nothing can be asked of the app — and is exactly when the logs
+/// are the only thing worth reading. So [up] is a field rather than an error.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunInspectResult implements PluginResult {
+  RunInspectResult({
+    required this.device,
+    required this.entrypoint,
+    required this.up,
+    required this.reloadable,
+    this.worktree,
+    this.mine,
+    this.tree,
+    this.nodes,
+    this.summary,
+    this.screenshot,
+    this.logs,
+    this.logLines,
+    this.errors,
+    this.progress,
+    this.log,
+    this.note,
+  });
+
+  final String device;
+  final String entrypoint;
+
+  /// The worktree holding it, and whether that is the one asking. A run from
+  /// another checkout is readable and not drivable.
+  final String? worktree;
+  final bool? mine;
+
+  /// The app answered its VM service, so the tree and the picture are
+  /// available. False during a build, and after a crash.
+  final bool up;
+
+  /// The `flutter run` that launched it is alive, so it can still be reloaded.
+  /// Independent of [up]: an app outlives its launcher and keeps everything
+  /// except reload.
+  final bool reloadable;
+
+  /// The launcher's most recent progress line, when it is still building —
+  /// the only narration a ninety-second build has.
+  final String? progress;
+
+  /// The widget tree, when asked for.
+  final Map<String, Object?>? tree;
+
+  /// How many nodes it has, so a caller can tell an empty answer from a small
+  /// one without walking it.
+  final int? nodes;
+
+  /// False when the whole tree was asked for rather than the summary. Worth
+  /// reporting: a one-screen app is 25 summary nodes and 517 full ones.
+  final bool? summary;
+
+  /// Where the PNG was written, when one was asked for.
+  ///
+  /// A path rather than the bytes: a picture is tens of kilobytes of base64 on
+  /// a wire carrying the rest of this answer, and every consumer wants a file
+  /// in the end.
+  final String? screenshot;
+
+  /// Log lines, when asked for.
+  final List<RunLogEntry>? logs;
+
+  /// How many lines matched before [logs] was cut to the tail.
+  final int? logLines;
+
+  /// Lines the launcher marked as errors. Reported by default, because with no
+  /// other flag "did it break" is the question worth asking first.
+  final List<RunLogEntry>? errors;
+
+  /// The launcher's log file, for anyone who would rather tail it themselves.
+  final String? log;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunInspectResultToJson(this);
 }

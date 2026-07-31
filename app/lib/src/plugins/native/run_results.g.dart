@@ -117,16 +117,6 @@ Map<String, dynamic> _$RunAppEntryToJson(RunAppEntry instance) =>
       'error': ?instance.error,
     };
 
-Map<String, dynamic> _$RunTreeResultToJson(RunTreeResult instance) =>
-    <String, dynamic>{
-      'device': instance.device,
-      'entrypoint': instance.entrypoint,
-      'nodes': instance.nodes,
-      'summary': instance.summary,
-      'root': ?instance.root,
-      'note': ?instance.note,
-    };
-
 Map<String, dynamic> _$RunScreenshotResultToJson(
   RunScreenshotResult instance,
 ) => <String, dynamic>{
@@ -137,16 +127,6 @@ Map<String, dynamic> _$RunScreenshotResultToJson(
   'ms': instance.ms,
   'note': ?instance.note,
 };
-
-Map<String, dynamic> _$RunLogsResultToJson(RunLogsResult instance) =>
-    <String, dynamic>{
-      'device': instance.device,
-      'entrypoint': instance.entrypoint,
-      'lines': instance.lines.map((e) => e.toJson()).toList(),
-      'total': instance.total,
-      'path': ?instance.path,
-      'note': ?instance.note,
-    };
 
 Map<String, dynamic> _$RunLogEntryToJson(RunLogEntry instance) =>
     <String, dynamic>{
@@ -176,5 +156,25 @@ Map<String, dynamic> _$RunBootResultToJson(RunBootResult instance) =>
       'device': ?instance.device,
       'deviceName': ?instance.deviceName,
       'ms': instance.ms,
+      'note': ?instance.note,
+    };
+
+Map<String, dynamic> _$RunInspectResultToJson(RunInspectResult instance) =>
+    <String, dynamic>{
+      'device': instance.device,
+      'entrypoint': instance.entrypoint,
+      'worktree': ?instance.worktree,
+      'mine': ?instance.mine,
+      'up': instance.up,
+      'reloadable': instance.reloadable,
+      'progress': ?instance.progress,
+      'tree': ?instance.tree,
+      'nodes': ?instance.nodes,
+      'summary': ?instance.summary,
+      'screenshot': ?instance.screenshot,
+      'logs': ?instance.logs?.map((e) => e.toJson()).toList(),
+      'logLines': ?instance.logLines,
+      'errors': ?instance.errors?.map((e) => e.toJson()).toList(),
+      'log': ?instance.log,
       'note': ?instance.note,
     };

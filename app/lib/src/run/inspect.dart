@@ -39,6 +39,44 @@ class RunInspector {
   /// invalidate the ids the second is still holding.
   static var _groups = 0;
 
+  /// One reading of the app: the tree, a picture, or both.
+  ///
+  /// **Both come off one object group and one `getRootWidgetTree` call**, and
+  /// that is the whole reason this exists rather than two methods a caller
+  /// chains. The app is live: between two reads it animates, a timer fires,
+  /// data arrives. Two calls produce a tree and a picture that *happen to
+  /// agree*, which is not the same thing as one reading and is exactly what
+  /// annotating a screenshot with node ids cannot be built on. The catalog
+  /// learned this first — see `ui_catalog_core.dart`'s `inspect`.
+  ///
+  /// Asks for the tree even when only a picture is wanted, because the
+  /// screenshot RPC takes an inspector id and ids only exist inside a group.
+  /// Previews are skipped in that case, which is the only cost saved.
+  Future<InspectRead> read({
+    bool tree = false,
+    bool screenshot = false,
+    bool summary = true,
+    double maxPixelRatio = 2,
+    int? maxSide,
+  }) => _inGroup((group) async {
+    var (:read, :rootId) = await _readTree(
+      group,
+      summary: summary,
+      withPreviews: tree,
+    );
+    return InspectRead(
+      tree: tree ? read : null,
+      image: screenshot
+          ? await _screenshot(
+              group,
+              rootId,
+              maxPixelRatio: maxPixelRatio,
+              maxSide: maxSide,
+            )
+          : null,
+    );
+  });
+
   /// The widget tree, as of the app's last build.
   ///
   /// Summary by default, and that default is not a nicety: the full tree
@@ -46,8 +84,8 @@ class RunInspector {
   /// the summary was 25 nodes and 25 KB. Summary means "the widgets the
   /// framework attributes to the user's code", which is what anyone reading a
   /// tree is asking about.
-  Future<InspectTree> tree({bool summary = true}) =>
-      _inGroup((group) async => _readTree(group, summary: summary));
+  Future<InspectTree> tree({bool summary = true}) async =>
+      (await read(tree: true, summary: summary)).tree ?? InspectTree.empty;
 
   /// A PNG of the whole app, as it is on the screen right now.
   ///
@@ -64,51 +102,63 @@ class RunInspector {
   /// Platform views — native maps, webviews, video — will not appear. They are
   /// composited by the OS, not by Flutter's layer tree, so nothing rendering
   /// that tree can photograph them.
-  Future<Uint8List> screenshot({double maxPixelRatio = 2, int? maxSide}) =>
-      _inGroup((group) async {
-        var root = await _rootId(group);
-        if (root == null) {
-          throw StateError(
-            'The app has no widget tree yet, so there is nothing to '
-            'photograph. It may still be starting up.',
-          );
-        }
-        // The RPC fits the render into this box, so the box decides how big the
-        // picture comes back. Asking the root how big it actually is costs one
-        // call and is the difference between a phone-shaped photograph and an
-        // arbitrarily letterboxed one.
-        var size =
-            await _sizeOf(group, root) ?? const (width: 2000.0, height: 2000.0);
-        var (:width, :height) = size;
-        if (maxSide != null) {
-          var longest = width > height ? width : height;
-          if (longest > maxSide) {
-            var scale = maxSide / longest;
-            width *= scale;
-            height *= scale;
-          }
-        }
-        var response = await _service.callServiceExtension(
-          'ext.flutter.inspector.screenshot',
-          isolateId: connection.isolateId,
-          args: {
-            'id': root,
-            'width': '$width',
-            'height': '$height',
-            'margin': '0',
-            'maxPixelRatio': '$maxPixelRatio',
-            'debugPaint': 'false',
-          },
-        );
-        var encoded = response.json?['result'];
-        if (encoded is! String) {
-          throw StateError(
-            'The app answered a screenshot request without a picture in it. '
-            'It reported: ${response.json}',
-          );
-        }
-        return base64Decode(encoded);
-      });
+  Future<Uint8List> screenshot({double maxPixelRatio = 2, int? maxSide}) async {
+    var read = await this.read(
+      screenshot: true,
+      maxPixelRatio: maxPixelRatio,
+      maxSide: maxSide,
+    );
+    return read.image!;
+  }
+
+  Future<Uint8List> _screenshot(
+    String group,
+    String? rootId, {
+    required double maxPixelRatio,
+    required int? maxSide,
+  }) async {
+    if (rootId == null) {
+      throw StateError(
+        'The app has no widget tree yet, so there is nothing to photograph. '
+        'It may still be starting up.',
+      );
+    }
+    // The RPC fits the render into this box, so the box decides how big the
+    // picture comes back. Asking the root how big it actually is costs one
+    // call and is the difference between a phone-shaped photograph and an
+    // arbitrarily letterboxed one.
+    var size =
+        await _sizeOf(group, rootId) ?? const (width: 2000.0, height: 2000.0);
+    var (:width, :height) = size;
+    if (maxSide != null) {
+      var longest = width > height ? width : height;
+      if (longest > maxSide) {
+        var scale = maxSide / longest;
+        width *= scale;
+        height *= scale;
+      }
+    }
+    var response = await _service.callServiceExtension(
+      'ext.flutter.inspector.screenshot',
+      isolateId: connection.isolateId,
+      args: {
+        'id': rootId,
+        'width': '$width',
+        'height': '$height',
+        'margin': '0',
+        'maxPixelRatio': '$maxPixelRatio',
+        'debugPaint': 'false',
+      },
+    );
+    var encoded = response.json?['result'];
+    if (encoded is! String) {
+      throw StateError(
+        'The app answered a screenshot request without a picture in it. '
+        'It reported: ${response.json}',
+      );
+    }
+    return base64Decode(encoded);
+  }
 
   /// Runs [body] against a fresh inspector object group and always disposes it.
   ///
@@ -134,40 +184,33 @@ class RunInspector {
     }
   }
 
-  Future<InspectTree> _readTree(String group, {required bool summary}) async {
+  /// The tree, and the inspector's own id for its root.
+  ///
+  /// Both from one call. The id is what the screenshot RPC takes and it is
+  /// alive only while [group] is, so reading it separately would mean a second
+  /// `getRootWidgetTree` against a tree that may already have moved.
+  Future<({InspectTree read, String? rootId})> _readTree(
+    String group, {
+    required bool summary,
+    required bool withPreviews,
+  }) async {
     var response = await _service.callServiceExtension(
       'ext.flutter.inspector.getRootWidgetTree',
       isolateId: connection.isolateId,
       args: {
         'groupName': group,
         'isSummaryTree': '$summary',
-        'withPreviews': 'true',
+        'withPreviews': '$withPreviews',
         if (!summary) 'fullDetails': 'true',
       },
     );
     var result = response.json?['result'];
-    if (result is! Map) return InspectTree.empty;
-    return InspectTree(
-      entryId: null,
-      root: convertNode(result.cast<String, Object?>(), ''),
+    if (result is! Map) return (read: InspectTree.empty, rootId: null);
+    var json = result.cast<String, Object?>();
+    return (
+      read: InspectTree(entryId: null, root: convertNode(json, '')),
+      rootId: json['valueId'] as String?,
     );
-  }
-
-  /// The inspector's own id for the root, alive only while [group] is.
-  Future<String?> _rootId(String group) async {
-    var response = await _service.callServiceExtension(
-      'ext.flutter.inspector.getRootWidgetTree',
-      isolateId: connection.isolateId,
-      args: {
-        'groupName': group,
-        'isSummaryTree': 'true',
-        'withPreviews': 'false',
-      },
-    );
-    return switch (response.json?['result']) {
-      Map result => result['valueId'] as String?,
-      _ => null,
-    };
   }
 
   /// How big [id]'s box is, in logical pixels.
@@ -263,4 +306,22 @@ class RunInspector {
       ],
     );
   }
+}
+
+/// What one [RunInspector.read] produced.
+///
+/// Both fields null is a legitimate answer — it is what asking for nothing
+/// returns, and the caller that wanted only liveness got it from the
+/// connection succeeding.
+class InspectRead {
+  const InspectRead({this.tree, this.image});
+
+  /// Null when the tree was not asked for. `InspectTree.empty` — non-null with
+  /// a null root — when it was and the app has not built a frame yet. The
+  /// difference matters: one is "did not ask", the other is "asked, nothing
+  /// there".
+  final InspectTree? tree;
+
+  /// A PNG, when one was asked for.
+  final Uint8List? image;
 }

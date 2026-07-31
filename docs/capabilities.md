@@ -455,76 +455,38 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 
-#### `tree` — Widget tree
+#### `inspect` — Inspect
 
-The widget tree of a running app, with the file, line and column each widget was constructed at. Read from the app itself, so it works whether or not the launcher is still alive. The summary tree — the widgets the framework attributes to your code — unless full is asked for.
+One reading of a running app — whether it is up, whether it can still be reloaded, and whatever you ask about it: its widget tree, a picture, what it printed. With no flags it answers the question worth asking first, whether anything has gone wrong. Everything else is opt-in and every flag you add is answered from the **same** connection, and the tree and the picture from the same reading — two calls against a live app are two moments that only happen to agree. Answers even while the app is still building, when the logs are the only thing there is to read.
 
 ```sh
-fw run run tree [--device=…] [--entrypoint=…] [--full=…]
+fw run run inspect [--device=…] [--entrypoint=…] [--tree=…] [--full=…] [--screenshot=…] [--out=…] [--logs=…] [--source=…] [--lines=…] [--errors=…]
 ```
 
-Returns `RunTreeResult`:
+Returns `RunInspectResult`:
 
 ```
 device: String
 entrypoint: String
-nodes: int   # How many nodes the tree has, so a caller can tell an empty answer from a small one without walking it.
-summary: bool   # False when the whole tree was asked for.
-root: Map<String, Object?>?   # The tree itself, or null when the app has not built a frame yet.
-note: String?
-```
-
-| parameter | kind | required | default | |
-|---|---|---|---|---|
-| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
-| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
-| `full` | boolean | no | false | Every widget, including the framework's own. Large: a one-screen app is 25 summary nodes and about 517 full ones, six megabytes of them. |
-
-#### `screenshot` — Screenshot
-
-Photographs a running app and writes a PNG. Rendered by the app itself rather than captured from the device, so it works on hardware that cannot be asked for a screen grab — and it is the current frame, not a cached one. Platform views (native maps, webviews, video) will not appear.
-
-```sh
-fw run run screenshot [--device=…] [--entrypoint=…] [--out=…] [--maxSide=…]
-```
-
-Returns `RunScreenshotResult`:
-
-```
-device: String
-entrypoint: String
-path: String   # Where the PNG was written.
-bytes: int
-ms: int
-note: String?   # Said out loud when the picture may not be the whole story — a run with platform views in it, which Flutter's layer tree cannot photograph.
-```
-
-| parameter | kind | required | default | |
-|---|---|---|---|---|
-| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
-| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
-| `out` | string | no | — | Where to write the PNG. Defaults to a file beside the run's log, overwritten on each call. |
-| `maxSide` | integer | no | — | Scale the picture down so its longest side is at most this many logical pixels. Full device size when omitted. |
-
-#### `logs` — Logs
-
-What a run's launcher has written: the app's own print output and the tool talking about the build, kept apart because they answer different questions. Read from the log file, so it covers the build before the app existed and survives the app itself — a crashed run can still be read.
-
-```sh
-fw run run logs [--device=…] [--entrypoint=…] [--source=…] [--errors=…] [--lines=…]
-```
-
-Returns `RunLogsResult`:
-
-```
-device: String
-entrypoint: String
-lines: List<RunLogEntry>
+worktree: String?   # The worktree holding it, and whether that is the one asking.
+mine: bool?
+up: bool   # The app answered its VM service, so the tree and the picture are available.
+reloadable: bool   # The `flutter run` that launched it is alive, so it can still be reloaded.
+progress: String?   # The launcher's most recent progress line, when it is still building — the only narration a ninety-second build has.
+tree: Map<String, Object?>?   # The widget tree, when asked for.
+nodes: int?   # How many nodes it has, so a caller can tell an empty answer from a small one without walking it.
+summary: bool?   # False when the whole tree was asked for rather than the summary.
+screenshot: String?   # Where the PNG was written, when one was asked for.
+logs: List<RunLogEntry>?   # Log lines, when asked for.
   source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
   text: String
   error: bool   # The launcher marked it as an error.
-total: int   # How many lines matched before [lines] was cut to the tail, so a caller can tell "that is all of it" from "that is the end of it".
-path: String?   # The log file, for anyone who would rather tail it themselves.
+logLines: int?   # How many lines matched before [logs] was cut to the tail.
+errors: List<RunLogEntry>?   # Lines the launcher marked as errors.
+  source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
+  text: String
+  error: bool   # The launcher marked it as an error.
+log: String?   # The launcher's log file, for anyone who would rather tail it themselves.
 note: String?
 ```
 
@@ -532,9 +494,14 @@ note: String?
 |---|---|---|---|---|
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
-| `source` | choice | no | — | Whose lines to return; both when omitted |
-| `errors` | boolean | no | false | Only lines the launcher marked as errors. Never guessed from the text. |
+| `tree` | boolean | no | false | Report the widget tree, with the file, line and column each widget was constructed at. Off by default because a real app is thousands of tokens of tree. |
+| `full` | boolean | no | false | Include the framework's own widgets, not just yours. Large: a one-screen app is 25 summary nodes and about 517 full ones, six megabytes of them. |
+| `screenshot` | boolean | no | false | Write a PNG of the same reading everything else comes from, and hand back its path. Rendered by the app rather than grabbed from the device, so it works on hardware that cannot be asked for a screen grab — and platform views (native maps, webviews, video) will not appear. |
+| `out` | string | no | — | Where to write the PNG. A file beside the run's log when omitted, overwritten on each call. |
+| `logs` | boolean | no | false | Report the run's output. Read from the launcher's log file rather than from the app, so it covers the build and survives a crash. |
+| `source` | choice | no | — | Whose lines: the app's own output, or `flutter run` talking about the build. Both when omitted. |
 | `lines` | integer | no | 200 | How many of the most recent lines to return |
+| `errors` | boolean | no | true | Report the lines the launcher marked as errors — never guessed from the text. On by default, and with no other flag it is the whole answer. |
 
 #### `emulators` — Emulators
 

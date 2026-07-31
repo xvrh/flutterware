@@ -155,6 +155,30 @@ question about artifacts, not about runs.
    there claimed an offline simulator while `devices` listed a booted one two
    lines away. Android answers the question properly, through `emulatorId`.
 
+### One action, not three
+
+`tree`, `screenshot` and `logs` shipped as three actions and were merged into
+one `inspect` with flags, plus a standalone `screenshot`. **The catalog had
+already decided this**, and its reason is written into `ui_catalog_core.dart`:
+a `--screenshot` is "a PNG of the same frame everything else is reported from",
+and `--annotate` draws boxes from "genuinely the same tree as the one reported
+rather than a second reading that happened to agree, which was the point of
+having it".
+
+That reasoning is *stronger* here, not weaker. The catalog inspects a frame it
+just rendered; the cockpit inspects a **live app** that animates, fires timers
+and takes in data between calls. Three actions meant three processes, three
+connections and three moments. The tree and the picture now come off one
+`getRootWidgetTree` call in one object group — which is the only footing on
+which annotating a screenshot with node ids can ever be built.
+
+One thing done differently from the catalog: **`inspect` answers even when the
+app is not up.** The cockpit's logs come from the launcher's file rather than
+from the app, so they are readable during a cold build and after a crash —
+exactly when nothing else is. So `up` is a field, not an error, and a call
+during a build returns the progress line and the logs instead of refusing.
+Verified against a cold Chrome build.
+
 ### What the build changed about the design
 
 - **The rail lists runs, not devices.** A `PluginChild.id` becomes the first
