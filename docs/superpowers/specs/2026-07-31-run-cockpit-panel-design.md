@@ -144,8 +144,16 @@ question about artifacts, not about runs.
    distinction is now `DaemonDevice.kind` (`physical`/`virtual`/`host`) and it
    is reported by the `devices` action, because `physical: false` covered both
    this Mac and a booted simulator and a caller could not tell them apart.
-7. `emulator.getEmulators` / `emulator.launch` in the daemon client. **Not
-   built** — device management rather than panel work.
+7. ~~`emulator.getEmulators` / `emulator.launch`~~ **built** — as the
+   `emulators` and `bootEmulator` actions and a boot control in the desk.
+   Booting the iOS simulator through it took 6.1s.
+
+   One thing the daemon forced: **`booted` has to be nullable.** There is
+   exactly one iOS entry, `apple_ios_simulator`, and it is a door to the
+   Simulator rather than a machine — the Simulator may already be running
+   `iPhone 16e` under a name that links back to nothing. Reporting `false`
+   there claimed an offline simulator while `devices` listed a booted one two
+   lines away. Android answers the question properly, through `emulatorId`.
 
 ### What the build changed about the design
 

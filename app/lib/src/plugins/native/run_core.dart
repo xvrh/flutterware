@@ -559,6 +559,51 @@ class RunCore extends PluginCore {
             ),
           ],
         ),
+        PluginAction(
+          'emulators',
+          'Emulators',
+          returns: RunEmulatorsResult,
+          description:
+              'Every emulator and simulator this machine could boot, and '
+              'whether each is already up. Different from devices, which only '
+              'lists the ones that are: an emulator that is not running is not '
+              'a device. Costs a few seconds — it starts a flutter daemon.',
+        ),
+        PluginAction(
+          'bootEmulator',
+          'Boot an emulator',
+          returns: RunBootResult,
+          description:
+              'Starts an emulator and waits for it to appear as a device, '
+              'which is well after the boot command returns. A cold Android '
+              'emulator can take over a minute; running out of the wait is '
+              'not a failure and the answer says so.',
+          parameters: const [
+            ActionParameter(
+              'emulator',
+              'Emulator',
+              description: 'The id `emulators` reports',
+            ),
+            ActionParameter(
+              'coldBoot',
+              'Cold boot',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'Skip the saved snapshot. Slower, and the answer to an '
+                  'emulator that boots into a broken state.',
+            ),
+            ActionParameter(
+              'timeout',
+              'Timeout',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '120',
+              description: 'Seconds to wait for it to become a device',
+            ),
+          ],
+        ),
       ],
       view: PluginView([
         if (_daemonError != null)
@@ -717,6 +762,8 @@ class RunCore extends PluginCore {
       'tree' => _treeAction(arguments),
       'screenshot' => _screenshotAction(arguments),
       'logs' => _logsAction(arguments),
+      'emulators' => _emulatorsAction(),
+      'bootEmulator' => _bootEmulatorAction(arguments),
       _ => super.invoke(actionId, arguments: arguments),
     };
   }
@@ -1039,6 +1086,80 @@ class RunCore extends PluginCore {
   }
 
   /// The one running app a control action means.
+  /// What the desk can offer to boot. Empty until [loadEmulators] has run.
+  List<DaemonEmulator> get emulators => _daemon?.emulators ?? const [];
+
+  /// Asks the daemon what it could boot, for the desk.
+  ///
+  /// Separate from [track] because it is a second round trip nobody needs to
+  /// open the panel, and the desk only shows when nothing is running.
+  Future<void> loadEmulators() async {
+    var daemon = await _acquireDaemon();
+    await daemon.refreshEmulators();
+    if (!isDisposed) notifyChanged();
+  }
+
+  /// Boots one. The panel's entry point, and `bootEmulator`'s.
+  Future<DaemonDevice?> bootEmulator(String id, {bool coldBoot = false}) async {
+    var daemon = await _acquireDaemon();
+    return daemon.launchEmulator(id, coldBoot: coldBoot);
+  }
+
+  /// Everything bootable, and whether it is already up.
+  ///
+  /// Costs a daemon — seconds — which is why it is its own action rather than
+  /// part of `devices`: most callers want the desk, not the garage.
+  Future<RunEmulatorsResult> _emulatorsAction() async {
+    var daemon = await _acquireDaemon();
+    var emulators = await daemon.refreshEmulators();
+    return RunEmulatorsResult(
+      emulators: [
+        for (var emulator in emulators)
+          RunEmulatorEntry(
+            id: emulator.id,
+            name: emulator.displayName,
+            platform: emulator.platformType,
+            booted: isEmulatorBooted(emulator, daemon.devices),
+          ),
+      ],
+      note: emulators.isEmpty
+          ? 'Nothing to boot. Android emulators come from the AVD manager and '
+                'iOS simulators from Xcode.'
+          : emulators.any((e) => e.platformType == 'ios')
+          ? 'The iOS row opens the Simulator rather than naming one device, so '
+                'it cannot say whether anything is booted. `devices` lists what '
+                'actually is.'
+          : null,
+    );
+  }
+
+  Future<RunBootResult> _bootEmulatorAction(
+    Map<String, Object?> arguments,
+  ) async {
+    var id = arguments['emulator'] as String?;
+    if (id == null || id.isEmpty) {
+      throw ArgumentError.value(id, 'emulator', 'Name one to boot');
+    }
+    var daemon = await _acquireDaemon();
+    var started = DateTime.now();
+    var device = await daemon.launchEmulator(
+      id,
+      coldBoot: _boolArgument(arguments['coldBoot']),
+      timeout: Duration(seconds: _intArgument(arguments['timeout'], 120)),
+    );
+    return RunBootResult(
+      emulator: id,
+      started: true,
+      device: device?.id,
+      deviceName: device?.displayName,
+      ms: DateTime.now().difference(started).inMilliseconds,
+      note: device == null
+          ? 'Started, but it had not appeared as a device before the wait ran '
+                'out. It is probably still booting — check `devices`.'
+          : null,
+    );
+  }
+
   /// Refreshes the ledger and picks the one app the arguments name.
   ///
   /// The same opening as [_controlAction]: a handle is a cache of its

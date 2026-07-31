@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:flutterware/src/inspect/node.dart';
 import '../../address/address_scope.dart';
 import '../../run/entrypoints.dart';
 import '../../run/handle.dart';
+import '../../run/inventory.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
 import '../../ui/design/design.dart';
@@ -1229,14 +1231,55 @@ class _EntrypointPicker extends StatelessWidget {
 /// The interim home of the desk: it belongs beside the worktree tabs, because a
 /// busy device should take you to the worktree holding it and only the shell
 /// can switch worktrees. Rendered here so the list exists before that lands.
-class _Desk extends StatelessWidget {
+class _Desk extends StatefulWidget {
   const _Desk({required this.core});
 
   final RunCore core;
 
   @override
+  State<_Desk> createState() => _DeskState();
+}
+
+class _DeskState extends State<_Desk> {
+  /// Which emulator is being booted, so its row can say so and nobody can
+  /// press it twice into two boots of one machine.
+  final _booting = <String>{};
+
+  RunCore get core => widget.core;
+
+  @override
+  void initState() {
+    super.initState();
+    // A second round trip, asked for only when the desk is actually on screen.
+    unawaited(core.loadEmulators());
+  }
+
+  Future<void> _boot(DaemonEmulator emulator) async {
+    setState(() => _booting.add(emulator.id));
+    try {
+      await core.bootEmulator(emulator.id);
+    } on Object catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not boot ${emulator.displayName}: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _booting.remove(emulator.id));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    // Only the ones not already up. `isEmulatorBooted` answers null for the
+    // daemon's single iOS entry, which is a door to the Simulator rather than a
+    // machine — that row stays, because opening the Simulator is useful whether
+    // or not something is already in it.
+    var offline = [
+      for (var emulator in core.emulators)
+        if (isEmulatorBooted(emulator, core.devices) != true) emulator,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1271,6 +1314,43 @@ class _Desk extends StatelessWidget {
                   _status(device, core),
                   style: context.type.caption.copyWith(color: colors.mut2),
                 ),
+              ],
+            ),
+          ),
+        for (var emulator in offline)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Icon(Icons.phone_iphone_outlined, size: 14, color: colors.mut3),
+                const Gap(FwSpacing.sm),
+                Flexible(
+                  flex: 0,
+                  child: Text(
+                    emulator.displayName,
+                    style: context.type.bodySmall.copyWith(color: colors.mut2),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Gap(FwSpacing.sm),
+                if (_booting.contains(emulator.id))
+                  Text(
+                    'starting…',
+                    style: context.type.caption.copyWith(color: colors.mut2),
+                  )
+                else
+                  Tappable(
+                    onTap: () => _boot(emulator),
+                    child: Text(
+                      // The iOS row opens the Simulator; an AVD row boots one
+                      // machine. Different verbs because they are different
+                      // acts.
+                      emulator.platformType == 'ios' ? 'open' : 'boot',
+                      style: context.type.caption.copyWith(
+                        color: colors.accent,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

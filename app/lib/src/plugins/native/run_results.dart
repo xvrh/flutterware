@@ -554,3 +554,93 @@ class RunLogEntry {
 
   Map<String, Object?> toJson() => _$RunLogEntryToJson(this);
 }
+
+/// `emulators` — everything this machine could boot, booted or not.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunEmulatorsResult implements PluginResult {
+  RunEmulatorsResult({required this.emulators, this.note});
+
+  final List<RunEmulatorEntry> emulators;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunEmulatorsResultToJson(this);
+}
+
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunEmulatorEntry {
+  RunEmulatorEntry({
+    required this.id,
+    required this.name,
+    this.booted,
+    this.platform,
+  });
+
+  /// What `bootEmulator` takes.
+  final String id;
+
+  final String name;
+
+  /// `ios` or `android`.
+  final String? platform;
+
+  /// True when it is already up, false when it is not — and **null when the
+  /// question has no answer for this row**.
+  ///
+  /// Null is the iOS case, and it is not a gap in the lookup. The daemon lists
+  /// exactly one iOS entry, `apple_ios_simulator`, which is not a machine but a
+  /// door: booting it opens the Simulator, which can already be running several
+  /// devices under names of their own (`iPhone 16e`). Nothing links the two, so
+  /// "is it booted" is a question about a thing that does not exist. Measured —
+  /// reporting `false` there meant claiming an offline simulator while
+  /// `devices` listed a booted one two lines away.
+  ///
+  /// Android does answer it: a device carries the `emulatorId` it was booted
+  /// from.
+  final bool? booted;
+
+  Map<String, Object?> toJson() => _$RunEmulatorEntryToJson(this);
+}
+
+/// `bootEmulator` — starting one, and what came up.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunBootResult implements PluginResult {
+  RunBootResult({
+    required this.emulator,
+    required this.started,
+    required this.ms,
+    this.device,
+    this.deviceName,
+    this.note,
+  });
+
+  final String emulator;
+
+  /// The daemon accepted the launch. Says nothing about whether it came up.
+  final bool started;
+
+  /// The device id it appeared as, once it did. Null when the wait ran out —
+  /// which is not the same as a failure, and [note] says so.
+  final String? device;
+  final String? deviceName;
+
+  final int ms;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunBootResultToJson(this);
+}

@@ -150,3 +150,53 @@ enum DeviceKind {
   /// closes the window — so the honest words are about the run, not the slot.
   host,
 }
+
+/// One emulator or simulator the daemon could boot, as `emulator.getEmulators`
+/// describes it.
+///
+/// Hand-decoded and fully tolerant, for the same reason [DaemonDevice] is: this
+/// is a wire type from a tool we do not version, and a field that changed name
+/// must not make a bootable emulator vanish from the list.
+class DaemonEmulator {
+  const DaemonEmulator({
+    required this.id,
+    this.name,
+    this.category,
+    this.platformType,
+  });
+
+  /// What `emulator.launch` takes.
+  final String id;
+
+  final String? name;
+
+  /// `mobile`, `desktop`, `web`.
+  final String? category;
+
+  /// `ios` or `android` — which of the two very different things this is.
+  final String? platformType;
+
+  String get displayName => name ?? id;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    if (name != null) 'name': name,
+    if (category != null) 'category': category,
+    if (platformType != null) 'platformType': platformType,
+  };
+
+  /// Null without a usable `id`, the only field nothing can stand in for.
+  static DaemonEmulator? tryRead(Map<String, Object?> json) {
+    var id = json['id'];
+    if (id is! String || id.isEmpty) return null;
+    return DaemonEmulator(
+      id: id,
+      name: json['name'] as String?,
+      category: json['category'] as String?,
+      platformType: json['platformType'] as String?,
+    );
+  }
+
+  @override
+  String toString() => 'DaemonEmulator($id, $name)';
+}

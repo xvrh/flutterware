@@ -536,6 +536,52 @@ note: String?
 | `errors` | boolean | no | false | Only lines the launcher marked as errors. Never guessed from the text. |
 | `lines` | integer | no | 200 | How many of the most recent lines to return |
 
+#### `emulators` — Emulators
+
+Every emulator and simulator this machine could boot, and whether each is already up. Different from devices, which only lists the ones that are: an emulator that is not running is not a device. Costs a few seconds — it starts a flutter daemon.
+
+```sh
+fw run run emulators
+```
+
+Returns `RunEmulatorsResult`:
+
+```
+emulators: List<RunEmulatorEntry>
+  id: String   # What `bootEmulator` takes.
+  name: String
+  platform: String?   # `ios` or `android`.
+  booted: bool?   # True when it is already up, false when it is not — and **null when the question has no answer for this row**.
+note: String?
+```
+
+Takes no parameters.
+
+#### `bootEmulator` — Boot an emulator
+
+Starts an emulator and waits for it to appear as a device, which is well after the boot command returns. A cold Android emulator can take over a minute; running out of the wait is not a failure and the answer says so.
+
+```sh
+fw run run bootEmulator --emulator=<string> [--coldBoot=…] [--timeout=…]
+```
+
+Returns `RunBootResult`:
+
+```
+emulator: String
+started: bool   # The daemon accepted the launch.
+device: String?   # The device id it appeared as, once it did.
+deviceName: String?
+ms: int
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `emulator` | string | yes | — | The id `emulators` reports |
+| `coldBoot` | boolean | no | false | Skip the saved snapshot. Slower, and the answer to an emulator that boots into a broken state. |
+| `timeout` | integer | no | 120 | Seconds to wait for it to become a device |
+
 
 ### `flutterware.server`
 

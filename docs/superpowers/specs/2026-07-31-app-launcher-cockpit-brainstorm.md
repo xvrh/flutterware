@@ -748,9 +748,13 @@ Order chosen so each slice is useful alone and the risky parts come early.
      announcing themselves right now, and `hostAddresses` with this machine's
      LAN addresses. Ask 3 — "inject the local server IP" — is then picking
      rather than looking up.
-3. **Inspect.** Tree, screenshot, logs, errors as the artifact triple with
+3. **Inspect.** ~~Tree, screenshot, logs, errors as the artifact triple with
    addresses; MCP loop working with no GUI running (the server plugin's exit
-   criterion, reused).
+   criterion, reused).~~ **Built 2026-07-31.** The exit criterion was driven
+   for real: `fw mcp` over stdio, no GUI, `tree` / `screenshot` / `logs` /
+   `emulators` all answering. Errors are in the logs rather than a pane of
+   their own — the launcher already marks them and the `errors` filter reads
+   them; a structured-error stream can come with the devbar.
 
    > **Over the VM service, not a guest runtime.** S-L3 measured what a plain
    > `flutter run` app already exposes: the whole triple, plus source locations

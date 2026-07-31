@@ -1933,6 +1933,30 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
   }),
+  'RunBootResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunBootResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'emulator', 'type': 'String'},
+      <String, Object?>{
+        'name': 'started',
+        'type': 'bool',
+        'doc': 'The daemon accepted the launch.',
+      },
+      <String, Object?>{
+        'name': 'device',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The device id it appeared as, once it did.',
+      },
+      <String, Object?>{
+        'name': 'deviceName',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{'name': 'ms', 'type': 'int'},
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
   'RunControlResult': ResultShape.fromJson(<String, Object?>{
     'type': 'RunControlResult',
     'fields': <Object?>[
@@ -2183,6 +2207,64 @@ final resultShapes = <String, ResultShape>{
         'doc':
             'Said out loud when the list is empty or stale enough to explain, rather than left for the caller to infer from an empty array.',
       },
+    ],
+  }),
+  'RunEmulatorEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunEmulatorEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'id',
+        'type': 'String',
+        'doc': 'What `bootEmulator` takes.',
+      },
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{
+        'name': 'platform',
+        'type': 'String',
+        'optional': true,
+        'doc': '`ios` or `android`.',
+      },
+      <String, Object?>{
+        'name': 'booted',
+        'type': 'bool',
+        'optional': true,
+        'doc':
+            'True when it is already up, false when it is not — and **null when the question has no answer for this row**.',
+      },
+    ],
+  }),
+  'RunEmulatorsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunEmulatorsResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'emulators',
+        'type': 'List<RunEmulatorEntry>',
+        'shape': <String, Object?>{
+          'type': 'RunEmulatorEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'id',
+              'type': 'String',
+              'doc': 'What `bootEmulator` takes.',
+            },
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'platform',
+              'type': 'String',
+              'optional': true,
+              'doc': '`ios` or `android`.',
+            },
+            <String, Object?>{
+              'name': 'booted',
+              'type': 'bool',
+              'optional': true,
+              'doc':
+                  'True when it is already up, false when it is not — and **null when the question has no answer for this row**.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
   }),
   'RunEntrypointEntry': ResultShape.fromJson(<String, Object?>{

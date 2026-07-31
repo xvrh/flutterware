@@ -116,6 +116,7 @@ class DeviceDaemon {
   /// by.
   final String _key;
   final _devices = <String, DaemonDevice>{};
+  var _emulators = <DaemonEmulator>[];
   final _changes = StreamController<void>.broadcast();
   var _stopped = false;
 
@@ -124,6 +125,14 @@ class DeviceDaemon {
   /// for — then by name.
   List<DaemonDevice> get devices =>
       _devices.values.toList()..sort(compareDevices);
+
+  /// Everything bootable, whether or not it is booted.
+  ///
+  /// Empty until [refreshEmulators] has been called once — a device list is
+  /// what the cockpit needs to open, and asking the daemon to enumerate every
+  /// AVD and simulator is a separate cost nobody should pay for a panel they
+  /// did not open.
+  List<DaemonEmulator> get emulators => _emulators;
 
   /// Fires whenever [devices] would answer differently.
   Stream<void> get changes => _changes.stream;
@@ -210,6 +219,46 @@ class DeviceDaemon {
     return devices;
   }
 
+  /// Asks the daemon what it could boot.
+  Future<List<DaemonEmulator>> refreshEmulators() async {
+    _emulators =
+        await _protocol.sendCommand(const EmulatorGetEmulatorsCommand())
+          ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    if (!_changes.isClosed) _changes.add(null);
+    return _emulators;
+  }
+
+  /// Boots [emulatorId] and waits for it to show up as a device.
+  ///
+  /// **`emulator.launch` returns long before the emulator is usable.** It
+  /// answers once the daemon has started the process; the device appears later,
+  /// through `device.added`, and only then can anything be installed onto it.
+  /// So this waits for the device rather than for the command, and reports the
+  /// timeout as a fact rather than an error: a cold Android emulator can take
+  /// well over a minute, and it is still coming when this gives up waiting.
+  Future<DaemonDevice?> launchEmulator(
+    String emulatorId, {
+    bool coldBoot = false,
+    Duration timeout = const Duration(minutes: 2),
+  }) async {
+    var before = _devices.keys.toSet();
+    await _protocol.sendCommand(
+      EmulatorLaunchCommand(emulatorId, coldBoot: coldBoot),
+    );
+    var deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      if (_stopped) return null;
+      for (var device in _devices.values) {
+        // By difference rather than by matching `emulatorId`: the daemon only
+        // fills a device's `emulatorId` for Android, and on iOS a booted
+        // simulator arrives with none at all.
+        if (!before.contains(device.id)) return device;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    return null;
+  }
+
   void _onEvent(Event event) {
     switch (event) {
       case DeviceAddedEvent(:var device):
@@ -262,4 +311,21 @@ int _rank(DaemonDevice device) {
   if (!device.ephemeral) return 3;
   if (!device.isConnected) return 2;
   return device.emulator ? 1 : 0;
+}
+
+/// Whether [emulator] is already running, as far as anything can tell.
+///
+/// Null rather than false when the question does not apply — see
+/// `RunEmulatorEntry.booted`. Android devices carry the `emulatorId` they were
+/// booted from, which is a real link; the daemon's single `apple_ios_simulator`
+/// entry has nothing to link to.
+bool? isEmulatorBooted(DaemonEmulator emulator, List<DaemonDevice> devices) {
+  if (emulator.platformType == 'ios') return null;
+  for (var device in devices) {
+    if (device.emulatorId == emulator.id) return true;
+    if (device.emulator && device.displayName == emulator.displayName) {
+      return true;
+    }
+  }
+  return false;
 }

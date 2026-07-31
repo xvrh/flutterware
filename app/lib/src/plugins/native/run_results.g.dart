@@ -23,6 +23,7 @@ Map<String, dynamic> _$RunDeviceEntryToJson(RunDeviceEntry instance) =>
       'sdk': ?instance.sdk,
       'emulator': instance.emulator,
       'physical': instance.physical,
+      'kind': instance.kind,
       'connected': instance.connected,
       'connection': ?instance.connection,
       'running': instance.running.map((e) => e.toJson()).toList(),
@@ -57,6 +58,7 @@ Map<String, dynamic> _$RunEntrypointEntryToJson(RunEntrypointEntry instance) =>
     <String, dynamic>{
       'path': instance.path,
       'name': instance.name,
+      'description': ?instance.description,
       'knobs': instance.knobs.map((e) => e.toJson()).toList(),
     };
 
@@ -151,4 +153,28 @@ Map<String, dynamic> _$RunLogEntryToJson(RunLogEntry instance) =>
       'source': instance.source,
       'text': instance.text,
       'error': instance.error,
+    };
+
+Map<String, dynamic> _$RunEmulatorsResultToJson(RunEmulatorsResult instance) =>
+    <String, dynamic>{
+      'emulators': instance.emulators.map((e) => e.toJson()).toList(),
+      'note': ?instance.note,
+    };
+
+Map<String, dynamic> _$RunEmulatorEntryToJson(RunEmulatorEntry instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'name': instance.name,
+      'platform': ?instance.platform,
+      'booted': ?instance.booted,
+    };
+
+Map<String, dynamic> _$RunBootResultToJson(RunBootResult instance) =>
+    <String, dynamic>{
+      'emulator': instance.emulator,
+      'started': instance.started,
+      'device': ?instance.device,
+      'deviceName': ?instance.deviceName,
+      'ms': instance.ms,
+      'note': ?instance.note,
     };
