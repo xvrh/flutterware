@@ -150,7 +150,7 @@ class FlutterwareConfig {
 /// import 'package:flutterware/plugins.dart';
 ///
 /// void main() => Flutterware.configure((fw) {
-///   fw.use(TestRunner());
+///   fw.use(Scenarios());
 ///   fw.use(UiCatalog());
 /// });
 /// ```

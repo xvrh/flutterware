@@ -156,8 +156,8 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
       properties: {
         'plugin': Schema.string(
           description:
-              'Plugin id, or its last dotted segment: "flutterware.tests" or '
-              'just "tests".',
+              'Plugin id, or its last dotted segment: "flutterware.scenarios" or '
+              'just "scenarios".',
         ),
         'action': Schema.string(description: 'Action id.'),
         'arguments': Schema.object(

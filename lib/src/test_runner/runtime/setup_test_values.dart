@@ -1,9 +1,13 @@
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+// The old surface: `lib/flutter_test.dart` no longer exports this tree's
+// api.dart, so the extension is imported directly. This whole tree is slated
+// for replacement by the scenarios plugin.
 import '../../../flutter_test.dart';
 import '../protocol/models.dart';
 import 'run_context.dart';
+import 'widget_tester_screenshot.dart';
 
 Future<void> Function(WidgetTester) withTestValues(
   Future<void> Function(WidgetTester) body,

@@ -1727,6 +1727,602 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'ScenarioListEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioListEntry',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{
+        'name': 'file',
+        'type': 'String',
+        'doc': 'Package-relative source file.',
+      },
+      <String, Object?>{'name': 'line', 'type': 'int'},
+    ],
+  }),
+  'ScenarioListPackage': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioListPackage',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'path', 'type': 'String'},
+      <String, Object?>{
+        'name': 'directory',
+        'type': 'String',
+        'doc': 'The scanned directory, relative to the package.',
+      },
+      <String, Object?>{
+        'name': 'scenarios',
+        'type': 'List<ScenarioListEntry>',
+        'shape': <String, Object?>{
+          'type': 'ScenarioListEntry',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'file',
+              'type': 'String',
+              'doc': 'Package-relative source file.',
+            },
+            <String, Object?>{'name': 'line', 'type': 'int'},
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'diagnostics',
+        'type': 'List<String>',
+        'doc':
+            'What the scan noticed but could not act on — non-literal names, duplicates.',
+      },
+      <String, Object?>{
+        'name': 'error',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Set when the package could not be scanned, in which case [scenarios] means nothing.',
+      },
+    ],
+  }),
+  'ScenarioListResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioListResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'packages',
+        'type': 'List<ScenarioListPackage>',
+        'shape': <String, Object?>{
+          'type': 'ScenarioListPackage',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'path', 'type': 'String'},
+            <String, Object?>{
+              'name': 'directory',
+              'type': 'String',
+              'doc': 'The scanned directory, relative to the package.',
+            },
+            <String, Object?>{
+              'name': 'scenarios',
+              'type': 'List<ScenarioListEntry>',
+              'shape': <String, Object?>{
+                'type': 'ScenarioListEntry',
+                'fields': <Object?>[
+                  <String, Object?>{'name': 'name', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'file',
+                    'type': 'String',
+                    'doc': 'Package-relative source file.',
+                  },
+                  <String, Object?>{'name': 'line', 'type': 'int'},
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'diagnostics',
+              'type': 'List<String>',
+              'doc':
+                  'What the scan noticed but could not act on — non-literal names, duplicates.',
+            },
+            <String, Object?>{
+              'name': 'error',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Set when the package could not be scanned, in which case [scenarios] means nothing.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'ScenarioRestartResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioRestartResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'restarted',
+        'type': 'List<String>',
+        'doc': 'The package paths whose harness was dropped.',
+      },
+    ],
+  }),
+  'ScenarioRunError': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioRunError',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'error', 'type': 'String'},
+      <String, Object?>{'name': 'stack', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'ScenarioRunOutcome': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioRunOutcome',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'file', 'type': 'String'},
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
+      <String, Object?>{'name': 'ms', 'type': 'int'},
+      <String, Object?>{
+        'name': 'steps',
+        'type': 'List<ScenarioRunStep>',
+        'shape': <String, Object?>{
+          'type': 'ScenarioRunStep',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'index',
+              'type': 'int',
+              'doc': '1-based position in the scenario\'s capture sequence.',
+            },
+            <String, Object?>{
+              'name': 'parent',
+              'type': 'int',
+              'optional': true,
+              'doc':
+                  'The [index] of the step this one follows; null for the scenario\'s first.',
+            },
+            <String, Object?>{
+              'name': 'branch',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The `split` branch label when this step is a branch\'s first capture.',
+            },
+            <String, Object?>{
+              'name': 'name',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The `Shot`\'s name; null for an automatic capture.',
+            },
+            <String, Object?>{
+              'name': 'auto',
+              'type': 'bool',
+              'doc':
+                  'True when nothing named this capture — a collapsible detail step.',
+            },
+            <String, Object?>{'name': 'tags', 'type': 'List<String>'},
+            <String, Object?>{
+              'name': 'image',
+              'type': 'String',
+              'doc': 'Path to the captured image, in [format].',
+            },
+            <String, Object?>{
+              'name': 'format',
+              'type': 'String',
+              'doc':
+                  '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
+            },
+            <String, Object?>{'name': 'width', 'type': 'int'},
+            <String, Object?>{'name': 'height', 'type': 'int'},
+            <String, Object?>{
+              'name': 'tree',
+              'type': 'String',
+              'doc':
+                  'Path to the widget-tree JSON captured at the same moment.',
+            },
+            <String, Object?>{
+              'name': 'texts',
+              'type': 'List<String>',
+              'doc':
+                  'The visible texts — the projection an agent reads next to the pixels.',
+            },
+            <String, Object?>{
+              'name': 'address',
+              'type': 'String',
+              'doc': 'The step\'s `fw://` address.',
+            },
+            <String, Object?>{
+              'name': 'statusBrightness',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+            },
+            <String, Object?>{
+              'name': 'navBrightness',
+              'type': 'String',
+              'optional': true,
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'errors',
+        'type': 'List<ScenarioRunError>',
+        'doc': 'The failure, when [ok] is false.',
+        'shape': <String, Object?>{
+          'type': 'ScenarioRunError',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'error', 'type': 'String'},
+            <String, Object?>{
+              'name': 'stack',
+              'type': 'String',
+              'optional': true,
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'ScenarioRunPackage': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioRunPackage',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'path', 'type': 'String'},
+      <String, Object?>{
+        'name': 'output',
+        'type': 'String',
+        'doc': 'Where this run\'s artifacts were written.',
+      },
+      <String, Object?>{
+        'name': 'ms',
+        'type': 'int',
+        'doc': 'Whole-run wall time inside the harness.',
+      },
+      <String, Object?>{
+        'name': 'scenarios',
+        'type': 'List<ScenarioRunOutcome>',
+        'shape': <String, Object?>{
+          'type': 'ScenarioRunOutcome',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'file', 'type': 'String'},
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{'name': 'ok', 'type': 'bool'},
+            <String, Object?>{'name': 'ms', 'type': 'int'},
+            <String, Object?>{
+              'name': 'steps',
+              'type': 'List<ScenarioRunStep>',
+              'shape': <String, Object?>{
+                'type': 'ScenarioRunStep',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'index',
+                    'type': 'int',
+                    'doc':
+                        '1-based position in the scenario\'s capture sequence.',
+                  },
+                  <String, Object?>{
+                    'name': 'parent',
+                    'type': 'int',
+                    'optional': true,
+                    'doc':
+                        'The [index] of the step this one follows; null for the scenario\'s first.',
+                  },
+                  <String, Object?>{
+                    'name': 'branch',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The `split` branch label when this step is a branch\'s first capture.',
+                  },
+                  <String, Object?>{
+                    'name': 'name',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'The `Shot`\'s name; null for an automatic capture.',
+                  },
+                  <String, Object?>{
+                    'name': 'auto',
+                    'type': 'bool',
+                    'doc':
+                        'True when nothing named this capture — a collapsible detail step.',
+                  },
+                  <String, Object?>{'name': 'tags', 'type': 'List<String>'},
+                  <String, Object?>{
+                    'name': 'image',
+                    'type': 'String',
+                    'doc': 'Path to the captured image, in [format].',
+                  },
+                  <String, Object?>{
+                    'name': 'format',
+                    'type': 'String',
+                    'doc':
+                        '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
+                  },
+                  <String, Object?>{'name': 'width', 'type': 'int'},
+                  <String, Object?>{'name': 'height', 'type': 'int'},
+                  <String, Object?>{
+                    'name': 'tree',
+                    'type': 'String',
+                    'doc':
+                        'Path to the widget-tree JSON captured at the same moment.',
+                  },
+                  <String, Object?>{
+                    'name': 'texts',
+                    'type': 'List<String>',
+                    'doc':
+                        'The visible texts — the projection an agent reads next to the pixels.',
+                  },
+                  <String, Object?>{
+                    'name': 'address',
+                    'type': 'String',
+                    'doc': 'The step\'s `fw://` address.',
+                  },
+                  <String, Object?>{
+                    'name': 'statusBrightness',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+                  },
+                  <String, Object?>{
+                    'name': 'navBrightness',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'errors',
+              'type': 'List<ScenarioRunError>',
+              'doc': 'The failure, when [ok] is false.',
+              'shape': <String, Object?>{
+                'type': 'ScenarioRunError',
+                'fields': <Object?>[
+                  <String, Object?>{'name': 'error', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'stack',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'error',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.',
+      },
+    ],
+  }),
+  'ScenarioRunResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioRunResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'packages',
+        'type': 'List<ScenarioRunPackage>',
+        'shape': <String, Object?>{
+          'type': 'ScenarioRunPackage',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'path', 'type': 'String'},
+            <String, Object?>{
+              'name': 'output',
+              'type': 'String',
+              'doc': 'Where this run\'s artifacts were written.',
+            },
+            <String, Object?>{
+              'name': 'ms',
+              'type': 'int',
+              'doc': 'Whole-run wall time inside the harness.',
+            },
+            <String, Object?>{
+              'name': 'scenarios',
+              'type': 'List<ScenarioRunOutcome>',
+              'shape': <String, Object?>{
+                'type': 'ScenarioRunOutcome',
+                'fields': <Object?>[
+                  <String, Object?>{'name': 'file', 'type': 'String'},
+                  <String, Object?>{'name': 'name', 'type': 'String'},
+                  <String, Object?>{'name': 'ok', 'type': 'bool'},
+                  <String, Object?>{'name': 'ms', 'type': 'int'},
+                  <String, Object?>{
+                    'name': 'steps',
+                    'type': 'List<ScenarioRunStep>',
+                    'shape': <String, Object?>{
+                      'type': 'ScenarioRunStep',
+                      'fields': <Object?>[
+                        <String, Object?>{
+                          'name': 'index',
+                          'type': 'int',
+                          'doc':
+                              '1-based position in the scenario\'s capture sequence.',
+                        },
+                        <String, Object?>{
+                          'name': 'parent',
+                          'type': 'int',
+                          'optional': true,
+                          'doc':
+                              'The [index] of the step this one follows; null for the scenario\'s first.',
+                        },
+                        <String, Object?>{
+                          'name': 'branch',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The `split` branch label when this step is a branch\'s first capture.',
+                        },
+                        <String, Object?>{
+                          'name': 'name',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The `Shot`\'s name; null for an automatic capture.',
+                        },
+                        <String, Object?>{
+                          'name': 'auto',
+                          'type': 'bool',
+                          'doc':
+                              'True when nothing named this capture — a collapsible detail step.',
+                        },
+                        <String, Object?>{
+                          'name': 'tags',
+                          'type': 'List<String>',
+                        },
+                        <String, Object?>{
+                          'name': 'image',
+                          'type': 'String',
+                          'doc': 'Path to the captured image, in [format].',
+                        },
+                        <String, Object?>{
+                          'name': 'format',
+                          'type': 'String',
+                          'doc':
+                              '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
+                        },
+                        <String, Object?>{'name': 'width', 'type': 'int'},
+                        <String, Object?>{'name': 'height', 'type': 'int'},
+                        <String, Object?>{
+                          'name': 'tree',
+                          'type': 'String',
+                          'doc':
+                              'Path to the widget-tree JSON captured at the same moment.',
+                        },
+                        <String, Object?>{
+                          'name': 'texts',
+                          'type': 'List<String>',
+                          'doc':
+                              'The visible texts — the projection an agent reads next to the pixels.',
+                        },
+                        <String, Object?>{
+                          'name': 'address',
+                          'type': 'String',
+                          'doc': 'The step\'s `fw://` address.',
+                        },
+                        <String, Object?>{
+                          'name': 'statusBrightness',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+                        },
+                        <String, Object?>{
+                          'name': 'navBrightness',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                      ],
+                    },
+                  },
+                  <String, Object?>{
+                    'name': 'errors',
+                    'type': 'List<ScenarioRunError>',
+                    'doc': 'The failure, when [ok] is false.',
+                    'shape': <String, Object?>{
+                      'type': 'ScenarioRunError',
+                      'fields': <Object?>[
+                        <String, Object?>{'name': 'error', 'type': 'String'},
+                        <String, Object?>{
+                          'name': 'stack',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'error',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'axes',
+        'type': 'Map<String, String>',
+        'optional': true,
+        'doc':
+            'The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.',
+      },
+    ],
+  }),
+  'ScenarioRunStep': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioRunStep',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'index',
+        'type': 'int',
+        'doc': '1-based position in the scenario\'s capture sequence.',
+      },
+      <String, Object?>{
+        'name': 'parent',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'The [index] of the step this one follows; null for the scenario\'s first.',
+      },
+      <String, Object?>{
+        'name': 'branch',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The `split` branch label when this step is a branch\'s first capture.',
+      },
+      <String, Object?>{
+        'name': 'name',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The `Shot`\'s name; null for an automatic capture.',
+      },
+      <String, Object?>{
+        'name': 'auto',
+        'type': 'bool',
+        'doc':
+            'True when nothing named this capture — a collapsible detail step.',
+      },
+      <String, Object?>{'name': 'tags', 'type': 'List<String>'},
+      <String, Object?>{
+        'name': 'image',
+        'type': 'String',
+        'doc': 'Path to the captured image, in [format].',
+      },
+      <String, Object?>{
+        'name': 'format',
+        'type': 'String',
+        'doc':
+            '`png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.',
+      },
+      <String, Object?>{'name': 'width', 'type': 'int'},
+      <String, Object?>{'name': 'height', 'type': 'int'},
+      <String, Object?>{
+        'name': 'tree',
+        'type': 'String',
+        'doc': 'Path to the widget-tree JSON captured at the same moment.',
+      },
+      <String, Object?>{
+        'name': 'texts',
+        'type': 'List<String>',
+        'doc':
+            'The visible texts — the projection an agent reads next to the pixels.',
+      },
+      <String, Object?>{
+        'name': 'address',
+        'type': 'String',
+        'doc': 'The step\'s `fw://` address.',
+      },
+      <String, Object?>{
+        'name': 'statusBrightness',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.',
+      },
+      <String, Object?>{
+        'name': 'navBrightness',
+        'type': 'String',
+        'optional': true,
+      },
+    ],
+  }),
   'SplashArtifactEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'SplashArtifactEntry',
     'fields': <Object?>[

@@ -12,7 +12,7 @@
 abstract class Plugin {
   Plugin(this.id, {String? label}) : label = label ?? id.split('.').last;
 
-  /// Stable and globally unique — `flutterware.tests`, `acme.deploy`. The GUI
+  /// Stable and globally unique — `flutterware.scenarios`, `acme.deploy`. The GUI
   /// resolves its native implementation by this string.
   final String id;
 

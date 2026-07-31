@@ -32,4 +32,12 @@ void main() => Flutterware.configure((fw) {
   // native splash to resolve, which is why `NativeSplash` offers no `each`.
   fw.use(NativeSplash(packages: [.new(example)]));
   fw.use(ServerInspection());
+  // `example` only, for now — the sample scenarios live there.
+  fw.use(
+    Scenarios(
+      packages: [
+        .new(example, languages: ['en', 'fr']),
+      ],
+    ),
+  );
 });

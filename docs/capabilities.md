@@ -79,7 +79,7 @@ Run one plugin action. Argument keys are the parameter ids reported by flutterwa
 
 | argument | required | |
 |---|---|---|
-| `plugin` | yes | Plugin id, or its last dotted segment: "flutterware.tests" or just "tests". |
+| `plugin` | yes | Plugin id, or its last dotted segment: "flutterware.scenarios" or just "scenarios". |
 | `action` | yes | Action id. |
 | `arguments` | no | Action arguments, keyed by parameter id. |
 
@@ -286,6 +286,112 @@ fw run server sql [--name=…] [--top=…]
 |---|---|---|---|---|
 | `name` | string | no | — | Which server, when several are running. |
 | `top` | integer | no | 20 | — |
+
+
+### `flutterware.scenarios`
+
+#### `list` — List
+
+Every scenario of a package, with its source location — from the syntactic scan, without compiling or running anything
+
+```sh
+fw run scenarios list [--package=…]
+```
+
+Returns `ScenarioListResult`:
+
+```
+packages: List<ScenarioListPackage>
+  path: String
+  directory: String   # The scanned directory, relative to the package.
+  scenarios: List<ScenarioListEntry>
+    name: String
+    file: String   # Package-relative source file.
+    line: int
+  diagnostics: List<String>   # What the scan noticed but could not act on — non-literal names, duplicates.
+  error: String?   # Set when the package could not be scanned, in which case [scenarios] means nothing.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+
+#### `run` — Run
+
+Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured just before it.
+
+```sh
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--format=…]
+```
+
+Returns `ScenarioRunResult`:
+
+```
+packages: List<ScenarioRunPackage>
+  path: String
+  output: String   # Where this run's artifacts were written.
+  ms: int   # Whole-run wall time inside the harness.
+  scenarios: List<ScenarioRunOutcome>
+    file: String
+    name: String
+    ok: bool
+    ms: int
+    steps: List<ScenarioRunStep>
+      index: int   # 1-based position in the scenario's capture sequence.
+      parent: int?   # The [index] of the step this one follows; null for the scenario's first.
+      branch: String?   # The `split` branch label when this step is a branch's first capture.
+      name: String?   # The `Shot`'s name; null for an automatic capture.
+      auto: bool   # True when nothing named this capture — a collapsible detail step.
+      tags: List<String>
+      image: String   # Path to the captured image, in [format].
+      format: String   # `png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.
+      width: int
+      height: int
+      tree: String   # Path to the widget-tree JSON captured at the same moment.
+      texts: List<String>   # The visible texts — the projection an agent reads next to the pixels.
+      address: String   # The step's `fw://` address.
+      statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
+      navBrightness: String?
+    errors: List<ScenarioRunError>   # The failure, when [ok] is false.
+      error: String
+      stack: String?
+  error: String?   # Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.
+axes: Map<String, String>?   # The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+| `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it |
+| `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
+| `output` | string | no | — | Where step artifacts are written; a fresh directory under the package's build/ when omitted |
+| `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted means the default form factor (iphone-13); `fit` means the bare 800×600 test surface. The same vocabulary the UI catalog frames with. |
+| `language` | string | no | — | A locale tag — `fr`, `fr-CA` — applied as the platform locale for the whole run |
+| `text-scale` | string | no | — | The platform text scale factor — `1.3` is a common accessibility setting |
+| `brightness` | choice | no | — | The platform brightness the app sees |
+| `bold-text` | choice | no | — | The bold-text accessibility switch |
+| `high-contrast` | choice | no | — | The high-contrast accessibility switch |
+| `invert-colors` | choice | no | — | The invert-colors accessibility switch |
+| `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. Omitted means the package's configured captureScale (tool/flutterware.dart), or 1. The device's own ratio gives a true screenshot; 1 is ~10× faster and smaller, which is what keeps a long FakeAsync run instantaneous. Not an axis: it changes the artifact, never what the app sees. |
+| `format` | choice | no | — | `png` (the default) is what everything opens. `raw` — bare rgba8888 rows, width×height×4 bytes as the result reports them — skips PNG encoding, which is ~80% of a capture's cost; for pipelines that consume pixels directly. |
+
+#### `restart` — Restart
+
+Drops the warm harness so the next run cold-starts from nothing: fresh asset bundle, fresh kernel, fresh tester process. The escape hatch for changes no incremental lane can see — a dependency's assets, or plain distrust.
+
+```sh
+fw run scenarios restart [--package=…]
+```
+
+Returns `ScenarioRestartResult`:
+
+```
+restarted: List<String>   # The package paths whose harness was dropped.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
 
 
 ### `flutterware.splash`
