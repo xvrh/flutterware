@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
-import 'package:flutterware/motion.dart';
+import 'package:flutterware/motion_vocabulary.dart';
 import 'package:path/path.dart' as p;
 
 /// Where a package keeps the screens its motions live in, when the config does

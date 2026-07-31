@@ -15,6 +15,7 @@ import '../plugins/manifest_loader.dart';
 import '../plugins/native/assets_core.dart';
 import '../plugins/native/dependencies_core.dart';
 import '../plugins/native/server_core.dart';
+import '../plugins/native/motion_core.dart';
 import '../plugins/native/scenarios_core.dart';
 import '../plugins/native/splash_core.dart';
 import '../plugins/native/ui_catalog_core.dart';
@@ -443,6 +444,7 @@ PluginCoreRegistry defaultCoreRegistry() => PluginCoreRegistry({
   assetsPluginId: assetsCoreFactory,
   dependenciesPluginId: dependenciesCoreFactory,
   serverPluginId: serverCoreFactory,
+  motionPluginId: motionCoreFactory,
   scenariosPluginId: scenariosCoreFactory,
   splashPluginId: splashCoreFactory,
   uiCatalogPluginId: uiCatalogCoreFactory,

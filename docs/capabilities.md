@@ -288,6 +288,41 @@ fw run server sql [--name=…] [--top=…]
 | `top` | integer | no | 20 | — |
 
 
+### `flutterware.motion`
+
+#### `list` — List
+
+Every motion of a package, with its targets and where each is read — from the syntactic scan, without compiling or running anything. Read the diagnostics: a target named by an expression rather than a literal is real at run time and invisible here.
+
+```sh
+fw run motion list [--package=…]
+```
+
+Returns `MotionListResult`:
+
+```
+packages: List<MotionListPackage>
+  path: String
+  directory: String   # The scanned directory, relative to the package.
+  motions: List<MotionListMotion>
+    file: String   # Package-relative source file.
+    line: int
+    values: String?   # The identifier passed to `motion:`, which names the values file's const.
+    address: String?   # Where to open it, playhead included — append `?t=` to park it.
+    targets: List<MotionListTarget>
+      name: String
+      line: int
+      properties: List<String>   # Vocabulary properties read at a call site.
+      boxed: bool   # Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.
+  diagnostics: List<String>   # What the scan noticed and could not act on.
+  error: String?   # Set when the package could not be scanned, in which case [motions] means nothing.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+
+
 ### `flutterware.scenarios`
 
 #### `list` — List

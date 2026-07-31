@@ -147,6 +147,43 @@ class ScenariosPackage extends PluginPackage {
   ];
 }
 
+/// Motion — timelines scrubbed against a live screen, with the tuned numbers in
+/// a file no human writes. See
+/// `docs/superpowers/specs/2026-07-31-motion-design.md`.
+class Motion extends Plugin {
+  Motion({this.packages = const [], String? label})
+    : super('flutterware.motion', label: label ?? 'Motion');
+
+  final List<MotionPackage> packages;
+
+  @override
+  Map<String, Object?> get config => {
+    'packages': [for (var p in packages) p.toJson()],
+  };
+}
+
+class MotionPackage extends PluginPackage {
+  const MotionPackage(super.pkg, {this.directory});
+
+  /// Where this package's screens are, relative to the package; `lib` when
+  /// null.
+  ///
+  /// A directory rather than a convention of ours, because a motion is not a
+  /// thing you keep somewhere — it is a screen that happens to move, and it
+  /// lives wherever the screens live.
+  final String? directory;
+
+  @override
+  Map<String, Object?> toJson() => {
+    ...super.toJson(),
+    if (directory != null) 'directory': directory,
+  };
+
+  static List<MotionPackage> each(List<Pkg> packages) => [
+    for (var pkg in packages) MotionPackage(pkg),
+  ];
+}
+
 /// The native splash screen: what `flutter_native_splash` will produce, on
 /// every surface and in both themes.
 ///
