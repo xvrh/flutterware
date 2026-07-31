@@ -40,6 +40,7 @@ Map<String, dynamic> _$ScenarioRunPackageToJson(ScenarioRunPackage instance) =>
     <String, dynamic>{
       'path': instance.path,
       'output': instance.output,
+      'axes': ?instance.axes,
       'ms': instance.ms,
       'scenarios': instance.scenarios.map((e) => e.toJson()).toList(),
       'error': ?instance.error,
@@ -50,6 +51,7 @@ Map<String, dynamic> _$ScenarioRunOutcomeToJson(ScenarioRunOutcome instance) =>
       'file': instance.file,
       'name': instance.name,
       'ok': instance.ok,
+      'device': ?instance.device,
       'ms': instance.ms,
       'steps': instance.steps.map((e) => e.toJson()).toList(),
       'errors': instance.errors.map((e) => e.toJson()).toList(),
@@ -72,6 +74,9 @@ Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
       'address': instance.address,
       'statusBrightness': ?instance.statusBrightness,
       'navBrightness': ?instance.navBrightness,
+      'settled': instance.settled,
+      'strayFrames': instance.strayFrames,
+      'failure': ?instance.failure,
     };
 
 Map<String, dynamic> _$ScenarioRunErrorToJson(ScenarioRunError instance) =>
@@ -88,3 +93,27 @@ Map<String, dynamic> _$ScenarioNewResultToJson(ScenarioNewResult instance) =>
 Map<String, dynamic> _$ScenarioRestartResultToJson(
   ScenarioRestartResult instance,
 ) => <String, dynamic>{'restarted': instance.restarted};
+
+Map<String, dynamic> _$ScenarioShotsResultToJson(
+  ScenarioShotsResult instance,
+) => <String, dynamic>{
+  'packages': instance.packages.map((e) => e.toJson()).toList(),
+  'count': instance.count,
+};
+
+Map<String, dynamic> _$ScenarioShotsPackageToJson(
+  ScenarioShotsPackage instance,
+) => <String, dynamic>{
+  'path': instance.path,
+  'output': instance.output,
+  'sets': instance.sets.map((e) => e.toJson()).toList(),
+  'error': ?instance.error,
+};
+
+Map<String, dynamic> _$ScenarioShotSetToJson(ScenarioShotSet instance) =>
+    <String, dynamic>{
+      'directory': instance.directory,
+      'axes': instance.axes,
+      'images': instance.images,
+      'failed': instance.failed,
+    };

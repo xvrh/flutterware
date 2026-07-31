@@ -17,6 +17,9 @@ class ScenarioStepCapture {
     required this.texts,
     required this.statusBrightness,
     required this.navBrightness,
+    this.settled = true,
+    this.strayFrames = 0,
+    this.failure,
   });
 
   /// 1-based position in the scenario's capture sequence.
@@ -54,6 +57,20 @@ class ScenarioStepCapture {
   /// status-bar brightness is a shipped bug a screenshot exists to catch.
   final String? statusBrightness;
   final String? navBrightness;
+
+  /// False when the verb's settle policy gave up with frames still scheduled
+  /// — an indefinite animation on screen, which is worth seeing rather than
+  /// failing on.
+  final bool settled;
+
+  /// Frames drawn between the previous step and this one that no verb drew —
+  /// so they came from the raw `tester`, and whatever they showed is missing
+  /// from the flow. Zero in a scenario written in verbs alone.
+  final int strayFrames;
+
+  /// Set on the one step a scenario captures when it breaks: the error, with
+  /// its split branch. The frame is the state at the failure.
+  final String? failure;
 }
 
 /// Set by the flutterware harness for the duration of one scenario run; null

@@ -7,7 +7,6 @@ import 'drawing/model/service.dart';
 import 'icon/model/service.dart';
 import 'overview/service.dart';
 import 'package_ref.dart';
-import 'test_runner/model/service.dart';
 import 'utils/async_value.dart';
 import 'utils/value_stream.dart';
 
@@ -16,10 +15,11 @@ export 'package:pubspec_parse/pubspec_parse.dart' show Pubspec;
 /// **Legacy.** Every service for one package, constructed eagerly.
 ///
 /// Nothing in the new architecture builds one of these. It survives only for
-/// the pre-overhaul screens under `src/app/`, `src/drawing/` and
-/// `src/test_runner/`, which are reachable from `main_dev.dart` and not from
+/// the pre-overhaul screens under `src/app/`, `src/drawing/`, `src/icon/` and
+/// `src/overview/`, which are reachable from `main_dev.dart` and not from
 /// `main.dart`, and which the master plan has slated for rewrite or deletion.
-/// **It goes when they do.**
+/// **It goes when they do** — the test-runner screens it also served are
+/// already gone, and with them its `tests` field.
 ///
 /// Why it had to stop being load-bearing: declaring a field per service means
 /// importing this file pulls every service — including the two that import
@@ -28,7 +28,6 @@ export 'package:pubspec_parse/pubspec_parse.dart' show Pubspec;
 /// plugin could not be linked into a pure-Dart `fw`. Services now take
 /// [PackageRef]; see `2026-07-27-gui-cli-mcp-architecture.md`.
 class Project extends PackageRef {
-  late final tests = TestService(this);
   late final info = ProjectInfoService(this);
   late final icons = IconService(this);
   late final dependencies = DependenciesService(this);
@@ -47,7 +46,6 @@ class Project extends PackageRef {
   ValueStream<Snapshot<Pubspec>> get pubspec => info.pubspec;
 
   void dispose() {
-    tests.dispose();
     info.dispose();
     icons.dispose();
     dependencies.dispose();

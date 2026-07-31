@@ -164,6 +164,34 @@ flutterware catalog and Flutter's widget previewer.
 
 > The catalog is **macOS only** for now. The other tools run everywhere.
 
+### Scenarios
+
+A `flutter_test` that screenshots itself. The verbs act, wait for the screen to
+settle and capture — so a test you would have written anyway leaves a picture,
+a widget tree and the visible texts for every step:
+
+```dart
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Order a cappuccino', (s) async {
+    await s.pumpWidget(const ShopApp());
+    await s.tap(ShopKeys.getStarted);
+    await s.tap('Cappuccino');
+    await s.tap(ShopKeys.placeOrder);
+  });
+}
+```
+
+`flutter test` runs it like any other test. The GUI runs the same file and
+draws the flow — including `s.split`, which replays the body once per path so
+one scenario covers every way through a screen. Devices and languages are
+declared per folder, so nothing repeats them per test, and CI brings its own
+matrix. `fw run scenarios shots` turns the named captures into a store-ready
+tree by language and device.
+
+See [doc/scenarios.md](doc/scenarios.md).
+
 ### Dependencies
 
 Every dependency of every declared package, with the resolved version, the
@@ -220,7 +248,7 @@ They are independent of the tools above.
 | `devbar.dart` | A hidden developer overlay inside your app: logs, network, analytics, device frames, knobs, feature flags |
 | `feature_flag.dart` | Feature flags, readable and overridable at runtime |
 | `router_outlet.dart` | Nested, URL-driven routing |
-| `flutter_test.dart` | Screenshot every step of a `flutter_test` — see [example](doc/app_tests.md) |
+| `flutter_test.dart` | A strict superset of `package:flutter_test`, plus the scenario API — see [doc/scenarios.md](doc/scenarios.md) |
 | `server.dart` | Live inspection for Dart servers — the primitives behind the server tool above, and the protocol its attachers use |
 | `drawing.dart` | Path building and drawing helpers |
 | `plugins.dart` | The plugin contract `tool/flutterware.dart` is written against |

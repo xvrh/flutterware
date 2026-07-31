@@ -6,6 +6,7 @@
 /// not just to the GUI.
 library;
 
+export 'src/devices.dart';
 export 'src/plugins/action.dart';
 export 'src/plugins/address.dart';
 export 'src/plugins/artifact.dart';

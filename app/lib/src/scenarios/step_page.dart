@@ -14,6 +14,7 @@ import '../plugins/native/scenarios_results.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import 'framed_shot.dart';
+import 'step_status.dart';
 
 /// One step, pushed over the flow: the frame big, the inspect dock under it —
 /// the same Chrome-shaped panel the UI catalog docks under its preview, with
@@ -40,7 +41,7 @@ class ScenarioStepPage extends StatefulWidget {
 
   final List<ScenarioRunStep> steps;
   final ScenarioRunStep step;
-  final CatalogDevice? device;
+  final Device? device;
   final VoidCallback onBack;
   final void Function(ScenarioRunStep) onOpenStep;
 
@@ -134,8 +135,12 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
                 const Gap(FwSpacing.lg),
                 Expanded(
                   child: Text(
-                    '${widget.step.index} · ${widget.step.name ?? 'step'}',
-                    style: context.type.heading,
+                    '${widget.step.index} · ${scenarioStepLabel(widget.step)}',
+                    style: context.type.heading.copyWith(
+                      color: widget.step.failure != null
+                          ? colors.red
+                          : context.type.heading.color,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -143,6 +148,9 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
             ),
           ),
           const Divider(height: 1),
+          // Above the pixels, because on a failed step the message is what the
+          // reader came for and the picture is the evidence.
+          ScenarioStepNotice(widget.step),
           Expanded(
             child: Stack(
               children: [
@@ -400,8 +408,10 @@ class _StepLink extends StatelessWidget {
             if (!isNext)
               Icon(Icons.arrow_back_ios, size: 12, color: colors.mut),
             Text(
-              '${step.index} · ${step.name ?? 'step'}',
-              style: context.type.caption.copyWith(color: colors.mut),
+              '${step.index} · ${scenarioStepLabel(step)}',
+              style: context.type.caption.copyWith(
+                color: scenarioStepTone(context, step),
+              ),
             ),
             if (isNext)
               Icon(Icons.arrow_forward_ios, size: 12, color: colors.mut),

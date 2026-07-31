@@ -121,6 +121,13 @@ Unproven, hence spike S4 below: `reloadSources` + FakeAsync re-run in a
 
 ## The API — three layers
 
+> **Amended 2026-07-31** by `2026-07-31-scenarios-api-gaps.md`: the verbs no
+> longer call `pumpAndSettle` — they apply a `Settle` policy, bounded by
+> default, because a screen holding a spinner made every verb throw. The verb
+> set is nine, not four (`longPress`, `drag`, `scrollTo`, `back`, `wait`
+> joined), and targets past text/key/icon/type are a `Target` vocabulary.
+> That review also lists what this surface still owes a real app's tests.
+
 ### Layer 0 — strict compat
 
 `package:flutterware/flutter_test.dart` re-exports `flutter_test` **1:1,
@@ -336,20 +343,25 @@ what makes them worth writing down rather than leaving to be rediscovered.
    sharing a leaf name in one file both run, the honest reading of a request
    that names only what the panel displays.
 
-2. **`setUpAll`/`tearDownAll` never execute.** `test_api` stores them as
-   `Group` fields outside `entries`, and the engine runs them around the
-   group's tests; our walk iterates `entries` only. Per-test `setUp`/`tearDown`
-   are unaffected (the declarer folds those into each test body), which makes
-   the divergence harder to spot: the same file passes under `flutter test` and
-   captures wrong screens under the runner. **Fix, ~15 lines:** mirror
-   `test_core`'s engine — run `group.setUpAll` as a LiveTest before the group's
-   entries and `tearDownAll` after, skipping both when the filter leaves the
-   group with nothing to run, and failing the group's scenarios if the hook
-   fails.
+2. ~~**`setUpAll`/`tearDownAll` never execute.**~~ **Fixed 2026-07-31.**
+   `test_api` stores them as `Group` fields outside `entries`, and the engine
+   runs them around the group's tests; our walk iterated `entries` only.
+   Per-test `setUp`/`tearDown` were unaffected (the declarer folds those into
+   each test body), which made the divergence harder to spot: the same file
+   passed under `flutter test` and captured wrong screens under the runner.
+   The walk now mirrors `test_core`'s engine — `setUpAll` before the group's
+   entries, entries only if it passed, `tearDownAll` afterwards whatever
+   happened — with two adaptations recorded in
+   `2026-07-31-scenarios-api-gaps.md`: the filter is consulted *first*, so
+   running one scenario does not start every other file's fixtures, and the
+   hooks run inside a zone of their own, because `test_api` builds them
+   unguarded and their failures would otherwise vanish into the harness's
+   outermost guard while the LiveTest stayed green.
 
-Gap 2 remains a documented limitation rather than a surprise; it does not
-block the shape of suite this branch demonstrates, and nothing about it
-corrupts a run that passes.
+The remaining divergence is not a gap but a rule worth knowing: a `split`
+replays the body, and `setUp` runs once per *test*, so state built in `setUp`
+carries from one path into the next. Per-path setup belongs in the body, which
+is what re-runs. Documented on `split` itself.
 
 ## Post-parity roadmap
 

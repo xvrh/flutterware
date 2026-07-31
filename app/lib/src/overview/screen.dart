@@ -192,10 +192,6 @@ class _ToolsCard extends StatelessWidget {
               'Pub dependencies overview',
               '/project/${paths.dependencies}',
             ),
-            _Link(
-              'Hot-reloadable, visual test runner',
-              '/project/${paths.tests}/home',
-            ),
             Text('• Widgets preview: build UI in isolation (WIP)'),
             Text('• Assets management (WIP)'),
             Text('• Path & drawing (WIP)'),

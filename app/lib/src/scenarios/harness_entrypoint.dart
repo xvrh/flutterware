@@ -11,8 +11,12 @@ const harnessEntrypointPath = 'build/flutterware/scenarios_harness.dart';
 /// Scenario files live under `test/`, outside `lib/`, so they have no
 /// `package:` URI — imports are relative to the entrypoint's own location,
 /// exactly as the catalog's per-entry wrappers re-relativise theirs.
-String generateHarnessEntrypoint(List<String> files) {
+String generateHarnessEntrypoint(
+  List<String> files, {
+  List<String> configs = const [],
+}) {
   var sorted = [...files]..sort();
+  var sortedConfigs = [...configs]..sort();
   var buffer = StringBuffer()
     ..writeln('// GENERATED — flutterware scenarios harness. Do not edit.')
     ..writeln("import 'package:flutterware/src/scenarios/harness.dart'")
@@ -20,14 +24,66 @@ String generateHarnessEntrypoint(List<String> files) {
   for (var (index, file) in sorted.indexed) {
     buffer.writeln("import '../../$file' as s$index;");
   }
+  for (var (index, config) in sortedConfigs.indexed) {
+    buffer.writeln("import '../../$config' as c$index;");
+  }
   buffer
     ..writeln()
-    ..writeln('void main() => harness.runHarness({');
+    ..writeln('void main() => harness.runHarness(')
+    ..writeln('  {');
   for (var (index, file) in sorted.indexed) {
-    buffer.writeln("  '$file': s$index.main,");
+    buffer.writeln("    '$file': s$index.main,");
   }
-  buffer.writeln('});');
+  buffer.writeln('  },');
+  if (sortedConfigs.isNotEmpty) {
+    // Keyed by the folder they govern, which is how the harness works out
+    // which scenarios each one speaks for.
+    buffer.writeln('  configs: {');
+    for (var (index, config) in sortedConfigs.indexed) {
+      buffer.writeln("    '${p.url.dirname(config)}': c$index.testExecutable,");
+    }
+    buffer.writeln('  },');
+  }
+  buffer.writeln(');');
   return buffer.toString();
+}
+
+/// The name `flutter test` looks for, and looked for the same way: from a test
+/// file's own directory upwards, first one wins, the package root stops the
+/// walk (`flutter_tools/src/test/test_config.dart`). Mirrored rather than
+/// invented, so the runner and a bare `flutter test` never disagree about
+/// which config governs a folder.
+const testConfigFileName = 'flutter_test_config.dart';
+
+/// Every `flutter_test_config.dart` that governs one of [files],
+/// package-relative and listed once.
+List<String> findTestConfigs(String packageRoot, List<String> files) {
+  var found = <String>{};
+  for (var file in files) {
+    if (testConfigFolderFor(packageRoot, file) case var directory?) {
+      found.add(p.url.join(directory, testConfigFileName));
+    }
+  }
+  return found.toList()..sort();
+}
+
+/// The folder whose `flutter_test_config.dart` governs [file] — the nearest
+/// one at or above it — or null where nothing does.
+///
+/// Package-relative, `''` for the package root. Also **the identity of a pool
+/// of scenarios**, which is what the panel remembers a device against: two
+/// folders configured differently are two pools, and the folder path says so
+/// without anybody having to compile the config to read its profile's name.
+String? testConfigFolderFor(String packageRoot, String file) {
+  var directory = p.url.dirname(file);
+  while (true) {
+    var candidate = p.url.join(directory, testConfigFileName);
+    var absolute = p.join(packageRoot, p.joinAll(p.url.split(candidate)));
+    if (File(absolute).existsSync()) return directory;
+    if (directory.isEmpty || directory == '.') return null;
+    directory = p.url.dirname(directory);
+    if (directory == '.') directory = '';
+  }
 }
 
 /// Writes the entrypoint into the package and returns its absolute path.
@@ -37,7 +93,10 @@ String generateHarnessEntrypoint(List<String> files) {
 /// and recompiling — it for nothing.
 String writeHarnessEntrypoint(String packageRoot, List<String> files) {
   var path = p.join(packageRoot, harnessEntrypointPath);
-  var source = generateHarnessEntrypoint(files);
+  var source = generateHarnessEntrypoint(
+    files,
+    configs: findTestConfigs(packageRoot, files),
+  );
   var file = File(path);
   if (!file.existsSync() || file.readAsStringSync() != source) {
     file

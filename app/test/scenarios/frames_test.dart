@@ -11,7 +11,7 @@ import 'package:flutterware_app/src/scenarios/framed_shot.dart';
 void main() {
   test('every named frame matches our table exactly', () {
     var mapped = 0;
-    for (var device in catalogDevices) {
+    for (var device in Devices.all) {
       var named = FramedShot.namedFrameFor(device.id);
       if (named == null) continue;
       mapped++;

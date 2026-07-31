@@ -7,6 +7,7 @@ import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import '../utils/graphite.dart';
 import 'framed_shot.dart';
+import 'step_status.dart';
 
 /// One run as a flow: every captured step a device-framed screenshot on a
 /// pannable, zoomable canvas — dev_studio's proven shape, on the design
@@ -28,7 +29,7 @@ class ScenarioFlowView extends StatefulWidget {
   final List<ScenarioRunStep> steps;
 
   /// The device the run was framed as, or null for the bare surface.
-  final CatalogDevice? device;
+  final Device? device;
 
   /// Status-chrome tint when a step declared no overlay style.
   final Brightness statusFallback;
@@ -187,7 +188,7 @@ class _StepNode extends StatelessWidget {
   });
 
   final ScenarioRunStep step;
-  final CatalogDevice? device;
+  final Device? device;
   final Brightness statusFallback;
   final VoidCallback onTap;
 
@@ -211,14 +212,14 @@ class _StepNode extends StatelessWidget {
               ),
             ),
           Text(
-            '${step.index} · ${step.name ?? 'step'}',
+            '${step.index} · ${scenarioStepLabel(step)}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             // Sized to survive the canvas's zoom-out: at half scale this
             // reads like a caption.
             style: context.type.body.copyWith(
               fontSize: 22,
-              color: context.colors.mut,
+              color: scenarioStepTone(context, step),
             ),
           ),
           const Gap(FwSpacing.md),

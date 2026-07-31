@@ -1,5 +1,8 @@
 import 'package:flutter/widgets.dart';
 
+import '../devices.dart';
+import 'profile.dart';
+
 /// One run's axis assignment — device geometry, locale, text scale,
 /// brightness — as the substrate applies it.
 ///
@@ -17,7 +20,72 @@ class ScenarioRunArgs {
     this.accessibility = const ScenarioRunAccessibility(),
     this.captureScale,
     this.captureRaw = false,
+    this.captureNative = false,
+    this.clockOrigin,
   });
+
+  /// The assignment a `flutter_test_config.dart` set, as the binding's test
+  /// values want it.
+  ///
+  /// The same translation the host does before it calls the harness — device
+  /// vocabulary in, numbers out — done here for the lane that has no host:
+  /// a bare `flutter test`, where the profile is all there is.
+  factory ScenarioRunArgs.forAssignment(ScenarioAssignment assignment) {
+    var device = assignment.device;
+    return ScenarioRunArgs(
+      size: device == null ? null : Size(device.width, device.height),
+      pixelRatio: device?.pixelRatio,
+      padding: device == null ? null : _paddingOf(device),
+      platform: _platformOf(device),
+      locale: switch (assignment.language) {
+        null => null,
+        var tag => () {
+          var parts = tag.split(RegExp('[-_]'));
+          return parts.length > 1
+              ? Locale(parts[0], parts[1])
+              : Locale(parts[0]);
+        }(),
+      },
+    );
+  }
+
+  /// These args, re-framed as [device] — everything else kept.
+  ///
+  /// What the harness applies when a run named no device and the scenario's
+  /// folder profile has one: the request still carries the language, the text
+  /// scale and the accessibility switches the caller asked for, and only the
+  /// screen comes from the folder.
+  ScenarioRunArgs withDevice(Device device) => ScenarioRunArgs(
+    size: Size(device.width, device.height),
+    pixelRatio: device.pixelRatio,
+    padding: _paddingOf(device),
+    platform: _platformOf(device),
+    locale: locale,
+    textScale: textScale,
+    brightness: brightness,
+    accessibility: accessibility,
+    captureScale: captureScale,
+    captureRaw: captureRaw,
+    captureNative: captureNative,
+    clockOrigin: clockOrigin,
+  );
+
+  static EdgeInsets _paddingOf(Device device) => EdgeInsets.fromLTRB(
+    device.insetLeft,
+    device.insetTop,
+    device.insetRight,
+    device.insetBottom,
+  );
+
+  static TargetPlatform? _platformOf(Device? device) =>
+      switch (device?.platform) {
+        null => null,
+        DevicePlatform.ios => TargetPlatform.iOS,
+        DevicePlatform.android => TargetPlatform.android,
+        DevicePlatform.macos => TargetPlatform.macOS,
+        DevicePlatform.windows => TargetPlatform.windows,
+        DevicePlatform.linux => TargetPlatform.linux,
+      };
 
   final ScenarioRunAccessibility accessibility;
 
@@ -41,6 +109,29 @@ class ScenarioRunArgs {
   /// the device's own ratio (a real screenshot's resolution). Not an axis —
   /// it changes the artifact, never what the app sees.
   final double? captureScale;
+
+  /// What `clock.now()` reads at the start of the scenario, or null for the
+  /// wall clock it starts at today.
+  ///
+  /// Under `FakeAsync` a scenario's clock already *advances* deterministically
+  /// — `s.wait(1 day)` moves it a day — but it still **starts** at whatever
+  /// time the run happened, so any screen showing a date differs run to run.
+  /// Pinning the origin is what makes two runs of the same suite comparable,
+  /// which is the groundwork for diffing against a baseline.
+  ///
+  /// Reaches only code that reads `package:clock` — the Flutter ecosystem's
+  /// convention, and what `flutter_test` itself uses. A direct
+  /// `DateTime.now()` cannot be intercepted by anything, in any test.
+  final DateTime? clockOrigin;
+
+  /// Capture at the device's own pixel ratio — a true screenshot, whatever
+  /// the device turned out to be.
+  ///
+  /// Beats computing a [captureScale] host-side, because the device may have
+  /// been chosen by the scenario's folder profile rather than by the caller:
+  /// only the guest, at capture time, knows what ratio it is actually
+  /// rendering at. Wins over [captureScale] when both are set.
+  final bool captureNative;
 
   /// Capture raw rgba8888 instead of PNG. PNG *encoding* is ~80% of a 1×
   /// capture's cost (and ~96% at 3×); a host that can display raw pixels —

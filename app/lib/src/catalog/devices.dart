@@ -1,269 +1,18 @@
-/// The device vocabulary an address may use, in **plain Dart**.
+/// The catalog's device *policy* — the defaults and the resolution rules.
 ///
-/// Deliberately free of `device_frame`, and by extension of Flutter. `fw` and
-/// MCP link this — they have to validate `--device` and render a capture at
-/// the right size — and their entry points must never reach `package:flutter`
-/// (`entry_point_purity_test.dart` is what holds that).
-///
-/// This is the **only** list of measurements. The panel's silhouette is built
-/// from these same numbers by `catalog_devices.dart`, through `device_frame`'s
-/// generic builders — see `deviceFrameFor` for the second list this retired.
+/// The table itself lives in `package:flutterware` (`Devices.all`), because a
+/// project's `tool/flutterware.dart` and a scenario folder's
+/// `flutter_test_config.dart` name devices too, and neither can import the
+/// GUI. Re-exported here so the panel keeps one import for both halves.
 library;
 
-/// What shape of thing a device is.
-///
-/// Decides the silhouette drawn around it, and nothing else — every
-/// measurement is on the device itself. `desktop` gets no silhouette at all:
-/// the panel is already a desktop-shaped canvas, and a monitor body scaled down
-/// to fit inside it costs more room than it explains. What a desktop entry is
-/// *for* is its size.
-enum DeviceKind { phone, tablet, desktop }
+import 'package:flutterware/devices.dart';
 
-/// Ours rather than `TargetPlatform`, which is Flutter-only. Translated at the
-/// one place a frame is drawn.
-enum DevicePlatform { ios, android, macos, windows, linux }
-
-/// One device an address may name.
-class CatalogDevice {
-  const CatalogDevice(
-    this.id,
-    this.label, {
-    required this.kind,
-    required this.platform,
-    required this.group,
-    required this.width,
-    required this.height,
-    required this.pixelRatio,
-    this.insetTop = 0,
-    this.insetRight = 0,
-    this.insetBottom = 0,
-    this.insetLeft = 0,
-  });
-
-  /// What goes in an address — `?device=iphone-13`.
-  ///
-  /// Ours rather than `device_frame`'s identifier: an address is written by
-  /// hand, pasted into a terminal and produced by an agent, so its vocabulary
-  /// has to be stable and guessable. A third party's internal identifier is
-  /// neither, and it would leak into every saved link.
-  final String id;
-
-  /// What a person reads in the picker.
-  final String label;
-
-  /// The heading it appears under.
-  final String group;
-
-  /// What silhouette to draw around it, if any.
-  final DeviceKind kind;
-
-  final DevicePlatform platform;
-
-  /// The screen in **logical** pixels — the number a layout is written
-  /// against, and what the demo reads from `MediaQuery`.
-  final double width;
-  final double height;
-
-  final double pixelRatio;
-
-  /// The notch, and whatever else is not drawable. Without these an `AppBar`
-  /// renders under the cutout and a capture misses the exact thing a phone
-  /// screenshot exists to catch.
-  final double insetTop;
-  final double insetRight;
-  final double insetBottom;
-  final double insetLeft;
-}
-
-/// What `?device=` means "no device at all": the panel itself, at whatever size
-/// the window happens to be.
-///
-/// A value rather than an absent parameter, because picking it is a decision.
-/// Leaving it out means "nobody chose", which is what lets an entry's own
-/// `formFactor` speak; `fit` means "I chose not to frame this", and those are
-/// different answers.
-const fitDeviceId = 'fit';
-
-/// The devices worth offering, which is not all of them.
-///
-/// `Devices.all` is nearly a hundred entries and a menu nobody reads. This is
-/// the same shortlist the previous catalog shipped (`default_device_list.dart`)
-/// — one small, one large and one tablet per platform, which is what a layout
-/// actually gets tested against.
-const catalogDevices = <CatalogDevice>[
-  CatalogDevice(
-    'iphone-se',
-    'iPhone SE',
-    kind: DeviceKind.phone,
-    platform: DevicePlatform.ios,
-    group: 'iOS',
-    width: 375,
-    height: 667,
-    pixelRatio: 2,
-    insetTop: 20,
-  ),
-  CatalogDevice(
-    'iphone-13-mini',
-    'iPhone 13 mini',
-    kind: DeviceKind.phone,
-    platform: DevicePlatform.ios,
-    group: 'iOS',
-    width: 375,
-    height: 812,
-    pixelRatio: 2,
-    insetTop: 47,
-    insetBottom: 34,
-  ),
-  CatalogDevice(
-    'iphone-13',
-    'iPhone 13',
-    kind: DeviceKind.phone,
-    platform: DevicePlatform.ios,
-    group: 'iOS',
-    width: 390,
-    height: 844,
-    pixelRatio: 3,
-    insetTop: 47,
-    insetBottom: 34,
-  ),
-  CatalogDevice(
-    'iphone-12-pro-max',
-    'iPhone 12 Pro Max',
-    kind: DeviceKind.phone,
-    platform: DevicePlatform.ios,
-    group: 'iOS',
-    width: 428,
-    height: 926,
-    pixelRatio: 3,
-    insetTop: 44,
-    insetBottom: 34,
-  ),
-  CatalogDevice(
-    'ipad',
-    'iPad',
-    kind: DeviceKind.tablet,
-    platform: DevicePlatform.ios,
-    group: 'iOS',
-    width: 810,
-    height: 1080,
-    pixelRatio: 2,
-    insetTop: 20,
-  ),
-  CatalogDevice(
-    'android-small',
-    'Small phone',
-    kind: DeviceKind.phone,
-    platform: DevicePlatform.android,
-    group: 'Android',
-    width: 360,
-    height: 640,
-    pixelRatio: 2,
-    insetTop: 24,
-  ),
-  CatalogDevice(
-    'android-medium',
-    'Medium phone',
-    kind: DeviceKind.phone,
-    platform: DevicePlatform.android,
-    group: 'Android',
-    width: 412,
-    height: 732,
-    pixelRatio: 2,
-    insetTop: 24,
-  ),
-  CatalogDevice(
-    'android-big',
-    'Big phone',
-    kind: DeviceKind.phone,
-    platform: DevicePlatform.android,
-    group: 'Android',
-    width: 480,
-    height: 853,
-    pixelRatio: 2,
-    insetTop: 24,
-  ),
-  CatalogDevice(
-    'android-small-tablet',
-    'Small tablet',
-    kind: DeviceKind.tablet,
-    platform: DevicePlatform.android,
-    group: 'Android',
-    width: 800,
-    height: 1280,
-    pixelRatio: 2,
-    insetTop: 24,
-  ),
-  CatalogDevice(
-    'android-medium-tablet',
-    'Medium tablet',
-    kind: DeviceKind.tablet,
-    platform: DevicePlatform.android,
-    group: 'Android',
-    width: 1024,
-    height: 1350,
-    pixelRatio: 2,
-    insetTop: 24,
-  ),
-  CatalogDevice(
-    'macbook-pro',
-    'MacBook Pro',
-    kind: DeviceKind.desktop,
-    platform: DevicePlatform.macos,
-    group: 'Desktop',
-    width: 1800,
-    height: 970,
-    pixelRatio: 2,
-  ),
-  CatalogDevice(
-    'wide-monitor',
-    'Wide monitor',
-    kind: DeviceKind.desktop,
-    platform: DevicePlatform.macos,
-    group: 'Desktop',
-    width: 1620,
-    height: 750,
-    pixelRatio: 2,
-  ),
-  CatalogDevice(
-    'windows-laptop',
-    'Windows laptop',
-    kind: DeviceKind.desktop,
-    platform: DevicePlatform.windows,
-    group: 'Desktop',
-    width: 1620,
-    height: 740,
-    pixelRatio: 2,
-  ),
-  CatalogDevice(
-    'linux-laptop',
-    'Linux laptop',
-    kind: DeviceKind.desktop,
-    platform: DevicePlatform.linux,
-    group: 'Desktop',
-    width: 1620,
-    height: 740,
-    pixelRatio: 2,
-  ),
-];
-
-/// Every value `?device=` accepts, [fitDeviceId] first.
-///
-/// One list, so the picker, the address, `fw`'s usage line and MCP's schema
-/// read the same thing.
-List<String> get deviceIds => [fitDeviceId, for (var d in catalogDevices) d.id];
-
-/// The device [id] names, or null for [fitDeviceId] and for anything unknown —
-/// which the caller must tell apart, because one is a choice and the other is a
-/// mistake. See [isDeviceId].
-CatalogDevice? deviceById(String id) =>
-    catalogDevices.where((d) => d.id == id).firstOrNull;
-
-/// Whether [id] is a value this build accepts at all.
-bool isDeviceId(String id) => id == fitDeviceId || deviceById(id) != null;
+export 'package:flutterware/devices.dart';
 
 /// How a device reads in the bar: its screen in logical pixels, which is the
 /// number a layout is written against.
-String describeDevice(CatalogDevice device) =>
+String describeDevice(Device device) =>
     '${device.width.round()}×${device.height.round()}';
 
 /// What an entry declaring `@Demo(formFactor: …)` is shown as when the address
@@ -278,7 +27,7 @@ String describeDevice(CatalogDevice device) =>
 /// canvas, and a 1440-wide frame scaled down inside it is a worse look at a
 /// desktop layout than the room it costs; `all` is an entry saying it has no
 /// opinion.
-CatalogDevice? defaultDeviceFor(String? formFactor) =>
+Device? defaultDeviceFor(String? formFactor) =>
     formFactor == 'mobile' ? deviceById('iphone-13') : null;
 
 /// The device an address names, or the default for [formFactor] when it names
@@ -292,7 +41,7 @@ CatalogDevice? defaultDeviceFor(String? formFactor) =>
 /// [fitDeviceId] resolves to no device *and* suppresses the default, which is
 /// why "fit" has to be a value rather than an absent parameter: choosing the
 /// panel and choosing nothing are different answers.
-CatalogDevice? resolveDevice(String? param, {String? formFactor}) =>
+Device? resolveDevice(String? param, {String? formFactor}) =>
     param == null ? defaultDeviceFor(formFactor) : deviceById(param);
 
 /// A `?device=` this build has never heard of, or null.
@@ -327,7 +76,7 @@ class CaptureViewport {
   /// The device's screen, at its own ratio, with its safe areas — the same
   /// three things the panel hands its guest, so a capture and what you were
   /// looking at are the same picture.
-  factory CaptureViewport.of(CatalogDevice device) => CaptureViewport(
+  factory CaptureViewport.of(Device device) => CaptureViewport(
     width: (device.width * device.pixelRatio).round(),
     height: (device.height * device.pixelRatio).round(),
     pixelRatio: device.pixelRatio,

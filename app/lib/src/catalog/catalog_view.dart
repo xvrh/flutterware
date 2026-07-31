@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:device_frame/device_frame.dart';
+import 'package:device_frame/device_frame.dart' hide Devices;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutterware/ui_catalog_guest.dart';
 import 'package:flutter/material.dart';
@@ -358,7 +358,7 @@ class _CatalogViewState extends State<CatalogView> {
     );
   }
 
-  Widget _buildCanvas(BuildContext context, CatalogDevice? device) {
+  Widget _buildCanvas(BuildContext context, Device? device) {
     switch (_session.phase) {
       case CatalogSessionPhase.starting:
         return Center(
@@ -412,7 +412,7 @@ class _CatalogViewState extends State<CatalogView> {
   Widget _buildTexture(
     BuildContext context,
     EmbeddedEngine engine,
-    CatalogDevice? device,
+    Device? device,
   ) {
     if (device == null) {
       var dpr = MediaQuery.of(context).devicePixelRatio;
@@ -1464,12 +1464,12 @@ class _DevicePicker extends StatelessWidget {
   const _DevicePicker({required this.device});
 
   /// What is on screen, already resolved. The picker holds nothing.
-  final CatalogDevice? device;
+  final Device? device;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return _Popover<CatalogDevice?>(
+    return _Popover<Device?>(
       selected: device,
       // **The only place a device is chosen, and it writes the address.** It
       // used to set the staging and let the panel copy that into the address a
@@ -1482,11 +1482,11 @@ class _DevicePicker extends StatelessWidget {
           heading: null,
           items: [(value: null, label: 'Fit', detail: 'the panel')],
         ),
-        for (var group in {for (var d in catalogDevices) d.group})
+        for (var group in {for (var d in Devices.all) d.group})
           (
             heading: group,
             items: [
-              for (var d in catalogDevices.where((d) => d.group == group))
+              for (var d in Devices.all.where((d) => d.group == group))
                 (value: d, label: d.label, detail: describeDevice(d)),
             ],
           ),
@@ -2278,7 +2278,7 @@ class _StatusBar extends StatelessWidget {
 /// panel while the picker beside it named a phone. `write` rather than `of` —
 /// this is a check, and a check that subscribed would rebuild on every address
 /// change in debug and on none in release.
-CatalogDevice? _deviceOf(BuildContext context, CatalogSession session) {
+Device? _deviceOf(BuildContext context, CatalogSession session) {
   assert(
     AddressScope.write(context).view.namespace == null,
     'device is un-namespaced: read it above any namespaced scope, or it asks '

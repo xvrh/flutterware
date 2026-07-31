@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('the vocabulary an address may use', () {
     test('every offered device has an id, and they are distinct', () {
-      var ids = [for (var d in catalogDevices) d.id];
+      var ids = [for (var d in Devices.all) d.id];
       expect(ids.toSet(), hasLength(ids.length));
       expect(ids, everyElement(matches(RegExp(r'^[a-z0-9-]+$'))));
     });
@@ -14,12 +14,12 @@ void main() {
       // exists. A vocabulary documented apart from the code that enforces it is
       // a vocabulary that is wrong.
       expect(deviceIds.first, fitDeviceId);
-      expect(deviceIds, hasLength(catalogDevices.length + 1));
+      expect(deviceIds, hasLength(Devices.all.length + 1));
       expect(deviceIds.every(isDeviceId), isTrue);
     });
 
     test('an id names the device that carries it', () {
-      for (var device in catalogDevices) {
+      for (var device in Devices.all) {
         expect(deviceById(device.id), same(device), reason: device.id);
       }
       expect(deviceById(fitDeviceId), isNull, reason: 'fit is not a device');
@@ -48,7 +48,7 @@ void main() {
     });
 
     test('every phone and tablet can be drawn', () {
-      for (var device in catalogDevices) {
+      for (var device in Devices.all) {
         expect(
           deviceFrameFor(device),
           device.kind == DeviceKind.desktop ? isNull : isNotNull,

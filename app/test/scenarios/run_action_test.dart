@@ -180,9 +180,13 @@ class _FakeRunner extends ScenarioRunner {
     required String outDir,
     String? file,
     String? scenario,
+    String? tag,
     ScenarioAxes axes = const ScenarioAxes(),
+    String? unspecifiedDevice,
     double? captureScale,
     bool captureRaw = false,
+    bool captureNative = false,
+    DateTime? clock,
   }) async {
     if (failure case var failure?) throw StateError(failure);
     if (!matches) return {'ms': 1, 'scenarios': <Object?>[]};

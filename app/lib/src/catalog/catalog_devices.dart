@@ -1,4 +1,6 @@
-import 'package:device_frame/device_frame.dart';
+// `Devices` hidden: theirs is a hundred hand-drawn bodies, ours is the
+// offered table, and this file is where the two meet.
+import 'package:device_frame/device_frame.dart' hide Devices;
 import 'package:flutter/widgets.dart';
 
 import 'devices.dart';
@@ -7,8 +9,8 @@ export 'devices.dart';
 
 /// The silhouette to draw around a device, **built from our own measurements**.
 ///
-/// Not a lookup. [catalogDevices] is the only list; this hands its numbers to
-/// `device_frame`'s generic builders, which take exactly what a [CatalogDevice]
+/// Not a lookup. [Devices.all] is the only list; this hands its numbers to
+/// `device_frame`'s generic builders, which take exactly what a [Device]
 /// already holds — screen size, safe areas, pixel ratio, a name and a platform.
 /// So there is nothing here to keep in step with anything, and nothing to
 /// drift.
@@ -22,7 +24,7 @@ export 'devices.dart';
 /// Null for [DeviceKind.desktop], which gets no silhouette: the panel is
 /// already a desktop-shaped canvas, and a monitor body scaled down to fit
 /// inside it costs more room than it explains. A desktop entry is a *size*.
-DeviceInfo? deviceFrameFor(CatalogDevice device) {
+DeviceInfo? deviceFrameFor(Device device) {
   var screen = Size(device.width, device.height);
   var safeAreas = EdgeInsets.fromLTRB(
     device.insetLeft,

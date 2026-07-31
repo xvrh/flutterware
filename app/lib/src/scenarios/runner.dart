@@ -19,10 +19,31 @@ import 'harness_entrypoint.dart';
 /// One scenario listed by the live harness — ground truth, where the scan is
 /// provisional.
 class ScenarioListing {
-  ScenarioListing({required this.file, required this.name});
+  ScenarioListing({
+    required this.file,
+    required this.name,
+    this.profile,
+    this.devices = const [],
+    this.languages = const [],
+    this.tags = const [],
+  });
 
   final String file;
   final String name;
+
+  /// The name of the profile its folder's `flutter_test_config.dart` declared,
+  /// or null where the folder has none.
+  final String? profile;
+
+  /// What that profile offers — the picker's list, and the first of each is
+  /// what a run takes when nobody chose.
+  final List<String> devices;
+  final List<String> languages;
+
+  /// What `scenario(tags: [...])` declared — the vocabulary `run --tag` and
+  /// `shots --tag` filter on. Only the live harness can see these; the
+  /// syntactic scan does not evaluate arguments.
+  final List<String> tags;
 }
 
 /// Runs a package's scenarios in a directly-spawned `flutter_tester`, exactly
@@ -481,6 +502,10 @@ class ScenarioRunner {
         ScenarioListing(
           file: entry['file']! as String,
           name: entry['name']! as String,
+          profile: entry['profile'] as String?,
+          devices: (entry['devices'] as List?)?.cast<String>() ?? const [],
+          languages: (entry['languages'] as List?)?.cast<String>() ?? const [],
+          tags: (entry['tags'] as List?)?.cast<String>() ?? const [],
         ),
     ];
   });
@@ -489,14 +514,23 @@ class ScenarioRunner {
   /// PNG and tree under [outDir] and returning the harness's report verbatim.
   /// [axes] is applied for the whole request and reset after it.
   ///
+  /// An axis assignment that names no device leaves the choice to each
+  /// scenario's folder profile, and to [unspecifiedDevice] where a folder has
+  /// none — a policy the runner holds no opinion about, so a caller that
+  /// passes nothing gets the bare test surface.
+  ///
   /// A warm runner refreshes first, so what runs is always what is on disk.
   Future<Map<String, Object?>> run({
     required String outDir,
     String? file,
     String? scenario,
+    String? tag,
     ScenarioAxes axes = const ScenarioAxes(),
+    String? unspecifiedDevice,
     double? captureScale,
     bool captureRaw = false,
+    bool captureNative = false,
+    DateTime? clock,
   }) => _exclusive(() async {
     var wasWarm = _starting != null;
     await _ensureGuest();
@@ -508,9 +542,12 @@ class ScenarioRunner {
         'out': outDir,
         'file': ?file,
         'scenario': ?scenario,
+        'tag': ?tag,
         if (captureScale != null) 'captureScale': '$captureScale',
         if (captureRaw) 'captureRaw': 'true',
-        ...axes.harnessArgs(),
+        if (captureNative) 'captureNative': 'true',
+        if (clock != null) 'clock': clock.toIso8601String(),
+        ...axes.harnessArgs(unspecifiedDevice: unspecifiedDevice),
       },
     );
     if (response!['error'] case String error) {
