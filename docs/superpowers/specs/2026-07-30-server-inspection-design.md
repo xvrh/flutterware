@@ -442,15 +442,23 @@ reveal, because terminals and agent transcripts have no click. True
 redaction — what must not leave the process — still belongs to the
 middleware snippet the user owns (decision 11's reasoning, unchanged).
 
-### 17. Nothing mirrors into the handle file, for now
+### 17. The handle mirrors `baseUrl` and `environment` — deferred, then wanted
 
-Mirroring `baseUrl` into `srv-*.json` would let `fw status` and the sidebar
-row say `example_server :8080` without a socket (`report` may not connect,
-fact 4). Deferred: it adds file churn and a second source of truth, the
-panel attaches anyway, and the `info` action attaches ephemerally like its
-siblings. The retrofit is understood — rewrite the handle on `info`
-updates; watchers already debounce and `tryRead` tolerates torn writes —
-and waits for someone to actually miss the port in `fw status`.
+Mirroring `baseUrl` into `srv-*.json` lets `fw status` and the sidebar row
+say where a server listens without a socket (`report` may not connect,
+fact 4). First deferred — file churn, a second source of truth — with the
+retrofit recorded; the wait for someone to actually miss the port in
+`fw status` lasted one day. Landed 2026-07-31, same-day as the review that
+asked for it, exactly as recorded: the inspector holds the two values from
+`info` publishes and rewrites its handle when they change (including the
+activation-order case, where the `info` call *is* the first event and the
+values must land in the initial write). The mirror is those two fields
+only and stays a convenience copy — the `info` channel remains the source
+of truth, `tryRead` reads the fields tolerantly so a wrong-typed mirror
+cannot unread a live handle, and pre-mirror handles read as before.
+Attachers refresh `TrackedServer.handle` on rescan (identity is
+`name-pid`; the file content is not part of identity), and the report row
+becomes `pid 4242 · http://localhost:8080 · dev`.
 
 ### The surfaces
 

@@ -318,12 +318,70 @@ void main() {
     expect(info['note'], contains('FlutterwareServer.info'));
   });
 
+  test('the report shows the mirrored base URL without attaching', () async {
+    inspector.addEvent(infoChannel, {
+      'baseUrl': 'http://localhost:8080',
+      'environment': 'dev',
+    });
+    await core.computeAll();
+    expect(
+      core.report.children.single.status.message,
+      'pid $pid · http://localhost:8080 · dev',
+    );
+    expect(core.servers.single.client, isNull, reason: 'scan only, no socket');
+  });
+
   test('a tracked server exposes the reduced info to the panel', () async {
     inspector.addEvent(infoChannel, {'environment': 'staging'});
     await core.computeAll();
     core.track();
     await _until(() => core.servers.single.events.isNotEmpty);
     expect(core.servers.single.info.environment, 'staging');
+  });
+
+  group('curlCommand', () {
+    ServerEvent request(Map<String, Object?> payload) => ServerEvent(
+      channel: 'http',
+      id: 1,
+      time: DateTime.now(),
+      payload: payload,
+      isReplay: false,
+    );
+    var info = ServerInfo(baseUrl: 'http://localhost:8080');
+
+    test('a bare GET is one line', () {
+      expect(
+        curlCommand(info, request({'method': 'GET', 'path': '/users'})),
+        "curl 'http://localhost:8080/users'",
+      );
+    });
+
+    test('headers and body continue over lines; curl-derived headers drop', () {
+      var command = curlCommand(
+        info,
+        request({'method': 'POST', 'path': '/echo'}),
+        details: {
+          'requestHeaders': {
+            'content-type': 'text/plain',
+            'host': 'localhost:8080',
+            'content-length': '11',
+            'authorization': '<redacted>',
+          },
+          'requestBody': "it's hello",
+        },
+      );
+      expect(
+        command,
+        "curl -X POST 'http://localhost:8080/echo' \\\n"
+        "  -H 'content-type: text/plain' \\\n"
+        "  -H 'authorization: <redacted>' \\\n"
+        r"  --data-raw 'it'\''s hello'",
+      );
+    });
+
+    test('no published baseUrl is null, not a relative non-command', () {
+      expect(curlCommand(ServerInfo(), request({'path': '/users'})), isNull);
+    });
   });
 
   test('details are fetched lazily through the tracked server', () async {

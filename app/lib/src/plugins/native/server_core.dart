@@ -74,6 +74,9 @@ class ServerCore extends PluginCore {
       var key = '${handle.name}-${handle.pid}';
       seen.add(key);
       var tracked = _servers.putIfAbsent(key, () => TrackedServer(handle));
+      // Same process, fresher file: the inspector rewrites its handle when
+      // the server publishes a base URL, and the row should say so.
+      tracked.handle = handle;
       if (_tracking) _attach(tracked);
     }
     // A vanished handle is a stopped server: keep it on screen, greyed out,
@@ -151,7 +154,7 @@ class ServerCore extends PluginCore {
             label: server.handle.name,
             status: server.stopped
                 ? Status.neutral('stopped')
-                : Status.good('pid ${server.handle.pid}'),
+                : Status.good(_where(server)),
           ),
       ],
       actions: [
@@ -231,21 +234,29 @@ class ServerCore extends PluginCore {
             for (var server in servers)
               ViewItem(
                 server.handle.name,
-                detail: server.stopped
-                    ? 'stopped'
-                    : server.connected
-                    ? 'pid ${server.handle.pid}, '
-                          '${server.events.length} events'
-                    : server.wasConnected
-                    ? 'pid ${server.handle.pid}, reconnecting'
-                    // The event count is only honest once attached — `fw`
-                    // reads this without ever opening the socket.
-                    : 'pid ${server.handle.pid}',
+                detail: switch (server) {
+                  _ when server.stopped => 'stopped',
+                  _ when server.connected =>
+                    '${_where(server)}, ${server.events.length} events',
+                  _ when server.wasConnected =>
+                    '${_where(server)}, reconnecting',
+                  // The event count is only honest once attached — `fw`
+                  // reads this without ever opening the socket.
+                  _ => _where(server),
+                },
               ),
           ]),
       ]),
     );
   }
+
+  /// `pid 4242 · http://localhost:8080 · dev`, from the scan-only mirror —
+  /// what both the child rows and the view items say about a live server.
+  static String _where(TrackedServer server) => [
+    'pid ${server.handle.pid}',
+    ?server.handle.baseUrl,
+    ?server.handle.environment,
+  ].join(' · ');
 
   @override
   Future<Object?> invoke(
@@ -496,7 +507,10 @@ class ServerCore extends PluginCore {
 class TrackedServer {
   TrackedServer(this.handle);
 
-  final ServerHandle handle;
+  /// Refreshed on every scan — the same process rewrites its handle file
+  /// when it learns its base URL, and the identity key (`name-pid`) is
+  /// what stays fixed.
+  ServerHandle handle;
   ServerAttachClient? client;
   StreamSubscription<ServerEvent>? _eventSubscription;
   var attaching = false;
@@ -577,6 +591,44 @@ class TrackedServer {
 
   void dispose() => markStopped();
 }
+
+/// A curl invocation reproducing [request], or null when one cannot be built
+/// — no published `baseUrl` to make the URL absolute, or no recorded path.
+///
+/// Headers and body come from the event's lazy details when captured. `host`
+/// and `content-length` are dropped because curl derives them; values the
+/// middleware redacted come through as `<redacted>` — a placeholder the user
+/// edits, deliberately visible rather than silently missing.
+String? curlCommand(
+  ServerInfo info,
+  ServerEvent request, {
+  Map<String, Object?>? details,
+}) {
+  var path = request.payload['path'];
+  if (path is! String) return null;
+  var url = info.baseUrl == null
+      ? null
+      : resolveLinkUrl(path, baseUrl: info.baseUrl);
+  if (url == null) return null;
+  var method = request.payload['method'];
+  var methodFlag = method is String && method != 'GET' ? ' -X $method' : '';
+  var lines = ['curl$methodFlag ${_shellQuote(url)}'];
+  var headers = details?['requestHeaders'];
+  if (headers is Map) {
+    for (var entry in headers.entries) {
+      var name = '${entry.key}'.toLowerCase();
+      if (name == 'host' || name == 'content-length') continue;
+      lines.add('-H ${_shellQuote('${entry.key}: ${entry.value}')}');
+    }
+  }
+  var body = details?['requestBody'];
+  if (body is String && body.isNotEmpty) {
+    lines.add('--data-raw ${_shellQuote(body)}');
+  }
+  return lines.join(' \\\n  ');
+}
+
+String _shellQuote(String value) => "'${value.replaceAll("'", r"'\''")}'";
 
 /// Sends a `sql` command — `explain`, `requery` — into a live server, which
 /// runs it on its own connection and answers. Throws [StateError] when not
