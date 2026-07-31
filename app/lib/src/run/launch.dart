@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:logging/logging.dart';
@@ -337,9 +338,16 @@ class LaunchLog {
 /// deleted with it was the only thing on screen, so a failed launch bounced you
 /// back to the form with nothing said. This is what the panel shows instead.
 ///
-/// Held in memory rather than written next to the log: the log *is* the durable
-/// record, [logPath] points at it, and a failure worth surviving a restart is
-/// one you should be reading the log for anyway.
+/// **A file beside the log, not memory.** It was memory first, and moving the
+/// run list into the rail proved that wrong within the hour: a launch that
+/// failed under `fw` was invisible to the GUI and to the next `fw`, so the list
+/// it had just been promoted into was the one place it could not appear. Every
+/// other fact about a run in this plugin is a file for exactly that reason —
+/// nobody coordinates, and the process that asks is rarely the one that knows.
+///
+/// Named `<key>.failed`, which is the convention the daemon library already
+/// uses in this directory, so the run dir's sweeper ages one out with the log
+/// it belongs to.
 class RunFailure {
   const RunFailure({
     required this.key,
@@ -388,6 +396,104 @@ class RunFailure {
   /// `SIGKILL` writes no parting words, and silence is still an answer.
   String get message =>
       detail ?? headline ?? 'The launcher stopped before the app started.';
+
+  Map<String, Object?> toJson() => {
+    'key': key,
+    'device': device,
+    if (deviceName != null) 'deviceName': deviceName,
+    'entrypoint': entrypoint,
+    if (entrypointName != null) 'entrypointName': entrypointName,
+    if (package != null) 'package': package,
+    if (flavor != null) 'flavor': flavor,
+    if (headline != null) 'headline': headline,
+    if (detail != null) 'detail': detail,
+    if (logPath != null) 'logPath': logPath,
+    'at': at.toUtc().toIso8601String(),
+  };
+
+  /// Writes `<key>.failed` beside the log. Best effort: a failure nobody can
+  /// record is still a failure, and throwing here would replace a legible
+  /// build error with a file-system one.
+  void write(String runDir) {
+    try {
+      Directory(runDir).createSync(recursive: true);
+      File(
+        p.join(runDir, '$key.failed'),
+      ).writeAsStringSync(jsonEncode(toJson()));
+    } on Object catch (e) {
+      _logger.warning('Could not record the failure of $key: $e');
+    }
+  }
+
+  /// Forgets it, for when somebody has read it.
+  static void forget(String runDir, String key) {
+    try {
+      File(p.join(runDir, '$key.failed')).deleteSync();
+    } on FileSystemException {
+      // Already gone, or never written. Either way it is forgotten.
+    }
+  }
+
+  static RunFailure? tryRead(File file) {
+    try {
+      var json = jsonDecode(file.readAsStringSync());
+      if (json is! Map) return null;
+      var map = json.cast<String, Object?>();
+      return RunFailure(
+        key: map['key']! as String,
+        device: map['device']! as String,
+        deviceName: map['deviceName'] as String?,
+        entrypoint: map['entrypoint']! as String,
+        entrypointName: map['entrypointName'] as String?,
+        package: map['package'] as String?,
+        flavor: map['flavor'] as String?,
+        headline: map['headline'] as String?,
+        detail: map['detail'] as String?,
+        logPath: map['logPath'] as String?,
+        at: DateTime.parse(map['at']! as String),
+      );
+    } on Object {
+      // Torn write, older schema, deleted meanwhile — like a handle that
+      // cannot be read, one that cannot be read does not exist.
+      return null;
+    }
+  }
+}
+
+/// The `*.failed` records in [runDir], newest first.
+///
+/// Reads files and nothing else, so [PluginCore.computeAll] may call it.
+/// Anything older than [maxAge] is skipped and deleted: a run that failed
+/// yesterday is not news, and the rail is a list of what is going on.
+List<RunFailure> scanRunFailures(
+  String runDir, {
+  Duration maxAge = const Duration(hours: 12),
+}) {
+  List<FileSystemEntity> entries;
+  try {
+    entries = Directory(runDir).listSync();
+  } on FileSystemException {
+    return [];
+  }
+  var failures = <RunFailure>[];
+  var now = DateTime.now();
+  for (var entity in entries) {
+    var name = p.basename(entity.path);
+    if (entity is! File ||
+        !name.startsWith('app-') ||
+        !name.endsWith('.failed')) {
+      continue;
+    }
+    var failure = RunFailure.tryRead(entity);
+    if (failure == null) continue;
+    if (now.difference(failure.at) > maxAge) {
+      RunFailure.forget(runDir, failure.key);
+      continue;
+    }
+    failures.add(failure);
+  }
+  failures.sort((a, b) => b.at.compareTo(a.at));
+  return failures;
 }
 
 /// Brings [handle] up to date from its log, rewriting the file when it learns

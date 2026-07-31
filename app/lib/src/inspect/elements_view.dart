@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/ui_catalog_guest.dart';
 
 import '../address/address_scope.dart';
+import 'inspect_dock.dart';
 import '../ui/theme.dart';
 
 /// Tree on the left, the selected node's detail on the right — the Elements
@@ -86,7 +87,8 @@ class _ElementsViewState extends State<ElementsView> {
                 highlight: widget.highlight,
               ),
             ),
-            _SplitGrip(
+            InspectSplitGrip(
+              axis: Axis.vertical,
               onDrag: (delta) => setState(() {
                 _split = ((treeWidth + delta) / constraints.maxWidth).clamp(
                   0.2,
@@ -108,33 +110,6 @@ class _ElementsViewState extends State<ElementsView> {
   }
 }
 
-class _SplitGrip extends StatelessWidget {
-  const _SplitGrip({required this.onDrag});
-
-  final void Function(double delta) onDrag;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.resizeLeftRight,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (event) => onDrag(event.delta.dx),
-        child: SizedBox(
-          width: 7,
-          child: Center(child: Container(width: 1, color: context.colors.line)),
-        ),
-      ),
-    );
-  }
-}
-
-/// The widget tree, indented.
-///
-/// Folded state is tracked by what has been **closed**, the same way the entry
-/// browser does it: a node that appears after a reload is then open like
-/// everything around it, where an opened-set would hide new work until
-/// somebody thought to look for it.
 class _TreeView extends StatefulWidget {
   const _TreeView({
     required this.root,

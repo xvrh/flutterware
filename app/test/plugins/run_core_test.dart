@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/context.dart';
-import 'package:flutterware_app/src/plugins/native/run_core.dart';
+import 'package:flutterware_app/src/plugins/native/run_address.dart';
+import 'package:flutterware_app/src/plugins/native/run_plugin.dart';
 import 'package:flutterware_app/src/plugins/native/run_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/run/entrypoints.dart';
@@ -242,6 +244,73 @@ void main() {
       expect(result.apps, isEmpty);
       expect(scanRunHandles(runDir.path), isEmpty);
     });
+
+    test('the rail carries the one thing a list of runs cannot say', () {
+      // `+ New run` was a chip in the panel; the chips are gone, so it is a
+      // command on the plugin's own rail row. It names a place rather than a
+      // callback, so the button and a typed address do the same thing.
+      var command = RunPlugin(core).rowCommands().single;
+      expect(command.label, 'New run');
+      expect(command.opens, newRunSegment);
+      expect(runPlace([command.opens]).isNew, isTrue);
+    });
+
+    test('a failed run is a rail row, not only a panel state', () async {
+      // The rail is the list — the chip row that used to hold failures is
+      // gone, so a launch that failed has to be a child here or it has
+      // vanished a second time.
+      var handle = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        entrypointName: 'App',
+        logPath: p.join(runDir.path, 'app-railed.log'),
+        launcherPid: await _deadPid(),
+      );
+      File(handle.logPath!).writeAsStringSync('Error: could not code sign\n');
+
+      await core.invoke('apps');
+      await core.computeAll();
+
+      var child = core.report.children.singleWhere((c) => c.id == handle.key);
+      expect(child.label, 'App · phone');
+      expect(child.status.tone, Tone.error);
+      expect(child.status.message, 'Error: could not code sign');
+
+      // And a *different process* sees it. This was memory first, which meant
+      // a launch that failed under `fw` was missing from the GUI's rail — the
+      // one list it had just been promoted into.
+      var elsewhere = _coreFor(worktree);
+      addTearDown(elsewhere.dispose);
+      await elsewhere.computeAll();
+      expect(elsewhere.failureFor(handle.key)?.headline, contains('code sign'));
+    });
+
+    test(
+      'a failure older than the window is dropped, and its file with it',
+      () {
+        var stale = RunFailure(
+          key: 'app-stale',
+          device: 'phone',
+          entrypoint: 'lib/main.dart',
+          at: DateTime.now().subtract(const Duration(days: 2)),
+        );
+        stale.write(runDir.path);
+        expect(
+          File(p.join(runDir.path, 'app-stale.failed')).existsSync(),
+          isTrue,
+        );
+
+        expect(scanRunFailures(runDir.path), isEmpty);
+        // Swept as it was read: the rail is a list of what is going on, and
+        // nothing else in this directory keeps yesterday either.
+        expect(
+          File(p.join(runDir.path, 'app-stale.failed')).existsSync(),
+          isFalse,
+        );
+      },
+    );
 
     test('sweeping a run that never started keeps why', () async {
       // The handle must go — a dead launcher is not holding the phone — but

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -42,6 +43,16 @@ class RunPlugin extends NativePlugin<RunCore> {
     if (core.isStarting) return 'building';
     return null;
   }
+
+  /// `+` beside `Run` in the rail.
+  ///
+  /// The runs themselves are the rail's child rows, so the one thing the list
+  /// needs that a list of runs cannot express is *starting another*. Same shape
+  /// as the scenarios panel's `+` on a folder header, one level up.
+  @override
+  List<PluginRowCommand> rowCommands() => const [
+    PluginRowCommand(label: 'New run', icon: Icons.add, opens: newRunSegment),
+  ];
 
   @override
   Widget buildPanel(BuildContext context) => _RunPanel(this);
@@ -102,7 +113,6 @@ class _RunPanelState extends State<_RunPanel> {
       animation: widget.plugin,
       builder: (context, _) {
         var handles = _core.handles;
-        var failures = _core.failures;
         var place = _resolve(context);
         // A failure is looked up before a handle is fallen back to, so the
         // address you were already watching turns into the reason it died
@@ -114,41 +124,27 @@ class _RunPanelState extends State<_RunPanel> {
             ? null
             : _select(handles, place);
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _SubjectBar(
-              handles: handles,
-              failures: failures,
-              shown: shown,
-              shownFailure: failed,
-              isNew: place.isNew,
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: switch ((failed, shown)) {
-                (var failure?, _) => _FailedRunPage(
-                  failure: failure,
-                  onDismiss: () {
-                    _core.dismissFailure(failure.key);
-                    if (mounted) {
-                      AddressScope.write(
-                        context,
-                      ).setSegments(const [newRunSegment]);
-                    }
-                  },
-                ),
-                (_, var handle?) => _RunView(
-                  core: _core,
-                  handle: handle,
-                  view: place.view,
-                  onControl: _control,
-                ),
-                _ => _NewRunPage(core: _core, onLaunched: _goTo),
-              },
-            ),
-          ],
-        );
+        // No chip row. The runs are the rail's child rows and were being drawn
+        // twice — the mockup had both, and building it made the duplication
+        // plain. `+ New run` moved to the rail with them, as [rowCommands].
+        return switch ((failed, shown)) {
+          (var failure?, _) => _FailedRunPage(
+            failure: failure,
+            onDismiss: () {
+              _core.dismissFailure(failure.key);
+              if (mounted) {
+                AddressScope.write(context).setSegments(const [newRunSegment]);
+              }
+            },
+          ),
+          (_, var handle?) => _RunView(
+            core: _core,
+            handle: handle,
+            view: place.view,
+            onControl: _control,
+          ),
+          _ => _NewRunPage(core: _core, onLaunched: _goTo),
+        };
       },
     );
   }
@@ -171,100 +167,15 @@ class _RunPanelState extends State<_RunPanel> {
   }
 }
 
-/// One chip per run, and New run on the right.
-///
-/// Every worktree's runs, not just this one's — a device held by another
-/// checkout is exactly the case the cockpit exists to make visible. A foreign
-/// run is chipped with its worktree's name so the list never implies you own
-/// something you do not.
-class _SubjectBar extends StatelessWidget {
-  const _SubjectBar({
-    required this.handles,
-    required this.failures,
-    required this.shown,
-    required this.shownFailure,
-    required this.isNew,
-  });
-
-  final List<RunHandle> handles;
-
-  /// Runs that died before they started. Chipped alongside the live ones
-  /// because a launch that failed is still something you asked for, and the
-  /// bar going empty was the whole of what "it closed without explanation"
-  /// looked like from here.
-  final List<RunFailure> failures;
-
-  final RunHandle? shown;
-  final RunFailure? shownFailure;
-  final bool isNew;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(FwSpacing.sm),
-      child: Row(
-        children: [
-          Expanded(
-            child: Wrap(
-              spacing: FwSpacing.sm,
-              runSpacing: FwSpacing.xs,
-              children: [
-                for (var handle in handles)
-                  _Pill(
-                    label: '${handle.runLabel} · ${handle.deviceLabel}',
-                    selected: !isNew && handle.key == shown?.key,
-                    dot: true,
-                    onTap: () => AddressScope.write(
-                      context,
-                    ).setSegments(runSegments(handle.key)),
-                  ),
-                for (var failure in failures)
-                  _Pill(
-                    label: '${failure.runLabel} · ${failure.deviceLabel}',
-                    selected: !isNew && failure.key == shownFailure?.key,
-                    dot: true,
-                    dotColor: context.colors.red,
-                    onTap: () => AddressScope.write(
-                      context,
-                    ).setSegments(runSegments(failure.key)),
-                  ),
-              ],
-            ),
-          ),
-          const Gap(FwSpacing.sm),
-          _Pill(
-            label: '+ New run',
-            // Selected when it is what is showing, which includes the case
-            // where nothing is running and there was nothing else to show.
-            selected:
-                isNew ||
-                (handles.isEmpty && shown == null && shownFailure == null),
-            onTap: () =>
-                AddressScope.write(context).setSegments(const [newRunSegment]),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _Pill extends StatelessWidget {
   const _Pill({
     required this.label,
     required this.selected,
     required this.onTap,
-    this.dot = false,
-    this.dotColor,
   });
 
   final String label;
   final bool selected;
-  final bool dot;
-
-  /// Green when absent — a live run. Red says the run is a failed one whose
-  /// chip is being kept so its reason has somewhere to live.
-  final Color? dotColor;
-
   final VoidCallback onTap;
 
   @override
@@ -285,23 +196,14 @@ class _Pill extends StatelessWidget {
             color: selected ? colors.accentSoft2 : colors.line,
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (dot) ...[
-              Icon(Icons.circle, size: 8, color: dotColor ?? colors.grn),
-              const SizedBox(width: 6),
-            ],
-            Text(label, style: context.type.bodySmall),
-          ],
-        ),
+        child: Text(label, style: context.type.bodySmall),
       ),
     );
   }
 }
 
-/// One run: its header, its tabs, and whichever pane is open.
-class _RunView extends StatelessWidget {
+/// One run: its tabs, its header, and whichever pane is open.
+class _RunView extends StatefulWidget {
   const _RunView({
     required this.core,
     required this.handle,
@@ -315,7 +217,20 @@ class _RunView extends StatelessWidget {
   final void Function(String action, RunHandle handle) onControl;
 
   @override
+  State<_RunView> createState() => _RunViewState();
+}
+
+class _RunViewState extends State<_RunView> {
+  /// Lets the strip's refresh reach the open pane without lifting the pane's
+  /// read into this widget. The strip belongs to the page and the reading
+  /// belongs to the pane; this is the one wire between them.
+  final _screen = GlobalKey<_ScreenTabState>();
+
+  @override
   Widget build(BuildContext context) {
+    var core = widget.core;
+    var handle = widget.handle;
+    var view = widget.view;
     var probe = core.probeOf(handle);
     var log = core.logOf(handle);
     var mine = handle.worktreeName == core.host.worktree.name;
@@ -333,19 +248,34 @@ class _RunView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _ViewTabs(runKey: handle.key, view: view, enabled: state.canInspect),
+        _ViewTabs(
+          runKey: handle.key,
+          view: view,
+          enabled: state.canInspect,
+          busy:
+              view == RunViewKind.screen &&
+              (_screen.currentState?.isReading ?? false),
+          onRefresh: view == RunViewKind.screen && state.canInspect
+              ? () => _screen.currentState?.read()
+              : null,
+        ),
         const Divider(height: 1),
         _RunHeader(
           handle: handle,
           state: state,
           mine: mine,
-          onControl: onControl,
+          onControl: widget.onControl,
         ),
         Expanded(
           child: !state.canInspect
               ? _NotYet(state: state, handle: handle)
               : switch (view) {
-                  RunViewKind.screen => _ScreenTab(core: core, handle: handle),
+                  RunViewKind.screen => _ScreenTab(
+                    key: _screen,
+                    core: core,
+                    handle: handle,
+                    onReadingChanged: () => setState(() {}),
+                  ),
                   RunViewKind.logs => _LogsTab(core: core, handle: handle),
                 },
         ),
@@ -447,35 +377,55 @@ class _RunHeader extends StatelessWidget {
         FwSpacing.lg,
         FwSpacing.sm,
       ),
+      // Two lines, as the design draws it: what the run *is* above, what is
+      // true of it right now below. One line put the title, the device, the
+      // capability and a `Spacer` in a row, which on a wide panel left the
+      // buttons stranded a screen away from the thing they act on.
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Flexible(
-            flex: 0,
-            child: Text(
-              handle.runLabel,
-              style: context.type.bodyStrong,
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        handle.runLabel,
+                        style: context.type.bodyStrong,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Gap(FwSpacing.sm),
+                    Text(
+                      'on ${handle.deviceLabel}',
+                      style: context.type.bodyMuted,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (!mine) ...[
+                      const Gap(FwSpacing.sm),
+                      _Tag(handle.worktreeName),
+                    ],
+                  ],
+                ),
+                Text(
+                  state.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.type.caption.copyWith(
+                    color: switch (state.tone) {
+                      _Tone.good => colors.grn,
+                      _Tone.warn => colors.amber,
+                      _Tone.quiet => colors.mut2,
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
-          const Gap(FwSpacing.sm),
-          Text('on ${handle.deviceLabel}', style: context.type.bodyMuted),
-          const Gap(FwSpacing.sm),
-          if (!mine) ...[_Tag(handle.worktreeName), const Gap(FwSpacing.sm)],
-          Flexible(
-            flex: 0,
-            child: Text(
-              state.label,
-              overflow: TextOverflow.ellipsis,
-              style: context.type.caption.copyWith(
-                color: switch (state.tone) {
-                  _Tone.good => colors.grn,
-                  _Tone.warn => colors.amber,
-                  _Tone.quiet => colors.mut2,
-                },
-              ),
-            ),
-          ),
-          const Spacer(),
+          const Gap(FwSpacing.md),
           // Another worktree's run is shown read-only: it is useful to see, and
           // a tool that knew and would not say would be worse. Driving it is
           // its owner's business.
@@ -520,6 +470,8 @@ class _ViewTabs extends StatelessWidget {
     required this.runKey,
     required this.view,
     required this.enabled,
+    this.busy = false,
+    this.onRefresh,
   });
 
   final String runKey;
@@ -529,6 +481,13 @@ class _ViewTabs extends StatelessWidget {
   /// responding — hiding them would move the page's furniture around every
   /// time a build started.
   final bool enabled;
+
+  /// A reading is in flight; the spinner stands where the button was.
+  final bool busy;
+
+  /// Re-reads whatever the open pane shows. Null for a pane that has nothing
+  /// to re-read — the log is read from the file on every build.
+  final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -544,6 +503,26 @@ class _ViewTabs extends StatelessWidget {
           runSegments(runKey, view: RunViewKind.byName(id) ?? view),
         );
       },
+      // Where the dock puts it, so re-reading is in the same place on all
+      // three surfaces. It had a row of its own, which held one icon and a
+      // caption and floated between the header and the panes.
+      trailing: [
+        if (busy)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+            child: SizedBox(
+              width: 13,
+              height: 13,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else if (onRefresh case var refresh?)
+          InspectStripButton(
+            icon: Icons.refresh,
+            tooltip: 'Read it all again',
+            onTap: refresh,
+          ),
+      ],
     );
   }
 
@@ -608,10 +587,19 @@ class _NotYet extends StatelessWidget {
 /// continuously for a screen nobody is watching most of the time. The button is
 /// the honest version until somebody wants a mirror enough to pay for it.
 class _ScreenTab extends StatefulWidget {
-  const _ScreenTab({required this.core, required this.handle});
+  const _ScreenTab({
+    super.key,
+    required this.core,
+    required this.handle,
+    required this.onReadingChanged,
+  });
 
   final RunCore core;
   final RunHandle handle;
+
+  /// So the strip above can swap its refresh button for a spinner. The pane
+  /// owns the reading; the page only needs to know one is happening.
+  final VoidCallback onReadingChanged;
 
   @override
   State<_ScreenTab> createState() => _ScreenTabState();
@@ -622,6 +610,13 @@ class _ScreenTabState extends State<_ScreenTab> {
   InspectTree? _tree;
   String? _error;
   var _loading = false;
+
+  /// How much of the pane the picture takes. Wider than the first build's
+  /// fixed 240: a phone screenshot at that width is a thumbnail, and the tree
+  /// beside it never needed the rest.
+  double _split = 0.34;
+
+  bool get isReading => _loading;
 
   /// What the tree hovers, for a box drawn over the picture.
   ///
@@ -657,8 +652,12 @@ class _ScreenTabState extends State<_ScreenTab> {
     super.dispose();
   }
 
+  /// Public so the tab strip's refresh can reach it — see [_RunViewState].
+  Future<void> read() => _read();
+
   Future<void> _read() async {
     setState(() => _loading = true);
+    widget.onReadingChanged();
     try {
       var read = await widget.core.inspectRead(widget.handle);
       if (!mounted) return;
@@ -671,58 +670,53 @@ class _ScreenTabState extends State<_ScreenTab> {
       if (!mounted) return;
       setState(() => _error = '$e');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        widget.onReadingChanged();
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_error case var error?) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _TabBar(loading: _loading, onRefresh: _read),
-          Expanded(child: _Failed(error)),
-        ],
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _TabBar(
-          loading: _loading,
-          onRefresh: _read,
-          note: 'rendered by the app, so platform views will not appear',
-        ),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Fixed and narrow, as the design draws it. A phone is tall and
-              // thin and a tree row is wide, so an even split would waste the
-              // half that cannot use it.
-              SizedBox(
-                width: 240,
-                child: _Picture(image: _image, loading: _loading),
+    if (_error case var error?) return _Failed(error);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        var width = (constraints.maxWidth * _split)
+            .clamp(180.0, math.max(180.0, constraints.maxWidth - 320))
+            .toDouble();
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: width,
+              child: _Picture(image: _image, loading: _loading),
+            ),
+            InspectSplitGrip(
+              axis: Axis.vertical,
+              onDrag: (delta) => setState(() {
+                _split = ((width + delta) / constraints.maxWidth).clamp(
+                  0.15,
+                  0.7,
+                );
+              }),
+            ),
+            Expanded(
+              child: ElementsView(
+                root: _tree?.root,
+                placeholder: _loading
+                    ? 'Reading the app…'
+                    : 'The app has not built a frame yet.',
+                highlight: _highlight,
+                // Paths are shortened against the worktree, and live in the
+                // detail pane rather than on every row — which is what the
+                // shared view does and what the run panel's own tree did not.
+                displayRoot: widget.core.host.worktree.path,
               ),
-              VerticalDivider(width: 1, color: context.colors.line),
-              Expanded(
-                child: ElementsView(
-                  root: _tree?.root,
-                  placeholder: _loading
-                      ? 'Reading the app…'
-                      : 'The app has not built a frame yet.',
-                  highlight: _highlight,
-                  // Paths are shortened against the worktree, and live in the
-                  // detail pane rather than on every row — which is what the
-                  // shared view does and what the run panel's own tree did not.
-                  displayRoot: widget.core.host.worktree.path,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -737,19 +731,38 @@ class _Picture extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: context.colors.panel,
-      padding: const EdgeInsets.all(FwSpacing.md),
       alignment: Alignment.topCenter,
-      child: image == null
-          ? Text(
+      padding: const EdgeInsets.all(FwSpacing.md),
+      // Shrink-wrapped and top-aligned so the caption sits *under the
+      // picture*, not at the bottom of whatever height the pane happens to
+      // have. `Expanded` put it a screen away from what it describes.
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (image == null)
+            Text(
               loading ? '' : 'No picture yet',
               style: context.type.caption.copyWith(color: context.colors.mut2),
             )
-          : Image.memory(
-              image!,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.medium,
-              gaplessPlayback: true,
+          else ...[
+            Flexible(
+              child: Image.memory(
+                image!,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.medium,
+                gaplessPlayback: true,
+              ),
             ),
+            const Gap(FwSpacing.sm),
+            Text(
+              'rendered by the app — platform views will not appear',
+              textAlign: TextAlign.center,
+              style: context.type.micro.copyWith(color: context.colors.mut3),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -1417,52 +1430,6 @@ class _Field extends StatelessWidget {
       const Gap(FwSpacing.xs),
       child,
     ],
-  );
-}
-
-/// The row above a pane: what it is, and how to take it again.
-class _TabBar extends StatelessWidget {
-  const _TabBar({required this.loading, required this.onRefresh, this.note});
-
-  final bool loading;
-  final VoidCallback onRefresh;
-  final String? note;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(
-      horizontal: FwSpacing.lg,
-      vertical: FwSpacing.xs,
-    ),
-    child: Row(
-      children: [
-        if (note != null)
-          Flexible(
-            child: Text(
-              note!,
-              style: context.type.micro.copyWith(color: context.colors.mut3),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        const Spacer(),
-        if (loading)
-          SizedBox(
-            width: 12,
-            height: 12,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: context.colors.mut2,
-            ),
-          )
-        else
-          _Action(
-            'Refresh',
-            Icons.refresh_rounded,
-            enabled: true,
-            onPressed: onRefresh,
-          ),
-      ],
-    ),
   );
 }
 

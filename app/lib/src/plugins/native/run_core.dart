@@ -139,6 +139,10 @@ class RunCore extends PluginCore {
   Future<void> computeAll() async {
     _cache = DeviceCache.read(runDirProvider());
     _handles = scanRunHandles(runDirProvider());
+    _failures = {
+      for (var failure in scanRunFailures(runDirProvider()))
+        failure.key: failure,
+    };
     for (var path in packages) {
       var declared = declaredEntrypoints(_configFor(path));
       _entrypoints[path] = declared.isNotEmpty
@@ -249,17 +253,19 @@ class RunCore extends PluginCore {
 
   String? _daemonError;
 
-  final _failures = <String, RunFailure>{};
+  var _failures = <String, RunFailure>{};
 
   /// Runs that ended before they started, newest first.
   ///
   /// Keyed by [runHandleKey] and replaced rather than accumulated, because that
   /// key is stable across relaunch: trying the same thing again should correct
   /// the reason it failed, not stack a second copy of it underneath.
-  List<RunFailure> get failures {
-    var all = _failures.values.toList()..sort((a, b) => b.at.compareTo(a.at));
-    return all;
-  }
+  ///
+  /// Read from `*.failed` files, so a launch that failed under `fw` is in the
+  /// GUI's rail and vice versa — the same rule as every other fact about a run
+  /// here.
+  List<RunFailure> get failures =>
+      _failures.values.toList()..sort((a, b) => b.at.compareTo(a.at));
 
   RunFailure? failureFor(String key) => _failures[key];
 
@@ -271,8 +277,9 @@ class RunCore extends PluginCore {
         !_failures.containsKey(handle.key)) {
       var oldest = failures.last;
       _failures.remove(oldest.key);
+      RunFailure.forget(runDirProvider(), oldest.key);
     }
-    _failures[handle.key] = RunFailure(
+    var failure = RunFailure(
       key: handle.key,
       device: handle.device,
       deviceName: handle.deviceName,
@@ -285,10 +292,13 @@ class RunCore extends PluginCore {
       logPath: handle.logPath,
       at: DateTime.now(),
     );
+    _failures[handle.key] = failure;
+    failure.write(runDirProvider());
   }
 
-  /// Forgets a failure, for when the panel's user has read it.
+  /// Forgets a failure, for when somebody has read it.
   void dismissFailure(String key) {
+    RunFailure.forget(runDirProvider(), key);
     if (_failures.remove(key) != null) notifyChanged();
   }
 
@@ -305,6 +315,10 @@ class RunCore extends PluginCore {
     // connectable here without this process ever having watched it start.
     var handles = [for (var handle in _handles) refreshFromLog(handle)];
     _handles = handles;
+    _failures = {
+      for (var failure in scanRunFailures(runDirProvider()))
+        failure.key: failure,
+    };
     var probes = await Future.wait([
       for (var handle in handles) probeRunHandle(handle),
     ]);
@@ -363,8 +377,18 @@ class RunCore extends PluginCore {
         for (var handle in _handles)
           PluginChild(
             id: handle.key,
-            label: '${handle.entrypointLabel} · ${handle.deviceLabel}',
+            label: '${handle.runLabel} · ${handle.deviceLabel}',
             status: _handleStatus(handle),
+          ),
+        // Runs that never started, listed with the live ones. They were in the
+        // panel's chip row and nowhere else, which was the wrong half: the rail
+        // is the list, so a launch that failed has to be in it or it has
+        // vanished again.
+        for (var failure in failures)
+          PluginChild(
+            id: failure.key,
+            label: '${failure.runLabel} · ${failure.deviceLabel}',
+            status: Status.error(failure.headline ?? 'failed'),
           ),
       ],
       actions: [

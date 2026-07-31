@@ -1160,6 +1160,7 @@ class _Row extends StatelessWidget {
     required this.onTap,
     this.icon,
     this.status = Status.none,
+    this.actions = const [],
   });
 
   final String label;
@@ -1167,6 +1168,10 @@ class _Row extends StatelessWidget {
   final VoidCallback onTap;
   final IconData? icon;
   final Status status;
+
+  /// Shown on hover, between the label and the status — a plugin's own
+  /// openings. See [PluginRowCommand].
+  final List<({String label, IconData icon, VoidCallback onTap})> actions;
 
   @override
   Widget build(BuildContext context) {
@@ -1201,6 +1206,7 @@ class _Row extends StatelessWidget {
               const Gap(FwSpacing.md),
             ],
             Expanded(
+              flex: 2,
               child: Text(
                 label,
                 overflow: TextOverflow.ellipsis,
@@ -1209,12 +1215,38 @@ class _Row extends StatelessWidget {
                     : context.type.body,
               ),
             ),
+            // Only on hover, and only then: a row that always carried its
+            // buttons would put a `+` beside every plugin that has one, which
+            // is a rail of controls rather than a list of places.
+            if (hovered)
+              for (var action in actions)
+                Tooltip(
+                  message: action.label,
+                  child: _Hoverable(
+                    onTap: action.onTap,
+                    builder: (context, over) => Padding(
+                      padding: const EdgeInsets.only(left: FwSpacing.xs),
+                      child: Icon(
+                        action.icon,
+                        size: 15,
+                        color: over ? colors.accent : colors.mut,
+                      ),
+                    ),
+                  ),
+                ),
             if (!status.isEmpty) ...[
               const Gap(FwSpacing.sm),
-              Text(
-                status.message,
-                style: context.type.micro.copyWith(
-                  color: toneColor(colors, status.tone),
+              // Capped, and shrinking before the label does. A run that failed
+              // carries its reason here, and an unbounded one ate the name of
+              // the thing it had failed to build.
+              Flexible(
+                child: Text(
+                  status.message,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: context.type.micro.copyWith(
+                    color: toneColor(colors, status.tone),
+                  ),
                 ),
               ),
             ],
@@ -1239,6 +1271,16 @@ class _PluginRow extends StatelessWidget {
       selected: shell.selectedPluginId == plugin.id,
       onTap: () => shell.selectPlugin(plugin.id),
       status: report.status,
+      actions: [
+        for (var command in plugin.rowCommands())
+          (
+            label: command.label,
+            icon: command.icon,
+            // The shell does the navigating, which is the point: a plugin
+            // names a place and never reaches into the rail.
+            onTap: () => shell.selectChild(plugin.id, command.opens),
+          ),
+      ],
     );
   }
 }

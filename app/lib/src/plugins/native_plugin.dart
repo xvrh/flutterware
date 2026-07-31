@@ -102,6 +102,20 @@ abstract class NativePlugin<C extends PluginCore> extends ChangeNotifier
     String childId,
   ) => const [];
 
+  /// Openings offered on the plugin's *own* sidebar row, drawn as icon buttons
+  /// that appear on hover — the `+` beside `Run` that starts one.
+  ///
+  /// Distinct from [childCommands], which hangs a menu off one child. This is
+  /// about the plugin as a whole, and it is deliberately narrower than a
+  /// callback: a command here names a **place**, and the shell navigates to it.
+  /// That keeps the rail out of the business of running plugin code, and it
+  /// means the affordance and a typed address do the same thing.
+  ///
+  /// Added when the run cockpit's run list moved into the rail and its `+ New
+  /// run` chip needed somewhere to go. The rail is ours to teach; there was no
+  /// reason to design around it.
+  List<PluginRowCommand> rowCommands() => const [];
+
   /// Schedules a change notification, coalescing bursts into one.
   ///
   /// Prefer this over [notifyListeners]. A plugin's work starts when a widget
@@ -161,6 +175,28 @@ class PluginChildCommand {
   final bool danger;
 
   final void Function(BuildContext context) onSelected;
+}
+
+/// A place inside a plugin, offered as a button on its sidebar row.
+///
+/// It names where to go rather than what to run, so the same button and the
+/// same typed address land in the same state — and the shell needs no way to
+/// call back into a plugin to draw it.
+class PluginRowCommand {
+  const PluginRowCommand({
+    required this.label,
+    required this.icon,
+    required this.opens,
+  });
+
+  /// The tooltip. There is no room for it on the row itself.
+  final String label;
+
+  final IconData icon;
+
+  /// The first segment under the plugin — what an address would carry there.
+  /// `new`, for the run cockpit's page that starts one.
+  final String opens;
 }
 
 /// Builds a plugin's panel over the core the session already resolved.

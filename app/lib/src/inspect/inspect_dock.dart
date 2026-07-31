@@ -244,15 +244,47 @@ class _Grip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var line = Container(height: 1, color: context.colors.line);
-    if (!enabled) return line;
+    if (!enabled) return Container(height: 1, color: context.colors.line);
+    return InspectSplitGrip(axis: Axis.horizontal, onDrag: onDrag);
+  }
+}
+
+/// A one-pixel rule you can drag, with a hit area wider than it is.
+///
+/// Shared because three panes now sit beside or above each other on this
+/// surface — the dock over its canvas, the tree beside its detail, and the run
+/// page's picture beside both — and a grip that behaves differently in one of
+/// them is a grip somebody has to learn twice.
+class InspectSplitGrip extends StatelessWidget {
+  const InspectSplitGrip({super.key, required this.axis, required this.onDrag});
+
+  /// The axis of the *rule*, not of the drag: [Axis.horizontal] is a
+  /// left-to-right line you drag up and down.
+  final Axis axis;
+
+  final void Function(double delta) onDrag;
+
+  @override
+  Widget build(BuildContext context) {
+    var line = axis == Axis.horizontal
+        ? Container(height: 1, color: context.colors.line)
+        : Container(width: 1, color: context.colors.line);
     return MouseRegion(
-      cursor: SystemMouseCursors.resizeUpDown,
+      cursor: axis == Axis.horizontal
+          ? SystemMouseCursors.resizeUpDown
+          : SystemMouseCursors.resizeLeftRight,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onVerticalDragUpdate: (event) => onDrag(event.delta.dy),
+        onVerticalDragUpdate: axis == Axis.horizontal
+            ? (event) => onDrag(event.delta.dy)
+            : null,
+        onHorizontalDragUpdate: axis == Axis.vertical
+            ? (event) => onDrag(event.delta.dx)
+            : null,
         // The line is one pixel; the thing you have to hit is not.
-        child: SizedBox(height: 7, child: Center(child: line)),
+        child: axis == Axis.horizontal
+            ? SizedBox(height: 7, child: Center(child: line))
+            : SizedBox(width: 7, child: Center(child: line)),
       ),
     );
   }
