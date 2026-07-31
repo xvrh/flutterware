@@ -140,6 +140,10 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(runner.runs, 3);
+
+    // Writing another one is reachable from a pane that is not empty — here
+    // still scanning, which is a state the empty-state button never sees.
+    expect(find.byTooltip('New scenario'), findsOneWidget);
   });
 
   testWidgets('an unset device runs as the default phone', (tester) async {
@@ -243,6 +247,171 @@ void main() {
     expect(hint, contains('No scenarios in test/scenarios'));
     expect(hint, contains("import 'package:flutterware/flutter_test.dart'"));
     expect(hint, contains('fw run scenarios new'));
+  });
+
+  // …and the command it names is a button too, so a GUI reader is not sent to
+  // a terminal for their first file.
+  testWidgets('New scenario writes one and opens it', (tester) async {
+    var core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: Worktree(path: root.path),
+        workspace: Workspace(
+          root: root.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    var runner = _FakeRunner();
+    core.debugInstallRunner('.', runner);
+    var plugin = ScenariosPlugin(core);
+
+    // As above: the off-isolate scan is primed in the real zone.
+    await tester.runAsync(() async {
+      core.track('.');
+      while (core.scanResultFor('.') == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
+
+    var address = ValueNotifier(
+      Address(worktree: 'wt', plugin: scenariosPluginId),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: AddressRoot(
+          address: address,
+          onChanged: (a) => address.value = a,
+          child: Builder(builder: plugin.buildPanel),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Both doors: the pane's persistent header and the empty state's call to
+    // action.
+    expect(find.byTooltip('New scenario'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'New scenario'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'New scenario'));
+    await tester.pumpAndSettle();
+
+    // Nothing to create until it is named.
+    expect(
+      tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Create')),
+      isA<FilledButton>().having((b) => b.onPressed, 'onPressed', isNull),
+    );
+
+    await tester.enterText(find.byType(TextField), 'Around the shop');
+    await tester.pump();
+    // The dialog says where the file lands, as `new` derives it.
+    expect(
+      find.text('test/scenarios/around_the_shop_test.dart'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    // The action writes, the dialog pops, and the pop's exit transition has to
+    // finish before its future — and so the address write — lands.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+
+    expect(
+      File(
+        '${root.path}/test/scenarios/around_the_shop_test.dart',
+      ).readAsStringSync(),
+      contains("scenario('Around the shop'"),
+    );
+    // And the panel went to it, which is what runs it.
+    expect(address.value.segments, [
+      '.',
+      'test',
+      'scenarios',
+      'around_the_shop_test.dart',
+      'Around the shop',
+    ]);
+    await tester.pump();
+    expect(runner.runs, 1);
+  });
+
+  // The action refuses to overwrite, and the dialog stays open saying so —
+  // the answer is another name typed into the field still on screen.
+  testWidgets('a name whose file exists is reported in place', (tester) async {
+    var core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: Worktree(path: root.path),
+        workspace: Workspace(
+          root: root.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    core.debugInstallRunner('.', _FakeRunner());
+    var plugin = ScenariosPlugin(core);
+
+    File('${root.path}/test/scenarios/taken_test.dart')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync('// already here\n');
+
+    await tester.runAsync(() async {
+      core.track('.');
+      while (core.scanResultFor('.') == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
+
+    var address = ValueNotifier(
+      Address(worktree: 'wt', plugin: scenariosPluginId),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: AddressRoot(
+          address: address,
+          onChanged: (a) => address.value = a,
+          child: Builder(builder: plugin.buildPanel),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('New scenario'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Taken');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining('already exists'), findsOneWidget);
+    // Still open, still on the untouched file, and the address never moved.
+    expect(find.widgetWithText(FilledButton, 'Create'), findsOneWidget);
+    expect(
+      File('${root.path}/test/scenarios/taken_test.dart').readAsStringSync(),
+      '// already here\n',
+    );
+    expect(address.value.segments, isEmpty);
   });
 }
 
