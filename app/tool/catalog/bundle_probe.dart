@@ -58,11 +58,11 @@ void main() => runApp(
 );
 ''');
 
-  await ensureEmbedderFramework(cache, p.join(packageRoot, '.engine'));
+  var engineDir = await ensureEmbedderFramework(cache);
   var hostPath = await buildHost(
     nativeSourceDir: p.join(packageRoot, 'native'),
     nativeBuildDir: p.join(packageRoot, 'build', 'catalog', 'native'),
-    engineDir: p.join(packageRoot, '.engine'),
+    engineDir: engineDir,
   );
 
   // A — what the Flutter tool builds.

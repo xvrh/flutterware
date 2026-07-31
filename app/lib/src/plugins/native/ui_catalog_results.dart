@@ -41,13 +41,23 @@ class CatalogEntriesResult implements PluginResult {
 class CatalogPackageEntries {
   CatalogPackageEntries({
     required this.path,
+    required this.directory,
     this.entries = const [],
     this.diagnostics = const [],
     this.error,
+    this.authoring,
   });
 
   /// Package path as declared in `tool/flutterware.dart`.
   final String path;
+
+  /// Where this package's demos were looked for, relative to the package.
+  ///
+  /// Reported on every answer, not only the empty one: an entry list that does
+  /// not say where it came from cannot be told apart from one that came from
+  /// the wrong place, and "there are no demos" and "we looked in the wrong
+  /// directory" are the same sentence until this is present.
+  final String directory;
 
   final List<CatalogEntrySummary> entries;
 
@@ -58,7 +68,45 @@ class CatalogPackageEntries {
   /// nothing.
   final String? error;
 
+  /// How to write the first demo. Set **only** when there are none, which is
+  /// the one moment the reader is certainly asking.
+  final String? authoring;
+
   Map<String, Object?> toJson() => _$CatalogPackageEntriesToJson(this);
+}
+
+/// `new` — the first demo, written for somebody who has none.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class CatalogNewResult implements PluginResult {
+  CatalogNewResult({
+    required this.package,
+    required this.file,
+    required this.name,
+    required this.id,
+    required this.next,
+  });
+
+  final String package;
+
+  /// The written file, package-relative.
+  final String file;
+
+  final String name;
+
+  /// What `screenshot --entry` and `describe --entry` take for it, so the next
+  /// call needs no translation.
+  final String id;
+
+  /// The command that renders what was just written. A scaffold that does not
+  /// say how to look at itself sends the reader back to `actions`.
+  final String next;
+
+  @override
+  Map<String, Object?> toJson() => _$CatalogNewResultToJson(this);
 }
 
 /// One entry, as every surface identifies it.

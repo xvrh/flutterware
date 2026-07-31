@@ -408,6 +408,13 @@ class CompilerDaemonClient {
       var stale = File(address.socketPath);
       if (stale.existsSync()) stale.deleteSync();
 
+      // Before the spawn, under the lock: a marker left by a previous run must
+      // never be read as this one's answer. The daemon we are about to start
+      // may well succeed where the last one failed — somebody has usually just
+      // fixed the thing it complained about.
+      var marker = File(address.failurePath);
+      if (marker.existsSync()) marker.deleteSync();
+
       // Under the daemon's own key: two clients spawning at once would
       // otherwise overwrite one another's config before either daemon read it.
       var configFile = File(
@@ -443,11 +450,19 @@ class CompilerDaemonClient {
       );
       onLog?.call('started a daemon for ${address.key}');
 
-      // The daemon binds before it prepares, so this waits only for the bind.
+      // The daemon binds before it prepares, so this waits only for the bind —
+      // *when preparing succeeds*. When it does not, the daemon is gone again
+      // before the first poll and leaves its reason in a file, which is the
+      // other thing this loop watches for. Without that check the quickest
+      // failure in the system produced the slowest feedback: 30 seconds of
+      // polling a deleted socket, then a timeout naming no cause.
       var deadline = DateTime.now().add(const Duration(seconds: 30));
       while (DateTime.now().isBefore(deadline)) {
         var socket = await _connect(address);
         if (socket != null) return socket;
+        if (_recordedFailure(address) case var failure?) {
+          throw StateError('the compiler daemon failed: $failure');
+        }
         await Future<void>.delayed(const Duration(milliseconds: 25));
       }
       throw StateError(
@@ -461,6 +476,34 @@ class CompilerDaemonClient {
         // Already released by the close below.
       }
       lock.closeSync();
+    }
+  }
+
+  /// The failure a daemon recorded on its way out, if it left one.
+  ///
+  /// **Read once.** The file is deleted as it is read, so it answers the client
+  /// that was waiting for it and nobody else — a marker left lying around would
+  /// be found by the next connect and reported as that daemon's failure.
+  ///
+  /// A marker that cannot be parsed is still a failure, and its raw text is
+  /// more useful than silence: something wrote it, and whatever it says is
+  /// closer to the cause than "never started listening" is.
+  static DaemonFailed? _recordedFailure(DaemonAddress address) {
+    var file = File(address.failurePath);
+    if (!file.existsSync()) return null;
+    String contents;
+    try {
+      contents = file.readAsStringSync();
+      file.deleteSync();
+    } on FileSystemException {
+      return null;
+    }
+    try {
+      return DaemonFailed.fromJson(
+        jsonDecode(contents) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      return DaemonFailed(message: contents);
     }
   }
 

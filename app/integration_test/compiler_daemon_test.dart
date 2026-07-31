@@ -77,6 +77,16 @@ void main() {
       dartExecutable: dartExecutable,
       config: config,
     );
+    // The recorded quarantine is that run's state too, and the more subtle
+    // half: a daemon that starts already knowing `doesNotCompile` is broken
+    // generates an entrypoint without it, so nothing fails, nothing is blamed,
+    // and there is no whole-program rebuild — which is exactly what the
+    // discovery test below asserts the presence of. Cleared here so that test
+    // describes a first encounter rather than whatever the last run left.
+    var recorded = File(
+      p.join(appRoot, 'build', 'catalog', stale.address.key, 'quarantine.json'),
+    );
+    if (recorded.existsSync()) recorded.deleteSync();
     await stale.stopDaemon();
 
     (daemon, ready) = await CompilerDaemonClient.connect(
@@ -463,6 +473,100 @@ void main() {
     );
   });
 
+  test('a quarantine survives a restart, and a repair ends it', () async {
+    // **A start that has to rediscover a broken demo costs three compiles** —
+    // the one that fails, the one that succeeds without it, and the
+    // whole-program rebuild that repairs the delta. Measured on this catalog:
+    // 5.5s against 1.2s. Paid on every start, for a fact the previous run
+    // already had.
+    //
+    // Its own project rather than the shared daemon's, so stopping and starting
+    // a daemon three times here does not pull the compiler out from under
+    // every other test in this file.
+    var projectRoot = p.join(p.dirname(appRoot), 'examples', 'example');
+    var otherConfig = DaemonConfig.forPackage(
+      appToolDirectory: appRoot,
+      packageRoot: projectRoot,
+      flutterSdkRoot: flutterRoot,
+      roots: const ['demo'],
+    );
+
+    var broken = File(p.join(projectRoot, 'demo', 'fixture_broken.dart'));
+    addTearDown(() async {
+      if (broken.existsSync()) broken.deleteSync();
+      // Left running, this daemon serves an entry whose file is gone.
+      var (last, _) = await CompilerDaemonClient.connect(
+        dartExecutable: dartExecutable,
+        config: otherConfig,
+      );
+      await last.stopDaemon();
+    });
+
+    Future<DaemonReady> restart() async {
+      var (client, ready) = await CompilerDaemonClient.connect(
+        dartExecutable: dartExecutable,
+        config: otherConfig,
+      );
+      await client.stopDaemon();
+      return ready;
+    }
+
+    // Nothing serving, and nothing remembered: a first encounter.
+    await restart();
+    broken.writeAsStringSync('''
+import 'package:flutter/material.dart';
+import 'package:flutterware/ui_catalog.dart';
+
+@Demo(name: 'Broken')
+Widget fixtureBroken() => NoSuchWidgetExistsHere();
+''');
+
+    var discovered = await restart();
+    expect(
+      discovered.quarantined.map((q) => q.entry.symbol),
+      contains('fixtureBroken'),
+    );
+    expect(
+      discovered.timings.keys,
+      contains('rebuild after quarantine'),
+      reason: 'discovering it costs the blame cycle and the rebuild',
+    );
+
+    var remembered = await restart();
+    expect(
+      remembered.quarantined.map((q) => q.entry.symbol),
+      contains('fixtureBroken'),
+      reason: 'the entry is still held back, and still carries its error',
+    );
+    expect(
+      remembered.timings.keys,
+      isNot(contains('rebuild after quarantine')),
+      reason:
+          'nothing was blamed this time, because the entrypoint was generated '
+          'without it — which is the whole saving',
+    );
+
+    // **The safety property.** The record is only honoured while the source is
+    // exactly as old as it was when it failed. Anything else and the entry is
+    // compiled like any other, so a repair can never be locked out by a stale
+    // note — which is the one way this optimisation could do real harm.
+    broken.writeAsStringSync('''
+import 'package:flutter/material.dart';
+import 'package:flutterware/ui_catalog.dart';
+
+@Demo(name: 'Broken')
+Widget fixtureBroken() => const Placeholder();
+''');
+
+    var repaired = await restart();
+    expect(repaired.quarantined, isEmpty);
+    expect(
+      repaired.entries.map((e) => e.symbol),
+      contains('fixtureBroken'),
+      reason: 'fixing the demo is enough to get it back',
+    );
+  });
+
   test('a line the daemon cannot read does not take it down', () async {
     // The daemon reads a line and decodes it into a request, and used to do
     // that without a guard — so an unknown request type threw a
@@ -491,6 +595,104 @@ void main() {
 
     var after = await daemon.select(entry('counter').id);
     expect(after.ok, isTrue, reason: 'still serving: ${after.error}');
+  });
+
+  test(
+    'a daemon that fails to prepare says why, without the 30s wait',
+    () async {
+      // **The regression this exists for is a stopwatch, not a message.**
+      //
+      // A daemon whose preparation fails quickly fails before its client has
+      // connected: it binds, scans, throws, sends `DaemonFailed` to an empty
+      // session list, unlinks the socket and exits — all inside a few
+      // milliseconds. The client was then polling a path that would never come
+      // back, and did so until its 30-second deadline before reporting "never
+      // started listening", which names no cause at all.
+      //
+      // Measured before the fix: **31629ms** for a catalog directory holding
+      // nothing, which the daemon had detected in 1ms. After: 249ms warm.
+      // The reason now goes to a file the client checks while it polls.
+      var watch = Stopwatch()..start();
+      await expectLater(
+        CompilerDaemonClient.connect(
+          dartExecutable: dartExecutable,
+          config: DaemonConfig.forPackage(
+            appToolDirectory: appRoot,
+            packageRoot: appRoot,
+            flutterSdkRoot: flutterRoot,
+            roots: const ['tool/catalog/no_such_directory'],
+          ),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              // The cause, not the timeout.
+              contains('no catalog entries found'),
+              isNot(contains('never started listening')),
+              // Where it looked, absolutely, and that the place is not there —
+              // the two questions a bare relative root left unanswered.
+              contains(p.join(appRoot, 'tool', 'catalog', 'no_such_directory')),
+              contains('does not exist'),
+              // And the way out.
+              contains('directory:'),
+            ),
+          ),
+        ),
+      );
+      expect(
+        watch.elapsed,
+        lessThan(const Duration(seconds: 15)),
+        reason:
+            'the failure took ${watch.elapsedMilliseconds}ms — it used to take '
+            'the full 30s deadline, which is the bug this guards',
+      );
+    },
+  );
+
+  test('a recorded failure is read once, so a retry is not poisoned', () async {
+    // The marker outlives the process that wrote it, which is the point and
+    // also the hazard: found again on the next connect it would report a
+    // failure that has since been fixed. It is deleted as it is read, and
+    // again before every spawn.
+    var failing = DaemonConfig.forPackage(
+      appToolDirectory: appRoot,
+      packageRoot: appRoot,
+      flutterSdkRoot: flutterRoot,
+      roots: const ['tool/catalog/still_not_there'],
+    );
+    await expectLater(
+      CompilerDaemonClient.connect(
+        dartExecutable: dartExecutable,
+        config: failing,
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    // A different package, whose daemon has no reason to fail, must not pick
+    // up anything left behind — and the failing one must fail on its own
+    // merits a second time rather than on a stale file.
+    var (client, ready) = await CompilerDaemonClient.connect(
+      dartExecutable: dartExecutable,
+      config: config,
+    );
+    expect(ready.entries, isNotEmpty);
+    await client.close();
+
+    await expectLater(
+      CompilerDaemonClient.connect(
+        dartExecutable: dartExecutable,
+        config: failing,
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('no catalog entries found'),
+        ),
+      ),
+    );
   });
 }
 

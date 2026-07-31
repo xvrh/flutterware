@@ -730,6 +730,12 @@ final resultShapes = <String, ResultShape>{
               'doc': 'Package path as declared in `tool/flutterware.dart`.',
             },
             <String, Object?>{
+              'name': 'directory',
+              'type': 'String',
+              'doc':
+                  'Where this package\'s demos were looked for, relative to the package.',
+            },
+            <String, Object?>{
               'name': 'entries',
               'type': 'List<CatalogEntrySummary>',
               'shape': <String, Object?>{
@@ -777,6 +783,12 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
               'doc':
                   'Set when the scan failed, in which case [entries] is empty and means nothing.',
+            },
+            <String, Object?>{
+              'name': 'authoring',
+              'type': 'String',
+              'optional': true,
+              'doc': 'How to write the first demo.',
             },
           ],
         },
@@ -1297,6 +1309,29 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'CatalogNewResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'CatalogNewResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{
+        'name': 'file',
+        'type': 'String',
+        'doc': 'The written file, package-relative.',
+      },
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{
+        'name': 'id',
+        'type': 'String',
+        'doc':
+            'What `screenshot --entry` and `describe --entry` take for it, so the next call needs no translation.',
+      },
+      <String, Object?>{
+        'name': 'next',
+        'type': 'String',
+        'doc': 'The command that renders what was just written.',
+      },
+    ],
+  }),
   'CatalogPackageCheck': ResultShape.fromJson(<String, Object?>{
     'type': 'CatalogPackageCheck',
     'fields': <Object?>[
@@ -1342,6 +1377,12 @@ final resultShapes = <String, ResultShape>{
         'name': 'path',
         'type': 'String',
         'doc': 'Package path as declared in `tool/flutterware.dart`.',
+      },
+      <String, Object?>{
+        'name': 'directory',
+        'type': 'String',
+        'doc':
+            'Where this package\'s demos were looked for, relative to the package.',
       },
       <String, Object?>{
         'name': 'entries',
@@ -1390,6 +1431,12 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc':
             'Set when the scan failed, in which case [entries] is empty and means nothing.',
+      },
+      <String, Object?>{
+        'name': 'authoring',
+        'type': 'String',
+        'optional': true,
+        'doc': 'How to write the first demo.',
       },
     ],
   }),

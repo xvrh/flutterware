@@ -23,7 +23,7 @@ void main() => Flutterware.configure((fw) {
       packages: [
         // flutterware's own demos sit beside the harness that renders them
         // rather than in `demo/`, because they exist to exercise the catalog.
-        .new(app, entrypoint: 'tool/catalog'),
+        .new(app, directory: 'tool/catalog'),
         .new(example),
       ],
     ),

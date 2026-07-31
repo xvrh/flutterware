@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import '../embedder/embedded_engine.dart';
 import '../embedder/guest_vm_service.dart';
+import 'authoring.dart';
 import 'catalog_params.dart';
 import 'devices.dart';
 import 'catalog_entry.dart';
@@ -170,7 +171,8 @@ class CatalogSession extends ChangeNotifier {
     required this.flutterSdkRoot,
     required this.projectRoot,
     this.worktreeRoot,
-    this.roots = const ['demo'],
+    this.roots = const [defaultCatalogDirectory],
+    this.previewAnnotations = defaultPreviewAnnotations,
     this.connectToDaemon = CompilerDaemonClient.connect,
   }) {
     // Forwarded, so a renderer has one thing to listen to.
@@ -228,6 +230,10 @@ class CatalogSession extends ChangeNotifier {
 
   /// Directories to scan, relative to [projectRoot].
   final List<String> roots;
+
+  /// The annotation names that mark an entry. Part of the daemon address, so
+  /// this has to be the plugin's answer rather than a second one.
+  final List<String> previewAnnotations;
 
   CatalogSessionPhase phase = CatalogSessionPhase.starting;
   String? errorMessage;
@@ -877,6 +883,7 @@ class CatalogSession extends ChangeNotifier {
           packageRoot: projectRoot,
           flutterSdkRoot: flutterSdkRoot,
           roots: roots,
+          previewAnnotations: previewAnnotations,
         ),
         onLog: (line) => debugPrint('[catalog] $line'),
       );
@@ -906,6 +913,19 @@ class CatalogSession extends ChangeNotifier {
       // What the address asked for if the daemon turned out to have it, else
       // the first — the fallback is for an address that named no entry, not a
       // correction of one that named the wrong entry.
+      //
+      // The daemon refuses to start with an empty catalog, and the panel no
+      // longer asks for a session until its own scan has found an entry, so
+      // there are two gates in front of this. It is still stated rather than
+      // assumed: `entries.first` on an empty list is `Bad state: No element`,
+      // which names neither the catalog nor the directory it is empty of.
+      if (entries.isEmpty) {
+        throw StateError(
+          'the catalog daemon reported no entries, so there is nothing to '
+          'show. Check the demo directory declared for this package in '
+          'tool/flutterware.dart.',
+        );
+      }
       var first = wantedEntry ?? entries.first;
       // Compiled before the guest exists, and whole.
       //

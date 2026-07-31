@@ -50,6 +50,19 @@ void main() {
       expect(runDir.listSync(), isEmpty);
     });
 
+    test('a failure marker nobody came back for', () async {
+      // Normally the client waiting on the spawn reads it and deletes it. A
+      // client that had already connected hears the failure over the socket
+      // instead and never looks at the file — so it is orphaned exactly when a
+      // daemon fails with somebody attached, and the key moves on every edit to
+      // the daemon's own sources.
+      var key = 'f' * 16;
+      aged('$key.failed', const Duration(days: 3));
+
+      expect(await sweep(), 1);
+      expect(runDir.listSync(), isEmpty);
+    });
+
     test('a socket file with nobody listening', () async {
       var key = 'b' * 16;
       // A daemon that died without unlinking leaves a plain file where a socket

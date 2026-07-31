@@ -30,7 +30,6 @@ Future<void> main(List<String> args) async {
   var buildDir = p.join(packageRoot, 'build', 'embedder');
   var assetsDir = p.join(buildDir, 'scenario_assets');
   var outDir = p.join(buildDir, 'scenario');
-  var engineDir = p.join(packageRoot, '.engine');
   var scenePath = p.join(
     packageRoot,
     'tool',
@@ -52,7 +51,7 @@ Future<void> main(List<String> args) async {
   if (out.existsSync()) out.deleteSync(recursive: true);
   out.createSync(recursive: true);
 
-  await ensureEmbedderFramework(cache, engineDir);
+  var engineDir = await ensureEmbedderFramework(cache);
   // The asset bundle (fonts, MaterialIcons, compiled shaders, manifests) is
   // what makes the guest behave like a real app — the ink-sparkle shader in
   // particular, which the FilledButton tap below loads on first use.

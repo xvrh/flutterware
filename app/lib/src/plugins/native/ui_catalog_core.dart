@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutterware/plugins.dart';
@@ -17,6 +18,7 @@ import 'package:flutterware/src/ui_catalog/axis.dart';
 import 'package:flutterware/src/ui_catalog/knob.dart';
 import 'package:path/path.dart' as p;
 
+import '../../catalog/authoring.dart';
 import '../../catalog/catalog_entry.dart';
 import '../../catalog/debug_flags.dart';
 import '../../catalog/devices.dart';
@@ -43,7 +45,23 @@ const uiCatalogPluginId = 'flutterware.ui_catalog';
 const webBuildActionId = 'build-web';
 
 /// Where a package keeps its demos when it does not say otherwise.
-const _defaultRoot = 'demo';
+const _defaultRoot = defaultCatalogDirectory;
+
+/// What the scan knows about a package before anything is compiled.
+enum CatalogSetup {
+  /// Nothing has scanned this package yet.
+  unknown,
+
+  /// The declared directory is not on disk — usually a misspelt `directory:`.
+  missing,
+
+  /// The directory is there and holds no entries — every project, before its
+  /// first demo. Not an error, and the state the tool should be best at.
+  empty,
+
+  /// There is at least one entry.
+  ready,
+}
 
 /// Entries the text projection lists before it starts counting. A projection is
 /// read, not scrolled.
@@ -149,6 +167,16 @@ class UiCatalogCore extends PluginCore {
   /// The scan failure for [path], for a panel that wants to show it directly.
   String? failureFor(String path) => _failures[path];
 
+  /// What the scan noticed about [path] but did not act on — a duplicate id, an
+  /// annotation on something that cannot be an entry.
+  ///
+  /// Public for the panel's empty state, which is the one place these matter
+  /// most: with no entries to show, a diagnostic is the whole explanation of
+  /// why, and without it the screen says "you have written none" to somebody
+  /// who has.
+  List<ScanDiagnostic> diagnosticsFor(String path) =>
+      _scans[path]?.diagnostics ?? const [];
+
   /// Ends anything still running, which for this plugin means a web build.
   ///
   /// Called by the [Session] when the worktree closes. Without it a compile
@@ -196,13 +224,18 @@ class UiCatalogCore extends PluginCore {
   Future<void> _scan(String path) async {
     var root = p.join(host.worktree.path, path);
     var entryRoot = rootFor(path);
+    var annotations = previewAnnotationsFor(path);
     _scanning.add(path);
     try {
       // Off the calling isolate: a large catalog is tens of milliseconds of
       // file reads and parsing, which is a dropped frame if it runs on the UI
       // isolate.
       var result = await Isolate.run(
-        () => CatalogScanner(projectRoot: root, roots: [entryRoot]).scan(),
+        () => CatalogScanner(
+          projectRoot: root,
+          roots: [entryRoot],
+          previewAnnotations: annotations,
+        ).scan(),
       );
       _scans[path] = result;
       // A scan that worked supersedes one that did not. Without this the
@@ -220,7 +253,7 @@ class UiCatalogCore extends PluginCore {
     }
   }
 
-  /// The package's demo directory: `entrypoint` when declared, else `demo/`.
+  /// The package's demo directory: `directory` when declared, else `demo/`.
   ///
   /// Public because it is part of the daemon address — `roots` is one of the
   /// fields [DaemonConfig] hashes — so the panel has to reach *this* answer
@@ -229,10 +262,51 @@ class UiCatalogCore extends PluginCore {
   String rootFor(String path) {
     for (var config in host.packageConfigs) {
       if (config['path'] != path) continue;
-      var entrypoint = config['entrypoint'];
-      if (entrypoint is String && entrypoint.isNotEmpty) return entrypoint;
+      var directory = config['directory'];
+      if (directory is String && directory.isNotEmpty) return directory;
     }
     return _defaultRoot;
+  }
+
+  /// The annotation names that mark an entry in [path], without their `@`.
+  ///
+  /// Part of the daemon address, like [rootFor] and for the same reason: the
+  /// panel and `fw run ui_catalog` must arrive at one daemon, and two sides
+  /// deciding this independently would be two daemons scanning for different
+  /// things.
+  List<String> previewAnnotationsFor(String path) {
+    for (var config in host.packageConfigs) {
+      if (config['path'] != path) continue;
+      if (config['previewAnnotations'] case List<Object?> names) {
+        var registered = names.whereType<String>().toList();
+        if (registered.isNotEmpty) return registered;
+      }
+    }
+    return defaultPreviewAnnotations;
+  }
+
+  /// What the scan says about [path], before anything is compiled.
+  ///
+  /// **The gate on the compile loop.** A package with no entries used to reach
+  /// the daemon anyway: it bound a socket, scanned the same directory in 1ms,
+  /// refused, and exited before the client's first poll — which then ran to its
+  /// 30-second deadline and reported that the daemon "never started listening".
+  /// Half a minute of waiting for a fact this answers instantly, off a scan the
+  /// panel has already paid for.
+  ///
+  /// [CatalogSetup.missing] is kept apart from [CatalogSetup.empty] because a
+  /// misspelt `directory:` is otherwise indistinguishable from a directory
+  /// nobody has written a demo in yet — the scanner skips a directory that is
+  /// not there without a word ([CatalogScanner] takes the roots on trust).
+  CatalogSetup setupFor(String path) {
+    var scan = _scans[path];
+    if (scan == null) return CatalogSetup.unknown;
+    if (scan.entries.isNotEmpty) return CatalogSetup.ready;
+    return Directory(
+          p.join(host.worktree.path, path, rootFor(path)),
+        ).existsSync()
+        ? CatalogSetup.empty
+        : CatalogSetup.missing;
   }
 
   /// True while any declared package is being scanned.
@@ -306,6 +380,47 @@ class UiCatalogCore extends PluginCore {
               for (var path in packages)
                 ActionOption(path, label: path == '.' ? 'root' : path),
             ],
+          ),
+        ],
+      ),
+      PluginAction(
+        'new',
+        'New demo',
+        returns: CatalogNewResult,
+        description:
+            'Writes a demo file where the package keeps them, creating the '
+            'directory if it is not there, and reports the id that renders it. '
+            'The scaffold renders as written, so start here when you have '
+            'never written one: it is the API, in a file that already works.',
+        parameters: [
+          ActionParameter(
+            'package',
+            'Package',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description:
+                'Which declared package; the only one when there is one',
+            options: [
+              for (var path in packages)
+                ActionOption(path, label: path == '.' ? 'root' : path),
+            ],
+          ),
+          const ActionParameter(
+            'name',
+            'Name',
+            required: true,
+            description:
+                "The demo's name — what the panel lists and what `@Demo(name:)` "
+                'carries',
+          ),
+          const ActionParameter(
+            'file',
+            'File',
+            required: false,
+            description:
+                'Package-relative path to write. Defaults to a snake_cased '
+                "`.dart` file under the package's demo directory. Never "
+                'overwrites.',
           ),
         ],
       ),
@@ -775,7 +890,14 @@ class UiCatalogCore extends PluginCore {
         '$broken ${broken == 1 ? 'package' : 'packages'} failed discovery',
       );
     }
-    if (entries.isEmpty) return const Status.warn('no entries');
+    // Names the directory rather than the fact. "no entries" sent a reader
+    // looking for a setting; "no entries in demo/" *is* the setting.
+    if (entries.isEmpty) {
+      var only = packages.length == 1 ? packages.single : null;
+      return Status.warn(
+        only == null ? 'no entries' : 'no entries in ${rootFor(only)}/',
+      );
+    }
     var warnings = _scans.values.fold(
       0,
       (sum, scan) => sum + scan.diagnostics.length,
@@ -792,8 +914,13 @@ class UiCatalogCore extends PluginCore {
     var scan = _scans[path];
     if (scan == null) return Status.none;
     if (!scan.ok) return const Status.error('discovery failed');
-    if (scan.entries.isEmpty) return const Status.warn('no entries');
-    return Status.none;
+    return switch (setupFor(path)) {
+      // A directory that is not there is a typo in `directory:` far more often
+      // than it is an intention, so it is worth a different word from "empty".
+      CatalogSetup.missing => Status.warn('no ${rootFor(path)}/ directory'),
+      CatalogSetup.empty => Status.warn('no entries in ${rootFor(path)}/'),
+      _ => Status.none,
+    };
   }
 
   PluginView get _view {
@@ -810,6 +937,40 @@ class UiCatalogCore extends PluginCore {
         nodes.add(
           ViewSection(path == '.' ? 'root' : path, const [
             ViewText('not computed'),
+          ]),
+        );
+        continue;
+      }
+
+      // The one moment the reader is certainly asking "so how do I write one" —
+      // the same rule the scenarios list follows, and the same hint text.
+      //
+      // **The diagnostics come first, and skipping them was a real hole.** Zero
+      // entries does not mean nobody wrote one: an annotation on a function with
+      // a required parameter, or on a non-static member, is rejected *with a
+      // diagnostic* and produces no entry. Dropping them told somebody who had
+      // just written a demo that they had none, and offered to teach them how —
+      // while the sidebar said "failed discovery" from the same scan.
+      if (scan.entries.isEmpty) {
+        nodes.add(
+          ViewSection(path == '.' ? 'root' : path, [
+            ViewText(
+              catalogEmptyReason(
+                directory: rootFor(path),
+                directoryExists: setupFor(path) != CatalogSetup.missing,
+                package: packages.length == 1 ? null : path,
+              ),
+              tone: Tone.warn,
+            ),
+            if (scan.diagnostics.isNotEmpty)
+              ViewSection('Diagnostics', [
+                for (var diagnostic in scan.diagnostics)
+                  ViewText(
+                    '$diagnostic',
+                    tone: diagnostic.isError ? Tone.error : Tone.warn,
+                  ),
+              ]),
+            ViewText(catalogAuthoringHint(rootFor(path))),
           ]),
         );
         continue;
@@ -852,6 +1013,12 @@ class UiCatalogCore extends PluginCore {
     switch (actionId) {
       case 'entries':
         return _entries(arguments);
+      case 'new':
+        return newDemo(
+          package: arguments['package'] as String?,
+          name: arguments['name'],
+          file: arguments['file'],
+        );
       case 'check':
         return _check(arguments);
       case 'describe':
@@ -891,6 +1058,88 @@ class UiCatalogCore extends PluginCore {
 
     return CatalogEntriesResult(
       packages: [for (var path in paths) _packageEntries(path)],
+    );
+  }
+
+  /// Writes the first demo — the file, and the directory if it is not there.
+  ///
+  /// Public because the panel's empty state offers it as a button: somebody who
+  /// is already looking at the GUI should not be sent to a terminal to get
+  /// their first file. Both routes land here, so the file they get is the same
+  /// file.
+  Future<CatalogNewResult> newDemo({
+    String? package,
+    Object? name,
+    Object? file,
+  }) async {
+    var path = _requireOnePackage(package);
+
+    if (name is! String || name.trim().isEmpty) {
+      throw ArgumentError.value(name, 'name', "required — the demo's name");
+    }
+    name = name.trim();
+
+    if (file != null && file is! String) {
+      throw ArgumentError.value(
+        file,
+        'file',
+        'must be a package-relative path',
+      );
+    }
+    var relative =
+        (file as String?) ?? '${rootFor(path)}/${catalogFileName(name)}';
+    // Inside the package, always: the scan only looks under the declared
+    // directory, so a file written outside it is a file nothing will ever find.
+    if (p.isAbsolute(relative) || p.split(relative).contains('..')) {
+      throw ArgumentError.value(
+        relative,
+        'file',
+        'must be relative to the package and stay inside it',
+      );
+    }
+    if (!relative.endsWith('.dart')) {
+      throw ArgumentError.value(relative, 'file', 'must end in `.dart`');
+    }
+    // Under the scanned directory, which is the check the two above only looked
+    // like. Discovery walks `rootFor(path)` and nothing else, so a file written
+    // beside it compiles, is never found, and leaves this call handing back an
+    // id and a `next` command for an entry that does not exist.
+    var root = rootFor(path);
+    if (!_isAtOrUnder(relative, root)) {
+      throw ArgumentError.value(
+        relative,
+        'file',
+        'must be under $root/, the only directory this package is scanned for '
+            'demos. A file outside it would never be found. Change the '
+            r'directory itself with `UiCatalog(packages: [.new(app, '
+            r"directory: '...')])` in tool/flutterware.dart.",
+      );
+    }
+
+    var target = File(p.join(host.worktree.path, path, relative));
+    if (target.existsSync()) {
+      throw ArgumentError.value(
+        relative,
+        'file',
+        'already exists. Add the demo to it, or name another file.',
+      );
+    }
+    target.parent.createSync(recursive: true);
+    target.writeAsStringSync(catalogScaffold(name));
+
+    // The scan is now stale by exactly this file — and, when this was the first
+    // demo, by the whole question of whether the package has any.
+    _scans.remove(path);
+    _failures.remove(path);
+    await _scan(path);
+
+    var id = '$relative#${catalogSymbolName(name)}';
+    return CatalogNewResult(
+      package: path,
+      file: relative,
+      name: name,
+      id: id,
+      next: "fw run ui_catalog screenshot --entry='$id'",
     );
   }
 
@@ -1042,11 +1291,20 @@ class UiCatalogCore extends PluginCore {
 
   CatalogPackageEntries _packageEntries(String path) {
     if (_failures[path] case var failure?) {
-      return CatalogPackageEntries(path: path, error: failure);
+      return CatalogPackageEntries(
+        path: path,
+        directory: rootFor(path),
+        error: failure,
+      );
     }
     var scan = _scans[path];
     return CatalogPackageEntries(
       path: path,
+      directory: rootFor(path),
+      authoring: scan == null || scan.entries.isNotEmpty
+          ? null
+          : '${catalogEmptyReason(directory: rootFor(path), directoryExists: setupFor(path) != CatalogSetup.missing, package: path)}\n\n'
+                '${catalogAuthoringHint(rootFor(path))}',
       entries: [
         for (var entry in scan?.entries ?? const <CatalogEntry>[])
           CatalogEntrySummary(
@@ -1688,6 +1946,7 @@ class UiCatalogCore extends PluginCore {
       packageRoot: p.join(host.worktree.path, packagePath),
       flutterSdkRoot: host.workspace.flutterSdk.root,
       roots: [rootFor(packagePath)],
+      previewAnnotations: previewAnnotationsFor(packagePath),
     ),
   );
 

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
+import 'package:flutterware_app/src/catalog/authoring.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/ui_catalog_core.dart';
 import 'package:flutterware_app/src/plugins/native/ui_catalog_results.dart';
@@ -25,7 +26,8 @@ void main() {
   late Directory root;
 
   UiCatalogCore catalog({
-    String? entrypoint,
+    String? directory,
+    List<String>? previewAnnotations,
     List<String> packages = const ['.'],
     String flutterSdkRoot = '/tmp/flutter',
   }) {
@@ -45,7 +47,11 @@ void main() {
         config: {
           'packages': [
             for (var path in packages)
-              {'path': path, 'entrypoint': ?entrypoint},
+              {
+                'path': path,
+                'directory': ?directory,
+                'previewAnnotations': ?previewAnnotations,
+              },
           ],
         },
       ),
@@ -181,22 +187,209 @@ Widget counter() => const Placeholder();
   });
 
   test('a package with no demos says so rather than looking healthy', () async {
-    var subject = catalog(entrypoint: 'nonexistent')..track('.');
+    var subject = catalog(directory: 'nonexistent')..track('.');
     await scanned(subject);
 
     expect(subject.report.status.tone, Tone.warn);
-    expect(subject.report.status.message, 'no entries');
+    // Names the directory, because "no entries" sends a reader looking for the
+    // setting where this *is* the setting.
+    expect(subject.report.status.message, 'no entries in nonexistent/');
   });
 
-  test('entrypoint overrides the demo/ convention', () async {
+  test('a directory that is not there reads differently from an empty one', () {
+    Future<void> check(String directory, CatalogSetup expected) async {
+      var subject = catalog(directory: directory)..track('.');
+      await scanned(subject);
+      expect(subject.setupFor('.'), expected);
+    }
+
+    // A misspelt `directory:` is otherwise indistinguishable from a directory
+    // nobody has written a demo in yet — the scanner skips a missing root
+    // without a word.
+    return Future.wait([
+      check('nonexistent', CatalogSetup.missing),
+      (() async {
+        Directory(p.join(root.path, 'blank')).createSync(recursive: true);
+        await check('blank', CatalogSetup.empty);
+      })(),
+    ]);
+  });
+
+  test('a package with no demos never starts a session', () async {
+    var subject = catalog(directory: 'nonexistent')..track('.');
+    await scanned(subject);
+
+    // The gate the thirty seconds hung on: with nothing to compile, the panel
+    // must not ask for a compile loop. A daemon started here binds, scans the
+    // same empty directory in a millisecond, refuses, and exits before the
+    // client's first poll — which then waits out its full 30s deadline.
+    expect(subject.setupFor('.'), isNot(CatalogSetup.ready));
+  });
+
+  test('new writes a demo that the scan then finds', () async {
+    // A directory that does not exist yet — `new` creates it, which is the
+    // case that matters: somebody with no demos has no demo directory either.
+    var subject = catalog(directory: 'fresh')..track('.');
+    await scanned(subject);
+    expect(subject.setupFor('.'), CatalogSetup.missing);
+
+    var result = await subject.newDemo(name: 'Primary Buttons');
+
+    expect(result.file, 'fresh/primary_buttons.dart');
+    expect(result.id, 'fresh/primary_buttons.dart#primaryButtons');
+    expect(File(p.join(root.path, result.file)).existsSync(), isTrue);
+    // The rescan is part of `new`: the entry it just wrote has to be there for
+    // the caller that is about to navigate to it.
+    expect(subject.setupFor('.'), CatalogSetup.ready);
+    expect(subject.entries.map((e) => e.id), [result.id]);
+  });
+
+  test('the scaffold it writes is a demo discovery can find', () async {
+    // The template is the first thing a new user reads, and it is written in
+    // one string far from the scanner that has to recognise it. Verified by
+    // scanning what was actually written rather than by eye: a scaffold whose
+    // annotation or signature drifts out of what discovery accepts would
+    // otherwise go on being handed to exactly the people least able to tell.
+    //
+    // That it also *renders* is checked by hand rather than here — it needs a
+    // compile and a frame. Confirmed on 2026-07-31: `ok: true, errors: []`.
+    var subject = catalog(directory: 'fresh')..track('.');
+    await scanned(subject);
+    var result = await subject.newDemo(name: 'Buttons');
+
+    var entry = subject.entries.singleWhere((e) => e.id == result.id);
+    expect(entry.name, 'Buttons');
+    expect(entry.symbol, 'buttons');
+    // The commented-out knob example must stay a comment: uncommented by the
+    // scanner it would be a second entry nobody asked for.
+    expect(subject.entries, hasLength(1));
+  });
+
+  test('the scaffold names a legal Dart identifier, whatever it is called', () {
+    // `Switch` is close to the most likely name in a UI catalog, and it is a
+    // reserved word — `Widget switch()` does not parse. A leading digit is the
+    // other way a perfectly reasonable name produces an illegal one.
+    expect(catalogSymbolName('Switch'), 'demoSwitch');
+    expect(catalogSymbolName('class'), 'demoClass');
+    expect(catalogSymbolName('404 page'), 'demo404Page');
+    expect(catalogSymbolName('2FA setup'), 'demo2faSetup');
+    // Everything else is left alone.
+    expect(catalogSymbolName('Primary Buttons'), 'primaryButtons');
+    expect(catalogSymbolName('Buttons'), 'buttons');
+    // `get` and `required` are built-in identifiers, legal as function names —
+    // renaming those would be officious.
+    expect(catalogSymbolName('get'), 'get');
+
+    var identifier = RegExp(r'^[a-zA-Z_$][a-zA-Z0-9_$]*$');
+    for (var name in ['Switch', '404 page', '!!!', 'void', 'yield', '9']) {
+      var symbol = catalogSymbolName(name);
+      expect(
+        identifier.hasMatch(symbol),
+        isTrue,
+        reason: '"$name" produced "$symbol", which is not an identifier',
+      );
+    }
+  });
+
+  test('new refuses a file outside the scanned directory', () async {
+    // Discovery walks the demo directory and nothing else, so a file written
+    // beside it compiles, is never found, and leaves `new` handing back an id
+    // and a `next` command for an entry that does not exist.
+    var subject = catalog()..track('.');
+    await scanned(subject);
+
+    await expectLater(
+      subject.newDemo(name: 'Tile', file: 'lib/tile.dart'),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '${e.message}',
+          'message',
+          contains('must be under demo/'),
+        ),
+      ),
+    );
+    expect(File(p.join(root.path, 'lib', 'tile.dart')).existsSync(), isFalse);
+
+    // A subdirectory of it is fine — grouping demos in folders is normal.
+    var nested = await subject.newDemo(name: 'Tile', file: 'demo/forms/t.dart');
+    expect(nested.id, 'demo/forms/t.dart#tile');
+    expect(subject.entries.map((e) => e.id), contains(nested.id));
+  });
+
+  test('an annotation the scan rejected is reported, not hidden', () async {
+    // Zero entries does not mean nobody wrote one. An annotated function with a
+    // required parameter is refused *with a diagnostic* and produces no entry —
+    // and the empty state used to answer that with "no demos yet, here is how
+    // to write one", to somebody who had just written one.
+    write('fresh/tile.dart', '''
+@Demo(name: 'Tile')
+Widget tile(String label) => const Placeholder();
+''');
+    var subject = catalog(directory: 'fresh')..track('.');
+    await scanned(subject);
+
+    expect(subject.entries, isEmpty);
+    expect(subject.diagnosticsFor('.'), isNotEmpty);
+    expect(
+      subject.report.toText(),
+      contains('required parameters'),
+      reason: 'the reason has to reach the reader that sees no entries',
+    );
+  });
+
+  test('new refuses to overwrite, and refuses to escape the package', () async {
+    var subject = catalog(directory: 'fresh')..track('.');
+    await scanned(subject);
+    await subject.newDemo(name: 'Buttons');
+
+    await expectLater(
+      subject.newDemo(name: 'Buttons'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      subject.newDemo(name: 'Buttons', file: '../outside.dart'),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('entries reports where it looked, and how to write one', () async {
+    var subject = catalog(directory: 'nonexistent');
+    var result = (await subject.invoke('entries'))! as CatalogEntriesResult;
+
+    var package = result.packages.single;
+    expect(package.directory, 'nonexistent');
+    // Only when there are none: the one moment the reader is certainly asking.
+    expect(package.authoring, contains('@Demo'));
+    expect(package.authoring, contains('nonexistent/'));
+  });
+
+  test('directory overrides the demo/ convention', () async {
     write('catalog/thing.dart', '''
 @Demo(name: 'Elsewhere')
 Widget thing() => const Placeholder();
 ''');
-    var subject = catalog(entrypoint: 'catalog')..track('.');
+    var subject = catalog(directory: 'catalog')..track('.');
     await scanned(subject);
 
     expect(subject.entries.map((e) => e.name), ['Elsewhere']);
+  });
+
+  test('a project can register its own annotation', () async {
+    // `@Demo`'s dartdoc has always told projects to register a subclass "in
+    // previewAnnotations". The field existed on the scanner and on the wire and
+    // was reachable from neither the config nor anything a user could write, so
+    // the advice named a knob that did not exist.
+    write('demo/tablet.dart', '''
+@Tablet(name: 'Wide')
+Widget wide() => const Placeholder();
+''');
+    var subject = catalog(previewAnnotations: ['Demo', 'Tablet'])..track('.');
+    await scanned(subject);
+
+    expect(subject.entries.map((e) => e.name), contains('Wide'));
+    // Listed rather than replaced: the defaults are still in force because the
+    // registration named them too, which is what the dartdoc says to do.
+    expect(subject.entries.map((e) => e.name), contains('Counter'));
   });
 
   test('a scan error is reported, not swallowed', () async {

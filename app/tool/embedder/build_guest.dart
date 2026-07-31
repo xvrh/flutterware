@@ -16,10 +16,9 @@ Future<void> main() async {
 
   var buildDir = p.join(packageRoot, 'build', 'embedder');
   var assetsDir = p.join(buildDir, 'assets');
-  var engineDir = p.join(packageRoot, '.engine');
   Directory(buildDir).createSync(recursive: true);
 
-  await ensureEmbedderFramework(cache, engineDir);
+  var engineDir = await ensureEmbedderFramework(cache);
   await compileScene(
     scenePath: p.join(packageRoot, 'tool', 'embedder', 'scene.dart'),
     kernelBlob: p.join(assetsDir, 'kernel_blob.bin'),

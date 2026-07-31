@@ -137,11 +137,23 @@ Annotate a widget with `@Demo` and it becomes a catalog entry — no map to
 register it in, no file to keep in sync:
 
 ```dart
+// demo/buttons.dart
 import 'package:flutterware/ui_catalog.dart';
 
 @Demo(name: 'Buttons', wrapper: wrapInApp)
 Widget buttons() => const ButtonsShowcase();
 ```
+
+**Demos live in `demo/`.** Every `.dart` file under it is scanned; nothing
+outside it is. A package that keeps them elsewhere says so once:
+
+```dart
+fw.use(UiCatalog(packages: [.new(app, directory: 'examples')]));
+```
+
+If you have never written one, `fw run ui_catalog new --name='Buttons'` writes
+the first — or press **New demo** in the panel, which is what it shows when it
+finds none.
 
 The GUI renders your entries live, and moving between them is near-instant.
 From the CLI or from an agent, those same entries can be screenshotted,

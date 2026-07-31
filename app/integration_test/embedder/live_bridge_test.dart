@@ -23,7 +23,6 @@ void main() {
 
       var buildDir = p.join(packageRoot, 'build', 'embedder');
       var assetsDir = p.join(buildDir, 'assets');
-      var engineDir = p.join(packageRoot, '.engine');
       // Not under the build directory: a unix socket path is capped at 104
       // bytes on macOS, which a long checkout path overflows. Pid so parallel
       // runs don't unlink each other's socket.
@@ -32,7 +31,7 @@ void main() {
       );
       Directory(buildDir).createSync(recursive: true);
 
-      await ensureEmbedderFramework(cache, engineDir);
+      var engineDir = await ensureEmbedderFramework(cache);
       await compileScene(
         scenePath: p.join(packageRoot, 'tool', 'embedder', 'scene.dart'),
         kernelBlob: p.join(assetsDir, 'kernel_blob.bin'),

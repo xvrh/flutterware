@@ -61,6 +61,22 @@ class DaemonAddress {
   /// Where a daemon that dies before it can speak leaves its reason.
   String get logPath => p.join(runDir, '$key.log');
 
+  /// Where a daemon that fails **while preparing** leaves the failure, for a
+  /// client that has not managed to connect yet.
+  ///
+  /// The socket is not that channel and cannot be. The daemon binds, prepares,
+  /// and on failure sends `DaemonFailed` to every connected session — but a
+  /// preparation that fails quickly fails before anybody has connected, so the
+  /// message reaches nobody and the socket is unlinked on the way out. The
+  /// client is then polling a path that will never exist again, and does so
+  /// until its deadline: **measured at 31.6 seconds for a catalog directory
+  /// holding nothing, which the daemon detected in 1 millisecond.**
+  ///
+  /// A file closes that because it outlives the process that wrote it. Read
+  /// once and deleted by the reader, and deleted again before every spawn, so a
+  /// retry can never be answered by the previous run's reason.
+  String get failurePath => p.join(runDir, '$key.failed');
+
   void ensureRunDir() => flutterwareRunDir();
 
   /// Sorts maps by key so the hash depends on the values, not on the order
