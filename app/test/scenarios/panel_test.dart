@@ -188,6 +188,62 @@ void main() {
     expect(runner.seenAxes.single.device, 'iphone-13');
     expect(find.text('iPhone 13'), findsOneWidget);
   });
+
+  // A package with nothing in it is the moment the reader is certainly asking
+  // how to write one, so the list pane answers with the same string `list`
+  // hands an agent rather than with an empty box.
+  testWidgets('an empty suite says how to write one', (tester) async {
+    var core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: Worktree(path: root.path),
+        workspace: Workspace(
+          root: root.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    var plugin = ScenariosPlugin(core);
+
+    // The scan runs off-isolate, and its completion is delivered to the zone
+    // that started it — so under the test's fake clock it would never land.
+    // Started here, in the real zone, it settles; the panel's own `track` on
+    // mount is idempotent and finds it done.
+    await tester.runAsync(() async {
+      core.track('.');
+      while (core.scanResultFor('.') == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: AddressRoot(
+          address: ValueNotifier(
+            Address(worktree: 'wt', plugin: scenariosPluginId),
+          ),
+          onChanged: (_) {},
+          child: Builder(builder: plugin.buildPanel),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    var hint = tester.widget<SelectableText>(find.byType(SelectableText)).data!;
+    expect(hint, contains('No scenarios in test/scenarios'));
+    expect(hint, contains("import 'package:flutterware/flutter_test.dart'"));
+    expect(hint, contains('fw run scenarios new'));
+  });
 }
 
 class _FakeRunner extends ScenarioRunner {

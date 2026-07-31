@@ -21,3 +21,18 @@ abstract interface class PluginResult {
   /// parses, so they are part of the action's contract.
   Map<String, Object?> toJson();
 }
+
+/// A result whose *action* succeeded while the thing it ran did not — a red
+/// scenario suite, a failing analysis, a build that produced diagnostics.
+///
+/// The job succeeded: it compiled, it spawned, it came back with data, and
+/// that data is the point. But `fw run … && deploy` has to stop, so `fw` exits
+/// 1 on one of these. MCP needs nothing — it reads the result.
+///
+/// Separate from [PluginResult] rather than a member of it because that one is
+/// an `interface class`: a getter there is a getter all seventeen implementers
+/// must write, and only a handful can fail in this sense at all.
+abstract interface class ReportsFailure {
+  /// False when the action ran and what it ran did not pass.
+  bool get ok;
+}

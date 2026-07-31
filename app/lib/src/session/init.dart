@@ -287,6 +287,10 @@ void main() => Flutterware.configure((fw) {
   // Renders the widgets you have annotated with `@Demo`.
   // `fw run ui_catalog entries` lists them.
   fw.use(UiCatalog(packages: [.new(app)]));
+
+  // Widget tests that screenshot every step, from `test/scenarios/`.
+  // `fw run scenarios new --name="Onboarding"` writes your first one.
+  fw.use(Scenarios(packages: [.new(app)]));
 });
 ''');
     return true;

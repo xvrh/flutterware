@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../address/address_scope.dart';
 import '../../catalog/devices.dart';
+import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/flow_view.dart';
@@ -185,15 +186,14 @@ class _ScenarioListPane extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
     if (result.scenarios.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(FwSpacing.lg),
-          child: Text(
-            'No scenarios in ${core.directoryFor(package)}.\n'
-            "Write one with scenario('…', (s) async { … }).",
-            textAlign: TextAlign.center,
-            style: context.type.bodyMuted,
-          ),
+      // The same string `list` hands an agent — this used to be the only place
+      // it was said, which is what made it unfindable from anywhere else.
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(FwSpacing.lg),
+        child: SelectableText(
+          'No scenarios in ${core.directoryFor(package)}.\n\n'
+          '${scenarioAuthoringHint(core.directoryFor(package))}',
+          style: context.type.caption.copyWith(color: context.colors.mut),
         ),
       );
     }

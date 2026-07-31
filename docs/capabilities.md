@@ -37,7 +37,7 @@ Run `fw help <command>` for detail, or `fw actions` for what this project can do
 Exit codes:
 
 - `0` — success
-- `1` — the action ran and failed
+- `1` — the action failed, or what it ran did not pass
 - `64` — a usage error: unknown plugin, bad argument, malformed command line
 
 ## MCP
@@ -310,6 +310,7 @@ packages: List<ScenarioListPackage>
     line: int
   diagnostics: List<String>   # What the scan noticed but could not act on — non-literal names, duplicates.
   error: String?   # Set when the package could not be scanned, in which case [scenarios] means nothing.
+  authoring: String?   # How to write one — present only when this package has none, which is exactly when the reader needs it and never when it would be noise.
 ```
 
 | parameter | kind | required | default | |
@@ -343,11 +344,14 @@ packages: List<ScenarioRunPackage>
       name: String?   # The `Shot`'s name; null for an automatic capture.
       auto: bool   # True when nothing named this capture — a collapsible detail step.
       tags: List<String>
-      image: String   # Path to the captured image, in [format].
+      image: String   # The captured image, in [format], **relative to the worktree root** — the same convention the catalog's artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.
       format: String   # `png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.
       width: int
       height: int
-      tree: String   # Path to the widget-tree JSON captured at the same moment.
+      tree: String   # The widget-tree JSON captured at the same moment, relative like [image].
+      root: String   # The worktree the two paths above are relative to.
+      imageFile: File
+      treeFile: File
       texts: List<String>   # The visible texts — the projection an agent reads next to the pixels.
       address: String   # The step's `fw://` address.
       statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
@@ -356,6 +360,13 @@ packages: List<ScenarioRunPackage>
       error: String
       stack: String?
   error: String?   # Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.
+ok: bool
+artifacts: List<Artifact>
+  kind: String   # A MIME type where one fits — see the constants above.
+  address: String   # What this is an artifact of, axes included.
+  path: String?   # Where it was written, when it was written.
+  text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
+  meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
 axes: Map<String, String>?   # The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.
 ```
 
@@ -374,6 +385,29 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `invert-colors` | choice | no | — | The invert-colors accessibility switch |
 | `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. Omitted means the package's configured captureScale (tool/flutterware.dart), or 1. The device's own ratio gives a true screenshot; 1 is ~10× faster and smaller, which is what keeps a long FakeAsync run instantaneous. Not an axis: it changes the artifact, never what the app sees. |
 | `format` | choice | no | — | `png` (the default) is what everything opens. `raw` — bare rgba8888 rows, width×height×4 bytes as the result reports them — skips PNG encoding, which is ~80% of a capture's cost; for pipelines that consume pixels directly. |
+
+#### `new` — New scenario
+
+Writes a runnable scenario file where the package keeps them, and reports the command that runs it. The scaffold pumps a stub app and drives it, so it passes as written — replace the stub with your own widget. Start here when you have never written one: it is the API, in a file that already works.
+
+```sh
+fw run scenarios new [--package=…] --name=<string> [--file=…]
+```
+
+Returns `ScenarioNewResult`:
+
+```
+package: String
+file: String   # The written file, package-relative — the same spelling `list` reports and `run --file=` takes, so the next call needs no translation.
+name: String
+next: String   # The command that runs what was just written.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the only one when there is one |
+| `name` | string | yes | — | The scenario's name — what `run --scenario=` takes and what the panel lists |
+| `file` | string | no | — | Package-relative path to write. Defaults to a snake_cased `_test.dart` from the name, under the package's scenario directory. Never overwrites. |
 
 #### `restart` — Restart
 

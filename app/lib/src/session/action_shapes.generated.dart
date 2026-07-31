@@ -1777,6 +1777,13 @@ final resultShapes = <String, ResultShape>{
         'doc':
             'Set when the package could not be scanned, in which case [scenarios] means nothing.',
       },
+      <String, Object?>{
+        'name': 'authoring',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'How to write one — present only when this package has none, which is exactly when the reader needs it and never when it would be noise.',
+      },
     ],
   }),
   'ScenarioListResult': ResultShape.fromJson(<String, Object?>{
@@ -1823,8 +1830,33 @@ final resultShapes = <String, ResultShape>{
               'doc':
                   'Set when the package could not be scanned, in which case [scenarios] means nothing.',
             },
+            <String, Object?>{
+              'name': 'authoring',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'How to write one — present only when this package has none, which is exactly when the reader needs it and never when it would be noise.',
+            },
           ],
         },
+      },
+    ],
+  }),
+  'ScenarioNewResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioNewResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{
+        'name': 'file',
+        'type': 'String',
+        'doc':
+            'The written file, package-relative — the same spelling `list` reports and `run --file=` takes, so the next call needs no translation.',
+      },
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{
+        'name': 'next',
+        'type': 'String',
+        'doc': 'The command that runs what was just written.',
       },
     ],
   }),
@@ -1893,7 +1925,8 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{
               'name': 'image',
               'type': 'String',
-              'doc': 'Path to the captured image, in [format].',
+              'doc':
+                  'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
             },
             <String, Object?>{
               'name': 'format',
@@ -1907,8 +1940,15 @@ final resultShapes = <String, ResultShape>{
               'name': 'tree',
               'type': 'String',
               'doc':
-                  'Path to the widget-tree JSON captured at the same moment.',
+                  'The widget-tree JSON captured at the same moment, relative like [image].',
             },
+            <String, Object?>{
+              'name': 'root',
+              'type': 'String',
+              'doc': 'The worktree the two paths above are relative to.',
+            },
+            <String, Object?>{'name': 'imageFile', 'type': 'File'},
+            <String, Object?>{'name': 'treeFile', 'type': 'File'},
             <String, Object?>{
               'name': 'texts',
               'type': 'List<String>',
@@ -2019,7 +2059,8 @@ final resultShapes = <String, ResultShape>{
                   <String, Object?>{
                     'name': 'image',
                     'type': 'String',
-                    'doc': 'Path to the captured image, in [format].',
+                    'doc':
+                        'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
                   },
                   <String, Object?>{
                     'name': 'format',
@@ -2033,8 +2074,15 @@ final resultShapes = <String, ResultShape>{
                     'name': 'tree',
                     'type': 'String',
                     'doc':
-                        'Path to the widget-tree JSON captured at the same moment.',
+                        'The widget-tree JSON captured at the same moment, relative like [image].',
                   },
+                  <String, Object?>{
+                    'name': 'root',
+                    'type': 'String',
+                    'doc': 'The worktree the two paths above are relative to.',
+                  },
+                  <String, Object?>{'name': 'imageFile', 'type': 'File'},
+                  <String, Object?>{'name': 'treeFile', 'type': 'File'},
                   <String, Object?>{
                     'name': 'texts',
                     'type': 'List<String>',
@@ -2165,7 +2213,8 @@ final resultShapes = <String, ResultShape>{
                         <String, Object?>{
                           'name': 'image',
                           'type': 'String',
-                          'doc': 'Path to the captured image, in [format].',
+                          'doc':
+                              'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
                         },
                         <String, Object?>{
                           'name': 'format',
@@ -2179,8 +2228,16 @@ final resultShapes = <String, ResultShape>{
                           'name': 'tree',
                           'type': 'String',
                           'doc':
-                              'Path to the widget-tree JSON captured at the same moment.',
+                              'The widget-tree JSON captured at the same moment, relative like [image].',
                         },
+                        <String, Object?>{
+                          'name': 'root',
+                          'type': 'String',
+                          'doc':
+                              'The worktree the two paths above are relative to.',
+                        },
+                        <String, Object?>{'name': 'imageFile', 'type': 'File'},
+                        <String, Object?>{'name': 'treeFile', 'type': 'File'},
                         <String, Object?>{
                           'name': 'texts',
                           'type': 'List<String>',
@@ -2236,6 +2293,46 @@ final resultShapes = <String, ResultShape>{
           ],
         },
       },
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
+      <String, Object?>{
+        'name': 'artifacts',
+        'type': 'List<Artifact>',
+        'shape': <String, Object?>{
+          'type': 'Artifact',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'kind',
+              'type': 'String',
+              'doc': 'A MIME type where one fits — see the constants above.',
+            },
+            <String, Object?>{
+              'name': 'address',
+              'type': 'String',
+              'doc': 'What this is an artifact of, axes included.',
+            },
+            <String, Object?>{
+              'name': 'path',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Where it was written, when it was written.',
+            },
+            <String, Object?>{
+              'name': 'text',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.',
+            },
+            <String, Object?>{
+              'name': 'meta',
+              'type': 'Map<String, Object?>',
+              'optional': true,
+              'doc':
+                  'Anything the producer wants the reader to know: timings, compile stats, exit codes.',
+            },
+          ],
+        },
+      },
       <String, Object?>{
         'name': 'axes',
         'type': 'Map<String, String>',
@@ -2283,7 +2380,8 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'image',
         'type': 'String',
-        'doc': 'Path to the captured image, in [format].',
+        'doc':
+            'The captured image, in [format], **relative to the worktree root** — the same convention the catalog\'s artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.',
       },
       <String, Object?>{
         'name': 'format',
@@ -2296,8 +2394,16 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{
         'name': 'tree',
         'type': 'String',
-        'doc': 'Path to the widget-tree JSON captured at the same moment.',
+        'doc':
+            'The widget-tree JSON captured at the same moment, relative like [image].',
       },
+      <String, Object?>{
+        'name': 'root',
+        'type': 'String',
+        'doc': 'The worktree the two paths above are relative to.',
+      },
+      <String, Object?>{'name': 'imageFile', 'type': 'File'},
+      <String, Object?>{'name': 'treeFile', 'type': 'File'},
       <String, Object?>{
         'name': 'texts',
         'type': 'List<String>',
