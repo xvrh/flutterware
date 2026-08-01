@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutterware/previews_guest.dart';
 
 import '../address/address_scope.dart';
-import '../catalog/devices.dart';
+import '../previews/devices.dart';
 import '../inspect/elements_view.dart';
 import '../inspect/inspect_dock.dart';
 import '../inspect/node_highlight.dart';

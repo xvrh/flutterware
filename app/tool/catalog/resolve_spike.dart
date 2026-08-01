@@ -10,7 +10,7 @@ import 'package:analyzer/dart/element/type.dart';
 import 'package:analyzer/src/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/src/dart/analysis/byte_store.dart';
 import 'package:analyzer/src/dart/analysis/file_byte_store.dart';
-import 'package:flutterware_app/src/catalog/discovery.dart';
+import 'package:flutterware_app/src/previews/discovery.dart';
 import 'package:path/path.dart' as p;
 
 /// Measures what resolved analysis costs when it is allowed to keep a cache,

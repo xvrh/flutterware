@@ -18,7 +18,7 @@ import '../plugins/native/run_core.dart';
 import '../plugins/native/server_core.dart';
 import '../plugins/native/scenarios_core.dart';
 import '../plugins/native/splash_core.dart';
-import '../plugins/native/ui_catalog_core.dart';
+import '../plugins/native/previews_core.dart';
 import '../plugins/plugin_core.dart';
 import '../shell/workspace.dart';
 import '../shell/worktree.dart';
