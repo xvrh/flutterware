@@ -333,6 +333,107 @@ void main() {
       ]);
       expect(config['mcpServers'], contains('flutterware'));
     });
+
+    test('reformats nothing, down to the indent width', () async {
+      // Re-encoding the parsed file would reindent, requote and reorder all of
+      // this, and the entry we added would be lost in a whole-file diff. The
+      // only line it may touch is the one that used to be last, which gains a
+      // comma.
+      mcpConfig().writeAsStringSync('''
+{
+    "inputs": [{ "id": "token", "type": "promptString" }],
+    "mcpServers": {
+        "other": {
+            "command": "other-server",
+            "args": ["--stdio"]
+        }
+    }
+}
+''');
+
+      await initWith().run();
+
+      expect(mcpConfig().readAsStringSync(), '''
+{
+    "inputs": [{ "id": "token", "type": "promptString" }],
+    "mcpServers": {
+        "other": {
+            "command": "other-server",
+            "args": ["--stdio"]
+        },
+        "flutterware": {
+            "command": "fw",
+            "args": [
+                "mcp"
+            ]
+        }
+    }
+}
+''');
+    });
+
+    test('adds mcpServers to a file that has none, in place', () async {
+      mcpConfig().writeAsStringSync('''
+{
+  "inputs": []
+}
+''');
+
+      await initWith().run();
+
+      expect(mcpConfig().readAsStringSync(), '''
+{
+  "inputs": [],
+  "mcpServers": {
+    "flutterware": {
+      "command": "fw",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}
+''');
+    });
+
+    test('fills an empty mcpServers without collapsing the file', () async {
+      mcpConfig().writeAsStringSync('''
+{
+  "mcpServers": {},
+  "inputs": []
+}
+''');
+
+      await initWith().run();
+
+      expect(mcpConfig().readAsStringSync(), '''
+{
+  "mcpServers": {
+    "flutterware": {
+      "command": "fw",
+      "args": [
+        "mcp"
+      ]
+    }
+  },
+  "inputs": []
+}
+''');
+    });
+
+    test('keeps a file written on one line on one line', () async {
+      mcpConfig().writeAsStringSync(
+        '{"mcpServers":{"other":{"command":"other-server"}}}',
+      );
+
+      await initWith().run();
+
+      expect(
+        mcpConfig().readAsStringSync(),
+        '{"mcpServers":{"other":{"command":"other-server"}, '
+        '"flutterware": {"command":"fw","args":["mcp"]}}}',
+      );
+    });
   });
 
   test('reports a dart that is not inside a Flutter SDK', () async {
