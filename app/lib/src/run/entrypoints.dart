@@ -5,6 +5,8 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/daemon/device.dart';
+
 /// One launchable `main()`, from the config or from the scan.
 class EntrypointRef {
   EntrypointRef({
@@ -13,6 +15,7 @@ class EntrypointRef {
     required this.declared,
     this.description,
     this.flavor,
+    this.platforms = const [],
     this.knobs = const [],
   });
 
@@ -37,10 +40,55 @@ class EntrypointRef {
   /// A flavoured project cannot be run without one — see [Entrypoint.flavor].
   final String? flavor;
 
+  /// What this entry point declares it can run on, as written — shorthands
+  /// unexpanded. Empty means anything.
+  final List<RunPlatform> platforms;
+
   final List<LaunchKnob> knobs;
+
+  /// Every concrete platform this allows. Empty means no restriction.
+  Set<RunPlatform> get allowedPlatforms => RunPlatform.expandAll(platforms);
+
+  /// Whether a device reporting [platformType] and [category] is one this
+  /// entry point can run on.
+  ///
+  /// Takes the two strings rather than a device because they are what crosses
+  /// the wire from `flutter daemon`, and because both are optional there: a
+  /// device that says nothing about itself is **allowed**. Hiding a connected
+  /// phone over a field the daemon happened not to send would be the tool
+  /// inventing a restriction nobody declared, which is worse than offering a
+  /// device that turns out not to build.
+  bool allowsDevice({String? platformType, String? category}) {
+    var allowed = allowedPlatforms;
+    if (allowed.isEmpty) return true;
+    if (platformType != null) {
+      var platform = RunPlatform.byName(platformType);
+      // A platform we have no name for — `fuchsia`, whatever comes next — is
+      // not something a declaration can have meant to include, so it is out.
+      if (platform != null) return allowed.contains(platform);
+      return false;
+    }
+    // No platform, but the daemon groups devices the same way our shorthands
+    // do, so `mobile` still answers for a phone that named no platform.
+    if (category != null) {
+      var shorthand = RunPlatform.byName(category);
+      if (shorthand != null) {
+        return allowed.intersection(shorthand.expanded).isNotEmpty;
+      }
+    }
+    return true;
+  }
 
   @override
   String toString() => '$name ($path)';
+}
+
+/// The one place a device and an entry point's declaration are compared, so
+/// the picker, the launch guard and the reported list cannot drift into three
+/// slightly different rules.
+extension EntrypointMatch on DaemonDevice {
+  bool allowedBy(EntrypointRef entry) =>
+      entry.allowsDevice(platformType: platformType, category: category);
 }
 
 /// The entry points [config] declares for one package, decoded from the
@@ -59,9 +107,23 @@ List<EntrypointRef> declaredEntrypoints(Map<String, Object?> config) => [
           name: entry['name'] as String? ?? _nameFor(path),
           description: entry['description'] as String?,
           flavor: entry['flavor'] as String?,
+          platforms: _platformsOf(entry['platforms']),
           declared: true,
           knobs: _knobsOf(entry['knobs']),
         ),
+];
+
+/// A name this build has no member for is dropped rather than refused: the
+/// config imports the `flutterware` version the *project* pins, which a hosted
+/// install can carry ahead of the GUI reading its manifest.
+///
+/// So a restriction naming only platforms we do not know becomes no
+/// restriction, and the picker offers everything. That is the safe direction:
+/// too many devices ends in a build failure that names the platform, while too
+/// few ends in a picker with nothing in it and no way to ask why.
+List<RunPlatform> _platformsOf(Object? raw) => [
+  for (var name in (raw as List? ?? const []))
+    if (name is String) ?RunPlatform.byName(name),
 ];
 
 List<LaunchKnob> _knobsOf(Object? raw) => [

@@ -377,8 +377,93 @@ Also unverified: whether the surfaces *look* right. They are asserted, not seen.
   skew across worktrees argues against.
 - The drain deadline, and whether a job that outlives it is retried against the
   new process or simply reported.
-- Where the line falls between "shapes the graph, so evaluate and project the
+- ~~Where the line falls between "shapes the graph, so evaluate and project the
   value" and "is a handler, so project a `$fn` path". Most cases are obvious;
   a callback that is cheap and pure could go either way, and projecting its
   value means the plugin reconstructs whenever the value moves, which may be
-  what you want or may be a rebuild per tick.
+  what you want or may be a rebuild per tick.~~ **Answered by the first real
+  case — see below.** The line is *what the value is a fact about*, and the
+  "rebuild per tick" worry is the test that finds it.
+
+### The values/`$fn` line, settled by launch knobs (2026-08-01)
+
+A launch knob's offered values are the first concrete instance of the case
+above, and they fall on the `$fn` side decisively.
+
+`LaunchKnob(from: …)` fills a `--dart-define` with something worth picking
+rather than typing — the base URLs of the servers running right now, this
+machine's LAN addresses. Against the rule:
+
+- **It shapes nothing.** It does not decide how many packages the plugin has,
+  what actions exist, or what an entry point is. It is asked in response to
+  somebody opening the New run page.
+- **Projecting the value is actively wrong.** A host's LAN address changes when
+  you join a different network. As a projected value it rewrites the manifest
+  and rebuilds the Run plugin every time — the rebuild-per-tick case, on a fact
+  that only ever needed re-reading when a form opened.
+
+So the sharper form of the rule: **a callback whose result is a fact about the
+project projects its value; a callback whose result is a fact about the machine,
+the moment, or the network projects a `$fn`.** Flavor and platform declarations
+are the first kind and are values today. Knob sources are the second.
+
+The consequence for what is already shipped: `KnobSource.servers` and
+`hostAddresses` (`lib/src/plugins/first_party.dart`) are host-side
+implementations of exactly this — handlers living on the wrong side of the
+boundary, closed as an enum because phase 1 gave a declaration no way to carry
+one. When phase 2 lands, `from:` should take a callback that projects as `$fn`,
+and the two enum members become functions a config can call rather than names
+the host switches on.
+
+**Until then, no second mechanism.** A `KnobSource.command([...])` — a shell
+command as data, run when the page opens — was considered and rejected on
+2026-08-01: it solves the same problem `$fn` is designed for, and shipping it
+first would make phase 2 arrive with a competing extension point to stay
+compatible with. Same verdict, same day, for `fromFile:` — a path as data is
+narrower and safer than a command, but the moment you ask what is *in* the file
+it grows a parsing dialect or needs exactly the project-specific code `$fn`
+carries.
+
+### The case phase 2 is actually blocked on: a port
+
+The enum does **not** cover the motivating case, and it is worth writing down
+what it misses rather than leaving "inject the local server's IP" reading as
+solved.
+
+A knob wanting `http://<host>:<port>` is two facts, and they are only half
+covered:
+
+| | fact about | today |
+|---|---|---|
+| the host | the machine, changes with the network | `KnobSource.hostAddresses`, fresh at page-open |
+| the port | **the moment**, when another tool writes it down per worktree | nothing |
+
+A port that is *deterministic from the worktree* needs no mechanism at all: the
+config runs with `workingDirectory: worktreePath` (both spawn paths in
+`ManifestLoader._runConfig`), so `Directory.current` is the worktree, and the
+`.dill` caches code rather than results — `portFor(Directory.current.path)` is
+an ordinary expression re-evaluated per worktree per session. Likewise a port
+the *running server* chose: decision 17 of the server design mirrors `baseUrl`
+into the handle, so `KnobSource.servers` carries it.
+
+The uncovered case is a port **another tool writes down while flutterware is
+open**. Config-time cannot see it: the config re-runs on session open and on
+config-file change, and the watch set is the compiler-reported import closure —
+Dart files — so a port file changing fires nothing and the value goes silently
+stale, which is the one failure this feature cannot tolerate. `servers` cannot
+see it either: the point is to bake the URL in *before* the launch, and the
+server is not up yet.
+
+So it is not derivable at construction, must be re-asked when the page opens,
+and needs code only the project has. That is `$fn`, and it is the concrete
+thing phase 2 unblocks.
+
+**Two knobs, not one composed value.** A `format: 'http://{}:$port'` on the knob
+was considered and rejected: splitting into `DEV_HOST` and `DEV_PORT` and
+joining them in the app's own Dart is better on every axis — no template
+dialect, each value separately addressable from `--knobs`, and both visible to
+the `fromEnvironment` scan with their real types and defaults. A value with no
+separable parts (a tunnel URL) is one fact and needs no composition either way.
+
+Interim, until phase 2: the New run page reopens with the last run's knob
+values, so a port is retyped when it changes rather than on every run.

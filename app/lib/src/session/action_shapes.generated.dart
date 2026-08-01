@@ -2287,7 +2287,26 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'optional': true,
         'doc':
-            'The `--flavor` this entry point declares, when the project has them.',
+            'The `--flavor` this entry point will be built with when nobody overrides it — its own declaration, or the package\'s `flutter: default-flavor:`.',
+      },
+      <String, Object?>{
+        'name': 'flavorSource',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            '`entrypoint` or `pubspec` — which of the two put [flavor] there.',
+      },
+      <String, Object?>{
+        'name': 'platforms',
+        'type': 'List<String>',
+        'doc':
+            'What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.',
+      },
+      <String, Object?>{
+        'name': 'devices',
+        'type': 'List<String>',
+        'doc':
+            'The ids of the devices currently connected that [platforms] allows.',
       },
       <String, Object?>{
         'name': 'knobs',
@@ -2321,6 +2340,25 @@ final resultShapes = <String, ResultShape>{
               'type': 'List<String>',
               'doc':
                   'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+            },
+            <String, Object?>{
+              'name': 'kind',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  '`String`, `int`, `bool` or `double` — how the app\'s own source reads this define.',
+            },
+            <String, Object?>{
+              'name': 'readAt',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The package-relative file the read is in.',
+            },
+            <String, Object?>{
+              'name': 'problem',
+              'type': 'String',
+              'optional': true,
+              'doc': 'What is wrong with this knob, when something is.',
             },
           ],
         },
@@ -2365,7 +2403,26 @@ final resultShapes = <String, ResultShape>{
               'type': 'String',
               'optional': true,
               'doc':
-                  'The `--flavor` this entry point declares, when the project has them.',
+                  'The `--flavor` this entry point will be built with when nobody overrides it — its own declaration, or the package\'s `flutter: default-flavor:`.',
+            },
+            <String, Object?>{
+              'name': 'flavorSource',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  '`entrypoint` or `pubspec` — which of the two put [flavor] there.',
+            },
+            <String, Object?>{
+              'name': 'platforms',
+              'type': 'List<String>',
+              'doc':
+                  'What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.',
+            },
+            <String, Object?>{
+              'name': 'devices',
+              'type': 'List<String>',
+              'doc':
+                  'The ids of the devices currently connected that [platforms] allows.',
             },
             <String, Object?>{
               'name': 'knobs',
@@ -2399,6 +2456,25 @@ final resultShapes = <String, ResultShape>{
                     'type': 'List<String>',
                     'doc':
                         'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+                  },
+                  <String, Object?>{
+                    'name': 'kind',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        '`String`, `int`, `bool` or `double` — how the app\'s own source reads this define.',
+                  },
+                  <String, Object?>{
+                    'name': 'readAt',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'The package-relative file the read is in.',
+                  },
+                  <String, Object?>{
+                    'name': 'problem',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'What is wrong with this knob, when something is.',
                   },
                 ],
               },
@@ -2452,7 +2528,26 @@ final resultShapes = <String, ResultShape>{
                     'type': 'String',
                     'optional': true,
                     'doc':
-                        'The `--flavor` this entry point declares, when the project has them.',
+                        'The `--flavor` this entry point will be built with when nobody overrides it — its own declaration, or the package\'s `flutter: default-flavor:`.',
+                  },
+                  <String, Object?>{
+                    'name': 'flavorSource',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        '`entrypoint` or `pubspec` — which of the two put [flavor] there.',
+                  },
+                  <String, Object?>{
+                    'name': 'platforms',
+                    'type': 'List<String>',
+                    'doc':
+                        'What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.',
+                  },
+                  <String, Object?>{
+                    'name': 'devices',
+                    'type': 'List<String>',
+                    'doc':
+                        'The ids of the devices currently connected that [platforms] allows.',
                   },
                   <String, Object?>{
                     'name': 'knobs',
@@ -2486,6 +2581,26 @@ final resultShapes = <String, ResultShape>{
                           'type': 'List<String>',
                           'doc':
                               'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+                        },
+                        <String, Object?>{
+                          'name': 'kind',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              '`String`, `int`, `bool` or `double` — how the app\'s own source reads this define.',
+                        },
+                        <String, Object?>{
+                          'name': 'readAt',
+                          'type': 'String',
+                          'optional': true,
+                          'doc': 'The package-relative file the read is in.',
+                        },
+                        <String, Object?>{
+                          'name': 'problem',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'What is wrong with this knob, when something is.',
                         },
                       ],
                     },
@@ -2682,6 +2797,25 @@ final resultShapes = <String, ResultShape>{
         'type': 'List<String>',
         'doc':
             'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+      },
+      <String, Object?>{
+        'name': 'kind',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            '`String`, `int`, `bool` or `double` — how the app\'s own source reads this define.',
+      },
+      <String, Object?>{
+        'name': 'readAt',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The package-relative file the read is in.',
+      },
+      <String, Object?>{
+        'name': 'problem',
+        'type': 'String',
+        'optional': true,
+        'doc': 'What is wrong with this knob, when something is.',
       },
     ],
   }),

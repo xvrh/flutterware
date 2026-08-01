@@ -10,6 +10,7 @@ import 'package:flutterware_app/src/plugins/native/run_address.dart';
 import 'package:flutterware_app/src/plugins/native/run_plugin.dart';
 import 'package:flutterware_app/src/plugins/native/run_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
+import 'package:flutterware_app/src/run/defines.dart';
 import 'package:flutterware_app/src/run/entrypoints.dart';
 import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/inventory.dart';
@@ -539,10 +540,385 @@ void main() {
           isA<ArgumentError>().having(
             (e) => '$e',
             'message',
-            contains('declares no such knob'),
+            // "has", not "declares": since the scan, a knob can come from the
+            // source as well as from the config, and the refusal covers both.
+            contains('has no such knob'),
           ),
         ),
       );
+    });
+  });
+
+  group('the platforms an entry point declares', () {
+    test('a shorthand expands, and a bare platform does not', () {
+      expect(RunPlatform.expandAll([RunPlatform.desktop]), {
+        RunPlatform.macos,
+        RunPlatform.linux,
+        RunPlatform.windows,
+      });
+      expect(RunPlatform.expandAll([RunPlatform.mobile, RunPlatform.web]), {
+        RunPlatform.ios,
+        RunPlatform.android,
+        RunPlatform.web,
+      });
+      expect(RunPlatform.expandAll(const []), isEmpty);
+    });
+
+    test('an undeclared entry point takes every device', () {
+      var entry = EntrypointRef(
+        path: 'lib/main.dart',
+        name: 'App',
+        declared: true,
+      );
+
+      expect(entry.allowsDevice(platformType: 'ios'), isTrue);
+      expect(entry.allowsDevice(platformType: 'macos'), isTrue);
+      // Empty is "no restriction", not "nothing allowed" — the difference
+      // between an entry point that runs anywhere and one that runs nowhere.
+      expect(entry.allowsDevice(platformType: null, category: null), isTrue);
+    });
+
+    test('a device saying nothing about itself is allowed', () {
+      var entry = EntrypointRef(
+        path: 'lib/main.dart',
+        name: 'Kiosk',
+        declared: true,
+        platforms: const [RunPlatform.mobile],
+      );
+
+      // The daemon is a tool we do not version. Hiding a connected phone over
+      // a field it happened not to send would be a restriction nobody wrote.
+      expect(entry.allowsDevice(platformType: null, category: null), isTrue);
+      // But it groups devices the way our shorthands do, so a category still
+      // answers when the platform is missing.
+      expect(entry.allowsDevice(category: 'mobile'), isTrue);
+      expect(entry.allowsDevice(category: 'desktop'), isFalse);
+    });
+
+    test('the picker, the report and the guard agree', () async {
+      _writePackage(worktree, 'app', {'lib/main_kiosk.dart': 'void main() {}'});
+      DeviceCache.write(runDir.path, const [
+        DaemonDevice(id: 'phone', name: 'Pixel', platformType: 'android'),
+        DaemonDevice(
+          id: 'macos',
+          name: 'macOS',
+          platformType: 'macos',
+          ephemeral: false,
+        ),
+      ]);
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main_kiosk.dart',
+                  'name': 'Kiosk',
+                  'platforms': ['mobile'],
+                },
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var entry = result.packages.single.entrypoints.single;
+      // Reported as written — `mobile` stays `mobile` — with the expansion
+      // against the desk done for the caller.
+      expect(entry.platforms, ['mobile']);
+      expect(entry.devices, ['phone']);
+      expect(
+        [
+          for (var d in core.devicesFor(core.entrypointsFor('app').single))
+            d.id,
+        ],
+        ['phone'],
+      );
+
+      await expectLater(
+        core.invoke('launch', arguments: {'device': 'macos'}),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            allOf(contains('macos'), contains('Kiosk')),
+          ),
+        ),
+      );
+    });
+
+    test('a platform this build has no name for lifts the restriction', () {
+      // The config imports the flutterware version the *project* pins, which a
+      // hosted install can carry ahead of the GUI reading its manifest. Too
+      // many devices ends in a build failure that names the platform; too few
+      // ends in a picker with nothing in it and no way to ask why.
+      var entries = declaredEntrypoints({
+        'entrypoints': [
+          {
+            'path': 'lib/main.dart',
+            'platforms': ['fuchsia'],
+          },
+        ],
+      });
+
+      expect(entries.single.platforms, isEmpty);
+      expect(entries.single.allowsDevice(platformType: 'macos'), isTrue);
+    });
+  });
+
+  group('the defines a package reads', () {
+    test('finds every spelling, with its type and its real default', () {
+      _writePackage(worktree, 'app', {
+        // The ordinary shape: `const x = …`, where the const is implicit and
+        // the parser sees a method invocation rather than a construction.
+        'lib/src/config.dart': '''
+const apiBase = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://localhost:8080',
+);
+const retries = int.fromEnvironment('RETRIES', defaultValue: 3);
+const verbose = bool.fromEnvironment('VERBOSE');
+''',
+        // The other spelling. An explicit `const` parses as an instance
+        // creation whose type is the prefixed name `String.fromEnvironment` —
+        // handling only this one finds the rarer of the two.
+        'lib/main.dart': '''
+void main() {
+  print(const String.fromEnvironment('MARKER', defaultValue: 'none'));
+  print(bool.hasEnvironment('NOT_A_DEFINE'));
+  print(const bool.fromEnvironment('dart.vm.product'));
+}
+''',
+        // Nowhere near the top level, which is why this scan recurses where
+        // the entry point scan deliberately does not.
+        'lib/src/deep/more.dart':
+            "const ratio = double.fromEnvironment('RATIO', defaultValue: 1.5);",
+      });
+
+      var found = scanDefines(p.join(worktree.path, 'app'));
+
+      expect(found.keys.toSet(), {
+        'API_BASE_URL',
+        'RETRIES',
+        'VERBOSE',
+        'MARKER',
+        'RATIO',
+      });
+      // `hasEnvironment` asks whether a define was passed; it is not one.
+      expect(found, isNot(contains('NOT_A_DEFINE')));
+      // Nor is a reserved VM define, which the compiler answers rather than the
+      // command line — offering one would be offering a control that cannot be
+      // set. This repo reads `dart.vm.product` in two of its own packages.
+      expect(found, isNot(contains('dart.vm.product')));
+
+      var api = found['API_BASE_URL']!;
+      expect(api.kind, 'String');
+      expect(api.file, 'lib/src/config.dart');
+      // Unquoted: the value, not the literal. A `--dart-define` carrying the
+      // quotes would set something the app never meant.
+      expect(api.defaultValue, 'http://localhost:8080');
+
+      expect(found['RETRIES']!.kind, 'int');
+      expect(found['RETRIES']!.defaultValue, '3');
+      // No `defaultValue:` at all is different from one that is empty.
+      expect(found['VERBOSE']!.defaultValue, isNull);
+      expect(found['MARKER']!.defaultValue, 'none');
+      expect(found['RATIO']!.kind, 'double');
+    });
+
+    test('a file that will not parse costs the others nothing', () {
+      _writePackage(worktree, 'app', {
+        'lib/broken.dart': "const x = String.fromEnvironment('A',,,",
+        'lib/fine.dart': "const y = String.fromEnvironment('B');",
+      });
+
+      expect(scanDefines(p.join(worktree.path, 'app')), contains('B'));
+    });
+
+    test('a package that declares no knobs offers the ones it reads', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': 'void main() {}',
+        'lib/src/config.dart':
+            "const api = String.fromEnvironment('API', defaultValue: 'x');",
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var knob = result.packages.single.entrypoints.single.knobs.single;
+      expect(knob.define, 'API');
+      expect(knob.kind, 'String');
+      expect(knob.readAt, 'lib/src/config.dart');
+      expect(knob.defaultValue, 'x');
+      expect(knob.problem, isNull);
+    });
+
+    test('a declared knob nothing reads is reported as such', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': 'void main() {}',
+        'lib/src/config.dart':
+            "const api = String.fromEnvironment('API_BASE_URL');",
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main.dart',
+                  'name': 'App',
+                  'knobs': [
+                    {'define': 'API_BASE_URI'},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var knob = result.packages.single.entrypoints.single.knobs.single;
+      // One letter out. It compiles, it launches, the control appears, and
+      // turning it does nothing — which looks exactly like a broken feature.
+      expect(knob.define, 'API_BASE_URI');
+      expect(knob.problem, contains('nothing in this package reads'));
+      expect(knob.readAt, isNull);
+    });
+
+    test('launching refuses a knob no config and no source knows', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': 'void main() {}',
+        'lib/src/config.dart': "const api = String.fromEnvironment('API');",
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+
+      // Before the scan there were no knobs to check against, so a package
+      // that declared none had to accept anything.
+      await expectLater(
+        core.invoke(
+          'launch',
+          arguments: {'device': 'phone', 'knobs': 'APII=x'},
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            allOf(contains('no such knob'), contains('API')),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('the flavor', () {
+    test('falls back to the pubspec’s default-flavor', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': 'void main() {}',
+        'pubspec.yaml': 'name: app\nflutter:\n  default-flavor: dev\n',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart', 'name': 'App'},
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var entry = result.packages.single.entrypoints.single;
+      expect(entry.flavor, 'dev');
+      expect(entry.flavorSource, 'pubspec');
+    });
+
+    test('the entry point’s own declaration wins over it', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main_staging.dart': 'void main() {}',
+        'pubspec.yaml': 'name: app\nflutter:\n  default-flavor: dev\n',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {
+                  'path': 'lib/main_staging.dart',
+                  'name': 'Staging',
+                  'flavor': 'staging',
+                },
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var entry = result.packages.single.entrypoints.single;
+      expect(entry.flavor, 'staging');
+      expect(entry.flavorSource, 'entrypoint');
+    });
+
+    test('a package with neither reports no flavor at all', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': 'void main() {}',
+        'pubspec.yaml': 'name: app\n',
+      });
+      core = _coreFor(
+        worktree,
+        config: {
+          'packages': [
+            {
+              'path': 'app',
+              'entrypoints': [
+                {'path': 'lib/main.dart'},
+              ],
+            },
+          ],
+        },
+      );
+
+      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+      var entry = result.packages.single.entrypoints.single;
+      expect(entry.flavor, isNull);
+      // Absent, not `none` — a caller reading the field should not have to know
+      // one of the words is a sentinel.
+      expect(entry.flavorSource, isNull);
     });
   });
 
