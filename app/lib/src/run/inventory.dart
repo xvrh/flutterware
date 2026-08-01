@@ -13,6 +13,22 @@ import '../utils/flutter_sdk.dart';
 
 final _logger = Logger('run_inventory');
 
+/// `just now`, `12s ago`, `2m ago`, `3h ago`, `2d ago`.
+///
+/// Top-level rather than a getter on the cache, because a run's header says the
+/// same thing about *its* age and the two should not drift into two
+/// vocabularies for one duration.
+String describeAge(Duration age) {
+  var seconds = age.inSeconds;
+  if (seconds < 10) return 'just now';
+  if (seconds < 90) return '${seconds}s ago';
+  var minutes = age.inMinutes;
+  if (minutes < 90) return '${minutes}m ago';
+  var hours = age.inHours;
+  if (hours < 48) return '${hours}h ago';
+  return '${age.inDays}d ago';
+}
+
 /// The device list, as somebody last saw it.
 ///
 /// A cache with a timestamp rather than a value that expires. A `flutter
@@ -29,18 +45,9 @@ class DeviceCache {
 
   Duration get age => DateTime.now().difference(updatedAt);
 
-  /// `just now`, `2 minutes ago`, `3 hours ago` — the phrase every surface
-  /// puts beside the list, computed once so they agree.
-  String get ageDescription {
-    var seconds = age.inSeconds;
-    if (seconds < 10) return 'just now';
-    if (seconds < 90) return '${seconds}s ago';
-    var minutes = age.inMinutes;
-    if (minutes < 90) return '${minutes}m ago';
-    var hours = age.inHours;
-    if (hours < 48) return '${hours}h ago';
-    return '${age.inDays}d ago';
-  }
+  /// `just now`, `2m ago`, `3h ago` — the phrase every surface puts beside the
+  /// list, computed once so they agree.
+  String get ageDescription => describeAge(age);
 
   static String pathIn(String runDir) => p.join(runDir, 'devices.json');
 

@@ -126,11 +126,15 @@ void main() {
     expect(find.text('MyApp'), findsOneWidget);
     expect(find.byType(Image), findsOneWidget);
 
-    // The design's tabs, and the header above them.
+    // The design's tabs, and the header above them — the run named as one
+    // phrase, its capability as a pill, and the controls spelled out.
     expect(find.text('Screen'), findsOneWidget);
     expect(find.text('Logs'), findsOneWidget);
-    expect(find.text('App'), findsOneWidget);
+    expect(find.text('App \u2192 macOS'), findsOneWidget);
     expect(find.text('reloadable'), findsOneWidget);
+    expect(find.text('Hot reload'), findsOneWidget);
+    expect(find.text('Hot restart'), findsOneWidget);
+    expect(find.text('Stop'), findsOneWidget);
   });
 }
 

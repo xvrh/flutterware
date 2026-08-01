@@ -17,6 +17,8 @@ import '../../inspect/elements_view.dart';
 import '../../inspect/inspect_dock.dart';
 import '../../ui/design/design.dart';
 import '../../ui/empty_state.dart';
+import '../../ui/popover.dart';
+import '../../ui/popover_menu.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../../utils/daemon/device.dart';
@@ -41,7 +43,21 @@ class RunPlugin extends NativePlugin<RunCore> {
   String? get busyWith {
     if (!core.isLive && core.devices.isEmpty) return 'finding devices';
     if (core.isStarting) return 'building';
+    // The open pane is mid-read. Without this a capture settles on an empty
+    // Screen tab saying `Reading the app…` — which is exactly what the first
+    // review of this layout photographed, and it looked like the bug that had
+    // just been fixed.
+    if (_reading) return 'reading the app';
     return null;
+  }
+
+  var _reading = false;
+
+  /// Told by the pane doing the reading. See [busyWith].
+  void setReading(bool reading) {
+    if (_reading == reading) return;
+    _reading = reading;
+    notifyChanged();
   }
 
   /// `+` beside `Run` in the rail.
@@ -142,6 +158,7 @@ class _RunPanelState extends State<_RunPanel> {
             handle: handle,
             view: place.view,
             onControl: _control,
+            onReading: widget.plugin.setReading,
           ),
           _ => _NewRunPage(core: _core, onLaunched: _goTo),
         };
@@ -209,12 +226,17 @@ class _RunView extends StatefulWidget {
     required this.handle,
     required this.view,
     required this.onControl,
+    required this.onReading,
   });
 
   final RunCore core;
   final RunHandle handle;
   final RunViewKind view;
   final void Function(String action, RunHandle handle) onControl;
+
+  /// Passed up to the plugin so `busyWith` can hold a capture until the pane
+  /// has something worth photographing.
+  final ValueChanged<bool> onReading;
 
   @override
   State<_RunView> createState() => _RunViewState();
@@ -241,13 +263,20 @@ class _RunViewState extends State<_RunView> {
       handle: handle,
     );
 
-    // Tabs above the header, as the design draws them: the strip says which
-    // *view* of the run you are in, the header says what the run is and what
-    // can be done to it. Nesting the second under the first would imply the
-    // buttons belong to the tab, and they do not.
+    // **Header first, then the tabs.** The design drew them the other way and
+    // it read wrong once built: the run is the subject and the tabs are views
+    // *of* it, so putting the strip on top made the page look like it belonged
+    // to the tab rather than to the app you launched. Reload and stop act on
+    // the run whichever pane is open, which is the same argument.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _RunHeader(
+          handle: handle,
+          state: state,
+          mine: mine,
+          onControl: widget.onControl,
+        ),
         _ViewTabs(
           runKey: handle.key,
           view: view,
@@ -260,12 +289,6 @@ class _RunViewState extends State<_RunView> {
               : null,
         ),
         const Divider(height: 1),
-        _RunHeader(
-          handle: handle,
-          state: state,
-          mine: mine,
-          onControl: widget.onControl,
-        ),
         Expanded(
           child: !state.canInspect
               ? _NotYet(state: state, handle: handle)
@@ -274,7 +297,12 @@ class _RunViewState extends State<_RunView> {
                     key: _screen,
                     core: core,
                     handle: handle,
-                    onReadingChanged: () => setState(() {}),
+                    onReadingChanged: () {
+                      setState(() {});
+                      widget.onReading(
+                        _screen.currentState?.isReading ?? false,
+                      );
+                    },
                   ),
                   RunViewKind.logs => _LogsTab(core: core, handle: handle),
                 },
@@ -370,57 +398,53 @@ class _RunHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Padding(
+    var meta = [
+      for (var knob in handle.knobs.entries) '${knob.key}=${knob.value}',
+      'started ${describeAge(DateTime.now().difference(handle.startedAt))}',
+    ].join(' · ');
+
+    return Container(
       padding: const EdgeInsets.fromLTRB(
         FwSpacing.lg,
         FwSpacing.md,
-        FwSpacing.lg,
-        FwSpacing.sm,
+        FwSpacing.md,
+        FwSpacing.md,
       ),
-      // Two lines, as the design draws it: what the run *is* above, what is
-      // true of it right now below. One line put the title, the device, the
-      // capability and a `Spacer` in a row, which on a wide panel left the
-      // buttons stranded a screen away from the thing they act on.
+      color: context.colors.panel2,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Flexible(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Flexible(
                       child: Text(
-                        handle.runLabel,
-                        style: context.type.bodyStrong,
+                        '${handle.runLabel} → ${handle.deviceLabel}',
+                        style: context.type.heading,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const Gap(FwSpacing.sm),
-                    Text(
-                      'on ${handle.deviceLabel}',
-                      style: context.type.bodyMuted,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    // Capability, as a pill rather than a caption. It is the
+                    // one thing on this row that changes what the buttons
+                    // beside it can do, and a grey line of small text said it
+                    // as quietly as everything else.
+                    _CapabilityPill(state: state),
                     if (!mine) ...[
                       const Gap(FwSpacing.sm),
                       _Tag(handle.worktreeName),
                     ],
                   ],
                 ),
+                const Gap(2),
                 Text(
-                  state.label,
+                  meta,
                   overflow: TextOverflow.ellipsis,
-                  style: context.type.caption.copyWith(
-                    color: switch (state.tone) {
-                      _Tone.good => colors.grn,
-                      _Tone.warn => colors.amber,
-                      _Tone.quiet => colors.mut2,
-                    },
-                  ),
+                  style: context.type.caption.copyWith(color: colors.mut2),
                 ),
               ],
             ),
@@ -429,27 +453,71 @@ class _RunHeader extends StatelessWidget {
           // Another worktree's run is shown read-only: it is useful to see, and
           // a tool that knew and would not say would be worse. Driving it is
           // its owner's business.
-          if (mine) ...[
-            _Action(
-              'Reload',
-              Icons.bolt_outlined,
-              enabled: state.canReload,
-              onPressed: () => onControl('reload', handle),
+          if (mine)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _Action(
+                  'Hot reload',
+                  Icons.bolt_outlined,
+                  enabled: state.canReload,
+                  onPressed: () => onControl('reload', handle),
+                ),
+                _Action(
+                  'Hot restart',
+                  Icons.refresh_rounded,
+                  enabled: state.canReload,
+                  onPressed: () => onControl('restart', handle),
+                ),
+                const Gap(FwSpacing.xs),
+                _Action(
+                  'Stop',
+                  Icons.stop_rounded,
+                  enabled: true,
+                  danger: true,
+                  onPressed: () => onControl('stop', handle),
+                ),
+              ],
             ),
-            _Action(
-              'Restart',
-              Icons.refresh_rounded,
-              enabled: state.canReload,
-              onPressed: () => onControl('restart', handle),
-            ),
-            _Action(
-              'Stop',
-              Icons.stop_rounded,
-              enabled: true,
-              onPressed: () => onControl('stop', handle),
-            ),
-          ],
         ],
+      ),
+    );
+  }
+}
+
+/// What the run can still be told to do, in three words and a colour.
+///
+/// **Capability, not liveness** — the S-L1 finding made loud. An app whose
+/// `flutter run` died keeps its tree and its screenshots and loses hot reload,
+/// and the row has to say which of those you have before you press anything.
+class _CapabilityPill extends StatelessWidget {
+  const _CapabilityPill({required this.state});
+
+  final _RunState state;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var color = switch (state.tone) {
+      _Tone.good => colors.grn,
+      _Tone.warn => colors.amber,
+      _Tone.quiet => colors.mut2,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.sm,
+        vertical: 2,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        state.label,
+        style: context.type.micro.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -987,108 +1055,118 @@ class _NewRunPageState extends State<_NewRunPage> {
       );
     }
     var device = _core.devices.where((d) => d.id == _device).firstOrNull;
-    return ListView(
-      padding: const EdgeInsets.all(FwSpacing.xl),
-      children: [
-        Text('New run', style: context.type.heading),
-        const Gap(FwSpacing.lg),
-        _Field(
-          label: 'Device',
-          child: _DevicePicker(
-            devices: _core.devices,
-            selected: _device,
-            onChanged: (id) => setState(() => _device = id),
-          ),
-        ),
-        const Gap(FwSpacing.lg),
-        _Field(
-          label: 'Entry point',
-          child: _EntrypointPicker(
-            entries: entries,
-            selected: _entry,
-            onChanged: (choice) => setState(() {
-              _entry = choice;
-              _rebuildKnobs(const {});
-              _flavor.text = choice.entry.flavor ?? '';
-            }),
-          ),
-        ),
-        // Always offered, not only when the entry point declared one: whether
-        // this project has flavors is not something the cockpit knows, and a
-        // flavoured project cannot be launched at all without the right word
-        // here. Empty means no `--flavor` is passed.
-        const Gap(FwSpacing.lg),
-        _Field(
-          label: 'Flavor',
-          hint: 'the --flavor to build; leave empty if the project has none',
-          child: TextField(
-            controller: _flavor,
-            style: context.type.bodySmall,
-            decoration: const InputDecoration(
-              isDense: true,
-              hintText: 'dev, staging…',
-            ),
-          ),
-        ),
-        if (_knobs.isNotEmpty) ...[
-          const Gap(FwSpacing.lg),
-          _Field(
-            label: 'Knobs',
-            hint: 'compiled in — changing one is a rebuild',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var knob in _entry!.entry.knobs) ...[
-                  _KnobField(
-                    knob: knob,
-                    options: _core.optionsFor(knob),
-                    controller: _knobs[knob.define]!,
-                  ),
-                  const Gap(FwSpacing.md),
-                ],
-              ],
-            ),
-          ),
-        ],
-        const Gap(FwSpacing.lg),
-        Row(
+    // A column, not the window. Fields stretched across a desktop panel put
+    // the label and the caret a hand's width apart, and the form is a short
+    // sequence of decisions rather than a table.
+    return Align(
+      alignment: Alignment.topLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: ListView(
+          padding: const EdgeInsets.all(FwSpacing.xl),
           children: [
-            FilledButton(
-              onPressed: _launching || device == null ? null : _start,
-              child: Text(_launching ? 'Starting…' : 'Start'),
+            Text('New run', style: context.type.heading),
+            const Gap(FwSpacing.lg),
+            _Field(
+              label: 'Device',
+              child: _DevicePicker(
+                devices: _core.devices,
+                selected: _device,
+                onChanged: (id) => setState(() => _device = id),
+              ),
             ),
-            const Gap(FwSpacing.md),
-            // Said before the click, not explained after it: every wireless
-            // launch in the spike stalled on an OS dialog while the tool
-            // reported only `Installing and launching…`.
-            if (device != null && device.isWireless)
-              Flexible(
-                child: Text(
-                  'wireless — expect a slow install, and a permission prompt '
-                  'on this Mac',
-                  style: context.type.caption.copyWith(
-                    color: context.colors.amber,
-                  ),
+            const Gap(FwSpacing.lg),
+            _Field(
+              label: 'Entry point',
+              child: _EntrypointPicker(
+                entries: entries,
+                selected: _entry,
+                onChanged: (choice) => setState(() {
+                  _entry = choice;
+                  _rebuildKnobs(const {});
+                  _flavor.text = choice.entry.flavor ?? '';
+                }),
+              ),
+            ),
+            // Always offered, not only when the entry point declared one: whether
+            // this project has flavors is not something the cockpit knows, and a
+            // flavoured project cannot be launched at all without the right word
+            // here. Empty means no `--flavor` is passed.
+            const Gap(FwSpacing.lg),
+            _Field(
+              label: 'Flavor',
+              hint:
+                  'the --flavor to build; leave empty if the project has none',
+              child: TextField(
+                controller: _flavor,
+                style: context.type.bodySmall,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  hintText: 'dev, staging…',
                 ),
               ),
+            ),
+            if (_knobs.isNotEmpty) ...[
+              const Gap(FwSpacing.lg),
+              _Field(
+                label: 'Knobs',
+                hint: 'compiled in — changing one is a rebuild',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var knob in _entry!.entry.knobs) ...[
+                      _KnobField(
+                        knob: knob,
+                        options: _core.optionsFor(knob),
+                        controller: _knobs[knob.define]!,
+                      ),
+                      const Gap(FwSpacing.md),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            const Gap(FwSpacing.lg),
+            Row(
+              children: [
+                FilledButton(
+                  onPressed: _launching || device == null ? null : _start,
+                  child: Text(_launching ? 'Starting…' : 'Start'),
+                ),
+                const Gap(FwSpacing.md),
+                // Said before the click, not explained after it: every wireless
+                // launch in the spike stalled on an OS dialog while the tool
+                // reported only `Installing and launching…`.
+                if (device != null && device.isWireless)
+                  Flexible(
+                    child: Text(
+                      'wireless — expect a slow install, and a permission prompt '
+                      'on this Mac',
+                      style: context.type.caption.copyWith(
+                        color: context.colors.amber,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            if (_error case var error?) ...[
+              const Gap(FwSpacing.md),
+              Text(
+                error,
+                style: context.type.caption.copyWith(color: context.colors.red),
+              ),
+            ],
+            // Nothing is running, so the panel is where the desk lives for now.
+            // It belongs in the shell's chrome — only the shell can jump you to
+            // the worktree holding a busy device — but nobody who never looks up
+            // there should lose the list.
+            if (_core.handles.isEmpty) ...[
+              const Gap(FwSpacing.xl),
+              _Desk(core: _core),
+            ],
           ],
         ),
-        if (_error case var error?) ...[
-          const Gap(FwSpacing.md),
-          Text(
-            error,
-            style: context.type.caption.copyWith(color: context.colors.red),
-          ),
-        ],
-        // Nothing is running, so the panel is where the desk lives for now.
-        // It belongs in the shell's chrome — only the shell can jump you to
-        // the worktree holding a busy device — but nobody who never looks up
-        // there should lose the list.
-        if (_core.handles.isEmpty) ...[
-          const Gap(FwSpacing.xl),
-          _Desk(core: _core),
-        ],
-      ],
+      ),
     );
   }
 
@@ -1141,49 +1219,26 @@ class _DevicePicker extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    if (devices.isEmpty) {
-      return Text(
-        'No devices yet. Starting a flutter daemon takes a few seconds.',
-        style: context.type.bodyMuted,
-      );
-    }
-    return DropdownButtonFormField<String>(
-      initialValue: devices.any((d) => d.id == selected) ? selected : null,
-      isExpanded: true,
-      items: [
-        for (var device in devices)
-          DropdownMenuItem(
-            value: device.id,
-            child: Row(
-              children: [
-                Flexible(
-                  flex: 0,
-                  child: Text(
-                    device.displayName,
-                    style: context.type.bodyStrong,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const Gap(FwSpacing.sm),
-                Flexible(
-                  child: Text(
-                    _detail(device),
-                    style: context.type.caption.copyWith(
-                      color: context.colors.mut2,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-      onChanged: (value) {
-        if (value != null) onChanged(value);
-      },
-    );
-  }
+  Widget build(BuildContext context) => _Picker<String>(
+    choices: [
+      for (var device in devices)
+        _Choice(
+          value: device.id,
+          label: device.displayName,
+          detail: _detail(device),
+          // The same green the rail uses for a live run. A phone that went to
+          // sleep is still listed and is not launchable, and the row should say
+          // so before the click rather than the build after it.
+          dotColor: device.isConnected
+              ? context.colors.grn
+              : context.colors.mut3,
+          enabled: device.isConnected,
+        ),
+    ],
+    selected: selected,
+    onChanged: onChanged,
+    empty: 'No devices yet. Starting a flutter daemon takes a few seconds.',
+  );
 
   static String _detail(DaemonDevice device) => [
     ?device.platformType,
@@ -1211,50 +1266,31 @@ class _EntrypointPicker extends StatelessWidget {
   final ValueChanged<({String package, EntrypointRef entry})> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      initialValue: selected == null
-          ? null
-          : '${selected!.package}|${selected!.entry.path}',
-      isExpanded: true,
-      items: [
-        for (var choice in entries)
-          DropdownMenuItem(
-            value: '${choice.package}|${choice.entry.path}',
-            child: Row(
-              children: [
-                Flexible(
-                  flex: 0,
-                  child: Text(
-                    choice.entry.name,
-                    style: context.type.bodyStrong,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const Gap(FwSpacing.sm),
-                Flexible(
-                  child: Text(
-                    choice.entry.description ?? choice.entry.path,
-                    style: context.type.caption.copyWith(
-                      color: context.colors.mut2,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-      onChanged: (value) {
-        for (var choice in entries) {
-          if ('${choice.package}|${choice.entry.path}' == value) {
-            onChanged(choice);
-            return;
-          }
+  Widget build(BuildContext context) => _Picker<String>(
+    choices: [
+      for (var choice in entries)
+        _Choice(
+          value: _idOf(choice),
+          label: choice.entry.name,
+          // The description when the config wrote one, the path when it did
+          // not. Never both — the path is what a description exists to replace.
+          detail: choice.entry.description ?? choice.entry.path,
+        ),
+    ],
+    selected: selected == null ? null : _idOf(selected!),
+    onChanged: (id) {
+      for (var choice in entries) {
+        if (_idOf(choice) == id) {
+          onChanged(choice);
+          return;
         }
-      },
-    );
-  }
+      }
+    },
+    empty: 'No entry points.',
+  );
+
+  static String _idOf(({String package, EntrypointRef entry}) choice) =>
+      '${choice.package}|${choice.entry.path}';
 }
 
 /// What is on this machine, and who has it.
@@ -1559,30 +1595,60 @@ class _Hint extends StatelessWidget {
   );
 }
 
+/// A control on the run's header — icon and word, not a bare glyph.
+///
+/// Labelled because there is room and because `⚡` and `↻` beside each other
+/// are a guess: hot reload and hot restart differ by about a second and by
+/// whether your state survives, which is not something to leave to a tooltip.
 class _Action extends StatelessWidget {
   const _Action(
     this.label,
     this.icon, {
     required this.enabled,
     required this.onPressed,
+    this.danger = false,
   });
 
   final String label;
   final IconData icon;
   final bool enabled;
+  final bool danger;
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) => Tooltip(
-    message: label,
-    child: IconButton(
-      icon: Icon(icon, size: 16),
-      onPressed: enabled ? onPressed : null,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
-    ),
-  );
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var fg = !enabled
+        ? colors.mut3
+        : danger
+        ? colors.red
+        : colors.accent;
+    return Padding(
+      padding: const EdgeInsets.only(left: FwSpacing.xs),
+      child: Tappable.builder(
+        onTap: enabled ? onPressed : null,
+        builder: (context, hovered) => Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: FwSpacing.sm,
+            vertical: 5,
+          ),
+          decoration: BoxDecoration(
+            color: hovered && enabled ? colors.hoverOverlay : colors.bg,
+            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+            border: Border.all(color: colors.line),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: fg),
+              const Gap(FwSpacing.xs),
+              Text(label, style: context.type.bodySmall.copyWith(color: fg)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// What to bake in before building.
@@ -1665,3 +1731,210 @@ TextStyle _mono(BuildContext context, {Color? color}) =>
       fontFeatures: const [FontFeature.tabularFigures()],
       color: color,
     );
+
+/// One choice, as the New run page offers it: a bold name, a muted line under
+/// it, and an optional dot.
+class _Choice<T> {
+  const _Choice({
+    required this.value,
+    required this.label,
+    this.detail,
+    this.dotColor,
+    this.enabled = true,
+  });
+
+  final T value;
+  final String label;
+
+  /// What the name does not say — `ios · iOS 26.5 · wireless`, or an entry
+  /// point's description. The whole reason a picker beats a list of file names.
+  final String? detail;
+
+  final Color? dotColor;
+  final bool enabled;
+}
+
+/// The New run page's picker: a trigger that reads like a field, and a popover
+/// of rows with room for a description.
+///
+/// **Not `DropdownButtonFormField`.** Both pickers were one, which put a device
+/// and an entry point through a control with one line of text and Material 3's
+/// own paddings. The design draws a bordered box — name, detail, caret —
+/// opening onto two-line rows, and `Kiosk` and `Onboarding` are unguessable
+/// from their file names, which is the entire reason this is a picker.
+///
+/// Built on [Popover] and [PopoverMenuSurface], which this app already has:
+/// both were ported from `cms/packages/admin_ui`, which is where the shape
+/// comes from, and the scenarios panel already uses them.
+class _Picker<T> extends StatelessWidget {
+  const _Picker({
+    required this.choices,
+    required this.selected,
+    required this.onChanged,
+    required this.empty,
+  });
+
+  final List<_Choice<T>> choices;
+  final T? selected;
+  final ValueChanged<T> onChanged;
+
+  /// Said instead of an empty box — a device list still being read is a
+  /// different thing from a project with no entry points.
+  final String empty;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    if (choices.isEmpty) return Text(empty, style: context.type.bodyMuted);
+    var current = choices
+        .where((choice) => choice.value == selected)
+        .firstOrNull;
+
+    return Popover(
+      anchor: (context, controller) => Tappable.builder(
+        onTap: controller.toggle,
+        builder: (context, hovered) => Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: FwSpacing.md,
+            vertical: FwSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: colors.bg,
+            borderRadius: BorderRadius.circular(context.radii.radius),
+            border: Border.all(
+              color: controller.isOpen
+                  ? colors.accent
+                  : hovered
+                  ? colors.mut3
+                  : colors.line,
+            ),
+          ),
+          child: Row(
+            children: [
+              if (current?.dotColor case var color?) ...[
+                Icon(Icons.circle, size: 8, color: color),
+                const Gap(FwSpacing.sm),
+              ],
+              Flexible(
+                flex: 0,
+                child: Text(
+                  current?.label ?? 'Choose…',
+                  style: context.type.bodyStrong,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (current?.detail case var detail?) ...[
+                const Gap(FwSpacing.sm),
+                Flexible(
+                  child: Text(
+                    detail,
+                    style: context.type.caption.copyWith(color: colors.mut),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              const Spacer(),
+              const Gap(FwSpacing.sm),
+              Icon(Icons.expand_more, size: 16, color: colors.mut2),
+            ],
+          ),
+        ),
+      ),
+      content: (context, controller) => PopoverMenuSurface(
+        // The trigger's width, so the open list lines up under the field
+        // rather than floating at whatever its longest row wants.
+        width: controller.anchorWidth,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(FwSpacing.xs),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var choice in choices)
+                _PickerRow<T>(
+                  choice: choice,
+                  selected: choice.value == selected,
+                  onTap: () {
+                    controller.close();
+                    onChanged(choice.value);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerRow<T> extends StatelessWidget {
+  const _PickerRow({
+    required this.choice,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _Choice<T> choice;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tappable.builder(
+      onTap: choice.enabled ? onTap : null,
+      builder: (context, hovered) => Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.sm,
+          vertical: 6,
+        ),
+        decoration: BoxDecoration(
+          color: selected
+              ? colors.accentSoft
+              : hovered
+              ? colors.hoverOverlay
+              : null,
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        ),
+        child: Row(
+          children: [
+            if (choice.dotColor case var color?) ...[
+              Icon(
+                Icons.circle,
+                size: 8,
+                color: choice.enabled ? color : colors.mut3,
+              ),
+              const Gap(FwSpacing.sm),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    choice.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.type.bodySmall.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: selected
+                          ? colors.accent
+                          : choice.enabled
+                          ? colors.ink
+                          : colors.mut2,
+                    ),
+                  ),
+                  if (choice.detail case var detail?)
+                    Text(
+                      detail,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.type.micro.copyWith(color: colors.mut),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
