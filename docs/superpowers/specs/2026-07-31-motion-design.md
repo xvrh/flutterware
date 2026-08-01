@@ -844,3 +844,62 @@ day the panel can write one is the day it belongs in a demo.
 The lanes are read-only — no drag, no keyframe selection, no writing
 `X.motion.dart`. That is step 3. The panel has not been looked at running; every
 claim above is from tests, `fw`, and the probe.
+
+## Step 3 — the write loop, 2026-08-01
+
+`app/lib/src/motion/values_file.dart` reads and writes `<screen>.motion.dart`.
+The panel's lanes are draggable: grab a span's middle to retime it, an end to
+trim it.
+
+### It replaces one expression, not a file
+
+The parser records the source offsets of the `MotionValues(...)` call and a
+rewrite is `source.replaceRange(start, end, rendered)`. Imports, the doc comment
+above the const, anything else in the file — outside the range and never
+touched. That is a stronger guarantee than "we own this file" and it costs one
+offset pair.
+
+### It refuses rather than approximates
+
+**A file it cannot fully understand is a file it will not rewrite.** Each of
+these is somebody's deliberate work, and re-emitting only the parts we followed
+would delete it:
+
+- a curve that is not a `Curves.<name>` — a hand-rolled `Cubic` would come back
+  as the default
+- a `from:`/`to:` that is not a literal — a shared constant would become a number
+- a `Duration(microseconds:)` — silently rounded to milliseconds
+- an interpolated target key, or a `...spread` into the map — gone entirely
+
+The panel shows the refusal on the lane. A drag that silently does nothing is
+indistinguishable from a broken one.
+
+### Comments and blank lines are part of the file
+
+Comments above a target or a property are captured and re-emitted, and so is a
+blank line above them. A blank line *between* a comment and an entry means the
+comment belongs to the gap, not the entry, and both facts survive a rewrite.
+
+This is not fussiness. The values file is a source of truth that people read;
+one rewrite that stripped the comments would teach everyone to stop writing
+them, and it would arrive as a huge diff over a file nobody had edited.
+
+### The formatter is matched by construction
+
+The emitter produces what `tool/prepare_submit.dart` would produce, rather than
+running a formatter — `dart_style` resolves a language version per file and CI
+checks the sanctioned formatter, so an emitter that formatted independently
+would disagree with CI on somebody else's machine. What keeps that honest is a
+test that reads **this repo's own values files, re-emits them, and compares byte
+for byte**. Both survive, comments and blank lines included.
+
+That test is also what caught the two things this got wrong first: whole numbers
+must emit as `1` and not `1.0` (or every hand-written file gets a diff on lines
+whose values did not change), and blank lines have to be carried.
+
+### Not yet done
+
+No keyframe insertion or deletion, no curve picker, no value editing — the drag
+retimes and trims, and that is the whole of the edit surface for now. Adding a
+property from the `+` on an untuned lane is the next obvious one, and it is the
+creation path the three states exist for.

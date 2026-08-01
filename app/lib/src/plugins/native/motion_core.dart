@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutterware/plugins.dart';
+import 'package:path/path.dart' as p;
 
 import '../../motion/discovery.dart';
+import '../../motion/values_file.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
 import 'motion_address.dart';
@@ -65,6 +68,56 @@ class MotionCore extends PluginCore {
     segments: motionSegments(packagePath, file: file, motion: motion),
     axes: {'t': ?formatMotionT(t)},
   );
+
+  /// The values file beside a screen — `home.dart` keeps its numbers in
+  /// `home.motion.dart`.
+  ///
+  /// A convention rather than a lookup, and it is the only one: the editor has
+  /// to know where to write before anything has been compiled, and a path it
+  /// derives is a path it cannot get wrong halfway through a session.
+  String valuesPathFor(String package, String motionFile) => p.join(
+    host.workspace.packageFor(package).directory.path,
+    p.joinAll(motionValuesPath(motionFile).split('/')),
+  );
+
+  /// Reads the values beside [motionFile], or says why it cannot.
+  MotionFileResult readValues(
+    String package,
+    String motionFile, {
+    String? constName,
+  }) {
+    var file = File(valuesPathFor(package, motionFile));
+    if (!file.existsSync()) {
+      return MotionFileResult(
+        problems: [MotionFileProblem('no ${p.basename(file.path)} beside it')],
+      );
+    }
+    return readMotionValues(file.readAsStringSync(), constName: constName);
+  }
+
+  /// Writes [targets] into the values file beside [motionFile].
+  ///
+  /// **Refuses when the file was not fully understood.** That is the whole of
+  /// blast radius zero: this rewrites one expression in one file it owns, and
+  /// where it cannot reproduce what it read it writes nothing at all rather
+  /// than dropping the part it did not follow.
+  List<MotionFileProblem> writeValues(
+    String package,
+    String motionFile,
+    List<MotionTargetValues> targets, {
+    String? constName,
+  }) {
+    var result = readValues(package, motionFile, constName: constName);
+    if (!result.writable) {
+      return result.problems.isEmpty
+          ? [MotionFileProblem('the values file could not be read')]
+          : result.problems;
+    }
+    File(
+      valuesPathFor(package, motionFile),
+    ).writeAsStringSync(result.file!.rewrite(targets));
+    return const [];
+  }
 
   /// Scans [path], unless it already has been. Idempotent.
   void track(String path) {

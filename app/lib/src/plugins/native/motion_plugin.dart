@@ -8,6 +8,7 @@ import '../../catalog/catalog_session.dart';
 import '../../catalog/compiler_daemon_client.dart';
 import '../../embedder/embedded_engine.dart';
 import '../../motion/discovery.dart';
+import '../../motion/values_file.dart';
 import '../../ui/design/spacing.dart';
 import '../../ui/design/tokens.dart';
 import '../../ui/tappable.dart';
@@ -265,6 +266,10 @@ class _MotionStageState extends State<_MotionStage> {
   var _seeking = false;
   var _ticking = false;
 
+  /// Why the last write was refused, or empty. Shown rather than swallowed: a
+  /// drag that silently does nothing is worse than one that says why.
+  List<MotionFileProblem> _writeProblems = const [];
+
   @override
   void initState() {
     super.initState();
@@ -368,6 +373,68 @@ class _MotionStageState extends State<_MotionStage> {
     }
   }
 
+  /// Retimes one span and writes the file.
+  ///
+  /// Everything here is a whole-file read, one span replaced, a whole-expression
+  /// write — no incremental model to keep in step with the disk, because the
+  /// disk is the model. The guest picks the edit up through the ordinary
+  /// reload; nothing is pushed into it.
+  Future<void> _edit(
+    String target,
+    String property,
+    int index,
+    MotionSpan Function(MotionSpan) change,
+  ) async {
+    var core = widget.core;
+    var package = widget.place.package;
+    var file = widget.motion.file;
+    var read = core.readValues(package, file, constName: widget.motion.values);
+    if (!read.writable) {
+      setState(() => _writeProblems = read.problems);
+      return;
+    }
+
+    var targets = [
+      for (var existing in read.file!.targets)
+        if (existing.name != target)
+          existing
+        else
+          MotionTargetValues(
+            name: existing.name,
+            comments: existing.comments,
+            blankBefore: existing.blankBefore,
+            properties: [
+              for (var candidate in existing.properties)
+                if (candidate.name != property)
+                  candidate
+                else
+                  MotionPropertyValues(
+                    name: candidate.name,
+                    comments: candidate.comments,
+                    blankBefore: candidate.blankBefore,
+                    spans: [
+                      for (var (i, span) in candidate.spans.indexed)
+                        i == index ? change(span) : span,
+                    ],
+                  ),
+            ],
+          ),
+    ];
+
+    var problems = core.writeValues(
+      package,
+      file,
+      targets,
+      constName: widget.motion.values,
+    );
+    if (!mounted) return;
+    setState(() => _writeProblems = problems);
+    if (problems.isEmpty) {
+      await _session?.reloadIfChanged();
+      await _refresh();
+    }
+  }
+
   Future<void> _transport(String verb) async {
     await _session?.callGuestExtension(
       'ext.flutterware.motion.transport',
@@ -406,7 +473,10 @@ class _MotionStageState extends State<_MotionStage> {
           onTransport: _transport,
         ),
         Divider(height: 1, color: context.colors.line),
-        SizedBox(height: 220, child: _Lanes(scope: _scope)),
+        SizedBox(
+          height: 220,
+          child: _Lanes(scope: _scope, problems: _writeProblems, onEdit: _edit),
+        ),
       ],
     );
   }
@@ -520,10 +590,24 @@ class _Transport extends StatelessWidget {
 }
 
 /// The gutter: one group per target, one row per property, read-only for now.
+typedef MotionEdit =
+    Future<void> Function(
+      String target,
+      String property,
+      int index,
+      MotionSpan Function(MotionSpan) change,
+    );
+
 class _Lanes extends StatelessWidget {
-  const _Lanes({required this.scope});
+  const _Lanes({
+    required this.scope,
+    required this.problems,
+    required this.onEdit,
+  });
 
   final Map<String, dynamic>? scope;
+  final List<MotionFileProblem> problems;
+  final MotionEdit onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -542,6 +626,20 @@ class _Lanes extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: FwSpacing.sm),
       children: [
+        // A refusal is shown, never swallowed. The editor declines to rewrite a
+        // values file it could not fully read, and a drag that silently did
+        // nothing would be indistinguishable from a broken one.
+        for (var problem in problems)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: FwSpacing.md,
+              vertical: FwSpacing.xs,
+            ),
+            child: Text(
+              'Not written — $problem',
+              style: context.type.caption.copyWith(color: context.colors.red),
+            ),
+          ),
         for (var target in targets) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -571,7 +669,16 @@ class _Lanes extends StatelessWidget {
           ),
           for (var property
               in (target['properties'] as List).cast<Map<String, dynamic>>())
-            _Lane(property: property, duration: duration),
+            _Lane(
+              property: property,
+              duration: duration,
+              onEdit: (index, change) => onEdit(
+                '${target['name']}',
+                '${property['name']}',
+                index,
+                change,
+              ),
+            ),
         ],
       ],
     );
@@ -579,10 +686,16 @@ class _Lanes extends StatelessWidget {
 }
 
 class _Lane extends StatelessWidget {
-  const _Lane({required this.property, required this.duration});
+  const _Lane({
+    required this.property,
+    required this.duration,
+    required this.onEdit,
+  });
 
   final Map<String, dynamic> property;
   final int duration;
+  final Future<void> Function(int index, MotionSpan Function(MotionSpan))
+  onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -612,17 +725,15 @@ class _Lane extends StatelessWidget {
           ),
           Expanded(
             child: Tooltip(
-              message: hint,
-              child: SizedBox(
-                height: 14,
-                child: CustomPaint(
-                  painter: _SpanPainter(
-                    segments: segments,
-                    duration: duration,
-                    tone: tone,
-                    dashed: property['state'] == 'untuned',
-                  ),
-                ),
+              message: segments.isEmpty
+                  ? hint
+                  : '$hint  Drag the middle to retime, an end to trim.',
+              child: _SpanStrip(
+                segments: segments,
+                duration: duration,
+                tone: tone,
+                dashed: property['state'] == 'untuned',
+                onEdit: onEdit,
               ),
             ),
           ),
@@ -650,12 +761,143 @@ class _Lane extends StatelessWidget {
   };
 }
 
+/// A lane's spans, draggable.
+///
+/// The grab decides what the drag means, and it is decided once on the way down
+/// rather than re-derived per sample: grabbing the middle third moves the whole
+/// span and the ends trim it. Re-deriving would change the meaning under the
+/// finger the moment a short span passed under the cursor.
+class _SpanStrip extends StatefulWidget {
+  const _SpanStrip({
+    required this.segments,
+    required this.duration,
+    required this.tone,
+    required this.dashed,
+    required this.onEdit,
+  });
+
+  final List<Map<String, dynamic>> segments;
+  final int duration;
+  final Color tone;
+  final bool dashed;
+  final Future<void> Function(int index, MotionSpan Function(MotionSpan))
+  onEdit;
+
+  @override
+  State<_SpanStrip> createState() => _SpanStripState();
+}
+
+enum _Grab { start, whole, end }
+
+class _SpanStripState extends State<_SpanStrip> {
+  int? _index;
+  _Grab? _grab;
+
+  /// Accumulated so a slow drag of a few pixels still lands as whole
+  /// milliseconds instead of rounding to nothing on every sample.
+  double _carried = 0;
+
+  double get _msPerPixel =>
+      widget.duration / (context.size?.width ?? 1).clamp(1.0, double.infinity);
+
+  void _down(Offset local, double width) {
+    for (var (index, segment) in widget.segments.indexed) {
+      var start = (segment['startMs'] as num) / widget.duration * width;
+      var end = (segment['endMs'] as num) / widget.duration * width;
+      // A zero-length span is a step keyframe and has no middle; the whole of
+      // it grabs as one.
+      var edge = ((end - start) / 3).clamp(0.0, 8.0);
+      if (local.dx < start - 4 || local.dx > end + 4) continue;
+      setState(() {
+        _index = index;
+        _grab = local.dx < start + edge
+            ? _Grab.start
+            : local.dx > end - edge
+            ? _Grab.end
+            : _Grab.whole;
+        _carried = 0;
+      });
+      return;
+    }
+    setState(_release);
+  }
+
+  void _release() {
+    _index = null;
+    _grab = null;
+    _carried = 0;
+  }
+
+  void _update(double dx) {
+    var index = _index;
+    var grab = _grab;
+    if (index == null || grab == null || widget.duration <= 0) return;
+    _carried += dx * _msPerPixel;
+    var whole = _carried.truncate();
+    if (whole == 0) return;
+    _carried -= whole;
+    unawaited(
+      widget.onEdit(index, (span) {
+        var total = widget.duration;
+        return switch (grab) {
+          // Clamped to the motion, and a span never turns inside out: an end
+          // dragged past its start is a span that would evaluate backwards.
+          _Grab.start => span.copyWith(
+            startMs: (span.startMs + whole).clamp(0, span.endMs),
+          ),
+          _Grab.end => span.copyWith(
+            endMs: (span.endMs + whole).clamp(span.startMs, total),
+          ),
+          _Grab.whole => _shifted(
+            span,
+            whole.clamp(-span.startMs, total - span.endMs),
+          ),
+        };
+      }),
+    );
+  }
+
+  static MotionSpan _shifted(MotionSpan span, int by) =>
+      span.copyWith(startMs: span.startMs + by, endMs: span.endMs + by);
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => MouseRegion(
+        cursor: widget.segments.isEmpty
+            ? MouseCursor.defer
+            : SystemMouseCursors.resizeLeftRight,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragDown: (details) =>
+              _down(details.localPosition, constraints.maxWidth),
+          onHorizontalDragUpdate: (details) => _update(details.delta.dx),
+          onHorizontalDragEnd: (_) => setState(_release),
+          child: SizedBox(
+            height: 14,
+            child: CustomPaint(
+              painter: _SpanPainter(
+                segments: widget.segments,
+                duration: widget.duration,
+                tone: widget.tone,
+                dashed: widget.dashed,
+                grabbed: _index,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SpanPainter extends CustomPainter {
   _SpanPainter({
     required this.segments,
     required this.duration,
     required this.tone,
     required this.dashed,
+    this.grabbed,
   });
 
   final List<Map<String, dynamic>> segments;
@@ -665,6 +907,9 @@ class _SpanPainter extends CustomPainter {
   /// A property nothing tunes has no span to draw, so the lane is the outline
   /// of where one would go — which is the whole of the creation path.
   final bool dashed;
+
+  /// The span under the finger, drawn solid so a drag has something to follow.
+  final int? grabbed;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -683,7 +928,8 @@ class _SpanPainter extends CustomPainter {
       }
       return;
     }
-    for (var segment in segments) {
+    for (var (index, segment) in segments.indexed) {
+      paint.color = index == grabbed ? tone : tone.withValues(alpha: 0.75);
       var start = ((segment['startMs'] as num) / duration) * size.width;
       var end = ((segment['endMs'] as num) / duration) * size.width;
       canvas.drawRRect(
@@ -703,7 +949,9 @@ class _SpanPainter extends CustomPainter {
       old.duration != duration ||
       old.tone != tone ||
       old.dashed != dashed ||
-      old.segments.length != segments.length;
+      old.grabbed != grabbed ||
+      old.segments.length != segments.length ||
+      !identical(old.segments, segments);
 }
 
 class _Chip extends StatelessWidget {
