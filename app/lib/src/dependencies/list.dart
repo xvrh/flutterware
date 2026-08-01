@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../address/address_scope.dart';
 import '../plugins/native/dependencies_address.dart';
 import 'package:pub_scores/pub_scores.dart';
@@ -108,8 +109,8 @@ Comparable _sortValue(Dependency dependency, String key, PubScores? scores) {
     DependencySort.origin => dependency.origin.label,
     DependencySort.version => dependency.resolvedVersion,
     // Missing scores sort below zero rather than above everything, so an
-    // unrated package does not top a descending sort by popularity.
-    DependencySort.pub => score?.pub.popularity ?? -1,
+    // unrated package does not top a descending sort by downloads.
+    DependencySort.pub => score?.pub.downloadCount30Days ?? -1,
     DependencySort.github => score?.github?.starCount ?? -1,
     _ => dependency.name,
   };
@@ -575,11 +576,13 @@ class _PubCell extends StatelessWidget {
     var pub = pubScores?[dependency.name]?.pub;
     if (pub == null) return const SizedBox();
 
-    var popularity = pub.popularity;
+    var number = NumberFormat.compact(locale: 'en_US');
+    var downloads = pub.downloadCount30Days;
     var likeCount = pub.likeCount;
     var points = pub.grantedPoints;
     var message = [
-      if (popularity != null) '$popularity% popularity',
+      if (downloads != null)
+        '${NumberFormat.decimalPattern('en_US').format(downloads)} downloads / 30d',
       '$likeCount like${likeCount > 1 ? 's' : ''}',
       if (points != null) '$points point${points > 1 ? 's' : ''}',
     ];
@@ -589,7 +592,7 @@ class _PubCell extends StatelessWidget {
       child: Tooltip(
         message: message.join(' / '),
         child: Text(
-          popularity == null ? '' : '$popularity%',
+          downloads == null ? '' : number.format(downloads),
           style: context.type.bodyMuted,
         ),
       ),
