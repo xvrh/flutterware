@@ -222,39 +222,152 @@ class ProjectInit {
   /// `flutterware` key that is already there is left exactly as it is, and a
   /// file that does not parse is left alone entirely rather than replaced with
   /// a valid one that has lost whatever it said.
+  ///
+  /// And the entry is *spliced in as text*, not re-encoded from the parsed map:
+  /// see [_spliceServer].
   bool _registerMcpServer() {
     var file = File(p.join(root, mcpConfigFileName));
 
+    // `fw` rather than an absolute path: the path would name this machine's
+    // pub cache, and this file is committed.
+    var entry = <String, Object?>{
+      'command': 'fw',
+      'args': ['mcp'],
+    };
+
+    if (!file.existsSync()) {
+      file.writeAsStringSync(
+        '${const JsonEncoder.withIndent('  ').convert({
+          'mcpServers': {'flutterware': entry},
+        })}\n',
+      );
+      return true;
+    }
+
+    var source = file.readAsStringSync();
     Map<String, Object?> config;
-    if (file.existsSync()) {
-      try {
-        config = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
-      } on Object {
-        return false;
-      }
-    } else {
-      config = {};
+    try {
+      config = jsonDecode(source) as Map<String, Object?>;
+    } on Object {
+      return false;
     }
 
     var declared = config['mcpServers'];
     // Present but not an object: someone else's schema, or a typo. Either way
     // it is not ours to correct.
     if (declared != null && declared is! Map<String, Object?>) return false;
-    var servers = (declared as Map<String, Object?>?) ?? <String, Object?>{};
-    if (servers.containsKey('flutterware')) return false;
+    var servers = declared as Map<String, Object?>?;
+    if (servers != null && servers.containsKey('flutterware')) return false;
 
-    servers['flutterware'] = {
-      // `fw` rather than an absolute path: the path would name this machine's
-      // pub cache, and this file is committed.
-      'command': 'fw',
-      'args': ['mcp'],
-    };
-    config['mcpServers'] = servers;
+    var spliced = _spliceServer(source, entry);
+    if (spliced != null) {
+      file.writeAsStringSync(spliced);
+      return true;
+    }
 
+    // The text was not the shape the parsed value promised — a comment, or
+    // something else no scanner here knows about. Getting the entry in still
+    // beats preserving the layout of a file we could not read closely.
+    config['mcpServers'] = {...?servers, 'flutterware': entry};
     file.writeAsStringSync(
       '${const JsonEncoder.withIndent('  ').convert(config)}\n',
     );
     return true;
+  }
+
+  /// Inserts `flutterware` into [source] as *text*, leaving every byte outside
+  /// the insertion exactly where it was.
+  ///
+  /// Re-encoding the parsed map is one line shorter and rewrites the whole
+  /// file: two spaces where the project used four, keys in a different order,
+  /// a trailing newline appearing or leaving. The result is a diff touching
+  /// every line of a file `init` does not own, to add one entry — and whoever
+  /// reads that commit has to check by hand that nothing else moved.
+  ///
+  /// Returns null when the text is not the shape the parsed value promised, so
+  /// the caller can fall back to re-encoding rather than skip the entry.
+  static String? _spliceServer(String source, Map<String, Object?> entry) {
+    var root = _skipWhitespace(source, 0);
+    if (root >= source.length || source[root] != '{') return null;
+
+    var servers = _memberValue(source, root + 1, 'mcpServers');
+    if (servers == null) {
+      return _insertMember(source, root, 'mcpServers', {'flutterware': entry});
+    }
+    if (source[servers] != '{') return null;
+    return _insertMember(source, servers, 'flutterware', entry);
+  }
+
+  /// Splices `"name": value` into the object whose `{` is at [open], after the
+  /// members already there — where every other tool that edits JSON in place
+  /// puts a new key, and where anyone rereading the file looks for the thing
+  /// that was added last.
+  ///
+  /// Laid out the way the file already lays itself out: the indent unit is read
+  /// off the first member rather than assumed, because a project writing four
+  /// spaces would otherwise get one two-space entry it did not ask for, and an
+  /// object written on one line stays on one line.
+  ///
+  /// Returns null when the text does not walk the way valid JSON should.
+  static String? _insertMember(
+    String source,
+    int open,
+    String name,
+    Object? value,
+  ) {
+    var close = _skipValue(source, open) - 1;
+    var first = _skipWhitespace(source, open + 1);
+    var isEmpty = first == close;
+    // An empty object says nothing about how the file is written, so it
+    // borrows the answer from whether anything else in the file has a line
+    // break at all.
+    var multiline = isEmpty
+        ? source.contains('\n')
+        : source.lastIndexOf('\n', close) > open;
+
+    // Where the comma goes, and everything before it stays byte-identical.
+    int? end;
+    if (!isEmpty) {
+      end = _lastMemberEnd(source, open + 1);
+      if (end == null) return null;
+    }
+
+    if (!multiline) {
+      var member = '${jsonEncode(name)}: ${jsonEncode(value)}';
+      if (isEmpty) {
+        return '${source.substring(0, open + 1)}$member'
+            '${source.substring(close)}';
+      }
+      return '${source.substring(0, end!)}, $member${source.substring(end)}';
+    }
+
+    var parentIndent = _indentOfLineAt(source, open);
+    var memberIndent = _indentOfLineAt(source, first);
+    // Usable only if the first member actually starts its own line below the
+    // brace, and sits further in than the object it belongs to.
+    if (source.lastIndexOf('\n', first) <= open ||
+        !memberIndent.startsWith(parentIndent) ||
+        memberIndent.length <= parentIndent.length) {
+      memberIndent = '$parentIndent  ';
+    }
+
+    var encoded = const LineSplitter().convert(
+      JsonEncoder.withIndent(
+        memberIndent.substring(parentIndent.length),
+      ).convert({name: value}),
+    );
+    var member = encoded
+        .sublist(1, encoded.length - 1)
+        .map((line) => '$parentIndent$line')
+        .join('\n');
+
+    // An empty object has to grow lines around the entry; a populated one only
+    // needs a comma on the line that used to be last.
+    if (isEmpty) {
+      return '${source.substring(0, open + 1)}\n$member\n$parentIndent'
+          '${source.substring(close)}';
+    }
+    return '${source.substring(0, end!)},\n$member${source.substring(end)}';
   }
 
   /// Writes a starter `tool/flutterware.dart` when the project has none.
@@ -296,4 +409,111 @@ void main() => Flutterware.configure((fw) {
 ''');
     return true;
   }
+}
+
+/// The leading whitespace of the line [offset] sits on.
+String _indentOfLineAt(String source, int offset) {
+  var start = source.lastIndexOf('\n', offset) + 1;
+  var end = start;
+  while (end < offset && (source[end] == ' ' || source[end] == '\t')) {
+    end++;
+  }
+  return source.substring(start, end);
+}
+
+int _skipWhitespace(String source, int offset) {
+  while (offset < source.length && ' \t\r\n'.contains(source[offset])) {
+    offset++;
+  }
+  return offset;
+}
+
+/// Offset just past the string literal starting at [offset].
+int _skipString(String source, int offset) {
+  offset++;
+  while (offset < source.length) {
+    if (source[offset] == r'\') {
+      offset += 2;
+      continue;
+    }
+    if (source[offset] == '"') return offset + 1;
+    offset++;
+  }
+  return offset;
+}
+
+/// Offset just past the value starting at [offset].
+///
+/// Only has to be right about already-valid JSON — whatever this walks has
+/// been through [jsonDecode] — so it counts brackets rather than parsing, and
+/// only strings need real handling because they can contain them.
+int _skipValue(String source, int offset) {
+  if (source[offset] == '"') return _skipString(source, offset);
+  if (source[offset] != '{' && source[offset] != '[') {
+    while (offset < source.length && !',}] \t\r\n'.contains(source[offset])) {
+      offset++;
+    }
+    return offset;
+  }
+
+  var depth = 0;
+  while (offset < source.length) {
+    var char = source[offset];
+    if (char == '"') {
+      offset = _skipString(source, offset);
+      continue;
+    }
+    if (char == '{' || char == '[') {
+      depth++;
+    } else if (char == '}' || char == ']') {
+      depth--;
+      if (depth == 0) return offset + 1;
+    }
+    offset++;
+  }
+  return offset;
+}
+
+/// Offset just past the value of the last member of the object whose body
+/// starts at [body] — where a new member's comma goes.
+///
+/// Deliberately not the offset of the `}`: the whitespace between the two is
+/// the file's own, and a new member belongs before it, not in place of it.
+int? _lastMemberEnd(String source, int body) {
+  int? end;
+  var offset = _skipWhitespace(source, body);
+  while (offset < source.length && source[offset] != '}') {
+    if (source[offset] != '"') return null;
+    offset = _skipWhitespace(source, _skipString(source, offset));
+    if (offset >= source.length || source[offset] != ':') return null;
+
+    end = _skipValue(source, _skipWhitespace(source, offset + 1));
+    offset = _skipWhitespace(source, end);
+    if (offset < source.length && source[offset] == ',') {
+      offset = _skipWhitespace(source, offset + 1);
+    }
+  }
+  return end;
+}
+
+/// Offset of the value of [key] in the object whose body starts at [body], or
+/// null when the key is not there.
+int? _memberValue(String source, int body, String key) {
+  var offset = _skipWhitespace(source, body);
+  while (offset < source.length && source[offset] != '}') {
+    if (source[offset] != '"') return null;
+    var nameEnd = _skipString(source, offset);
+    var name = jsonDecode(source.substring(offset, nameEnd)) as String;
+
+    offset = _skipWhitespace(source, nameEnd);
+    if (offset >= source.length || source[offset] != ':') return null;
+    offset = _skipWhitespace(source, offset + 1);
+    if (name == key) return offset;
+
+    offset = _skipWhitespace(source, _skipValue(source, offset));
+    if (offset < source.length && source[offset] == ',') {
+      offset = _skipWhitespace(source, offset + 1);
+    }
+  }
+  return null;
 }
