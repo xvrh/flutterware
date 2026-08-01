@@ -26,6 +26,22 @@ void main() {
     await Future<void>.delayed(_debounce * 4);
   }
 
+  /// Waits for a fire to land, instead of for a fixed slice of clock.
+  ///
+  /// The paths through the empty-file confirmation — a delete, a truncate —
+  /// cost two debounce windows by design, so a budget written as a small
+  /// multiple of a 10ms debounce leaves a few milliseconds of slack and
+  /// ordinary scheduler jitter spends it: that 20ms path measured over 70ms on
+  /// an *idle* machine, and on CI it failed for a reason that had nothing to do
+  /// with the watcher. A test that asserts nothing fired still has to spend the
+  /// time; these have an outcome to wait for.
+  Future<void> fires(int count) async {
+    var deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (seen.length < count && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+  }
+
   setUp(() {
     root = Directory.systemTemp.createTempSync('fw_config_watcher');
     config = File(p.join(root.path, configFilePath))
@@ -129,8 +145,8 @@ void main() {
     await watcher.start();
     config.deleteSync();
     events.add(WatchEvent(ChangeType.REMOVE, config.path));
-    await Future<void>.delayed(_debounce * 4);
-    expect(seen, hasLength(1));
+    await fires(1);
+    expect(seen, [null], reason: 'the fire reports a config that is gone');
   });
 
   test('broken twice fires once', () async {
@@ -198,7 +214,7 @@ void main() {
 
     config.writeAsStringSync('');
     events.add(WatchEvent(ChangeType.MODIFY, config.path));
-    await Future<void>.delayed(_debounce * 8);
+    await fires(1);
 
     expect(seen, [''], reason: 'one settle later, the empty file is believed');
   });
