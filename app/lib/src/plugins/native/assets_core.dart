@@ -9,7 +9,7 @@ import 'package:path/path.dart' as p;
 import '../../assets/model/asset_catalog.dart';
 import '../../assets/model/asset_facts.dart';
 import '../../assets/model/asset_scan.dart';
-import '../../catalog/package_config_locator.dart';
+import '../../previews/package_config_locator.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
 import 'assets_address.dart';

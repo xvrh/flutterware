@@ -1,4 +1,4 @@
-import '../catalog/devices.dart';
+import '../previews/devices.dart';
 
 /// The form factor a scenario runs as when nothing at all chose one: no
 /// `?device=`, and no profile on its folder either. A phone, because that is

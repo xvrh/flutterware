@@ -18,7 +18,7 @@ import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 ///
 /// A config that changed rebuilds everything, and losing a compiled catalog to
 /// that is the accepted price. A config that did *not* change must cost nothing
-/// — and `UiCatalogPlugin` holds a `CatalogSession` per package, so "nothing" is
+/// — and `PreviewsPlugin` holds a `CatalogSession` per package, so "nothing" is
 /// worth thousands of milliseconds here.
 ///
 /// The widget tests next door use a fake core, which is the right level for the

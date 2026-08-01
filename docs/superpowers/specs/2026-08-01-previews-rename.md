@@ -13,7 +13,7 @@ use what they already wrote if they did.
 
 ## `@Demo` goes away
 
-`Demo extends Preview` ([`demo.dart:45`](../../../lib/src/ui_catalog/demo.dart)) adds three fields, and all three
+`Demo extends Preview` (`lib/src/ui_catalog/demo.dart`, deleted here) adds three fields, and all three
 leave. The audit, in-tree:
 
 | field | uses | verdict |
@@ -47,16 +47,16 @@ you want a shell or knobs, not to see your first preview.
 ### And a plain `@Preview` does not work today
 
 `previewAnnotations` defaults to `['Preview', 'Demo']`
-([`authoring.dart:20`](../../../app/lib/src/catalog/authoring.dart)), so a plain `@Preview` **is discovered** — and then
-[`catalog_wrapper.dart:70`](../../../app/lib/src/catalog/catalog_wrapper.dart) emits
+([`authoring.dart:20`](../../../app/lib/src/previews/authoring.dart)), so a plain `@Preview` **is discovered** — and then
+[`catalog_wrapper.dart:70`](../../../app/lib/src/previews/catalog_wrapper.dart) emits
 
 ```dart
 Demo get fwDemo => Preview(name: 'x');   // compile error
 ```
 
-Same in [`web_app_generator.dart:120`](../../../app/lib/src/catalog/web_app_generator.dart), `_entry(Demo demo, …)`. Both call
+Same in [`web_app_generator.dart:120`](../../../app/lib/src/previews/web_app_generator.dart), `_entry(Demo demo, …)`. Both call
 nothing but `.transform()`, which is on `Preview`. `@Preview` appears exactly
-once in the tree — in a discovery *unit test* ([`discovery_test.dart:100`](../../../app/test/catalog/discovery_test.dart)) — so
+once in the tree — in a discovery *unit test* ([`discovery_test.dart:100`](../../../app/test/previews/discovery_test.dart)) — so
 the "one declaration serves both hosts" claim in [the 2026-07-26
 findings](2026-07-26-widget-previews-integration-findings.md) has never been
 exercised end to end. It holds in the direction that does not matter (our
@@ -111,7 +111,7 @@ and the published libraries split by *who writes them*:
 | `previews_guest.dart` (was `ui_catalog_guest.dart`) | guest plumbing | generated code only |
 
 The dependency runs from the catalog to Previews, not the other way, and that is
-already the architecture: [`web_app_generator.dart`](../../../app/lib/src/catalog/web_app_generator.dart) hosts the old `UICatalog`
+already the architecture: [`web_app_generator.dart`](../../../app/lib/src/previews/web_app_generator.dart) hosts the old `UICatalog`
 widget deliberately — *"It hosts the old `UICatalog` widget, and that is not a
 stopgap"* — to render previews as a page. A host importing the authoring API is
 the right direction.
@@ -149,11 +149,11 @@ than no field: it is a promise in the dartdoc that a reader will act on.
 ## D4 — `id` is removed; derivation covers the gap
 
 Zero in-tree uses. `CatalogEntry.id` already derives `path#symbol`
-([`catalog_entry.dart:62`](../../../app/lib/src/catalog/catalog_entry.dart)) and `declaredId` only overrides it.
+([`catalog_entry.dart:62`](../../../app/lib/src/previews/catalog_entry.dart)) and `declaredId` only overrides it.
 
 The one place `id:` is *forced* today is stacked annotations: two `@Demo`s on
 one declaration derive the same id, and `_rejectDuplicateIds`
-([`discovery.dart:248`](../../../app/lib/src/catalog/discovery.dart)) escalates that to a scan error. Stacking is a supported
+([`discovery.dart:248`](../../../app/lib/src/previews/discovery.dart)) escalates that to a scan error. Stacking is a supported
 way to spell variants, so the requirement bites exactly where the feature is
 used.
 
@@ -167,7 +167,7 @@ variant follows the position rather than the entry.
 
 Deleting `Demo` removes three fields from our published surface. It removes
 nothing from the *scanner*: `_literalString` asks for an argument by name and
-does not care what class the annotation is ([`discovery.dart:287`](../../../app/lib/src/catalog/discovery.dart)).
+does not care what class the annotation is ([`discovery.dart:287`](../../../app/lib/src/previews/discovery.dart)).
 `declaredId` stays on `CatalogEntry`, and `id:` keeps being read.
 
 So a project that wants any of it back writes its own five lines —
@@ -188,7 +188,7 @@ answer to every future request for one more annotation field.
 ## The work
 
 **P0 — plain `@Preview` compiles. Landed 2026-08-01.** `Preview` instead of `Demo` in
-[`catalog_wrapper.dart:70`](../../../app/lib/src/catalog/catalog_wrapper.dart) and [`web_app_generator.dart:120`](../../../app/lib/src/catalog/web_app_generator.dart). A fixture with a
+[`catalog_wrapper.dart:70`](../../../app/lib/src/previews/catalog_wrapper.dart) and [`web_app_generator.dart:120`](../../../app/lib/src/previews/web_app_generator.dart). A fixture with a
 plain `@Preview` rendered end to end — through `entries`, `inspect` and a
 capture — because the test that exists today asserts discovery and nothing
 downstream of it.
@@ -205,13 +205,13 @@ derivation lands in `discovery.dart`, and `_rejectDuplicateIds` keeps rejecting
 two *declared* ids that collide while no longer rejecting derived ones.
 
 The form-factor plumbing goes with it, end to end: `_enumName`
-([`discovery.dart:302`](../../../app/lib/src/catalog/discovery.dart)), `CatalogEntry.formFactor`, `defaultDeviceFor`
-([`devices.dart:30`](../../../app/lib/src/catalog/devices.dart)), the `formFactor` fields on
-[`ui_catalog_results.dart`](../../../app/lib/src/plugins/native/ui_catalog_results.dart) and the generated action shapes. `resolveDevice`
+([`discovery.dart:302`](../../../app/lib/src/previews/discovery.dart)), `CatalogEntry.formFactor`, `defaultDeviceFor`
+([`devices.dart:30`](../../../app/lib/src/previews/devices.dart)), the `formFactor` fields on
+[`ui_catalog_results.dart`](../../../app/lib/src/plugins/native/previews_results.dart) and the generated action shapes. `resolveDevice`
 collapses to `deviceById`. Dead code kept warm for a future feature is worse
 than code deleted and rewritten when the feature arrives.
 
-**P2 — the rename, and the split. Landed 2026-08-01.** Plugin id, label, action names,
+**P2 — the rename, and the split. Landed 2026-08-01**, including the internal paths that this originally deferred. Plugin id, label, action names,
 `PreviewsPackage`. `CatalogShell` → `PreviewShell` immediately, no typedef.
 `UICatalogState` → `PreviewState`.
 
@@ -223,13 +223,13 @@ loses the `Demo` export with P1. `ui_catalog_guest.dart` →
 commitment.
 
 `docs/capabilities.md` regenerates from the action descriptions.
-`app/lib/src/catalog/` and `app/lib/src/plugins/native/ui_catalog_*.dart` are
+`app/lib/src/previews/` and `app/lib/src/plugins/native/previews_*.dart` are
 **not** renamed here — nothing outside reads those paths, and folding a large
 mechanical diff into a behavioural one buys nothing. Everything under
 `lib/src/ui_catalog/` that stays with the old catalog keeps its path for the
 better reason: that is its name.
 
-**P3 — the words. Landed 2026-08-01.** Every message in [`authoring.dart`](../../../app/lib/src/catalog/authoring.dart) says "preview", not
+**P3 — the words. Landed 2026-08-01.** Every message in [`authoring.dart`](../../../app/lib/src/previews/authoring.dart) says "preview", not
 "demo": the empty state, the scan diagnostics, the daemon's refusal, and the
 scaffold `fw run previews new` writes. The scaffold's annotation becomes
 `@Preview` and its `package:flutterware` import disappears — **the file a first
@@ -249,7 +249,7 @@ Seven previews lose their declared starting device, and
 [`home_page.dart`](../../../examples/example/demo/home_page.dart)'s `'On a phone'` entry is the visible case: it starts
 on the panel, unframed, until form factor returns. Picking the iPhone in the
 toolbar is one click and was always what outranked the declaration anyway
-([`devices.dart:20`](../../../app/lib/src/catalog/devices.dart) — a device is never stored, and a choice outranks a
+([`devices.dart:20`](../../../app/lib/src/previews/devices.dart) — a device is never stored, and a choice outranks a
 default). Accepted knowingly rather than papered over with a stopgap that would
 have to be unpicked.
 
@@ -263,7 +263,7 @@ groundwork:
   it as a plain string, and handed it to `defaultDeviceFor` — a one-line policy:
   `mobile` starts on an iPhone 13, everything else starts on the panel.
 - The `Size` on the enum, and the `size:` that `transform()` filled from it, were
-  **never read in flutterware**. [`entrypoint_generator.dart:232`](../../../app/lib/src/catalog/entrypoint_generator.dart): *"No
+  **never read in flutterware**. [`entrypoint_generator.dart:232`](../../../app/lib/src/previews/entrypoint_generator.dart): *"No
   `preview.size` here. The host sizes the guest's window to whatever device is
   chosen […] The annotation still chooses which device the picker starts on."*
   `size:` is meaningful in Flutter's previewer and inert in ours.
@@ -274,6 +274,28 @@ groundwork:
 separate change — ids move, the tree gains a `lib/` prefix rule, `fingerprint()`
 starts statting a whole project on the reload path. Doing it after this means
 one id churn, not two.
+
+**What it must not do, written down now because it is the trap.**
+`CatalogScanner._dartFiles` is a bare `listSync(recursive: true)`
+([`discovery.dart:104`](../../../app/lib/src/previews/discovery.dart)). Scoped to `demo/` that is fine and nothing
+below is needed. Pointed at a project root it walks `node_modules`, `cdk/out`,
+`.dart_tool`, `build`, and — through `.fvm` — an entire Flutter SDK. **A
+hand-maintained deny-list is not the answer**: the list is per-project and
+unknowable.
+
+`listFilesInDirectory` ([`list_files.dart`](../../../app/lib/src/utils/list_files.dart)) already walks gitignore-aware,
+accumulating each directory's `.gitignore` down the tree through
+[`ignore.dart`](../../../lib/src/utils/ignore.dart), and the dependencies plugin already uses it. That is
+what a widened scan should walk with. Three gaps to close when it does:
+
+- It reads `.gitignore` and nothing else. A project that does not ignore a
+  large directory is still walked, so `.git/`, `.dart_tool/`, `build/` and
+  dot-directories want a hard skip regardless of what git says.
+- `.gitignore` files *above* the scan root, and git's global
+  `core.excludesFile`, are not consulted.
+- It reads and parses a `.gitignore` per directory, every walk.
+  `fingerprint()` runs on the reload path and today only stats — the matcher
+  has to be built once per scan rather than per call.
 
 **`MultiPreview` support.** Not a `Preview` subclass, and its expansion is a
 *runtime* value: how many entries an annotation produces, and what each is

@@ -147,7 +147,7 @@ class GuestInspector {
         );
       }
       var json = decoded.cast<String, Object?>();
-      var demo = _findDemo(json) ?? json;
+      var demo = _findPreview(json) ?? json;
       // The marker is ours, added so this could find the demo at all. Reporting
       // it would be reporting the observer: a caller would see a root whose
       // source is a file inside `package:flutterware` and reasonably wonder
@@ -196,7 +196,7 @@ class GuestInspector {
   /// Null when nothing below the marker is in the tree, in which case the
   /// caller reports the whole thing: a tree with catalog chrome on top beats
   /// no tree.
-  Map<String, Object?>? _findDemo(Map<String, Object?> json) {
+  Map<String, Object?>? _findPreview(Map<String, Object?> json) {
     var marker = rootOf();
     if (marker == null) return null;
 

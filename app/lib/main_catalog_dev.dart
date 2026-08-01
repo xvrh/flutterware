@@ -4,8 +4,8 @@ import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
 import 'src/address/address_scope.dart';
-import 'src/catalog/catalog_session.dart';
-import 'src/catalog/catalog_view.dart';
+import 'src/previews/catalog_session.dart';
+import 'src/previews/catalog_view.dart';
 import 'src/utils/flutter_sdk.dart';
 
 /// IDE dev entrypoint for the Previews loop, without the shell.
