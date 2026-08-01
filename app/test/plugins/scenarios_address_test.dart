@@ -51,6 +51,20 @@ void main() {
     expect(scenarioPlace(segments), place);
   });
 
+  test('round-trips the help page', () {
+    var segments = scenarioSegments('examples/example', help: true);
+    expect(segments, ['examples/example', 'help']);
+    expect(
+      scenarioPlace(segments),
+      const ScenarioPlace('examples/example', help: true),
+    );
+    // And it is a place of its own, not the package list wearing a flag.
+    expect(
+      scenarioPlace(['examples/example']),
+      isNot(const ScenarioPlace('examples/example', help: true)),
+    );
+  });
+
   test('reads an unrecognised tail as the nearest known place', () {
     expect(scenarioPlace([]), isNull);
     expect(scenarioPlace(['app', 'not-a-file']), const ScenarioPlace('app'));

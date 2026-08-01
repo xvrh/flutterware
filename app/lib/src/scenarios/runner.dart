@@ -5,8 +5,8 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
-import 'package:yaml/yaml.dart';
 
+import '../catalog/asset_bundle.dart';
 import '../catalog/package_config_locator.dart';
 import '../embedder/flutter_cache.dart';
 import '../embedder/frontend_server.dart';
@@ -166,8 +166,8 @@ class ScenarioRunner {
     var entrypoint = writeHarnessEntrypoint(packageRoot, _files);
     var packageConfig = _packageConfig = requirePackageConfig(packageRoot);
 
-    var assetsDir = _assetsDir = p.join(_buildDir, 'scenarios_assets');
-    await _ensureAssetBundle(assetsDir);
+    _assetsDir = p.join(_buildDir, 'scenarios_assets');
+    await _syncAssetBundle();
 
     var compiler = _compiler = await FrontendServer.start(
       executable: _cache.dartAotRuntime,
@@ -182,6 +182,10 @@ class ScenarioRunner {
       // in.
       extraArguments: ['--track-widget-creation'],
     );
+    // The cold start's long pole, and now its only slow step — narrated
+    // because the panel shows the last line the runner said, and a silent one
+    // reads as a hung one.
+    onLog?.call('[scenarios] compiling the harness');
     var compiled = await compiler.compile();
     if (compiled.errorCount > 0) {
       throw StateError(
@@ -283,109 +287,30 @@ class ScenarioRunner {
         .listen((event) => onStep?.call(event));
   }
 
-  /// The real `flutter build bundle`, cached against the pubspec.
+  /// The asset directory the guest reads, assembled by [AssetBundleBuilder] —
+  /// manifests written, payloads symlinked, framework shaders compiled once per
+  /// engine revision.
   ///
-  /// Not [AssetBundleBuilder], deliberately: its fast bundle carries fonts and
-  /// images but not the **compiled Material shader** (`ink_sparkle.frag`), and
-  /// the first tap of a Material 3 button loads that shader — so a scenario
-  /// died on its first tap. Teaching the fast builder about shaders is the
-  /// follow-up that swaps this back; seconds-once-then-cached is the honest
-  /// price today.
-  /// One string that changes when anything the bundle is built from changes:
-  /// the pubspec itself plus the mtime of **every declared asset, font and
-  /// shader file** — a directory entry is walked, so editing an image or
-  /// dropping a new one into `assets/images/` is seen, pubspec untouched.
+  /// Not `flutter build bundle`, which this used to shell out to. That command
+  /// builds a *program*, so it insists on an entrypoint — and a package whose
+  /// scenarios are its only entry (a library, a package whose app lives
+  /// elsewhere) has no `lib/main.dart` to give it, which is where scenarios
+  /// stopped with `Target file "lib/main.dart" not found`. The bundle wanted
+  /// nothing from that kernel: the harness's own dill is what the tester is
+  /// handed.
   ///
-  /// What it still cannot see: assets living in *dependencies*
-  /// (`packages/...` entries resolve outside this package and stamp as
-  /// `missing`, constant either way). The full-restart action is the manual
-  /// override for those.
-  String _assetStamp() {
-    var pubspec = File(p.join(packageRoot, 'pubspec.yaml'));
-    var buffer = StringBuffer()
-      ..writeln(
-        'pubspec:${pubspec.statSync().modified.microsecondsSinceEpoch}',
-      );
-
-    void stamp(String relative) {
-      var path = p.join(packageRoot, relative);
-      if (relative.endsWith('/')) {
-        var dir = Directory(path);
-        if (!dir.existsSync()) {
-          buffer.writeln('$relative:missing');
-          return;
-        }
-        var files = dir.listSync(recursive: true).whereType<File>().toList()
-          ..sort((a, b) => a.path.compareTo(b.path));
-        for (var file in files) {
-          buffer.writeln(
-            '${file.path}:${file.statSync().modified.microsecondsSinceEpoch}',
-          );
-        }
-      } else {
-        var file = File(path);
-        buffer.writeln(
-          file.existsSync()
-              ? '$relative:${file.statSync().modified.microsecondsSinceEpoch}'
-              : '$relative:missing',
-        );
-      }
-    }
-
-    Object? flutter;
-    try {
-      flutter = (loadYaml(pubspec.readAsStringSync()) as Map?)?['flutter'];
-    } on Object {
-      // An unparseable pubspec fails the build loudly on its own; the stamp
-      // only has to change when the file does, and its mtime above covers
-      // that.
-    }
-    if (flutter is Map) {
-      for (var asset in flutter['assets'] as List? ?? const []) {
-        switch (asset) {
-          case String path:
-            stamp(path);
-          case Map map when map['path'] is String:
-            stamp(map['path'] as String);
-        }
-      }
-      for (var family in flutter['fonts'] as List? ?? const []) {
-        if (family is Map && family['fonts'] is List) {
-          for (var font in family['fonts'] as List) {
-            if (font is Map && font['asset'] is String) {
-              stamp(font['asset'] as String);
-            }
-          }
-        }
-      }
-      for (var shader in flutter['shaders'] as List? ?? const []) {
-        if (shader is String) stamp(shader);
-      }
-    }
-    return buffer.toString();
-  }
-
-  bool _assetBundleFresh(String assetsDir) {
-    var stampFile = File(p.join(assetsDir, '.assets.stamp'));
-    return File(p.join(assetsDir, 'FontManifest.json')).existsSync() &&
-        stampFile.existsSync() &&
-        stampFile.readAsStringSync() == _assetStamp();
-  }
-
-  Future<void> _ensureAssetBundle(String assetsDir) async {
-    if (_assetBundleFresh(assetsDir)) return;
-    var stamp = _assetStamp();
-    onLog?.call('[scenarios] building the asset bundle');
-    var result = await Process.run(p.join(flutterSdkRoot, 'bin', 'flutter'), [
-      'build',
-      'bundle',
-      '--asset-dir',
-      assetsDir,
-    ], workingDirectory: packageRoot);
-    if (result.exitCode != 0) {
-      throw StateError('flutter build bundle failed:\n${result.stderr}');
-    }
-    File(p.join(assetsDir, '.assets.stamp')).writeAsStringSync(stamp);
+  /// Returns whether the directory changed, which is what decides a restart:
+  /// the builder rebuilds in place under a live guest by design, but a guest
+  /// registers `FontManifest.json` when it starts, so a changed bundle reaches
+  /// one only through a fresh process.
+  Future<bool> _syncAssetBundle() async {
+    var sync = await AssetBundleBuilder(
+      cache: _cache,
+      rootPackageRoot: packageRoot,
+      packageConfigPath: _packageConfig!,
+    ).build(_assetsDir!);
+    if (sync.changed) onLog?.call('[scenarios] the asset bundle changed');
+    return sync.changed;
   }
 
   /// Brings a warm harness up to date with the sources on disk.
@@ -410,12 +335,12 @@ class ScenarioRunner {
       writeHarnessEntrypoint(packageRoot, files);
     }
     // A changed asset — edited, added to a declared directory, or a pubspec
-    // edit — restarts too: the guest holds the bundle directory open, so the
-    // rebuild happens around a fresh process, never under a live one. So does
-    // a guest that is simply gone (see [_ensureGuest]) — the reload lane below
-    // would talk to a dead service.
+    // edit — restarts too: what the running engine registered at startup is
+    // what it keeps. So does a guest that is simply gone (see [_ensureGuest]) —
+    // the reload lane below would talk to a dead service.
     var guestGone = _vm == null || !_guestAlive;
-    if (filesChanged || guestGone || !_assetBundleFresh(_assetsDir!)) {
+    var assetsChanged = await _syncAssetBundle();
+    if (filesChanged || guestGone || assetsChanged) {
       await _restartGuest();
       return;
     }
@@ -468,9 +393,10 @@ class ScenarioRunner {
     }
     _guest = null;
 
-    // With the old guest gone, the bundle can be rebuilt if the pubspec
-    // moved. A no-op when it is fresh.
-    await _ensureAssetBundle(_assetsDir!);
+    // The fresh guest reads what is on disk now. ~15ms when nothing moved,
+    // which is why every path here re-syncs rather than tracking whether the
+    // caller already did.
+    await _syncAssetBundle();
 
     var compiler = _compiler!;
     _dirty.addAll(_invalidator!.sweep(compiler.sources));

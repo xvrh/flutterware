@@ -348,10 +348,91 @@ void main() {
     );
     await tester.pump();
 
-    var hint = tester.widget<SelectableText>(find.byType(SelectableText)).data!;
-    expect(hint, contains('No scenarios in test/scenarios'));
-    expect(hint, contains("import 'package:flutterware/flutter_test.dart'"));
-    expect(hint, contains('fw run scenarios new'));
+    // The 240px list says the short half — which directory is empty, and the
+    // button that fills it.
+    expect(find.text('No scenarios in test/scenarios.'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'New scenario'), findsWidgets);
+
+    // The long half is the help page, in the detail pane where a code example
+    // has the width to be code.
+    expect(find.text('How to write a scenario'), findsOneWidget);
+    expect(
+      find.textContaining(
+        "import 'package:flutterware/flutter_test.dart'",
+        findRichText: true,
+      ),
+      findsWidgets,
+    );
+    expect(
+      find.textContaining('fw run scenarios new', findRichText: true),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the help page is still reachable once scenarios exist', (
+    tester,
+  ) async {
+    var core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: Worktree(path: root.path),
+        workspace: Workspace(
+          root: root.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    var plugin = ScenariosPlugin(core);
+
+    File('${root.path}/test/scenarios/a_test.dart')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync("void main() { scenario('A', (s) async {}); }\n");
+
+    await tester.runAsync(() async {
+      core.track('.');
+      while (core.scanResultFor('.') == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
+
+    var address = ValueNotifier(
+      Address(worktree: 'wt', plugin: scenariosPluginId, segments: ['.']),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        // A populated pane draws the filter, which is a `TextField` and wants
+        // the Material the shell puts under every panel.
+        home: Scaffold(
+          body: AddressRoot(
+            address: address,
+            onChanged: (a) => address.value = a,
+            child: Builder(builder: plugin.buildPanel),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // A suite that exists is not a suite whose author knows the API by heart:
+    // the door is in the header, above every state.
+    expect(find.text('How to write a scenario'), findsNothing);
+    await tester.tap(find.byTooltip('How to write a scenario'));
+    await tester.pump();
+
+    expect(address.value.segments, ['.', 'help']);
+    expect(find.text('How to write a scenario'), findsOneWidget);
+    // The list is still there beside it — help is a page, not a mode.
+    expect(find.text('A'), findsOneWidget);
   });
 
   // …and the command it names is a button too, so a GUI reader is not sent to
@@ -403,12 +484,13 @@ void main() {
     );
     await tester.pump();
 
-    // Both doors: the pane's persistent header and the empty state's call to
-    // action.
+    // Every door: the pane's persistent header, the empty list's call to
+    // action, and the help page's — which is the detail pane while there are
+    // none. The list's is the one tapped, tree order putting it first.
     expect(find.byTooltip('New scenario'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'New scenario'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'New scenario'), findsNWidgets(2));
 
-    await tester.tap(find.widgetWithText(FilledButton, 'New scenario'));
+    await tester.tap(find.widgetWithText(FilledButton, 'New scenario').first);
     await tester.pumpAndSettle();
 
     // Nothing to create until it is named.

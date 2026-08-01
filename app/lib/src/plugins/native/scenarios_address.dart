@@ -4,6 +4,7 @@
 ///
 /// ```
 /// <package>                          the package's scenario list
+/// <package>/help                     how to write one
 /// <package>/<file…>/<scenario>       one scenario
 /// <package>/<file…>/<scenario>/<n>   one step of its run
 /// ```
@@ -17,11 +18,21 @@ library;
 
 /// A place in the scenarios plugin.
 class ScenarioPlace {
-  const ScenarioPlace(this.package, {this.file, this.scenario, this.step})
-    : assert(scenario != null || step == null, 'a step needs its scenario');
+  const ScenarioPlace(
+    this.package, {
+    this.file,
+    this.scenario,
+    this.step,
+    this.help = false,
+  }) : assert(scenario != null || step == null, 'a step needs its scenario'),
+       assert(!help || file == null, 'help is not inside a file');
 
   /// The workspace-relative package path whose scenarios are shown.
   final String package;
+
+  /// The authoring help page — a place of its own, so it survives a reload and
+  /// can be linked to.
+  final bool help;
 
   /// The package-relative source file, `/`-separated, or null for the list.
   final String? file;
@@ -38,14 +49,16 @@ class ScenarioPlace {
       other.package == package &&
       other.file == file &&
       other.scenario == scenario &&
-      other.step == step;
+      other.step == step &&
+      other.help == help;
 
   @override
-  int get hashCode => Object.hash(package, file, scenario, step);
+  int get hashCode => Object.hash(package, file, scenario, step, help);
 
   @override
   String toString() =>
       'ScenarioPlace($package'
+      '${help ? '/help' : ''}'
       '${file == null ? '' : '/$file'}'
       '${scenario == null ? '' : '#$scenario'}'
       '${step == null ? '' : '@$step'})';
@@ -57,11 +70,18 @@ List<String> scenarioSegments(
   String? file,
   String? scenario,
   int? step,
+  bool help = false,
 }) {
   assert(scenario == null || file != null, 'a scenario needs its file');
   assert(step == null || scenario != null, 'a step needs its scenario');
+  assert(!help || file == null, 'help is not inside a file');
+  if (help) return [package, helpSegment];
   return [package, ...?file?.split('/'), ?scenario, if (step != null) '$step'];
 }
+
+/// What names the help page. Not a file name and never ends in `.dart`, which
+/// is what keeps it out of the file lane below.
+const helpSegment = 'help';
 
 /// The inverse of [scenarioSegments].
 ///
@@ -73,7 +93,12 @@ ScenarioPlace? scenarioPlace(List<String> segments) {
   var package = segments.first;
   var rest = segments.skip(1).toList();
   var dartIndex = rest.indexWhere((s) => s.endsWith('.dart'));
-  if (dartIndex < 0) return ScenarioPlace(package);
+  if (dartIndex < 0) {
+    return ScenarioPlace(
+      package,
+      help: rest.isNotEmpty && rest.first == helpSegment,
+    );
+  }
   var file = rest.take(dartIndex + 1).join('/');
   var scenario = dartIndex + 1 < rest.length ? rest[dartIndex + 1] : null;
   var step = dartIndex + 2 < rest.length
