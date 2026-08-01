@@ -32,6 +32,47 @@ void main() => Flutterware.configure((fw) {
   // native splash to resolve, which is why `NativeSplash` offers no `each`.
   fw.use(NativeSplash(packages: [.new(example)]));
   fw.use(ServerInspection());
+  // `example` only: it is the one package here that is an app you would put on
+  // a phone. `app` is this GUI and `root` is a library.
+  //
+  // Named rather than left to the scan, which would find four `main()`s under
+  // `lib/` and offer them by file name. `FW_MARKER` is a real define — see
+  // `examples/example/lib/main.dart` — and is here because a launch knob the
+  // app does not read is a control that does nothing.
+  fw.use(
+    Run(
+      packages: [
+        .new(
+          example,
+          entrypoints: [
+            Entrypoint(
+              'lib/main.dart',
+              name: 'App',
+              description: 'The example app, with the devbar mounted',
+              knobs: [
+                LaunchKnob(
+                  'FW_MARKER',
+                  description:
+                      'Shown on the home page, to prove which build '
+                      'is on the device',
+                ),
+              ],
+            ),
+            Entrypoint(
+              'lib/devbar_example.dart',
+              name: 'Devbar',
+              description: 'Every devbar plugin, on a demo screen',
+            ),
+            Entrypoint(
+              'lib/ui_book.dart',
+              name: 'UI book',
+              description: 'The component gallery, no backend',
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
   // `example` only, for now — the sample scenarios live there.
   fw.use(
     Scenarios(

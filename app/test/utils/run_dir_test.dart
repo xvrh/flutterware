@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutterware_app/src/utils/run_dir.dart';
@@ -27,6 +28,25 @@ void main() {
   /// A file in the run dir, [age] old.
   File aged(String name, Duration age) {
     var file = File(p.join(runDir.path, name))..writeAsStringSync('x');
+    file.setLastModifiedSync(DateTime.now().subtract(age));
+    return file;
+  }
+
+  /// A run handle naming [launcherPid], [age] old. Only the pid is read by the
+  /// sweeper; the rest is there so the file is a real handle rather than a
+  /// shape that happens to parse.
+  File handle(String name, int launcherPid, Duration age) {
+    var file = File(p.join(runDir.path, name))
+      ..writeAsStringSync(
+        jsonEncode({
+          'worktree': '/tmp/wt',
+          'worktreeName': '~',
+          'device': 'phone',
+          'entrypoint': 'lib/main.dart',
+          'launcherPid': launcherPid,
+          'startedAt': DateTime.now().toUtc().toIso8601String(),
+        }),
+      );
     file.setLastModifiedSync(DateTime.now().subtract(age));
     return file;
   }
@@ -114,9 +134,52 @@ void main() {
       expect(await sweep(), 2);
       expect(runDir.listSync(), isEmpty);
     });
+
+    test('a run handle whose launcher is gone', () async {
+      // A run announces itself in `app-*.json` and points at a VM service on a
+      // device, so there is no socket here to knock on. The launcher's pid is
+      // the one thing this sweeper can check cheaply, and a dead one on a
+      // handle this old is what a crash leaves behind.
+      var process = await Process.start('true', const []);
+      await process.exitCode;
+      handle(
+        'app-deadbeef1234-${process.pid}.json',
+        process.pid,
+        const Duration(days: 3),
+      );
+
+      expect(await sweep(), 1);
+      expect(runDir.listSync(), isEmpty);
+    });
+
+    test('a run handle nothing can parse', () async {
+      aged('app-torn-1.json', const Duration(days: 3));
+
+      expect(await sweep(), 1);
+      expect(runDir.listSync(), isEmpty);
+    });
   });
 
   group('what it spares', () {
+    test('a run handle whose launcher is still alive, however old', () async {
+      // A desktop session can legitimately be up since Monday. Sweeping its
+      // handle would free a device that is very much in use — the same lie the
+      // `srv-*` rule exists to avoid, arrived at from the other side.
+      handle('app-abcdef123456-$pid.json', pid, const Duration(days: 30));
+
+      expect(await sweep(), 0);
+      expect(runDir.listSync(), hasLength(1));
+    });
+
+    test('the device cache, which is bounded and self-refreshing', () async {
+      // One file per machine, overwritten by the next daemon. Deleting it only
+      // makes a cold `fw devices` answer "nobody has ever looked".
+      aged('devices.json', const Duration(days: 30));
+
+      expect(await sweep(), 0);
+      expect(runDir.listSync(), hasLength(1));
+    });
+
     test('a server socket that still answers, however old', () async {
       // The guest rule would be wrong here: a dev server legitimately runs
       // for days, and unlinking a live one's socket makes it unreachable for

@@ -234,6 +234,326 @@ packages: List<DependencyListPackage>
 | `transitive` | boolean | no | false | List what the package pulls in indirectly too. The counts are reported either way. |
 
 
+### `flutterware.run`
+
+#### `devices` — Devices
+
+Every device an app could run on, with what is already running on it and from which worktree. Reads a cached list and says how old it is; pass refresh to start a flutter daemon and take a fresh one, which costs a few seconds.
+
+```sh
+fw run run devices [--refresh=…]
+```
+
+Returns `RunDevicesResult`:
+
+```
+devices: List<RunDeviceEntry>
+  id: String   # What `flutter run -d` takes.
+  name: String
+  platform: String?   # `ios`, `android`, `macos`, `web` — the family, not the architecture.
+  sdk: String?   # `iOS 18.5`, `Android 12 (API 31)`.
+  emulator: bool
+  physical: bool   # False for the always-there targets — this desktop, the browser — which cannot be unplugged and are never contended for in the way a phone is.
+  kind: String   # `physical`, `virtual` or `host` — the distinction [physical] cannot make on its own.
+  connected: bool   # Known but not reachable right now.
+  connection: String?   # `attached` for a cable or a built-in target, `wireless` over the network.
+  running: List<RunHolder>   # The runs currently holding this device, from any worktree.
+    worktree: String   # The worktree name — `~` for the main checkout.
+    entrypoint: String   # Package-relative entry point, `lib/main.dart`.
+    entrypointName: String?   # Its declared name, when it has one.
+    package: String?   # The package, relative to the worktree.
+    since: String   # When the run started, ISO-8601.
+    canReload: bool   # Reload and restart are still on offer — meaning both the app and the `flutter run` that launched it are alive.
+    canInspect: bool   # The app answers on its VM service: it can be inspected and driven even if its launcher is gone.
+live: bool   # True when a `flutter daemon` is running in this process, so the list is what it saw rather than what somebody wrote down earlier.
+updatedAt: String?   # When the list was taken, ISO-8601.
+age: String?   # [updatedAt] as a phrase — `just now`, `12m ago`.
+note: String?   # Said out loud when the list is empty or stale enough to explain, rather than left for the caller to infer from an empty array.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `refresh` | boolean | no | false | Ask a live flutter daemon instead of reading the cache |
+
+#### `apps` — Running apps
+
+Every app announcing itself under this machine's run directory, from any worktree, probed: whether the app still answers, whether the launcher that can hot-reload it is still alive, and where its log is. Handles nothing answers are deleted.
+
+```sh
+fw run run apps
+```
+
+Returns `RunAppsResult`:
+
+```
+apps: List<RunAppEntry>
+  device: String
+  deviceName: String?
+  worktree: String   # The worktree name — `~` for the main checkout.
+  mine: bool   # True when that worktree is the one this call was made from.
+  package: String?
+  entrypoint: String
+  entrypointName: String?
+  knobs: Map<String, String>   # The dart-defines it was built with.
+  since: String   # When it started, ISO-8601.
+  app: bool   # The app answered on its VM service — it can be inspected and driven.
+  launcher: bool   # The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.
+  vmService: String?
+  log: String?   # Where the launcher's output is being written, for a client that arrived after the interesting part scrolled past.
+  error: String?   # Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.
+swept: int   # Handles deleted during this call because nothing answered them.
+note: String?
+```
+
+Takes no parameters.
+
+#### `entrypoints` — Entry points
+
+The main() files each package can be launched from, with the dart-defines each one declares and the values worth offering for them. Declared in tool/flutterware.dart when the project says so, found by scanning lib/ when it does not.
+
+```sh
+fw run run entrypoints [--package=…]
+```
+
+Returns `RunEntrypointsResult`:
+
+```
+packages: List<RunEntrypointPackage>
+  path: String   # Package path, relative to the worktree.
+  declared: bool   # True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.
+  entrypoints: List<RunEntrypointEntry>
+    path: String   # Package-relative — what `launch` takes as its `entrypoint`.
+    name: String
+    description: String?   # What it is, in a line, when the config said.
+    flavor: String?   # The `--flavor` this entry point declares, when the project has them.
+    knobs: List<RunKnobEntry>
+      define: String   # The define's name, as `String.fromEnvironment` reads it.
+      label: String?
+      description: String?
+      default: String?
+      options: List<String>   # Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine's addresses on the local network.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the only one when there is one |
+
+#### `launch` — Launch
+
+Builds an entry point and runs it on a device. The launcher is detached and its output goes to a log file, so this can return while the app keeps running. A cold build is slow — about ten seconds warm on Android and a minute and a half cold — and on a wireless device it can stall on an OS permission dialog that nobody is looking at.
+
+```sh
+fw run run launch --device=<choice> [--package=…] [--entrypoint=…] [--flavor=…] [--knobs=…] [--wait=…] [--timeout=…]
+```
+
+Returns `RunLaunchResult`:
+
+```
+app: RunAppEntry   # The run as the ledger now holds it — the same shape `apps` reports.
+  device: String
+  deviceName: String?
+  worktree: String   # The worktree name — `~` for the main checkout.
+  mine: bool   # True when that worktree is the one this call was made from.
+  package: String?
+  entrypoint: String
+  entrypointName: String?
+  knobs: Map<String, String>   # The dart-defines it was built with.
+  since: String   # When it started, ISO-8601.
+  app: bool   # The app answered on its VM service — it can be inspected and driven.
+  launcher: bool   # The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.
+  vmService: String?
+  log: String?   # Where the launcher's output is being written, for a client that arrived after the interesting part scrolled past.
+  error: String?   # Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.
+status: String   # `running`, `starting`, `stopped`, or `failed`.
+waited: bool   # False when the call returned without waiting for the app to come up, so [status] is what was true a moment after spawning and nothing more.
+progress: String?   # The launcher's most recent narration — `Installing and launching…`.
+error: String?   # Why it failed, in the launcher's own words and in full.
+headline: String?   # [error]'s first line that names a fault, for a row with no room for the rest.
+logPath: String?   # Where the whole thing is, since [error] is bounded and a launcher that died in an unusual way may have put the interesting part above the cut.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | yes | — | Which device to run on |
+| `package` | choice | no | — | Which declared package; the only one when there is one |
+| `entrypoint` | choice | no | — | Package-relative path, as `entrypoints` reports it. The package's only entry point when omitted. |
+| `flavor` | string | no | — | The `--flavor` to build. Defaults to what the entry point declares. A project with product flavors cannot be built without one at all — unlike a knob, leaving it out is a build failure rather than a default value. |
+| `knobs` | string | no | — | Launch knobs to bake in: `NAME=value,NAME=value`, or a JSON object. Each becomes a `--dart-define`, so changing one costs a rebuild — which is why the entry point declares which ones it wants and what values are worth using. |
+| `wait` | boolean | no | true | Wait for the app to come up before answering. Off returns as soon as the launcher is spawned, and `apps` is how you find out how it went. |
+| `timeout` | integer | no | 300 | Seconds to wait. A timeout is not a failure — the build carries on and the answer says how far it got. |
+
+#### `reload` — Hot reload
+
+Applies edited sources to a running app, in a few hundred milliseconds. Needs the `flutter run` that launched it to still be alive: hot reload is registered by the tool, not by the app, so it goes away with it while the app keeps running.
+
+```sh
+fw run run reload [--device=…] [--entrypoint=…]
+```
+
+Returns `RunControlResult`:
+
+```
+action: String   # `reload`, `restart` or `stop`.
+device: String
+entrypoint: String
+ok: bool
+ms: int   # Wall time, which is the number that decides whether this is worth doing instead of relaunching: a hot restart is about a second where a warm relaunch is ten on Android and twenty-three on a cabled iPhone.
+error: String?
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+
+#### `restart` — Hot restart
+
+Restarts a running app from its main(), in about a second, without rebuilding or reinstalling. Same requirement as reload: the launcher has to be alive.
+
+```sh
+fw run run restart [--device=…] [--entrypoint=…]
+```
+
+Returns `RunControlResult`:
+
+```
+action: String   # `reload`, `restart` or `stop`.
+device: String
+entrypoint: String
+ok: bool
+ms: int   # Wall time, which is the number that decides whether this is worth doing instead of relaunching: a hot restart is about a second where a warm relaunch is ten on Android and twenty-three on a cabled iPhone.
+error: String?
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+
+#### `stop` — Stop
+
+Asks a running app to exit, kills its launcher, and frees the device. Asking the app first matters: killing only the launcher leaves the app running on the phone.
+
+```sh
+fw run run stop [--device=…] [--entrypoint=…]
+```
+
+Returns `RunControlResult`:
+
+```
+action: String   # `reload`, `restart` or `stop`.
+device: String
+entrypoint: String
+ok: bool
+ms: int   # Wall time, which is the number that decides whether this is worth doing instead of relaunching: a hot restart is about a second where a warm relaunch is ten on Android and twenty-three on a cabled iPhone.
+error: String?
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+
+#### `inspect` — Inspect
+
+One reading of a running app — whether it is up, whether it can still be reloaded, and whatever you ask about it: its widget tree, a picture, what it printed. With no flags it answers the question worth asking first, whether anything has gone wrong. Everything else is opt-in and every flag you add is answered from the **same** connection, and the tree and the picture from the same reading — two calls against a live app are two moments that only happen to agree. Answers even while the app is still building, when the logs are the only thing there is to read.
+
+```sh
+fw run run inspect [--device=…] [--entrypoint=…] [--tree=…] [--full=…] [--screenshot=…] [--out=…] [--logs=…] [--source=…] [--lines=…] [--errors=…]
+```
+
+Returns `RunInspectResult`:
+
+```
+device: String
+entrypoint: String
+worktree: String?   # The worktree holding it, and whether that is the one asking.
+mine: bool?
+up: bool   # The app answered its VM service, so the tree and the picture are available.
+reloadable: bool   # The `flutter run` that launched it is alive, so it can still be reloaded.
+progress: String?   # The launcher's most recent progress line, when it is still building — the only narration a ninety-second build has.
+tree: Map<String, Object?>?   # The widget tree, when asked for.
+nodes: int?   # How many nodes it has, so a caller can tell an empty answer from a small one without walking it.
+summary: bool?   # False when the whole tree was asked for rather than the summary.
+screenshot: String?   # Where the PNG was written, when one was asked for.
+logs: List<RunLogEntry>?   # Log lines, when asked for.
+  source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
+  text: String
+  error: bool   # The launcher marked it as an error.
+logLines: int?   # How many lines matched before [logs] was cut to the tail.
+errors: List<RunLogEntry>?   # Lines the launcher marked as errors.
+  source: String   # `app` for what the app printed, `tool` for what `flutter run` said about itself.
+  text: String
+  error: bool   # The launcher marked it as an error.
+log: String?   # The launcher's log file, for anyone who would rather tail it themselves.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `tree` | boolean | no | false | Report the widget tree, with the file, line and column each widget was constructed at. Off by default because a real app is thousands of tokens of tree. |
+| `full` | boolean | no | false | Include the framework's own widgets, not just yours. Large: a one-screen app is 25 summary nodes and about 517 full ones, six megabytes of them. |
+| `screenshot` | boolean | no | false | Write a PNG of the same reading everything else comes from, and hand back its path. Rendered by the app rather than grabbed from the device, so it works on hardware that cannot be asked for a screen grab — and platform views (native maps, webviews, video) will not appear. |
+| `out` | string | no | — | Where to write the PNG. A file beside the run's log when omitted, overwritten on each call. |
+| `logs` | boolean | no | false | Report the run's output. Read from the launcher's log file rather than from the app, so it covers the build and survives a crash. |
+| `source` | choice | no | — | Whose lines: the app's own output, or `flutter run` talking about the build. Both when omitted. |
+| `lines` | integer | no | 200 | How many of the most recent lines to return |
+| `errors` | boolean | no | true | Report the lines the launcher marked as errors — never guessed from the text. On by default, and with no other flag it is the whole answer. |
+
+#### `emulators` — Emulators
+
+Every emulator and simulator this machine could boot, and whether each is already up. Different from devices, which only lists the ones that are: an emulator that is not running is not a device. Costs a few seconds — it starts a flutter daemon.
+
+```sh
+fw run run emulators
+```
+
+Returns `RunEmulatorsResult`:
+
+```
+emulators: List<RunEmulatorEntry>
+  id: String   # What `bootEmulator` takes.
+  name: String
+  platform: String?   # `ios` or `android`.
+  booted: bool?   # True when it is already up, false when it is not — and **null when the question has no answer for this row**.
+note: String?
+```
+
+Takes no parameters.
+
+#### `bootEmulator` — Boot an emulator
+
+Starts an emulator and waits for it to appear as a device, which is well after the boot command returns. A cold Android emulator can take over a minute; running out of the wait is not a failure and the answer says so.
+
+```sh
+fw run run bootEmulator --emulator=<string> [--coldBoot=…] [--timeout=…]
+```
+
+Returns `RunBootResult`:
+
+```
+emulator: String
+started: bool   # The daemon accepted the launch.
+device: String?   # The device id it appeared as, once it did.
+deviceName: String?
+ms: int
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `emulator` | string | yes | — | The id `emulators` reports |
+| `coldBoot` | boolean | no | false | Skip the saved snapshot. Slower, and the answer to an emulator that boots into a broken state. |
+| `timeout` | integer | no | 120 | Seconds to wait for it to become a device |
+
+
 ### `flutterware.server`
 
 #### `requests` — Recent requests

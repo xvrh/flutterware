@@ -19,12 +19,18 @@ DaemonLogEvent _$DaemonLogEventFromJson(Map<String, dynamic> json) =>
 DaemonLogMessageEvent _$DaemonLogMessageEventFromJson(
   Map<String, dynamic> json,
 ) => DaemonLogMessageEvent(
-  $enumDecode(_$MessageLevelEnumMap, json['level']),
+  $enumDecode(
+    _$MessageLevelEnumMap,
+    json['level'],
+    unknownValue: MessageLevel.status,
+  ),
   json['message'] as String,
   json['stackTrace'] as String?,
 );
 
 const _$MessageLevelEnumMap = {
+  MessageLevel.trace: 'trace',
+  MessageLevel.status: 'status',
   MessageLevel.info: 'info',
   MessageLevel.warning: 'warning',
   MessageLevel.error: 'error',
@@ -58,3 +64,9 @@ AppProgressEvent _$AppProgressEventFromJson(Map<String, dynamic> json) =>
 
 AppStartedEvent _$AppStartedEventFromJson(Map<String, dynamic> json) =>
     AppStartedEvent(json['appId'] as String);
+
+AppStopEvent _$AppStopEventFromJson(Map<String, dynamic> json) => AppStopEvent(
+  json['appId'] as String,
+  json['error'] as String?,
+  json['trace'] as String?,
+);

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -82,6 +83,20 @@ String flutterwareDir() {
 /// under names that change — so an old one is swept with its socket, and kept
 /// while its socket still answers.
 ///
+/// **`app-*.json` — a run's handle — is kept while its launcher is alive, and
+/// aged out otherwise.** It has no socket here to knock on: it points at a VM
+/// service on a device, and deciding it properly means an async websocket
+/// connect, which this sweeper is the wrong place for. The run plugin does that
+/// probe continuously while anything is watching, so this only catches what a
+/// crash left behind — hence the pid check, which spares a desktop session that
+/// has legitimately been up since Monday, and the age gate, which spares a
+/// launch that started thirty seconds ago.
+///
+/// `devices.json` is never swept: there is exactly one, it is small, and the
+/// next daemon overwrites it. Deleting it would only make a cold `fw devices`
+/// answer "nothing has ever looked" about a machine that had a device list a
+/// minute ago.
+///
 /// Every failure is swallowed per file. This is housekeeping — another process
 /// winning a race to delete the same orphan is the expected case, not an error,
 /// and nothing here is worth failing a daemon start over.
@@ -129,15 +144,30 @@ Future<int> sweepRunDir({
   for (var entity in entries) {
     var name = p.basename(entity.path);
     var isServerHandle = name.startsWith('srv-') && name.endsWith('.json');
+    // `.png` is a run's last screenshot, written beside its log and swept on
+    // the same terms: an observation of a moment nobody asked to keep.
     if (!name.endsWith('.log') &&
         !name.endsWith('.lock') &&
         !name.endsWith('.failed') &&
+        !name.endsWith('.png') &&
         !isServerHandle) {
       continue;
     }
     var key = name.substring(0, name.lastIndexOf('.'));
     if (serving.contains(key)) continue;
     if (!_isOlderThan(entity, cutoff)) continue;
+    if (_delete(entity)) deleted++;
+  }
+
+  for (var entity in entries) {
+    var name = p.basename(entity.path);
+    if (entity is! File ||
+        !name.startsWith('app-') ||
+        !name.endsWith('.json')) {
+      continue;
+    }
+    if (!_isOlderThan(entity, cutoff)) continue;
+    if (_launcherIsAlive(entity)) continue;
     if (_delete(entity)) deleted++;
   }
 
@@ -158,6 +188,41 @@ Future<int> sweepRunDir({
 }
 
 final _daemonKey = RegExp(r'^[0-9a-f]{16}$');
+
+/// Whether a run handle's `flutter run` is still there.
+///
+/// Read straight out of the file rather than through `RunHandle`, so the
+/// sweeper stays a leaf: it must not pull the VM-service client in behind it,
+/// and the one field it needs is a number.
+bool _launcherIsAlive(File handle) {
+  try {
+    var json = jsonDecode(handle.readAsStringSync());
+    if (json is! Map) return false;
+    return isProcessAlive(json['launcherPid'] as int? ?? 0);
+  } on Object {
+    // Unreadable is not "alive": a handle nothing can parse is litter.
+    return false;
+  }
+}
+
+/// Whether [pid] is a process this user could signal.
+///
+/// `SIGCONT` is the probe because it is the signal a running process ignores —
+/// `kill` fails with `ESRCH` when the pid is gone, which is the answer we are
+/// after, and does nothing when it is not.
+///
+/// Two ways this can be wrong, both narrow and both worth naming: a pid
+/// recycled onto an unrelated process reads as alive, and a process owned by
+/// another user reads as dead. Neither applies to a launcher this machine's
+/// own tooling started, which is the only kind that appears in the ledger.
+bool isProcessAlive(int pid) {
+  if (pid <= 0) return false;
+  try {
+    return Process.killPid(pid, ProcessSignal.sigcont);
+  } on Object {
+    return false;
+  }
+}
 
 bool _isOlderThan(FileSystemEntity entity, DateTime cutoff) {
   try {

@@ -1,0 +1,1982 @@
+import 'dart:async';
+import 'dart:math' as math;
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:flutterware/plugins.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart';
+
+import '../../address/address_scope.dart';
+import '../../run/entrypoints.dart';
+import '../../run/handle.dart';
+import '../../run/inventory.dart';
+import '../../run/launch.dart';
+import '../../run/logs.dart';
+import '../../inspect/elements_view.dart';
+import '../../inspect/inspect_dock.dart';
+import '../../ui/design/design.dart';
+import '../../ui/empty_state.dart';
+import '../../ui/popover.dart';
+import '../../ui/popover_menu.dart';
+import '../../ui/tappable.dart';
+import '../../ui/theme.dart';
+import '../../utils/daemon/device.dart';
+import '../native_plugin.dart';
+import 'run_address.dart';
+import 'run_core.dart';
+
+export 'run_core.dart' show RunCore, runPluginId;
+
+/// The GUI half of the run cockpit: a panel, and nothing else.
+///
+/// What is connected, what is busy, who holds it and what launching does all
+/// live in [RunCore], so `fw` and an agent get the same answers from the same
+/// code. This class exists because `buildPanel` returns a `Widget`.
+class RunPlugin extends NativePlugin<RunCore> {
+  RunPlugin(super.core);
+
+  /// Starting a `flutter daemon` takes seconds and a cold build takes minutes,
+  /// and the panel is worth photographing for neither. Without this a window
+  /// capture catches the empty state and reports it as the device list.
+  @override
+  String? get busyWith {
+    if (!core.isLive && core.devices.isEmpty) return 'finding devices';
+    if (core.isStarting) return 'building';
+    // The open pane is mid-read. Without this a capture settles on an empty
+    // Screen tab saying `Reading the app…` — which is exactly what the first
+    // review of this layout photographed, and it looked like the bug that had
+    // just been fixed.
+    if (_reading) return 'reading the app';
+    return null;
+  }
+
+  var _reading = false;
+
+  /// Told by the pane doing the reading. See [busyWith].
+  void setReading(bool reading) {
+    if (_reading == reading) return;
+    _reading = reading;
+    notifyChanged();
+  }
+
+  /// `+` beside `Run` in the rail.
+  ///
+  /// The runs themselves are the rail's child rows, so the one thing the list
+  /// needs that a list of runs cannot express is *starting another*. Same shape
+  /// as the scenarios panel's `+` on a folder header, one level up.
+  @override
+  List<PluginRowCommand> rowCommands() => const [
+    PluginRowCommand(label: 'New run', icon: Icons.add, opens: newRunSegment),
+  ];
+
+  @override
+  Widget buildPanel(BuildContext context) => _RunPanel(this);
+}
+
+/// **Runs are the subjects, not devices.**
+///
+/// The panel was a list of devices with a run squeezed into each row. That
+/// fitted the first slice, strained in the second, and had nowhere to put the
+/// third: a screenshot, a widget tree and a log stream do not go in a table
+/// row. So it follows the server panel instead — subject chips, a tab strip,
+/// and a pane — which is this problem already solved once in this codebase.
+///
+/// Starting a run is its own page rather than a button per entry point: four to
+/// ten entry points as a row of buttons is a wall, and the knobs have nowhere
+/// to go. See `docs/superpowers/specs/2026-07-31-run-cockpit-panel-design.md`.
+class _RunPanel extends StatefulWidget {
+  const _RunPanel(this.plugin);
+
+  final RunPlugin plugin;
+
+  @override
+  State<_RunPanel> createState() => _RunPanelState();
+}
+
+class _RunPanelState extends State<_RunPanel> {
+  RunCore get _core => widget.plugin.core;
+
+  @override
+  void initState() {
+    super.initState();
+    _core.track();
+  }
+
+  RunPlace _resolve(BuildContext context) => runPlace(
+    [for (var i = 0; i < 2; i++) AddressScope.segment(context, i) ?? '']
+      ..removeWhere((s) => s.isEmpty),
+  );
+
+  /// The run the place names, or the first one.
+  ///
+  /// By key rather than by identity, because the handle object is replaced on
+  /// every probe — and by *falling back* rather than by showing nothing,
+  /// because an address to a run that has since stopped should land you in the
+  /// cockpit rather than in an error.
+  RunHandle? _select(List<RunHandle> handles, RunPlace place) {
+    if (place.runKey case var key?) {
+      for (var handle in handles) {
+        if (handle.key == key) return handle;
+      }
+    }
+    return handles.firstOrNull;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.plugin,
+      builder: (context, _) {
+        var handles = _core.handles;
+        var place = _resolve(context);
+        // A failure is looked up before a handle is fallen back to, so the
+        // address you were already watching turns into the reason it died
+        // rather than bouncing you to the form with nothing said.
+        var failed = place.isNew || place.runKey == null
+            ? null
+            : _core.failureFor(place.runKey!);
+        var shown = place.isNew || failed != null
+            ? null
+            : _select(handles, place);
+
+        // No chip row. The runs are the rail's child rows and were being drawn
+        // twice — the mockup had both, and building it made the duplication
+        // plain. `+ New run` moved to the rail with them, as [rowCommands].
+        return switch ((failed, shown)) {
+          (var failure?, _) => _FailedRunPage(
+            failure: failure,
+            onDismiss: () {
+              _core.dismissFailure(failure.key);
+              if (mounted) {
+                AddressScope.write(context).setSegments(const [newRunSegment]);
+              }
+            },
+          ),
+          (_, var handle?) => _RunView(
+            core: _core,
+            handle: handle,
+            view: place.view,
+            onControl: _control,
+            onReading: widget.plugin.setReading,
+          ),
+          _ => _NewRunPage(core: _core, onLaunched: _goTo),
+        };
+      },
+    );
+  }
+
+  void _goTo(RunHandle handle) {
+    if (!mounted) return;
+    AddressScope.write(context).setSegments(runSegments(handle.key));
+  }
+
+  Future<void> _control(String action, RunHandle handle) async {
+    try {
+      await _core.control(action, handle);
+    } on Object catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tappable.builder(
+      onTap: onTap,
+      builder: (context, hovered) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? colors.accentSoft
+              : hovered
+              ? colors.hoverOverlay
+              : null,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? colors.accentSoft2 : colors.line,
+          ),
+        ),
+        child: Text(label, style: context.type.bodySmall),
+      ),
+    );
+  }
+}
+
+/// One run: its tabs, its header, and whichever pane is open.
+class _RunView extends StatefulWidget {
+  const _RunView({
+    required this.core,
+    required this.handle,
+    required this.view,
+    required this.onControl,
+    required this.onReading,
+  });
+
+  final RunCore core;
+  final RunHandle handle;
+  final RunViewKind view;
+  final void Function(String action, RunHandle handle) onControl;
+
+  /// Passed up to the plugin so `busyWith` can hold a capture until the pane
+  /// has something worth photographing.
+  final ValueChanged<bool> onReading;
+
+  @override
+  State<_RunView> createState() => _RunViewState();
+}
+
+class _RunViewState extends State<_RunView> {
+  /// Lets the strip's refresh reach the open pane without lifting the pane's
+  /// read into this widget. The strip belongs to the page and the reading
+  /// belongs to the pane; this is the one wire between them.
+  final _screen = GlobalKey<_ScreenTabState>();
+
+  @override
+  Widget build(BuildContext context) {
+    var core = widget.core;
+    var handle = widget.handle;
+    var view = widget.view;
+    var probe = core.probeOf(handle);
+    var log = core.logOf(handle);
+    var mine = handle.worktreeName == core.host.worktree.name;
+    var state = _RunState.of(
+      probe: probe,
+      log: log,
+      mine: mine,
+      handle: handle,
+    );
+
+    // **Header first, then the tabs.** The design drew them the other way and
+    // it read wrong once built: the run is the subject and the tabs are views
+    // *of* it, so putting the strip on top made the page look like it belonged
+    // to the tab rather than to the app you launched. Reload and stop act on
+    // the run whichever pane is open, which is the same argument.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _RunHeader(
+          handle: handle,
+          state: state,
+          mine: mine,
+          onControl: widget.onControl,
+        ),
+        _ViewTabs(
+          runKey: handle.key,
+          view: view,
+          enabled: state.canInspect,
+          busy:
+              view == RunViewKind.screen &&
+              (_screen.currentState?.isReading ?? false),
+          onRefresh: view == RunViewKind.screen && state.canInspect
+              ? () => _screen.currentState?.read()
+              : null,
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: !state.canInspect
+              ? _NotYet(state: state, handle: handle)
+              : switch (view) {
+                  RunViewKind.screen => _ScreenTab(
+                    key: _screen,
+                    core: core,
+                    handle: handle,
+                    onReadingChanged: () {
+                      setState(() {});
+                      widget.onReading(
+                        _screen.currentState?.isReading ?? false,
+                      );
+                    },
+                  ),
+                  RunViewKind.logs => _LogsTab(core: core, handle: handle),
+                },
+        ),
+      ],
+    );
+  }
+}
+
+/// **Capability, not liveness.**
+///
+/// The S-L1 finding, made visible. Hot reload is registered by the `flutter
+/// run` and dies with it; the tree and the screenshots belong to the app and
+/// outlive it. A header saying only "running" would hide exactly the difference
+/// the buttons beside it are about to demonstrate.
+class _RunState {
+  const _RunState({
+    required this.label,
+    required this.canInspect,
+    required this.canReload,
+    required this.tone,
+  });
+
+  factory _RunState.of({
+    required RunProbe? probe,
+    required LaunchLog? log,
+    required bool mine,
+    required RunHandle handle,
+  }) {
+    if (probe == null) {
+      return _RunState(
+        label: log?.summary ?? 'not probed yet',
+        canInspect: false,
+        canReload: false,
+        tone: _Tone.quiet,
+      );
+    }
+    if (!probe.canInspect) {
+      return _RunState(
+        label: log?.progress ?? log?.summary ?? 'building',
+        canInspect: false,
+        canReload: false,
+        tone: _Tone.quiet,
+      );
+    }
+    if (!probe.launcher) {
+      return const _RunState(
+        // Not "stopped": the app is up and fully inspectable. What is gone is
+        // the process that could have reloaded it.
+        label: 'no launcher — cannot reload',
+        canInspect: true,
+        canReload: false,
+        tone: _Tone.warn,
+      );
+    }
+    if (!mine) {
+      return _RunState(
+        label: 'held by ${handle.worktreeName}',
+        canInspect: true,
+        canReload: false,
+        tone: _Tone.quiet,
+      );
+    }
+    return const _RunState(
+      label: 'reloadable',
+      canInspect: true,
+      canReload: true,
+      tone: _Tone.good,
+    );
+  }
+
+  final String label;
+  final bool canInspect;
+  final bool canReload;
+  final _Tone tone;
+}
+
+enum _Tone { good, warn, quiet }
+
+class _RunHeader extends StatelessWidget {
+  const _RunHeader({
+    required this.handle,
+    required this.state,
+    required this.mine,
+    required this.onControl,
+  });
+
+  final RunHandle handle;
+  final _RunState state;
+  final bool mine;
+  final void Function(String action, RunHandle handle) onControl;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var meta = [
+      for (var knob in handle.knobs.entries) '${knob.key}=${knob.value}',
+      'started ${describeAge(DateTime.now().difference(handle.startedAt))}',
+    ].join(' · ');
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        FwSpacing.lg,
+        FwSpacing.md,
+        FwSpacing.md,
+        FwSpacing.md,
+      ),
+      color: context.colors.panel2,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '${handle.runLabel} → ${handle.deviceLabel}',
+                        style: context.type.heading,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Gap(FwSpacing.sm),
+                    // Capability, as a pill rather than a caption. It is the
+                    // one thing on this row that changes what the buttons
+                    // beside it can do, and a grey line of small text said it
+                    // as quietly as everything else.
+                    _CapabilityPill(state: state),
+                    if (!mine) ...[
+                      const Gap(FwSpacing.sm),
+                      _Tag(handle.worktreeName),
+                    ],
+                  ],
+                ),
+                const Gap(2),
+                Text(
+                  meta,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.type.caption.copyWith(color: colors.mut2),
+                ),
+              ],
+            ),
+          ),
+          const Gap(FwSpacing.md),
+          // Another worktree's run is shown read-only: it is useful to see, and
+          // a tool that knew and would not say would be worse. Driving it is
+          // its owner's business.
+          if (mine)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _Action(
+                  'Hot reload',
+                  Icons.bolt_outlined,
+                  enabled: state.canReload,
+                  onPressed: () => onControl('reload', handle),
+                ),
+                _Action(
+                  'Hot restart',
+                  Icons.refresh_rounded,
+                  enabled: state.canReload,
+                  onPressed: () => onControl('restart', handle),
+                ),
+                const Gap(FwSpacing.xs),
+                _Action(
+                  'Stop',
+                  Icons.stop_rounded,
+                  enabled: true,
+                  danger: true,
+                  onPressed: () => onControl('stop', handle),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the run can still be told to do, in three words and a colour.
+///
+/// **Capability, not liveness** — the S-L1 finding made loud. An app whose
+/// `flutter run` died keeps its tree and its screenshots and loses hot reload,
+/// and the row has to say which of those you have before you press anything.
+class _CapabilityPill extends StatelessWidget {
+  const _CapabilityPill({required this.state});
+
+  final _RunState state;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var color = switch (state.tone) {
+      _Tone.good => colors.grn,
+      _Tone.warn => colors.amber,
+      _Tone.quiet => colors.mut2,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.sm,
+        vertical: 2,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        state.label,
+        style: context.type.micro.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// Screen | Logs, written into the address.
+///
+/// **The strip is the extension point.** `Network` and `Data` are devbar
+/// plugins reporting into the cockpit later, so it has to accept tabs this
+/// build does not know about — which is why the address carries a tab *name*
+/// and reading an unknown one falls back to the screen.
+///
+/// [InspectTabStrip] rather than a row of buttons: it is what ui_catalog and
+/// scenarios already draw above a widget tree, and three surfaces showing the
+/// same thing should not be two designs.
+class _ViewTabs extends StatelessWidget {
+  const _ViewTabs({
+    required this.runKey,
+    required this.view,
+    required this.enabled,
+    this.busy = false,
+    this.onRefresh,
+  });
+
+  final String runKey;
+  final RunViewKind view;
+
+  /// False while the app has nothing to read. The tabs stay visible and stop
+  /// responding — hiding them would move the page's furniture around every
+  /// time a build started.
+  final bool enabled;
+
+  /// A reading is in flight; the spinner stands where the button was.
+  final bool busy;
+
+  /// Re-reads whatever the open pane shows. Null for a pane that has nothing
+  /// to re-read — the log is read from the file on every build.
+  final VoidCallback? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return InspectTabStrip(
+      tabs: const [
+        InspectDockTab(id: 'screen', label: 'Screen', body: _unused),
+        InspectDockTab(id: 'logs', label: 'Logs', body: _unused),
+      ],
+      current: view.name,
+      onSelect: (id) {
+        if (!enabled) return;
+        AddressScope.write(context).setSegments(
+          runSegments(runKey, view: RunViewKind.byName(id) ?? view),
+        );
+      },
+      // Where the dock puts it, so re-reading is in the same place on all
+      // three surfaces. It had a row of its own, which held one icon and a
+      // caption and floated between the header and the panes.
+      trailing: [
+        if (busy)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+            child: SizedBox(
+              width: 13,
+              height: 13,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else if (onRefresh case var refresh?)
+          InspectStripButton(
+            icon: Icons.refresh,
+            tooltip: 'Read it all again',
+            onTap: refresh,
+          ),
+      ],
+    );
+  }
+
+  /// The strip reads ids, labels and badges and never builds a body — the run
+  /// page keeps its panes, because only one of them is cheap to rebuild.
+  static Widget _unused(BuildContext context) => const SizedBox.shrink();
+}
+
+/// Shown while a run has no app to ask — a build in flight, or one that failed.
+///
+/// The logs are offered rather than described, because this is the state where
+/// they are the only thing that can say what is happening.
+class _NotYet extends StatelessWidget {
+  const _NotYet({required this.state, required this.handle});
+
+  final _RunState state;
+  final RunHandle handle;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(FwSpacing.xl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: context.colors.mut2,
+            ),
+          ),
+          const Gap(FwSpacing.md),
+          Text(state.label, style: context.type.body),
+          const Gap(FwSpacing.xs),
+          Text(
+            'Nothing can be read from an app that has not started. '
+            'A cold build is minutes, not seconds.',
+            textAlign: TextAlign.center,
+            style: context.type.caption.copyWith(color: context.colors.mut2),
+          ),
+          if (handle.logPath case var path?) ...[
+            const Gap(FwSpacing.sm),
+            SelectableText(path, style: context.type.micro),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+
+/// The picture and the widget tree, side by side — the design's Screen tab.
+///
+/// **One reading, not two.** Both come off a single `getRootWidgetTree` in one
+/// object group, which is what merging `inspect` into one action bought: a live
+/// app animates and takes in data between calls, so two reads would put a tree
+/// beside a picture of a different frame.
+///
+/// **Not a live mirror, and it says so.** Each capture is a render and a PNG —
+/// 66ms on this Mac, 42 on a simulator — so polling one would be a cost paid
+/// continuously for a screen nobody is watching most of the time. The button is
+/// the honest version until somebody wants a mirror enough to pay for it.
+class _ScreenTab extends StatefulWidget {
+  const _ScreenTab({
+    super.key,
+    required this.core,
+    required this.handle,
+    required this.onReadingChanged,
+  });
+
+  final RunCore core;
+  final RunHandle handle;
+
+  /// So the strip above can swap its refresh button for a spinner. The pane
+  /// owns the reading; the page only needs to know one is happening.
+  final VoidCallback onReadingChanged;
+
+  @override
+  State<_ScreenTab> createState() => _ScreenTabState();
+}
+
+class _ScreenTabState extends State<_ScreenTab> {
+  Uint8List? _image;
+  InspectTree? _tree;
+  String? _error;
+  var _loading = false;
+
+  /// How much of the pane the picture takes. Wider than the first build's
+  /// fixed 240: a phone screenshot at that width is a thumbnail, and the tree
+  /// beside it never needed the rest.
+  double _split = 0.34;
+
+  bool get isReading => _loading;
+
+  /// What the tree hovers, for a box drawn over the picture.
+  ///
+  /// Nothing draws one yet and that is not an oversight: the inspector surface
+  /// carries **no position at all** — `getLayoutExplorerNode` gives size and
+  /// constraints, `parentData` is `<none>` — so global rects wait for the
+  /// Devbar installer. [ElementsView] requires the notifier, so it gets a real
+  /// one rather than a widget bent around the gap.
+  final _highlight = ValueNotifier<String?>(null);
+
+  @override
+  void initState() {
+    super.initState();
+    _read();
+  }
+
+  @override
+  void didUpdateWidget(_ScreenTab old) {
+    super.didUpdateWidget(old);
+    // A different run in the same tab is a different subject, not a stale
+    // picture of this one.
+    if (old.handle.key != widget.handle.key) {
+      _image = null;
+      _tree = null;
+      _error = null;
+      _read();
+    }
+  }
+
+  @override
+  void dispose() {
+    _highlight.dispose();
+    super.dispose();
+  }
+
+  /// Public so the tab strip's refresh can reach it — see [_RunViewState].
+  Future<void> read() => _read();
+
+  Future<void> _read() async {
+    // Assigned rather than `setState`, because this is reached from `initState`
+    // and `didUpdateWidget` — both inside a build. [_tellThePage] schedules the
+    // rebuild that shows it, one frame later, which is what a spinner is for.
+    _loading = true;
+    _tellThePage();
+    try {
+      var read = await widget.core.inspectRead(widget.handle);
+      if (!mounted) return;
+      setState(() {
+        _image = read.image;
+        _tree = read.tree;
+        _error = null;
+      });
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '$e');
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+        _tellThePage();
+      }
+    }
+  }
+
+  /// **After the frame, never inside it.** The page above draws the spinner in
+  /// its tab strip, so this is a `setState` on an *ancestor* — and [_read] is
+  /// reached from `initState` and `didUpdateWidget`, both of which run while
+  /// that ancestor is building. In debug the framework throws there, which
+  /// aborted the read before it started and left the pane saying `Reading the
+  /// app…` for ever.
+  ///
+  /// It survived review because `capture` builds the GUI in **release**, where
+  /// the assertion is compiled out and the same call merely schedules a
+  /// rebuild. A screenshot is not a test of this class of bug.
+  void _tellThePage() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onReadingChanged();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error case var error?) return _Failed(error);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        var width = (constraints.maxWidth * _split)
+            .clamp(180.0, math.max(180.0, constraints.maxWidth - 320))
+            .toDouble();
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: width,
+              child: _Picture(image: _image, loading: _loading),
+            ),
+            InspectSplitGrip(
+              axis: Axis.vertical,
+              onDrag: (delta) => setState(() {
+                _split = ((width + delta) / constraints.maxWidth).clamp(
+                  0.15,
+                  0.7,
+                );
+              }),
+            ),
+            Expanded(
+              child: ElementsView(
+                root: _tree?.root,
+                placeholder: _loading
+                    ? 'Reading the app…'
+                    : 'The app has not built a frame yet.',
+                highlight: _highlight,
+                // Paths are shortened against the worktree, and live in the
+                // detail pane rather than on every row — which is what the
+                // shared view does and what the run panel's own tree did not.
+                displayRoot: widget.core.host.worktree.path,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _Picture extends StatelessWidget {
+  const _Picture({required this.image, required this.loading});
+
+  final Uint8List? image;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: context.colors.panel,
+      alignment: Alignment.topCenter,
+      padding: const EdgeInsets.all(FwSpacing.md),
+      // Shrink-wrapped and top-aligned so the caption sits *under the
+      // picture*, not at the bottom of whatever height the pane happens to
+      // have. `Expanded` put it a screen away from what it describes.
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (image == null)
+            Text(
+              loading ? '' : 'No picture yet',
+              style: context.type.caption.copyWith(color: context.colors.mut2),
+            )
+          else ...[
+            Flexible(
+              child: Image.memory(
+                image!,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.medium,
+                gaplessPlayback: true,
+              ),
+            ),
+            const Gap(FwSpacing.sm),
+            Text(
+              'rendered by the app — platform views will not appear',
+              textAlign: TextAlign.center,
+              style: context.type.micro.copyWith(color: context.colors.mut3),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// What the launcher wrote, with the app's own output separable from the
+/// build's.
+///
+/// Read from the file rather than from a stream, which is why it works before
+/// the app exists and after it has gone.
+class _LogsTab extends StatefulWidget {
+  const _LogsTab({required this.core, required this.handle});
+
+  final RunCore core;
+  final RunHandle handle;
+
+  @override
+  State<_LogsTab> createState() => _LogsTabState();
+}
+
+class _LogsTabState extends State<_LogsTab> {
+  RunLogSource? _only;
+  List<RunLogLine> _lines = const [];
+  Timer? _poll;
+
+  /// Slower than a frame and faster than you can read a line.
+  static const _every = Duration(milliseconds: 700);
+
+  @override
+  void initState() {
+    super.initState();
+    _reread();
+    _poll = Timer.periodic(_every, (_) => _reread());
+  }
+
+  @override
+  void didUpdateWidget(_LogsTab old) {
+    super.didUpdateWidget(old);
+    if (old.handle.key != widget.handle.key) _reread();
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  /// **Not in `build`.** A log is a file, the panel rebuilds on every probe and
+  /// on every frame of any animation above it, and `RunCore.logOf` says in as
+  /// many words why a panel must not read one from there. A timer is the honest
+  /// shape: the file is polled because nothing pushes it.
+  void _reread() {
+    if (!mounted) return;
+    var lines = widget.core.readLogs(widget.handle, only: _only, tail: 2000);
+    setState(() => _lines = lines);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var lines = _lines;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: FwSpacing.lg,
+            vertical: FwSpacing.xs,
+          ),
+          child: Row(
+            children: [
+              for (var (label, value) in [
+                ('All', null),
+                ('App', RunLogSource.app),
+                ('Build', RunLogSource.tool),
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(right: FwSpacing.xs),
+                  child: _Pill(
+                    label: label,
+                    selected: _only == value,
+                    onTap: () {
+                      _only = value;
+                      // Immediately, not on the next tick: a filter that took
+                      // most of a second to answer would read as broken.
+                      _reread();
+                    },
+                  ),
+                ),
+              const Spacer(),
+              Text(
+                '${lines.length} lines',
+                style: context.type.micro.copyWith(color: context.colors.mut3),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: lines.isEmpty
+              ? _Hint(
+                  _only == RunLogSource.app
+                      ? 'The app has printed nothing. The build output is '
+                            'under Build.'
+                      : 'Nothing logged yet.',
+                )
+              // `reverse` rather than a scroll controller: it pins the view to
+              // the newest line, which is the one anybody opening a log is
+              // looking for, and keeps it pinned as more arrive. The list is
+              // indexed from the end to match, so it still reads top-to-bottom
+              // oldest-to-newest.
+              : ListView.builder(
+                  reverse: true,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FwSpacing.lg,
+                    vertical: FwSpacing.sm,
+                  ),
+                  itemCount: lines.length,
+                  itemBuilder: (context, i) =>
+                      _LogRow(lines[lines.length - 1 - i]),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LogRow extends StatelessWidget {
+  const _LogRow(this.line);
+
+  final RunLogLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: SelectableText(
+        line.text,
+        style: _mono(
+          context,
+          color: line.error
+              ? colors.red
+              : line.source == RunLogSource.app
+              ? colors.ink
+              : colors.mut2,
+        ),
+      ),
+    );
+  }
+}
+
+/// Pick a device, pick an entry point, fill its knobs, start.
+///
+/// One column, in that order, and it opens filled in with whatever ran last —
+/// so running the same thing again is opening the page and pressing Start.
+/// An earlier draft had a two-column workspace with a recents row; it was
+/// harder to follow than the four steps it was decorating.
+class _NewRunPage extends StatefulWidget {
+  const _NewRunPage({required this.core, required this.onLaunched});
+
+  final RunCore core;
+  final void Function(RunHandle) onLaunched;
+
+  @override
+  State<_NewRunPage> createState() => _NewRunPageState();
+}
+
+class _NewRunPageState extends State<_NewRunPage> {
+  String? _device;
+  ({String package, EntrypointRef entry})? _entry;
+  final _knobs = <String, TextEditingController>{};
+  final _flavor = TextEditingController();
+  var _launching = false;
+  String? _error;
+
+  RunCore get _core => widget.core;
+
+  List<({String package, EntrypointRef entry})> get _entries => [
+    for (var package in _core.packages)
+      for (var entry in _core.entrypointsFor(package))
+        (package: package, entry: entry),
+  ];
+
+  @override
+  void dispose() {
+    for (var field in _knobs.values) {
+      field.dispose();
+    }
+    _flavor.dispose();
+    super.dispose();
+  }
+
+  /// Fills the form from the last launch, and from the first plausible choice
+  /// when there has not been one.
+  void _prime() {
+    var entries = _entries;
+    if (entries.isEmpty) return;
+    var last = _core.lastLaunch;
+    _device ??=
+        last?.device ??
+        _core.devices
+            .where((d) => d.isConnected)
+            .map((d) => d.id)
+            .firstOrNull ??
+        _core.devices.firstOrNull?.id;
+    if (_entry == null) {
+      _entry =
+          entries
+              .where(
+                (e) =>
+                    e.package == last?.package &&
+                    e.entry.path == last?.entrypoint,
+              )
+              .firstOrNull ??
+          entries.first;
+      _rebuildKnobs(last?.knobs ?? const {});
+      // The entry point's declaration is the default; what was actually run
+      // last time wins over it, because overriding a flavor once usually means
+      // overriding it again.
+      _flavor.text = last?.flavor ?? _entry?.entry.flavor ?? '';
+    }
+  }
+
+  void _rebuildKnobs(Map<String, String> values) {
+    for (var field in _knobs.values) {
+      field.dispose();
+    }
+    _knobs.clear();
+    for (var knob in _entry?.entry.knobs ?? const <LaunchKnob>[]) {
+      _knobs[knob.define] = TextEditingController(
+        text: values[knob.define] ?? knob.defaultValue ?? '',
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _prime();
+    var entries = _entries;
+    if (entries.isEmpty) {
+      return const EmptyState(
+        icon: Icons.play_circle_outline,
+        title: 'No entry points',
+        message:
+            'Declare them in tool/flutterware.dart, or put a main() in '
+            'the package’s lib/.',
+      );
+    }
+    var device = _core.devices.where((d) => d.id == _device).firstOrNull;
+    // A column, not the window. Fields stretched across a desktop panel put
+    // the label and the caret a hand's width apart, and the form is a short
+    // sequence of decisions rather than a table.
+    return Align(
+      alignment: Alignment.topLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: ListView(
+          padding: const EdgeInsets.all(FwSpacing.xl),
+          children: [
+            Text('New run', style: context.type.heading),
+            const Gap(FwSpacing.lg),
+            _Field(
+              label: 'Device',
+              child: _DevicePicker(
+                devices: _core.devices,
+                selected: _device,
+                onChanged: (id) => setState(() => _device = id),
+              ),
+            ),
+            const Gap(FwSpacing.lg),
+            _Field(
+              label: 'Entry point',
+              child: _EntrypointPicker(
+                entries: entries,
+                selected: _entry,
+                onChanged: (choice) => setState(() {
+                  _entry = choice;
+                  _rebuildKnobs(const {});
+                  _flavor.text = choice.entry.flavor ?? '';
+                }),
+              ),
+            ),
+            // Always offered, not only when the entry point declared one: whether
+            // this project has flavors is not something the cockpit knows, and a
+            // flavoured project cannot be launched at all without the right word
+            // here. Empty means no `--flavor` is passed.
+            const Gap(FwSpacing.lg),
+            _Field(
+              label: 'Flavor',
+              hint:
+                  'the --flavor to build; leave empty if the project has none',
+              child: TextField(
+                controller: _flavor,
+                style: context.type.bodySmall,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  hintText: 'dev, staging…',
+                ),
+              ),
+            ),
+            if (_knobs.isNotEmpty) ...[
+              const Gap(FwSpacing.lg),
+              _Field(
+                label: 'Knobs',
+                hint: 'compiled in — changing one is a rebuild',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var knob in _entry!.entry.knobs) ...[
+                      _KnobField(
+                        knob: knob,
+                        options: _core.optionsFor(knob),
+                        controller: _knobs[knob.define]!,
+                      ),
+                      const Gap(FwSpacing.md),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            const Gap(FwSpacing.lg),
+            Row(
+              children: [
+                FilledButton(
+                  onPressed: _launching || device == null ? null : _start,
+                  child: Text(_launching ? 'Starting…' : 'Start'),
+                ),
+                const Gap(FwSpacing.md),
+                // Said before the click, not explained after it: every wireless
+                // launch in the spike stalled on an OS dialog while the tool
+                // reported only `Installing and launching…`.
+                if (device != null && device.isWireless)
+                  Flexible(
+                    child: Text(
+                      'wireless — expect a slow install, and a permission prompt '
+                      'on this Mac',
+                      style: context.type.caption.copyWith(
+                        color: context.colors.amber,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            if (_error case var error?) ...[
+              const Gap(FwSpacing.md),
+              Text(
+                error,
+                style: context.type.caption.copyWith(color: context.colors.red),
+              ),
+            ],
+            // Nothing is running, so the panel is where the desk lives for now.
+            // It belongs in the shell's chrome — only the shell can jump you to
+            // the worktree holding a busy device — but nobody who never looks up
+            // there should lose the list.
+            if (_core.handles.isEmpty) ...[
+              const Gap(FwSpacing.xl),
+              _Desk(core: _core),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _start() async {
+    var choice = _entry;
+    var device = _device;
+    if (choice == null || device == null) return;
+    var knobs = {
+      for (var entry in _knobs.entries)
+        if (entry.value.text.isNotEmpty) entry.key: entry.value.text,
+    };
+    var flavor = _flavor.text.trim();
+    setState(() {
+      _launching = true;
+      _error = null;
+    });
+    try {
+      var handle = await _core.launch(
+        device: device,
+        package: choice.package,
+        entry: choice.entry,
+        flavor: flavor.isEmpty ? null : flavor,
+        knobs: knobs,
+      );
+      _core.lastLaunch = (
+        device: device,
+        package: choice.package,
+        entrypoint: choice.entry.path,
+        flavor: flavor.isEmpty ? null : flavor,
+        knobs: knobs,
+      );
+      widget.onLaunched(handle);
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = 'Could not launch: $e');
+    } finally {
+      if (mounted) setState(() => _launching = false);
+    }
+  }
+}
+
+class _DevicePicker extends StatelessWidget {
+  const _DevicePicker({
+    required this.devices,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<DaemonDevice> devices;
+  final String? selected;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) => _Picker<String>(
+    choices: [
+      for (var device in devices)
+        _Choice(
+          value: device.id,
+          label: device.displayName,
+          detail: _detail(device),
+          // The same green the rail uses for a live run. A phone that went to
+          // sleep is still listed and is not launchable, and the row should say
+          // so before the click rather than the build after it.
+          dotColor: device.isConnected
+              ? context.colors.grn
+              : context.colors.mut3,
+          enabled: device.isConnected,
+        ),
+    ],
+    selected: selected,
+    onChanged: onChanged,
+    empty: 'No devices yet. Starting a flutter daemon takes a few seconds.',
+  );
+
+  static String _detail(DaemonDevice device) => [
+    ?device.platformType,
+    ?device.sdk,
+    if (device.kind == MachineKind.virtual) 'simulator',
+    if (device.isWireless) 'wireless',
+    if (!device.isConnected) 'not connected',
+  ].join(' · ');
+}
+
+/// A picker rather than a row of buttons.
+///
+/// Four to ten entry points as buttons is a wall; as a picker it is a line.
+/// The description is what makes it usable: `Kiosk` and `Onboarding` cannot be
+/// told apart by their file names.
+class _EntrypointPicker extends StatelessWidget {
+  const _EntrypointPicker({
+    required this.entries,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<({String package, EntrypointRef entry})> entries;
+  final ({String package, EntrypointRef entry})? selected;
+  final ValueChanged<({String package, EntrypointRef entry})> onChanged;
+
+  @override
+  Widget build(BuildContext context) => _Picker<String>(
+    choices: [
+      for (var choice in entries)
+        _Choice(
+          value: _idOf(choice),
+          label: choice.entry.name,
+          // The description when the config wrote one, the path when it did
+          // not. Never both — the path is what a description exists to replace.
+          detail: choice.entry.description ?? choice.entry.path,
+        ),
+    ],
+    selected: selected == null ? null : _idOf(selected!),
+    onChanged: (id) {
+      for (var choice in entries) {
+        if (_idOf(choice) == id) {
+          onChanged(choice);
+          return;
+        }
+      }
+    },
+    empty: 'No entry points.',
+  );
+
+  static String _idOf(({String package, EntrypointRef entry}) choice) =>
+      '${choice.package}|${choice.entry.path}';
+}
+
+/// What is on this machine, and who has it.
+///
+/// The interim home of the desk: it belongs beside the worktree tabs, because a
+/// busy device should take you to the worktree holding it and only the shell
+/// can switch worktrees. Rendered here so the list exists before that lands.
+class _Desk extends StatefulWidget {
+  const _Desk({required this.core});
+
+  final RunCore core;
+
+  @override
+  State<_Desk> createState() => _DeskState();
+}
+
+class _DeskState extends State<_Desk> {
+  /// Which emulator is being booted, so its row can say so and nobody can
+  /// press it twice into two boots of one machine.
+  final _booting = <String>{};
+
+  RunCore get core => widget.core;
+
+  @override
+  void initState() {
+    super.initState();
+    // A second round trip, asked for only when the desk is actually on screen.
+    unawaited(core.loadEmulators());
+  }
+
+  Future<void> _boot(DaemonEmulator emulator) async {
+    setState(() => _booting.add(emulator.id));
+    try {
+      await core.bootEmulator(emulator.id);
+    } on Object catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not boot ${emulator.displayName}: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _booting.remove(emulator.id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    // Only the ones not already up. `isEmulatorBooted` answers null for the
+    // daemon's single iOS entry, which is a door to the Simulator rather than a
+    // machine — that row stays, because opening the Simulator is useful whether
+    // or not something is already in it.
+    var offline = [
+      for (var emulator in core.emulators)
+        if (isEmulatorBooted(emulator, core.devices) != true) emulator,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('On this machine', style: context.type.fieldLabel),
+            const Gap(FwSpacing.sm),
+            Text(
+              core.isLive ? 'live' : 'cached',
+              style: context.type.micro.copyWith(color: colors.mut3),
+            ),
+          ],
+        ),
+        const Gap(FwSpacing.xs),
+        for (var device in core.devices)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Icon(_iconFor(device), size: 14, color: colors.mut2),
+                const Gap(FwSpacing.sm),
+                Flexible(
+                  flex: 0,
+                  child: Text(
+                    device.displayName,
+                    style: context.type.bodySmall,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Gap(FwSpacing.sm),
+                Text(
+                  _status(device, core),
+                  style: context.type.caption.copyWith(color: colors.mut2),
+                ),
+              ],
+            ),
+          ),
+        for (var emulator in offline)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Icon(Icons.phone_iphone_outlined, size: 14, color: colors.mut3),
+                const Gap(FwSpacing.sm),
+                Flexible(
+                  flex: 0,
+                  child: Text(
+                    emulator.displayName,
+                    style: context.type.bodySmall.copyWith(color: colors.mut2),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Gap(FwSpacing.sm),
+                if (_booting.contains(emulator.id))
+                  Text(
+                    'starting…',
+                    style: context.type.caption.copyWith(color: colors.mut2),
+                  )
+                else
+                  Tappable(
+                    onTap: () => _boot(emulator),
+                    child: Text(
+                      // The iOS row opens the Simulator; an AVD row boots one
+                      // machine. Different verbs because they are different
+                      // acts.
+                      emulator.platformType == 'ios' ? 'open' : 'boot',
+                      style: context.type.caption.copyWith(
+                        color: colors.accent,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// The three kinds, said in their own words — a host is never `free`,
+  /// because it was never anybody's to take.
+  static String _status(DaemonDevice device, RunCore core) {
+    var holders = [
+      for (var handle in core.handles)
+        if (handle.device == device.id) handle,
+    ];
+    if (!device.isConnected) return 'not connected';
+    if (holders.isEmpty) {
+      return device.kind == MachineKind.host ? 'not running' : 'free';
+    }
+    var first = holders.first;
+    return device.kind == MachineKind.host
+        ? 'running ${first.runLabel}'
+        : '${first.runLabel} · ${first.worktreeName}';
+  }
+
+  static IconData _iconFor(DaemonDevice device) => switch (device.kind) {
+    MachineKind.host =>
+      device.platformType == 'web'
+          ? Icons.language_outlined
+          : Icons.desktop_windows_outlined,
+    MachineKind.virtual => Icons.phone_iphone_outlined,
+    MachineKind.physical => Icons.smartphone_outlined,
+  };
+}
+
+class _Field extends StatelessWidget {
+  const _Field({required this.label, required this.child, this.hint});
+
+  final String label;
+  final String? hint;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Text(label, style: context.type.fieldLabel),
+          if (hint != null) ...[
+            const Gap(FwSpacing.sm),
+            Flexible(
+              child: Text(
+                hint!,
+                style: context.type.caption.copyWith(
+                  color: context.colors.mut3,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      const Gap(FwSpacing.xs),
+      child,
+    ],
+  );
+}
+
+/// Where a run's page goes when the run never started.
+///
+/// Left-aligned, monospaced and scrollable rather than the centred one-liner
+/// [_Failed] uses, because what goes here is a build failure: a fault, the file
+/// it is in, and often the numbered steps that fix it. Centring that turns
+/// instructions into a shrug.
+class _FailedRunPage extends StatelessWidget {
+  const _FailedRunPage({required this.failure, required this.onDismiss});
+
+  final RunFailure failure;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(FwSpacing.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.error_outline, size: 16, color: colors.red),
+              const Gap(FwSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      failure.headline ?? 'The run did not start',
+                      style: context.type.bodyStrong.copyWith(
+                        color: colors.red,
+                      ),
+                    ),
+                    const Gap(FwSpacing.xs),
+                    Text(
+                      '${failure.runLabel} on ${failure.deviceLabel} — '
+                      'never started, so nothing is holding the device.',
+                      style: context.type.bodyMuted,
+                    ),
+                  ],
+                ),
+              ),
+              const Gap(FwSpacing.sm),
+              TextButton(onPressed: onDismiss, child: const Text('Dismiss')),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(FwSpacing.md),
+            child: SelectableText(
+              failure.message,
+              style: _mono(context, color: colors.mut),
+            ),
+          ),
+        ),
+        if (failure.logPath case var path?) ...[
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(FwSpacing.sm),
+            child: SelectableText(
+              path,
+              style: context.type.micro.copyWith(color: colors.mut3),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _Failed extends StatelessWidget {
+  const _Failed(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(FwSpacing.xl),
+      child: SelectableText(
+        message,
+        textAlign: TextAlign.center,
+        style: context.type.caption.copyWith(color: context.colors.red),
+      ),
+    ),
+  );
+}
+
+class _Hint extends StatelessWidget {
+  const _Hint(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(FwSpacing.xl),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: context.type.bodyMuted,
+      ),
+    ),
+  );
+}
+
+/// A control on the run's header — icon and word, not a bare glyph.
+///
+/// Labelled because there is room and because `⚡` and `↻` beside each other
+/// are a guess: hot reload and hot restart differ by about a second and by
+/// whether your state survives, which is not something to leave to a tooltip.
+class _Action extends StatelessWidget {
+  const _Action(
+    this.label,
+    this.icon, {
+    required this.enabled,
+    required this.onPressed,
+    this.danger = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool enabled;
+  final bool danger;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var fg = !enabled
+        ? colors.mut3
+        : danger
+        ? colors.red
+        : colors.accent;
+    return Padding(
+      padding: const EdgeInsets.only(left: FwSpacing.xs),
+      child: Tappable.builder(
+        onTap: enabled ? onPressed : null,
+        builder: (context, hovered) => Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: FwSpacing.sm,
+            vertical: 5,
+          ),
+          decoration: BoxDecoration(
+            color: hovered && enabled ? colors.hoverOverlay : colors.bg,
+            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+            border: Border.all(color: colors.line),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: fg),
+              const Gap(FwSpacing.xs),
+              Text(label, style: context.type.bodySmall.copyWith(color: fg)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What to bake in before building.
+///
+/// Every knob is a text field, because a `--dart-define` is a string; the
+/// difference the tool makes is the list under it. `from: KnobSource.servers`
+/// fills that list with the base URLs of the servers running right now, and
+/// `hostAddresses` with this machine's LAN addresses — so "point the app at my
+/// dev server" is a click rather than a trip to `ifconfig`.
+class _KnobField extends StatelessWidget {
+  const _KnobField({
+    required this.knob,
+    required this.options,
+    required this.controller,
+  });
+
+  final LaunchKnob knob;
+  final List<String> options;
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(knob.label ?? knob.define, style: context.type.fieldLabel),
+        if (knob.description != null)
+          Text(knob.description!, style: context.type.caption),
+        const Gap(FwSpacing.xxs),
+        TextField(controller: controller),
+        if (options.isNotEmpty) ...[
+          const Gap(FwSpacing.xs),
+          Wrap(
+            spacing: FwSpacing.xs,
+            runSpacing: FwSpacing.xxs,
+            children: [
+              for (var option in options)
+                ActionChip(
+                  label: Text(option, style: context.type.micro),
+                  onPressed: () => controller.text = option,
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _Tag extends StatelessWidget {
+  const _Tag(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.sm,
+        vertical: 1,
+      ),
+      decoration: BoxDecoration(
+        color: colors.panel2,
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+      ),
+      child: Text(label, style: context.type.micro.copyWith(color: colors.mut)),
+    );
+  }
+}
+
+/// The panel's one mono style, matching the server panel's: machine data —
+/// log lines, paths — wears it, prose stays in the UI face.
+TextStyle _mono(BuildContext context, {Color? color}) =>
+    Theme.of(context).textTheme.bodySmall!.copyWith(
+      fontFamily: 'monospace',
+      fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
+      letterSpacing: 0,
+      fontFeatures: const [FontFeature.tabularFigures()],
+      color: color,
+    );
+
+/// One choice, as the New run page offers it: a bold name, a muted line under
+/// it, and an optional dot.
+class _Choice<T> {
+  const _Choice({
+    required this.value,
+    required this.label,
+    this.detail,
+    this.dotColor,
+    this.enabled = true,
+  });
+
+  final T value;
+  final String label;
+
+  /// What the name does not say — `ios · iOS 26.5 · wireless`, or an entry
+  /// point's description. The whole reason a picker beats a list of file names.
+  final String? detail;
+
+  final Color? dotColor;
+  final bool enabled;
+}
+
+/// The New run page's picker: a trigger that reads like a field, and a popover
+/// of rows with room for a description.
+///
+/// **Not `DropdownButtonFormField`.** Both pickers were one, which put a device
+/// and an entry point through a control with one line of text and Material 3's
+/// own paddings. The design draws a bordered box — name, detail, caret —
+/// opening onto two-line rows, and `Kiosk` and `Onboarding` are unguessable
+/// from their file names, which is the entire reason this is a picker.
+///
+/// Built on [Popover] and [PopoverMenuSurface], which this app already has:
+/// both were ported from `cms/packages/admin_ui`, which is where the shape
+/// comes from, and the scenarios panel already uses them.
+class _Picker<T> extends StatelessWidget {
+  const _Picker({
+    required this.choices,
+    required this.selected,
+    required this.onChanged,
+    required this.empty,
+  });
+
+  final List<_Choice<T>> choices;
+  final T? selected;
+  final ValueChanged<T> onChanged;
+
+  /// Said instead of an empty box — a device list still being read is a
+  /// different thing from a project with no entry points.
+  final String empty;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    if (choices.isEmpty) return Text(empty, style: context.type.bodyMuted);
+    var current = choices
+        .where((choice) => choice.value == selected)
+        .firstOrNull;
+
+    return Popover(
+      anchor: (context, controller) => Tappable.builder(
+        onTap: controller.toggle,
+        builder: (context, hovered) => Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: FwSpacing.md,
+            vertical: FwSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: colors.bg,
+            borderRadius: BorderRadius.circular(context.radii.radius),
+            border: Border.all(
+              color: controller.isOpen
+                  ? colors.accent
+                  : hovered
+                  ? colors.mut3
+                  : colors.line,
+            ),
+          ),
+          child: Row(
+            children: [
+              if (current?.dotColor case var color?) ...[
+                Icon(Icons.circle, size: 8, color: color),
+                const Gap(FwSpacing.sm),
+              ],
+              Flexible(
+                flex: 0,
+                child: Text(
+                  current?.label ?? 'Choose…',
+                  style: context.type.bodyStrong,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (current?.detail case var detail?) ...[
+                const Gap(FwSpacing.sm),
+                Flexible(
+                  child: Text(
+                    detail,
+                    style: context.type.caption.copyWith(color: colors.mut),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              const Spacer(),
+              const Gap(FwSpacing.sm),
+              Icon(Icons.expand_more, size: 16, color: colors.mut2),
+            ],
+          ),
+        ),
+      ),
+      content: (context, controller) => PopoverMenuSurface(
+        // The trigger's width, so the open list lines up under the field
+        // rather than floating at whatever its longest row wants.
+        width: controller.anchorWidth,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(FwSpacing.xs),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var choice in choices)
+                _PickerRow<T>(
+                  choice: choice,
+                  selected: choice.value == selected,
+                  onTap: () {
+                    controller.close();
+                    onChanged(choice.value);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerRow<T> extends StatelessWidget {
+  const _PickerRow({
+    required this.choice,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _Choice<T> choice;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tappable.builder(
+      onTap: choice.enabled ? onTap : null,
+      builder: (context, hovered) => Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.sm,
+          vertical: 6,
+        ),
+        decoration: BoxDecoration(
+          color: selected
+              ? colors.accentSoft
+              : hovered
+              ? colors.hoverOverlay
+              : null,
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        ),
+        child: Row(
+          children: [
+            if (choice.dotColor case var color?) ...[
+              Icon(
+                Icons.circle,
+                size: 8,
+                color: choice.enabled ? color : colors.mut3,
+              ),
+              const Gap(FwSpacing.sm),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    choice.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.type.bodySmall.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: selected
+                          ? colors.accent
+                          : choice.enabled
+                          ? colors.ink
+                          : colors.mut2,
+                    ),
+                  ),
+                  if (choice.detail case var detail?)
+                    Text(
+                      detail,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.type.micro.copyWith(color: colors.mut),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -197,6 +197,180 @@ class ServerInspection extends Plugin {
     : super('flutterware.server', label: label ?? 'Server');
 }
 
+/// Running the app on a device: what is connected, what is free, what is
+/// already running where — across every worktree of the repo, not just this
+/// one — and launching an entry point onto it.
+///
+/// ```dart
+/// fw.use(Run(packages: [
+///   RunPackage(app, entrypoints: [
+///     Entrypoint('lib/main.dart', name: 'App'),
+///     Entrypoint('lib/main_staging.dart', name: 'Staging', knobs: [
+///       LaunchKnob('API_BASE_URL', from: KnobSource.servers),
+///     ]),
+///   ]),
+/// ]));
+/// ```
+///
+/// See `docs/superpowers/specs/2026-07-31-app-launcher-cockpit-brainstorm.md`.
+///
+/// Offers no `each`, like [LauncherIcon] and for the same reason: only a
+/// package that is an app can be run onto a phone.
+class Run extends Plugin {
+  Run({this.packages = const [], String? label})
+    : super('flutterware.run', label: label ?? 'Run');
+
+  final List<RunPackage> packages;
+
+  @override
+  Map<String, Object?> get config => {
+    'packages': [for (var p in packages) p.toJson()],
+  };
+}
+
+class RunPackage extends PluginPackage {
+  const RunPackage(super.pkg, {this.entrypoints = const []});
+
+  /// The `main()`s worth launching, named.
+  ///
+  /// Empty means "scan for them": every `lib/*.dart` with a `main()` is
+  /// offered, under its file name. The scan is provisional and this list is
+  /// authority — the rule discovery already has everywhere else.
+  ///
+  /// Naming them is worth more than it looks. An agent picks an entry point
+  /// off a list, and `Staging` tells it what the thing is where
+  /// `main_staging.dart` only tells it where the thing lives.
+  final List<Entrypoint> entrypoints;
+
+  @override
+  Map<String, Object?> toJson() => {
+    ...super.toJson(),
+    if (entrypoints.isNotEmpty)
+      'entrypoints': [for (var e in entrypoints) e.toJson()],
+  };
+}
+
+/// One `main()` a package can be launched from.
+class Entrypoint {
+  const Entrypoint(
+    this.path, {
+    this.name,
+    this.description,
+    this.flavor,
+    this.knobs = const [],
+  });
+
+  /// Package-relative, `/`-separated — `lib/main_staging.dart`.
+  final String path;
+
+  /// What a human and an agent call it. The file's name when null.
+  final String? name;
+
+  /// What this entry point *is*, in a line.
+  ///
+  /// `Kiosk` and `Onboarding` are unguessable from their file names, and the
+  /// picker is where that costs you. An agent choosing between entry points
+  /// reads the same field, so it pays twice.
+  final String? description;
+
+  /// The `--flavor` this entry point is built with — `dev`, `staging`.
+  ///
+  /// **A flavoured project cannot be run without one at all.** Where a missing
+  /// `--dart-define` merely gives you the fallback value, a missing `--flavor`
+  /// on a project that declares product flavors is a hard failure before
+  /// anything is compiled: Gradle has no such variant, and Xcode has no such
+  /// scheme. So this is not a convenience — for those projects it is the
+  /// difference between an entry point that launches and one that cannot.
+  ///
+  /// Declared per entry point because that is how the pairing actually works:
+  /// `main_dev.dart` goes with `dev`, and it is the same fact twice. To run one
+  /// entry point under several flavors, declare it several times with different
+  /// [name]s, or pass `flavor` to the launch action.
+  ///
+  /// Android and Apple platforms only — `flutter run` rejects `--flavor` for
+  /// web, Linux and Windows, so leave it null for an entry point that targets
+  /// those.
+  final String? flavor;
+
+  /// What has to be decided before this can be built.
+  final List<LaunchKnob> knobs;
+
+  Map<String, Object?> toJson() => {
+    'path': path,
+    'name': ?name,
+    'description': ?description,
+    'flavor': ?flavor,
+    if (knobs.isNotEmpty) 'knobs': [for (var k in knobs) k.toJson()],
+  };
+}
+
+/// A `--dart-define` this entry point wants, offered as a control rather than
+/// as something to remember.
+///
+/// **Launch knobs are the expensive kind.** Changing one is a rebuild, because
+/// the value is compiled in. Prefer a runtime knob — a devbar variable, pushed
+/// into a running app for nothing — and reach for this only when the value has
+/// to be baked in.
+class LaunchKnob {
+  const LaunchKnob(
+    this.define, {
+    this.label,
+    this.description,
+    this.defaultValue,
+    this.options = const [],
+    this.from,
+  });
+
+  /// The define's name, as `String.fromEnvironment` reads it —
+  /// `API_BASE_URL`.
+  final String define;
+
+  /// What a human sees; [define] when absent.
+  final String? label;
+
+  final String? description;
+
+  /// Used when nobody says otherwise.
+  final String? defaultValue;
+
+  /// Values worth offering, when they are known in advance and few.
+  final List<String> options;
+
+  /// Values the tool can work out for itself, added to [options].
+  ///
+  /// This is what turns "inject the local server's address" from typing into
+  /// picking: the tool already knows what is running and what this machine is
+  /// reachable at, so the value should not have to be looked up by hand.
+  final KnobSource? from;
+
+  Map<String, Object?> toJson() => {
+    'define': define,
+    if (label != null) 'label': label,
+    if (description != null) 'description': description,
+    if (defaultValue != null) 'default': defaultValue,
+    if (options.isNotEmpty) 'options': options,
+    if (from != null) 'from': from!.name,
+  };
+}
+
+/// Where a [LaunchKnob]'s offered values are found.
+enum KnobSource {
+  /// The base URLs of the dev servers announcing themselves right now — what
+  /// `package:flutterware/server.dart` publishes in its handle.
+  servers,
+
+  /// This machine's addresses on the local network. What a phone has to be
+  /// told, since `localhost` on a phone is the phone.
+  hostAddresses;
+
+  static KnobSource? byName(String name) {
+    for (var value in values) {
+      if (value.name == name) return value;
+    }
+    return null;
+  }
+}
+
 /// The launcher-icon editor. Only meaningful for packages that are apps, so it
 /// deliberately offers no `each` — naming them is the point.
 class LauncherIcon extends Plugin {

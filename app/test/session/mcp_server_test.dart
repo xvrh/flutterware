@@ -22,6 +22,7 @@ const _declaredPlugins = [
   'flutterware.ui_catalog',
   'flutterware.splash',
   'flutterware.server',
+  'flutterware.run',
   'flutterware.scenarios',
 ];
 

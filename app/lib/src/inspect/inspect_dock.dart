@@ -130,53 +130,114 @@ class _InspectDockState extends State<InspectDock> {
   }
 
   Widget _strip(BuildContext context) {
-    return Container(
-      height: _stripHeight,
-      color: context.colors.panel,
-      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
-      child: Row(
-        children: [
-          ?widget.leading,
-          // Scrolls rather than overflows: the panel is as narrow as its
-          // window allows, and a tab strip that paints Flutter's stripes over
-          // itself in an inspector is a poor advertisement.
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (var tab in widget.tabs)
-                    _Tab(
-                      label: tab.label,
-                      selected: !widget.collapsed && tab.id == widget.current,
-                      badge: tab.badge,
-                      onTap: () {
-                        // Clicking the tab you are on is how you get the
-                        // panel back without hunting for the chevron.
-                        if (tab.id == widget.current && !widget.collapsed) {
-                          widget.onChanged(widget.current, true);
-                        } else {
-                          widget.onChanged(tab.id, false);
-                        }
-                      },
-                    ),
-                ],
+    return InspectTabStrip(
+      tabs: widget.tabs,
+      // Null while collapsed: no tab is open, so none of them is lit.
+      current: widget.collapsed ? null : widget.current,
+      onSelect: (id) {
+        // Clicking the tab you are on is how you get the panel back without
+        // hunting for the chevron.
+        if (id == widget.current && !widget.collapsed) {
+          widget.onChanged(widget.current, true);
+        } else {
+          widget.onChanged(id, false);
+        }
+      },
+      leading: widget.leading,
+      trailing: [
+        if (!widget.collapsed)
+          if (widget.onRefresh case var refresh?)
+            InspectStripButton(
+              icon: Icons.refresh,
+              tooltip: 'Read it all again',
+              onTap: () => refresh(),
+            ),
+        InspectStripButton(
+          icon: widget.collapsed ? Icons.expand_less : Icons.expand_more,
+          tooltip: widget.collapsed ? 'Show the panel' : 'Hide the panel',
+          onTap: () => widget.onChanged(widget.current, !widget.collapsed),
+        ),
+      ],
+    );
+  }
+}
+
+/// The tab strip on its own, without the dock around it.
+///
+/// Split out because a host can want these tabs at the *top* of a pane rather
+/// than docked under a canvas — the run cockpit's run page is the first, and
+/// its own hand-rolled row of `TextButton`s was the reason: three surfaces
+/// showing a widget tree, two of them matching and one of them not.
+///
+/// [InspectDock] is now a composition of this, a drag grip and a sized body,
+/// so what ui_catalog and scenarios draw is unchanged.
+class InspectTabStrip extends StatelessWidget {
+  const InspectTabStrip({
+    super.key,
+    required this.tabs,
+    required this.current,
+    required this.onSelect,
+    this.leading,
+    this.trailing = const [],
+  });
+
+  /// Only [InspectDockTab.id], [InspectDockTab.label] and
+  /// [InspectDockTab.badge] are read here — a strip does not build bodies.
+  final List<InspectDockTab> tabs;
+
+  /// The open tab's id, or null for none — which is what the dock passes while
+  /// it is collapsed.
+  final String? current;
+
+  final void Function(String id) onSelect;
+
+  /// Before the tabs. Not a tab because it is not one: it changes what the
+  /// surface around the strip does.
+  final Widget? leading;
+
+  /// After them, hard right — a refresh, a collapse chevron.
+  final List<Widget> trailing;
+
+  static const height = _InspectDockState._stripHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    // Its own (invisible) Material, for the same reason [InspectDock] has one
+    // and now more so: the tabs are `InkWell`s, and once the strip could be
+    // used *outside* the dock it stopped inheriting the dock's. It happened to
+    // work in the shell, which has one somewhere above — which is precisely
+    // the gamble a reusable widget should not be taking.
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        height: height,
+        color: context.colors.panel,
+        padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+        child: Row(
+          children: [
+            ?leading,
+            // Scrolls rather than overflows: the panel is as narrow as its
+            // window allows, and a tab strip that paints Flutter's stripes over
+            // itself in an inspector is a poor advertisement.
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (var tab in tabs)
+                      _Tab(
+                        label: tab.label,
+                        selected: tab.id == current,
+                        badge: tab.badge,
+                        onTap: () => onSelect(tab.id),
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-          if (!widget.collapsed)
-            if (widget.onRefresh case var refresh?)
-              InspectStripButton(
-                icon: Icons.refresh,
-                tooltip: 'Read it all again',
-                onTap: () => refresh(),
-              ),
-          InspectStripButton(
-            icon: widget.collapsed ? Icons.expand_less : Icons.expand_more,
-            tooltip: widget.collapsed ? 'Show the panel' : 'Hide the panel',
-            onTap: () => widget.onChanged(widget.current, !widget.collapsed),
-          ),
-        ],
+            ...trailing,
+          ],
+        ),
       ),
     );
   }
@@ -191,15 +252,47 @@ class _Grip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var line = Container(height: 1, color: context.colors.line);
-    if (!enabled) return line;
+    if (!enabled) return Container(height: 1, color: context.colors.line);
+    return InspectSplitGrip(axis: Axis.horizontal, onDrag: onDrag);
+  }
+}
+
+/// A one-pixel rule you can drag, with a hit area wider than it is.
+///
+/// Shared because three panes now sit beside or above each other on this
+/// surface — the dock over its canvas, the tree beside its detail, and the run
+/// page's picture beside both — and a grip that behaves differently in one of
+/// them is a grip somebody has to learn twice.
+class InspectSplitGrip extends StatelessWidget {
+  const InspectSplitGrip({super.key, required this.axis, required this.onDrag});
+
+  /// The axis of the *rule*, not of the drag: [Axis.horizontal] is a
+  /// left-to-right line you drag up and down.
+  final Axis axis;
+
+  final void Function(double delta) onDrag;
+
+  @override
+  Widget build(BuildContext context) {
+    var line = axis == Axis.horizontal
+        ? Container(height: 1, color: context.colors.line)
+        : Container(width: 1, color: context.colors.line);
     return MouseRegion(
-      cursor: SystemMouseCursors.resizeUpDown,
+      cursor: axis == Axis.horizontal
+          ? SystemMouseCursors.resizeUpDown
+          : SystemMouseCursors.resizeLeftRight,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onVerticalDragUpdate: (event) => onDrag(event.delta.dy),
+        onVerticalDragUpdate: axis == Axis.horizontal
+            ? (event) => onDrag(event.delta.dy)
+            : null,
+        onHorizontalDragUpdate: axis == Axis.vertical
+            ? (event) => onDrag(event.delta.dx)
+            : null,
         // The line is one pixel; the thing you have to hit is not.
-        child: SizedBox(height: 7, child: Center(child: line)),
+        child: axis == Axis.horizontal
+            ? SizedBox(height: 7, child: Center(child: line))
+            : SizedBox(width: 7, child: Center(child: line)),
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/ui_catalog_guest.dart';
 
 import '../address/address_scope.dart';
+import 'inspect_dock.dart';
 import '../ui/theme.dart';
 
 /// Tree on the left, the selected node's detail on the right — the Elements
@@ -70,71 +71,52 @@ class _ElementsViewState extends State<ElementsView> {
         ? null
         : InspectTree(entryId: null, root: root).nodeAt(selectedId);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        var treeWidth = (constraints.maxWidth * _split)
-            .clamp(200.0, math.max(200.0, constraints.maxWidth - 220))
-            .toDouble();
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              width: treeWidth,
-              child: _TreeView(
-                root: root,
-                selectedId: selectedId,
-                highlight: widget.highlight,
+    // Its own (invisible) Material: the tree rows are `InkWell`s, and this was
+    // inheriting one from [InspectDock] purely because both hosts happened to
+    // put it there. The run cockpit uses it outside a dock, which is where a
+    // borrowed ancestor stops arriving.
+    return Material(
+      type: MaterialType.transparency,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          var treeWidth = (constraints.maxWidth * _split)
+              .clamp(200.0, math.max(200.0, constraints.maxWidth - 220))
+              .toDouble();
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: treeWidth,
+                child: _TreeView(
+                  root: root,
+                  selectedId: selectedId,
+                  highlight: widget.highlight,
+                ),
               ),
-            ),
-            _SplitGrip(
-              onDrag: (delta) => setState(() {
-                _split = ((treeWidth + delta) / constraints.maxWidth).clamp(
-                  0.2,
-                  0.85,
-                );
-              }),
-            ),
-            Expanded(
-              child: _Detail(
-                node: selected,
-                selectedId: selectedId,
-                displayRoot: widget.displayRoot,
+              InspectSplitGrip(
+                axis: Axis.vertical,
+                onDrag: (delta) => setState(() {
+                  _split = ((treeWidth + delta) / constraints.maxWidth).clamp(
+                    0.2,
+                    0.85,
+                  );
+                }),
               ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _SplitGrip extends StatelessWidget {
-  const _SplitGrip({required this.onDrag});
-
-  final void Function(double delta) onDrag;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.resizeLeftRight,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (event) => onDrag(event.delta.dx),
-        child: SizedBox(
-          width: 7,
-          child: Center(child: Container(width: 1, color: context.colors.line)),
-        ),
+              Expanded(
+                child: _Detail(
+                  node: selected,
+                  selectedId: selectedId,
+                  displayRoot: widget.displayRoot,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-/// The widget tree, indented.
-///
-/// Folded state is tracked by what has been **closed**, the same way the entry
-/// browser does it: a node that appears after a reload is then open like
-/// everything around it, where an opened-set would hide new work until
-/// somebody thought to look for it.
 class _TreeView extends StatefulWidget {
   const _TreeView({
     required this.root,

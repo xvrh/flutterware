@@ -1774,6 +1774,1058 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'RunAppEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunAppEntry',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{
+        'name': 'deviceName',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'worktree',
+        'type': 'String',
+        'doc': 'The worktree name — `~` for the main checkout.',
+      },
+      <String, Object?>{
+        'name': 'mine',
+        'type': 'bool',
+        'doc': 'True when that worktree is the one this call was made from.',
+      },
+      <String, Object?>{'name': 'package', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{
+        'name': 'entrypointName',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'knobs',
+        'type': 'Map<String, String>',
+        'doc': 'The dart-defines it was built with.',
+      },
+      <String, Object?>{
+        'name': 'since',
+        'type': 'String',
+        'doc': 'When it started, ISO-8601.',
+      },
+      <String, Object?>{
+        'name': 'app',
+        'type': 'bool',
+        'doc':
+            'The app answered on its VM service — it can be inspected and driven.',
+      },
+      <String, Object?>{
+        'name': 'launcher',
+        'type': 'bool',
+        'doc':
+            'The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.',
+      },
+      <String, Object?>{
+        'name': 'vmService',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'log',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Where the launcher\'s output is being written, for a client that arrived after the interesting part scrolled past.',
+      },
+      <String, Object?>{
+        'name': 'error',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.',
+      },
+    ],
+  }),
+  'RunAppsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunAppsResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'apps',
+        'type': 'List<RunAppEntry>',
+        'shape': <String, Object?>{
+          'type': 'RunAppEntry',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'device', 'type': 'String'},
+            <String, Object?>{
+              'name': 'deviceName',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'worktree',
+              'type': 'String',
+              'doc': 'The worktree name — `~` for the main checkout.',
+            },
+            <String, Object?>{
+              'name': 'mine',
+              'type': 'bool',
+              'doc':
+                  'True when that worktree is the one this call was made from.',
+            },
+            <String, Object?>{
+              'name': 'package',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+            <String, Object?>{
+              'name': 'entrypointName',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'knobs',
+              'type': 'Map<String, String>',
+              'doc': 'The dart-defines it was built with.',
+            },
+            <String, Object?>{
+              'name': 'since',
+              'type': 'String',
+              'doc': 'When it started, ISO-8601.',
+            },
+            <String, Object?>{
+              'name': 'app',
+              'type': 'bool',
+              'doc':
+                  'The app answered on its VM service — it can be inspected and driven.',
+            },
+            <String, Object?>{
+              'name': 'launcher',
+              'type': 'bool',
+              'doc':
+                  'The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.',
+            },
+            <String, Object?>{
+              'name': 'vmService',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'log',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Where the launcher\'s output is being written, for a client that arrived after the interesting part scrolled past.',
+            },
+            <String, Object?>{
+              'name': 'error',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'swept',
+        'type': 'int',
+        'doc':
+            'Handles deleted during this call because nothing answered them.',
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunBootResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunBootResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'emulator', 'type': 'String'},
+      <String, Object?>{
+        'name': 'started',
+        'type': 'bool',
+        'doc': 'The daemon accepted the launch.',
+      },
+      <String, Object?>{
+        'name': 'device',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The device id it appeared as, once it did.',
+      },
+      <String, Object?>{
+        'name': 'deviceName',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{'name': 'ms', 'type': 'int'},
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunControlResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunControlResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'action',
+        'type': 'String',
+        'doc': '`reload`, `restart` or `stop`.',
+      },
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
+      <String, Object?>{
+        'name': 'ms',
+        'type': 'int',
+        'doc':
+            'Wall time, which is the number that decides whether this is worth doing instead of relaunching: a hot restart is about a second where a warm relaunch is ten on Android and twenty-three on a cabled iPhone.',
+      },
+      <String, Object?>{'name': 'error', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunDeviceEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunDeviceEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'id',
+        'type': 'String',
+        'doc': 'What `flutter run -d` takes.',
+      },
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{
+        'name': 'platform',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            '`ios`, `android`, `macos`, `web` — the family, not the architecture.',
+      },
+      <String, Object?>{
+        'name': 'sdk',
+        'type': 'String',
+        'optional': true,
+        'doc': '`iOS 18.5`, `Android 12 (API 31)`.',
+      },
+      <String, Object?>{'name': 'emulator', 'type': 'bool'},
+      <String, Object?>{
+        'name': 'physical',
+        'type': 'bool',
+        'doc':
+            'False for the always-there targets — this desktop, the browser — which cannot be unplugged and are never contended for in the way a phone is.',
+      },
+      <String, Object?>{
+        'name': 'kind',
+        'type': 'String',
+        'doc':
+            '`physical`, `virtual` or `host` — the distinction [physical] cannot make on its own.',
+      },
+      <String, Object?>{
+        'name': 'connected',
+        'type': 'bool',
+        'doc': 'Known but not reachable right now.',
+      },
+      <String, Object?>{
+        'name': 'connection',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            '`attached` for a cable or a built-in target, `wireless` over the network.',
+      },
+      <String, Object?>{
+        'name': 'running',
+        'type': 'List<RunHolder>',
+        'doc': 'The runs currently holding this device, from any worktree.',
+        'shape': <String, Object?>{
+          'type': 'RunHolder',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'worktree',
+              'type': 'String',
+              'doc': 'The worktree name — `~` for the main checkout.',
+            },
+            <String, Object?>{
+              'name': 'entrypoint',
+              'type': 'String',
+              'doc': 'Package-relative entry point, `lib/main.dart`.',
+            },
+            <String, Object?>{
+              'name': 'entrypointName',
+              'type': 'String',
+              'optional': true,
+              'doc': 'Its declared name, when it has one.',
+            },
+            <String, Object?>{
+              'name': 'package',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The package, relative to the worktree.',
+            },
+            <String, Object?>{
+              'name': 'since',
+              'type': 'String',
+              'doc': 'When the run started, ISO-8601.',
+            },
+            <String, Object?>{
+              'name': 'canReload',
+              'type': 'bool',
+              'doc':
+                  'Reload and restart are still on offer — meaning both the app and the `flutter run` that launched it are alive.',
+            },
+            <String, Object?>{
+              'name': 'canInspect',
+              'type': 'bool',
+              'doc':
+                  'The app answers on its VM service: it can be inspected and driven even if its launcher is gone.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'RunDevicesResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunDevicesResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'devices',
+        'type': 'List<RunDeviceEntry>',
+        'shape': <String, Object?>{
+          'type': 'RunDeviceEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'id',
+              'type': 'String',
+              'doc': 'What `flutter run -d` takes.',
+            },
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'platform',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  '`ios`, `android`, `macos`, `web` — the family, not the architecture.',
+            },
+            <String, Object?>{
+              'name': 'sdk',
+              'type': 'String',
+              'optional': true,
+              'doc': '`iOS 18.5`, `Android 12 (API 31)`.',
+            },
+            <String, Object?>{'name': 'emulator', 'type': 'bool'},
+            <String, Object?>{
+              'name': 'physical',
+              'type': 'bool',
+              'doc':
+                  'False for the always-there targets — this desktop, the browser — which cannot be unplugged and are never contended for in the way a phone is.',
+            },
+            <String, Object?>{
+              'name': 'kind',
+              'type': 'String',
+              'doc':
+                  '`physical`, `virtual` or `host` — the distinction [physical] cannot make on its own.',
+            },
+            <String, Object?>{
+              'name': 'connected',
+              'type': 'bool',
+              'doc': 'Known but not reachable right now.',
+            },
+            <String, Object?>{
+              'name': 'connection',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  '`attached` for a cable or a built-in target, `wireless` over the network.',
+            },
+            <String, Object?>{
+              'name': 'running',
+              'type': 'List<RunHolder>',
+              'doc':
+                  'The runs currently holding this device, from any worktree.',
+              'shape': <String, Object?>{
+                'type': 'RunHolder',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'worktree',
+                    'type': 'String',
+                    'doc': 'The worktree name — `~` for the main checkout.',
+                  },
+                  <String, Object?>{
+                    'name': 'entrypoint',
+                    'type': 'String',
+                    'doc': 'Package-relative entry point, `lib/main.dart`.',
+                  },
+                  <String, Object?>{
+                    'name': 'entrypointName',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'Its declared name, when it has one.',
+                  },
+                  <String, Object?>{
+                    'name': 'package',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'The package, relative to the worktree.',
+                  },
+                  <String, Object?>{
+                    'name': 'since',
+                    'type': 'String',
+                    'doc': 'When the run started, ISO-8601.',
+                  },
+                  <String, Object?>{
+                    'name': 'canReload',
+                    'type': 'bool',
+                    'doc':
+                        'Reload and restart are still on offer — meaning both the app and the `flutter run` that launched it are alive.',
+                  },
+                  <String, Object?>{
+                    'name': 'canInspect',
+                    'type': 'bool',
+                    'doc':
+                        'The app answers on its VM service: it can be inspected and driven even if its launcher is gone.',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'live',
+        'type': 'bool',
+        'doc':
+            'True when a `flutter daemon` is running in this process, so the list is what it saw rather than what somebody wrote down earlier.',
+      },
+      <String, Object?>{
+        'name': 'updatedAt',
+        'type': 'String',
+        'optional': true,
+        'doc': 'When the list was taken, ISO-8601.',
+      },
+      <String, Object?>{
+        'name': 'age',
+        'type': 'String',
+        'optional': true,
+        'doc': '[updatedAt] as a phrase — `just now`, `12m ago`.',
+      },
+      <String, Object?>{
+        'name': 'note',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Said out loud when the list is empty or stale enough to explain, rather than left for the caller to infer from an empty array.',
+      },
+    ],
+  }),
+  'RunEmulatorEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunEmulatorEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'id',
+        'type': 'String',
+        'doc': 'What `bootEmulator` takes.',
+      },
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{
+        'name': 'platform',
+        'type': 'String',
+        'optional': true,
+        'doc': '`ios` or `android`.',
+      },
+      <String, Object?>{
+        'name': 'booted',
+        'type': 'bool',
+        'optional': true,
+        'doc':
+            'True when it is already up, false when it is not — and **null when the question has no answer for this row**.',
+      },
+    ],
+  }),
+  'RunEmulatorsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunEmulatorsResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'emulators',
+        'type': 'List<RunEmulatorEntry>',
+        'shape': <String, Object?>{
+          'type': 'RunEmulatorEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'id',
+              'type': 'String',
+              'doc': 'What `bootEmulator` takes.',
+            },
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'platform',
+              'type': 'String',
+              'optional': true,
+              'doc': '`ios` or `android`.',
+            },
+            <String, Object?>{
+              'name': 'booted',
+              'type': 'bool',
+              'optional': true,
+              'doc':
+                  'True when it is already up, false when it is not — and **null when the question has no answer for this row**.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunEntrypointEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunEntrypointEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'path',
+        'type': 'String',
+        'doc': 'Package-relative — what `launch` takes as its `entrypoint`.',
+      },
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{
+        'name': 'description',
+        'type': 'String',
+        'optional': true,
+        'doc': 'What it is, in a line, when the config said.',
+      },
+      <String, Object?>{
+        'name': 'flavor',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The `--flavor` this entry point declares, when the project has them.',
+      },
+      <String, Object?>{
+        'name': 'knobs',
+        'type': 'List<RunKnobEntry>',
+        'shape': <String, Object?>{
+          'type': 'RunKnobEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'define',
+              'type': 'String',
+              'doc':
+                  'The define\'s name, as `String.fromEnvironment` reads it.',
+            },
+            <String, Object?>{
+              'name': 'label',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'description',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'default',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'options',
+              'type': 'List<String>',
+              'doc':
+                  'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'RunEntrypointPackage': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunEntrypointPackage',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'path',
+        'type': 'String',
+        'doc': 'Package path, relative to the worktree.',
+      },
+      <String, Object?>{
+        'name': 'declared',
+        'type': 'bool',
+        'doc':
+            'True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.',
+      },
+      <String, Object?>{
+        'name': 'entrypoints',
+        'type': 'List<RunEntrypointEntry>',
+        'shape': <String, Object?>{
+          'type': 'RunEntrypointEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'path',
+              'type': 'String',
+              'doc':
+                  'Package-relative — what `launch` takes as its `entrypoint`.',
+            },
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'description',
+              'type': 'String',
+              'optional': true,
+              'doc': 'What it is, in a line, when the config said.',
+            },
+            <String, Object?>{
+              'name': 'flavor',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The `--flavor` this entry point declares, when the project has them.',
+            },
+            <String, Object?>{
+              'name': 'knobs',
+              'type': 'List<RunKnobEntry>',
+              'shape': <String, Object?>{
+                'type': 'RunKnobEntry',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'define',
+                    'type': 'String',
+                    'doc':
+                        'The define\'s name, as `String.fromEnvironment` reads it.',
+                  },
+                  <String, Object?>{
+                    'name': 'label',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'description',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'default',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'options',
+                    'type': 'List<String>',
+                    'doc':
+                        'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'RunEntrypointsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunEntrypointsResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'packages',
+        'type': 'List<RunEntrypointPackage>',
+        'shape': <String, Object?>{
+          'type': 'RunEntrypointPackage',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'path',
+              'type': 'String',
+              'doc': 'Package path, relative to the worktree.',
+            },
+            <String, Object?>{
+              'name': 'declared',
+              'type': 'bool',
+              'doc':
+                  'True when `tool/flutterware.dart` listed these, false when they came from scanning `lib/`.',
+            },
+            <String, Object?>{
+              'name': 'entrypoints',
+              'type': 'List<RunEntrypointEntry>',
+              'shape': <String, Object?>{
+                'type': 'RunEntrypointEntry',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'path',
+                    'type': 'String',
+                    'doc':
+                        'Package-relative — what `launch` takes as its `entrypoint`.',
+                  },
+                  <String, Object?>{'name': 'name', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'description',
+                    'type': 'String',
+                    'optional': true,
+                    'doc': 'What it is, in a line, when the config said.',
+                  },
+                  <String, Object?>{
+                    'name': 'flavor',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The `--flavor` this entry point declares, when the project has them.',
+                  },
+                  <String, Object?>{
+                    'name': 'knobs',
+                    'type': 'List<RunKnobEntry>',
+                    'shape': <String, Object?>{
+                      'type': 'RunKnobEntry',
+                      'fields': <Object?>[
+                        <String, Object?>{
+                          'name': 'define',
+                          'type': 'String',
+                          'doc':
+                              'The define\'s name, as `String.fromEnvironment` reads it.',
+                        },
+                        <String, Object?>{
+                          'name': 'label',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'description',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'default',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'options',
+                          'type': 'List<String>',
+                          'doc':
+                              'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunHolder': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunHolder',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'worktree',
+        'type': 'String',
+        'doc': 'The worktree name — `~` for the main checkout.',
+      },
+      <String, Object?>{
+        'name': 'entrypoint',
+        'type': 'String',
+        'doc': 'Package-relative entry point, `lib/main.dart`.',
+      },
+      <String, Object?>{
+        'name': 'entrypointName',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Its declared name, when it has one.',
+      },
+      <String, Object?>{
+        'name': 'package',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The package, relative to the worktree.',
+      },
+      <String, Object?>{
+        'name': 'since',
+        'type': 'String',
+        'doc': 'When the run started, ISO-8601.',
+      },
+      <String, Object?>{
+        'name': 'canReload',
+        'type': 'bool',
+        'doc':
+            'Reload and restart are still on offer — meaning both the app and the `flutter run` that launched it are alive.',
+      },
+      <String, Object?>{
+        'name': 'canInspect',
+        'type': 'bool',
+        'doc':
+            'The app answers on its VM service: it can be inspected and driven even if its launcher is gone.',
+      },
+    ],
+  }),
+  'RunInspectResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunInspectResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{
+        'name': 'worktree',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The worktree holding it, and whether that is the one asking.',
+      },
+      <String, Object?>{'name': 'mine', 'type': 'bool', 'optional': true},
+      <String, Object?>{
+        'name': 'up',
+        'type': 'bool',
+        'doc':
+            'The app answered its VM service, so the tree and the picture are available.',
+      },
+      <String, Object?>{
+        'name': 'reloadable',
+        'type': 'bool',
+        'doc':
+            'The `flutter run` that launched it is alive, so it can still be reloaded.',
+      },
+      <String, Object?>{
+        'name': 'progress',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The launcher\'s most recent progress line, when it is still building — the only narration a ninety-second build has.',
+      },
+      <String, Object?>{
+        'name': 'tree',
+        'type': 'Map<String, Object?>',
+        'optional': true,
+        'doc': 'The widget tree, when asked for.',
+      },
+      <String, Object?>{
+        'name': 'nodes',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'How many nodes it has, so a caller can tell an empty answer from a small one without walking it.',
+      },
+      <String, Object?>{
+        'name': 'summary',
+        'type': 'bool',
+        'optional': true,
+        'doc':
+            'False when the whole tree was asked for rather than the summary.',
+      },
+      <String, Object?>{
+        'name': 'screenshot',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Where the PNG was written, when one was asked for.',
+      },
+      <String, Object?>{
+        'name': 'logs',
+        'type': 'List<RunLogEntry>',
+        'optional': true,
+        'doc': 'Log lines, when asked for.',
+        'shape': <String, Object?>{
+          'type': 'RunLogEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'source',
+              'type': 'String',
+              'doc':
+                  '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+            },
+            <String, Object?>{'name': 'text', 'type': 'String'},
+            <String, Object?>{
+              'name': 'error',
+              'type': 'bool',
+              'doc': 'The launcher marked it as an error.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'logLines',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How many lines matched before [logs] was cut to the tail.',
+      },
+      <String, Object?>{
+        'name': 'errors',
+        'type': 'List<RunLogEntry>',
+        'optional': true,
+        'doc': 'Lines the launcher marked as errors.',
+        'shape': <String, Object?>{
+          'type': 'RunLogEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'source',
+              'type': 'String',
+              'doc':
+                  '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+            },
+            <String, Object?>{'name': 'text', 'type': 'String'},
+            <String, Object?>{
+              'name': 'error',
+              'type': 'bool',
+              'doc': 'The launcher marked it as an error.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'log',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The launcher\'s log file, for anyone who would rather tail it themselves.',
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunKnobEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunKnobEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'define',
+        'type': 'String',
+        'doc': 'The define\'s name, as `String.fromEnvironment` reads it.',
+      },
+      <String, Object?>{'name': 'label', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'description',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{'name': 'default', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'options',
+        'type': 'List<String>',
+        'doc':
+            'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+      },
+    ],
+  }),
+  'RunLaunchResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunLaunchResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'app',
+        'type': 'RunAppEntry',
+        'doc':
+            'The run as the ledger now holds it — the same shape `apps` reports.',
+        'shape': <String, Object?>{
+          'type': 'RunAppEntry',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'device', 'type': 'String'},
+            <String, Object?>{
+              'name': 'deviceName',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'worktree',
+              'type': 'String',
+              'doc': 'The worktree name — `~` for the main checkout.',
+            },
+            <String, Object?>{
+              'name': 'mine',
+              'type': 'bool',
+              'doc':
+                  'True when that worktree is the one this call was made from.',
+            },
+            <String, Object?>{
+              'name': 'package',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+            <String, Object?>{
+              'name': 'entrypointName',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'knobs',
+              'type': 'Map<String, String>',
+              'doc': 'The dart-defines it was built with.',
+            },
+            <String, Object?>{
+              'name': 'since',
+              'type': 'String',
+              'doc': 'When it started, ISO-8601.',
+            },
+            <String, Object?>{
+              'name': 'app',
+              'type': 'bool',
+              'doc':
+                  'The app answered on its VM service — it can be inspected and driven.',
+            },
+            <String, Object?>{
+              'name': 'launcher',
+              'type': 'bool',
+              'doc':
+                  'The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.',
+            },
+            <String, Object?>{
+              'name': 'vmService',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'log',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Where the launcher\'s output is being written, for a client that arrived after the interesting part scrolled past.',
+            },
+            <String, Object?>{
+              'name': 'error',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Why the app did not answer, when it did not — a live launcher with a silent app is a real state, and the reason is the only lead.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'status',
+        'type': 'String',
+        'doc': '`running`, `starting`, `stopped`, or `failed`.',
+      },
+      <String, Object?>{
+        'name': 'waited',
+        'type': 'bool',
+        'doc':
+            'False when the call returned without waiting for the app to come up, so [status] is what was true a moment after spawning and nothing more.',
+      },
+      <String, Object?>{
+        'name': 'progress',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The launcher\'s most recent narration — `Installing and launching…`.',
+      },
+      <String, Object?>{
+        'name': 'error',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Why it failed, in the launcher\'s own words and in full.',
+      },
+      <String, Object?>{
+        'name': 'headline',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            '[error]\'s first line that names a fault, for a row with no room for the rest.',
+      },
+      <String, Object?>{
+        'name': 'logPath',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Where the whole thing is, since [error] is bounded and a launcher that died in an unusual way may have put the interesting part above the cut.',
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunLogEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunLogEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'source',
+        'type': 'String',
+        'doc':
+            '`app` for what the app printed, `tool` for what `flutter run` said about itself.',
+      },
+      <String, Object?>{'name': 'text', 'type': 'String'},
+      <String, Object?>{
+        'name': 'error',
+        'type': 'bool',
+        'doc': 'The launcher marked it as an error.',
+      },
+    ],
+  }),
   'ScenarioListEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'ScenarioListEntry',
     'fields': <Object?>[
