@@ -6,10 +6,12 @@ import 'package:collection/collection.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
+import '../../catalog/catalog_entry.dart';
 import '../../catalog/devices.dart';
 import '../../catalog/headless_catalog.dart';
 import '../../catalog/protocol.dart';
 import '../../motion/discovery.dart';
+import '../../motion/filmstrip.dart';
 import '../../motion/values_file.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
@@ -214,6 +216,49 @@ class MotionCore extends PluginCore {
         ],
       ),
       PluginAction(
+        'filmstrip',
+        'Filmstrip',
+        returns: Artifact,
+        description:
+            'Renders a motion at several points on its playhead and composes '
+            'them into one contact sheet. This is how to look at an animation '
+            'without watching it: one image, N moments, each labelled with its '
+            't and its milliseconds.',
+        parameters: [
+          ActionParameter(
+            'motion',
+            'Motion',
+            required: true,
+            description: 'The `motion:` identifier, as `list` reports it',
+          ),
+          const ActionParameter(
+            'frames',
+            'Frames',
+            kind: ActionParameterKind.integer,
+            required: false,
+            description: 'How many, including both ends. 5 when omitted.',
+          ),
+          ActionParameter(
+            'package',
+            'Package',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'Which declared package; the only one when omitted',
+            options: [
+              for (var path in packages)
+                ActionOption(path, label: path == '.' ? 'root' : path),
+            ],
+          ),
+          const ActionParameter(
+            'device',
+            'Device',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'A device to render as; the panel otherwise',
+          ),
+        ],
+      ),
+      PluginAction(
         'list',
         'List',
         returns: MotionListResult,
@@ -245,6 +290,7 @@ class MotionCore extends PluginCore {
     Map<String, Object?> arguments = const {},
   }) async {
     if (actionId == 'capture') return _capture(arguments);
+    if (actionId == 'filmstrip') return _filmstrip(arguments);
     if (actionId != 'list') return super.invoke(actionId, arguments: arguments);
     var wanted = _requestedPackages(arguments['package']);
     for (var path in wanted) {
@@ -262,10 +308,6 @@ class MotionCore extends PluginCore {
   /// answers the same whether a panel is open or nothing is running at all —
   /// the rule the catalog's headless half already keeps.
   Future<Artifact> _capture(Map<String, Object?> arguments) async {
-    var wanted = '${arguments['motion'] ?? ''}';
-    if (wanted.isEmpty) {
-      throw ArgumentError.value(wanted, 'motion', 'name a motion');
-    }
     var t = switch (arguments['t']) {
       num value => value.toDouble().clamp(0.0, 1.0),
       String text when double.tryParse(text) != null => double.parse(
@@ -275,42 +317,8 @@ class MotionCore extends PluginCore {
       // usually being asked for.
       _ => 1.0,
     };
-
-    var packagePath = _requestedPackages(arguments['package']).first;
-    track(packagePath);
-    await _scans[packagePath];
-
-    var motion = _results[packagePath]?.motions.firstWhereOrNull(
-      (candidate) => candidate.values == wanted,
-    );
-    if (motion == null) {
-      var known = _results[packagePath]?.motions
-          .map((m) => m.values)
-          .nonNulls
-          .join(', ');
-      throw ArgumentError.value(
-        wanted,
-        'motion',
-        'not found in $packagePath; try ${known?.isEmpty ?? true ? 'none' : known}',
-      );
-    }
-
-    var catalog = _headless(packagePath);
-    // The entry whose source file is the one the motion was scanned from —
-    // the same join the panel makes, so the picture and the panel agree.
-    var audit = await catalog.auditAll();
-    var entry = audit.entries.firstWhereOrNull((e) => e.path == motion.file);
-    if (entry == null) {
-      throw StateError(
-        '`${motion.values}` lives in ${motion.file}, which is not a catalog '
-        'entry — a motion is captured through the demo that mounts it',
-      );
-    }
-
-    var device = switch (arguments['device']) {
-      String id when id.isNotEmpty && isDeviceId(id) => deviceById(id),
-      _ => null,
-    };
+    var (packagePath, motion, entry, catalog) = await _resolve(arguments);
+    var device = _deviceOf(arguments);
     var output = p.join(
       host.workspace.appContext.appToolDirectory.path,
       'build',
@@ -345,6 +353,100 @@ class MotionCore extends PluginCore {
         'device': ?device?.id,
       },
     );
+  }
+
+  /// Several frames of a motion, as one sheet.
+  Future<Artifact> _filmstrip(Map<String, Object?> arguments) async {
+    var (packagePath, motion, entry, catalog) = await _resolve(arguments);
+    var frames = switch (arguments['frames']) {
+      int value => value,
+      String text when int.tryParse(text) != null => int.parse(text),
+      _ => 5,
+    }.clamp(2, 24);
+
+    var device = _deviceOf(arguments);
+    var output = p.join(
+      host.workspace.appContext.appToolDirectory.path,
+      'build',
+      'motion',
+      '${motion.values}-filmstrip.png',
+    );
+    var strip = await catalog.filmstrip(
+      entryId: entry.id,
+      output: output,
+      stops: filmstripStops(frames),
+      viewport: device == null
+          ? CaptureViewport.panel
+          : CaptureViewport.of(device),
+    );
+
+    return Artifact(
+      kind: Artifact.png,
+      // The whole motion rather than a moment in it, so the address has no `t`.
+      address: addressFor(
+        packagePath,
+        file: motion.file,
+        motion: motion.values,
+      ),
+      path: p.relative(strip.file.path, from: host.worktree.path),
+      meta: {
+        'motion': motion.values,
+        'file': motion.file,
+        'frames': strip.stops.length,
+        'durationMs': strip.durationMs,
+        'bytes': strip.file.lengthSync(),
+        'device': ?device?.id,
+      },
+    );
+  }
+
+  CatalogDevice? _deviceOf(Map<String, Object?> arguments) =>
+      switch (arguments['device']) {
+        String id when id.isNotEmpty && isDeviceId(id) => deviceById(id),
+        _ => null,
+      };
+
+  /// The package, the motion, the catalog entry that mounts it, and a headless
+  /// catalog to drive — everything both actions need before they diverge.
+  Future<(String, MotionRef, CatalogEntry, HeadlessCatalog)> _resolve(
+    Map<String, Object?> arguments,
+  ) async {
+    var wanted = '${arguments['motion'] ?? ''}';
+    if (wanted.isEmpty) {
+      throw ArgumentError.value(wanted, 'motion', 'name a motion');
+    }
+    var packagePath = _requestedPackages(arguments['package']).first;
+    track(packagePath);
+    await _scans[packagePath];
+
+    var motion = _results[packagePath]?.motions.firstWhereOrNull(
+      (candidate) => candidate.values == wanted,
+    );
+    if (motion == null) {
+      var known = _results[packagePath]?.motions
+          .map((m) => m.values)
+          .nonNulls
+          .join(', ');
+      throw ArgumentError.value(
+        wanted,
+        'motion',
+        'not found in $packagePath; try '
+            '${known == null || known.isEmpty ? 'none' : known}',
+      );
+    }
+
+    var catalog = _headless(packagePath);
+    // The entry whose source file is the one the motion was scanned from —
+    // the same join the panel makes, so a picture and the panel agree.
+    var audit = await catalog.auditAll();
+    var entry = audit.entries.firstWhereOrNull((e) => e.path == motion.file);
+    if (entry == null) {
+      throw StateError(
+        '`${motion.values}` lives in ${motion.file}, which is not a catalog '
+        'entry — a motion is captured through the demo that mounts it',
+      );
+    }
+    return (packagePath, motion, entry, catalog);
   }
 
   HeadlessCatalog _headless(String packagePath) => HeadlessCatalog(

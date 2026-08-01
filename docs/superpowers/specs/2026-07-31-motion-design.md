@@ -934,9 +934,25 @@ capability, and an action built on it would have failed on the first motion
 written by somebody who had not read our demos. Driving the extension is the
 real thing and it needed the catalog's headless half to learn a new verb.
 
-### Still to come
+### `filmstrip`, and why it is a method rather than a loop
 
-`filmstrip --frames=N` as one contact sheet. N separate captures is a
-loop over this and needs nothing new; the *sheet* needs an image composer,
-which is the actual work and the reason it is worth doing properly — one image
-of N moments is what makes an animation affordable for an agent to look at.
+`fw run motion filmstrip --motion=receiptMotion --frames=6` composes one contact
+sheet, each frame labelled with **both** its `t` and its milliseconds — the two
+units the panel and the values file are written in, so a frame that looks wrong
+can be found in the file without arithmetic.
+
+The stops always include both ends. A strip whose first frame is not `t = 0`
+cannot show what a motion starts from and one whose last is not `t = 1` cannot
+show where it lands, which are the two frames anybody looks at first.
+
+**One guest, N seeks.** Calling `capture` in a loop would compile, launch and
+tear down a guest per frame — that is most of the cost and nearly all of the
+wall clock, since the seek itself is one frame. It is the whole reason this
+lives on `HeadlessCatalog` rather than in the caller. The same argument made
+`seekMotion` render its warm-up frame only once: a filmstrip that drew a
+throwaway frame before every seek would double the cost of the thing it exists
+to make cheap.
+
+`package:image` was already a dependency, and it is pure Dart, which matters —
+`fw` is compiled with `dart compile exe` and a composer that needed Flutter
+could not have run there at all.
