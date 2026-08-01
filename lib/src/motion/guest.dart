@@ -30,7 +30,12 @@ abstract class MotionSurface {
   Object? peek(String target, String property);
 }
 
-/// The door a host drives a motion through.
+/// The door a motion is driven through from outside it.
+///
+/// **Two doors, one object.** A *host* in another process drives the service
+/// extensions below; a *test* in the same isolate holds the registry directly
+/// and writes the playhead with no RPC and no frame to wait for. The extensions
+/// exist because of the process boundary, not because of the driving.
 ///
 /// Registered by the first `MotionScope` to mount rather than before `runApp`,
 /// because a motion lives in somebody's screen and there is no entrypoint of
@@ -49,6 +54,13 @@ class MotionRegistry {
   MotionRegistry._();
 
   static final instance = MotionRegistry._();
+
+  // [attach] and [detach] belong to `MotionScope` and nothing else should call
+  // them; they are public only because Dart has no package-private. What this
+  // is exported *for* is [resolve] and [ids] — a test in the same isolate
+  // reaches a mounted motion through them rather than over the VM service,
+  // which is what `MotionTester` in `package:flutterware/flutter_test.dart`
+  // does.
 
   final _scopes = <String, MotionSurface>{};
   var _nextId = 0;

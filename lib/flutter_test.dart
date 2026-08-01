@@ -5,4 +5,5 @@ library;
 
 export 'package:flutter_test/flutter_test.dart';
 
+export 'src/motion/testing.dart';
 export 'src/scenarios/scenario.dart';

@@ -303,10 +303,9 @@ catalog's entrypoint already imports it.
   `t` behaves exactly like the catalog's applied axes and is recorded on every
   artifact, per the rule that a screenshot is under-specified without its axis
   assignment.
-- **Golden frames** fall out: the scenarios substrate is already a deterministic
-  FakeAsync clock, and a Motion is already a function of `t`, so baselines at
-  `t ∈ {0, .25, .5, .75, 1}` are nearly free. This is scenarios' roadmap item 3
-  arriving early.
+- **Golden frames** are cheap, but not for the reason first written here — see
+  *Golden frames, corrected* below. A Motion needs no clock; FakeAsync is for
+  everything else on the screen.
 
 ## The panel
 
@@ -956,3 +955,62 @@ to make cheap.
 `package:image` was already a dependency, and it is pure Dart, which matters —
 `fw` is compiled with `dart compile exe` and a composer that needed Flutter
 could not have run there at all.
+
+
+## Golden frames, corrected — 2026-08-01
+
+The plugin section first said golden frames "fall out" because the scenarios
+substrate is a deterministic FakeAsync clock. That gets the causation backwards
+and would send somebody to the wrong mechanism.
+
+**FakeAsync buys the Motion nothing.** A Motion is a pure function of `t` and
+reads no clock at all: `seek` writes the playhead and the scope rebuilds. That
+is why `fw run motion capture --t=0.45` is already reproducible **against a live
+guest on a real wall clock** — run it twice, get the same pixels. There was
+never any flake to remove.
+
+**What FakeAsync buys is everything around the motion.** A screen with a Motion
+on it also holds things attached to `SchedulerBinding`'s real ticker: implicit
+animations, a spinner, a shimmer, a `TextField` cursor, an image fade-in, a
+route transition. None of those is a function of `t`, and *they* are what makes
+a golden flake. Under `AutomatedTestWidgetsFlutterBinding` nothing advances
+unless the test pumps it, so each is pinned at a known point.
+
+This is the principled version of what spike S5b found the escape hatch for:
+`timeDilation = 1e5` froze a free-running `AnimationController` (0.050000 →
+0.050003 over 600ms) while leaving the playhead alone. That works in a live
+guest; FakeAsync is the same problem solved rather than slowed by 100,000×.
+
+So: **a golden is of a frame, not of a motion.** The motion half is already
+reproducible. The value of the harness is proportional to how much else on the
+screen moves — for a still screen with one Motion, `capture --at=` *is* the
+golden.
+
+### The mechanism is the registry, not the service extension
+
+A scenario runs the widget tree **in the test isolate**, so there is nothing to
+connect to. `package:flutterware/flutter_test.dart` now carries `MotionTester`:
+
+```dart
+await tester.seekMotion(0.5);
+expect(tester.motionValue('title', 'opacity'), closeTo(0.5, 1e-9));
+```
+
+No RPC and no frame to wait for. `ext.flutterware.motion.*` exists because of a
+*process boundary*, not because of the driving — which is why `MotionRegistry`
+and `MotionSurface` are now exported from `motion.dart` as well. Before this
+they were reachable only by importing `src/`, so the golden-frame story the
+spec was telling could not actually have been written.
+
+### What it is worth, and what it costs
+
+Worth: of the three real bugs found in flutterware's own demos, **two were
+mid-run only** — both ends correct, the middle wrong. Goldens at
+`t ∈ {0, .25, .5, .75, 1}` catch exactly that class and nothing else does. So
+does a `Curves.easeOutBack` whose overshoot changes in a Flutter upgrade.
+
+Cost: "nearly free" understated it. The harness side is genuinely cheap —
+scenarios already capture per step in a running tester, so a stop is one more
+capture. The goldens are not: five frames × N motions × N devices of PNGs in
+the repo, and image goldens are brittle across platforms and renderers.
+`flutter_tester` is steadier than a device, not immune.
