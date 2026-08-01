@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware/ui_catalog_guest.dart';
+import 'package:flutterware/previews_guest.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
@@ -88,7 +88,7 @@ void main() {
     address = ValueNotifier(
       Address(
         worktree: 'test',
-        plugin: 'flutterware.ui_catalog',
+        plugin: 'flutterware.previews',
         axes: {
           'device': ?device,
           for (var axis in axes.entries) 'axis.${axis.key}': axis.value,
@@ -446,45 +446,42 @@ void main() {
     });
   });
 
-  group('the form factor', () {
+  group('the device', () {
     // Selected *and* broken, so the canvas renders the compile error rather
     // than a texture — the only way in without a live guest engine. The top
     // bar draws either way, which is what these are about.
-    const mobile = CatalogEntry(
+    const plain = CatalogEntry(
       path: 'demo/m.dart',
       symbol: 'm',
-      annotation: 'Demo()',
+      annotation: 'Preview()',
       name: 'M',
-      formFactor: 'mobile',
     );
 
-    testWidgets('a mobile demo is framed as a phone with no parameter at all', (
+    testWidgets('comes from the address alone, so no parameter is no frame', (
       tester,
     ) async {
-      // The entry's declaration is a default read at build time, not something
-      // pushed into the session on switch — so nothing is written to the
-      // address, and moving to a demo with no opinion simply stops defaulting.
-      await pump(tester, sessionOf([mobile, alpha], mobile, 'boom'));
+      // An entry used to get a say through `formFactor`, and a phone here was
+      // a default computed from the declaration. Nothing declares one now.
+      await pump(tester, sessionOf([plain, alpha], plain, 'boom'));
 
-      expect(find.text('iPhone 13'), findsOneWidget);
+      expect(find.text('iPhone 13'), findsNothing);
       expect(address.value.axes, isEmpty, reason: 'a default is not a choice');
     });
 
-    testWidgets('and a chosen device outranks it', (tester) async {
+    testWidgets('and a chosen one is shown', (tester) async {
       await pump(
         tester,
-        sessionOf([mobile, alpha], mobile, 'boom'),
+        sessionOf([plain, alpha], plain, 'boom'),
         device: 'ipad',
       );
 
       expect(find.text('iPad'), findsOneWidget);
-      expect(find.text('iPhone 13'), findsNothing);
     });
 
-    testWidgets('and fit silences it', (tester) async {
+    testWidgets('and fit reads as the panel', (tester) async {
       await pump(
         tester,
-        sessionOf([mobile, alpha], mobile, 'boom'),
+        sessionOf([plain, alpha], plain, 'boom'),
         device: 'fit',
       );
 

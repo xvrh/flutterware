@@ -39,7 +39,6 @@ Map<String, dynamic> _$CatalogEntrySummaryToJson(
   'name': instance.name,
   'address': instance.address,
   'group': ?instance.group,
-  'formFactor': ?instance.formFactor,
 };
 
 Map<String, dynamic> _$CatalogCheckResultToJson(CatalogCheckResult instance) =>
@@ -71,7 +70,6 @@ Map<String, dynamic> _$CatalogEntryDescriptionToJson(
   'annotation': instance.annotation,
   'address': instance.address,
   'group': ?instance.group,
-  'formFactor': ?instance.formFactor,
   'knobs': ?instance.knobs?.map((e) => e.toJson()).toList(),
   'axes': ?instance.axes?.map((e) => e.toJson()).toList(),
   'shell': ?instance.shell,

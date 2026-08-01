@@ -34,7 +34,7 @@ import 'ui_catalog_results.dart';
 import '../plugin_host.dart';
 
 /// The registered id — also what `tool/flutterware.dart` declares.
-const uiCatalogPluginId = 'flutterware.ui_catalog';
+const uiCatalogPluginId = 'flutterware.previews';
 
 /// The action that compiles a browsable page.
 ///
@@ -78,11 +78,12 @@ const _inlinedOptions = 50;
 /// be given instead is where the names come from and how to ask.
 const _knobsDoc =
     'Values to turn before this runs: `name=value,name=value`, or a JSON '
-    'object. A knob is whatever the demo asked for while it built — a demo '
-    'calling `context.uiCatalog.parameters.string("label", "Hello")` declares '
-    'one named `label` — so the names come from the demo itself and differ per '
+    'object. A knob is whatever the preview asked for while it built — a '
+    'preview calling `context.previews.parameters.string("label", "Hello")` '
+    'declares one named `label` — so the names come from the preview itself '
+    'and differ per '
     'entry. Read them with `describe --entry=<id> --knobs=true`. Each value is '
-    'coerced to the kind the demo declared, and a picker takes one of its '
+    'coerced to the kind the preview declared, and a picker takes one of its '
     'option labels; a name the entry does not declare is an error listing the '
     'ones it does.';
 
@@ -90,7 +91,7 @@ const _knobsDoc =
 const _debugDoc =
     'The debug switches the framework itself registers, as '
     '`name=value,name=value`. These '
-    'belong to neither the demo nor its shell but to the guest process, and '
+    'belong to neither the preview nor its shell but to the guest process, and '
     'the framework registers them whether anything asks or not — so unlike '
     'knobs and axes the set is fixed and listed in `--help`. '
     '`paint=true` draws the layout guides, `brightness=dark` moves '
@@ -101,10 +102,10 @@ const _debugDoc =
 
 /// What `--axes` is. The distinction from a knob is the whole content.
 const _axesDoc =
-    'Values for the shell *around* the demo — theme, locale, flavour. Same '
+    'Values for the shell *around* the preview — theme, locale, flavour. Same '
     'syntax as knobs: `name=value,name=value` or a JSON object. The difference '
-    'is who declares it and how long it lasts: a knob is asked for by the demo '
-    'and travels with the entry, an axis is declared by the `CatalogShell` '
+    'is who declares it and how long it lasts: a knob is asked for by the preview '
+    'and travels with the entry, an axis is declared by the `PreviewShell` '
     'wrapping it and stays put as you move between entries. Read them with '
     '`describe --entry=<id> --axes=true`, which also names the shell; an entry '
     'whose wrapper is not a shell offers none.';
@@ -114,7 +115,7 @@ const _axesDoc =
 const _liveDoc =
     'Read the entry from a GUI session that is already showing it, instead of '
     'building a fresh guest. **Off unless you ask.** What it buys is real: '
-    'attached, the answer describes the demo *as the person left it* — the '
+    'attached, the answer describes the preview *as the person left it* — the '
     'dropdown they opened, the tab they switched to, the row they scrolled to, '
     'and anything their clicking made it print or throw. No fresh render can '
     'reach that, because no fresh render performs the clicks. What it costs is '
@@ -125,7 +126,7 @@ const _liveDoc =
     'on this exact entry and nothing here would change what is drawn, and it '
     'never switches what that window is showing.';
 
-/// The UI catalog's entries, per declared package — everything but the panel.
+/// Previews' entries, per declared package — everything but the panel.
 ///
 /// Two tiers, and the split is the point. The **scan** parses a package's demos
 /// in ~38ms and touches no compiler, so `fw` and an agent read the entry list
@@ -253,7 +254,7 @@ class UiCatalogCore extends PluginCore {
     }
   }
 
-  /// The package's demo directory: `directory` when declared, else `demo/`.
+  /// The package's preview directory: `directory` when declared, else `demo/`.
   ///
   /// Public because it is part of the daemon address — `roots` is one of the
   /// fields [DaemonConfig] hashes — so the panel has to reach *this* answer
@@ -271,7 +272,7 @@ class UiCatalogCore extends PluginCore {
   /// The annotation names that mark an entry in [path], without their `@`.
   ///
   /// Part of the daemon address, like [rootFor] and for the same reason: the
-  /// panel and `fw run ui_catalog` must arrive at one daemon, and two sides
+  /// panel and `fw run previews` must arrive at one daemon, and two sides
   /// deciding this independently would be two daemons scanning for different
   /// things.
   List<String> previewAnnotationsFor(String path) {
@@ -320,7 +321,7 @@ class UiCatalogCore extends PluginCore {
   /// Where an entry *is*, as the one identifier every surface carries.
   ///
   /// ```
-  /// fw:///<worktree>/flutterware.ui_catalog/<package>/<file…>/<file.dart%23symbol>
+  /// fw:///<worktree>/flutterware.previews/<package>/<file…>/<file.dart%23symbol>
   /// ```
   ///
   /// The package comes first because two packages may legitimately declare the
@@ -385,10 +386,10 @@ class UiCatalogCore extends PluginCore {
       ),
       PluginAction(
         'new',
-        'New demo',
+        'New preview',
         returns: CatalogNewResult,
         description:
-            'Writes a demo file where the package keeps them, creating the '
+            'Writes a preview file where the package keeps them, creating the '
             'directory if it is not there, and reports the id that renders it. '
             'The scaffold renders as written, so start here when you have '
             'never written one: it is the API, in a file that already works.',
@@ -410,7 +411,7 @@ class UiCatalogCore extends PluginCore {
             'Name',
             required: true,
             description:
-                "The demo's name — what the panel lists and what `@Demo(name:)` "
+                "The preview's name — what the panel lists and what `@Preview(name:)` "
                 'carries',
           ),
           const ActionParameter(
@@ -419,7 +420,7 @@ class UiCatalogCore extends PluginCore {
             required: false,
             description:
                 'Package-relative path to write. Defaults to a snake_cased '
-                "`.dart` file under the package's demo directory. Never "
+                "`.dart` file under the package's preview directory. Never "
                 'overwrites.',
           ),
         ],
@@ -527,7 +528,7 @@ class UiCatalogCore extends PluginCore {
             required: false,
             description:
                 'Render as a device: its screen, its pixel ratio and its safe '
-                'areas, so the demo reads the phone from `MediaQuery` rather '
+                'areas, so the preview reads the phone from `MediaQuery` rather '
                 'than a rectangle. Omitted means the panel. The same value the '
                 'GUI writes as `?device=`, so an address captured here reopens '
                 'framed the way it was shot.',
@@ -621,8 +622,8 @@ class UiCatalogCore extends PluginCore {
             required: false,
             defaultValue: 'false',
             description:
-                'Report the widget tree, scoped to the demo rather than the '
-                'catalog around it. Off by default because a real demo is '
+                'Report the widget tree, scoped to the preview rather than the '
+                'catalog around it. Off by default because a real preview is '
                 'thousands of tokens of tree — try `find` first.',
           ),
           ActionParameter(
@@ -665,7 +666,7 @@ class UiCatalogCore extends PluginCore {
             required: false,
             defaultValue: 'false',
             description:
-                'Report what the demo printed while it built and painted. '
+                'Report what the preview printed while it built and painted. '
                 'Attached to an open session this is everything it has printed '
                 'since the person opened it, including whatever their clicking '
                 'caused — output no fresh render can produce.',
@@ -728,7 +729,7 @@ class UiCatalogCore extends PluginCore {
             required: false,
             description:
                 'Render as a device: its screen, its pixel ratio and its safe '
-                'areas, so the demo reads the phone from `MediaQuery` rather '
+                'areas, so the preview reads the phone from `MediaQuery` rather '
                 'than a rectangle. Omitted means the panel. **This is what '
                 'makes "why does it look wrong on a phone" one render**: the '
                 'tree, the constraints and the picture all describe the same '
@@ -828,7 +829,7 @@ class UiCatalogCore extends PluginCore {
         'Build a web page',
         returns: CatalogWebBuildResult,
         description:
-            'Compile the whole catalog into a browsable page — the demos '
+            'Compile the whole catalog into a browsable page — the previews '
             'themselves running in a browser, with their knobs, not pictures '
             'of them. Needs the package to have web enabled; says so, with the '
             'command, when it does not.',
@@ -1111,7 +1112,7 @@ class UiCatalogCore extends PluginCore {
         'file',
         'must be under $root/, the only directory this package is scanned for '
             'demos. A file outside it would never be found. Change the '
-            r'directory itself with `UiCatalog(packages: [.new(app, '
+            r'directory itself with `Previews(packages: [.new(app, '
             r"directory: '...')])` in tool/flutterware.dart.",
       );
     }
@@ -1121,7 +1122,7 @@ class UiCatalogCore extends PluginCore {
       throw ArgumentError.value(
         relative,
         'file',
-        'already exists. Add the demo to it, or name another file.',
+        'already exists. Add the preview to it, or name another file.',
       );
     }
     target.parent.createSync(recursive: true);
@@ -1139,14 +1140,14 @@ class UiCatalogCore extends PluginCore {
       file: relative,
       name: name,
       id: id,
-      next: "fw run ui_catalog screenshot --entry='$id'",
+      next: "fw run previews screenshot --entry='$id'",
     );
   }
 
   /// Compiles one package's catalog into a browsable page.
   ///
   /// Unlike every other action here this runs no daemon and no guest: a page is
-  /// the demos themselves, compiled for a browser, not pictures of them. What
+  /// the previews themselves, compiled for a browser, not pictures of them. What
   /// it needs from this class is only the scan — which entries there are — and
   /// which package they belong to.
   ///
@@ -1181,7 +1182,7 @@ class UiCatalogCore extends PluginCore {
       flutterExecutable: host.workspace.flutterSdk.flutter,
       packageRoot: packageRoot,
       // The package rather than the plugin: a page says what it is a catalog
-      // *of*, and "UI catalog" on a repo with three of them says nothing.
+      // *of*, and "Previews" on a repo with three of them says nothing.
       title: packagePath == '.' ? host.worktree.name : packagePath,
     );
     WebCatalogBuild built;
@@ -1254,7 +1255,7 @@ class UiCatalogCore extends PluginCore {
     }
     if (packages.length == 1) return packages.single;
     if (packages.isEmpty) {
-      throw StateError('No packages are declared for the UI catalog.');
+      throw StateError('No packages are declared for Previews.');
     }
     throw ArgumentError.value(
       null,
@@ -1311,7 +1312,6 @@ class UiCatalogCore extends PluginCore {
             id: entry.id,
             name: entry.name,
             group: entry.group,
-            formFactor: entry.formFactor,
             // What every other surface identifies this by — hand it straight
             // back to `screenshot`, or later to `show`.
             address: '${addressFor(path, entry.id)}',
@@ -1384,7 +1384,6 @@ class UiCatalogCore extends PluginCore {
       id: entry.id,
       name: entry.name,
       group: entry.group,
-      formFactor: entry.formFactor,
       package: packagePath,
       file: entry.path,
       symbol: entry.symbol,
@@ -1996,7 +1995,6 @@ class UiCatalogCore extends PluginCore {
       debug: debug,
       node: node as String?,
       annotate: annotate,
-      formFactor: entry.formFactor,
     );
 
     var output =
@@ -2117,8 +2115,8 @@ class UiCatalogCore extends PluginCore {
   /// produce the same PNG from the same flags, and the default output path is
   /// derived from this address — so two builders means the same picture lands in
   /// two filenames. Which is not hypothetical: `inspect` was written with its
-  /// own copy and it omitted `formFactor`, so the two disagreed the moment both
-  /// could take a `--device`.
+  /// own copy and it omitted one of the framing keys, so the two disagreed the
+  /// moment both could take a `--device`.
   ///
   /// Recording the size the capture actually *ran* at — rather than only a size
   /// someone asked for — is what lets the same frame be requested again.
@@ -2136,7 +2134,6 @@ class UiCatalogCore extends PluginCore {
     required Map<String, String> debug,
     required String? node,
     required bool annotate,
-    String? formFactor,
   }) => addressFor(
     packagePath,
     entryId,
@@ -2148,7 +2145,6 @@ class UiCatalogCore extends PluginCore {
       'device': ?deviceId,
       'width': '${viewport.width}',
       'height': '${viewport.height}',
-      'formFactor': ?formFactor,
       for (var knob in knobs.entries) 'knob.${knob.key}': knob.value,
       for (var axis in axes.entries) 'axis.${axis.key}': axis.value,
       // On the address for the same reason as the rest: a picture taken with the

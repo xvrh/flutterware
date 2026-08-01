@@ -15,34 +15,20 @@ export 'package:flutterware/devices.dart';
 String describeDevice(Device device) =>
     '${device.width.round()}×${device.height.round()}';
 
-/// What an entry declaring `@Demo(formFactor: …)` is shown as when the address
-/// names no device of its own.
-///
-/// A **default, computed on the spot** — never stored, never written into the
-/// address. That is the whole of "a choice outranks a declaration": a chosen
-/// device is a parameter and this is the `??` behind it, so there is no rule to
-/// enforce and no flag remembering which of the two last spoke.
-///
-/// `desktop` and `all` mean the panel. The panel is already a desktop-shaped
-/// canvas, and a 1440-wide frame scaled down inside it is a worse look at a
-/// desktop layout than the room it costs; `all` is an entry saying it has no
-/// opinion.
-Device? defaultDeviceFor(String? formFactor) =>
-    formFactor == 'mobile' ? deviceById('iphone-13') : null;
-
-/// The device an address names, or the default for [formFactor] when it names
-/// none.
+/// The device an address names, or the panel when it names none.
 ///
 /// **The one place a device comes from.** Nothing holds one: it is a function
-/// of the address and the entry on screen, recomputed wherever it is needed.
-/// That is what stops the picker and the address from being two copies of the
-/// same fact chasing each other a frame apart.
+/// of the address, recomputed wherever it is needed. That is what stops the
+/// picker and the address from being two copies of the same fact chasing each
+/// other a frame apart.
 ///
-/// [fitDeviceId] resolves to no device *and* suppresses the default, which is
-/// why "fit" has to be a value rather than an absent parameter: choosing the
-/// panel and choosing nothing are different answers.
-Device? resolveDevice(String? param, {String? formFactor}) =>
-    param == null ? defaultDeviceFor(formFactor) : deviceById(param);
+/// [fitDeviceId] and an absent parameter both resolve to the panel. They used
+/// to differ: an entry could declare a form factor, and "fit" was how you said
+/// *no* frame rather than *no opinion*. With the declaration gone there is one
+/// answer, and the distinction is kept in the address only because a device
+/// somebody chose should survive a reload.
+Device? resolveDevice(String? param) =>
+    param == null ? null : deviceById(param);
 
 /// A `?device=` this build has never heard of, or null.
 ///

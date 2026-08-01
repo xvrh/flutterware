@@ -27,7 +27,7 @@ class DetailView extends StatefulWidget {
   State<DetailView> createState() => _DetailViewState();
 }
 
-class _DetailViewState extends State<DetailView> implements UICatalogState {
+class _DetailViewState extends State<DetailView> implements PreviewState {
   final _deviceFrameKey = GlobalKey<__SingleDeviceWrapperState>();
   Key _appKey = UniqueKey();
   final _knobsPanelKey = GlobalKey();

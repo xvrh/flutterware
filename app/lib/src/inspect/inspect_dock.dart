@@ -25,7 +25,7 @@ class InspectDockTab {
 }
 
 /// The Chrome-shaped docked panel: a draggable grip, a tab strip, a
-/// collapsible and resizable body. Extracted from the UI catalog's inspect
+/// collapsible and resizable body. Extracted from Previews' inspect
 /// panel so the scenarios step page is the *same* surface — one look, one
 /// muscle memory — while each host declares its own tabs; the catalog's
 /// live-guest tabs (Controls, Problems, Console) stay the catalog's.

@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog_guest.dart';
+import 'package:flutterware/previews_guest.dart';
 
 /// Draws a box around one node, and its type above it — the inspector's
 /// rectangle, painted **inside a surface that is the guest's logical size**:

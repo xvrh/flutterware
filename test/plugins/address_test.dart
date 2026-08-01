@@ -5,11 +5,11 @@ void main() {
   group('parse', () {
     test('worktree, plugin and segments', () {
       var address = Address.parse(
-        'fw:///main/flutterware.ui_catalog/packages/admin/Team',
+        'fw:///main/flutterware.previews/packages/admin/Team',
       );
       expect(address.project, isNull);
       expect(address.worktree, 'main');
-      expect(address.plugin, 'flutterware.ui_catalog');
+      expect(address.plugin, 'flutterware.previews');
       expect(address.segments, ['packages', 'admin', 'Team']);
       expect(address.path, 'packages/admin/Team');
     });
@@ -65,7 +65,7 @@ void main() {
 
     test('a segment may carry encoded structural characters', () {
       var address = Address.parse(
-        'fw:///main/flutterware.ui_catalog/lib%2Fdemo%2Fteam.dart%23TeamList',
+        'fw:///main/flutterware.previews/lib%2Fdemo%2Fteam.dart%23TeamList',
       );
       expect(address.segments, ['lib/demo/team.dart#TeamList']);
     });
@@ -93,9 +93,9 @@ void main() {
       for (var source in [
         'fw:///',
         'fw:///main',
-        'fw:///main/flutterware.ui_catalog/packages/admin/Team',
+        'fw:///main/flutterware.previews/packages/admin/Team',
         'fw:///main/p/e?device=iPhone%2015&theme=dark',
-        'fw:///main/flutterware.ui_catalog/lib%2Fdemo%2Fteam.dart%23TeamList',
+        'fw:///main/flutterware.previews/lib%2Fdemo%2Fteam.dart%23TeamList',
         'fw://acme/main/p',
         'fw:///~/flutterware.dependencies/app/packages/collection',
       ]) {
@@ -191,7 +191,7 @@ void main() {
 
   group('derivation', () {
     var base = Address.parse(
-      'fw:///main/flutterware.ui_catalog/admin?theme=dark',
+      'fw:///main/flutterware.previews/admin?theme=dark',
     );
 
     test('child appends a segment', () {

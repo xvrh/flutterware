@@ -39,7 +39,7 @@ void main() {
     expect(session.cores.map((c) => c.id), [
       'flutterware.dependencies',
       'flutterware.assets',
-      'flutterware.ui_catalog',
+      'flutterware.previews',
       'flutterware.splash',
       'flutterware.server',
       'flutterware.run',

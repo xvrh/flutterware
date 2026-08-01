@@ -8,9 +8,9 @@ import 'src/catalog/catalog_session.dart';
 import 'src/catalog/catalog_view.dart';
 import 'src/utils/flutter_sdk.dart';
 
-/// IDE dev entrypoint for the UI catalog loop, without the shell.
+/// IDE dev entrypoint for the Previews loop, without the shell.
 ///
-/// The same [CatalogView] the `flutterware.ui_catalog` plugin mounts as its
+/// The same [CatalogView] the `flutterware.previews` plugin mounts as its
 /// panel — this just skips the shell, for working on the loop itself.
 ///
 /// A macOS app launched by `flutter run` has a stripped environment and a
@@ -32,7 +32,7 @@ const _rootsDefine = String.fromEnvironment(
   defaultValue: 'tool/catalog',
 );
 
-/// Where the demos are, when that is not the app package.
+/// Where the previews are, when that is not the app package.
 const _projectDefine = String.fromEnvironment('FLUTTERWARE_PROJECT');
 
 Future<void> main() async {
@@ -73,7 +73,7 @@ class _HarnessState extends State<_Harness> {
   /// need a second code path — which is how the two-sources-of-truth bug got in
   /// the first place.
   final _address = ValueNotifier(
-    Address(worktree: 'dev', plugin: 'flutterware.ui_catalog'),
+    Address(worktree: 'dev', plugin: 'flutterware.previews'),
   );
 
   late final CatalogSession _session = CatalogSession(

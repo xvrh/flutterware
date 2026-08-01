@@ -3,7 +3,7 @@ import '../embedder/guest_vm_service.dart';
 /// The framework's own debug switches, named for a command line.
 ///
 /// These are **not** axes, though they sit beside them on an address and
-/// change the pixels the same way. An axis is declared by a `CatalogShell` and
+/// change the pixels the same way. An axis is declared by a `PreviewShell` and
 /// pushed to it; these are `ext.flutter.*` extensions on the guest *process*,
 /// registered by the framework whether a demo asks for anything or not. Same
 /// address, different push — which is why they are their own thing rather than

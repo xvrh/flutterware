@@ -173,6 +173,24 @@ void main() {
       expect(ready.entries.map((e) => e.group), contains('Avatar tile'));
     });
 
+    test("compiles a demo carrying Flutter's own @Preview", () {
+      // `plain_preview.dart` imports nothing of ours: Flutter's annotation, and
+      // no `package:flutterware`. The scanner has always accepted `@Preview`,
+      // and the generated wrapper used to declare `Demo get fwDemo`, so every
+      // such entry assigned a supertype to a subtype and failed to compile.
+      //
+      // Asserted here rather than left to the suite passing, because the
+      // daemon's answer to a demo that does not compile is to quarantine it and
+      // carry on — the failure this covers is one every other test is designed
+      // to survive.
+      expect(
+        ready.quarantined.map((q) => q.entry.symbol),
+        isNot(contains('plainPreview')),
+        reason: 'the whole point is that it compiles',
+      );
+      expect(ready.entries.map((e) => e.symbol), contains('plainPreview'));
+    });
+
     test('quarantines a demo that does not compile instead of failing', () {
       // The entrypoint imports every entry — that is what makes one compiler
       // safe to share — so one demo mid-edit fails the compile for all of them.
@@ -515,9 +533,9 @@ void main() {
     await restart();
     broken.writeAsStringSync('''
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
-@Demo(name: 'Broken')
+@Preview(name: 'Broken')
 Widget fixtureBroken() => NoSuchWidgetExistsHere();
 ''');
 
@@ -552,9 +570,9 @@ Widget fixtureBroken() => NoSuchWidgetExistsHere();
     // note — which is the one way this optimisation could do real harm.
     broken.writeAsStringSync('''
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
-@Demo(name: 'Broken')
+@Preview(name: 'Broken')
 Widget fixtureBroken() => const Placeholder();
 ''');
 
@@ -709,10 +727,9 @@ Future<String> _appPackageRoot() async {
 String _demo(String symbol, String text) =>
     '''
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 
-import 'package:flutterware/ui_catalog.dart';
-
-@Demo(name: 'Fixture')
+@Preview(name: 'Fixture')
 Widget $symbol() => const Center(child: Text('$text'));
 ''';
 
@@ -721,9 +738,8 @@ Widget $symbol() => const Center(child: Text('$text'));
 String _brokenDemo(String symbol) =>
     '''
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 
-import 'package:flutterware/ui_catalog.dart';
-
-@Demo(name: 'Fixture')
+@Preview(name: 'Fixture')
 Widget $symbol() => ThisTypeDoesNotExist(missing: 1);
 ''';

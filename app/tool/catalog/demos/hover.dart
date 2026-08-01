@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
 import 'shell.dart';
 
@@ -8,7 +7,7 @@ import 'shell.dart';
 /// does. Hover has no lasting effect a probe can read — an ink highlight is a
 /// colour, not a widget — so a demo that turns it into text is the only way the
 /// headless check can tell forwarding from silence.
-@Demo(name: 'Hover', wrapper: wrapInApp)
+@Preview(name: 'Hover', wrapper: wrapInApp)
 Widget hoverProbe() => const _HoverProbe();
 
 class _HoverProbe extends StatefulWidget {

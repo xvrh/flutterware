@@ -20,7 +20,7 @@ const _sizes = {'Small': Size.small, 'Large': Size.large};
 /// A shell declares them by asking for them while it builds, so what the panel
 /// is offered is whatever the last build of the shell asked for. What keeps
 /// that from drifting the way knobs can is scope, not timing: only a
-/// [CatalogShell]'s builder is handed a [TopBarState], so nothing below the
+/// [PreviewShell]'s builder is handed a [TopBarState], so nothing below the
 /// shell can add to the set.
 void main() {
   late CatalogAxes axes;
@@ -176,7 +176,7 @@ void main() {
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
-        child: CatalogShell(
+        child: PreviewShell(
           'app',
           builder: (context, topBar) {
             built.add(topBar.picker('flavor', _flavors, Flavor.dev));

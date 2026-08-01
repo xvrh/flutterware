@@ -179,7 +179,7 @@ const fwCommands = [
         'regeneration.\n'
         '\n'
         'An address names the worktree first, then the plugin, in full:\n'
-        '`fw:///<worktree>/flutterware.ui_catalog/<package>/<entry>`. The\n'
+        '`fw:///<worktree>/flutterware.previews/<package>/<entry>`. The\n'
         'worktree slot is positional, so it cannot be left out — `~` is the\n'
         'main checkout. With no address at all it photographs the home screen\n'
         'of the worktree you ran it in.\n'
@@ -544,7 +544,7 @@ class FwCli {
   ///
   /// The banner `main.dart` used to print itself, from the process that can
   /// actually answer it. The GUI had to hard-code the list — "Pub dependencies
-  /// manager, UI catalog" — because a `runApp` has no session to ask; here it
+  /// manager, Previews" — because a `runApp` has no session to ask; here it
   /// is read from the same reports `fw status` prints, so a project that
   /// declares something else says so.
   ///

@@ -16,7 +16,7 @@ class CatalogEntry {
     required this.name,
     this.group,
     this.declaredId,
-    this.formFactor,
+    this.ordinal = 0,
   });
 
   factory CatalogEntry.fromJson(Map<String, dynamic> json) =>
@@ -29,7 +29,7 @@ class CatalogEntry {
   /// The annotated top-level function.
   final String symbol;
 
-  /// The annotation's source text with the `@` stripped — `Demo(name: 'x')`.
+  /// The annotation's source text with the `@` stripped — `Preview(name: 'x')`.
   /// Emitted verbatim into generated code and evaluated as Dart; nothing here
   /// interprets it.
   final String annotation;
@@ -44,22 +44,24 @@ class CatalogEntry {
   final String? group;
 
   /// An `id:` on the annotation, pinning identity across renames and moves.
-  final String? declaredId;
-
-  /// The `formFactor:` enum name as written — `mobile`, `desktop`, `all` —
-  /// or null when the annotation says nothing.
   ///
-  /// A name, not a `FormFactor`: that enum carries a `Size` and so lives in a
-  /// Flutter library, and everything on this side of the wire has to stay
-  /// plain Dart for the daemon and the CLI to keep reading it.
-  final String? formFactor;
+  /// Read by *name*, off whatever annotation the project registered — nothing
+  /// flutterware ships declares it. A project wanting identity to survive a
+  /// rename writes its own `Preview` subclass carrying an `id:`.
+  final String? declaredId;
 
   /// Identity: derived from path and symbol unless the annotation pins it.
   ///
-  /// Optional rather than required because nothing holds an id yet and the
-  /// derivation is unambiguous — except where several annotations sit on one
-  /// declaration, which the scanner rejects rather than silently collapses.
-  String get id => declaredId ?? '$path#$symbol';
+  /// [ordinal] disambiguates several annotations stacked on one declaration,
+  /// which is one of the two ways to spell variants and would otherwise derive
+  /// one id for all of them. It follows the *position*, so reordering a stack
+  /// moves the ids with it — the cost of the derivation being free, and the
+  /// reason `id:` is still read.
+  String get id =>
+      declaredId ?? (ordinal == 0 ? '$path#$symbol' : '$path#$symbol#$ordinal');
+
+  /// Which annotation on the declaration this is, in source order.
+  final int ordinal;
 
   CatalogEntry withGroup(String group) => CatalogEntry(
     path: path,
@@ -68,7 +70,7 @@ class CatalogEntry {
     name: name,
     group: group,
     declaredId: declaredId,
-    formFactor: formFactor,
+    ordinal: ordinal,
   );
 
   Map<String, dynamic> toJson() => _$CatalogEntryToJson(this);

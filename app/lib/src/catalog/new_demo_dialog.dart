@@ -10,7 +10,7 @@ import 'authoring.dart';
 /// Asks for a name, calls the `new` action, and answers with what it wrote.
 ///
 /// The GUI half of the authoring door, and the same shape the scenarios one
-/// has. The empty state ends by naming `fw run ui_catalog new …`, which is the
+/// has. The empty state ends by naming `fw run previews new …`, which is the
 /// right answer for an agent and the wrong one for somebody already looking at
 /// the panel that could do it.
 ///
@@ -94,7 +94,7 @@ class _NewDemoDialogState extends State<_NewDemoDialog> {
   Widget build(BuildContext context) {
     var colors = context.colors;
     return AlertDialog(
-      title: const Text('New demo'),
+      title: const Text('New preview'),
       content: SizedBox(
         width: 460,
         child: Column(
@@ -102,7 +102,7 @@ class _NewDemoDialogState extends State<_NewDemoDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Writes a demo that already renders. Replace its placeholder '
+              'Writes a preview that already renders. Replace its placeholder '
               'with the widget you meant.',
               style: context.type.caption.copyWith(color: colors.mut),
             ),

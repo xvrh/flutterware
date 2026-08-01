@@ -20,7 +20,7 @@ import 'ui_catalog_core.dart';
 
 export 'ui_catalog_core.dart' show UiCatalogCore, uiCatalogPluginId;
 
-/// The GUI half of the UI catalog: the live compile loop, and a panel.
+/// The GUI half of Previews: the live compile loop, and a panel.
 ///
 /// Everything else — the scan, the entry list, the report, `rescan` and
 /// `screenshot` — lives in [UiCatalogCore], which is pure Dart, so `fw` and an
@@ -83,7 +83,7 @@ class UiCatalogPlugin extends NativePlugin<UiCatalogCore> {
       worktreeRoot: host.worktree.path,
       // The core's answer, not a second one: `roots` is part of the daemon
       // address, so a panel resolving it independently would open a different
-      // daemon than `fw run ui_catalog` does for the same package.
+      // daemon than `fw run previews` does for the same package.
       roots: [core.rootFor(path)],
       previewAnnotations: core.previewAnnotationsFor(path),
     )..addListener(core.notifyChanged);
@@ -466,7 +466,7 @@ class _NoDemos extends StatelessWidget {
 
   /// What the scan rejected. Empty for a project that has genuinely written
   /// nothing — and decidedly not empty for one whose first attempt was turned
-  /// away, which is the case this screen used to answer with "no demos yet".
+  /// away, which is the case this screen used to answer with "no previews yet".
   final List<ScanDiagnostic> diagnostics;
 
   final VoidCallback onNew;
@@ -512,7 +512,7 @@ class _NoDemos extends StatelessWidget {
             child: FilledButton.icon(
               onPressed: onNew,
               icon: const Icon(Icons.add, size: 16),
-              label: const Text('New demo'),
+              label: const Text('New preview'),
             ),
           ),
           const SizedBox(height: 24),

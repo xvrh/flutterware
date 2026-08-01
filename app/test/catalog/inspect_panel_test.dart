@@ -2,7 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
-import 'package:flutterware/ui_catalog_guest.dart';
+import 'package:flutterware/previews_guest.dart';
 import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/catalog/catalog_entry.dart';
 import 'package:flutterware_app/src/catalog/catalog_session.dart';
@@ -115,7 +115,7 @@ void main() {
     address = ValueNotifier(
       Address(
         worktree: 'test',
-        plugin: 'flutterware.ui_catalog',
+        plugin: 'flutterware.previews',
         axes: {...params},
       ),
     );
@@ -256,7 +256,7 @@ void main() {
         MaterialApp(
           home: AddressRoot(
             address: ValueNotifier(
-              Address(worktree: 't', plugin: 'flutterware.ui_catalog'),
+              Address(worktree: 't', plugin: 'flutterware.previews'),
             ),
             onChanged: (_) {},
             child: Scaffold(
@@ -403,7 +403,7 @@ void main() {
         MaterialApp(
           home: AddressRoot(
             address: ValueNotifier(
-              Address(worktree: 't', plugin: 'flutterware.ui_catalog'),
+              Address(worktree: 't', plugin: 'flutterware.previews'),
             ),
             onChanged: (_) {},
             child: Scaffold(
@@ -558,7 +558,7 @@ void main() {
         MaterialApp(
           home: AddressRoot(
             address: ValueNotifier(
-              Address(worktree: 't', plugin: 'flutterware.ui_catalog'),
+              Address(worktree: 't', plugin: 'flutterware.previews'),
             ),
             onChanged: (_) {},
             child: Scaffold(

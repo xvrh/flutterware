@@ -515,7 +515,7 @@ class ScenariosCore extends PluginCore {
                   '`flutter_test_config.dart` declares, or '
                   '$defaultScenarioDeviceId where a folder declares none. '
                   '`fit` means the bare 800×600 test surface. The same '
-                  'vocabulary the UI catalog frames with.',
+                  'vocabulary Previews frames with.',
               options: [
                 for (var device in Devices.all)
                   ActionOption(device.id, label: device.label),

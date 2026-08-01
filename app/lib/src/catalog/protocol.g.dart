@@ -146,7 +146,7 @@ DaemonConfig _$DaemonConfigFromJson(Map<String, dynamic> json) => DaemonConfig(
       (json['previewAnnotations'] as List<dynamic>?)
           ?.map((e) => e as String)
           .toList() ??
-      const ['Preview', 'Demo'],
+      const ['Preview'],
   emitProbe: json['emitProbe'] as bool? ?? false,
   trackWidgetCreation: json['trackWidgetCreation'] as bool? ?? true,
   daemonRevision: json['daemonRevision'] as String? ?? '',

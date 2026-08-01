@@ -23,7 +23,7 @@ import 'catalog_wrapper.dart';
 /// because the panel is in another process; here the panel and the demo are one
 /// isolate and there is no wire at all.
 ///
-/// What it does *not* carry over is the top bar's axes: a `CatalogShell` still
+/// What it does *not* carry over is the top bar's axes: a `PreviewShell` still
 /// declares them, and with nothing driving `CatalogAxes` they answer with the
 /// defaults the shell wrote.
 class WebAppGenerator {
@@ -88,6 +88,7 @@ class WebAppGenerator {
     return '''
 // GENERATED — do not edit.
 import 'package:flutter/widgets.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/ui_catalog.dart';
 
 $imports
@@ -97,8 +98,8 @@ void main() {
       title: ${_literal(title)},
       catalog: () => _catalog,
       // A pass-through, because in this model the chrome is the entry's own:
-      // `@Demo(wrapper:)` supplies the MaterialApp, exactly as it does for the
-      // guest, whose host adds nothing either. An entry with no wrapper still
+      // the annotation's `wrapper:` supplies the MaterialApp, exactly as it does
+      // for the guest, whose host adds nothing either. An entry with no wrapper still
       // has the catalog's own MaterialApp above it for a Directionality and a
       // theme.
       appBuilder: (context, child) => child,
@@ -117,7 +118,10 @@ Map<String, dynamic> get _catalog => ${_map(tree, index, 1)};
 /// `_CatalogHost` in the guest's entrypoint applies, and the two have to agree:
 /// an entry that looks one way in the panel and another on the page is worse
 /// than one that ignores an annotation in both.
-Widget _entry(Demo demo, Widget Function() builder) {
+///
+/// Typed as `Preview` rather than any subclass: the page hosts whatever the
+/// scan accepted, and the scan accepts Flutter's own annotation.
+Widget _entry(Preview demo, Widget Function() builder) {
   var wrapper = demo.transform().wrapper;
   var child = builder();
   return wrapper == null ? child : wrapper(child);
@@ -133,7 +137,7 @@ Widget _entry(Demo demo, Widget Function() builder) {
     if (nodes.isEmpty) return '<String, dynamic>{}';
     // The map is keyed by what a row *says*, and two rows are allowed to say
     // the same thing — discovery rejects a duplicate id, not a duplicate name,
-    // so `demo/a.dart` and `demo/b.dart` may both declare `@Demo(name:
+    // so `demo/a.dart` and `demo/b.dart` may both declare `@Preview(name:
     // 'Default')`. A folder may also share a name with an entry beside it.
     // Emitted as-is that is a repeated key in a map literal: the last one wins
     // at run time and the others are simply not on the page, which is the one

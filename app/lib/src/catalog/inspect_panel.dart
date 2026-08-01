@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog_guest.dart';
+import 'package:flutterware/previews_guest.dart';
 
 import '../inspect/elements_view.dart';
 import '../inspect/inspect_dock.dart';
@@ -15,7 +15,7 @@ import 'catalog_session.dart';
 /// It reads the **live** guest through [CatalogSession], never a
 /// `PluginAction`: an action renders its own headless copy, and a copy has none
 /// of the state a person put this one into. That is the whole reason the panel
-/// is not simply a rendering of `fw run ui_catalog inspect --tree`.
+/// is not simply a rendering of `fw run previews inspect --tree`.
 class InspectPanel extends StatefulWidget {
   const InspectPanel({
     super.key,

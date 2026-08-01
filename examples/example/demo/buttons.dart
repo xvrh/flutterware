@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
 import 'shell.dart';
 
 /// A single demo in its own file, so it gets no group and sits at the top
 /// level of the catalog — the counterpart to `home_page.dart`.
-@Demo(name: 'Buttons', wrapper: wrapInApp)
+@Preview(name: 'Buttons', wrapper: wrapInApp)
 Widget buttons() => Scaffold(
   appBar: AppBar(title: const Text('Buttons')),
   body: Center(

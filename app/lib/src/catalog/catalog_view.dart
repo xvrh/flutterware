@@ -4,7 +4,7 @@ import 'dart:math' as math;
 
 import 'package:device_frame/device_frame.dart' hide Devices;
 import 'package:file_selector/file_selector.dart';
-import 'package:flutterware/ui_catalog_guest.dart';
+import 'package:flutterware/previews_guest.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -34,7 +34,7 @@ const _inspectNamespace = 'inspect';
 /// The catalog loop: entries on the left, the live guest on the right.
 /// Selecting an entry hot-reloads the running guest rather than restarting it.
 ///
-/// Mounted by the `flutterware.ui_catalog` plugin as its panel, and by
+/// Mounted by the `flutterware.previews` plugin as its panel, and by
 /// `main_catalog_dev.dart` for working on the loop itself.
 ///
 /// It **renders** a [CatalogSession]; it does not own one. The owner outlives
@@ -2284,8 +2284,5 @@ Device? _deviceOf(BuildContext context, CatalogSession session) {
     'device is un-namespaced: read it above any namespaced scope, or it asks '
     'for <namespace>.device and nobody writes that.',
   );
-  return resolveDevice(
-    AddressScope.param(context, 'device'),
-    formFactor: session.selected?.formFactor,
-  );
+  return resolveDevice(AddressScope.param(context, 'device'));
 }

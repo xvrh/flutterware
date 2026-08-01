@@ -37,7 +37,7 @@ void main() {
 
   test('the bare form names the plugin the way the CLI resolves it', () {
     // `fw` matches on the last dotted segment, not the full id.
-    expect(command(), 'dart run flutterware run ui_catalog build-web');
+    expect(command(), 'dart run flutterware run previews build-web');
   });
 
   test('the default output is left off', () {
@@ -140,7 +140,7 @@ Widget a() => const Placeholder();
       return UiCatalogCore(
         PluginHost(
           id: uiCatalogPluginId,
-          label: 'UI catalog',
+          label: 'Previews',
           worktree: worktree,
           workspace: Workspace(
             root: worktree.path,

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
 import 'shell.dart';
 
 /// Reports the padding a demo actually sees, which is the only way to tell a
 /// notch that is drawn from one that is respected.
-@Demo(name: 'Padding', wrapper: wrapInApp)
+@Preview(name: 'Padding', wrapper: wrapInApp)
 Widget paddingProbe() => const _PaddingProbe();
 
 class _PaddingProbe extends StatelessWidget {

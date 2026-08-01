@@ -3,12 +3,12 @@ import 'package:test/test.dart';
 
 /// The generic tier: what every plugin gets without writing search code.
 ///
-/// Shaped like the UI catalog's real report — children per package, declared
+/// Shaped like the Previews plugin's real report — children per package, declared
 /// actions, and a view of sections wrapping item lists — because the point of
 /// this walk is that it works on a report it has never been told about.
 PluginReport _report() => PluginReport(
-  id: 'flutterware.ui_catalog',
-  label: 'UI catalog',
+  id: 'flutterware.previews',
+  label: 'Previews',
   children: const [
     PluginChild(id: 'app', label: 'app'),
     PluginChild(
@@ -51,7 +51,7 @@ ViewItem _entry(String name, String id) => ViewItem(
   detail: id,
   address: Address(
     worktree: 'main',
-    plugin: 'flutterware.ui_catalog',
+    plugin: 'flutterware.previews',
     segments: ['app', id],
   ),
 );
@@ -68,8 +68,8 @@ void main() {
     });
 
     test('the plugin itself', () {
-      var hits = searchReport(_report(), 'catalog', worktree: 'main');
-      expect(hits.first.title, 'UI catalog');
+      var hits = searchReport(_report(), 'preview', worktree: 'main');
+      expect(hits.first.title, 'Previews');
       expect(hits.first.reason, SearchReason.plugin);
     });
 
@@ -162,7 +162,7 @@ void main() {
     });
 
     test('the plugin outranks an entry matching as well', () {
-      var hits = searchReport(_report(), 'ca', worktree: 'main');
+      var hits = searchReport(_report(), 'pre', worktree: 'main');
       expect(hits.first.reason, SearchReason.plugin);
     });
 
@@ -188,12 +188,12 @@ void main() {
       expect(hit.address.segments, ['app', 'demo/dashboard.dart#dashboard']);
       expect(
         hit.address.toString(),
-        'fw:///main/flutterware.ui_catalog/app/demo%2Fdashboard.dart%23dashboard',
+        'fw:///main/flutterware.previews/app/demo%2Fdashboard.dart%23dashboard',
       );
     });
 
     test('the plugin and its packages carry the worktree', () {
-      var hits = searchReport(_report(), 'catalog', worktree: 'feature-x');
+      var hits = searchReport(_report(), 'preview', worktree: 'feature-x');
       expect(hits, isNotEmpty);
       for (var hit in hits) {
         expect(hit.address.worktree, 'feature-x', reason: hit.title);
@@ -209,14 +209,14 @@ void main() {
   group('grouping and deduplication', () {
     test('every hit is grouped under the plugin label', () {
       var hits = searchReport(_report(), 'a', worktree: 'main');
-      expect(hits.map((h) => h.group).toSet(), {'UI catalog'});
+      expect(hits.map((h) => h.group).toSet(), {'Previews'});
     });
 
     test('the same entry listed twice collapses to one', () {
       var entry = _entry('Dashboard', 'demo/dashboard.dart#dashboard');
       var report = PluginReport(
-        id: 'flutterware.ui_catalog',
-        label: 'UI catalog',
+        id: 'flutterware.previews',
+        label: 'Previews',
         view: PluginView([
           ViewSection('by name', [
             ViewItems([entry]),
