@@ -657,7 +657,7 @@ class _ScreenTabState extends State<_ScreenTab> {
 
   Future<void> _read() async {
     setState(() => _loading = true);
-    widget.onReadingChanged();
+    _tellThePage();
     try {
       var read = await widget.core.inspectRead(widget.handle);
       if (!mounted) return;
@@ -672,9 +672,25 @@ class _ScreenTabState extends State<_ScreenTab> {
     } finally {
       if (mounted) {
         setState(() => _loading = false);
-        widget.onReadingChanged();
+        _tellThePage();
       }
     }
+  }
+
+  /// **After the frame, never inside it.** The page above draws the spinner in
+  /// its tab strip, so this is a `setState` on an *ancestor* — and [_read] is
+  /// reached from `initState` and `didUpdateWidget`, both of which run while
+  /// that ancestor is building. In debug the framework throws there, which
+  /// aborted the read before it started and left the pane saying `Reading the
+  /// app…` for ever.
+  ///
+  /// It survived review because `capture` builds the GUI in **release**, where
+  /// the assertion is compiled out and the same call merely schedules a
+  /// rebuild. A screenshot is not a test of this class of bug.
+  void _tellThePage() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onReadingChanged();
+    });
   }
 
   @override

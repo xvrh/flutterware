@@ -202,34 +202,42 @@ class InspectTabStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: height,
-      color: context.colors.panel,
-      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
-      child: Row(
-        children: [
-          ?leading,
-          // Scrolls rather than overflows: the panel is as narrow as its
-          // window allows, and a tab strip that paints Flutter's stripes over
-          // itself in an inspector is a poor advertisement.
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (var tab in tabs)
-                    _Tab(
-                      label: tab.label,
-                      selected: tab.id == current,
-                      badge: tab.badge,
-                      onTap: () => onSelect(tab.id),
-                    ),
-                ],
+    // Its own (invisible) Material, for the same reason [InspectDock] has one
+    // and now more so: the tabs are `InkWell`s, and once the strip could be
+    // used *outside* the dock it stopped inheriting the dock's. It happened to
+    // work in the shell, which has one somewhere above — which is precisely
+    // the gamble a reusable widget should not be taking.
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        height: height,
+        color: context.colors.panel,
+        padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+        child: Row(
+          children: [
+            ?leading,
+            // Scrolls rather than overflows: the panel is as narrow as its
+            // window allows, and a tab strip that paints Flutter's stripes over
+            // itself in an inspector is a poor advertisement.
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (var tab in tabs)
+                      _Tab(
+                        label: tab.label,
+                        selected: tab.id == current,
+                        badge: tab.badge,
+                        onTap: () => onSelect(tab.id),
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-          ...trailing,
-        ],
+            ...trailing,
+          ],
+        ),
       ),
     );
   }

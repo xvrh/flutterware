@@ -192,10 +192,18 @@ class RunCore extends PluginCore {
     if (_tracking || isDisposed) return;
     _tracking = true;
     unawaited(computeAll().then((_) => notifyChanged()));
-    unawaited(_startDaemon());
-    unawaited(_probeAll());
-    _scheduleProbe();
+    if (debugLive) {
+      unawaited(_startDaemon());
+      unawaited(_probeAll());
+      _scheduleProbe();
+    }
   }
+
+  /// False in a widget test. Mounting the panel starts a `flutter daemon` and
+  /// a repeating probe, which is right in the app and is a subprocess and a
+  /// pending timer in a test — neither of which a pumped panel can settle.
+  @visibleForTesting
+  static bool debugLive = true;
 
   /// Polls fast while something is building and slowly otherwise.
   ///
@@ -1311,10 +1319,26 @@ class RunCore extends PluginCore {
     bool tree = true,
     bool screenshot = true,
     bool summary = true,
-  }) => _withInspector(
-    handle,
-    (i) => i.read(tree: tree, screenshot: screenshot, summary: summary),
-  );
+  }) =>
+      debugRead?.call(handle) ??
+      _withInspector(
+        handle,
+        (i) => i.read(tree: tree, screenshot: screenshot, summary: summary),
+      );
+
+  /// Stands in for the VM service so the panel can be pumped in a test.
+  ///
+  /// The same seam scenarios has for its runner, and for the same reason: the
+  /// pane's mount-and-read is where a `setState` on an ancestor slipped in, and
+  /// nothing that needs a real app could ever have caught it.
+  @visibleForTesting
+  Future<InspectRead> Function(RunHandle handle)? debugRead;
+
+  /// Puts a probe result in as though one had been taken.
+  @visibleForTesting
+  void debugSetProbe(RunHandle handle, RunProbe probe) {
+    if (handle.handlePath case var path?) _probes[path] = probe;
+  }
 
   /// The widget tree of one run, on its own.
   Future<InspectTree> inspectTree(RunHandle handle, {bool summary = true}) =>
