@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutterware_app/src/catalog/asset_bundle.dart';
-import 'package:flutterware_app/src/catalog/catalog_entry.dart';
-import 'package:flutterware_app/src/catalog/compile_blame.dart';
-import 'package:flutterware_app/src/catalog/daemon_address.dart';
-import 'package:flutterware_app/src/catalog/discovery.dart';
-import 'package:flutterware_app/src/catalog/protocol.dart';
-import 'package:flutterware_app/src/catalog/entrypoint_generator.dart';
+import 'package:flutterware_app/src/previews/asset_bundle.dart';
+import 'package:flutterware_app/src/previews/catalog_entry.dart';
+import 'package:flutterware_app/src/previews/compile_blame.dart';
+import 'package:flutterware_app/src/previews/daemon_address.dart';
+import 'package:flutterware_app/src/previews/discovery.dart';
+import 'package:flutterware_app/src/previews/protocol.dart';
+import 'package:flutterware_app/src/previews/entrypoint_generator.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/resident_compiler.dart';
@@ -325,8 +325,7 @@ class _Daemon {
       before.annotation != after.annotation ||
       before.name != after.name ||
       before.group != after.group ||
-      before.symbol != after.symbol ||
-      before.formFactor != after.formFactor;
+      before.symbol != after.symbol;
 
   /// Looked up among everything discovered, not only what is servable: an entry
   /// that does not compile has to stay selectable, because selecting it is how
@@ -478,9 +477,9 @@ class _Daemon {
         'no catalog entries found. Looked for '
         '${config.previewAnnotations.map((a) => '@$a').join(' and ')} in every '
         '.dart file under:\n$looked\n'
-        'Demos live in `demo/` unless the project says otherwise — set '
-        r"`UiCatalog(packages: [.new(app, directory: '...')])` in "
-        'tool/flutterware.dart, or run `fw run ui_catalog new '
+        'Previews live in `demo/` unless the project says otherwise — set '
+        r"`Previews(packages: [.new(app, directory: '...')])` in "
+        'tool/flutterware.dart, or run `fw run previews new '
         r"--name='Buttons'` to write the first one.",
       );
     }
@@ -1072,7 +1071,7 @@ class _Daemon {
   ///
   /// Runs wherever a rescan runs — the refresh request and every select —
   /// because they answer the same question about different halves of the
-  /// project: a rescan notices the demos moved, this notices the assets did.
+  /// project: a rescan notices the previews moved, this notices the assets did.
   /// ~30ms measured when nothing changed, against a picture that is wrong.
   Future<void> _refreshAssets() async {
     if (!_prepared.isCompleted) return;

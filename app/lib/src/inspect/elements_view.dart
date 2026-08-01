@@ -1,14 +1,14 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog_guest.dart';
+import 'package:flutterware/previews_guest.dart';
 
 import '../address/address_scope.dart';
 import 'inspect_dock.dart';
 import '../ui/theme.dart';
 
 /// Tree on the left, the selected node's detail on the right — the Elements
-/// tab of an [InspectDock], shared verbatim between the UI catalog's live
+/// tab of an [InspectDock], shared verbatim between Previews' live
 /// tree and a scenario step's snapshot. It renders an [InspectNode] and
 /// neither knows nor cares which of the two produced it.
 ///
@@ -465,7 +465,7 @@ class _Detail extends StatelessWidget {
             _Pair(
               label: 'source',
               // Shortened against the worktree, so this is the same string
-              // `fw run ui_catalog inspect --tree` prints for the same node —
+              // `fw run previews inspect --tree` prints for the same node —
               // one can be pasted where the other was expected.
               value: source.describe(relativeTo: displayRoot),
             ),

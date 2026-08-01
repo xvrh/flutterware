@@ -761,13 +761,6 @@ final resultShapes = <String, ResultShape>{
                     'doc':
                         'One tree level between the directory and the leaf, when the entry declares or derives one.',
                   },
-                  <String, Object?>{
-                    'name': 'formFactor',
-                    'type': 'String',
-                    'optional': true,
-                    'doc':
-                        '`mobile`, `desktop`, `all` — what the demo says it is *for*, when it says.',
-                  },
                 ],
               },
             },
@@ -819,15 +812,10 @@ final resultShapes = <String, ResultShape>{
         'name': 'annotation',
         'type': 'String',
         'doc':
-            'The annotation\'s source text, verbatim — `Demo(name: \'Counter\')`.',
+            'The annotation\'s source text, verbatim — `Preview(name: \'Counter\')`.',
       },
       <String, Object?>{'name': 'address', 'type': 'String'},
       <String, Object?>{'name': 'group', 'type': 'String', 'optional': true},
-      <String, Object?>{
-        'name': 'formFactor',
-        'type': 'String',
-        'optional': true,
-      },
       <String, Object?>{
         'name': 'knobs',
         'type': 'List<CatalogKnob>',
@@ -942,13 +930,6 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc':
             'One tree level between the directory and the leaf, when the entry declares or derives one.',
-      },
-      <String, Object?>{
-        'name': 'formFactor',
-        'type': 'String',
-        'optional': true,
-        'doc':
-            '`mobile`, `desktop`, `all` — what the demo says it is *for*, when it says.',
       },
     ],
   }),
@@ -1408,13 +1389,6 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
               'doc':
                   'One tree level between the directory and the leaf, when the entry declares or derives one.',
-            },
-            <String, Object?>{
-              'name': 'formFactor',
-              'type': 'String',
-              'optional': true,
-              'doc':
-                  '`mobile`, `desktop`, `all` — what the demo says it is *for*, when it says.',
             },
           ],
         },

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
 import 'shell.dart';
 
@@ -18,7 +17,7 @@ import 'shell.dart';
 /// is reported from `paint`, which means it fires **once per frame** — so this
 /// is also the fixture that shows the count doing its job, rather than several
 /// hundred identical rows.
-@Demo(name: 'Overflows', wrapper: wrapInApp)
+@Preview(name: 'Overflows', wrapper: wrapInApp)
 Widget overflows() => const _Overflows();
 
 class _Overflows extends StatelessWidget {

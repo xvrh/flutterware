@@ -130,7 +130,7 @@ Tests  3 failing
       Flutterware.configure(
         (fw) => fw
           ..use(_Docker(compose: 'docker/dev.yml', label: 'dev'))
-          ..use(_BarePlugin('flutterware.ui_catalog')),
+          ..use(_BarePlugin('flutterware.previews')),
         emit: (line) => emitted = line,
       );
 
@@ -138,12 +138,12 @@ Tests  3 failing
       expect(manifest.version, manifestVersion);
       expect(manifest.plugins.map((p) => p.id), [
         'acme.docker',
-        'flutterware.ui_catalog',
+        'flutterware.previews',
       ]);
       expect(manifest.plugins.first.label, 'dev');
       expect(manifest.plugins.first.config, {'compose': 'docker/dev.yml'});
       // Label falls back to the last dotted segment of the id.
-      expect(manifest.plugins.last.label, 'ui_catalog');
+      expect(manifest.plugins.last.label, 'previews');
     });
 
     test('rejects duplicate ids', () {

@@ -6,8 +6,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutterware_app/src/catalog/asset_bundle.dart';
-import 'package:flutterware_app/src/catalog/package_config_locator.dart';
+import 'package:flutterware_app/src/previews/asset_bundle.dart';
+import 'package:flutterware_app/src/previews/package_config_locator.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';

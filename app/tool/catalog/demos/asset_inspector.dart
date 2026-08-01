@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutterware_app/src/assets/detail.dart';
 import 'package:flutterware_app/src/assets/list.dart';
 import 'package:flutterware_app/src/assets/model/asset_catalog.dart';
@@ -24,13 +24,13 @@ import 'shell.dart';
 /// running the app against `examples/example`, which ships two weights of
 /// Roboto for exactly this.
 
-@Demo(name: 'List', formFactor: FormFactor.desktop, wrapper: wrapInApp)
+@Preview(name: 'List', wrapper: wrapInApp)
 Widget assetInspectorList() => const _Lists();
 
-@Demo(name: 'Previews', formFactor: FormFactor.desktop, wrapper: wrapInApp)
+@Preview(name: 'Previews', wrapper: wrapInApp)
 Widget assetInspectorPreviews() => const _Previews();
 
-@Demo(name: 'Detail', formFactor: FormFactor.desktop, wrapper: wrapInApp)
+@Preview(name: 'Detail', wrapper: wrapInApp)
 Widget assetInspectorDetail() => const _Detail();
 
 /// Every state of the list at once, which is the point of stacking them: an

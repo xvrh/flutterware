@@ -39,7 +39,7 @@ class ScenarioScanResult {
 /// (`2026-07-26-ui-catalog-entry-model.md`), applied to the third source.
 ///
 /// A `scenario('literal', …)` call is as syntactically discoverable as a
-/// `@Demo` annotation: the call's name and its first argument are all the
+/// `@Preview` annotation: the call's name and its first argument are all the
 /// report and the badges need. The runtime listing stays ground truth; a
 /// disagreement is a diagnostic, not a failure.
 class ScenarioScanner {

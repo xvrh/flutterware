@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutterware_app/src/catalog/compiler_daemon_client.dart';
-import 'package:flutterware_app/src/catalog/protocol.dart';
+import 'package:flutterware_app/src/previews/compiler_daemon_client.dart';
+import 'package:flutterware_app/src/previews/protocol.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart' as wire;
 import 'package:flutterware_app/src/utils/run_dir.dart';
@@ -18,7 +18,7 @@ import 'package:path/path.dart' as p;
 /// only proves the guest survives the messages, which is what let keyboard
 /// input look fine while every key sat undelivered in a framework queue.
 ///
-/// Needs the demos in `examples/example/demo/input.dart`, which report their
+/// Needs the previews in `examples/example/demo/input.dart`, which report their
 /// state as `Text` so a tree read can see it.
 ///
 /// Usage: `dart run tool/embedder/input_probe.dart [projectRoot]`

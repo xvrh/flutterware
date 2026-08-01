@@ -10,7 +10,7 @@ import 'knob.dart';
 /// The app-wide switches a project's shell offers, drawn in the catalog's top
 /// bar.
 ///
-/// Handed to [CatalogShell]'s builder rather than read off a [BuildContext],
+/// Handed to [PreviewShell]'s builder rather than read off a [BuildContext],
 /// and that confinement is the design rather than an accident of it. An axis
 /// outlives the entry on screen because it belongs to the shell, so a stray
 /// declaration from somewhere deep inside a demo would go on being offered
@@ -79,9 +79,9 @@ class CatalogAxes implements TopBarState {
   }
 
   /// Opens a shell's declaration pass and answers the object it declares
-  /// through. Called by [CatalogShell] and nothing else.
+  /// through. Called by [PreviewShell] and nothing else.
   ///
-  /// Shells do not nest: the pass is singular, so a [CatalogShell] built inside
+  /// Shells do not nest: the pass is singular, so a [PreviewShell] built inside
   /// another one replaces rather than extends what the outer one declared.
   TopBarState beginShell(String shellId) {
     _shellId = shellId;
@@ -207,7 +207,7 @@ class CatalogAxes implements TopBarState {
 ///
 /// ```dart
 /// // demo/shell.dart
-/// Widget wrapInApp(Widget child) => CatalogShell(
+/// Widget wrapInApp(Widget child) => PreviewShell(
 ///   'app',
 ///   builder: (context, topBar) => MyApp(
 ///     flavor: topBar.picker('flavor', {
@@ -219,7 +219,7 @@ class CatalogAxes implements TopBarState {
 /// );
 /// ```
 ///
-/// A demo names it the way it always did, with `@Demo(wrapper: wrapInApp)`.
+/// A preview names it the way it always did, with `@Preview(wrapper: wrapInApp)`.
 /// Nothing about the shell is discovered: it is an ordinary
 /// `Widget Function(Widget)`, so Flutter's own previewer and the real app call
 /// it unchanged and [TopBarState] answers them with the defaults.
@@ -228,8 +228,8 @@ class CatalogAxes implements TopBarState {
 /// back finds the flavour you had chosen. Write it once and leave it alone —
 /// it is a name, not a path, so moving or renaming the file does not lose what
 /// was set.
-class CatalogShell extends StatelessWidget {
-  const CatalogShell(this.id, {super.key, required this.builder});
+class PreviewShell extends StatelessWidget {
+  const PreviewShell(this.id, {super.key, required this.builder});
 
   /// This shell's name, unique within the project.
   final String id;

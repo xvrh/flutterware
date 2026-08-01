@@ -6,8 +6,8 @@ import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
-import '../catalog/asset_bundle.dart';
-import '../catalog/package_config_locator.dart';
+import '../previews/asset_bundle.dart';
+import '../previews/package_config_locator.dart';
 import '../embedder/flutter_cache.dart';
 import '../embedder/frontend_server.dart';
 import '../embedder/guest_vm_service.dart';

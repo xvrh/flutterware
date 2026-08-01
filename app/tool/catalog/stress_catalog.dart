@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:async/async.dart';
-import 'package:flutterware_app/src/catalog/compiler_daemon_client.dart';
-import 'package:flutterware_app/src/catalog/package_config_locator.dart';
-import 'package:flutterware_app/src/catalog/protocol.dart';
+import 'package:flutterware_app/src/previews/compiler_daemon_client.dart';
+import 'package:flutterware_app/src/previews/package_config_locator.dart';
+import 'package:flutterware_app/src/previews/protocol.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart';

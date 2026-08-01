@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 
 // Ours hidden here, not theirs: this file names `device_frame`'s bodies.
-import '../catalog/catalog_devices.dart' hide Devices;
+import '../previews/catalog_devices.dart' hide Devices;
 import '../plugins/native/scenarios_results.dart';
 import '../utils/raw_image_provider.dart';
 import '../ui/theme.dart';

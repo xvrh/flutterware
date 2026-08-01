@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware_app/src/catalog/devices.dart';
+import 'package:flutterware_app/src/previews/devices.dart';
 import 'package:flutterware_app/src/scenarios/framed_shot.dart';
 
 /// The test that makes the named-frame mapping safe: `device_frame`'s

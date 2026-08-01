@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:async/async.dart';
-import 'package:flutterware_app/src/catalog/asset_bundle.dart';
+import 'package:flutterware_app/src/previews/asset_bundle.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/frontend_server.dart';

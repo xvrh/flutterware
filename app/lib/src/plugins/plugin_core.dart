@@ -75,7 +75,7 @@ abstract class PluginCore {
   /// work belongs behind an action, where a caller chose it by name and can be
   /// told what it costs. The two first-party cores hold to this: the catalog
   /// parses its demo files and deliberately does not start the compile loop
-  /// (see `UiCatalogCore.track`), and dependencies parses pubspecs without
+  /// (see `PreviewsCore.track`), and dependencies parses pubspecs without
   /// resolving them.
   ///
   /// The budget is what lets every surface call this freely — `fw status`, MCP,

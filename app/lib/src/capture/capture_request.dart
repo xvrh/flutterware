@@ -186,7 +186,7 @@ class CaptureRequest {
   ///
   /// The list of ids is in the message because the cause is almost always a
   /// short name where a full one belongs — `ui_catalog` for
-  /// `flutterware.ui_catalog`, which is exactly the mistake that produced this
+  /// `flutterware.previews`, which is exactly the mistake that produced this
   /// check.
   String? _landingError(ShellController shell) {
     var wanted = address?.plugin;
@@ -214,7 +214,7 @@ class CaptureRequest {
   ///
   /// The gap is real: a documentation script should not have to write this
   /// machine's branch name. Closing it is either a relative form on the CLI
-  /// (`fw capture flutterware.ui_catalog`) or a correction to the spec, and
+  /// (`fw capture flutterware.previews`) or a correction to the spec, and
   /// that is a decision rather than a cleanup. This stays so that whichever
   /// way it goes, the shell side already works.
   static Address _resolve(Address destination, ShellController shell) =>

@@ -4,9 +4,9 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutterware_app/src/catalog/compiler_daemon_client.dart';
-import 'package:flutterware_app/src/catalog/package_config_locator.dart';
-import 'package:flutterware_app/src/catalog/protocol.dart';
+import 'package:flutterware_app/src/previews/compiler_daemon_client.dart';
+import 'package:flutterware_app/src/previews/package_config_locator.dart';
+import 'package:flutterware_app/src/previews/protocol.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';

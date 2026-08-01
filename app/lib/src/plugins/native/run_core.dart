@@ -21,7 +21,7 @@ import '../../utils/run_dir.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
 import 'run_results.dart';
-import 'ui_catalog_core.dart' show UiCatalogCore;
+import 'previews_core.dart' show PreviewsCore;
 
 /// The registered id — also what `tool/flutterware.dart` declares.
 const runPluginId = 'flutterware.run';
@@ -956,7 +956,7 @@ class RunCore extends PluginCore {
     );
     var knobs = _resolveKnobs(
       entry,
-      UiCatalogCore.parseKnobs(arguments['knobs']),
+      PreviewsCore.parseKnobs(arguments['knobs']),
     );
 
     var handle = await launch(

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutterware/previews.dart';
 
 /// The app chrome a demo needs to look like itself: theme, localizations,
 /// directionality.
@@ -11,12 +11,12 @@ import 'package:flutterware/ui_catalog.dart';
 /// because a demo that themes itself differently from the app is not a preview
 /// of the app.
 ///
-/// Wrapping it in a [CatalogShell] is what puts the switches below in the
+/// Wrapping it in a [PreviewShell] is what puts the switches below in the
 /// catalog's top bar, where they apply to every demo and stay put as you move
 /// between them. It changes nothing anywhere else: this is still a plain
 /// `Widget Function(Widget)`, and outside the catalog — in the real app, or in
 /// Flutter's own previewer — each switch answers with the default written here.
-Widget wrapInApp(Widget child) => CatalogShell(
+Widget wrapInApp(Widget child) => PreviewShell(
   'app',
   builder: (context, topBar) => MaterialApp(
     debugShowCheckedModeBanner: false,
