@@ -2,9 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:collection/collection.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
+import '../../catalog/devices.dart';
+import '../../catalog/headless_catalog.dart';
+import '../../catalog/protocol.dart';
 import '../../motion/discovery.dart';
 import '../../motion/values_file.dart';
 import '../plugin_core.dart';
@@ -165,6 +169,51 @@ class MotionCore extends PluginCore {
     view: _view(),
     actions: [
       PluginAction(
+        'capture',
+        'Capture',
+        returns: Artifact,
+        description:
+            'Renders one motion at a point on its playhead and writes a PNG. '
+            'The whole of an animation an agent can afford to look at: `t` is '
+            'an axis like a device or a language, so the same call at several '
+            'values is a filmstrip.',
+        parameters: [
+          ActionParameter(
+            'motion',
+            'Motion',
+            required: true,
+            description:
+                'The `motion:` identifier, as `list` reports it — `homeMotion`',
+          ),
+          const ActionParameter(
+            't',
+            'Playhead',
+            required: false,
+            // A string rather than an integer, because a playhead is a
+            // fraction and the kinds on offer are whole numbers or text.
+            description: 'Where on the motion, 0 to 1. The end when omitted.',
+          ),
+          ActionParameter(
+            'package',
+            'Package',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'Which declared package; the only one when omitted',
+            options: [
+              for (var path in packages)
+                ActionOption(path, label: path == '.' ? 'root' : path),
+            ],
+          ),
+          const ActionParameter(
+            'device',
+            'Device',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description: 'A device to render as; the panel otherwise',
+          ),
+        ],
+      ),
+      PluginAction(
         'list',
         'List',
         returns: MotionListResult,
@@ -195,6 +244,7 @@ class MotionCore extends PluginCore {
     String actionId, {
     Map<String, Object?> arguments = const {},
   }) async {
+    if (actionId == 'capture') return _capture(arguments);
     if (actionId != 'list') return super.invoke(actionId, arguments: arguments);
     var wanted = _requestedPackages(arguments['package']);
     for (var path in wanted) {
@@ -205,6 +255,107 @@ class MotionCore extends PluginCore {
       packages: [for (var path in wanted) _listPackage(path)],
     );
   }
+
+  /// One frame of a motion, at a point on its playhead.
+  ///
+  /// Goes through [HeadlessCatalog] rather than the panel's session, so this
+  /// answers the same whether a panel is open or nothing is running at all —
+  /// the rule the catalog's headless half already keeps.
+  Future<Artifact> _capture(Map<String, Object?> arguments) async {
+    var wanted = '${arguments['motion'] ?? ''}';
+    if (wanted.isEmpty) {
+      throw ArgumentError.value(wanted, 'motion', 'name a motion');
+    }
+    var t = switch (arguments['t']) {
+      num value => value.toDouble().clamp(0.0, 1.0),
+      String text when double.tryParse(text) != null => double.parse(
+        text,
+      ).clamp(0.0, 1.0),
+      // The end, because the finished state is what a still of an animation is
+      // usually being asked for.
+      _ => 1.0,
+    };
+
+    var packagePath = _requestedPackages(arguments['package']).first;
+    track(packagePath);
+    await _scans[packagePath];
+
+    var motion = _results[packagePath]?.motions.firstWhereOrNull(
+      (candidate) => candidate.values == wanted,
+    );
+    if (motion == null) {
+      var known = _results[packagePath]?.motions
+          .map((m) => m.values)
+          .nonNulls
+          .join(', ');
+      throw ArgumentError.value(
+        wanted,
+        'motion',
+        'not found in $packagePath; try ${known?.isEmpty ?? true ? 'none' : known}',
+      );
+    }
+
+    var catalog = _headless(packagePath);
+    // The entry whose source file is the one the motion was scanned from —
+    // the same join the panel makes, so the picture and the panel agree.
+    var audit = await catalog.auditAll();
+    var entry = audit.entries.firstWhereOrNull((e) => e.path == motion.file);
+    if (entry == null) {
+      throw StateError(
+        '`${motion.values}` lives in ${motion.file}, which is not a catalog '
+        'entry — a motion is captured through the demo that mounts it',
+      );
+    }
+
+    var device = switch (arguments['device']) {
+      String id when id.isNotEmpty && isDeviceId(id) => deviceById(id),
+      _ => null,
+    };
+    var output = p.join(
+      host.workspace.appContext.appToolDirectory.path,
+      'build',
+      'motion',
+      '${motion.values}-t${(t * 1000).round()}.png',
+    );
+    var captured = await catalog.capture(
+      entryId: entry.id,
+      output: output,
+      viewport: device == null
+          ? CaptureViewport.panel
+          : CaptureViewport.of(device),
+      motionT: t,
+    );
+
+    return Artifact(
+      kind: Artifact.png,
+      // Addressed at the playhead it was taken at, per the rule that a
+      // screenshot is under-specified without its axis assignment.
+      address: addressFor(
+        packagePath,
+        file: motion.file,
+        motion: motion.values,
+        t: t,
+      ),
+      path: p.relative(captured.file.path, from: host.worktree.path),
+      meta: {
+        'motion': motion.values,
+        'file': motion.file,
+        't': t,
+        'bytes': captured.file.lengthSync(),
+        'device': ?device?.id,
+      },
+    );
+  }
+
+  HeadlessCatalog _headless(String packagePath) => HeadlessCatalog(
+    dartExecutable: p.join(host.workspace.flutterSdk.root, 'bin', 'dart'),
+    config: DaemonConfig.forPackage(
+      appToolDirectory: host.workspace.appContext.appToolDirectory.path,
+      packageRoot: host.workspace.packageFor(packagePath).directory.path,
+      flutterSdkRoot: host.workspace.flutterSdk.root,
+      roots: [directoryFor(packagePath)],
+    ),
+  );
 
   List<String> _requestedPackages(Object? argument) {
     if (argument is! String || argument.isEmpty) return packages;

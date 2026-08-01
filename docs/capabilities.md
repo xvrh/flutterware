@@ -290,6 +290,31 @@ fw run server sql [--name=…] [--top=…]
 
 ### `flutterware.motion`
 
+#### `capture` — Capture
+
+Renders one motion at a point on its playhead and writes a PNG. The whole of an animation an agent can afford to look at: `t` is an axis like a device or a language, so the same call at several values is a filmstrip.
+
+```sh
+fw run motion capture --motion=<string> [--t=…] [--package=…] [--device=…]
+```
+
+Returns `Artifact`:
+
+```
+kind: String   # A MIME type where one fits — see the constants above.
+address: String   # What this is an artifact of, axes included.
+path: String?   # Where it was written, when it was written.
+text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
+meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `motion` | string | yes | — | The `motion:` identifier, as `list` reports it — `homeMotion` |
+| `t` | string | no | — | Where on the motion, 0 to 1. The end when omitted. |
+| `package` | choice | no | — | Which declared package; the only one when omitted |
+| `device` | choice | no | — | A device to render as; the panel otherwise |
+
 #### `list` — List
 
 Every motion of a package, with its targets and where each is read — from the syntactic scan, without compiling or running anything. Read the diagnostics: a target named by an expression rather than a literal is real at run time and invisible here.

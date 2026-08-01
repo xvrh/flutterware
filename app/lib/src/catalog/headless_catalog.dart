@@ -72,6 +72,9 @@ class HeadlessCatalog {
 
     /// Draw every node of the tree over the picture, id and all.
     bool annotate = false,
+
+    /// Where to park the entry's motion, 0..1.
+    double? motionT,
   }) async {
     var observed = await observe(
       entryId: entryId,
@@ -83,6 +86,7 @@ class HeadlessCatalog {
       annotate: annotate,
       cropNode: node,
       wantKnobs: true,
+      motionT: motionT,
     );
     return CatalogCapture(
       // `observe` was asked for a screenshot, so it took one or threw.
@@ -284,10 +288,17 @@ class HeadlessCatalog {
     String? screenshot,
     bool annotate = false,
     String? cropNode,
+
+    /// Where to park the entry's motion, 0..1. See [_GuestSession.seekMotion].
+    double? motionT,
   }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
     if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
     if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
     await guest.applyDebug(debug);
+    // After the knobs and the axes, because both rebuild the demo and a
+    // rebuilt scope would start wherever its controller says rather than where
+    // this was asked to put it.
+    if (motionT != null) await guest.seekMotion(motionT);
 
     // Read whenever anything needs it, which is more often than the caller asked
     // for it: a hit resolves ids against a tree, a crop needs a node's rect, and
@@ -837,6 +848,30 @@ class _GuestSession {
     if (values.isEmpty) return;
     await _renderScratchFrame();
     await applyDebugFlags(_vmService, values);
+  }
+
+  /// Parks the entry's motion at [t], 0..1.
+  ///
+  /// A frame first, for the reason [applyDebug] gives: a `MotionScope`
+  /// registers its extensions when it *mounts*, so a seek asked for before the
+  /// demo has built comes back "method not found" rather than seeking.
+  ///
+  /// The seek itself answers after the guest's next frame, so by the time this
+  /// returns the picture is already at `t` and the capture that follows needs no
+  /// settling of its own.
+  Future<void> seekMotion(double t) async {
+    await _renderScratchFrame();
+    var reply = await _vmService.callExtension(
+      'ext.flutterware.motion.seek',
+      args: {'t': '$t'},
+    );
+    if (reply == null) {
+      throw ArgumentError.value(
+        t,
+        't',
+        'this entry has no mounted MotionScope to seek',
+      );
+    }
   }
 
   /// Draws one frame nobody looks at, so the demo has built.

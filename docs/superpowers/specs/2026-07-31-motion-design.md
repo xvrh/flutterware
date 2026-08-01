@@ -903,3 +903,40 @@ No keyframe insertion or deletion, no curve picker, no value editing — the dra
 retimes and trims, and that is the whole of the edit surface for now. Adding a
 property from the `+` on an untuned lane is the next obvious one, and it is the
 creation path the three states exist for.
+
+## The agent surface — `capture`, 2026-08-01
+
+`fw run motion capture --motion=receiptMotion --t=0.45` renders one frame of a
+motion and returns an `Artifact` addressed at the playhead it was taken at —
+which is the rule that a screenshot is under-specified without its axis
+assignment, applied to `t`.
+
+It goes through `HeadlessCatalog`, so it answers the same whether a panel is
+open or nothing is running. That needed one thing the catalog did not have:
+`_GuestSession.seekMotion`, and an optional `motionT` on `observe`/`capture`.
+
+**Two orderings in it are load-bearing**, and both are the same lesson the debug
+flags already taught:
+
+- **A frame before the seek.** A `MotionScope` registers its extensions when it
+  *mounts*, so a seek asked for before the demo has built comes back "method not
+  found" rather than seeking.
+- **The seek after the knobs and the axes.** Both rebuild the demo, and a
+  rebuilt scope starts wherever its controller says rather than where it was
+  put.
+
+### The estimate was wrong
+
+This was described as "mostly promotion work" because `motion_shots.dart`
+already did it. It did — through the demos' `t` **knob**, which works only
+because both demos happen to declare one. That is a convention, not a
+capability, and an action built on it would have failed on the first motion
+written by somebody who had not read our demos. Driving the extension is the
+real thing and it needed the catalog's headless half to learn a new verb.
+
+### Still to come
+
+`filmstrip --frames=N` as one contact sheet. N separate captures is a
+loop over this and needs nothing new; the *sheet* needs an image composer,
+which is the actual work and the reason it is worth doing properly — one image
+of N moments is what makes an animation affordable for an agent to look at.
