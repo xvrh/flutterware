@@ -6,11 +6,11 @@ import 'package:flutterware/plugins.dart' show fuzzyMatch;
 
 import '../../address/address_scope.dart';
 import '../../catalog/devices.dart';
-import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/flow_view.dart';
 import '../../scenarios/harness_entrypoint.dart';
+import '../../scenarios/help_page.dart';
 import '../../scenarios/new_scenario_dialog.dart';
 import '../../scenarios/step_page.dart';
 import '../../ui/empty_state.dart';
@@ -191,11 +191,26 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
             axes: axes,
             key: ValueKey('${place.package}/$file#$scenario'),
           );
+        } else if (place.help ||
+            // A suite of none has nothing to pick, so the page that says what
+            // to do is the page to be on. Only once the scan has answered —
+            // "there are none" is a finding, not the absence of one.
+            (_core.scanResultFor(place.package)?.scenarios.isEmpty ?? false)) {
+          detail = ScenarioHelpPage(
+            directory: _core.directoryFor(place.package),
+            onNew: () => unawaited(_newScenario(context, _core, place.package)),
+          );
         } else {
-          detail = const EmptyState(
+          detail = EmptyState(
             icon: Icons.route_outlined,
             title: 'Pick a scenario',
             message: 'Opening one runs it.',
+            action: TextButton(
+              onPressed: () => AddressScope.write(
+                context,
+              ).setSegments(scenarioSegments(place.package, help: true)),
+              child: const Text('How to write one'),
+            ),
           );
         }
         return Row(
@@ -217,6 +232,28 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
       },
     );
   }
+}
+
+/// Writes a scenario and goes straight to it — which runs it, since opening a
+/// scenario is the demand. The whole point of the button over the command the
+/// help page names: you end up looking at the thing you just made.
+///
+/// Top-level because three surfaces offer it — the list header, the empty list,
+/// and the help page — and they are in three different widgets.
+Future<void> _newScenario(
+  BuildContext context,
+  ScenariosCore core,
+  String package,
+) async {
+  var result = await showNewScenarioDialog(
+    context,
+    core: core,
+    package: package,
+  );
+  if (result == null || !context.mounted) return;
+  AddressScope.write(context).setSegments(
+    scenarioSegments(package, file: result.file, scenario: result.name),
+  );
 }
 
 /// The master pane: every scenario of the package, grouped by file, the
@@ -253,21 +290,6 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
     super.dispose();
   }
 
-  /// Writes a scenario and goes straight to it — which runs it, since opening
-  /// a scenario is the demand. The whole point of the button over the command
-  /// the hint names: you end up looking at the thing you just made.
-  Future<void> _newScenario(BuildContext context) async {
-    var result = await showNewScenarioDialog(
-      context,
-      core: core,
-      package: package,
-    );
-    if (result == null || !context.mounted) return;
-    AddressScope.write(context).setSegments(
-      scenarioSegments(package, file: result.file, scenario: result.name),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     // Nothing to narrow until the scan has found something: a filter over a
@@ -278,7 +300,11 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
       children: [
         _ListPaneHeader(
           directory: core.directoryFor(package),
-          onNew: () => unawaited(_newScenario(context)),
+          onNew: () => unawaited(_newScenario(context, core, package)),
+          onHelp: () => AddressScope.write(
+            context,
+          ).setSegments(scenarioSegments(package, help: true)),
+          helpSelected: widget.selected.help,
         ),
         if (scanned.isNotEmpty)
           _FilterField(controller: _query, onChanged: (_) => setState(() {})),
@@ -306,24 +332,22 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
       return const Center(child: CircularProgressIndicator());
     }
     if (result.scenarios.isEmpty) {
-      // The hint is the same string `list` hands an agent — this used to be the
-      // only place it was said, which is what made it unfindable from anywhere
-      // else. Above it, the thing it describes, as a button: a reader who is in
-      // the GUI should not be sent to a terminal to get their first file.
+      // Two doors and a sentence, because this column is 240px wide. What used
+      // to be here — the whole authoring hint, wrapped to death — is the help
+      // page the detail pane opens itself on, where a code example can be code.
       return SingleChildScrollView(
         padding: const EdgeInsets.all(FwSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             FilledButton.icon(
-              onPressed: () => unawaited(_newScenario(context)),
+              onPressed: () => unawaited(_newScenario(context, core, package)),
               icon: const Icon(Icons.add, size: 16),
               label: const Text('New scenario'),
             ),
             const Gap(FwSpacing.lg),
-            SelectableText(
-              'No scenarios in ${core.directoryFor(package)}.\n\n'
-              '${scenarioAuthoringHint(core.directoryFor(package))}',
+            Text(
+              'No scenarios in ${core.directoryFor(package)}.',
               style: context.type.caption.copyWith(color: context.colors.mut),
             ),
           ],
@@ -432,20 +456,28 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
   }
 }
 
-/// The list pane's header: which directory this suite lives in, and the way to
-/// add to it.
+/// The list pane's header: which directory this suite lives in, the way to add
+/// to it, and the way back to how.
 ///
 /// Above every state the pane has — loading, failed, empty, populated — because
-/// "write another one" is not a question you only have when there are none.
+/// neither "write another one" nor "how does `split` go again" is a question
+/// you only have when there are none. The help used to live in the empty state
+/// alone, which meant the first file you wrote took it away.
 class _ListPaneHeader extends StatelessWidget {
-  const _ListPaneHeader({required this.directory, required this.onNew});
+  const _ListPaneHeader({
+    required this.directory,
+    required this.onNew,
+    required this.onHelp,
+    required this.helpSelected,
+  });
 
   final String directory;
   final VoidCallback onNew;
+  final VoidCallback onHelp;
+  final bool helpSelected;
 
   @override
   Widget build(BuildContext context) {
-    var colors = context.colors;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         FwSpacing.lg,
@@ -466,25 +498,51 @@ class _ListPaneHeader extends StatelessWidget {
               ),
             ),
           ),
-          Tooltip(
-            message: 'New scenario',
-            child: Tappable.builder(
-              onTap: onNew,
-              builder: (context, hovered) => Container(
-                padding: const EdgeInsets.all(FwSpacing.xs),
-                decoration: BoxDecoration(
-                  color: hovered ? colors.panel : Colors.transparent,
-                  borderRadius: BorderRadius.circular(context.radii.radius),
-                ),
-                child: Icon(
-                  Icons.add,
-                  size: 16,
-                  color: hovered ? colors.ink : colors.mut,
-                ),
-              ),
-            ),
+          _HeaderButton(
+            icon: Icons.help_outline,
+            tooltip: 'How to write a scenario',
+            onTap: onHelp,
+            selected: helpSelected,
           ),
+          _HeaderButton(icon: Icons.add, tooltip: 'New scenario', onTap: onNew),
         ],
+      ),
+    );
+  }
+}
+
+class _HeaderButton extends StatelessWidget {
+  const _HeaderButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tooltip(
+      message: tooltip,
+      child: Tappable.builder(
+        onTap: onTap,
+        builder: (context, hovered) => Container(
+          padding: const EdgeInsets.all(FwSpacing.xs),
+          decoration: BoxDecoration(
+            color: selected || hovered ? colors.panel : Colors.transparent,
+            borderRadius: BorderRadius.circular(context.radii.radius),
+          ),
+          child: Icon(
+            icon,
+            size: 16,
+            color: selected || hovered ? colors.ink : colors.mut,
+          ),
+        ),
       ),
     );
   }

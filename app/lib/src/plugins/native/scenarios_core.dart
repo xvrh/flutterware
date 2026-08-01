@@ -97,8 +97,8 @@ class ScenariosCore extends PluginCore {
   final _panelRuns = <(String, String, String), ScenarioPanelRun>{};
 
   /// The runner's last progress line per package — the only narration a cold
-  /// start has, so the panel can say "building the asset bundle" rather than
-  /// spinning silently for thirty seconds.
+  /// start has, so the panel can say "compiling the harness" rather than
+  /// spinning silently.
   final _runnerLogs = <String, String>{};
 
   /// Declared packages, filtered to those the workspace knows about.
@@ -1476,18 +1476,6 @@ class ScenariosCore extends PluginCore {
       unawaited(runner.dispose());
     }
     _runnerLogs.remove(path);
-    // Drop the bundle stamp too: a full restart means "rebuild it all",
-    // including assets the stamp cannot see (a dependency's, say).
-    var stamp = File(
-      p.join(
-        host.workspace.packageFor(path).directory.path,
-        'build',
-        'flutterware',
-        'scenarios_assets',
-        '.assets.stamp',
-      ),
-    );
-    if (stamp.existsSync()) stamp.deleteSync();
     notifyChanged();
   }
 

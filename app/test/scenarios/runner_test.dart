@@ -642,6 +642,41 @@ void main() {
     timeout: const Timeout(Duration(minutes: 4)),
   );
 
+  test(
+    'a package with no lib/main.dart runs, and taps a Material button',
+    () async {
+      var flutterRoot = Platform.environment['FLUTTER_ROOT']!;
+      // The workspace root — the `flutterware` package itself, which has no
+      // `lib/main.dart`, like any library or any app whose entry lives
+      // elsewhere. Shelling out to `flutter build bundle` used to stop such a
+      // package with `Target file "lib/main.dart" not found` before a single
+      // scenario ran.
+      var repoRoot = Directory.current.parent.path;
+      var outDir = Directory.systemTemp.createTempSync('scenario_no_main').path;
+      var dir = Directory(p.join(repoRoot, 'test', 'scenarios_no_main'))
+        ..createSync(recursive: true);
+      File(
+        p.join(dir.path, 'ripple_test.dart'),
+      ).writeAsStringSync(_rippleSource);
+
+      var runner = ScenarioRunner(
+        packageRoot: repoRoot,
+        directory: 'test/scenarios_no_main',
+        flutterSdkRoot: flutterRoot,
+      );
+      try {
+        var report = await runner.run(outDir: outDir);
+        var outcome = (report['scenarios']! as List).single as Map;
+        expect(outcome['ok'], isTrue, reason: '${outcome['errors']}');
+      } finally {
+        await runner.dispose();
+        dir.deleteSync(recursive: true);
+        Directory(outDir).deleteSync(recursive: true);
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 4)),
+  );
+
   test('the entrypoint file is left alone when its content is right', () {
     var root = Directory.systemTemp.createTempSync('scenario_entrypoint');
     try {
@@ -700,6 +735,33 @@ List<String> _scratchTexts(Map<String, Object?> report) {
   var steps = (scratch['steps']! as List).cast<Map<String, dynamic>>();
   return (steps.last['texts']! as List).cast<String>();
 }
+
+/// A scenario that needs the bundle to be right in the one way a hand-written
+/// one is most likely to get wrong: `FragmentProgram.fromAsset` throws unless
+/// `shaders/ink_sparkle.frag` is the *compiled* form, and it is what an M3
+/// button's first tap loads.
+const _rippleSource = r'''
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('Ripple', (s) async {
+    await FragmentProgram.fromAsset('shaders/ink_sparkle.frag');
+    await s.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: ElevatedButton(onPressed: () {}, child: const Text('Tap')),
+          ),
+        ),
+      ),
+    );
+    await s.tap('Tap');
+  });
+}
+''';
 
 String _scratchSource(String label) =>
     '''
