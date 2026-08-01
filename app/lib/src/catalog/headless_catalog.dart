@@ -764,7 +764,7 @@ class _GuestSession {
         values.keys.join(', '),
         'axes',
         'this entry has no shell, so it offers no axes. Axes are declared by a '
-            'CatalogShell around the demo.',
+            'PreviewShell around the demo.',
       );
     }
 
@@ -860,7 +860,7 @@ class _GuestSession {
 
   /// Turns [values] on [entryId], and reports what the entry says afterwards.
   ///
-  /// Coerced to the kind the demo declared, because everything arrives as text:
+  /// Coerced to the kind the preview declared, because everything arrives as text:
   /// a shell flag has no types and a JSON object from an agent may disagree
   /// with the demo about int versus double.
   Future<KnobReport> applyKnobs(

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
 import 'shell.dart';
 
@@ -12,7 +12,7 @@ import 'shell.dart';
 /// shows this demo perfectly minus its pictures. It is also the font specimen
 /// `asset_inspector.dart`'s demos cannot carry — a font that renders needs
 /// real bytes, and the app bundles none, so the working case lives here.
-@Demo(name: 'Asset smoke', wrapper: wrapInApp)
+@Preview(name: 'Asset smoke', wrapper: wrapInApp)
 Widget assetSmoke() => Scaffold(
   body: Center(
     child: Column(

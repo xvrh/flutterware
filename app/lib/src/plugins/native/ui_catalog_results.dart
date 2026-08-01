@@ -3,7 +3,7 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'ui_catalog_results.g.dart';
 
-/// What the UI catalog's actions hand back.
+/// What the Previews actions hand back.
 ///
 /// Classes rather than hand-built maps, for three reasons that all showed up in
 /// this plugin: the compiler checks a field name and does not check `'entires'`;
@@ -121,7 +121,6 @@ class CatalogEntrySummary {
     required this.name,
     required this.address,
     this.group,
-    this.formFactor,
   });
 
   /// What `screenshot --entry` and `describe --entry` take.
@@ -137,7 +136,6 @@ class CatalogEntrySummary {
   final String? group;
 
   /// `mobile`, `desktop`, `all` — what the demo says it is *for*, when it says.
-  final String? formFactor;
 
   Map<String, Object?> toJson() => _$CatalogEntrySummaryToJson(this);
 }
@@ -220,7 +218,6 @@ class CatalogEntryDescription implements PluginResult {
     required this.annotation,
     required this.address,
     this.group,
-    this.formFactor,
     this.knobs,
     this.axes,
     this.shell,
@@ -238,12 +235,11 @@ class CatalogEntryDescription implements PluginResult {
   /// The annotated top-level function.
   final String symbol;
 
-  /// The annotation's source text, verbatim — `Demo(name: 'Counter')`.
+  /// The annotation's source text, verbatim — `Preview(name: 'Counter')`.
   final String annotation;
 
   final String address;
   final String? group;
-  final String? formFactor;
 
   /// Present only when `--knobs` asked for them: reading a knob costs a
   /// compile and a frame, so absent means "not looked at" while an empty list

@@ -168,7 +168,7 @@ Widget settingsWide() => const Placeholder();
       p.join(root.path, 'build', 'web_src', 'entry_0.dart'),
     ).readAsStringSync();
 
-    expect(wrapper, contains('Demo get fwDemo => Demo();'));
+    expect(wrapper, contains('Preview get fwDemo => Demo();'));
     expect(
       wrapper,
       contains('Widget Function() get fwBuilder => fw0.settings;'),

@@ -1,4 +1,4 @@
-/// How the UI catalog writes itself into an address, and how it reads itself
+/// How Previews writes itself into an address, and how it reads itself
 /// back out.
 ///
 /// **Both directions in one file, on purpose.** The address is written by

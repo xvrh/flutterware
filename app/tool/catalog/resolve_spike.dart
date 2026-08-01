@@ -173,7 +173,6 @@ Future<void> main(List<String> args) async {
     print('  annotation   ${entry.annotationType}');
     print('  name         ${entry.name}');
     print('  id           ${entry.declaredId ?? '(derived)'}');
-    print('  formFactor   ${entry.formFactor ?? '-'}');
     print('  figma        ${entry.figma ?? '-'}');
     var shell = entry.wrapper == null ? null : shells[entry.wrapper];
     if (shell == null) {
@@ -398,7 +397,6 @@ class _ResolvedEntry {
     required this.annotationType,
     required this.name,
     required this.declaredId,
-    required this.formFactor,
     required this.figma,
     required this.wrapper,
     required this.target,
@@ -409,7 +407,6 @@ class _ResolvedEntry {
   final String annotationType;
   final String name;
   final String? declaredId;
-  final String? formFactor;
   final String? figma;
 
   /// The function `wrapper:` names — recovered as an element even though the
@@ -471,9 +468,9 @@ void _collectEntries(
       var type = value?.type;
       if (value == null || type is! InterfaceType) continue;
       // Recognition by the element's own hierarchy, not by the annotation's
-      // spelling. A project's `base class Tablet extends Demo` is found here
-      // with no registration list and no name matching.
-      if (!_isDemo(type.element)) continue;
+      // spelling. A project's `base class Tablet extends Preview` is found
+      // here with no registration list and no name matching.
+      if (!_isPreview(type.element)) continue;
       into.add(
         _ResolvedEntry(
           path: relative,
@@ -481,7 +478,6 @@ void _collectEntries(
           annotationType: type.element.name ?? '?',
           name: _field(value, 'name')?.toStringValue() ?? symbol,
           declaredId: _field(value, 'id')?.toStringValue(),
-          formFactor: _field(value, 'formFactor')?.variable?.name,
           figma: _field(value, 'figma')?.toStringValue(),
           wrapper: _field(value, 'wrapper')?.toFunctionValue(),
           target: element,
@@ -507,13 +503,13 @@ void _collectEntries(
   }
 }
 
-/// Whether [element] is `Demo` or descends from it.
-bool _isDemo(InterfaceElement element) {
+/// Whether [element] is `Preview` or descends from it.
+bool _isPreview(InterfaceElement element) {
   InterfaceElement? current = element;
   var guard = 0;
   while (current != null && guard++ < 32) {
-    if (current.name == 'Demo' &&
-        '${current.library.uri}'.startsWith('package:flutterware/')) {
+    if (current.name == 'Preview' &&
+        '${current.library.uri}'.startsWith('package:flutter/')) {
       return true;
     }
     current = current.supertype?.element;
@@ -524,8 +520,9 @@ bool _isDemo(InterfaceElement element) {
 /// A field of a const object, following the superclass chain.
 ///
 /// The chain matters: every field this reads — `name`, `wrapper`, `group` —
-/// is declared on `Preview`, not on `Demo`, and a `DartObject` keeps inherited
-/// fields under the synthetic `(super)` key rather than flattening them.
+/// is declared on `Preview` while a project's own subclass declares the rest,
+/// and a `DartObject` keeps inherited fields under the synthetic `(super)` key
+/// rather than flattening them.
 DartObject? _field(DartObject object, String name) {
   DartObject? current = object;
   var guard = 0;

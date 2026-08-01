@@ -82,14 +82,14 @@ const shots = [
   // text and all — and looks broken in a README.
   Shot(
     'ui_catalog',
-    path: '/flutterware.ui_catalog/$examplePackage/demo/buttons.dart%23buttons',
+    path: '/flutterware.previews/$examplePackage/demo/buttons.dart%23buttons',
     caption: 'UI catalog: a demo rendered in a live embedded engine.',
     height: 900,
   ),
   Shot(
     'ui_catalog_device',
     path:
-        '/flutterware.ui_catalog/$examplePackage/demo/'
+        '/flutterware.previews/$examplePackage/demo/'
         'home_page.dart%23homePageMobile',
     caption: 'The same catalog, with a demo that pins its own phone canvas.',
   ),

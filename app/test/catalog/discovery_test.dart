@@ -22,7 +22,7 @@ void main() {
     write('team/avatar_tile.dart', '''
 import 'package:flutter/widgets.dart';
 
-@Demo(name: 'Members')
+@Preview(name: 'Members')
 Widget avatarTileMembers() => const Placeholder();
 
 Widget notAnEntry() => const Placeholder();
@@ -42,14 +42,13 @@ Widget notAnEntry() => const Placeholder();
 
   test('carries the annotation verbatim, never interpreted', () {
     write('a.dart', '''
-@Demo(name: 'X', formFactor: FormFactor.desktop, size: kWide, wrapper: shell)
+@Preview(name: 'X', size: kWide, wrapper: shell)
 Widget a() => const Placeholder();
 ''');
 
     expect(
       scan().entries.single.annotation,
-      "Demo(name: 'X', formFactor: FormFactor.desktop, size: kWide, "
-      'wrapper: shell)',
+      "Preview(name: 'X', size: kWide, wrapper: shell)",
     );
   });
 
@@ -60,7 +59,7 @@ Widget a() => const Placeholder();
 import 'package:flutter/widgets.dart';
 
 class AvatarTileDemo extends StatelessWidget {
-  @Demo(name: 'Avatar tile')
+  @Preview(name: 'Avatar tile')
   const AvatarTileDemo({super.key});
 
   @override
@@ -76,10 +75,10 @@ class AvatarTileDemo extends StatelessWidget {
   test('finds annotated named constructors and static methods', () {
     write('b.dart', '''
 class Demos {
-  @Demo(name: 'Named')
+  @Preview(name: 'Named')
   const Demos.named();
 
-  @Demo(name: 'Static')
+  @Preview(name: 'Static')
   static Widget build() => const Placeholder();
 }
 ''');
@@ -116,12 +115,79 @@ Widget preview() => const Placeholder();
     },
   );
 
+  group('MultiPreview', () {
+    // Flutter's one-annotation-many-previews base class. Both of these used to
+    // be silent: unregistered, the previews are simply missing; registered, the
+    // generated wrapper fails to compile pointing at generated code.
+    const brightness = '''
+final class BrightnessPreview extends MultiPreview {
+  const BrightnessPreview();
+
+  @override
+  List<Preview> get previews => const [Preview(name: 'Light')];
+}
+''';
+
+    test('unregistered is none of our business', () {
+      // Two reasons, and the second is the binding one. It may be serving
+      // Flutter's own previewer perfectly well, so warning off a bare-name
+      // match is this scanner volunteering an opinion about a file it has no
+      // stake in. And knowing whether the name is *used* would mean parsing the
+      // files the prefilter skips — 20ms becomes 478ms to serve a case with no
+      // users.
+      write('brightness.dart', brightness);
+      write('a.dart', '''
+@BrightnessPreview()
+Widget themed() => const Placeholder();
+''');
+
+      var result = scan();
+      expect(result.entries, isEmpty);
+      expect(result.diagnostics, isEmpty);
+    });
+
+    test('is refused, with the reason, when it is registered', () {
+      write('brightness.dart', brightness);
+
+      var result = CatalogScanner(
+        projectRoot: root.path,
+        previewAnnotations: const ['Demo', 'Preview', 'BrightnessPreview'],
+      ).scan();
+      expect(result.ok, isFalse);
+      expect(
+        result.diagnostics.single.message,
+        allOf(contains('BrightnessPreview'), contains('previewAnnotations')),
+      );
+    });
+
+    test('is found in a file that declares no entries of its own', () {
+      // The prefilter reads for annotations, and the class that extends
+      // MultiPreview is routinely declared away from anything using it — hence
+      // `MultiPreview` joining the annotations as a prefilter term.
+      write('annotations/brightness.dart', brightness);
+      write('a.dart', '''
+@Preview(name: 'Ordinary')
+Widget ordinary() => const Placeholder();
+''');
+
+      var result = CatalogScanner(
+        projectRoot: root.path,
+        previewAnnotations: const ['Demo', 'Preview', 'BrightnessPreview'],
+      ).scan();
+      expect(result.entries.map((e) => e.name), ['Ordinary']);
+      expect(
+        result.diagnostics.single.location,
+        'demo/annotations/brightness.dart',
+      );
+    });
+  });
+
   test('a file with several entries derives a group from its filename', () {
     write('team/member_list_view.dart', '''
-@Demo(name: 'Few')
+@Preview(name: 'Few')
 Widget few() => const Placeholder();
 
-@Demo(name: 'Empty')
+@Preview(name: 'Empty')
 Widget empty() => const Placeholder();
 ''');
 
@@ -133,7 +199,7 @@ Widget empty() => const Placeholder();
 
   test('a file with one entry derives no group', () {
     write('team/avatar_tile.dart', '''
-@Demo(name: 'Avatar tile')
+@Preview(name: 'Avatar tile')
 Widget avatarTile() => const Placeholder();
 ''');
 
@@ -142,14 +208,14 @@ Widget avatarTile() => const Placeholder();
 
   test('a declared group wins over the derived one, and spans files', () {
     write('case/upload_capture.dart', '''
-@Demo(name: 'Capture', group: 'Upload')
+@Preview(name: 'Capture', group: 'Upload')
 Widget capture() => const Placeholder();
 ''');
     write('case/upload_progress.dart', '''
-@Demo(name: 'In progress', group: 'Upload')
+@Preview(name: 'In progress', group: 'Upload')
 Widget progress() => const Placeholder();
 
-@Demo(name: 'Failed', group: 'Upload')
+@Preview(name: 'Failed', group: 'Upload')
 Widget failed() => const Placeholder();
 ''');
 
@@ -158,43 +224,16 @@ Widget failed() => const Placeholder();
 
   test('a declared id overrides the derived identity', () {
     write('a.dart', '''
-@Demo(name: 'X', id: 'stable-id')
+@Preview(name: 'X', id: 'stable-id')
 Widget x() => const Placeholder();
 ''');
 
     expect(scan().entries.single.id, 'stable-id');
   });
 
-  test('stacked annotations on one declaration are rejected, not collapsed', () {
-    // Both derive `path#symbol`, so one entry would be unreachable. This is the
-    // single case where the design refuses rather than reports.
-    write('a.dart', '''
-@Demo(name: 'Few')
-@Demo(name: 'Empty')
-Widget list() => const Placeholder();
-''');
-
-    var result = scan();
-    expect(result.ok, isFalse);
-    expect(
-      result.diagnostics.map((d) => d.message).join(),
-      contains('same id'),
-    );
-  });
-
-  test('an explicit id resolves a stacked-annotation clash', () {
-    write('a.dart', '''
-@Demo(name: 'Few')
-@Demo(name: 'Empty', id: 'a.dart#list.empty')
-Widget list() => const Placeholder();
-''');
-
-    expect(scan().ok, isTrue);
-  });
-
   test('a target with required parameters is an error', () {
     write('a.dart', '''
-@Demo(name: 'X')
+@Preview(name: 'X')
 Widget x(int count) => const Placeholder();
 ''');
 
@@ -206,7 +245,7 @@ Widget x(int count) => const Placeholder();
 
   test('optional and named parameters are fine', () {
     write('a.dart', '''
-@Demo(name: 'X')
+@Preview(name: 'X')
 Widget x({int count = 0}) => const Placeholder();
 ''');
 
@@ -216,7 +255,7 @@ Widget x({int count = 0}) => const Placeholder();
 
   test('a wrong return type is reported but still discovered', () {
     write('a.dart', '''
-@Demo(name: 'X')
+@Preview(name: 'X')
 String x() => 'not a widget';
 ''');
 
@@ -228,7 +267,7 @@ String x() => 'not a widget';
 
   test('the name falls back to the symbol when none is declared', () {
     write('a.dart', '''
-@Demo()
+@Preview()
 Widget avatarTile() => const Placeholder();
 ''');
 
@@ -240,32 +279,42 @@ Widget avatarTile() => const Placeholder();
     expect(scan().entries, isEmpty);
   });
 
-  test('the form factor is read as the name it is written with', () {
-    write('sizes.dart', '''
-import 'package:flutter/widgets.dart';
-
-@Demo(name: 'Phone', formFactor: FormFactor.mobile)
-Widget phone() => const Placeholder();
-
-@Demo(name: 'Desk', formFactor: FormFactor.desktop)
-Widget desk() => const Placeholder();
-
-@Demo(name: 'Plain')
-Widget plain() => const Placeholder();
+  test('stacked annotations take an ordinal, so no id has to be declared', () {
+    // Stacking is one of the two ways to spell variants, and it used to be the
+    // one place `id:` was mandatory: both annotations derived `path#symbol`,
+    // and the collision was a scan error.
+    write('variants.dart', '''
+@Preview(name: 'Light')
+@Preview(name: 'Dark')
+Widget themed() => const Placeholder();
 ''');
 
-    // The name it is written with, not what it resolves to: discovery parses,
-    // it does not analyse.
-    expect(
-      {for (var e in scan().entries) e.symbol: e.formFactor},
-      {'phone': 'mobile', 'desk': 'desktop', 'plain': null},
-    );
+    var result = scan();
+    expect(result.ok, isTrue);
+    expect(result.entries.map((e) => e.id), [
+      'demo/variants.dart#themed',
+      'demo/variants.dart#themed#1',
+    ]);
+  });
+
+  test('a declared id still wins, and two of them are still refused', () {
+    write('pinned.dart', '''
+@Preview(name: 'A', id: 'shared')
+Widget a() => const Placeholder();
+
+@Preview(name: 'B', id: 'shared')
+Widget b() => const Placeholder();
+''');
+
+    var result = scan();
+    expect(result.ok, isFalse);
+    expect(result.diagnostics.single.message, contains('"shared"'));
   });
 
   group('shells are not discovered at all', () {
     test('a shell file yields no entries and no complaint', () {
       // Nothing marks it and nothing looks for it. A shell is an ordinary
-      // `Widget Function(Widget)` that happens to build a `CatalogShell`, and
+      // `Widget Function(Widget)` that happens to build a `PreviewShell`, and
       // the catalog learns about it only when the guest renders one and
       // reports the axes it asked for.
       write('shell.dart', '''
@@ -274,7 +323,7 @@ import 'package:flutterware/ui_catalog.dart';
 
 enum Flavor { dev, staging, prod }
 
-Widget wrapInApp(Widget child) => CatalogShell(
+Widget wrapInApp(Widget child) => PreviewShell(
   'app',
   builder: (context, topBar) => topBar.flag('compact', false)
       ? child
@@ -294,10 +343,10 @@ Widget wrapInApp(Widget child) => CatalogShell(
       // refuse. Nothing reads it here any more — it rides along in the
       // annotation's source text and is resolved by the compiler.
       write('a.dart', '''
-@Demo(name: 'Wrapped', wrapper: wrapInApp)
+@Preview(name: 'Wrapped', wrapper: wrapInApp)
 Widget a() => const Placeholder();
 
-@Demo(name: 'Bare')
+@Preview(name: 'Bare')
 Widget b() => const Placeholder();
 ''');
 
@@ -307,7 +356,7 @@ Widget b() => const Placeholder();
       expect(result.entries.map((e) => e.name), ['Wrapped', 'Bare']);
       expect(
         result.entries.firstWhere((e) => e.name == 'Wrapped').annotation,
-        "Demo(name: 'Wrapped', wrapper: wrapInApp)",
+        "Preview(name: 'Wrapped', wrapper: wrapInApp)",
       );
     });
   });

@@ -151,7 +151,7 @@ class FlutterwareConfig {
 ///
 /// void main() => Flutterware.configure((fw) {
 ///   fw.use(Scenarios());
-///   fw.use(UiCatalog());
+///   fw.use(Previews());
 /// });
 /// ```
 ///

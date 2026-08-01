@@ -35,7 +35,7 @@ void main() {
     return UiCatalogCore(
       PluginHost(
         id: uiCatalogPluginId,
-        label: 'UI catalog',
+        label: 'Previews',
         worktree: worktree,
         workspace: Workspace(
           root: worktree.path,
@@ -67,14 +67,14 @@ void main() {
   setUp(() {
     root = Directory.systemTemp.createTempSync('fw_catalog_plugin_test');
     write('demo/team/avatar_tile.dart', '''
-@Demo(name: 'Members')
+@Preview(name: 'Members')
 Widget members() => const Placeholder();
 
-@Demo(name: 'Empty')
+@Preview(name: 'Empty')
 Widget empty() => const Placeholder();
 ''');
     write('demo/counter.dart', '''
-@Demo(name: 'Counter')
+@Preview(name: 'Counter')
 Widget counter() => const Placeholder();
 ''');
   });
@@ -87,7 +87,7 @@ Widget counter() => const Placeholder();
       var address = subject.addressFor('.', 'demo/counter.dart#counter');
       expect(
         address.toString(),
-        'fw:///worktrees/${p.basename(root.path)}/flutterware.ui_catalog'
+        'fw:///worktrees/${p.basename(root.path)}/flutterware.previews'
         '/./demo/counter.dart%23counter',
       );
     });
@@ -266,13 +266,13 @@ Widget counter() => const Placeholder();
   });
 
   test('the scaffold names a legal Dart identifier, whatever it is called', () {
-    // `Switch` is close to the most likely name in a UI catalog, and it is a
+    // `Switch` is the most likely name in a catalog of previews, and it is a
     // reserved word — `Widget switch()` does not parse. A leading digit is the
     // other way a perfectly reasonable name produces an illegal one.
-    expect(catalogSymbolName('Switch'), 'demoSwitch');
-    expect(catalogSymbolName('class'), 'demoClass');
-    expect(catalogSymbolName('404 page'), 'demo404Page');
-    expect(catalogSymbolName('2FA setup'), 'demo2faSetup');
+    expect(catalogSymbolName('Switch'), 'previewSwitch');
+    expect(catalogSymbolName('class'), 'previewClass');
+    expect(catalogSymbolName('404 page'), 'preview404Page');
+    expect(catalogSymbolName('2FA setup'), 'preview2faSetup');
     // Everything else is left alone.
     expect(catalogSymbolName('Primary Buttons'), 'primaryButtons');
     expect(catalogSymbolName('Buttons'), 'buttons');
@@ -319,10 +319,10 @@ Widget counter() => const Placeholder();
   test('an annotation the scan rejected is reported, not hidden', () async {
     // Zero entries does not mean nobody wrote one. An annotated function with a
     // required parameter is refused *with a diagnostic* and produces no entry —
-    // and the empty state used to answer that with "no demos yet, here is how
+    // and the empty state used to answer that with "no previews yet, here is how
     // to write one", to somebody who had just written one.
     write('fresh/tile.dart', '''
-@Demo(name: 'Tile')
+@Preview(name: 'Tile')
 Widget tile(String label) => const Placeholder();
 ''');
     var subject = catalog(directory: 'fresh')..track('.');
@@ -359,13 +359,13 @@ Widget tile(String label) => const Placeholder();
     var package = result.packages.single;
     expect(package.directory, 'nonexistent');
     // Only when there are none: the one moment the reader is certainly asking.
-    expect(package.authoring, contains('@Demo'));
+    expect(package.authoring, contains('@Preview'));
     expect(package.authoring, contains('nonexistent/'));
   });
 
   test('directory overrides the demo/ convention', () async {
     write('catalog/thing.dart', '''
-@Demo(name: 'Elsewhere')
+@Preview(name: 'Elsewhere')
 Widget thing() => const Placeholder();
 ''');
     var subject = catalog(directory: 'catalog')..track('.');
@@ -375,7 +375,7 @@ Widget thing() => const Placeholder();
   });
 
   test('a project can register its own annotation', () async {
-    // `@Demo`'s dartdoc has always told projects to register a subclass "in
+    // `@Preview`'s dartdoc has always told projects to register a subclass "in
     // previewAnnotations". The field existed on the scanner and on the wire and
     // was reachable from neither the config nor anything a user could write, so
     // the advice named a knob that did not exist.
@@ -383,7 +383,8 @@ Widget thing() => const Placeholder();
 @Tablet(name: 'Wide')
 Widget wide() => const Placeholder();
 ''');
-    var subject = catalog(previewAnnotations: ['Demo', 'Tablet'])..track('.');
+    var subject = catalog(previewAnnotations: ['Preview', 'Tablet'])
+      ..track('.');
     await scanned(subject);
 
     expect(subject.entries.map((e) => e.name), contains('Wide'));
@@ -393,12 +394,15 @@ Widget wide() => const Placeholder();
   });
 
   test('a scan error is reported, not swallowed', () async {
-    // Two annotations on one declaration derive the same id, which discovery
-    // refuses. The plugin must surface that rather than show a short list.
+    // Two declared ids that collide leave one entry unreachable, which
+    // discovery refuses. The plugin must surface that rather than show a short
+    // list. (Stacked annotations no longer do this: they take an ordinal.)
     write('demo/broken.dart', '''
-@Demo(name: 'A')
-@Demo(name: 'B')
-Widget broken() => const Placeholder();
+@Preview(name: 'A', id: 'clash')
+Widget a() => const Placeholder();
+
+@Preview(name: 'B', id: 'clash')
+Widget b() => const Placeholder();
 ''');
     var subject = catalog()..track('.');
     await scanned(subject);
@@ -432,7 +436,7 @@ Widget broken() => const Placeholder();
     expect(subject.entries, hasLength(3));
 
     write('demo/added.dart', '''
-@Demo(name: 'Added')
+@Preview(name: 'Added')
 Widget added() => const Placeholder();
 ''');
     var result = (await subject.invoke('entries'))! as CatalogEntriesResult;

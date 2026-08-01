@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
 import 'shell.dart';
 
 /// Animated and stateful, so the texture visibly proves the guest is live —
 /// and so switching away and back shows the entry remounting with fresh state.
-@Demo(name: 'Counter', wrapper: wrapInApp)
+@Preview(name: 'Counter', wrapper: wrapInApp)
 Widget counter() => const _Counter();
 
 class _Counter extends StatefulWidget {

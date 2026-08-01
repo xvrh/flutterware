@@ -150,7 +150,7 @@ List<LaunchKnob> _knobsOf(Object? raw) => [
 ///
 /// **Parsed, never resolved or compiled** — the posture the catalog and the
 /// scenario scanner already take. A `void main()` is as syntactically visible
-/// as a `@Demo` annotation, and finding one costs a parse rather than a build.
+/// as a `@Preview` annotation, and finding one costs a parse rather than a build.
 ///
 /// Deliberately not recursive. A `main()` under `lib/src/` is somebody's
 /// helper or a generated harness, not a thing to offer in a launch menu, and a

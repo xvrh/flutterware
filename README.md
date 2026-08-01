@@ -68,7 +68,7 @@ void main() => Flutterware.configure((fw) {
   fw.use(Dependencies(packages: [.new(app)]));
   fw.use(Assets(packages: [.new(app)]));
   fw.use(NativeSplash(packages: [.new(app)]));
-  fw.use(UiCatalog(packages: [.new(app)]));
+  fw.use(Previews(packages: [.new(app)]));
 });
 ```
 
@@ -85,8 +85,8 @@ tools you declared, and a command palette on `⌘K`.
 **CLI** — the same commands, without the window:
 
 ```shell
-fw run ui_catalog entries
-fw run ui_catalog screenshot --entry='demo/buttons.dart#buttons'
+fw run previews entries
+fw run previews screenshot --entry='demo/buttons.dart#buttons'
 fw status --json
 ```
 
@@ -131,27 +131,34 @@ plugin declarations rather than written by hand.
 
 ## Tools
 
-### UI catalog
+### Previews
 
-Annotate a widget with `@Demo` and it becomes a catalog entry — no map to
-register it in, no file to keep in sync:
+Annotate a widget with Flutter's own `@Preview` and it becomes an entry — no
+map to register it in, no file to keep in sync, and **nothing of flutterware's
+to import**:
 
 ```dart
 // demo/buttons.dart
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
-@Demo(name: 'Buttons', wrapper: wrapInApp)
+@Preview(name: 'Buttons')
 Widget buttons() => const ButtonsShowcase();
 ```
 
-**Demos live in `demo/`.** Every `.dart` file under it is scanned; nothing
+That is the whole of it. If you already write `@Preview` for Flutter's own
+previewer, those previews open here unchanged — on a real device frame, with
+`dart:io`, plugins, knobs and screenshots. `package:flutterware/previews.dart`
+is only for what the annotation does not carry: a shell (`PreviewShell`) and
+knobs (`context.previews.parameters.*`).
+
+**Previews live in `demo/`.** Every `.dart` file under it is scanned; nothing
 outside it is. A package that keeps them elsewhere says so once:
 
 ```dart
-fw.use(UiCatalog(packages: [.new(app, directory: 'examples')]));
+fw.use(Previews(packages: [.new(app, directory: 'examples')]));
 ```
 
-If you have never written one, `fw run ui_catalog new --name='Buttons'` writes
+If you have never written one, `fw run previews new --name='Buttons'` writes
 the first — or press **New demo** in the panel, which is what it shows when it
 finds none.
 
@@ -256,7 +263,8 @@ They are independent of the tools above.
 
 | Library | What it is |
 |---|---|
-| `ui_catalog.dart` | The `@Demo` annotation the catalog tool discovers, plus `UICatalog` — a standalone catalog app, with its own map-based API, that builds for the web or runs on a device |
+| `previews.dart` | What a `@Preview` needs beyond Flutter's annotation: `PreviewShell` for the top bar's axes, and `context.previews.parameters.*` for knobs |
+| `ui_catalog.dart` | `UICatalog` — a standalone, browsable catalog app with its own map-based API, hosting the same previews; builds for the web or runs on a device |
 | `devbar.dart` | A hidden developer overlay inside your app: logs, network, analytics, device frames, knobs, feature flags |
 | `feature_flag.dart` | Feature flags, readable and overridable at runtime |
 | `router_outlet.dart` | Nested, URL-driven routing |

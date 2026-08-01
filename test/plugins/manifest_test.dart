@@ -52,7 +52,7 @@ void main() {
 
   test("a plugin's own per-package options are untouched", () {
     var manifest = manifestOf([
-      UiCatalog(packages: [UiCatalogPackage(app, directory: 'tool/catalog')]),
+      Previews(packages: [PreviewsPackage(app, directory: 'tool/catalog')]),
     ]);
     expect(manifest.packages.map((p) => p.path), ['app']);
     expect(manifest.plugins.single.config['packages'], [

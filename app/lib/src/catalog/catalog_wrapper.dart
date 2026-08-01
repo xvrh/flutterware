@@ -40,8 +40,11 @@ class CatalogWrapperWriter {
 // so anything the annotation names has to resolve here too.
 ${carried.join('\n')}
 // Unconditional: the getters below are typed, and a demo file is not obliged
-// to import widgets itself.
+// to import widgets itself. `widget_previews.dart` is here for the same reason
+// and for one more — a demo annotated with Flutter's own `@Preview` never
+// imports `ui_catalog.dart` at all.
 import 'package:flutter/widgets.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/ui_catalog.dart';
 
 // The demo file twice, and both are load-bearing. Prefixed, because fwBuilder
@@ -60,6 +63,11 @@ import '${relative(demo)}' as fw$index;
 // `transform()` returns a plain Preview and drops id/figma/formFactor, so the
 // annotation itself is kept alongside it.
 //
+// Typed as `Preview`, the annotation's own type, so a project's registered
+// subclass of it lands here too. Declaring the subtype instead is what once
+// turned a plain `@Preview` — which the scan has always accepted — into a
+// compile error naming generated code.
+//
 // Getters, not consts. A const holding a function tear-off — every `wrapper:`
 // is one — is inlined into whichever library reads it, so the entrypoint's
 // constant pool ends up referring to a procedure in the demo's own file. A
@@ -67,7 +75,7 @@ import '${relative(demo)}' as fw$index;
 // reference against a library it does not contain, and the guest renders
 // `Lookup failed: <wrapper> in @methods in file:...` instead of the demo.
 // Behind a getter there is nothing to inline and nothing to re-resolve.
-Demo get fwDemo => ${entry.annotation};
+Preview get fwDemo => ${entry.annotation};
 
 Widget Function() get fwBuilder => fw$index.${entry.symbol};
 ''';
@@ -76,7 +84,7 @@ Widget Function() get fwBuilder => fw$index.${entry.symbol};
   /// The demo file's own import and export directives, with relative URIs
   /// rewritten to resolve from [outputDir].
   ///
-  /// Demo files live outside `lib/` and so have no `package:` URI of their own;
+  /// Preview files live outside `lib/` and so have no `package:` URI of their own;
   /// a carried `../utils/shell.dart` would not resolve from the generated
   /// directory without this.
   ///
@@ -97,8 +105,8 @@ Widget Function() get fwBuilder => fw$index.${entry.symbol};
     for (var directive in unit.directives) {
       if (directive is! NamespaceDirective) continue;
       var uri = directive.uri.stringValue;
-      // `package:flutterware/ui_catalog.dart` is emitted unconditionally below.
-      if (uri == null || uri == 'package:flutterware/ui_catalog.dart') continue;
+      // Both of these are emitted unconditionally below.
+      if (uri == null || _unconditionalImports.contains(uri)) continue;
 
       var text = directive.toSource();
       for (var literal in [
@@ -121,3 +129,14 @@ Widget Function() get fwBuilder => fw$index.${entry.symbol};
   String relative(String target) =>
       p.split(p.relative(target, from: outputDir)).join('/');
 }
+
+/// The two libraries an annotation is written against, emitted into every
+/// wrapper and so dropped when a demo file carries them itself.
+///
+/// `widgets.dart` is deliberately not here: it is emitted unconditionally too,
+/// but a demo carrying it has always been left alone, and narrowing that now
+/// would be an unrelated change to every wrapper.
+const _unconditionalImports = {
+  'package:flutter/widget_previews.dart',
+  'package:flutterware/ui_catalog.dart',
+};

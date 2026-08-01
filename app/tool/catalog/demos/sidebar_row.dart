@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/plugins.dart';
-import 'package:flutterware/ui_catalog.dart';
 import 'package:flutterware_app/src/plugins/native_plugin.dart';
 import 'package:flutterware_app/src/shell/sidebar_row.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
@@ -36,7 +36,7 @@ List<PluginChildCommand> get _commands => [
   ),
 ];
 
-@Demo(name: 'Every state', group: 'Sidebar row', wrapper: wrapInAppTheme)
+@Preview(name: 'Every state', group: 'Sidebar row', wrapper: wrapInAppTheme)
 Widget sidebarRowStates() => const _Rail(
   children: [
     _Labelled(

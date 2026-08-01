@@ -65,7 +65,7 @@ void main() {
           options: options,
         );
 
-    test('follows the kind the demo declared, not the characters', () {
+    test('follows the kind the preview declared, not the characters', () {
       // The same text, three demos, three types.
       expect(coerceKnob(knob(KnobKind.string), '7'), '7');
       expect(coerceKnob(knob(KnobKind.integer), '7'), 7);

@@ -6,7 +6,7 @@ import 'package:flutterware/plugins.dart';
 /// There is exactly one config, here at the repo root: `examples/example` is a
 /// workspace *member*, so it is a package below, not a project of its own.
 /// `.new(...)` is the dot shorthand for a package entry, and needs an SDK
-/// constraint of 3.10+; the explicit `UiCatalogPackage(...)` form is identical
+/// constraint of 3.10+; the explicit `PreviewsPackage(...)` form is identical
 /// otherwise. It only works inside a list literal, where the context type is
 /// the entry — `.each(...)` is handed a `List`, so it stays spelled out.
 const root = Pkg('.');
@@ -19,7 +19,7 @@ void main() => Flutterware.configure((fw) {
   );
   fw.use(Assets(packages: AssetsPackage.each([root, app, example])));
   fw.use(
-    UiCatalog(
+    Previews(
       packages: [
         // flutterware's own demos sit beside the harness that renders them
         // rather than in `demo/`, because they exist to exercise the catalog.

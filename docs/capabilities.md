@@ -707,7 +707,7 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it |
 | `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
 | `output` | string | no | — | Where step artifacts are written; a fresh directory under the package's build/ when omitted |
-| `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted lets each scenario run as its own folder says — the first device of the profile its `flutter_test_config.dart` declares, or iphone-13 where a folder declares none. `fit` means the bare 800×600 test surface. The same vocabulary the UI catalog frames with. |
+| `device` | choice | no | — | Run as a device: its screen, its pixel ratio, its safe areas and its platform, so the app reads the phone from `MediaQuery`. Omitted lets each scenario run as its own folder says — the first device of the profile its `flutter_test_config.dart` declares, or iphone-13 where a folder declares none. `fit` means the bare 800×600 test surface. The same vocabulary Previews frames with. |
 | `language` | string | no | — | A locale tag — `fr`, `fr-CA` — applied as the platform locale for the whole run |
 | `devices` | string | no | — | A comma-separated matrix — `iphone-se,android-tall`. Runs everything once per device, each into its own `<output>/<device>-<language>/` directory with an `index.json` beside them. The same plural vocabulary as `flutter test --dart-define=fw.devices=`. Overrides `device`. |
 | `languages` | string | no | — | The other half of the matrix — `en,fr,de`. Crossed with `devices`, and overrides `language`. |
@@ -894,14 +894,14 @@ artifacts: List<SplashArtifactEntry>   # What exists afterwards — the point of
 | `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
 
 
-### `flutterware.ui_catalog`
+### `flutterware.previews`
 
 #### `entries` — Entries
 
 Every catalog entry, with its id and address — the whole list, not the projection the report carries
 
 ```sh
-fw run ui_catalog entries [--package=…]
+fw run previews entries [--package=…]
 ```
 
 Returns `CatalogEntriesResult`:
@@ -915,7 +915,6 @@ packages: List<CatalogPackageEntries>
     name: String
     address: String   # The `Address`, rendered — hand it back to `screenshot`, or later `show`.
     group: String?   # One tree level between the directory and the leaf, when the entry declares or derives one.
-    formFactor: String?   # `mobile`, `desktop`, `all` — what the demo says it is *for*, when it says.
   diagnostics: List<String>   # Discovery's complaints — a duplicate id, an uncallable target.
   error: String?   # Set when the scan failed, in which case [entries] is empty and means nothing.
   authoring: String?   # How to write the first demo.
@@ -925,12 +924,12 @@ packages: List<CatalogPackageEntries>
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 
-#### `new` — New demo
+#### `new` — New preview
 
-Writes a demo file where the package keeps them, creating the directory if it is not there, and reports the id that renders it. The scaffold renders as written, so start here when you have never written one: it is the API, in a file that already works.
+Writes a preview file where the package keeps them, creating the directory if it is not there, and reports the id that renders it. The scaffold renders as written, so start here when you have never written one: it is the API, in a file that already works.
 
 ```sh
-fw run ui_catalog new [--package=…] --name=<string> [--file=…]
+fw run previews new [--package=…] --name=<string> [--file=…]
 ```
 
 Returns `CatalogNewResult`:
@@ -946,15 +945,15 @@ next: String   # The command that renders what was just written.
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; the only one when there is one |
-| `name` | string | yes | — | The demo's name — what the panel lists and what `@Demo(name:)` carries |
-| `file` | string | no | — | Package-relative path to write. Defaults to a snake_cased `.dart` file under the package's demo directory. Never overwrites. |
+| `name` | string | yes | — | The preview's name — what the panel lists and what `@Preview(name:)` carries |
+| `file` | string | no | — | Package-relative path to write. Defaults to a snake_cased `.dart` file under the package's preview directory. Never overwrites. |
 
 #### `check` — Check
 
 Which entries the compiler can build, and the diagnostics for those it cannot
 
 ```sh
-fw run ui_catalog check [--package=…]
+fw run previews check [--package=…]
 ```
 
 Returns `CatalogCheckResult`:
@@ -979,7 +978,7 @@ packages: List<CatalogPackageCheck>
 One entry: what it is, where it is, and the knobs it declares
 
 ```sh
-fw run ui_catalog describe --entry=<choice> [--knobs=…] [--axes=…]
+fw run previews describe --entry=<choice> [--knobs=…] [--axes=…]
 ```
 
 Returns `CatalogEntryDescription`:
@@ -990,10 +989,9 @@ name: String
 package: String   # Which declared package holds it.
 file: String   # Project-relative path of the declaring file.
 symbol: String   # The annotated top-level function.
-annotation: String   # The annotation's source text, verbatim — `Demo(name: 'Counter')`.
+annotation: String   # The annotation's source text, verbatim — `Preview(name: 'Counter')`.
 address: String
 group: String?
-formFactor: String?
 knobs: List<CatalogKnob>?   # Present only when `--knobs` asked for them: reading a knob costs a compile and a frame, so absent means "not looked at" while an empty list means "this entry declares none".
   name: String
   kind: String   # `string`, `boolean`, `integer`, `number`, `picker`.
@@ -1024,7 +1022,7 @@ shell: String?   # Which shell declared [axes].
 Render one entry to a PNG
 
 ```sh
-fw run ui_catalog screenshot --entry=<choice> [--output=…] [--knobs=…] [--device=…] [--width=…] [--height=…] [--axes=…] [--debug=…] [--node=…] [--annotate=…]
+fw run previews screenshot --entry=<choice> [--output=…] [--knobs=…] [--device=…] [--width=…] [--height=…] [--axes=…] [--debug=…] [--node=…] [--annotate=…]
 ```
 
 Returns `Artifact`:
@@ -1041,12 +1039,12 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 |---|---|---|---|---|
 | `entry` | choice (from `entries`) | yes | — | The id of the entry to render |
 | `output` | string | no | — | Where to write the PNG; a build path when omitted |
-| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the demo asked for while it built — a demo calling `context.uiCatalog.parameters.string("label", "Hello")` declares one named `label` — so the names come from the demo itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the demo declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. Recorded on the address, so two settings are two artifacts rather than one file written twice. |
-| `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the demo reads the phone from `MediaQuery` rather than a rectangle. Omitted means the panel. The same value the GUI writes as `?device=`, so an address captured here reopens framed the way it was shot. |
+| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the preview asked for while it built — a preview calling `context.previews.parameters.string("label", "Hello")` declares one named `label` — so the names come from the preview itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the preview declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. Recorded on the address, so two settings are two artifacts rather than one file written twice. |
+| `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the preview reads the phone from `MediaQuery` rather than a rectangle. Omitted means the panel. The same value the GUI writes as `?device=`, so an address captured here reopens framed the way it was shot. |
 | `width` | integer | no | 900 | — |
 | `height` | integer | no | 700 | — |
-| `axes` | string | no | — | Values for the shell *around* the demo — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the demo and travels with the entry, an axis is declared by the `CatalogShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
-| `debug` | string | no | — | The debug switches the framework itself registers, as `name=value,name=value`. These belong to neither the demo nor its shell but to the guest process, and the framework registers them whether anything asks or not — so unlike knobs and axes the set is fixed and listed in `--help`. `paint=true` draws the layout guides, `brightness=dark` moves `MediaQuery.platformBrightness` (dark mode without a shell axis for it), `banner=false` drops the DEBUG ribbon, `platform=iOS` changes what `defaultTargetPlatform` reports, `timeDilation=5` slows animations enough to photograph. Only what you name is set; the rest are left as they are. |
+| `axes` | string | no | — | Values for the shell *around* the preview — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the preview and travels with the entry, an axis is declared by the `PreviewShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
+| `debug` | string | no | — | The debug switches the framework itself registers, as `name=value,name=value`. These belong to neither the preview nor its shell but to the guest process, and the framework registers them whether anything asks or not — so unlike knobs and axes the set is fixed and listed in `--help`. `paint=true` draws the layout guides, `brightness=dark` moves `MediaQuery.platformBrightness` (dark mode without a shell axis for it), `banner=false` drops the DEBUG ribbon, `platform=iOS` changes what `defaultTargetPlatform` reports, `timeDilation=5` slows animations enough to photograph. Only what you name is set; the rest are left as they are. |
 | `node` | string | no | — | Cut the picture down to one node, by the id `tree` gave. Cut out of the real frame rather than re-rendered alone, so the widget is still in its surroundings. |
 | `annotate` | boolean | no | false | Draw a box and its node id over every widget, so a tree read and a picture of it can be laid side by side |
 
@@ -1055,7 +1053,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 One rendered build, and whatever you ask about it — whether it renders, its widget tree, the nodes matching a query, what is under a point, what it printed, a picture. With no flags it answers the only question worth asking first: did it render without the framework complaining. Everything heavier is opt-in, and every flag you add is answered off the **same** frame rather than costing another compile-and-render.
 
 ```sh
-fw run ui_catalog inspect --entry=<choice> [--tree=…] [--find=…] [--at=…] [--errors=…] [--logs=…] [--node=…] [--depth=…] [--screenshot=…] [--output=…] [--annotate=…] [--device=…] [--width=…] [--height=…] [--knobs=…] [--axes=…] [--debug=…] [--live=…]
+fw run previews inspect --entry=<choice> [--tree=…] [--find=…] [--at=…] [--errors=…] [--logs=…] [--node=…] [--depth=…] [--screenshot=…] [--output=…] [--annotate=…] [--device=…] [--width=…] [--height=…] [--knobs=…] [--axes=…] [--debug=…] [--live=…]
 ```
 
 Returns `CatalogInspectResult`:
@@ -1116,30 +1114,30 @@ screenshot: Artifact?   # The picture, when `--screenshot` asked for one.
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `entry` | choice (from `entries`) | yes | — | The id of the entry to inspect |
-| `tree` | boolean | no | false | Report the widget tree, scoped to the demo rather than the catalog around it. Off by default because a real demo is thousands of tokens of tree — try `find` first. |
+| `tree` | boolean | no | false | Report the widget tree, scoped to the preview rather than the catalog around it. Off by default because a real preview is thousands of tokens of tree — try `find` first. |
 | `find` | string | no | — | Report only the nodes matching this, case-insensitively against each node's type and against the words it puts on screen — `ElevatedButton`, `Save`, `SizedBox`. What you want instead of `tree` when the question is "where is the submit button". |
 | `at` | string | no | — | Report the widgets under this point as `x,y`, outermost first — the chain, because the thing under a cursor is usually a Text and the thing you meant is the button around it. In the same coordinates a screenshot is taken in, so a point read off one lands here without a transform. |
 | `errors` | boolean | no | true | Report build failures and layout overflows. On by default, and with no other flag it is the whole answer. `check` says whether an entry *compiles*, which is a different question. |
-| `logs` | boolean | no | false | Report what the demo printed while it built and painted. Attached to an open session this is everything it has printed since the person opened it, including whatever their clicking caused — output no fresh render can produce. |
+| `logs` | boolean | no | false | Report what the preview printed while it built and painted. Attached to an open session this is everything it has printed since the person opened it, including whatever their clicking caused — output no fresh render can produce. |
 | `node` | string | no | — | Narrow `tree` to this node and below, and crop `screenshot` to it, by the id a previous read gave. Ids come from tree shape, so one taken in another process still names this node. |
 | `depth` | integer | no | — | Stop `tree` this many levels below its root |
 | `screenshot` | boolean | no | false | Write a PNG of the same frame everything else is reported from, and hand back an artifact for it — the path, and the address recording everything that changed the pixels, so two settings are two artifacts rather than one file written twice. Give `output` to choose where. **Forces a fresh render**: a picture has to come from a frame this call composited, and an attached session only offers a VM service. |
 | `output` | string | no | — | Where to write the PNG; a build path derived from the address when omitted, the same as `screenshot` uses |
 | `annotate` | boolean | no | false | Draw a box and its node id over every widget of the screenshot. Now genuinely the same tree as the one reported rather than a second reading that happened to agree, which was the point of having it. |
-| `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the demo reads the phone from `MediaQuery` rather than a rectangle. Omitted means the panel. **This is what makes "why does it look wrong on a phone" one render**: the tree, the constraints and the picture all describe the same framed build. Forces a render, like any other change to what is drawn. |
+| `device` | choice | no | — | Render as a device: its screen, its pixel ratio and its safe areas, so the preview reads the phone from `MediaQuery` rather than a rectangle. Omitted means the panel. **This is what makes "why does it look wrong on a phone" one render**: the tree, the constraints and the picture all describe the same framed build. Forces a render, like any other change to what is drawn. |
 | `width` | integer | no | — | Override the viewport width — how to ask for a size no device has, and on a device it stretches the screen rather than dropping its ratio and its notch |
 | `height` | integer | no | — | See width |
-| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the demo asked for while it built — a demo calling `context.uiCatalog.parameters.string("label", "Hello")` declares one named `label` — so the names come from the demo itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the demo declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. A tree is of one build, and a knob can change which widgets there are. |
-| `axes` | string | no | — | Values for the shell *around* the demo — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the demo and travels with the entry, an axis is declared by the `CatalogShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
-| `debug` | string | no | — | The debug switches the framework itself registers, as `name=value,name=value`. These belong to neither the demo nor its shell but to the guest process, and the framework registers them whether anything asks or not — so unlike knobs and axes the set is fixed and listed in `--help`. `paint=true` draws the layout guides, `brightness=dark` moves `MediaQuery.platformBrightness` (dark mode without a shell axis for it), `banner=false` drops the DEBUG ribbon, `platform=iOS` changes what `defaultTargetPlatform` reports, `timeDilation=5` slows animations enough to photograph. Only what you name is set; the rest are left as they are. |
-| `live` | boolean | no | false | Read the entry from a GUI session that is already showing it, instead of building a fresh guest. **Off unless you ask.** What it buys is real: attached, the answer describes the demo *as the person left it* — the dropdown they opened, the tab they switched to, the row they scrolled to, and anything their clicking made it print or throw. No fresh render can reach that, because no fresh render performs the clicks. What it costs is determinism: the same command answers differently depending on whether a window happens to be open, which is a poor default for CI and for an agent that did not know to look. So it is opt-in, and `readFrom` says which one you got either way. Even switched on it declines unless a session is open on this exact entry and nothing here would change what is drawn, and it never switches what that window is showing. |
+| `knobs` | string | no | — | Values to turn before this runs: `name=value,name=value`, or a JSON object. A knob is whatever the preview asked for while it built — a preview calling `context.previews.parameters.string("label", "Hello")` declares one named `label` — so the names come from the preview itself and differ per entry. Read them with `describe --entry=<id> --knobs=true`. Each value is coerced to the kind the preview declared, and a picker takes one of its option labels; a name the entry does not declare is an error listing the ones it does. A tree is of one build, and a knob can change which widgets there are. |
+| `axes` | string | no | — | Values for the shell *around* the preview — theme, locale, flavour. Same syntax as knobs: `name=value,name=value` or a JSON object. The difference is who declares it and how long it lasts: a knob is asked for by the preview and travels with the entry, an axis is declared by the `PreviewShell` wrapping it and stays put as you move between entries. Read them with `describe --entry=<id> --axes=true`, which also names the shell; an entry whose wrapper is not a shell offers none. |
+| `debug` | string | no | — | The debug switches the framework itself registers, as `name=value,name=value`. These belong to neither the preview nor its shell but to the guest process, and the framework registers them whether anything asks or not — so unlike knobs and axes the set is fixed and listed in `--help`. `paint=true` draws the layout guides, `brightness=dark` moves `MediaQuery.platformBrightness` (dark mode without a shell axis for it), `banner=false` drops the DEBUG ribbon, `platform=iOS` changes what `defaultTargetPlatform` reports, `timeDilation=5` slows animations enough to photograph. Only what you name is set; the rest are left as they are. |
+| `live` | boolean | no | false | Read the entry from a GUI session that is already showing it, instead of building a fresh guest. **Off unless you ask.** What it buys is real: attached, the answer describes the preview *as the person left it* — the dropdown they opened, the tab they switched to, the row they scrolled to, and anything their clicking made it print or throw. No fresh render can reach that, because no fresh render performs the clicks. What it costs is determinism: the same command answers differently depending on whether a window happens to be open, which is a poor default for CI and for an agent that did not know to look. So it is opt-in, and `readFrom` says which one you got either way. Even switched on it declines unless a session is open on this exact entry and nothing here would change what is drawn, and it never switches what that window is showing. |
 
 #### `audit` — Audit every entry
 
 Render the whole catalog and report everything that does not compile or does not render — one warm guest, one answer for the repo
 
 ```sh
-fw run ui_catalog audit [--package=…] [--path=…]
+fw run previews audit [--package=…] [--path=…]
 ```
 
 Returns `CatalogAuditResult`:
@@ -1169,10 +1167,10 @@ unreachable: List<CatalogAuditFailure>   # Packages that could not be audited at
 
 #### `build-web` — Build a web page
 
-Compile the whole catalog into a browsable page — the demos themselves running in a browser, with their knobs, not pictures of them. Needs the package to have web enabled; says so, with the command, when it does not.
+Compile the whole catalog into a browsable page — the previews themselves running in a browser, with their knobs, not pictures of them. Needs the package to have web enabled; says so, with the command, when it does not.
 
 ```sh
-fw run ui_catalog build-web [--package=…] [--output=…] [--base-href=…]
+fw run previews build-web [--package=…] [--output=…] [--base-href=…]
 ```
 
 Returns `CatalogWebBuildResult`:

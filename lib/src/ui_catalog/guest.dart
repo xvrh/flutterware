@@ -228,7 +228,7 @@ class CatalogParameters {
 /// Provides the catalog's state to the entry below it, and rebuilds it when a
 /// knob moves.
 ///
-/// The [UICatalogState] a demo reads through `context.uiCatalog` is otherwise
+/// The [PreviewState] a demo reads through `context.uiCatalog` is otherwise
 /// the empty one, which answers every call with the default — which is exactly
 /// what should happen when the same widget is built inside the real app.
 class CatalogGuest extends StatefulWidget {
@@ -309,7 +309,7 @@ class _CatalogGuestState extends State<CatalogGuest> {
   }
 }
 
-class _GuestCatalogState implements UICatalogState {
+class _GuestCatalogState implements PreviewState {
   _GuestCatalogState(this.parameters, this.revision);
 
   @override

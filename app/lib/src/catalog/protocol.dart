@@ -385,7 +385,7 @@ class DaemonConfig {
     required this.packageConfig,
     required this.flutterSdkRoot,
     this.roots = const ['demo'],
-    this.previewAnnotations = const ['Preview', 'Demo'],
+    this.previewAnnotations = const ['Preview'],
     this.emitProbe = false,
     this.trackWidgetCreation = true,
     this.daemonRevision = '',

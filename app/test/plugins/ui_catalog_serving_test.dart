@@ -44,7 +44,7 @@ void main() {
       UiCatalogCore(
         PluginHost(
           id: uiCatalogPluginId,
-          label: 'UI catalog',
+          label: 'Previews',
           worktree: worktree,
           workspace: Workspace(
             root: worktree.path,

@@ -30,7 +30,7 @@ String _manifest({String depsDir = 'app'}) =>
     '"plugins":['
     '{"id":"flutterware.dependencies","label":"Dependencies",'
     '"config":{"packages":[{"path":"$depsDir"}]}},'
-    '{"id":"flutterware.ui_catalog","label":"UI catalog",'
+    '{"id":"flutterware.previews","label":"Previews",'
     '"config":{"packages":[{"path":"examples/example"}]}}'
     ']}';
 

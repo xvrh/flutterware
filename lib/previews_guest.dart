@@ -3,7 +3,7 @@
 /// The catalog's generated entrypoint is written into the user's project and
 /// imports the package like any other consumer, so this surface has to be
 /// importable. It is a separate library so that fact does not put host-driven
-/// machinery beside `Demo` in the published API: `ui_catalog.dart` is the
+/// machinery beside the in-app catalog in the published API: `ui_catalog.dart` is the
 /// semver commitment, this file follows the generators.
 ///
 /// Nothing here is expected to be called by hand. A project declaring demos,

@@ -11,12 +11,12 @@ import 'web_app_generator.dart';
 /// Two steps, and the second is just `flutter build web`: [WebAppGenerator]
 /// writes an app that browses every entry, and the tool compiles it. Nothing
 /// here talks to the compiler daemon or the embedder — a page is not a frame
-/// somebody captured, it is the demos themselves running in a browser.
+/// somebody captured, it is the previews themselves running in a browser.
 ///
 /// **Built from the target package**, not from a generated package of its own.
 /// The package's `web/index.html`, its assets and its fonts are all declared
 /// there, and a build run from anywhere else would have to reproduce them —
-/// which is how a catalog page ends up missing exactly the images the demos are
+/// which is how a catalog page ends up missing exactly the images the previews are
 /// about.
 class WebCatalogBuilder {
   WebCatalogBuilder({

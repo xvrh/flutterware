@@ -18,7 +18,7 @@ import 'package:path/path.dart' as p;
 /// only proves the guest survives the messages, which is what let keyboard
 /// input look fine while every key sat undelivered in a framework queue.
 ///
-/// Needs the demos in `examples/example/demo/input.dart`, which report their
+/// Needs the previews in `examples/example/demo/input.dart`, which report their
 /// state as `Text` so a tree read can see it.
 ///
 /// Usage: `dart run tool/embedder/input_probe.dart [projectRoot]`

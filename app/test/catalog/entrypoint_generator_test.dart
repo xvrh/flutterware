@@ -52,7 +52,7 @@ Widget avatarTileEmpty() => const Placeholder();
     expect(
       wrapper(0),
       contains(
-        "Demo get fwDemo => Demo(name: 'Members', "
+        "Preview get fwDemo => Demo(name: 'Members', "
         'wrapper: wrapInApp);',
       ),
     );
@@ -67,6 +67,32 @@ Widget avatarTileEmpty() => const Placeholder();
     // @methods in file:...` instead of the demo.
     expect(wrapper(0), isNot(contains('const fwDemo')));
     expect(wrapper(0), isNot(contains('const fwBuilder')));
+  });
+
+  test('a plain @Preview is typed as Preview, and can be', () {
+    // The regression this exists for: the getter used to be declared `Demo`,
+    // so an entry carrying Flutter's own annotation — which the scanner has
+    // always accepted — assigned a supertype to a subtype and failed to
+    // compile, pointing at generated code. Nothing downstream calls anything
+    // `Demo` adds.
+    generator.select(
+      const CatalogEntry(
+        path: 'demo/team/avatar_tile.dart',
+        symbol: 'avatarTileMembers',
+        name: 'Members',
+        annotation: "Preview(name: 'Members')",
+      ),
+    );
+    expect(
+      wrapper(0),
+      contains("Preview get fwDemo => Preview(name: 'Members');"),
+    );
+    // And the type has to be nameable: a file annotated `@Preview` never
+    // imports ours, so the wrapper cannot rely on carrying it.
+    expect(
+      wrapper(0),
+      contains("import 'package:flutter/widget_previews.dart';"),
+    );
   });
 
   test('carries the demo file imports, re-relativised', () {

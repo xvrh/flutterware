@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../third_party/device_frame/lib/device_frame.dart';
 import 'default_device_list.dart';
-import 'demo.dart';
+import 'form_factor.dart';
 import 'detail.dart';
 import 'device_choice_panel.dart';
 import 'figma/provider.dart';
@@ -195,7 +195,7 @@ class UICatalogAppState extends State<UICatalog> {
         ),
       );
       return UICatalogStateProvider(
-        state: UICatalogState.empty,
+        state: PreviewState.empty,
         child: Builder(
           builder: (context) {
             return widget.appBuilder(context, scaffold);

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutterware/ui_catalog_guest.dart';
+import 'package:flutterware/previews_guest.dart';
 import 'package:path/path.dart' as p;
 
 import '../embedder/embedded_engine.dart';
@@ -905,7 +905,7 @@ class CatalogSession extends ChangeNotifier {
     try {
       var (daemon, ready) = await connectToDaemon(
         dartExecutable: p.join(flutterSdkRoot, 'bin', 'dart'),
-        // Through the shared builder, so this panel and `fw run ui_catalog`
+        // Through the shared builder, so this panel and `fw run previews`
         // arrive at the same socket. See [DaemonConfig.forPackage] for what
         // happened when each side built its own.
         config: DaemonConfig.forPackage(

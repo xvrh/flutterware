@@ -19,7 +19,7 @@ import 'package:stream_channel/stream_channel.dart';
 const _declaredPlugins = [
   'flutterware.dependencies',
   'flutterware.assets',
-  'flutterware.ui_catalog',
+  'flutterware.previews',
   'flutterware.splash',
   'flutterware.server',
   'flutterware.run',

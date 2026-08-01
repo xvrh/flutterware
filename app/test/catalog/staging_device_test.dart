@@ -100,30 +100,25 @@ void main() {
       expect(resolveDevice('iphone-13')?.id, 'iphone-13');
     });
 
-    test('and it outranks what the entry declares, by being a `??`', () {
-      // Not a rule anyone enforces, and no flag remembering who spoke last.
-      expect(resolveDevice('ipad', formFactor: 'mobile')?.id, 'ipad');
-    });
-
-    test('naming nothing lets the entry speak', () {
-      expect(resolveDevice(null, formFactor: 'mobile')?.id, 'iphone-13');
-      expect(resolveDevice(null, formFactor: 'desktop'), isNull);
-      expect(resolveDevice(null, formFactor: 'all'), isNull);
+    test('naming nothing is the panel', () {
+      // It used to be the entry's turn to speak here, through `formFactor`.
+      // With the declaration gone there is one answer and no `??` behind it.
       expect(resolveDevice(null), isNull);
     });
 
-    test('fit is a choice, and silences the entry', () {
-      // Which is why it has to be a value rather than an absent parameter:
-      // choosing the panel and choosing nothing are different answers, and
-      // with nothing stored there is no other way to tell them apart.
-      expect(resolveDevice(fitDeviceId, formFactor: 'mobile'), isNull);
+    test('fit is a choice, and reads as one', () {
+      // Kept as a value rather than an absent parameter even though the two now
+      // resolve alike: an address that says `fit` says somebody chose the panel,
+      // and that survives a reload where an absent parameter would not.
+      expect(resolveDevice(fitDeviceId), isNull);
+      expect(unknownDeviceIn(fitDeviceId), isNull);
     });
 
     test('an unknown device frames as the panel, and is reported', () {
       // Loudly, because the silent failure is the dangerous one: framing as
       // the panel when the address asked for an iPhone produces a picture that
       // is wrong without looking wrong.
-      expect(resolveDevice('iphone-99', formFactor: 'mobile'), isNull);
+      expect(resolveDevice('iphone-99'), isNull);
       expect(unknownDeviceIn('iphone-99'), 'iphone-99');
     });
 
