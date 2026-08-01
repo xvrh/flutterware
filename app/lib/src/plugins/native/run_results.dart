@@ -203,6 +203,9 @@ class RunEntrypointEntry {
     required this.name,
     this.description,
     this.flavor,
+    this.flavorSource,
+    this.platforms = const [],
+    this.devices = const [],
     this.knobs = const [],
   });
 
@@ -216,12 +219,31 @@ class RunEntrypointEntry {
   /// tells them apart — for a picker and for an agent alike.
   final String? description;
 
-  /// The `--flavor` this entry point declares, when the project has them.
+  /// The `--flavor` this entry point will be built with when nobody overrides
+  /// it — its own declaration, or the package's `flutter: default-flavor:`.
   ///
   /// Reported because a flavoured project **cannot be launched without one** —
   /// it is not a preference the caller may skip, and an agent that does not
   /// pass it gets a build failure rather than a default.
   final String? flavor;
+
+  /// `entrypoint` or `pubspec` — which of the two put [flavor] there.
+  ///
+  /// Absent when nothing declared one. Worth a field because the two are
+  /// overridden with different confidence: a pubspec default is the project's
+  /// blanket answer, while an entry point's is a pairing somebody wrote down.
+  final String? flavorSource;
+
+  /// What this entry point declares it can run on, as the config wrote it —
+  /// `mobile` stays `mobile`. Empty means anything.
+  final List<String> platforms;
+
+  /// The ids of the devices currently connected that [platforms] allows.
+  ///
+  /// The expansion done for you, against the desk as it is right now: a caller
+  /// picking an entry point and a device in one go should not have to know
+  /// that `desktop` means three platforms, nor which of them is plugged in.
+  final List<String> devices;
 
   final List<RunKnobEntry> knobs;
 
@@ -242,6 +264,9 @@ class RunKnobEntry {
     this.description,
     this.defaultValue,
     this.options = const [],
+    this.kind,
+    this.readAt,
+    this.problem,
   });
 
   /// The define's name, as `String.fromEnvironment` reads it.
@@ -257,6 +282,25 @@ class RunKnobEntry {
   /// `from:` resolved to right now: the base URLs of the servers currently
   /// running, or this machine's addresses on the local network.
   final List<String> options;
+
+  /// `String`, `int`, `bool` or `double` — how the app's own source reads this
+  /// define. Absent when nothing reads it.
+  ///
+  /// Found by parsing, not by building. It is the difference between a text
+  /// field and a checkbox, and it catches a config offering two string options
+  /// for a `bool.fromEnvironment`, where both of them mean false.
+  final String? kind;
+
+  /// The package-relative file the read is in. Absent when nothing reads it.
+  final String? readAt;
+
+  /// What is wrong with this knob, when something is.
+  ///
+  /// There is exactly one such thing worth saying and it is the expensive one:
+  /// **a declared define that the app never reads**. It compiles, it launches,
+  /// the control appears in the cockpit, and turning it does nothing at all —
+  /// which is indistinguishable from a feature that does not work.
+  final String? problem;
 
   Map<String, Object?> toJson() => _$RunKnobEntryToJson(this);
 }

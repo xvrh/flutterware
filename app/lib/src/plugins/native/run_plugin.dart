@@ -8,7 +8,9 @@ import 'package:flutterware/plugins.dart';
 import 'package:flutterware/src/inspect/node.dart';
 
 import '../../address/address_scope.dart';
+import '../../run/defines.dart';
 import '../../run/entrypoints.dart';
+import '../../run/flavors.dart';
 import '../../run/handle.dart';
 import '../../run/inventory.dart';
 import '../../run/launch.dart';
@@ -999,12 +1001,19 @@ class _LogRow extends StatelessWidget {
   }
 }
 
-/// Pick a device, pick an entry point, fill its knobs, start.
+/// Pick an entry point, pick a device it can run on, fill its knobs, start.
 ///
 /// One column, in that order, and it opens filled in with whatever ran last —
 /// so running the same thing again is opening the page and pressing Start.
 /// An earlier draft had a two-column workspace with a recents row; it was
 /// harder to follow than the four steps it was decorating.
+///
+/// **The entry point comes first, and the fields below depend on it.** It was
+/// second, under the device, which had the dependency backwards: an entry point
+/// declaring `platforms: [mobile]` decides which devices are offerable and
+/// what flavor is pre-filled, so choosing it after them meant choosing them
+/// twice. Flavor and knobs were already downstream of it; the device list is
+/// the third thing that was pretending not to be.
 class _NewRunPage extends StatefulWidget {
   const _NewRunPage({required this.core, required this.onLaunched});
 
@@ -1020,6 +1029,14 @@ class _NewRunPageState extends State<_NewRunPage> {
   ({String package, EntrypointRef entry})? _entry;
   final _knobs = <String, TextEditingController>{};
   final _flavor = TextEditingController();
+
+  /// True once the user has taken the flavor off what the project declares.
+  ///
+  /// The field is collapsed to a line of text until then, because the answer is
+  /// nearly always already written down — in the entry point, or in the
+  /// package's `flutter: default-flavor:` — and an empty box beside it invited
+  /// filling in something the project had settled two files away.
+  var _overridingFlavor = false;
   var _launching = false;
   String? _error;
 
@@ -1046,29 +1063,66 @@ class _NewRunPageState extends State<_NewRunPage> {
     var entries = _entries;
     if (entries.isEmpty) return;
     var last = _core.lastLaunch;
-    _device ??=
-        last?.device ??
-        _core.devices
-            .where((d) => d.isConnected)
-            .map((d) => d.id)
-            .firstOrNull ??
-        _core.devices.firstOrNull?.id;
     if (_entry == null) {
-      _entry =
-          entries
-              .where(
-                (e) =>
-                    e.package == last?.package &&
-                    e.entry.path == last?.entrypoint,
-              )
-              .firstOrNull ??
-          entries.first;
-      _rebuildKnobs(last?.knobs ?? const {});
-      // The entry point's declaration is the default; what was actually run
-      // last time wins over it, because overriding a flavor once usually means
-      // overriding it again.
-      _flavor.text = last?.flavor ?? _entry?.entry.flavor ?? '';
+      var restored = entries
+          .where(
+            (e) =>
+                e.package == last?.package && e.entry.path == last?.entrypoint,
+          )
+          .firstOrNull;
+      _entry = restored ?? entries.first;
+      // Only when it really is last time's entry point. The knobs and the
+      // flavor of a run belong to the `main()` they were typed for, and
+      // restoring them onto whatever entry point happened to sort first put a
+      // stale flavor on an unrelated build.
+      _rebuildKnobs(restored != null ? last?.knobs ?? const {} : const {});
+      _resetFlavor(used: restored != null ? last?.flavor : null);
     }
+    _device ??= _pickDevice(preferred: last?.device);
+  }
+
+  /// The declared flavor, unless [used] is somebody having overridden it.
+  ///
+  /// Matching the declaration is not an override, so a run launched without
+  /// touching the field reopens the page collapsed rather than expanded on a
+  /// value it would have used anyway.
+  void _resetFlavor({String? used}) {
+    var declared = _declaredFlavor.flavor;
+    _overridingFlavor = used != null && used.isNotEmpty && used != declared;
+    _flavor.text = (_overridingFlavor ? used : declared) ?? '';
+  }
+
+  ({String? flavor, FlavorSource source}) get _declaredFlavor {
+    var choice = _entry;
+    return choice == null
+        ? (flavor: null, source: FlavorSource.none)
+        : _core.flavorFor(choice.package, choice.entry);
+  }
+
+  /// The device to select: the one asked for when this entry point allows it,
+  /// otherwise the first connected one that it does.
+  String? _pickDevice({String? preferred}) {
+    var choice = _entry;
+    if (choice == null) return null;
+    var allowed = _core.devicesFor(choice.entry);
+    if (allowed.any((device) => device.id == preferred)) return preferred;
+    return allowed
+            .where((device) => device.isConnected)
+            .map((device) => device.id)
+            .firstOrNull ??
+        allowed.firstOrNull?.id;
+  }
+
+  /// Why the device list is shorter than the desk, when it is.
+  ///
+  /// Said rather than left to be noticed: a picker that has quietly dropped
+  /// the machine you were about to choose is indistinguishable from a tool
+  /// that has not found it yet.
+  String? get _restriction {
+    var platforms = _entry?.entry.platforms ?? const [];
+    if (platforms.isEmpty) return null;
+    return '${_entry!.entry.name} runs on '
+        '${[for (var platform in platforms) platform.name].join(', ')}';
   }
 
   void _rebuildKnobs(Map<String, String> values) {
@@ -1076,11 +1130,28 @@ class _NewRunPageState extends State<_NewRunPage> {
       field.dispose();
     }
     _knobs.clear();
-    for (var knob in _entry?.entry.knobs ?? const <LaunchKnob>[]) {
+    for (var (:knob, :read) in _offered) {
       _knobs[knob.define] = TextEditingController(
-        text: values[knob.define] ?? knob.defaultValue ?? '',
+        text:
+            values[knob.define] ??
+            knob.defaultValue ??
+            read?.defaultValue ??
+            '',
       );
     }
+  }
+
+  /// The knobs this entry point offers — what the config declared, or what a
+  /// scan of the package's `lib/` found it reads.
+  ///
+  /// Through the core rather than off `entry.knobs`, so the form and the
+  /// `entrypoints` action offer the same list. One that only the panel had
+  /// would be a control an agent could not see.
+  List<({LaunchKnob knob, DefineRef? read})> get _offered {
+    var choice = _entry;
+    return choice == null
+        ? const []
+        : _core.knobsFor(choice.package, choice.entry);
   }
 
   @override
@@ -1096,7 +1167,10 @@ class _NewRunPageState extends State<_NewRunPage> {
             'the package’s lib/.',
       );
     }
-    var device = _core.devices.where((d) => d.id == _device).firstOrNull;
+    var allowed = _entry == null
+        ? _core.devices
+        : _core.devicesFor(_entry!.entry);
+    var device = allowed.where((d) => d.id == _device).firstOrNull;
     // A column, not the window. Fields stretched across a desktop panel put
     // the label and the caret a hand's width apart, and the form is a short
     // sequence of decisions rather than a table.
@@ -1110,15 +1184,6 @@ class _NewRunPageState extends State<_NewRunPage> {
             Text('New run', style: context.type.heading),
             const Gap(FwSpacing.lg),
             _Field(
-              label: 'Device',
-              child: _DevicePicker(
-                devices: _core.devices,
-                selected: _device,
-                onChanged: (id) => setState(() => _device = id),
-              ),
-            ),
-            const Gap(FwSpacing.lg),
-            _Field(
               label: 'Entry point',
               child: _EntrypointPicker(
                 entries: entries,
@@ -1126,26 +1191,42 @@ class _NewRunPageState extends State<_NewRunPage> {
                 onChanged: (choice) => setState(() {
                   _entry = choice;
                   _rebuildKnobs(const {});
-                  _flavor.text = choice.entry.flavor ?? '';
+                  _resetFlavor();
+                  // Everything below is downstream, and the device most
+                  // visibly so: switching to a mobile-only entry point while
+                  // this Mac is selected has to move off it, not leave a
+                  // selection the Start button would refuse.
+                  _device = _pickDevice(preferred: _device);
                 }),
               ),
             ),
-            // Always offered, not only when the entry point declared one: whether
-            // this project has flavors is not something the cockpit knows, and a
-            // flavoured project cannot be launched at all without the right word
-            // here. Empty means no `--flavor` is passed.
+            const Gap(FwSpacing.lg),
+            _Field(
+              label: 'Device',
+              hint: _restriction,
+              child: _DevicePicker(
+                devices: allowed,
+                selected: _device,
+                restricted: _entry?.entry.platforms.isNotEmpty ?? false,
+                onChanged: (id) => setState(() => _device = id),
+              ),
+            ),
+            // Always present, not only when something declared one: whether
+            // this project has flavors is not something the cockpit knows, and
+            // a flavoured project cannot be launched at all without the right
+            // word here.
             const Gap(FwSpacing.lg),
             _Field(
               label: 'Flavor',
-              hint:
-                  'the --flavor to build; leave empty if the project has none',
-              child: TextField(
+              hint: _overridingFlavor
+                  ? 'just this run; empty passes no --flavor at all'
+                  : null,
+              child: _FlavorField(
+                declared: _declaredFlavor,
                 controller: _flavor,
-                style: context.type.bodySmall,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  hintText: 'dev, staging…',
-                ),
+                overriding: _overridingFlavor,
+                onOverride: () => setState(() => _overridingFlavor = true),
+                onRevert: () => setState(_resetFlavor),
               ),
             ),
             if (_knobs.isNotEmpty) ...[
@@ -1156,9 +1237,10 @@ class _NewRunPageState extends State<_NewRunPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (var knob in _entry!.entry.knobs) ...[
+                    for (var (:knob, :read) in _offered) ...[
                       _KnobField(
                         knob: knob,
+                        read: read,
                         options: _core.optionsFor(knob),
                         controller: _knobs[knob.define]!,
                       ),
@@ -1254,11 +1336,19 @@ class _DevicePicker extends StatelessWidget {
     required this.devices,
     required this.selected,
     required this.onChanged,
+    this.restricted = false,
   });
 
   final List<DaemonDevice> devices;
   final String? selected;
   final ValueChanged<String> onChanged;
+
+  /// Whether [devices] is the desk filtered by an entry point's declaration.
+  ///
+  /// Only the empty state needs it, and it needs it badly: "starting a flutter
+  /// daemon takes a few seconds" is a lie told to somebody whose desk is full
+  /// of machines this entry point said it cannot use.
+  final bool restricted;
 
   @override
   Widget build(BuildContext context) => _Picker<String>(
@@ -1279,7 +1369,10 @@ class _DevicePicker extends StatelessWidget {
     ],
     selected: selected,
     onChanged: onChanged,
-    empty: 'No devices yet. Starting a flutter daemon takes a few seconds.',
+    empty: restricted
+        ? 'Nothing connected that this entry point can run on. Boot one from '
+              'the desk below, or widen its platforms in tool/flutterware.dart.'
+        : 'No devices yet. Starting a flutter daemon takes a few seconds.',
   );
 
   static String _detail(DaemonDevice device) => [
@@ -1494,6 +1587,88 @@ class _DeskState extends State<_Desk> {
   };
 }
 
+/// The `--flavor`: a line of text until somebody wants to change it.
+///
+/// A text box was the wrong shape for a field that is right before you look at
+/// it. The project has almost always said which flavor this entry point builds
+/// with — in `Entrypoint(flavor:)`, or in its pubspec's `default-flavor` — so
+/// the ordinary job here is *reading* one word and moving on, and an empty box
+/// beside a declared value invites retyping it.
+///
+/// Overriding stays one click away, because the case that needs it is real:
+/// running the one entry point under a second flavor without declaring it
+/// twice.
+class _FlavorField extends StatelessWidget {
+  const _FlavorField({
+    required this.declared,
+    required this.controller,
+    required this.overriding,
+    required this.onOverride,
+    required this.onRevert,
+  });
+
+  final ({String? flavor, FlavorSource source}) declared;
+  final TextEditingController controller;
+  final bool overriding;
+  final VoidCallback onOverride;
+  final VoidCallback onRevert;
+
+  @override
+  Widget build(BuildContext context) {
+    if (overriding) {
+      return Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              style: context.type.bodySmall,
+              decoration: const InputDecoration(
+                isDense: true,
+                hintText: 'dev, staging…',
+              ),
+            ),
+          ),
+          const Gap(FwSpacing.xs),
+          TextButton(
+            onPressed: onRevert,
+            child: Text(
+              declared.flavor == null ? 'Clear' : 'Use ${declared.flavor}',
+              style: context.type.caption,
+            ),
+          ),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Text(
+          declared.flavor ?? 'none',
+          style: declared.flavor == null
+              ? context.type.bodySmall.copyWith(color: context.colors.mut3)
+              : context.type.bodySmall,
+        ),
+        const Gap(FwSpacing.sm),
+        Flexible(
+          child: Text(switch (declared.source) {
+            FlavorSource.entrypoint => 'from the entry point',
+            FlavorSource.pubspec => 'from the pubspec’s default-flavor',
+            // Not "the project has none": a project can have flavors and
+            // simply not have written this down, and that is exactly the
+            // case where the build is about to fail for a reason the
+            // cockpit could not have known.
+            FlavorSource.none => 'nothing declares one — none is passed',
+          }, style: context.type.caption.copyWith(color: context.colors.mut3)),
+        ),
+        const Gap(FwSpacing.xs),
+        TextButton(
+          onPressed: onOverride,
+          child: Text('Override', style: context.type.caption),
+        ),
+      ],
+    );
+  }
+}
+
 class _Field extends StatelessWidget {
   const _Field({required this.label, required this.child, this.hint});
 
@@ -1703,11 +1878,18 @@ class _Action extends StatelessWidget {
 class _KnobField extends StatelessWidget {
   const _KnobField({
     required this.knob,
+    required this.read,
     required this.options,
     required this.controller,
   });
 
   final LaunchKnob knob;
+
+  /// Where the app reads this define, when it does. Null is the case worth
+  /// saying out loud: a knob nothing reads is a control that does nothing, and
+  /// it looks exactly like one that does.
+  final DefineRef? read;
+
   final List<String> options;
   final TextEditingController controller;
 
@@ -1716,7 +1898,33 @@ class _KnobField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(knob.label ?? knob.define, style: context.type.fieldLabel),
+        Row(
+          children: [
+            Text(knob.label ?? knob.define, style: context.type.fieldLabel),
+            if (read case var found?) ...[
+              const Gap(FwSpacing.sm),
+              Flexible(
+                child: Text(
+                  '${found.kind} · ${found.file}',
+                  style: context.type.caption.copyWith(
+                    color: context.colors.mut3,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ] else ...[
+              const Gap(FwSpacing.sm),
+              Flexible(
+                child: Text(
+                  'nothing reads this — setting it changes nothing',
+                  style: context.type.caption.copyWith(
+                    color: context.colors.amber,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
         if (knob.description != null)
           Text(knob.description!, style: context.type.caption),
         const Gap(FwSpacing.xxs),

@@ -10,15 +10,19 @@ import 'package:flutterware/src/inspect/node.dart';
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/address/address_scope.dart';
 import 'package:flutterware_app/src/context.dart';
+import 'package:flutterware_app/src/plugins/native/run_address.dart';
 import 'package:flutterware_app/src/plugins/native/run_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/inspect.dart';
+import 'package:flutterware_app/src/run/inventory.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
+import 'package:flutterware_app/src/utils/daemon/device.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 import 'package:flutterware_app/src/utils/run_dir.dart';
+import 'package:path/path.dart' as p;
 
 /// The Screen tab, mounted for real against a fake reading.
 ///
@@ -135,6 +139,115 @@ void main() {
     expect(find.text('Hot reload'), findsOneWidget);
     expect(find.text('Hot restart'), findsOneWidget);
     expect(find.text('Stop'), findsOneWidget);
+  });
+
+  testWidgets('the New run page offers only the devices the entry point '
+      'declares, and reads its flavor rather than asking for it', (
+    tester,
+  ) async {
+    File(p.join(worktree.path, 'pubspec.yaml'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('name: app\nflutter:\n  default-flavor: dev\n');
+    File(p.join(worktree.path, 'lib', 'main_kiosk.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('void main() {}');
+    DeviceCache.write(runDir.path, const [
+      DaemonDevice(id: 'phone', name: 'Pixel', platformType: 'android'),
+      DaemonDevice(
+        id: 'macos',
+        name: 'macOS',
+        platformType: 'macos',
+        ephemeral: false,
+      ),
+    ]);
+
+    var core = RunCore(
+      PluginHost(
+        id: runPluginId,
+        label: 'Run',
+        worktree: Worktree(path: worktree.path),
+        workspace: Workspace(
+          root: worktree.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: const {
+          'packages': [
+            {
+              'path': '.',
+              'entrypoints': [
+                {
+                  'path': 'lib/main_kiosk.dart',
+                  'name': 'Kiosk',
+                  'platforms': ['mobile'],
+                },
+              ],
+            },
+          ],
+        },
+      ),
+    );
+    addTearDown(core.dispose);
+
+    // One run in the ledger, purely so the desk is not drawn under the form.
+    // The desk is the whole machine and lists this Mac on purpose; the claim
+    // under test is about the *picker*, and with both on screen no assertion
+    // can tell them apart.
+    RunHandle(
+      worktree: worktree.path,
+      worktreeName: Worktree(path: worktree.path).name,
+      device: 'phone',
+      entrypoint: 'lib/main_kiosk.dart',
+      launcherPid: pid,
+      startedAt: DateTime.now(),
+    ).publish(runDir.path);
+    await tester.runAsync(core.computeAll);
+
+    var address = ValueNotifier(
+      Address(
+        worktree: 'wt',
+        plugin: runPluginId,
+        segments: const [newRunSegment],
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        // The shell puts the panel inside one; the other test gets away
+        // without because it never builds a text field.
+        home: Scaffold(
+          body: AddressRoot(
+            address: address,
+            onChanged: (a) => address.value = a,
+            child: Builder(builder: RunPlugin(core).buildPanel),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // The entry point is the first decision, and the device list below it is
+    // the mobile half of a desk that also holds this Mac.
+    expect(find.text('Kiosk'), findsWidgets);
+    expect(find.text('Pixel'), findsWidgets);
+    // The one that matters. This Mac is on the desk and in the cache, and the
+    // only reason it is nowhere on this page is that `Kiosk` said `mobile`.
+    expect(find.text('macOS'), findsNothing);
+    expect(find.text('Kiosk runs on mobile'), findsOneWidget);
+
+    // The flavor is read, not asked for: `default-flavor: dev` in the pubspec
+    // is the project having already answered.
+    expect(find.text('dev'), findsOneWidget);
+    expect(find.text('from the pubspec’s default-flavor'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+
+    // And it is one click away when this run really does need another.
+    await tester.tap(find.text('Override'));
+    await tester.pump();
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Use dev'), findsOneWidget);
   });
 }
 

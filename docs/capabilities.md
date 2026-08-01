@@ -325,13 +325,19 @@ packages: List<RunEntrypointPackage>
     path: String   # Package-relative — what `launch` takes as its `entrypoint`.
     name: String
     description: String?   # What it is, in a line, when the config said.
-    flavor: String?   # The `--flavor` this entry point declares, when the project has them.
+    flavor: String?   # The `--flavor` this entry point will be built with when nobody overrides it — its own declaration, or the package's `flutter: default-flavor:`.
+    flavorSource: String?   # `entrypoint` or `pubspec` — which of the two put [flavor] there.
+    platforms: List<String>   # What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.
+    devices: List<String>   # The ids of the devices currently connected that [platforms] allows.
     knobs: List<RunKnobEntry>
       define: String   # The define's name, as `String.fromEnvironment` reads it.
       label: String?
       description: String?
       default: String?
       options: List<String>   # Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine's addresses on the local network.
+      kind: String?   # `String`, `int`, `bool` or `double` — how the app's own source reads this define.
+      readAt: String?   # The package-relative file the read is in.
+      problem: String?   # What is wrong with this knob, when something is.
 note: String?
 ```
 

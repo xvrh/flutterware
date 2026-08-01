@@ -10,7 +10,9 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../../run/connection.dart';
+import '../../run/defines.dart';
 import '../../run/entrypoints.dart';
+import '../../run/flavors.dart';
 import '../../run/handle.dart';
 import '../../run/inspect.dart';
 import '../../run/inventory.dart';
@@ -122,6 +124,93 @@ class RunCore extends PluginCore {
 
   final _entrypoints = <String, List<EntrypointRef>>{};
 
+  /// [path]'s `flutter: default-flavor:`, when its pubspec declares one.
+  ///
+  /// Cached beside the entry points because it is read the same way, at the
+  /// same moment, and answers the same question: what would be built if nobody
+  /// filled anything in.
+  String? defaultFlavorFor(String path) => _defaultFlavors[path];
+
+  final _defaultFlavors = <String, String?>{};
+
+  /// Every `--dart-define` [path]'s own `lib/` reads, by define name.
+  ///
+  /// Package-level rather than per entry point, because that is as far as an
+  /// unresolved parse can honestly go — see [scanDefines].
+  ///
+  /// **Scanned on first ask, not in [computeAll].** Measured warm, the scan
+  /// costs ~0.2ms per file in `lib/` — 2ms for `examples/example`'s 11 files,
+  /// but 100ms for a 500-file package, because every file is read before the
+  /// substring prefilter can rule it out. `computeAll` is ~430ms across this
+  /// repo and *every* `fw` invocation pays it, so putting a real app's 100ms
+  /// there would tax `fw status` for something only the `entrypoints` action
+  /// and the New run page ever read.
+  ///
+  /// The cache is dropped by [computeAll] rather than kept forever: a reload
+  /// means the sources may have moved, and a knob list that outlived the code
+  /// it was read from is the one wrong answer worth paying to avoid.
+  Map<String, DefineRef> definesFor(String path) => _defines.putIfAbsent(
+    path,
+    () => scanDefines(host.workspace.absolutePathOf(path)),
+  );
+
+  final _defines = <String, Map<String, DefineRef>>{};
+
+  /// The knobs to offer for [entry], and what the scan says about each.
+  ///
+  /// The config is authority when it declared any — the rule entry points
+  /// already follow, and for the same reason: declaring two knobs meant those
+  /// two. What the scan adds there is the **default the code actually uses**
+  /// when the config named none, and the fact that a declared define is read
+  /// nowhere at all.
+  ///
+  /// When the config declared none, the scan *is* the list. That is the zero
+  /// config case, and it is worth having: the define's name and its real
+  /// default are already written in the app, and repeating them in
+  /// `tool/flutterware.dart` only creates two places to be wrong.
+  List<({LaunchKnob knob, DefineRef? read})> knobsFor(
+    String package,
+    EntrypointRef entry,
+  ) {
+    var defines = definesFor(package);
+    if (entry.knobs.isNotEmpty) {
+      return [
+        for (var knob in entry.knobs) (knob: knob, read: defines[knob.define]),
+      ];
+    }
+    return [
+      for (var define in defines.values)
+        (
+          knob: LaunchKnob(define.name, defaultValue: define.defaultValue),
+          read: define,
+        ),
+    ];
+  }
+
+  /// What [entry] builds with when nobody overrides it, and where that came
+  /// from — its own declaration, or [package]'s `flutter: default-flavor:`.
+  ///
+  /// One chain, used by the panel and by the `launch` action, because a form
+  /// that pre-fills `dev` and an agent that passes nothing must build the same
+  /// thing. They did not before: the action stopped at the entry point's
+  /// declaration and never looked at the pubspec.
+  ({String? flavor, FlavorSource source}) flavorFor(
+    String package,
+    EntrypointRef entry,
+  ) => resolveFlavor(
+    entrypointFlavor: entry.flavor,
+    packageDefault: defaultFlavorFor(package),
+  );
+
+  /// The devices [entry] can run on, in the order every surface lists them.
+  ///
+  /// The whole list when the entry point declared no platforms, which is the
+  /// ordinary case and has to stay free.
+  List<DaemonDevice> devicesFor(EntrypointRef entry) => [
+    for (var device in devices)
+      if (device.allowedBy(entry)) device,
+  ];
+
   /// True when [path]'s entry points came from `tool/flutterware.dart` rather
   /// than from scanning.
   bool isDeclared(String path) =>
@@ -144,11 +233,16 @@ class RunCore extends PluginCore {
         failure.key: failure,
     };
     for (var path in packages) {
+      var root = host.workspace.absolutePathOf(path);
       var declared = declaredEntrypoints(_configFor(path));
       _entrypoints[path] = declared.isNotEmpty
           ? declared
-          : scanEntrypoints(host.workspace.absolutePathOf(path));
+          : scanEntrypoints(root);
+      _defaultFlavors[path] = defaultFlavorOf(root);
     }
+    // Not rescanned here — see [definesFor]. Dropped so the next ask re-reads
+    // sources that may have moved since.
+    _defines.clear();
     _hostAddresses = await _readHostAddresses();
     _scanned = true;
   }
@@ -896,8 +990,21 @@ class RunCore extends PluginCore {
                   path: entry.path,
                   name: entry.name,
                   description: entry.description,
-                  flavor: entry.flavor,
-                  knobs: [for (var knob in entry.knobs) _knobEntry(knob)],
+                  flavor: flavorFor(path, entry).flavor,
+                  flavorSource: switch (flavorFor(path, entry).source) {
+                    FlavorSource.none => null,
+                    var source => source.name,
+                  },
+                  platforms: [
+                    for (var platform in entry.platforms) platform.name,
+                  ],
+                  devices: entry.platforms.isEmpty
+                      ? const []
+                      : [for (var device in devicesFor(entry)) device.id],
+                  knobs: [
+                    for (var (:knob, :read) in knobsFor(path, entry))
+                      _knobEntry(knob, read),
+                  ],
                 ),
             ],
           ),
@@ -936,12 +1043,20 @@ class RunCore extends PluginCore {
     return options;
   }
 
-  RunKnobEntry _knobEntry(LaunchKnob knob) => RunKnobEntry(
+  RunKnobEntry _knobEntry(LaunchKnob knob, DefineRef? read) => RunKnobEntry(
     define: knob.define,
     label: knob.label,
     description: knob.description,
-    defaultValue: knob.defaultValue,
+    // The config's word first; the code's real fallback when it said nothing.
+    defaultValue: knob.defaultValue ?? read?.defaultValue,
     options: optionsFor(knob),
+    kind: read?.kind,
+    readAt: read?.file,
+    problem: read == null
+        ? 'nothing in this package reads ${knob.define}. Setting it compiles '
+              'and changes nothing — check the spelling against the '
+              'fromEnvironment call.'
+        : null,
   );
 
   Future<RunLaunchResult> _launchAction(Map<String, Object?> arguments) async {
@@ -954,7 +1069,9 @@ class RunCore extends PluginCore {
       arguments['package'] as String?,
       arguments['entrypoint'] as String?,
     );
+    _checkDevice(device, entry);
     var knobs = _resolveKnobs(
+      package,
       entry,
       UiCatalogCore.parseKnobs(arguments['knobs']),
     );
@@ -963,11 +1080,11 @@ class RunCore extends PluginCore {
       device: device,
       package: package,
       entry: entry,
-      // The caller's word beats the declaration, and an empty string is how a
+      // The caller's word beats every declaration, and an empty string is how a
       // caller says "no flavor" about an entry point that declares one.
       flavor: switch (arguments['flavor']) {
         String given => given.isEmpty ? null : given,
-        _ => entry.flavor,
+        _ => flavorFor(package, entry).flavor,
       },
       knobs: knobs,
     );
@@ -1042,7 +1159,7 @@ class RunCore extends PluginCore {
       deviceName: deviceName,
       entrypoint: entry.path,
       entrypointName: entry.declared ? entry.name : null,
-      flavor: flavor ?? entry.flavor,
+      flavor: flavor,
       knobs: knobs,
     );
     _handles = [handle, ..._handles];
@@ -1090,30 +1207,69 @@ class RunCore extends PluginCore {
     return matches.single;
   }
 
-  /// The knobs a launch will bake in: what the caller gave, over the declared
-  /// defaults, with anything the entry point did not declare refused.
+  /// Refuses a device [entry] declared it cannot run on.
+  ///
+  /// Before the build rather than after it, which is the whole value: the
+  /// alternative is a Gradle or Xcode failure minutes later saying something
+  /// true about the toolchain and nothing about the choice that caused it.
+  ///
+  /// A device the daemon has never mentioned is *not* refused here — `launch`
+  /// has always let a caller name one the cache has not caught up with, and
+  /// turning that into an error would break launching onto a phone plugged in
+  /// a second ago.
+  void _checkDevice(String device, EntrypointRef entry) {
+    if (entry.allowedPlatforms.isEmpty) return;
+    var target = devices.where((candidate) => candidate.id == device);
+    for (var candidate in target) {
+      if (candidate.allowedBy(entry)) return;
+      throw ArgumentError.value(
+        device,
+        'device',
+        '${candidate.displayName} is '
+            '${candidate.platformType ?? candidate.category ?? 'a platform'}, '
+            'and ${entry.name} declares '
+            '${[for (var platform in entry.platforms) platform.name].join(', ')}. '
+            'Runs on: ${[for (var allowed in devicesFor(entry)) allowed.id].join(', ')}',
+      );
+    }
+  }
+
+  /// The knobs a launch will bake in: what the caller gave, over the defaults,
+  /// with anything neither declared nor read anywhere refused.
   ///
   /// Refused rather than passed through, because a misspelled define compiles
   /// perfectly and does nothing — the app reads the fallback and behaves as if
   /// nobody set anything, which is a very long way from a legible failure.
+  ///
+  /// The scan is what makes the refusal safe to extend. Before it, the only
+  /// knobs known were the declared ones, so a package that declared none had to
+  /// accept anything; now `APII` is refused against the defines the code
+  /// genuinely reads, and the error can name them.
   Map<String, String> _resolveKnobs(
+    String package,
     EntrypointRef entry,
     Map<String, String> given,
   ) {
-    var declared = {for (var knob in entry.knobs) knob.define: knob};
-    if (declared.isNotEmpty) {
+    var known = {
+      for (var (:knob, read: _) in knobsFor(package, entry)) knob.define: knob,
+    };
+    if (known.isNotEmpty) {
       for (var name in given.keys) {
-        if (!declared.containsKey(name)) {
+        if (!known.containsKey(name)) {
           throw ArgumentError.value(
             name,
             'knobs',
-            '${entry.name} declares no such knob; it declares '
-                '${declared.keys.join(', ')}',
+            '${entry.name} has no such knob; it takes '
+                '${known.keys.join(', ')}',
           );
         }
       }
     }
     return {
+      // Only what the *config* chose. A scanned knob's default is the value the
+      // code already falls back to, so passing it back as a `--dart-define`
+      // sets nothing, lengthens the build command and fills the run's handle
+      // with values nobody picked.
       for (var knob in entry.knobs) knob.define: ?knob.defaultValue,
       ...given,
     };

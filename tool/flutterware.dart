@@ -67,6 +67,10 @@ void main() => Flutterware.configure((fw) {
               'lib/ui_book.dart',
               name: 'UI book',
               description: 'The component gallery, no backend',
+              // Not a restriction the gallery needs — it runs anywhere — but
+              // the one entry point here that is worth reading a device list
+              // through, and this repo is the monorepo test case.
+              platforms: [RunPlatform.desktop, RunPlatform.web],
             ),
           ],
         ),

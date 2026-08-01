@@ -257,6 +257,7 @@ class Entrypoint {
     this.name,
     this.description,
     this.flavor,
+    this.platforms = const [],
     this.knobs = const [],
   });
 
@@ -292,6 +293,29 @@ class Entrypoint {
   /// those.
   final String? flavor;
 
+  /// What this entry point can actually run on. Everything, when empty.
+  ///
+  /// Some `main()`s are only meant for one kind of machine: a kiosk build for
+  /// tablets, an operator console for the desktop, a web-only embed. Declaring
+  /// it turns a wrong device from a build failure minutes later into a device
+  /// the picker never offers.
+  ///
+  /// [RunPlatform.mobile] and [RunPlatform.desktop] are shorthands and expand,
+  /// so the coarse case stays one word:
+  ///
+  /// ```dart
+  /// Entrypoint('lib/main_kiosk.dart', name: 'Kiosk',
+  ///     platforms: [RunPlatform.ios, RunPlatform.android]),
+  /// Entrypoint('lib/main_admin.dart', name: 'Admin',
+  ///     platforms: [RunPlatform.desktop]),
+  /// ```
+  ///
+  /// This says what the *entry point* is for, not what the package can build.
+  /// A package with no `web/` directory cannot run on Chrome either, and that
+  /// is not declared here — it is a fact about the package, and one nothing
+  /// should have to write down twice.
+  final List<RunPlatform> platforms;
+
   /// What has to be decided before this can be built.
   final List<LaunchKnob> knobs;
 
@@ -300,7 +324,57 @@ class Entrypoint {
     'name': ?name,
     'description': ?description,
     'flavor': ?flavor,
+    // As written, shorthands and all. The tool expands them where it matches
+    // devices; the manifest keeps the author's word so a picker can say
+    // `desktop` rather than reciting three platforms back at them.
+    if (platforms.isNotEmpty) 'platforms': [for (var p in platforms) p.name],
     if (knobs.isNotEmpty) 'knobs': [for (var k in knobs) k.toJson()],
+  };
+}
+
+/// What an [Entrypoint] can run on — one of Flutter's platforms, or a
+/// shorthand for a group of them.
+///
+/// The concrete members are `flutter run`'s own platform names, which is what
+/// makes them checkable: the device list reports the same vocabulary, so a
+/// declaration and a device either match or visibly do not. The two shorthands
+/// are the daemon's device *categories*, and exist because "this is a phone
+/// thing" is the restriction people actually mean most of the time.
+enum RunPlatform {
+  ios,
+  android,
+  macos,
+  linux,
+  windows,
+  web,
+
+  /// [ios] and [android].
+  mobile,
+
+  /// [macos], [linux] and [windows].
+  desktop;
+
+  /// The concrete platforms this stands for — itself, unless it is a shorthand.
+  Set<RunPlatform> get expanded => switch (this) {
+    mobile => const {ios, android},
+    desktop => const {macos, linux, windows},
+    _ => {this},
+  };
+
+  static RunPlatform? byName(String name) {
+    for (var value in values) {
+      if (value.name == name) return value;
+    }
+    return null;
+  }
+
+  /// Every concrete platform [platforms] allows, shorthands expanded.
+  ///
+  /// Empty in and empty out, and the caller has to read that as "no
+  /// restriction" rather than "nothing is allowed" — the difference between an
+  /// entry point that runs anywhere and one that runs nowhere.
+  static Set<RunPlatform> expandAll(Iterable<RunPlatform> platforms) => {
+    for (var platform in platforms) ...platform.expanded,
   };
 }
 
