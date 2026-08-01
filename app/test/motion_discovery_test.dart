@@ -189,38 +189,46 @@ var b = MotionScope(motion: second, builder: (m) => MotionBox(m.target('b'), chi
       ).scan();
 
       var byValues = {for (var motion in result.motions) motion.values: motion};
-      expect(byValues.keys, containsAll(['inboxMotion', 'playerMotion']));
+      expect(byValues.keys, containsAll(['receiptMotion', 'playerMotion']));
 
-      var inbox = byValues['inboxMotion']!;
-      expect(
-        inbox.targets.map((t) => t.name),
-        containsAll(['header', 'search', 'fab']),
-      );
-      // The header is boxed *and* reads a property the box does not apply.
-      var header = inbox.targets.firstWhere((t) => t.name == 'header');
-      expect(header.boxed, isTrue);
-      expect(header.properties, ['fontSize']);
+      var receipt = byValues['receiptMotion']!;
+      expect(receipt.targets.map((t) => t.name), [
+        'scrim',
+        'badge',
+        'ring',
+        'title',
+        'card',
+        'total',
+        'cta',
+      ]);
 
-      // The player wears no box at all — every property is a call-site read.
+      // The receipt mixes both halves of the API, so the scan sees both: a
+      // target wearing a box *and* reading a property the box does not apply.
+      var title = receipt.targets.firstWhere((t) => t.name == 'title');
+      expect(title.boxed, isTrue);
+      expect(title.properties, ['fontSize']);
+
+      var card = receipt.targets.firstWhere((t) => t.name == 'card');
+      expect(card.boxed, isTrue);
+      expect(card.properties, ['borderRadius', 'elevation']);
+
+      // And one that is read and never boxed.
+      var scrim = receipt.targets.firstWhere((t) => t.name == 'scrim');
+      expect(scrim.boxed, isFalse);
+      expect(scrim.properties, ['blur', 'opacity']);
+
+      // Reads written in the builder and passed down are visible. The player
+      // hands whole targets to helper widgets instead, and several of its seven
+      // show nothing here while being fully wired at run time. Both are legal;
+      // only one is scannable, which is why the receipt is the demo to copy.
       var player = byValues['playerMotion']!;
       expect(player.targets.every((t) => !t.boxed), isTrue);
-      var sheet = player.targets.firstWhere((t) => t.name == 'sheet');
       expect(
-        sheet.properties,
-        containsAll(['borderRadius', 'color', 'elevation', 'padding']),
+        player.targets.where((t) => t.properties.isEmpty).length,
+        greaterThan(3),
       );
 
-      // And the honest limit, in the wild rather than in a fixture: the inbox's
-      // four staggered rows are `m.target('msg${index + 1}')` inside a loop, so
-      // the parser cannot name them and says so instead of guessing. The guest
-      // lists all four. This *is* the provisional-versus-ground-truth split,
-      // and finding it in the second demo anybody wrote suggests it will be
-      // common — the panel must never present a scan as complete.
-      expect(inbox.targets.map((t) => t.name), isNot(contains('msg1')));
-      expect(
-        result.diagnostics.single,
-        allOf(contains('motion_inbox.dart'), contains('not a string literal')),
-      );
+      expect(result.diagnostics, isEmpty);
     });
   });
 }

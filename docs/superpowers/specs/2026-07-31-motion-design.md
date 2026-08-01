@@ -788,27 +788,56 @@ every plugin's protocol.
 ### How much the scan actually sees, measured on our own demos
 
 Running `list` against this repo is the honest answer, and it is lower than the
-design implied:
+design implied. Two separate limits, both real:
 
-| motion | targets | with properties the scan can see |
-|---|---|---|
-| `inboxMotion` | 3 of 7 | header (`fontSize`), search (`borderRadius`), fab (`color`, `elevation`) |
-| `playerMotion` | 2 of 7 | glow, sheet |
-
-Two separate limits, both real, both in the second and third files anybody
-wrote against this API:
-
-1. **Computed names.** `motion_inbox`'s four staggered rows are
-   `m.target('msg${index + 1}')` in a loop. The parser reports a diagnostic
-   rather than guessing; the guest lists all four.
+1. **Computed names.** `m.target('row${i}')` in a loop cannot be named by a
+   parser. It reports a diagnostic rather than guessing; the guest lists them
+   all. (The demo that had this was deleted for a better reason — see below —
+   but the limit stands and a synthetic test keeps covering it.)
 2. **Helper widgets.** `motion_player` reads `art.width` inside `_Cover`, not in
-   the builder closure. Five of its seven targets therefore show *zero*
-   properties statically and full wiring at run time.
+   the builder closure, so several of its seven targets show *zero* properties
+   statically and full wiring at run time.
 
-This is not a defect in the scan — it is the boundary the design named, arriving
+The second one has a fix that costs nothing, and `motion_receipt` demonstrates
+it: **read in the builder and pass the values down**, rather than handing a
+whole target to a helper widget. Both work identically at run time; only the
+first is visible before anything is compiled. That is the habit to document.
+
+Neither is a defect in the scan — it is the boundary the design named, arriving
 sooner and wider than expected. The consequence for the panel is a rule:
 **never present the scan as complete.** It is a list that exists before a guest
 does, and the diagnostics belong on screen beside it, not folded away.
+
+### The transport bar needs its own RPC
+
+The first panel polled `list` once a second, so pressing play moved nothing and
+then jumped to the end — a 780ms motion is over before the second tick. Making
+that poll fast is not the fix: `list` walks every target and every segment.
+
+So the guest answers `ext.flutterware.motion.progress` with three numbers, and
+the panel polls *that* at 40ms while something is playing and asks nothing at
+all when nothing is. Measured: **1.04ms median**, against a `seek` that waits a
+whole frame at 16.66ms.
+
+Two more things the scrubber would be wrong without, both about the same
+mismatch between a finger and a frame: seeks are **not queued** — a drag samples
+far faster than a guest can draw, and a queue leaves the preview finishing a
+scrub abandoned seconds ago — and the thumb **holds its own position during the
+drag**, because the guest answers after the frame and echoing it back lags the
+finger by a frame on every sample.
+
+### The first demo was teaching the wrong thing
+
+`motion_inbox` staggered four list rows by writing four near-identical blocks of
+values. That is not a demo of this tool; it is a demo of the duplication the
+tool exists to remove, and nobody would reach for an editor to produce it. It
+also produced limit (1) above, by needing a loop to read what the values file
+spelled out four times.
+
+Replaced by `motion_receipt` — seven targets, each doing something different,
+ten of the sixteen vocabulary properties, and no repeated block. **A stagger of
+identical rows is a thing to generate, not a thing to hand-write**, and the
+day the panel can write one is the day it belongs in a demo.
 
 ### Not yet done
 

@@ -29,7 +29,7 @@ import 'package:path/path.dart' as p;
 /// cd app && dart run tool/catalog/motion_probe.dart [entry-substring]
 /// ```
 Future<void> main(List<String> args) async {
-  var wanted = args.isEmpty ? 'motion_inbox' : args.first;
+  var wanted = args.isEmpty ? 'motion_receipt' : args.first;
   var appPackageRoot = p.dirname(
     p.dirname(p.dirname(p.fromUri(Platform.script))),
   );
@@ -112,6 +112,7 @@ Future<void> _reportRegistration(_Guest guest) async {
   var rpcs = isolate.extensionRPCs ?? const <String>[];
   for (var wanted in const [
     'ext.flutterware.motion.list',
+    'ext.flutterware.motion.progress',
     'ext.flutterware.motion.seek',
     'ext.flutterware.motion.transport',
   ]) {
@@ -218,17 +219,27 @@ Future<void> _reportTransport(_Guest guest) async {
   var seeked = _sole(await _list(guest));
   stdout.writeln('seek ms=390 -> ${seeked['ms']}ms, t=${seeked['progress']}');
 
+  // What a transport bar has to poll, at the rate it has to poll it. `list`
+  // walks every target and segment; a bar that asked *that* sixty times a
+  // second would be absurd, and the first panel asked it once a second and
+  // simply jumped to the end.
   await guest.vmService.callExtension(
     'ext.flutterware.motion.transport',
     args: {'verb': 'restart'},
   );
-  var started = _sole(await _list(guest));
-  await Future<void>.delayed(const Duration(milliseconds: 300));
-  var later = _sole(await _list(guest));
-  stdout.writeln(
-    'restart -> playing=${started['playing']}, '
-    't ${started['progress']} then ${later['progress']} 300ms on',
-  );
+  var samples = <String>[];
+  var costs = <int>[];
+  for (var i = 0; i < 12; i++) {
+    var watch = Stopwatch()..start();
+    var progress = await guest.vmService.callExtension(
+      'ext.flutterware.motion.progress',
+    );
+    costs.add(watch.elapsedMicroseconds);
+    samples.add(((progress?['progress'] as num?) ?? -1).toStringAsFixed(2));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+  }
+  stdout.writeln('restart, sampled every 40ms: ${samples.join(' ')}');
+  _summarise('progress RPC                 ', costs);
 
   await guest.vmService.callExtension(
     'ext.flutterware.motion.transport',

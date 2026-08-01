@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/motion.dart';
 import 'package:flutterware/ui_catalog.dart';
 
-import 'motion_inbox.dart' show shadowFor;
+import 'motion_receipt.dart' show shadowFor;
 import 'motion_player.motion.dart';
 import 'shell.dart';
 

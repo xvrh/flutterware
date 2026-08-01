@@ -83,6 +83,28 @@ class MotionRegistry {
       return developer.ServiceExtensionResponse.result(jsonEncode(describe()));
     });
 
+    // The playhead alone, and nothing else.
+    //
+    // `list` walks every target and every segment, which is the wrong thing to
+    // ask sixty times a second — and a transport bar that follows a playing
+    // motion has to ask something at about that rate or it does not move. The
+    // first panel polled `list` once a second and the bar simply jumped to the
+    // end, because a 780ms motion is over before the second tick.
+    developer.registerExtension('ext.flutterware.motion.progress', (
+      _,
+      args,
+    ) async {
+      var scope = resolve(args['scope']);
+      if (scope == null) return _noScope(args['scope']);
+      return developer.ServiceExtensionResponse.result(
+        jsonEncode({
+          'progress': scope.controller.progress,
+          'ms': scope.controller.position.inMilliseconds,
+          'playing': scope.controller.isAnimating,
+        }),
+      );
+    });
+
     developer.registerExtension('ext.flutterware.motion.seek', (_, args) async {
       var scope = resolve(args['scope']);
       if (scope == null) return _noScope(args['scope']);

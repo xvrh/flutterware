@@ -250,6 +250,7 @@ class _MotionStage extends StatefulWidget {
 class _MotionStageState extends State<_MotionStage> {
   CatalogSession? _session;
   Timer? _poll;
+  Timer? _tick;
 
   /// The guest's own answer, or null before it has given one.
   Map<String, dynamic>? _scope;
@@ -262,6 +263,7 @@ class _MotionStageState extends State<_MotionStage> {
   double? _dragging;
 
   var _seeking = false;
+  var _ticking = false;
 
   @override
   void initState() {
@@ -282,10 +284,16 @@ class _MotionStageState extends State<_MotionStage> {
     )..addListener(_onSession);
     _session = session;
     unawaited(session.start());
-    // Slow, because nothing here is a live readout: the states and the tuned
-    // spans change when somebody edits a file, not between frames. The playhead
-    // is read back from the seek that moved it.
+    // Slow, because none of this is a live readout: the states and the tuned
+    // spans change when somebody edits a file, not between frames.
     _poll = Timer.periodic(const Duration(seconds: 1), (_) => _refresh());
+    // The playhead is the exception, and it needs its own rate. `list` walks
+    // every target and segment, so polling *it* fast is not an option; the
+    // guest answers `progress` with three numbers instead.
+    _tick = Timer.periodic(
+      const Duration(milliseconds: 40),
+      (_) => _followPlayhead(),
+    );
   }
 
   void _onSession() {
@@ -302,6 +310,28 @@ class _MotionStageState extends State<_MotionStage> {
       }
     }
     setState(() {});
+  }
+
+  /// Follows a playing motion, and asks nothing at all when none is.
+  ///
+  /// Idle, this costs one boolean read every 40ms. The alternative — ticking
+  /// only while a transport is in flight — needs the panel to know when the
+  /// motion *ended*, which is the thing it is asking about.
+  Future<void> _followPlayhead() async {
+    if (_ticking || _dragging != null) return;
+    if (_scope == null || _scope!['playing'] != true) return;
+    _ticking = true;
+    try {
+      var reply = await _session?.callGuestExtension(
+        'ext.flutterware.motion.progress',
+      );
+      if (!mounted || reply == null) return;
+      // Merged rather than replacing: the lanes stay put while the playhead
+      // moves, so a scrub does not make every lane flicker.
+      setState(() => _scope = {..._scope!, ...reply});
+    } finally {
+      _ticking = false;
+    }
   }
 
   Future<void> _refresh() async {
@@ -330,6 +360,8 @@ class _MotionStageState extends State<_MotionStage> {
         args: {'t': '$t'},
       );
       if (!mounted || reply == null) return;
+      // The values change with the playhead; the lanes do not. Refreshing the
+      // whole tree on every drag sample is what makes a scrubber feel heavy.
       await _refresh();
     } finally {
       _seeking = false;
@@ -347,6 +379,7 @@ class _MotionStageState extends State<_MotionStage> {
   @override
   void dispose() {
     _poll?.cancel();
+    _tick?.cancel();
     _session?.removeListener(_onSession);
     _session?.dispose();
     super.dispose();
