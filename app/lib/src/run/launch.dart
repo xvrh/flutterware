@@ -309,14 +309,23 @@ class LaunchLog {
 
   /// The trailing plain lines, minus the blank ones a terminal used for
   /// spacing, capped so a runaway build log cannot become the error message.
+  ///
+  /// **The head, not the tail.** A tool states the fault first and summarises
+  /// last — `Failed to build iOS app`, then the Xcode error, then the steps,
+  /// then `App failed to start`. Keeping the last N would throw away the cause
+  /// and keep the summary, which is the exact bug this block exists to fix. The
+  /// cut says what it dropped, and [RunFailure.logPath] points at the whole
+  /// thing.
   List<String> _failureBlock() {
     var kept = [
       for (var line in trailing)
         if (line.trim().isNotEmpty) line,
     ];
-    return kept.length <= _maxFailureLines
-        ? kept
-        : kept.sublist(kept.length - _maxFailureLines);
+    if (kept.length <= _maxFailureLines) return kept;
+    return [
+      ...kept.take(_maxFailureLines),
+      '… ${kept.length - _maxFailureLines} more lines in the log',
+    ];
   }
 
   /// The launcher's own last word, for a row that has to say something.
@@ -334,9 +343,10 @@ class LaunchLog {
 /// **The handle has to go and the reason has to stay.** A launcher that never
 /// came up is not holding the device, so leaving its handle in the ledger would
 /// tell the next person a phone is busy running something that is not there —
-/// which is why both the sweeper and a failed `launch` delete it. But the chip
-/// deleted with it was the only thing on screen, so a failed launch bounced you
-/// back to the form with nothing said. This is what the panel shows instead.
+/// which is why both the sweeper and a failed `launch` delete it. But that
+/// handle was the run's only row, so deleting it bounced you back to the form
+/// with nothing said. This is what stands in its place — a rail row in red, and
+/// a page with the launcher's own words on it.
 ///
 /// **A file beside the log, not memory.** It was memory first, and moving the
 /// run list into the rail proved that wrong within the hour: a launch that
@@ -462,9 +472,11 @@ class RunFailure {
 
 /// The `*.failed` records in [runDir], newest first.
 ///
-/// Reads files and nothing else, so [PluginCore.computeAll] may call it.
-/// Anything older than [maxAge] is skipped and deleted: a run that failed
-/// yesterday is not news, and the rail is a list of what is going on.
+/// **Reads files and nothing else**, so [PluginCore.computeAll] may call it.
+/// Anything older than [maxAge] is skipped but *not* deleted: deleting is the
+/// run dir's sweeper's job, which already ages `<key>.failed` out on the same
+/// rule as the log it belongs to. A scan that quietly wrote would be a scan
+/// that could not be called from where this one is.
 List<RunFailure> scanRunFailures(
   String runDir, {
   Duration maxAge = const Duration(hours: 12),
@@ -486,10 +498,8 @@ List<RunFailure> scanRunFailures(
     }
     var failure = RunFailure.tryRead(entity);
     if (failure == null) continue;
-    if (now.difference(failure.at) > maxAge) {
-      RunFailure.forget(runDir, failure.key);
-      continue;
-    }
+    // Old enough to be history rather than news. Left on disk for the sweeper.
+    if (now.difference(failure.at) > maxAge) continue;
     failures.add(failure);
   }
   failures.sort((a, b) => b.at.compareTo(a.at));

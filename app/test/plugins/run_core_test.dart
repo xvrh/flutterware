@@ -287,30 +287,48 @@ void main() {
       expect(elsewhere.failureFor(handle.key)?.headline, contains('code sign'));
     });
 
-    test(
-      'a failure older than the window is dropped, and its file with it',
-      () {
-        var stale = RunFailure(
-          key: 'app-stale',
-          device: 'phone',
-          entrypoint: 'lib/main.dart',
-          at: DateTime.now().subtract(const Duration(days: 2)),
-        );
-        stale.write(runDir.path);
-        expect(
-          File(p.join(runDir.path, 'app-stale.failed')).existsSync(),
-          isTrue,
-        );
+    test('a failure older than the window is history, and is left alone', () {
+      var stale = RunFailure(
+        key: 'app-stale',
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        at: DateTime.now().subtract(const Duration(days: 2)),
+      );
+      stale.write(runDir.path);
 
-        expect(scanRunFailures(runDir.path), isEmpty);
-        // Swept as it was read: the rail is a list of what is going on, and
-        // nothing else in this directory keeps yesterday either.
-        expect(
-          File(p.join(runDir.path, 'app-stale.failed')).existsSync(),
-          isFalse,
-        );
-      },
-    );
+      expect(scanRunFailures(runDir.path), isEmpty);
+      // Not deleted here. This scan runs inside `computeAll`, which reads and
+      // does not write; the run dir's sweeper ages `.failed` out on the same
+      // rule as the log beside it.
+      expect(
+        File(p.join(runDir.path, 'app-stale.failed')).existsSync(),
+        isTrue,
+      );
+    });
+
+    test('a long failure keeps its cause, not its summary', () {
+      // A tool states the fault first and summarises last. Capping to the tail
+      // would drop `Error (Xcode): …` and keep `App failed to start`, which is
+      // the bug the block exists to fix.
+      var path = p.join(runDir.path, 'app-long.log');
+      File(path).writeAsStringSync(
+        [
+          'Error (Xcode): No Account for Team "B7V224LKE4".',
+          for (var i = 0; i < 60; i++) 'noise $i',
+          'App failed to start',
+        ].join('\n'),
+      );
+
+      var failure = LaunchLog.read(path).failure(launcherAlive: false)!;
+
+      expect(failure, startsWith('Error (Xcode): No Account'));
+      expect(failure, contains('more lines in the log'));
+      expect(failure, isNot(contains('App failed to start')));
+      expect(
+        LaunchLog.read(path).failureHeadline,
+        'Error (Xcode): No Account for Team "B7V224LKE4".',
+      );
+    });
 
     test('sweeping a run that never started keeps why', () async {
       // The handle must go — a dead launcher is not holding the phone — but

@@ -724,7 +724,10 @@ class _ScreenTabState extends State<_ScreenTab> {
   Future<void> read() => _read();
 
   Future<void> _read() async {
-    setState(() => _loading = true);
+    // Assigned rather than `setState`, because this is reached from `initState`
+    // and `didUpdateWidget` — both inside a build. [_tellThePage] schedules the
+    // rebuild that shows it, one frame later, which is what a spinner is for.
+    _loading = true;
     _tellThePage();
     try {
       var read = await widget.core.inspectRead(widget.handle);
@@ -868,10 +871,44 @@ class _LogsTab extends StatefulWidget {
 
 class _LogsTabState extends State<_LogsTab> {
   RunLogSource? _only;
+  List<RunLogLine> _lines = const [];
+  Timer? _poll;
+
+  /// Slower than a frame and faster than you can read a line.
+  static const _every = Duration(milliseconds: 700);
+
+  @override
+  void initState() {
+    super.initState();
+    _reread();
+    _poll = Timer.periodic(_every, (_) => _reread());
+  }
+
+  @override
+  void didUpdateWidget(_LogsTab old) {
+    super.didUpdateWidget(old);
+    if (old.handle.key != widget.handle.key) _reread();
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  /// **Not in `build`.** A log is a file, the panel rebuilds on every probe and
+  /// on every frame of any animation above it, and `RunCore.logOf` says in as
+  /// many words why a panel must not read one from there. A timer is the honest
+  /// shape: the file is polled because nothing pushes it.
+  void _reread() {
+    if (!mounted) return;
+    var lines = widget.core.readLogs(widget.handle, only: _only, tail: 2000);
+    setState(() => _lines = lines);
+  }
 
   @override
   Widget build(BuildContext context) {
-    var lines = widget.core.readLogs(widget.handle, only: _only, tail: 2000);
+    var lines = _lines;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -892,7 +929,12 @@ class _LogsTabState extends State<_LogsTab> {
                   child: _Pill(
                     label: label,
                     selected: _only == value,
-                    onTap: () => setState(() => _only = value),
+                    onTap: () {
+                      _only = value;
+                      // Immediately, not on the next tick: a filter that took
+                      // most of a second to answer would read as broken.
+                      _reread();
+                    },
                   ),
                 ),
               const Spacer(),
