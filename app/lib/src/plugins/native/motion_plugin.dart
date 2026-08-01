@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -8,6 +9,7 @@ import '../../catalog/catalog_session.dart';
 import '../../catalog/compiler_daemon_client.dart';
 import '../../embedder/embedded_engine.dart';
 import '../../motion/discovery.dart';
+import '../../motion/new_span.dart';
 import '../../motion/values_file.dart';
 import '../../ui/design/spacing.dart';
 import '../../ui/design/tokens.dart';
@@ -421,9 +423,46 @@ class _MotionStageState extends State<_MotionStage> {
           ),
     ];
 
-    var problems = core.writeValues(
-      package,
-      file,
+    await _commit(targets);
+  }
+
+  /// Tunes a property nothing has tuned yet — the creation path the three
+  /// states exist for.
+  ///
+  /// Reached from a dashed lane (read in code, untuned) and from a target's
+  /// offered list (a `MotionBox` applies it, nothing tunes it). Both are the
+  /// same act: the code already asks for the value, and this is where the value
+  /// starts existing.
+  Future<void> _create(String target, String property) async {
+    var core = widget.core;
+    var read = core.readValues(
+      widget.place.package,
+      widget.motion.file,
+      constName: widget.motion.values,
+    );
+    if (!read.writable) {
+      setState(() => _writeProblems = read.problems);
+      return;
+    }
+    var span = newSpanFor(
+      property,
+      durationMs: (_scope?['durationMs'] as num?)?.toInt(),
+    );
+    if (span == null) {
+      setState(
+        () => _writeProblems = [
+          MotionFileProblem('`$property` is not a motion property'),
+        ],
+      );
+      return;
+    }
+    await _commit(withNewProperty(read.file!.targets, target, property, span));
+  }
+
+  Future<void> _commit(List<MotionTargetValues> targets) async {
+    var problems = widget.core.writeValues(
+      widget.place.package,
+      widget.motion.file,
       targets,
       constName: widget.motion.values,
     );
@@ -475,7 +514,12 @@ class _MotionStageState extends State<_MotionStage> {
         Divider(height: 1, color: context.colors.line),
         SizedBox(
           height: 220,
-          child: _Lanes(scope: _scope, problems: _writeProblems, onEdit: _edit),
+          child: _Lanes(
+            scope: _scope,
+            problems: _writeProblems,
+            onEdit: _edit,
+            onCreate: _create,
+          ),
         ),
       ],
     );
@@ -603,11 +647,13 @@ class _Lanes extends StatelessWidget {
     required this.scope,
     required this.problems,
     required this.onEdit,
+    required this.onCreate,
   });
 
   final Map<String, dynamic>? scope;
   final List<MotionFileProblem> problems;
   final MotionEdit onEdit;
+  final Future<void> Function(String target, String property) onCreate;
 
   @override
   Widget build(BuildContext context) {
@@ -658,11 +704,15 @@ class _Lanes extends StatelessWidget {
                     tone: context.colors.amber,
                     hint: 'Tuned, but no build asked for it — prunable.',
                   ),
-                if ((target['offered'] as List).isNotEmpty)
-                  _Chip(
-                    '+${(target['offered'] as List).length}',
-                    tone: context.colors.mut,
-                    hint: 'Available through a MotionBox, not tuned.',
+                // The commonest creation path, and easy to miss: an element in
+                // a `MotionBox` has eight properties available and no lane for
+                // any of them until one is tuned.
+                if (_untuned(target) case var available
+                    when available.isNotEmpty)
+                  _OfferedMenu(
+                    available: available,
+                    onPick: (property) =>
+                        onCreate('${target['name']}', property),
                   ),
               ],
             ),
@@ -678,6 +728,9 @@ class _Lanes extends StatelessWidget {
                 index,
                 change,
               ),
+              onCreate: property['state'] != 'untuned'
+                  ? null
+                  : () => onCreate('${target['name']}', '${property['name']}'),
             ),
         ],
       ],
@@ -690,12 +743,16 @@ class _Lane extends StatelessWidget {
     required this.property,
     required this.duration,
     required this.onEdit,
+    this.onCreate,
   });
 
   final Map<String, dynamic> property;
   final int duration;
   final Future<void> Function(int index, MotionSpan Function(MotionSpan))
   onEdit;
+
+  /// Set only on a dashed lane: the code reads this and nothing tunes it.
+  final VoidCallback? onCreate;
 
   @override
   Widget build(BuildContext context) {
@@ -733,12 +790,23 @@ class _Lane extends StatelessWidget {
                 duration: duration,
                 tone: tone,
                 dashed: property['state'] == 'untuned',
-                onEdit: onEdit,
+                onCommit: (index, startMs, endMs) => onEdit(
+                  index,
+                  (span) => span.copyWith(startMs: startMs, endMs: endMs),
+                ),
               ),
             ),
           ),
+          if (onCreate case var create?)
+            Tappable(
+              onTap: create,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+                child: Icon(Icons.add, size: 14, color: context.colors.accent),
+              ),
+            ),
           SizedBox(
-            width: 92,
+            width: onCreate == null ? 92 : 62,
             child: Text(
               _valueLabel(property['value']),
               textAlign: TextAlign.right,
@@ -767,21 +835,35 @@ class _Lane extends StatelessWidget {
 /// rather than re-derived per sample: grabbing the middle third moves the whole
 /// span and the ends trim it. Re-deriving would change the meaning under the
 /// finger the moment a short span passed under the cursor.
+/// A lane's spans, draggable.
+///
+/// **The drag is held here and written once.** Every pointer sample used to be
+/// a file read, a file write, a reload and a refresh — at roughly 1.5ms per
+/// pixel on a 900ms motion that is a write on nearly every sample, sixty times
+/// a second, and sixty entries in your editor's undo history for one gesture.
+/// The bar follows the finger off a local copy, and the commit happens on
+/// release.
+///
+/// The grab is decided once on the way down rather than re-derived per sample:
+/// the middle third moves the whole span and the ends trim it, and re-deriving
+/// would change what the drag means under the finger the moment a short span
+/// passed beneath the cursor.
 class _SpanStrip extends StatefulWidget {
   const _SpanStrip({
     required this.segments,
     required this.duration,
     required this.tone,
     required this.dashed,
-    required this.onEdit,
+    required this.onCommit,
   });
 
   final List<Map<String, dynamic>> segments;
   final int duration;
   final Color tone;
   final bool dashed;
-  final Future<void> Function(int index, MotionSpan Function(MotionSpan))
-  onEdit;
+
+  /// Called once, on release, with the span's settled bounds.
+  final Future<void> Function(int index, int startMs, int endMs) onCommit;
 
   @override
   State<_SpanStrip> createState() => _SpanStripState();
@@ -797,13 +879,28 @@ class _SpanStripState extends State<_SpanStrip> {
   /// milliseconds instead of rounding to nothing on every sample.
   double _carried = 0;
 
-  double get _msPerPixel =>
-      widget.duration / (context.size?.width ?? 1).clamp(1.0, double.infinity);
+  /// The bounds under the finger, or null when nothing is being dragged.
+  ///
+  /// While this is set it is what the lane draws, so the bar tracks the pointer
+  /// without the file or the guest being involved at all.
+  List<(int, int)>? _held;
+
+  List<(int, int)> get _bounds =>
+      _held ??
+      [
+        for (var segment in widget.segments)
+          (
+            (segment['startMs'] as num).toInt(),
+            (segment['endMs'] as num).toInt(),
+          ),
+      ];
 
   void _down(Offset local, double width) {
-    for (var (index, segment) in widget.segments.indexed) {
-      var start = (segment['startMs'] as num) / widget.duration * width;
-      var end = (segment['endMs'] as num) / widget.duration * width;
+    if (widget.duration <= 0) return;
+    var bounds = _bounds;
+    for (var (index, (startMs, endMs)) in bounds.indexed) {
+      var start = startMs / widget.duration * width;
+      var end = endMs / widget.duration * width;
       // A zero-length span is a step keyframe and has no middle; the whole of
       // it grabs as one.
       var edge = ((end - start) / 3).clamp(0.0, 8.0);
@@ -816,49 +913,53 @@ class _SpanStripState extends State<_SpanStrip> {
             ? _Grab.end
             : _Grab.whole;
         _carried = 0;
+        _held = bounds;
       });
       return;
     }
-    setState(_release);
   }
 
-  void _release() {
-    _index = null;
-    _grab = null;
-    _carried = 0;
-  }
-
-  void _update(double dx) {
+  void _update(double dx, double width) {
     var index = _index;
     var grab = _grab;
-    if (index == null || grab == null || widget.duration <= 0) return;
-    _carried += dx * _msPerPixel;
+    var held = _held;
+    if (index == null || grab == null || held == null) return;
+    _carried += dx * (widget.duration / width.clamp(1.0, double.infinity));
     var whole = _carried.truncate();
     if (whole == 0) return;
     _carried -= whole;
-    unawaited(
-      widget.onEdit(index, (span) {
-        var total = widget.duration;
-        return switch (grab) {
-          // Clamped to the motion, and a span never turns inside out: an end
-          // dragged past its start is a span that would evaluate backwards.
-          _Grab.start => span.copyWith(
-            startMs: (span.startMs + whole).clamp(0, span.endMs),
-          ),
-          _Grab.end => span.copyWith(
-            endMs: (span.endMs + whole).clamp(span.startMs, total),
-          ),
-          _Grab.whole => _shifted(
-            span,
-            whole.clamp(-span.startMs, total - span.endMs),
-          ),
-        };
-      }),
-    );
+
+    var (startMs, endMs) = held[index];
+    var total = widget.duration;
+    // Clamped to the motion, and a span never turns inside out: an end dragged
+    // past its start is a span that would evaluate backwards.
+    var next = switch (grab) {
+      _Grab.start => ((startMs + whole).clamp(0, endMs), endMs),
+      _Grab.end => (startMs, (endMs + whole).clamp(startMs, total)),
+      _Grab.whole => switch (whole.clamp(-startMs, total - endMs)) {
+        var shift => (startMs + shift, endMs + shift),
+      },
+    };
+    if (next == held[index]) return;
+    setState(() => _held = [...held]..[index] = next);
   }
 
-  static MotionSpan _shifted(MotionSpan span, int by) =>
-      span.copyWith(startMs: span.startMs + by, endMs: span.endMs + by);
+  Future<void> _release() async {
+    var index = _index;
+    var held = _held;
+    setState(() {
+      _index = null;
+      _grab = null;
+      _carried = 0;
+    });
+    if (index != null && held != null) {
+      var (startMs, endMs) = held[index];
+      await widget.onCommit(index, startMs, endMs);
+    }
+    // Cleared after the write, so the bar does not snap back to the guest's
+    // old answer in the frames between committing and the reload landing.
+    if (mounted) setState(() => _held = null);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -871,13 +972,15 @@ class _SpanStripState extends State<_SpanStrip> {
           behavior: HitTestBehavior.opaque,
           onHorizontalDragDown: (details) =>
               _down(details.localPosition, constraints.maxWidth),
-          onHorizontalDragUpdate: (details) => _update(details.delta.dx),
-          onHorizontalDragEnd: (_) => setState(_release),
+          onHorizontalDragUpdate: (details) =>
+              _update(details.delta.dx, constraints.maxWidth),
+          onHorizontalDragEnd: (_) => unawaited(_release()),
+          onHorizontalDragCancel: () => unawaited(_release()),
           child: SizedBox(
             height: 14,
             child: CustomPaint(
               painter: _SpanPainter(
-                segments: widget.segments,
+                bounds: _bounds,
                 duration: widget.duration,
                 tone: widget.tone,
                 dashed: widget.dashed,
@@ -893,14 +996,14 @@ class _SpanStripState extends State<_SpanStrip> {
 
 class _SpanPainter extends CustomPainter {
   _SpanPainter({
-    required this.segments,
+    required this.bounds,
     required this.duration,
     required this.tone,
     required this.dashed,
     this.grabbed,
   });
 
-  final List<Map<String, dynamic>> segments;
+  final List<(int, int)> bounds;
   final int duration;
   final Color tone;
 
@@ -914,7 +1017,7 @@ class _SpanPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     var paint = Paint()..color = tone;
-    if (segments.isEmpty || duration <= 0) {
+    if (bounds.isEmpty || duration <= 0) {
       if (!dashed) return;
       paint
         ..style = PaintingStyle.stroke
@@ -928,10 +1031,10 @@ class _SpanPainter extends CustomPainter {
       }
       return;
     }
-    for (var (index, segment) in segments.indexed) {
+    for (var (index, (startMs, endMs)) in bounds.indexed) {
       paint.color = index == grabbed ? tone : tone.withValues(alpha: 0.75);
-      var start = ((segment['startMs'] as num) / duration) * size.width;
-      var end = ((segment['endMs'] as num) / duration) * size.width;
+      var start = startMs / duration * size.width;
+      var end = endMs / duration * size.width;
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           // A step keyframe is a zero-length span, and a zero-width rect draws
@@ -950,8 +1053,7 @@ class _SpanPainter extends CustomPainter {
       old.tone != tone ||
       old.dashed != dashed ||
       old.grabbed != grabbed ||
-      old.segments.length != segments.length ||
-      !identical(old.segments, segments);
+      !const ListEquality<(int, int)>().equals(old.bounds, bounds);
 }
 
 class _Chip extends StatelessWidget {
@@ -972,6 +1074,51 @@ class _Chip extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(label, style: context.type.caption.copyWith(color: tone)),
+      ),
+    );
+  }
+}
+
+/// The properties a target offers and nobody has tuned.
+///
+/// `offered` minus everything already listed, because a `MotionBox` sweeps its
+/// whole frozen set every build — an element that fades reports eight offered
+/// properties and one lane, and only the other seven are worth adding.
+List<String> _untuned(Map<String, dynamic> target) {
+  var tuned = {
+    for (var property in (target['properties'] as List))
+      (property as Map<String, dynamic>)['name'] as String,
+  };
+  return [
+    for (var offer in (target['offered'] as List).cast<String>())
+      if (!tuned.contains(offer)) offer,
+  ];
+}
+
+/// The `+N` chip, opened.
+class _OfferedMenu extends StatelessWidget {
+  const _OfferedMenu({required this.available, required this.onPick});
+
+  final List<String> available;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      menuChildren: [
+        for (var property in available)
+          MenuItemButton(
+            onPressed: () => onPick(property),
+            child: Text(property, style: context.type.caption),
+          ),
+      ],
+      builder: (context, controller, _) => Tappable(
+        onTap: () => controller.isOpen ? controller.close() : controller.open(),
+        child: _Chip(
+          '+${available.length}',
+          tone: context.colors.mut,
+          hint: 'Applied by a MotionBox, not tuned. Pick one to tune it.',
+        ),
       ),
     );
   }
