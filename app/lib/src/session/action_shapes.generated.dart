@@ -3812,7 +3812,21 @@ final resultShapes = <String, ResultShape>{
       },
       <String, Object?>{'name': 'surface', 'type': 'String'},
       <String, Object?>{'name': 'theme', 'type': 'String'},
+      <String, Object?>{
+        'name': 'role',
+        'type': 'String',
+        'doc':
+            'Which layer this is — `image`, `background`, `branding`, `icon`.',
+      },
       <String, Object?>{'name': 'density', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'pixelWidth', 'type': 'int', 'optional': true},
+      <String, Object?>{'name': 'pixelHeight', 'type': 'int', 'optional': true},
+      <String, Object?>{
+        'name': 'logicalWidth',
+        'type': 'double',
+        'optional': true,
+        'doc': 'The size it occupies on screen.',
+      },
       <String, Object?>{'name': 'modified', 'type': 'String'},
     ],
   }),
@@ -3846,9 +3860,31 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{'name': 'surface', 'type': 'String'},
             <String, Object?>{'name': 'theme', 'type': 'String'},
             <String, Object?>{
+              'name': 'role',
+              'type': 'String',
+              'doc':
+                  'Which layer this is — `image`, `background`, `branding`, `icon`.',
+            },
+            <String, Object?>{
               'name': 'density',
               'type': 'String',
               'optional': true,
+            },
+            <String, Object?>{
+              'name': 'pixelWidth',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'pixelHeight',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'logicalWidth',
+              'type': 'double',
+              'optional': true,
+              'doc': 'The size it occupies on screen.',
             },
             <String, Object?>{'name': 'modified', 'type': 'String'},
           ],
@@ -3938,12 +3974,72 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
             },
             <String, Object?>{
+              'name': 'device',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The screen this is about, for the rules that sweep the device table — `iphone-se`.',
+            },
+            <String, Object?>{
+              'name': 'fix',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The id to hand `fix`, when this one can be repaired by writing a key.',
+            },
+            <String, Object?>{
+              'name': 'fixLabel',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'What that fix will do, in words — so a caller can decide before running it.',
+            },
+            <String, Object?>{
               'name': 'blocksGeneration',
               'type': 'bool',
               'doc': '`create` will exit rather than write anything.',
             },
           ],
         },
+      },
+    ],
+  }),
+  'SplashFixResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashFixResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{'name': 'flavor', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'fix', 'type': 'String'},
+      <String, Object?>{'name': 'label', 'type': 'String'},
+      <String, Object?>{
+        'name': 'configPath',
+        'type': 'String',
+        'doc': 'Which file was edited, package-relative.',
+      },
+      <String, Object?>{
+        'name': 'writes',
+        'type': 'List<SplashWriteEntry>',
+        'shape': <String, Object?>{
+          'type': 'SplashWriteEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'key',
+              'type': 'String',
+              'doc': 'Dotted for the nested section — `android_12.image`.',
+            },
+            <String, Object?>{
+              'name': 'value',
+              'type': 'Object',
+              'optional': true,
+              'doc': 'Absent when the key was removed.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'remainingProblems',
+        'type': 'int',
+        'doc': 'How many problems the re-scan found afterwards.',
       },
     ],
   }),
@@ -3975,14 +4071,76 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{'name': 'surface', 'type': 'String'},
             <String, Object?>{'name': 'theme', 'type': 'String'},
             <String, Object?>{
+              'name': 'role',
+              'type': 'String',
+              'doc':
+                  'Which layer this is — `image`, `background`, `branding`, `icon`.',
+            },
+            <String, Object?>{
               'name': 'density',
               'type': 'String',
               'optional': true,
+            },
+            <String, Object?>{
+              'name': 'pixelWidth',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'pixelHeight',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'logicalWidth',
+              'type': 'double',
+              'optional': true,
+              'doc': 'The size it occupies on screen.',
             },
             <String, Object?>{'name': 'modified', 'type': 'String'},
           ],
         },
       },
+    ],
+  }),
+  'SplashPrepareResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashPrepareResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{'name': 'flavor', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'target', 'type': 'String'},
+      <String, Object?>{'name': 'theme', 'type': 'String'},
+      <String, Object?>{
+        'name': 'key',
+        'type': 'String',
+        'doc':
+            'The config key it was written to — derived from the target and the theme, so a caller cannot make the file and point the wrong key at it.',
+      },
+      <String, Object?>{
+        'name': 'output',
+        'type': 'String',
+        'doc': 'Package-relative path of the PNG.',
+      },
+      <String, Object?>{'name': 'width', 'type': 'int'},
+      <String, Object?>{'name': 'height', 'type': 'int'},
+      <String, Object?>{
+        'name': 'explanation',
+        'type': 'String',
+        'doc': 'Why the canvas is that size, in words.',
+      },
+      <String, Object?>{
+        'name': 'sourceCopiedTo',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Where the original was copied to, when it came from outside the package.',
+      },
+      <String, Object?>{
+        'name': 'cornerOverhang',
+        'type': 'double',
+        'doc': 'How far the image reaches past a circular mask, in pixels.',
+      },
+      <String, Object?>{'name': 'remainingProblems', 'type': 'int'},
     ],
   }),
   'SplashProblemEntry': ResultShape.fromJson(<String, Object?>{
@@ -3993,6 +4151,27 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'key', 'type': 'String', 'optional': true},
       <String, Object?>{'name': 'surface', 'type': 'String', 'optional': true},
       <String, Object?>{'name': 'theme', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'device',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The screen this is about, for the rules that sweep the device table — `iphone-se`.',
+      },
+      <String, Object?>{
+        'name': 'fix',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The id to hand `fix`, when this one can be repaired by writing a key.',
+      },
+      <String, Object?>{
+        'name': 'fixLabel',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What that fix will do, in words — so a caller can decide before running it.',
+      },
       <String, Object?>{
         'name': 'blocksGeneration',
         'type': 'bool',
@@ -4014,6 +4193,62 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'optional': true,
         'doc': 'The config key that won the cascade — `color_dark_android`.',
+      },
+    ],
+  }),
+  'SplashReloadResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashReloadResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{
+        'name': 'configPath',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Which file the re-read found, or null when the package has no splash config at all.',
+      },
+      <String, Object?>{'name': 'scannedAt', 'type': 'String'},
+      <String, Object?>{
+        'name': 'changed',
+        'type': 'bool',
+        'doc': 'Something the scan depends on had moved since the last read.',
+      },
+    ],
+  }),
+  'SplashSetResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashSetResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{'name': 'flavor', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'key', 'type': 'String'},
+      <String, Object?>{
+        'name': 'value',
+        'type': 'Object',
+        'optional': true,
+        'doc': 'Absent when the key was removed.',
+      },
+      <String, Object?>{'name': 'configPath', 'type': 'String'},
+      <String, Object?>{
+        'name': 'remainingProblems',
+        'type': 'int',
+        'doc':
+            'What the re-scan found afterwards — the cheap check that a hand-written value did not break something else.',
+      },
+    ],
+  }),
+  'SplashWriteEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashWriteEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'key',
+        'type': 'String',
+        'doc': 'Dotted for the nested section — `android_12.image`.',
+      },
+      <String, Object?>{
+        'name': 'value',
+        'type': 'Object',
+        'optional': true,
+        'doc': 'Absent when the key was removed.',
       },
     ],
   }),

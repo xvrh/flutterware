@@ -1,12 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
+import '../capture/capture_mode.dart';
 import '../plugins/native/splash_core.dart';
 import '../ui/theme.dart';
 import 'model/config.dart';
 import 'model/scan.dart';
+import 'model/studio.dart';
 import 'model/surface.dart';
 import 'model/validation.dart';
+import 'ui/artifacts_view.dart';
+import 'ui/edit_value_dialog.dart';
+import 'ui/studio_dialog.dart';
 import 'ui/variant_tile.dart';
 
 /// The whole matrix at once: four surfaces, two themes, side by side.
@@ -23,6 +30,9 @@ class SplashScreen extends StatelessWidget {
     this.flavor,
     this.surface,
     this.theme,
+    this.device,
+    this.onSelectCell,
+    this.onShowAll,
   });
 
   final SplashCore core;
@@ -35,6 +45,17 @@ class SplashScreen extends StatelessWidget {
   /// alone — the comparison is the feature.
   final SplashSurface? surface;
   final SplashTheme? theme;
+
+  /// `?device=`, or null for each surface's own default.
+  final String? device;
+
+  /// Writes the two axes. Supplied by the plugin, which is the half that sits
+  /// inside an `AddressScope`; null in a test that mounts this screen on its
+  /// own, where navigating means nothing.
+  final void Function(SplashSurface, SplashTheme)? onSelectCell;
+
+  /// Clears them again — back to the matrix.
+  final VoidCallback? onShowAll;
 
   @override
   Widget build(BuildContext context) {
@@ -60,15 +81,111 @@ class SplashScreen extends StatelessWidget {
 
     var config = scan.forFlavor(flavor) ?? scan.main!;
 
+    // Straight through the action, not through a second copy of the write path.
+    // The button, `fw run … fix` and an agent's MCP call are then the same code
+    // reaching the same file — which is the only way they can be relied on to
+    // mean the same thing by "fix it".
+    void applyFix(SplashFix fix) => unawaited(
+      core.invoke(
+        'fix',
+        arguments: {
+          'package': package,
+          'fix': fix.id,
+          if (config.config.flavor != null) 'flavor': config.config.flavor,
+        },
+      ),
+    );
+
+    // Editing the value the caption points at. Which key it lands on is the
+    // dialog's question, not this one's — see `model/edit_target.dart`.
+    void editValue(
+      SplashSurface cellSurface,
+      String label,
+      String key,
+      String value,
+      bool isColor,
+    ) => unawaited(
+      showSplashValueDialog(
+        context,
+        core: core,
+        package: package,
+        flavor: config.config.flavor,
+        surface: cellSurface,
+        label: label,
+        key: key,
+        value: value,
+        isColor: isColor,
+      ),
+    );
+
+    // Opened from the header, and from any problem about a key the studio can
+    // make. That second door is the one that matters: somebody reading "there is
+    // no android_12 image" is exactly the person who needs the 1152 canvas, and
+    // making them find a menu instead is how a tool ends up unused.
+    void openStudio({SplashStudioTarget? target, SplashTheme? forTheme}) =>
+        unawaited(
+          showSplashStudioDialog(
+            context,
+            core: core,
+            package: package,
+            config: config,
+            target: target ?? SplashStudioTarget.android12Icon,
+            theme: forTheme ?? SplashTheme.light,
+          ),
+        );
+
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        _Header(scan: scan, config: config, selected: flavor),
+        _Header(
+          scan: scan,
+          config: config,
+          selected: flavor,
+          scannedAt: core.scannedAt(package),
+          onReload: () =>
+              unawaited(core.invoke('reload', arguments: {'package': package})),
+          onStudio: openStudio,
+        ),
         const SizedBox(height: 20),
-        _Matrix(config: config, surface: surface, theme: theme),
-        if (config.problems.isNotEmpty) ...[
+        // An address naming both axes names one cell, so show that cell rather
+        // than outlining it inside seven others. It is also what makes
+        // `fw capture …?surface=android12&theme=dark` produce a picture worth
+        // looking at instead of a thumbnail with a blue border.
+        if (surface != null && theme != null)
+          _SingleCell(
+            config: config,
+            surface: surface!,
+            theme: theme!,
+            device: device,
+            onShowAll: onShowAll,
+            onFix: applyFix,
+            onEditValue: editValue,
+            onStudio: openStudio,
+          )
+        else ...[
+          _Matrix(
+            config: config,
+            surface: surface,
+            theme: theme,
+            device: device,
+            onSelect: onSelectCell,
+            onEditValue: editValue,
+          ),
+          if (config.problems.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            _Problems(
+              config.problems,
+              configPath: config.config.path,
+              onFix: applyFix,
+              onStudio: openStudio,
+            ),
+          ],
           const SizedBox(height: 28),
-          _Problems(config.problems),
+          SplashArtifactsView(
+            artifacts: config.artifacts,
+            packageRoot: core.packageRootFor(package),
+            stale: config.stale,
+          ),
         ],
       ],
     );
@@ -76,11 +193,26 @@ class SplashScreen extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.scan, required this.config, this.selected});
+  const _Header({
+    required this.scan,
+    required this.config,
+    this.selected,
+    this.scannedAt,
+    this.onReload,
+    this.onStudio,
+  });
 
   final SplashScan scan;
   final SplashConfigScan config;
   final String? selected;
+
+  /// When the panel last read the disk. Printed as a wall-clock time rather
+  /// than "2 minutes ago", which would need a ticker to stay true — and a
+  /// staleness display that is itself stale is worse than none.
+  final DateTime? scannedAt;
+
+  final VoidCallback? onReload;
+  final VoidCallback? onStudio;
 
   @override
   Widget build(BuildContext context) {
@@ -106,11 +238,33 @@ class _Header extends StatelessWidget {
                   ? config.stale
                         ? 'Generated, then edited'
                         : '${config.artifacts.length} files generated'
-                  : 'Never generated',
+                  // Not "never generated", which reads as a property of the
+                  // config rather than as a thing you have not done yet.
+                  : 'create has never run — this is a prediction',
               style: type.caption.copyWith(
                 color: config.stale ? colors.amber : colors.mut,
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            // A wall clock is the textbook thing `CaptureMode` exists for: it
+            // changes on every run and means nothing about the project, so a
+            // committed screenshot would churn on each regeneration. The button
+            // stays — it is part of what the panel *is*.
+            if (scannedAt != null && !CaptureMode.isCapturing(context))
+              Text(
+                'Read at ${_clock(scannedAt!)}',
+                style: type.micro.copyWith(color: colors.mut3),
+              ),
+            const SizedBox(width: 8),
+            if (onReload != null) _ReloadButton(onPressed: onReload!),
+            if (onStudio != null) ...[
+              const SizedBox(width: 8),
+              _LinkButton(label: 'Prepare an image…', onPressed: onStudio!),
+            ],
           ],
         ),
         if (scan.flavors.isNotEmpty) ...[
@@ -127,6 +281,43 @@ class _Header extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+String _two(int value) => '$value'.padLeft(2, '0');
+
+String _clock(DateTime time) =>
+    '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}';
+
+/// The manual re-read.
+///
+/// **Permanent, not a fallback for when detection breaks.** Polling can miss an
+/// edit on a network mount or a filesystem with coarse mtimes, and the failure
+/// is silent — a stale preview looks exactly like a correct one. A button that
+/// is always there costs one row and removes the whole class of "I don't trust
+/// what this is showing me".
+class _ReloadButton extends StatelessWidget {
+  const _ReloadButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tooltip(
+      message: 'Read the config and its images again',
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Text(
+            'Reload',
+            style: context.type.micro.copyWith(color: colors.accent),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -157,11 +348,43 @@ class _FlavorChip extends StatelessWidget {
 /// Laid out as a `Wrap` rather than a fixed grid so a narrow panel reflows
 /// instead of squeezing eight phones into a column too thin to read.
 class _Matrix extends StatelessWidget {
-  const _Matrix({required this.config, this.surface, this.theme});
+  const _Matrix({
+    required this.config,
+    this.surface,
+    this.theme,
+    this.device,
+    this.onSelect,
+    this.onEditValue,
+  });
 
   final SplashConfigScan config;
   final SplashSurface? surface;
   final SplashTheme? theme;
+  final String? device;
+  final void Function(SplashSurface, SplashTheme)? onSelect;
+  final void Function(SplashSurface, String, String, String, bool)? onEditValue;
+
+  /// The screen a surface draws as.
+  ///
+  /// **Resolved per surface, not once for the matrix.** The address carries one
+  /// `?device=`, but an iPhone is not a canvas for the Android tiles — asking
+  /// for an iPhone SE and getting the Android row redrawn at 375×667 would be a
+  /// picture of a phone that does not exist. So a chosen device applies to the
+  /// surfaces of its own platform and the rest keep their defaults.
+  Device? _deviceFor(SplashSurface surface) {
+    var chosen = device == null ? null : deviceById(device!);
+    if (chosen != null) {
+      var platform = switch (surface) {
+        SplashSurface.android ||
+        SplashSurface.android12 => DevicePlatform.android,
+        SplashSurface.ios => DevicePlatform.ios,
+        SplashSurface.web => null,
+      };
+      if (chosen.platform == platform) return chosen;
+    }
+    var fallback = defaultSplashDeviceId(surface);
+    return fallback == null ? null : deviceById(fallback);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,17 +402,221 @@ class _Matrix extends StatelessWidget {
                   .problemsFor(s, t)
                   .where((p) => p.surface != null)
                   .toList(),
+              device: _deviceFor(s),
               selected: s == surface && t == theme,
+              onTap: onSelect == null ? null : () => onSelect!(s, t),
+              onEditValue: onEditValue == null
+                  ? null
+                  : (label, key, value, isColor) =>
+                        onEditValue!(s, label, key, value, isColor),
             ),
       ],
     );
   }
 }
 
+/// One cell, large, with what actually shipped beside it.
+///
+/// This is where the two halves of the plugin finally meet. The left picture is
+/// derived from the config through our transcription of the cascade; the right
+/// is derived from the files `create` wrote. Same renderer, same
+/// `SplashComposition` type, different provenance — so a difference between
+/// them is a real difference and not two drawing paths disagreeing.
+class _SingleCell extends StatelessWidget {
+  const _SingleCell({
+    required this.config,
+    required this.surface,
+    required this.theme,
+    this.device,
+    this.onShowAll,
+    this.onFix,
+    this.onEditValue,
+    this.onStudio,
+  });
+
+  final SplashConfigScan config;
+  final SplashSurface surface;
+  final SplashTheme theme;
+  final String? device;
+  final VoidCallback? onShowAll;
+  final void Function(SplashFix)? onFix;
+  final void Function(SplashSurface, String, String, String, bool)? onEditValue;
+  final void Function({SplashStudioTarget? target, SplashTheme? forTheme})?
+  onStudio;
+
+  @override
+  Widget build(BuildContext context) {
+    var type = context.type;
+    var colors = context.colors;
+
+    var chosen = device == null ? null : deviceById(device!);
+    var fallback = defaultSplashDeviceId(surface);
+    var resolved = chosen ?? (fallback == null ? null : deviceById(fallback));
+
+    var predicted = config.compositionFor(surface, theme);
+    var generated = config.recomposedFor(surface, theme);
+    var problems = config
+        .problemsFor(surface, theme)
+        .where((p) => p.surface != null)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            // Back goes on the left, before the title, because that is where
+            // every reader's eye and every other application puts it. It was on
+            // the far right of the row reading "Show all eight", which is a
+            // description of the destination and not an offer to leave.
+            if (onShowAll != null) ...[
+              _LinkButton(label: '← All eight', onPressed: onShowAll!),
+              const SizedBox(width: 10),
+            ],
+            Text('${surface.label} · ${theme.label}', style: type.sectionLabel),
+            const SizedBox(width: 10),
+            if (resolved != null)
+              Text(
+                '${resolved.label} · '
+                '${resolved.width.round()}×${resolved.height.round()}',
+                style: type.caption.copyWith(color: colors.mut),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 24,
+          runSpacing: 20,
+          children: [
+            SplashVariantTile(
+              composition: predicted,
+              resolution: config.resolutionFor(surface, theme),
+              problems: problems,
+              device: resolved,
+              width: 260,
+              slotHeight: 480,
+              onEditValue: onEditValue == null
+                  ? null
+                  : (label, key, value, isColor) =>
+                        onEditValue!(surface, label, key, value, isColor),
+            ),
+            if (generated != null)
+              SizedBox(
+                width: 260,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SplashScreenBox(
+                      composition: generated,
+                      enabled: true,
+                      selected: false,
+                      device: resolved,
+                      slotHeight: 480,
+                    ),
+                    const SizedBox(height: 8),
+                    Text('What shipped', style: type.bodyStrong),
+                    const SizedBox(height: 4),
+                    Text(
+                      config.stale
+                          ? 'Read from the generated files — but the config has '
+                                'changed since, so this is the old splash.'
+                          : 'Read from the generated files, not from the config.',
+                      style: type.caption.copyWith(
+                        color: config.stale ? colors.amber : colors.mut,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        if (generated == null) ...[
+          const SizedBox(height: 10),
+          Text(
+            // "Never run" outranks everything else, and has to be checked
+            // first. The dark line below it — "no dark resources, so the OS
+            // shows the light splash" — is a real and useful fact *about
+            // generated output*, and saying it about a project that has never
+            // run the generator is telling somebody the result of a thing that
+            // has not happened.
+            !config.isGenerated
+                ? 'Nothing has been generated yet, so there is nothing to '
+                      'check this against. Everything above is what the config '
+                      '*will* produce. Run '
+                      '`dart run flutter_native_splash:create` — the Generate '
+                      'action does exactly that.'
+                : surface == SplashSurface.ios || surface == SplashSurface.web
+                // Saying "nothing generated" here would be a lie: there may be
+                // plenty on disk, we simply cannot read it back.
+                ? 'Only Android can be read back from its generated files — '
+                      'iOS is a storyboard and web is CSS.'
+                : theme == SplashTheme.dark
+                ? 'No dark resources were generated, which is the answer: the '
+                      'OS shows the light splash in dark mode.'
+                : 'Nothing was generated for this surface.',
+            style: type.caption.copyWith(color: colors.mut),
+          ),
+        ],
+        if (problems.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          _Problems(problems, configPath: config.config.path, onFix: onFix),
+        ],
+      ],
+    );
+  }
+}
+
+/// The studio offer a problem carries, when it has one.
+///
+/// Only on the rules that actually complain about the image — an `info` note
+/// that a `.jpg` will be converted names an image key too, and putting a "make
+/// one" button under it would be an offer nobody asked for.
+(SplashStudioTarget, SplashTheme)? _studioFor(SplashProblem problem) {
+  if (problem.tone != Tone.warn && problem.tone != Tone.error) return null;
+  var key = problem.key;
+  return key == null ? null : splashStudioTargetForKey(key);
+}
+
+class _LinkButton extends StatelessWidget {
+  const _LinkButton({super.key, required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onPressed,
+    borderRadius: BorderRadius.circular(4),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: Text(
+        label,
+        style: context.type.caption.copyWith(color: context.colors.accent),
+      ),
+    ),
+  );
+}
+
 class _Problems extends StatelessWidget {
-  const _Problems(this.problems);
+  const _Problems(this.problems, {this.configPath, this.onFix, this.onStudio});
 
   final List<SplashProblem> problems;
+
+  /// The file a fix would be written to. Named on the button rather than left
+  /// implicit: a project with both a `flutter_native_splash.yaml` and a pubspec
+  /// section reads only one, and "which file did that just edit" is exactly the
+  /// question a tool writing to your project has to answer before it writes.
+  final String? configPath;
+
+  final void Function(SplashFix)? onFix;
+
+  /// Opens the studio for a problem whose key names an image the studio can
+  /// make. Distinct from [onFix] because a fix writes keys and this writes a
+  /// file — and because a repair the plugin worked out and an image somebody
+  /// has to crop are not the same offer.
+  final void Function({SplashStudioTarget? target, SplashTheme? forTheme})?
+  onStudio;
 
   @override
   Widget build(BuildContext context) {
@@ -241,6 +668,31 @@ class _Problems extends StatelessWidget {
                             style: type.micro.copyWith(color: colors.mut2),
                           ),
                         ),
+                      if (_studioFor(problem) case var studio?
+                          when problem.fix == null && onStudio != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: _LinkButton(
+                            key: ValueKey('studio:${problem.key}'),
+                            label: 'Prepare a ${studio.$1.label}…',
+                            onPressed: () => onStudio!(
+                              target: studio.$1,
+                              forTheme: studio.$2,
+                            ),
+                          ),
+                        ),
+                      if (problem.fix != null && onFix != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: _FixButton(
+                            // Named so a test can point at one repair rather
+                            // than at a string that happens to be on it.
+                            key: ValueKey('fix:${problem.fix!.id}'),
+                            fix: problem.fix!,
+                            configPath: configPath,
+                            onPressed: () => onFix!(problem.fix!),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -248,6 +700,57 @@ class _Problems extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Applies one repair, in one click.
+///
+/// **No confirmation dialog, on purpose.** The label is the edit — 'Rename to
+/// "color_dark"' — and the tooltip names the file and the keys. A modal asking
+/// "are you sure?" would add a step and tell the reader strictly less than the
+/// button already does. What makes that safe is the size of the thing: one or
+/// two keys, spliced into a file that is under version control, in a project
+/// whose whole config is four lines long.
+class _FixButton extends StatelessWidget {
+  const _FixButton({
+    super.key,
+    required this.fix,
+    required this.onPressed,
+    this.configPath,
+  });
+
+  final SplashFix fix;
+  final String? configPath;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var writes = [
+      for (var write in fix.writes)
+        write.value == null
+            ? 'remove ${write.key}'
+            : '${write.key}: ${write.value}',
+    ].join('\n');
+
+    return Tooltip(
+      message: configPath == null ? writes : 'In $configPath\n$writes',
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: colors.line),
+          ),
+          child: Text(
+            fix.label,
+            style: context.type.micro.copyWith(color: colors.accent),
+          ),
+        ),
+      ),
     );
   }
 }

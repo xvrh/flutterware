@@ -819,6 +819,9 @@ problems: List<SplashProblemEntry>
   key: String?
   surface: String?
   theme: String?
+  device: String?   # The screen this is about, for the rules that sweep the device table — `iphone-se`.
+  fix: String?   # The id to hand `fix`, when this one can be repaired by writing a key.
+  fixLabel: String?   # What that fix will do, in words — so a caller can decide before running it.
   blocksGeneration: bool   # `create` will exit rather than write anything.
 ```
 
@@ -828,6 +831,27 @@ problems: List<SplashProblemEntry>
 | `surface` | choice | no | android | Android 12+ is its own surface: it reads different keys and ignores most of the legacy ones |
 | `theme` | choice | no | light | — |
 | `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
+
+#### `reload` — Reload
+
+Re-reads the config and everything it references, now. The panel notices most edits on its own; this is what covers the filesystems where it cannot, and it answers "did my edit land in the file this project actually reads?"
+
+```sh
+fw run splash reload [--package=…]
+```
+
+Returns `SplashReloadResult`:
+
+```
+package: String
+configPath: String?   # Which file the re-read found, or null when the package has no splash config at all.
+scannedAt: String
+changed: bool   # Something the scan depends on had moved since the last read.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the first when omitted |
 
 #### `artifacts` — Artifacts
 
@@ -847,7 +871,11 @@ artifacts: List<SplashArtifactEntry>
   path: String   # Worktree-relative, so an agent whose tools are scoped to the repo can open it.
   surface: String
   theme: String
+  role: String   # Which layer this is — `image`, `background`, `branding`, `icon`.
   density: String?
+  pixelWidth: int?
+  pixelHeight: int?
+  logicalWidth: double?   # The size it occupies on screen.
   modified: String
 ```
 
@@ -855,9 +883,100 @@ artifacts: List<SplashArtifactEntry>
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; the first when omitted |
 
-#### `generate` — Generate
+#### `fix` — Fix
 
-Runs `dart run flutter_native_splash:create`, which rewrites files under android/, ios/ and web/
+Applies one repair to the config file — one or two keys, spliced in so comments and key order survive. The ids come from the "fix" field on a problem, which `describe` returns.
+
+```sh
+fw run splash fix --fix=<choice> [--package=…] [--flavor=…]
+```
+
+Returns `SplashFixResult`:
+
+```
+package: String
+flavor: String?
+fix: String
+label: String
+configPath: String   # Which file was edited, package-relative.
+writes: List<SplashWriteEntry>
+  key: String   # Dotted for the nested section — `android_12.image`.
+  value: Object?   # Absent when the key was removed.
+remainingProblems: int   # How many problems the re-scan found afterwards.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `fix` | choice | yes | — | Which repair, from a problem's "fix" field |
+| `package` | choice | no | — | Which declared package; the first when omitted |
+| `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
+
+#### `set` — Set a key
+
+Writes one config key, spliced into the file so comments and key order survive. The key must be one the generator accepts — writing an unknown one is exactly what stops `create` from running.
+
+```sh
+fw run splash set --key=<string> [--value=…] [--package=…] [--flavor=…]
+```
+
+Returns `SplashSetResult`:
+
+```
+package: String
+flavor: String?
+key: String
+value: Object?   # Absent when the key was removed.
+configPath: String
+remainingProblems: int   # What the re-scan found afterwards — the cheap check that a hand-written value did not break something else.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `key` | string | yes | — | Dotted for the section — `color_dark`, `android_12.image` |
+| `value` | string | no | — | Omit to remove the key |
+| `package` | choice | no | — | Which declared package; the first when omitted |
+| `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
+
+#### `prepare` — Prepare an image
+
+Turns a source image into the file one target actually wants — the right canvas, the right scale, the config key pointed at it. The numbers are the value here: an Android 12 icon is 1152 square with only the inner 768 circle showing, and a splash image is drawn at a quarter of its pixel size. Neither is anywhere the person exporting the PNG would see it.
+
+```sh
+fw run splash prepare --source=<string> [--target=…] [--theme=…] [--width=…] [--scale=…] [--offsetX=…] [--offsetY=…] [--package=…] [--flavor=…]
+```
+
+Returns `SplashPrepareResult`:
+
+```
+package: String
+flavor: String?
+target: String
+theme: String
+key: String   # The config key it was written to — derived from the target and the theme, so a caller cannot make the file and point the wrong key at it.
+output: String   # Package-relative path of the PNG.
+width: int
+height: int
+explanation: String   # Why the canvas is that size, in words.
+sourceCopiedTo: String?   # Where the original was copied to, when it came from outside the package.
+cornerOverhang: double   # How far the image reaches past a circular mask, in pixels.
+remainingProblems: int
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `source` | string | yes | — | Package-relative or absolute. A file outside the package is copied in beside the output. |
+| `target` | choice | no | android12Icon | — |
+| `theme` | choice | no | light | — |
+| `width` | integer | no | — | For the splash image only, in logical pixels — the question the config has no field for, because the answer is baked into the pixel size of the file. Defaults to 160. |
+| `scale` | string | no | — | Multiplier on the source, if the default fit is not what you want. A second pass after seeing a corner overhang is what this is for. |
+| `offsetX` | string | no | — | Canvas pixels right of centre |
+| `offsetY` | string | no | — | Canvas pixels below centre |
+| `package` | choice | no | — | Which declared package; the first when omitted |
+| `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
+
+#### `generate` — Run flutter_native_splash:create
+
+Runs `dart run flutter_native_splash:create` in the package, using the version the project pins. This is what turns the config into real files; until it runs, everything the panel shows is a prediction. Rewrites files under android/, ios/ and web/.
 
 ```sh
 fw run splash generate [--package=…] [--flavor=…]
@@ -875,7 +994,11 @@ artifacts: List<SplashArtifactEntry>   # What exists afterwards — the point of
   path: String   # Worktree-relative, so an agent whose tools are scoped to the repo can open it.
   surface: String
   theme: String
+  role: String   # Which layer this is — `image`, `background`, `branding`, `icon`.
   density: String?
+  pixelWidth: int?
+  pixelHeight: int?
+  logicalWidth: double?   # The size it occupies on screen.
   modified: String
 ```
 

@@ -9,7 +9,11 @@ import 'package:flutterware_app/src/splash/model/surface.dart';
 void main() {
   SplashPlace? roundTrip(SplashPlace place) => splashPlace(
     splashSegments(place.package, place.flavor),
-    splashAxes(surface: place.surface, theme: place.theme),
+    splashAxes(
+      surface: place.surface,
+      theme: place.theme,
+      device: place.device,
+    ),
   );
 
   test('a package on its own round-trips', () {
@@ -32,6 +36,28 @@ void main() {
         expect(roundTrip(place), place, reason: '$surface/$theme');
       }
     }
+  });
+
+  test('a device round-trips as a third axis', () {
+    var place = const SplashPlace(
+      '.',
+      surface: SplashSurface.ios,
+      theme: SplashTheme.dark,
+      device: 'iphone-se',
+    );
+    expect(roundTrip(place), place);
+  });
+
+  test('a device this build has never heard of survives the trip', () {
+    // Kept raw rather than resolved, so it can be reported. Silently becoming
+    // "the default" would draw a picture that is wrong without looking wrong.
+    var place = const SplashPlace('.', device: 'nokia-3310');
+    expect(roundTrip(place)!.device, 'nokia-3310');
+  });
+
+  test('no device round-trips to no device', () {
+    expect(splashAxes(surface: SplashSurface.ios).containsKey('device'), false);
+    expect(roundTrip(const SplashPlace('.'))!.device, isNull);
   });
 
   test('a flavor round-trips alongside a cell', () {

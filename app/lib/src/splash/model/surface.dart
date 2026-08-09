@@ -258,9 +258,22 @@ SplashAlignment parseBrandingMode(String? mode) => switch (mode?.trim()) {
 /// them at a quarter of their pixel dimensions.
 const sourceDensity = 4.0;
 
+/// The device a surface is previewed on when the address names none.
+///
+/// A real screen rather than one arbitrary rectangle for everything. The old
+/// single 393×852 canvas meant the iOS tile and the Android tile were literally
+/// the same picture, which hid the only thing worth comparing them for.
+String? defaultSplashDeviceId(SplashSurface surface) => switch (surface) {
+  // The shape almost every current Android phone is, gesture bar included.
+  SplashSurface.android || SplashSurface.android12 => 'android-tall',
+  SplashSurface.ios => 'iphone-16',
+  // The web splash is a full-page background in a browser, not a device.
+  SplashSurface.web => null,
+};
+
 /// The logical canvas a surface is previewed at, in the order (width, height).
 ///
-/// It has to live here rather than in the panel, and it has to be a fixed
+/// It has to live here rather than in the panel, and it has to be a real
 /// device-sized canvas rather than whatever box the tile happens to be. A
 /// natural-size placement is 256dp because the source is 1024px at 4×, and
 /// "256dp" only means anything against a real screen — rendering it into a
@@ -268,13 +281,21 @@ const sourceDensity = 4.0;
 /// exist. So the render is always at these dimensions and scaled down to fit
 /// afterwards, which keeps every proportion true.
 ///
-/// The panel and the headless guest both read this, so an exported PNG is the
-/// same picture at a different scale rather than a different picture.
-(double, double) splashPreviewSize(SplashSurface surface) => switch (surface) {
-  // A desktop browser viewport; the web splash is a full-page background.
-  SplashSurface.web => (1280, 800),
-  _ => (393, 852),
-};
+/// [width] and [height] come from the chosen device when there is one. The
+/// panel and the headless guest both read this, so an exported PNG is the same
+/// picture at a different scale rather than a different picture.
+(double, double) splashPreviewSize(
+  SplashSurface surface, {
+  double? width,
+  double? height,
+}) {
+  if (width != null && height != null) return (width, height);
+  return switch (surface) {
+    // A desktop browser viewport; the web splash is a full-page background.
+    SplashSurface.web => (1280, 800),
+    _ => (393, 852),
+  };
+}
 
 /// The fraction of an Android 12 icon canvas that survives the mask.
 ///
