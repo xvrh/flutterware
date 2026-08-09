@@ -360,4 +360,85 @@ Widget b() => const Placeholder();
       );
     });
   });
+
+  group('rescanning the same scanner', () {
+    // The scan root is the whole package, so the daemon rescans whenever any
+    // `.dart` file is touched — and that rescan sits on the hot-reload path.
+    // Re-reading every file there is what these guard against; what they assert
+    // is that being incremental changes nothing about the answer.
+    late CatalogScanner scanner;
+
+    setUp(() {
+      scanner = CatalogScanner(projectRoot: root.path);
+      write('counter.dart', '''
+@Preview(name: 'Counter')
+Widget counter() => const Placeholder();
+''');
+    });
+
+    /// Files written in the same millisecond as the last scan would keep their
+    /// cached result. A real edit is never that quick; a test is.
+    void touch(String relative) => File(
+      p.join(root.path, 'demo', relative),
+    ).setLastModifiedSync(DateTime.now().add(const Duration(seconds: 1)));
+
+    test('an edit to an existing file is picked up', () {
+      expect(scanner.scan().entries.map((e) => e.name), ['Counter']);
+
+      write('counter.dart', '''
+@Preview(name: 'Counter')
+Widget counter() => const Placeholder();
+
+@Preview(name: 'Stepper')
+Widget stepper() => const Placeholder();
+''');
+      touch('counter.dart');
+
+      var result = scanner.scan();
+      expect(result.entries.map((e) => e.name), ['Counter', 'Stepper']);
+      // Two entries in one file, so the file's own name becomes their group —
+      // derived per file, which is why it survives being cached per file.
+      expect(result.entries.map((e) => e.group), ['Counter', 'Counter']);
+    });
+
+    test('a new file appears and a deleted one goes', () {
+      scanner.scan();
+
+      write('tile.dart', '''
+@Preview(name: 'Tile')
+Widget tile() => const Placeholder();
+''');
+      expect(scanner.scan().entries.map((e) => e.name), ['Counter', 'Tile']);
+
+      File(p.join(root.path, 'demo', 'counter.dart')).deleteSync();
+      expect(scanner.scan().entries.map((e) => e.name), ['Tile']);
+    });
+
+    test('an annotation removed takes its entry with it', () {
+      expect(scanner.scan().entries, hasLength(1));
+
+      // Straight past the prefilter now, which is the case a cache keyed on
+      // "did this file ever have an entry" would get wrong.
+      write('counter.dart', 'Widget counter() => const Placeholder();\n');
+      touch('counter.dart');
+
+      expect(scanner.scan().entries, isEmpty);
+    });
+
+    test('a duplicate id is still refused after a rescan', () {
+      scanner.scan();
+
+      // Cross-file, so it cannot be cached per file and has to be recomputed on
+      // every assembly.
+      write('a.dart', "@Preview(name: 'A', id: 'same')\nWidget a() => x;\n");
+      write('b.dart', "@Preview(name: 'B', id: 'same')\nWidget b() => x;\n");
+
+      var result = scanner.scan();
+      expect(result.ok, isFalse);
+      expect(
+        result.diagnostics.where((d) => d.isError).single.message,
+        contains('resolve to the same id "same"'),
+      );
+    });
+  });
 }

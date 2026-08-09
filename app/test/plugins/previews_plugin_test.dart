@@ -291,11 +291,34 @@ Widget counter() => const Placeholder();
     }
   });
 
-  test('new refuses a file outside the scanned directory', () async {
-    // Discovery walks the demo directory and nothing else, so a file written
-    // beside it compiles, is never found, and leaves `new` handing back an id
-    // and a `next` command for an entry that does not exist.
+  test('new writes anywhere in the package, because everywhere is scanned', () {
     var subject = catalog()..track('.');
+
+    return scanned(subject).then((_) async {
+      var beside = await subject.newPreview(
+        name: 'Tile',
+        file: 'lib/tile.dart',
+      );
+      expect(beside.id, 'lib/tile.dart#tile');
+      expect(
+        subject.entries.map((e) => e.id),
+        contains(beside.id),
+        reason: 'a file the scan can no longer miss',
+      );
+
+      // Nothing named a directory, so the default authoring one is where an
+      // unnamed file lands.
+      var unnamed = await subject.newPreview(name: 'Card');
+      expect(unnamed.id, 'demo/card.dart#card');
+    });
+  });
+
+  test('new refuses a file outside a *declared* directory', () async {
+    // Narrowing the scan brings the old failure back, and only then: discovery
+    // walks the declared directory and nothing else, so a file written beside
+    // it compiles, is never found, and leaves `new` handing back an id and a
+    // `next` command for an entry that does not exist.
+    var subject = catalog(directory: 'demo')..track('.');
     await scanned(subject);
 
     await expectLater(

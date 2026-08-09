@@ -141,7 +141,7 @@ DaemonConfig _$DaemonConfigFromJson(Map<String, dynamic> json) => DaemonConfig(
   flutterSdkRoot: json['flutterSdkRoot'] as String,
   roots:
       (json['roots'] as List<dynamic>?)?.map((e) => e as String).toList() ??
-      const ['demo'],
+      const [''],
   previewAnnotations:
       (json['previewAnnotations'] as List<dynamic>?)
           ?.map((e) => e as String)

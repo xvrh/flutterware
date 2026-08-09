@@ -34,11 +34,12 @@
 # Embedder: downloaded FlutterEmbedder.framework (see lib/src/embedder/)
 /.engine/
 
-# Demos written and deleted by integration_test/. Ignored rather than checked
-# in so a run killed halfway leaves an untracked file behind instead of a
-# modified tracked one — which would fail CI's uncommitted-changes step for a
-# reason that has nothing to do with the test.
-/tool/catalog/demos/fixture_*.dart
+# `/tool/catalog/demos/fixture_*.dart` used to be ignored here, so that a run
+# killed halfway left an untracked file rather than a modified tracked one.
+# It cannot be: discovery is gitignore-aware now, so an ignored demo is a demo
+# the scan correctly refuses to see — and every test that writes a fixture and
+# waits for the daemon to announce it waited forever. The fixtures are still
+# written and deleted by the test; they are simply visible while they exist.
 
 # Web related
 lib/generated_plugin_registrant.dart

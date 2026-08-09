@@ -4,8 +4,24 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/list_files.dart';
 import 'authoring.dart';
 import 'catalog_entry.dart';
+
+/// One file's contribution to a scan, held so the next scan need not re-read
+/// it.
+class _FileScan {
+  _FileScan({required this.modified});
+
+  /// When the file was last written, in microseconds. The whole of the cache
+  /// invalidation: a file whose mtime has not moved cannot have changed what it
+  /// declares.
+  final int modified;
+
+  final entries = <CatalogEntry>[];
+  final diagnostics = <ScanDiagnostic>[];
+  final multiPreviews = <String, String>{};
+}
 
 /// How a scan went: what it found, and what it noticed but did not act on.
 class ScanResult {
@@ -43,7 +59,7 @@ class ScanDiagnostic {
 class CatalogScanner {
   CatalogScanner({
     required this.projectRoot,
-    this.roots = const [defaultCatalogDirectory],
+    this.roots = const [defaultCatalogRoot],
     this.previewAnnotations = defaultPreviewAnnotations,
   });
 
@@ -51,7 +67,8 @@ class CatalogScanner {
   /// on every machine.
   final String projectRoot;
 
-  /// Directories to scan, relative to [projectRoot].
+  /// Directories to scan, relative to [projectRoot]. The empty string is the
+  /// package root, and is the default.
   final List<String> roots;
 
   /// Recognition is by **registration**, not by inference. The class-hierarchy
@@ -61,52 +78,117 @@ class CatalogScanner {
   /// missing entry.
   final List<String> previewAnnotations;
 
+  /// What each file yielded last time it was read, keyed by absolute path.
+  ///
+  /// **What makes a rescan proportional to the edit rather than to the
+  /// package.** The scan root is the whole package now, so the fingerprint moves
+  /// when any `.dart` file is touched — `lib/main.dart` included, which you edit
+  /// constantly — and a rescan sits at the head of `select`, on the hot-reload
+  /// path. Re-reading and re-parsing everything there cost 57ms for this app
+  /// package and 134ms for the repository root, to answer a question that the
+  /// edited file alone decides.
+  final _scanned = <String, _FileScan>{};
+
   ScanResult scan() {
+    var live = <String>{};
+    for (var file in _dartFiles()) {
+      live.add(file.path);
+      var modified = file.statSync().modified.microsecondsSinceEpoch;
+      if (_scanned[file.path] case var cached?
+          when cached.modified == modified) {
+        continue;
+      }
+      _scanned[file.path] = _scanOne(file, modified);
+    }
+    // A file that is gone takes its entries with it — including one that became
+    // gitignored, which is the same thing from here.
+    _scanned.removeWhere((path, _) => !live.contains(path));
+
     var entries = <CatalogEntry>[];
     var diagnostics = <ScanDiagnostic>[];
     var multiPreviews = <String, String>{};
-
-    for (var file in _dartFiles()) {
-      var source = file.readAsStringSync();
-      // A substring prefilter before parsing: 20ms across 180 files, against
-      // 478ms to parse them. `MultiPreview` joins the annotations rather than
-      // riding along with them, because the class that extends it is routinely
-      // declared in a file that holds no entries of its own.
-      if (!previewAnnotations.any((a) => source.contains('@$a')) &&
-          !source.contains('MultiPreview')) {
-        continue;
-      }
-      _scanFile(file, source, entries, diagnostics, multiPreviews);
+    // In path order, so the diagnostics a reader sees do not depend on which
+    // files happened to be re-read this time.
+    for (var path in _scanned.keys.toList()..sort()) {
+      var scan = _scanned[path]!;
+      entries.addAll(scan.entries);
+      diagnostics.addAll(scan.diagnostics);
+      multiPreviews.addAll(scan.multiPreviews);
     }
 
-    _deriveGroups(entries);
+    // The cross-file half, which no per-file cache can hold and which is cheap
+    // enough not to: both are one pass over the entries already in hand.
     _rejectDuplicateIds(entries, diagnostics);
     _reportMultiPreviews(multiPreviews, diagnostics);
     entries.sort((a, b) => a.id.compareTo(b.id));
     return ScanResult(entries: entries, diagnostics: diagnostics);
   }
 
+  _FileScan _scanOne(File file, int modified) {
+    var source = file.readAsStringSync();
+    // A substring prefilter before parsing: 20ms across 180 files, against
+    // 478ms to parse them. `MultiPreview` joins the annotations rather than
+    // riding along with them, because the class that extends it is routinely
+    // declared in a file that holds no entries of its own.
+    if (!previewAnnotations.any((a) => source.contains('@$a')) &&
+        !source.contains('MultiPreview')) {
+      // Cached all the same: a file with no annotations is most of a package,
+      // and not recording it is re-reading it on every rescan for ever.
+      return _FileScan(modified: modified);
+    }
+
+    var result = _FileScan(modified: modified);
+    _scanFile(
+      file,
+      source,
+      result.entries,
+      result.diagnostics,
+      result.multiPreviews,
+    );
+    // Per file by definition — a group is derived from the file's own name when
+    // the file holds more than one entry — so it belongs on this side of the
+    // cache rather than in the assembly above.
+    _deriveGroups(result.entries);
+    return result;
+  }
+
   /// What the roots look like from outside, without reading or parsing
   /// anything: every `.dart` file and when it was last written.
   ///
-  /// A stand-in for "is a rescan worth it". Listing is a millisecond where the
-  /// scan behind it reads and parses, and a daemon that rescanned on every
-  /// request just in case somebody added a demo would put that on the reload
-  /// loop, which is the one thing that has to stay quick.
+  /// A stand-in for "is a rescan worth it". Listing and statting a whole
+  /// package is a few milliseconds against the reads and parsing behind it, and
+  /// a daemon that rescanned on every request just in case somebody added a
+  /// demo would put *that* on the reload loop, which is the one thing that has
+  /// to stay quick.
+  ///
+  /// Hashed rather than spelled out. The result is only ever compared to the
+  /// previous one, and naming every file in it made a 151KB string for this
+  /// repository — allocated, sorted and thrown away every three seconds while
+  /// the panel is open. Sorting the hashes keeps it independent of the order
+  /// the walk happened to return.
   String fingerprint() {
     var files = [
       for (var file in _dartFiles())
-        '${file.path}:${file.statSync().modified.microsecondsSinceEpoch}',
+        Object.hash(file.path, file.statSync().modified.microsecondsSinceEpoch),
     ]..sort();
-    return files.join('\n');
+    return '${files.length}:${Object.hashAll(files)}';
   }
 
+  /// Listed the way git lists, because the default root is now the package
+  /// itself and a raw recursive walk from there is a trap.
+  ///
+  /// `Directory.listSync(recursive: true)` follows symlinks by default, so
+  /// pointing it at a package with a `.fvm/flutter_sdk` link read the entire
+  /// Flutter SDK — 17,163 `.dart` files against this repository's own 1,127.
+  /// Ignores are honoured from the enclosing repository down, so a workspace
+  /// member with no `.gitignore` of its own still skips what the repository
+  /// ignores. See `2026-08-01-root-scan-listing-findings.md`.
   Iterable<File> _dartFiles() sync* {
     for (var root in roots) {
-      var directory = Directory(p.join(projectRoot, root));
-      if (!directory.existsSync()) continue;
-      for (var entity in directory.listSync(recursive: true)) {
-        if (entity is File && entity.path.endsWith('.dart')) yield entity;
+      var directory = p.join(projectRoot, root);
+      if (!Directory(directory).existsSync()) continue;
+      for (var file in listFilesInDirectory(directory)) {
+        if (file.path.endsWith('.dart')) yield file;
       }
     }
   }

@@ -171,7 +171,7 @@ class CatalogSession extends ChangeNotifier {
     required this.flutterSdkRoot,
     required this.projectRoot,
     this.worktreeRoot,
-    this.roots = const [defaultCatalogDirectory],
+    this.roots = const [defaultCatalogRoot],
     this.previewAnnotations = defaultPreviewAnnotations,
     this.connectToDaemon = CompilerDaemonClient.connect,
   }) {

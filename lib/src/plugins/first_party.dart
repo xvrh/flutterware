@@ -67,8 +67,10 @@ class AssetsPackage extends PluginPackage {
 
 /// Previews — your `@Preview`s, rendered in the embedded engine.
 ///
-/// They live in `demo/` unless a package says otherwise with
-/// [PreviewsPackage.directory].
+/// Wherever they are: the whole package is scanned, so a preview beside the
+/// widget it shows is found without anybody declaring anything.
+/// [PreviewsPackage.directory] narrows that, and is the only reason to name a
+/// directory at all.
 class Previews extends Plugin {
   Previews({this.packages = const [], String? label})
     : super('flutterware.previews', label: label ?? 'Previews');
@@ -84,9 +86,14 @@ class Previews extends Plugin {
 class PreviewsPackage extends PluginPackage {
   const PreviewsPackage(super.pkg, {this.directory, this.previewAnnotations});
 
-  /// The directory this package keeps its demos in, relative to the package —
-  /// every `.dart` file under it is scanned for Flutter's `@Preview`.
-  /// `demo/` when null.
+  /// Narrows the scan to one directory, relative to the package.
+  ///
+  /// **Null scans the whole package**, which is the default and what most
+  /// projects want: previews are found wherever they are written, ignored files
+  /// and `build/` excluded the way git excludes them. Naming a directory is for
+  /// a package that wants the scan bounded — and it moves `new` there too, so
+  /// the place files are written and the place they are looked for stay the
+  /// same.
   final String? directory;
 
   /// The annotation names that mark an entry, without their `@`.

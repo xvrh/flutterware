@@ -1,8 +1,9 @@
 # Scanning from the package root: how to list files without walking into a trap
 
 **Date:** 2026-08-01
-**Status:** Investigation complete. Feeds the whole-package scan, which
-[the rename spec](2026-08-01-previews-rename.md) left out of scope.
+**Status:** **Implemented.** Option D built, default root widened to the
+package. What shipped and what it measures is at the bottom, under
+[What was built](#what-was-built).
 **Question:** if `roots` defaults to the package root instead of `demo/`, what
 lists the files — without a hand-maintained deny-list, and without walking into
 `node_modules`, `cdk/out`, or a Flutter SDK.
@@ -58,6 +59,9 @@ the walk instead. The vendored lister is already the better implementation; the
 wrapper is the thing to stop using, not the thing to optimise.
 
 That matters beyond this feature: the dependencies plugin uses the wrapper.
+
+*Done. `listFilesInDirectory` is now an adapter over `Ignore.listFiles` rather
+than a second walk beside it, and the same 1,127 files come back in 44ms.*
 
 ### 3. On this repo, the deny-list and gitignore agree exactly
 
@@ -124,16 +128,154 @@ root. Widening `roots` from `['demo']` to `['']` leaves
 `demo/buttons.dart#buttons` spelled exactly as it is. Nothing stored has to
 change, and the sequencing argument disappears with it.
 
-## Still open, and not answered here
+## What was built
 
-- **Which root.** Per declared package, not the repo root: the config already
-  names packages, and scanning a workspace root from one package would attribute
-  another package's previews to it.
-- **`test/`.** Flutter's previewer scans it. Previews there pull `flutter_test`
-  into the compile closure, which is the one place the wider scope has a real
-  build cost. Include, exclude by default, or make it a config key.
-- **The tree.** Hierarchy is path-derived, so entries under `lib/` gain a `lib/`
-  level. Needs a rule — most likely stripping the package's source root the way
-  `demo/` is stripped now.
-- **What `directory:` becomes.** It stops being the place previews live and
-  becomes an optional narrowing, for a project that wants to bound the scan.
+`listFilesInDirectory` ([`list_files.dart`](../../../lib/src/utils/list_files.dart))
+is now a thin adapter over `Ignore.listFiles` rather than a second walk beside
+it, and `CatalogScanner._dartFiles` uses it.
+
+**Ancestor ignores were already in the vendored lister.** `Ignore.listFiles`
+walks from its root down to `beneath` before the search starts, pushing each
+directory's ignores onto the stack
+([`ignore.dart:254`](../../../lib/src/utils/ignore.dart)) — the machinery for
+"a sub-package inherits the repository's `.gitignore`" was there and nothing
+called it, because `listFilesInDirectory` never used `Ignore.listFiles` at all.
+So the fix was to delete the parallel implementation, not to write a feature.
+The old walk also could not express a negation: `ignored |= parent._ignores(…)`
+means a child's `!keep.dart` can never take back what a parent ignored, which is
+the opposite of git's last-match-wins.
+
+The root is the enclosing git repository (`gitRootOf`, matching a `.git` of
+either shape — directory in a clone, file in a worktree or submodule), so the
+gap this document flagged is closed rather than papered over: a workspace member
+with no `.gitignore` of its own is now filtered by the repository's.
+`.git/info/exclude` is read too. The floor kept from option D is `.git/` and
+`.dart_tool/` only — `build/` came off it, because unanchored it would also kill
+`lib/build/`, and every Flutter template ignores its own.
+
+| | before | after |
+|---|---|---|
+| repo root, wall clock | 904ms (`listSync`) / 884ms (old wrapper) | **44ms** |
+| repo root, `.dart` found | 17,163 | 1,126 |
+| `app/`, list + stat every `.dart` | — | 16ms |
+
+**It agrees with git exactly.** `git ls-files --cached --others
+--exclude-standard` and this lister return byte-identical sets at the repo root,
+`app/`, `app/lib/`, `lib/` and `examples/example` — zero difference in either
+direction. Covered by [`test/utils/list_files_test.dart`](../../../test/utils/list_files_test.dart).
+
+16ms is what settles the *listing* half of the `fingerprint()` worry above. The
+other half — that a rescan now fires on every save anywhere in the package — was
+real, and is dealt with under
+[The rescan](#the-rescan-which-the-widening-broke-and-this-fixes).
+
+**One rule inheritance needed that git does not have:** asking for a directory
+by name outranks a rule above it that covers the whole directory. Reading
+ignores from the repository down means a home directory that is itself a git
+repository with `.pub-cache/` in its `.gitignore` would empty every walk of a
+cached package — the dependencies plugin would report each one as zero lines and
+zero bytes. When the inherited walk comes back empty, the walk is redone from
+the requested directory.
+
+## The rescan, which the widening broke and this fixes
+
+Widening the scan quietly moved a cost onto the hot path, and it took measuring
+to see it. `_rescanIfNeeded` runs on the panel's 3s poll *and* at the head of
+every `select` — which is every hot reload. Its gate is `fingerprint()`, and the
+fingerprint now moves when **any** `.dart` file in the package is touched.
+`lib/main.dart` is a file you edit constantly and one that cannot change the
+entry set; before, it was not even looked at.
+
+**Where a listing's time actually goes** — measured, and not where either of the
+obvious guesses said:
+
+| | repo root, 1,127 `.dart` |
+|---|---|
+| `listSync` on every directory | 5ms |
+| `statSync` on all of them | 1ms |
+| the whole gitignore-aware walk | 43ms |
+| the same walk with **no ignore rules at all**, over a *larger* tree | 41ms |
+
+So it is neither syscalls nor the ignore matcher: it is per-entity path
+manipulation inside the walk — `p.relative`, `p.split`, `p.posix.joinAll` for
+every file found. A cache of compiled `Ignore` objects keyed by mtime was
+written against the "it must be the regexes" theory and measured at **no
+difference**; it was deleted rather than kept as plausible-looking insurance.
+
+Two changes came out of it:
+
+- **`fingerprint()` returns a hash**, not a listing. Naming every file made a
+  151KB string, allocated, sorted and discarded every three seconds.
+- **`CatalogScanner` is incremental.** It holds each file's contribution keyed by
+  mtime and re-reads only what moved. Grouping is per file by definition and
+  moved inside that cache; duplicate-id and `MultiPreview` checks are cross-file
+  and stayed outside it, recomputed on every assembly.
+
+| rescan | before | after, one file saved |
+|---|---|---|
+| `examples/example` | 9ms | 8ms |
+| `app/` | 57ms | **17ms** |
+| repo root | 134ms | **47ms** |
+
+What is left is the listing, which is now the floor. Beating it means a
+filesystem watcher rather than a poll — worth it if a project makes 47ms felt,
+and not before: Dart's recursive `Directory.watch` is unsupported on Linux, so it
+is a per-platform answer rather than a swap.
+
+### One thing the investigation missed
+
+**A preview under `lib/` cannot be imported by a relative path.** The generated
+wrapper imported the demo file relatively, always — correct while previews lived
+in `demo/`, which has no `package:` URI. A file under `lib/` reached both ways is
+*two libraries* to the compiler, with separate copies of every class in it.
+`CatalogWrapperWriter.uriFor` now spells `package:<name>/…` for anything under
+the package's `lib/`, for the demo itself and for its carried relative imports.
+
+### The questions that were open, and how they were answered
+
+- **Which root.** Per declared package. `rootFor(path)` is per package config,
+  as it already was.
+- **`test/`.** Included — the scan is the package. A preview there pulling
+  `flutter_test` into the compile closure is a cost somebody opted into by
+  writing one, not a reason to make the default surprising.
+- **The tree.** Nothing needed doing: `buildCatalogTree` already drops the
+  directories every entry shares
+  ([`catalog_tree.dart:146`](../../../app/lib/src/previews/catalog_tree.dart)),
+  so a package whose previews all sit under `lib/` collapses that level by
+  itself, and a package with some in `demo/` and some in `lib/` gets both — which
+  is what it should show.
+- **What `directory:` becomes.** An optional narrowing, and the only reason to
+  write it. It also moves where `new` writes, so the place files are written and
+  the place they are looked for stay the same; with no `directory:`, `new` still
+  writes to `demo/` (`defaultAuthoringDirectory`), which is a convention about
+  new files rather than a constraint on where previews may live.
+
+## The other listings in the tree
+
+Audited after the fact, since the same trap is not previews-specific.
+
+**Fixed here, both raw recursive walks over user-controlled directories:**
+
+- `ScenarioScanner.scan` ([`scenarios/discovery.dart`](../../../app/lib/src/scenarios/discovery.dart))
+- `_unreachableFiles` ([`assets_core.dart`](../../../app/lib/src/plugins/native/assets_core.dart)) —
+  gitignore-awareness is not just hygiene here: it *is* the finding. A generated,
+  ignored file under an asset directory was being reported as "on disk, and not
+  in the bundle", which is a false positive by construction.
+
+**Fixed for free**, having always gone through `listFilesInDirectory`: the
+dependencies plugin's line counts, and the launcher's three walks in
+`bin/flutterware.dart` — the working-copy copy, the freshness check and the
+source stamp. Those were walking `.git/` on any project whose `.gitignore` does
+not mention it, which is every project.
+
+**Left alone, deliberately:**
+
+- `findPackages` ([`repo_layout.dart`](../../../app/lib/src/shell/repo_layout.dart))
+  is the deny-list approach this document rejected, but it runs *before* any
+  package is known and is bounded by `maxDepth`. Worth revisiting; not a trap.
+- `codeMetricsOf` ([`code_metrics.dart`](../../../app/lib/src/overview/model/code_metrics.dart))
+  globs `lib/**`, `test/**`, `tool/**`, `bin/**` with `followLinks: false`. It
+  carries a TODO asking for exactly this treatment; bounded to source
+  directories, so the cost is counting the odd generated file.
+- `_guessedSources` ([`compiler_daemon_client.dart`](../../../app/lib/src/previews/compiler_daemon_client.dart))
+  walks flutterware's own `app/`, not a user's project.

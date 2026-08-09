@@ -306,4 +306,78 @@ Widget avatarTileMembers() => const Placeholder();
       expect(wrapper(0), contains("import '../../demo/shell.dart';"));
     });
   });
+
+  group('a preview under lib/', () {
+    // The scan covers the whole package now, so previews sit in `lib/` next to
+    // the widgets they show. Importing one of those by a relative path would
+    // give the compiler a *second* library for the same file — everything else
+    // reaches it as `package:…` — and the two share no types at all.
+    late Directory libRoot;
+    late EntrypointGenerator libGenerator;
+
+    setUp(() {
+      libRoot = Directory.systemTemp.createTempSync('fw_entrypoint_lib_test');
+      File(
+        p.join(libRoot.path, 'pubspec.yaml'),
+      ).writeAsStringSync('name: my_app\n');
+      var widgets = Directory(p.join(libRoot.path, 'lib', 'widgets'))
+        ..createSync(recursive: true);
+      File(p.join(widgets.path, 'tile.dart')).writeAsStringSync('''
+import 'package:flutter/material.dart';
+
+import '../theme.dart';
+import '../../demo/shell.dart';
+
+Widget tile() => const Placeholder();
+''');
+      libGenerator = EntrypointGenerator(
+        outputDir: p.join(libRoot.path, 'build', 'entrypoint'),
+        projectRoot: libRoot.path,
+      );
+    });
+
+    tearDown(() => libRoot.deleteSync(recursive: true));
+
+    String libWrapper() => File(
+      p.join(libRoot.path, 'build', 'entrypoint', 'entry_0.dart'),
+    ).readAsStringSync();
+
+    test('is imported by its package: URI, twice', () {
+      libGenerator.select(
+        const CatalogEntry(
+          path: 'lib/widgets/tile.dart',
+          symbol: 'tile',
+          name: 'Tile',
+          annotation: "Preview(name: 'Tile')",
+        ),
+      );
+      expect(
+        libWrapper(),
+        contains("import 'package:my_app/widgets/tile.dart';"),
+      );
+      expect(
+        libWrapper(),
+        contains("import 'package:my_app/widgets/tile.dart' as fw0;"),
+      );
+      expect(libWrapper(), isNot(contains('../../lib/widgets/tile.dart')));
+    });
+
+    test(
+      'carries a sibling as package:, and an outsider as a relative path',
+      () {
+        libGenerator.select(
+          const CatalogEntry(
+            path: 'lib/widgets/tile.dart',
+            symbol: 'tile',
+            name: 'Tile',
+            annotation: "Preview(name: 'Tile')",
+          ),
+        );
+        // `../theme.dart` is still inside lib/ and gets the same treatment.
+        expect(libWrapper(), contains("import 'package:my_app/theme.dart';"));
+        // `demo/` is not, and has no package: URI to be spelled with.
+        expect(libWrapper(), contains("import '../../demo/shell.dart';"));
+      },
+    );
+  });
 }

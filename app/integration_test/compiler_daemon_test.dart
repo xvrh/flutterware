@@ -70,6 +70,16 @@ void main() {
       roots: const ['tool/catalog'],
     );
 
+    // A fixture left over from a run that was killed before its teardown is
+    // worse than clutter: `addPreview` waits for the daemon to *announce* the
+    // demo, and rewriting a file that is already an entry announces no change,
+    // so every test that adds one waits out its timeout.
+    for (var entity in Directory(demosDir).listSync()) {
+      if (entity is File && p.basename(entity.path).startsWith('fixture_')) {
+        entity.deleteSync();
+      }
+    }
+
     // A daemon left over from an earlier run carries that run's state — which
     // entries it quarantined above all, and these tests quarantine on purpose.
     // Sharing is measured deliberately further down, by a second client.
@@ -120,10 +130,15 @@ void main() {
   /// and takes it away again when the test ends.
   ///
   /// Fixtures are written rather than checked in, and every one of them is
-  /// named `fixture_*`, which `.gitignore` covers: a run killed halfway leaves
-  /// an untracked file behind rather than a modified tracked one, so it cannot
-  /// fail the "no uncommitted changes" step for a reason that has nothing to do
-  /// with the test. Nothing here rewrites a file that is under version control.
+  /// named `fixture_*` so a run killed halfway leaves an untracked file behind
+  /// rather than a modified tracked one. Nothing here rewrites a file that is
+  /// under version control.
+  ///
+  /// They used to be *gitignored* as well, which discovery has made impossible:
+  /// the scan honours `.gitignore`, so an ignored demo is one it correctly
+  /// refuses to see, and every test below waited out its timeout for an entry
+  /// that was never going to be announced. Worth knowing as a rule rather than
+  /// as a test detail — a preview in an ignored file does not exist.
   Future<(File, CatalogEntry)> addPreview(
     String name,
     String source, {

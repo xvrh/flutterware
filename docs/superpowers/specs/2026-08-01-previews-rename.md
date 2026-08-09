@@ -270,42 +270,15 @@ groundwork:
 
 ## Not in scope
 
-**The whole-package scan.** Widening discovery beyond one directory is a
-separate change — the tree gains a `lib/` prefix rule, `fingerprint()` starts
-statting a whole project on the reload path, and previews in `test/` would pull
-`flutter_test` into the compile closure.
+**The whole-package scan.** ~~A separate change.~~ **Landed 2026-08-01**, in
+the same branch — see
+[2026-08-01-root-scan-listing-findings.md](2026-08-01-root-scan-listing-findings.md)
+for the measurements and the decisions. The default `roots` is now `['']`, the
+package itself, and `directory:` narrows it.
 
 *Corrected 2026-08-01: this first said ids move, and sequenced the work around
 that. They do not. `CatalogEntry.path` is relative to the project, never to the
-scan root, so widening `roots` leaves every existing id spelled as it is.*
-
-**What it must not do** — investigated and measured in
-[2026-08-01-root-scan-listing-findings.md](2026-08-01-root-scan-listing-findings.md); the summary is
-that `followLinks` defaults to true and walks the SDK through `.fvm`, that
-`Ignore.listFiles` is the right lister and our wrapper over it costs 5× for the
-same answer, and that ids do not move.
-
-Originally written here as:
-`CatalogScanner._dartFiles` is a bare `listSync(recursive: true)`
-([`discovery.dart:104`](../../../app/lib/src/previews/discovery.dart)). Scoped to `demo/` that is fine and nothing
-below is needed. Pointed at a project root it walks `node_modules`, `cdk/out`,
-`.dart_tool`, `build`, and — through `.fvm` — an entire Flutter SDK. **A
-hand-maintained deny-list is not the answer**: the list is per-project and
-unknowable.
-
-`listFilesInDirectory` ([`list_files.dart`](../../../app/lib/src/utils/list_files.dart)) already walks gitignore-aware,
-accumulating each directory's `.gitignore` down the tree through
-[`ignore.dart`](../../../lib/src/utils/ignore.dart), and the dependencies plugin already uses it. That is
-what a widened scan should walk with. Three gaps to close when it does:
-
-- It reads `.gitignore` and nothing else. A project that does not ignore a
-  large directory is still walked, so `.git/`, `.dart_tool/`, `build/` and
-  dot-directories want a hard skip regardless of what git says.
-- `.gitignore` files *above* the scan root, and git's global
-  `core.excludesFile`, are not consulted.
-- It reads and parses a `.gitignore` per directory, every walk.
-  `fingerprint()` runs on the reload path and today only stats — the matcher
-  has to be built once per scan rather than per call.
+scan root, so widening `roots` left every existing id spelled as it was.*
 
 **`MultiPreview` support.** Not a `Preview` subclass, and its expansion is a
 *runtime* value: how many entries an annotation produces, and what each is

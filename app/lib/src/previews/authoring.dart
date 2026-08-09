@@ -6,12 +6,22 @@
 /// it thirty seconds late under a stack trace.
 library;
 
-/// Where previews live when a package does not say otherwise.
+/// What a package scans when it does not say otherwise: **all of it**.
 ///
-/// Duplicated nowhere: the plugin's own default reads this, and so does every
-/// message that names it — a convention that is spelled twice is a convention
-/// that eventually disagrees with itself.
-const defaultCatalogDirectory = 'demo';
+/// The empty string is the package root. It is spelled here rather than left
+/// implicit because scanning everything is a decision — previews used to be
+/// findable only under `demo/`, and the single most common way to arrive at an
+/// empty catalog was to have written one somewhere else.
+const defaultCatalogRoot = '';
+
+/// Where `new` writes a scaffold, and the directory the hint's example names.
+///
+/// **Not the scan root.** Nothing has to be here to be found; this is only the
+/// answer to "where should this file go" when nobody said. A package that
+/// declares `directory:` moves both at once — a narrowed scan and the place new
+/// files land are then the same directory, which is the only reading of that
+/// setting that does not surprise somebody.
+const defaultAuthoringDirectory = 'demo';
 
 /// The annotations that mark an entry when a package registers none of its own.
 ///
@@ -22,17 +32,22 @@ const defaultCatalogDirectory = 'demo';
 /// whatever it calls itself, an `id:` on it is still an `id:`.
 const defaultPreviewAnnotations = ['Preview'];
 
-/// How to write the first preview in [directory].
+/// How to write the first preview, given what [directory] this package scans.
 ///
-/// The directory is interpolated rather than assumed, so a project that moved
-/// it is told about *its* directory and not about `demo/`.
-String catalogAuthoringHint(String directory) =>
-    '''
+/// Empty means the whole package, which is the default. A project that narrowed
+/// the scan is told about *its* directory rather than about the convention it
+/// chose not to follow.
+String catalogAuthoringHint(String directory) {
+  var scanned = directory.isEmpty
+      ? 'every `.dart` file in the package is scanned, wherever it sits'
+      : 'every `.dart` file under `$directory/` is scanned';
+  var example = directory.isEmpty ? defaultAuthoringDirectory : directory;
+  return '''
 A preview is an ordinary function returning a Widget, annotated with Flutter's
 own `@Preview`. Nothing of flutterware's is imported, and there is no map to
-register it in — every `.dart` file under `$directory/` is scanned.
+register it in — $scanned.
 
-  // $directory/buttons.dart
+  // $example/buttons.dart
   import 'package:flutter/material.dart';
   import 'package:flutter/widget_previews.dart';
 
@@ -55,6 +70,7 @@ register it in — every `.dart` file under `$directory/` is scanned.
   needs `package:flutterware/previews.dart`; nothing above it does.
 
 `fw run previews new --name='Buttons'` writes that file for you.''';
+}
 
 /// The file `new` writes for a preview called [name].
 String catalogFileName(String name) {
@@ -177,31 +193,35 @@ Widget $symbol() => Center(
 /// Why there are no entries, and what to do about it — the sentence above the
 /// hint.
 ///
-/// [directory] is package-relative, as the config declares it; [package] names
-/// the declared package when there is more than one, since "no entries in
-/// demo/" is ambiguous in a monorepo.
+/// [directory] is package-relative, as the config declares it, and empty for
+/// the default whole-package scan; [package] names the declared package when
+/// there is more than one, since "no entries" is ambiguous in a monorepo.
 String catalogEmptyReason({
   required String directory,
   required bool directoryExists,
   String? package,
 }) {
-  var where = package == null || package == '.'
-      ? '$directory/'
-      : '$package/$directory/';
+  var named = package == null || package == '.' ? null : package;
+
+  // Nothing to point at and nothing to blame: the scan covered the package, so
+  // there is genuinely nothing annotated. The version of this that named a
+  // directory was the tool's most misleading sentence — it read as "look
+  // elsewhere" to somebody whose previews were sitting in `lib/`.
+  if (directory.isEmpty) {
+    return named == null
+        ? 'No previews in this package yet.'
+        : 'No previews in $named yet.';
+  }
+
+  var where = named == null ? '$directory/' : '$named/$directory/';
   if (directoryExists) return 'No previews in $where yet.';
 
-  // What to say next depends on whether anybody chose this directory. Telling
-  // someone who wrote `directory: 'examples'` to try `directory: 'demo'` reads
-  // as the tool not having noticed what they set — which was the whole
-  // complaint that started this.
-  return directory == defaultCatalogDirectory
-      ? 'No previews: $where does not exist.\n'
-            'Previews live in `$defaultCatalogDirectory/` by default. Create it, '
-            'or point Previews at wherever yours are with '
-            "`Previews(packages: [.new(app, directory: 'lib/demos')])` in "
-            'tool/flutterware.dart.'
-      : 'No previews: $where does not exist.\n'
-            "tool/flutterware.dart declares `directory: '$directory'` for this "
-            'package, so that is the only place scanned. Either the path is '
-            'wrong, or the previews are somewhere else.';
+  // Only a *declared* directory can be missing now, so this can say plainly
+  // whose choice it was. Telling someone who wrote `directory: 'examples'` to
+  // try `demo/` instead read as the tool not having noticed what they set.
+  return 'No previews: $where does not exist.\n'
+      "tool/flutterware.dart declares `directory: '$directory'` for this "
+      'package, so that is the only place scanned — the default is to scan the '
+      'whole package. Either the path is wrong, or the previews are somewhere '
+      'else.';
 }

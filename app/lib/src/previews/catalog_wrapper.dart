@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 import 'catalog_entry.dart';
 
@@ -23,6 +24,16 @@ class CatalogWrapperWriter {
 
   /// Resolves each entry's [CatalogEntry.path].
   final String projectRoot;
+
+  /// The package's own name, needed to spell a `package:` URI for anything
+  /// under its `lib/`.
+  ///
+  /// Read here rather than passed in: both call sites know the root and nothing
+  /// else, and a name threaded through two constructors is a name that can
+  /// disagree with the pubspec. Null for a directory with no readable pubspec,
+  /// which falls back to relative imports — the behaviour before `lib/` was in
+  /// scope at all.
+  late final String? _packageName = _readPackageName();
 
   /// The source of `entry_<index>.dart` for [entry].
   String source(CatalogEntry entry, int index) {
@@ -56,8 +67,8 @@ import 'package:flutterware/ui_catalog.dart';
 // Together these reproduce the demo's own scope, which is the one the
 // annotation was written in. The gap that remains is privacy: a `_kName` in the
 // annotation is visible where it was written and not here.
-import '${relative(demo)}';
-import '${relative(demo)}' as fw$index;
+import '${uriFor(demo)}';
+import '${uriFor(demo)}' as fw$index;
 
 // The annotation, evaluated as Dart rather than interpreted statically.
 // `transform()` returns a plain Preview and drops id/figma/formFactor, so the
@@ -82,11 +93,12 @@ Widget Function() get fwBuilder => fw$index.${entry.symbol};
   }
 
   /// The demo file's own import and export directives, with relative URIs
-  /// rewritten to resolve from [outputDir].
+  /// rewritten to resolve from [outputDir] — or to `package:`, when what they
+  /// point at is under `lib/`.
   ///
-  /// Preview files live outside `lib/` and so have no `package:` URI of their own;
-  /// a carried `../utils/shell.dart` would not resolve from the generated
-  /// directory without this.
+  /// A preview outside `lib/` has no `package:` URI of its own, so a carried
+  /// `../utils/shell.dart` would not resolve from the generated directory
+  /// without this.
   ///
   /// Parsed rather than matched. The regex this replaced was line-oriented, so
   /// a directive written across two lines — which `dart format` produces as
@@ -117,17 +129,46 @@ Widget Function() get fwBuilder => fw$index.${entry.symbol};
         // A `package:`/`dart:` URI means the same thing from anywhere.
         if (written == null || written.contains(':')) continue;
         var target = p.normalize(p.join(p.dirname(source), written));
-        text = text.replaceFirst(literal.toSource(), "'${relative(target)}'");
+        text = text.replaceFirst(literal.toSource(), "'${uriFor(target)}'");
       }
       carried.add(text);
     }
     return carried;
   }
 
+  /// How the wrapper names [target] in an import directive.
+  ///
+  /// **Anything under `lib/` is named by its `package:` URI, never relatively.**
+  /// The same file reached both ways is *two libraries* to the compiler, with
+  /// separate copies of every class in it — so a demo imported relatively here
+  /// while the rest of the app reaches it as `package:x/…` yields a widget
+  /// whose `State` is not the `State` anything else knows, and errors that name
+  /// a type against itself.
+  ///
+  /// This did not matter while previews lived only in `demo/`, which is outside
+  /// `lib/` and has no `package:` URI. Scanning the whole package put them in
+  /// reach of one.
+  String uriFor(String target) {
+    var lib = p.join(projectRoot, 'lib');
+    if (_packageName case var name? when p.isWithin(lib, target)) {
+      return 'package:$name/${p.split(p.relative(target, from: lib)).join('/')}';
+    }
+    return relative(target);
+  }
+
   /// Always `/`-separated: this ends up inside a URI literal, where a Windows
   /// separator is an escape rather than a path.
   String relative(String target) =>
       p.split(p.relative(target, from: outputDir)).join('/');
+
+  String? _readPackageName() {
+    var pubspec = File(p.join(projectRoot, 'pubspec.yaml'));
+    if (!pubspec.existsSync()) return null;
+    var document = loadYaml(pubspec.readAsStringSync());
+    return document is YamlMap && document['name'] is String
+        ? document['name'] as String
+        : null;
+  }
 }
 
 /// The two libraries an annotation is written against, emitted into every

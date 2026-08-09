@@ -66,7 +66,8 @@ class _NewPreviewDialogState extends State<_NewPreviewDialog> {
 
   /// Where the file lands, spelled exactly as the action derives it.
   String get _target =>
-      '${widget.core.rootFor(widget.package)}/${catalogFileName(_named)}';
+      '${widget.core.authoringDirectoryFor(widget.package)}/'
+      '${catalogFileName(_named)}';
 
   Future<void> _create() async {
     if (_named.isEmpty || _creating) return;

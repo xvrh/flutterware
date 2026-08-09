@@ -5,6 +5,8 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/list_files.dart';
+
 /// Where a package keeps its scenarios when the config does not say otherwise.
 const defaultScenariosDirectory = 'test/scenarios';
 
@@ -57,11 +59,14 @@ class ScenarioScanner {
     var scenarios = <ScenarioRef>[];
     var diagnostics = <String>[];
 
-    var root = Directory(p.join(packageRoot, directory));
-    if (root.existsSync()) {
+    var root = p.join(packageRoot, directory);
+    if (Directory(root).existsSync()) {
+      // Listed the way git lists — see `list_files.dart`. A recursive
+      // `listSync` follows symlinks by default, which is how a scan of a
+      // modest directory ends up reading whatever a link inside it points at.
       var files = [
-        for (var entity in root.listSync(recursive: true))
-          if (entity is File && entity.path.endsWith('.dart')) entity,
+        for (var file in listFilesInDirectory(root))
+          if (file.path.endsWith('.dart')) file,
       ]..sort((a, b) => a.path.compareTo(b.path));
       for (var file in files) {
         var source = file.readAsStringSync();

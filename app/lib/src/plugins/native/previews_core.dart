@@ -44,8 +44,8 @@ const uiCatalogPluginId = 'flutterware.previews';
 /// fails in front of a user.
 const webBuildActionId = 'build-web';
 
-/// Where a package keeps its demos when it does not say otherwise.
-const _defaultRoot = defaultCatalogDirectory;
+/// What a package is scanned for when it does not say otherwise: all of it.
+const _defaultRoot = defaultCatalogRoot;
 
 /// What the scan knows about a package before anything is compiled.
 enum CatalogSetup {
@@ -254,7 +254,8 @@ class PreviewsCore extends PluginCore {
     }
   }
 
-  /// The package's preview directory: `directory` when declared, else `demo/`.
+  /// What the package is scanned for: `directory` when declared, else the whole
+  /// package.
   ///
   /// Public because it is part of the daemon address — `roots` is one of the
   /// fields [DaemonConfig] hashes — so the panel has to reach *this* answer
@@ -267,6 +268,17 @@ class PreviewsCore extends PluginCore {
       if (directory is String && directory.isNotEmpty) return directory;
     }
     return _defaultRoot;
+  }
+
+  /// Where a *new* preview file goes — `demo/` unless the package narrowed the
+  /// scan, in which case it goes where the scan is looking.
+  ///
+  /// Apart from [rootFor] because the two stopped being the same question when
+  /// the scan widened to the package: everything is found, so nothing has to
+  /// live anywhere, and the tool still has to put a scaffold *somewhere*.
+  String authoringDirectoryFor(String path) {
+    var root = rootFor(path);
+    return root.isEmpty ? defaultAuthoringDirectory : root;
   }
 
   /// The annotation names that mark an entry in [path], without their `@`.
@@ -1088,7 +1100,8 @@ class PreviewsCore extends PluginCore {
       );
     }
     var relative =
-        (file as String?) ?? '${rootFor(path)}/${catalogFileName(name)}';
+        (file as String?) ??
+        '${authoringDirectoryFor(path)}/${catalogFileName(name)}';
     // Inside the package, always: the scan only looks under the declared
     // directory, so a file written outside it is a file nothing will ever find.
     if (p.isAbsolute(relative) || p.split(relative).contains('..')) {

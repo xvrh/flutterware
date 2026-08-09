@@ -13,7 +13,8 @@ void main() => Flutterware.configure((fw) {
   fw.use(Dependencies(packages: [.new(app)]));
   fw.use(Assets(packages: [.new(app)]));
   fw.use(NativeSplash(packages: [.new(app)]));
-  // No `entrypoint:` — this is the ordinary case, where demos live in `demo/`.
+  // No `directory:` — the ordinary case, where the whole package is scanned
+  // and previews are found wherever they were written.
   fw.use(Previews(packages: [.new(app)]));
   // Zero config: servers announce themselves at runtime — see
   // bin/example_server.dart.
