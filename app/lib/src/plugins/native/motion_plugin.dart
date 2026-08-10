@@ -432,13 +432,17 @@ class _MotionStageState extends State<_MotionStage> {
     await _commit(targets);
   }
 
-  /// Tunes a property nothing has tuned yet — the creation path the three
-  /// states exist for.
+  /// Gives a lane another tween — and what that means depends on whether it has
+  /// one.
   ///
-  /// Reached from a dashed lane (read in code, untuned) and from a target's
-  /// offered list (a `MotionBox` applies it, nothing tunes it). Both are the
-  /// same act: the code already asks for the value, and this is where the value
-  /// starts existing.
+  /// On an untuned lane it is the creation path the three states exist for:
+  /// reached from a dashed lane (read in code, untuned) or from a target's
+  /// offered list (a `MotionBox` applies it, nothing tunes it), and both are the
+  /// same act — the code already asks for the value, and this is where the
+  /// value starts existing.
+  ///
+  /// On a tuned one it inserts at the playhead, opening at whatever the guest
+  /// says the property is worth there.
   Future<void> _create(String target, String property) async {
     var core = widget.core;
     var read = core.readValues(
@@ -450,19 +454,88 @@ class _MotionStageState extends State<_MotionStage> {
       setState(() => _writeProblems = read.problems);
       return;
     }
-    var span = newSpanFor(
-      property,
-      durationMs: (_scope?['durationMs'] as num?)?.toInt(),
-    );
-    if (span == null) {
+
+    var scope = MotionScopeView.parse(_scope);
+    var existing = scope?.property(target, property);
+    var durationMs = scope?.durationMs;
+
+    if (existing == null || existing.segments.isEmpty) {
+      var span = newSpanFor(property, durationMs: durationMs);
+      if (span == null) {
+        setState(
+          () => _writeProblems = [
+            MotionFileProblem('`$property` is not a motion property'),
+          ],
+        );
+        return;
+      }
+      await _commit(
+        withNewProperty(read.file!.targets, target, property, span),
+      );
+      return;
+    }
+
+    var atMs = ((_dragging ?? scope!.progress) * scope!.durationMs).round();
+    var bounds = [
+      for (var segment in existing.segments) (segment.startMs, segment.endMs),
+    ];
+    // Refused rather than nudged. A span dropped into the middle of another
+    // would overlap, which `evaluateSegments` explicitly does not resolve —
+    // and the editor's job is to be unable to produce that file.
+    if (bounds.any((span) => atMs >= span.$1 && atMs < span.$2)) {
       setState(
         () => _writeProblems = [
-          MotionFileProblem('`$property` is not a motion property'),
+          MotionFileProblem('a span already covers ${atMs}ms on $property'),
         ],
       );
       return;
     }
-    await _commit(withNewProperty(read.file!.targets, target, property, span));
+
+    var span = spanAt(
+      property: property,
+      atMs: atMs,
+      durationMs: scope.durationMs,
+      existing: bounds,
+      current: _literalOf(existing.value),
+    );
+    if (span == null) {
+      setState(
+        () => _writeProblems = [
+          MotionFileProblem('no room for a span at ${atMs}ms'),
+        ],
+      );
+      return;
+    }
+    await _commit(withSpanAdded(read.file!.targets, target, property, span));
+  }
+
+  /// What the guest says a property is worth, as the file would spell it.
+  static MotionLiteral? _literalOf(MotionValueView? value) => switch (value) {
+    MotionColorView(:var argb) => MotionColor(argb),
+    MotionNumberView(:var value) => MotionNumber(value),
+    null => null,
+  };
+
+  Future<void> _delete(MotionSelection selection) async {
+    var core = widget.core;
+    var read = core.readValues(
+      widget.place.package,
+      widget.motion.file,
+      constName: widget.motion.values,
+    );
+    if (!read.writable) {
+      setState(() => _writeProblems = read.problems);
+      return;
+    }
+    setState(() => _selection = null);
+    await _commit(
+      withSpanRemoved(
+        read.file!.targets,
+        selection.target,
+        selection.property,
+        selection.index,
+      ),
+    );
   }
 
   Future<void> _commit(List<MotionTargetValues> targets) async {
@@ -552,7 +625,12 @@ class _MotionStageState extends State<_MotionStage> {
               VerticalDivider(width: 1, color: context.colors.line),
               SizedBox(
                 width: 264,
-                child: MotionInspector(scope: scope, selection: _selection),
+                child: MotionInspector(
+                  scope: scope,
+                  selection: _selection,
+                  onEdit: _edit,
+                  onDelete: _delete,
+                ),
               ),
             ],
           ],

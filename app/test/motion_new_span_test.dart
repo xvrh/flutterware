@@ -149,4 +149,237 @@ const demoMotion = MotionValues(
       expect(reread.file!.target('title')!.properties, hasLength(2));
     });
   });
+
+  group('a second span, inserted at the playhead', () {
+    /// Opacity's debut is 0 -> 1, so the far end from a resting 1 is 0.
+    test('opens at what the property is already worth', () {
+      var span = spanAt(
+        property: 'opacity',
+        atMs: 200,
+        durationMs: 600,
+        existing: const [(0, 200)],
+        current: const MotionNumber(0.9),
+      )!;
+      // Nothing on screen jumps when the span appears, which is the whole
+      // reason to insert here rather than at the end.
+      expect((span.from as MotionNumber).value, 0.9);
+      expect(span.startMs, 200);
+    });
+
+    test('runs to the next span rather than over it', () {
+      var span = spanAt(
+        property: 'opacity',
+        atMs: 200,
+        durationMs: 600,
+        existing: const [(0, 150), (400, 600)],
+      )!;
+      expect(span.endMs, 400);
+    });
+
+    test('runs to the end of the motion when nothing follows', () {
+      var span = spanAt(
+        property: 'opacity',
+        atMs: 200,
+        durationMs: 600,
+        existing: const [(0, 150)],
+      )!;
+      expect(span.endMs, 600);
+    });
+
+    test('goes to whichever end is further, so it always shows', () {
+      // The commonest case: the first span already landed on rest, so a second
+      // one closing on rest again would be a span that does nothing.
+      var atRest = spanAt(
+        property: 'opacity',
+        atMs: 300,
+        durationMs: 600,
+        existing: const [(0, 300)],
+        current: const MotionNumber(1),
+      )!;
+      expect((atRest.to as MotionNumber).value, 0);
+
+      var away = spanAt(
+        property: 'opacity',
+        atMs: 300,
+        durationMs: 600,
+        existing: const [(0, 300)],
+        current: const MotionNumber(0),
+      )!;
+      expect((away.to as MotionNumber).value, 1);
+    });
+
+    test('refuses when there is no room left', () {
+      expect(
+        spanAt(
+          property: 'opacity',
+          atMs: 600,
+          durationMs: 600,
+          existing: const [],
+        ),
+        isNull,
+      );
+      // The gap closed: the next span starts exactly here.
+      expect(
+        spanAt(
+          property: 'opacity',
+          atMs: 300,
+          durationMs: 600,
+          existing: const [(300, 600)],
+        ),
+        isNull,
+      );
+    });
+
+    test('is nothing at all for a name the vocabulary does not carry', () {
+      expect(
+        spanAt(
+          property: 'nonsense',
+          atMs: 100,
+          durationMs: 600,
+          existing: const [],
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('putting a span into the file', () {
+    var file = [
+      MotionTargetValues(
+        name: 'title',
+        properties: [
+          MotionPropertyValues(
+            name: 'opacity',
+            spans: [
+              MotionSpan(
+                startMs: 400,
+                endMs: 600,
+                from: const MotionNumber(0),
+                to: const MotionNumber(1),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ];
+
+    test('inserts in start order, because the ends read first and last', () {
+      // `evaluateSegments` answers "before the start" from `first` and "after
+      // the end" from `last`, so an appended-out-of-order span would give the
+      // property the wrong value at both ends of the motion.
+      var next = withSpanAdded(
+        file,
+        'title',
+        'opacity',
+        MotionSpan(
+          startMs: 0,
+          endMs: 200,
+          from: const MotionNumber(1),
+          to: const MotionNumber(0),
+        ),
+      );
+      var spans = next.single.properties.single.spans;
+      expect(spans.map((s) => s.startMs), [0, 400]);
+    });
+
+    test('leaves other targets and properties alone', () {
+      var next = withSpanAdded(
+        [
+          ...file,
+          MotionTargetValues(
+            name: 'cta',
+            properties: [
+              MotionPropertyValues(
+                name: 'scale',
+                spans: [
+                  MotionSpan(
+                    startMs: 0,
+                    endMs: 100,
+                    from: const MotionNumber(0),
+                    to: const MotionNumber(1),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+        'title',
+        'opacity',
+        MotionSpan(
+          startMs: 0,
+          endMs: 200,
+          from: const MotionNumber(1),
+          to: const MotionNumber(0),
+        ),
+      );
+      expect(next.last.name, 'cta');
+      expect(next.last.properties.single.spans, hasLength(1));
+    });
+  });
+
+  group('taking a span out again', () {
+    MotionSpan span(int startMs, int endMs) => MotionSpan(
+      startMs: startMs,
+      endMs: endMs,
+      from: const MotionNumber(0),
+      to: const MotionNumber(1),
+    );
+
+    test('removes just the one', () {
+      var next = withSpanRemoved(
+        [
+          MotionTargetValues(
+            name: 'title',
+            properties: [
+              MotionPropertyValues(
+                name: 'opacity',
+                spans: [span(0, 100), span(200, 300)],
+              ),
+            ],
+          ),
+        ],
+        'title',
+        'opacity',
+        0,
+      );
+      expect(next.single.properties.single.spans.single.startMs, 200);
+    });
+
+    test('takes the property with it when that was the last span', () {
+      // A property with no spans is not a thing the file can spell, and an
+      // empty lane would read as tuned-and-broken rather than as untuned.
+      var next = withSpanRemoved(
+        [
+          MotionTargetValues(
+            name: 'title',
+            properties: [
+              MotionPropertyValues(name: 'opacity', spans: [span(0, 100)]),
+              MotionPropertyValues(name: 'scale', spans: [span(0, 100)]),
+            ],
+          ),
+        ],
+        'title',
+        'opacity',
+        0,
+      );
+      expect(next.single.properties.map((p) => p.name), ['scale']);
+    });
+
+    test('takes the target too when that was its last property', () {
+      var next = withSpanRemoved(
+        [
+          MotionTargetValues(
+            name: 'title',
+            properties: [
+              MotionPropertyValues(name: 'opacity', spans: [span(0, 100)]),
+            ],
+          ),
+        ],
+        'title',
+        'opacity',
+        0,
+      );
+      expect(next, isEmpty);
+    });
+  });
 }

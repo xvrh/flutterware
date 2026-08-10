@@ -73,6 +73,8 @@ class MotionSpan {
   /// re-emitted as something else.
   final String? curve;
 
+  int get durationMs => endMs - startMs;
+
   MotionSpan copyWith({
     int? startMs,
     int? endMs,

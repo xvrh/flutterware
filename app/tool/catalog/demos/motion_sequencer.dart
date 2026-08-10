@@ -196,6 +196,38 @@ Widget motionSequencerStates() => Material(
   child: ListView(
     padding: const EdgeInsets.all(12),
     children: [
+      // The inspector's other two branches, first so they are above the fold.
+      _Case(
+        'Inspector · nothing selected, and a curve we cannot write',
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Expanded(
+              child: MotionInspector(
+                scope: null,
+                selection: null,
+                onEdit: _noEdit,
+                onDelete: _noDelete,
+              ),
+            ),
+            Expanded(
+              child: MotionInspector(
+                scope: MotionScopeView(
+                  id: 'x',
+                  durationMs: _dur,
+                  positionMs: 0,
+                  progress: 0,
+                  playing: false,
+                  targets: _targets().where((t) => t.name == 'artist').toList(),
+                ),
+                selection: const MotionSelection('artist', 'fontSize', 0),
+                onEdit: _noEdit,
+                onDelete: _noDelete,
+              ),
+            ),
+          ],
+        ),
+      ),
       _Case(
         'Nothing mounted',
         MotionSequencer(
@@ -283,7 +315,7 @@ class _Case extends StatelessWidget {
         Text(label, style: context.type.caption),
         const SizedBox(height: 4),
         Container(
-          height: 150,
+          height: 310,
           decoration: BoxDecoration(
             border: Border.all(color: context.colors.line),
           ),
@@ -388,6 +420,42 @@ class _HarnessState extends State<_Harness> {
     MotionNumber(:var value) => MotionNumberView(value),
   };
 
+  Future<void> _delete(MotionSelection selection) async {
+    setState(() {
+      _selection = null;
+      _targetList = [
+        for (var candidate in _targetList)
+          if (candidate.name != selection.target)
+            candidate
+          else
+            MotionTargetView(
+              name: candidate.name,
+              named: candidate.named,
+              offered: candidate.offered,
+              properties: [
+                for (var existing in candidate.properties)
+                  if (existing.name != selection.property)
+                    existing
+                  else
+                    MotionPropertyView(
+                      name: existing.name,
+                      // A lane with nothing left on it is untuned again, which
+                      // is the state the code already puts it in.
+                      state: existing.segments.length == 1
+                          ? MotionLaneState.untuned
+                          : existing.state,
+                      value: existing.value,
+                      segments: [
+                        for (var (at, segment) in existing.segments.indexed)
+                          if (at != selection.index) segment,
+                      ],
+                    ),
+              ],
+            ),
+      ];
+    });
+  }
+
   /// Gives an untuned property a span, the way `newSpanFor` would.
   Future<void> _create(String target, String property) async {
     setState(() {
@@ -409,7 +477,20 @@ class _HarnessState extends State<_Harness> {
                       name: existing.name,
                       state: MotionLaneState.wired,
                       value: existing.value,
-                      segments: [_seg(0, _dur ~/ 2, 0, 1)],
+                      // Tuned already: another span at the playhead, so the
+                      // insert-into-a-gap path is reachable here too.
+                      segments: existing.segments.isEmpty
+                          ? [_seg(0, _dur ~/ 2, 0, 1)]
+                          : ([
+                              ...existing.segments,
+                              _seg(
+                                (_t * _dur).round(),
+                                _dur,
+                                (existing.value as MotionNumberView?)?.value ??
+                                    0,
+                                1,
+                              ),
+                            ]..sort((a, b) => a.startMs.compareTo(b.startMs))),
                     ),
                 if (candidate.properties.every((p) => p.name != property))
                   MotionPropertyView(
@@ -450,10 +531,24 @@ class _HarnessState extends State<_Harness> {
           VerticalDivider(width: 1, color: context.colors.line),
           SizedBox(
             width: 264,
-            child: MotionInspector(scope: _scope, selection: _selection),
+            child: MotionInspector(
+              scope: _scope,
+              selection: _selection,
+              onEdit: _edit,
+              onDelete: _delete,
+            ),
           ),
         ],
       ),
     );
   }
 }
+
+Future<void> _noEdit(
+  String _,
+  String _,
+  int _,
+  MotionSpan Function(MotionSpan) _,
+) async {}
+
+Future<void> _noDelete(MotionSelection _) async {}

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutterware/motion_vocabulary.dart';
 
 import 'values_file.dart';
@@ -85,6 +87,149 @@ MotionSpan? newSpanFor(String property, {int? durationMs}) {
     curve: 'easeOutCubic',
   );
 }
+
+/// The span inserted when a lane that is already tuned gets another one.
+///
+/// **It starts at the playhead and its `from` is what the property is worth
+/// there**, which is the whole reason to insert at the playhead rather than at
+/// the end: nothing on screen jumps when the span appears, so what you judge
+/// afterwards is the change you asked for rather than a discontinuity you did
+/// not. It runs to whatever comes next — the following span's start, or the end
+/// of the motion — because a span you have to trim before you can judge it is
+/// one drag of nothing.
+///
+/// Null when there is no room: the playhead is at or past the end, it is inside
+/// a span already, or the gap it landed in has closed.
+///
+/// The inside-a-span case is refused *here* as well as by the panel, which
+/// wants to say which span. Overlapping spans are something `evaluateSegments`
+/// explicitly does not resolve, so being unable to produce one is worth
+/// checking twice rather than leaving to whoever calls next.
+MotionSpan? spanAt({
+  required String property,
+  required int atMs,
+  required int durationMs,
+  required List<(int, int)> existing,
+  MotionLiteral? current,
+}) {
+  if (atMs >= durationMs) return null;
+  if (existing.any((span) => atMs >= span.$1 && atMs < span.$2)) return null;
+  var next = existing
+      .map((span) => span.$1)
+      .where((start) => start > atMs)
+      .fold<int?>(
+        null,
+        (best, start) => best == null ? start : math.min(best, start),
+      );
+  var end = math.min(next ?? durationMs, durationMs);
+  if (end <= atMs) return null;
+
+  var debut = newSpanFor(property, durationMs: durationMs);
+  if (debut == null) return null;
+
+  return MotionSpan(
+    startMs: atMs,
+    endMs: end,
+    from: current ?? debut.from,
+    to: current == null ? debut.to : _awayFrom(current, debut),
+    curve: 'easeOutCubic',
+  );
+}
+
+/// Whichever end of the debut is further from where the property already is.
+///
+/// A second span that opens at the current value and closes at the resting one
+/// is a span that does nothing whenever the property is already at rest — which
+/// is most of the time, since the first span usually lands there. Picking the
+/// far end means an inserted span is always visible, and visible is the only
+/// thing that makes it worth judging.
+MotionLiteral _awayFrom(MotionLiteral current, MotionSpan debut) {
+  if (current is! MotionNumber) return debut.to;
+  var from = debut.from;
+  var to = debut.to;
+  if (from is! MotionNumber || to is! MotionNumber) return debut.to;
+  return (from.value - current.value).abs() >= (to.value - current.value).abs()
+      ? from
+      : to;
+}
+
+/// [targets] with [span] inserted into [property], in start order.
+///
+/// **The order is not cosmetic.** `evaluateSegments` reads `first` and `last`
+/// for its before-the-start and after-the-end rules, so a span appended out of
+/// order would make the property hold the wrong value at both ends of the
+/// motion — a bug visible only outside the spans, which is exactly where nobody
+/// looks.
+List<MotionTargetValues> withSpanAdded(
+  List<MotionTargetValues> targets,
+  String target,
+  String property,
+  MotionSpan span,
+) => [
+  for (var existing in targets)
+    if (existing.name != target)
+      existing
+    else
+      MotionTargetValues(
+        name: existing.name,
+        comments: existing.comments,
+        blankBefore: existing.blankBefore,
+        properties: [
+          for (var candidate in existing.properties)
+            if (candidate.name != property)
+              candidate
+            else
+              MotionPropertyValues(
+                name: candidate.name,
+                comments: candidate.comments,
+                blankBefore: candidate.blankBefore,
+                spans: [...candidate.spans, span]
+                  ..sort((a, b) => a.startMs.compareTo(b.startMs)),
+              ),
+        ],
+      ),
+];
+
+/// [targets] with one span removed — and the property with it when that was its
+/// last, and the target too when that was its last property.
+///
+/// A property with no spans is not a thing the file can spell, and a lane that
+/// lingered empty would read as tuned-and-broken rather than as untuned. The
+/// state it should fall back to is the one the code already puts it in.
+List<MotionTargetValues> withSpanRemoved(
+  List<MotionTargetValues> targets,
+  String target,
+  String property,
+  int index,
+) => [
+  for (var existing in targets)
+    if (existing.name != target)
+      existing
+    else
+      () {
+        var properties = [
+          for (var candidate in existing.properties)
+            if (candidate.name != property)
+              candidate
+            else
+              MotionPropertyValues(
+                name: candidate.name,
+                comments: candidate.comments,
+                blankBefore: candidate.blankBefore,
+                spans: [
+                  for (var (at, span) in candidate.spans.indexed)
+                    if (at != index) span,
+                ],
+              ),
+        ]..removeWhere((candidate) => candidate.spans.isEmpty);
+        return MotionTargetValues(
+          name: existing.name,
+          comments: existing.comments,
+          blankBefore: existing.blankBefore,
+          properties: properties,
+        );
+      }(),
+]..removeWhere((existing) => existing.properties.isEmpty);
 
 /// [targets] with [property] added under [target], creating the target if it is
 /// not there yet.

@@ -15,7 +15,7 @@ import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/motion.dart' show curveByName;
+import 'package:flutterware/motion.dart' show curveByName, motionCurveNames;
 
 import '../../motion/lane_model.dart';
 import '../../motion/values_file.dart';
@@ -187,9 +187,7 @@ class _MotionSequencerState extends State<MotionSequencer> {
             selection: widget.selection,
             onSelect: widget.onSelect,
             onEdit: widget.onEdit,
-            onCreate: property.state == MotionLaneState.untuned
-                ? () => widget.onCreate(target.name, property.name)
-                : null,
+            onCreate: () => widget.onCreate(target.name, property.name),
             zebra: index.isOdd,
           ),
         if (target.addable.isNotEmpty)
@@ -522,7 +520,7 @@ class _LaneRow extends StatelessWidget {
     required this.onSelect,
     required this.onEdit,
     required this.zebra,
-    this.onCreate,
+    required this.onCreate,
   });
 
   final String target;
@@ -533,8 +531,9 @@ class _LaneRow extends StatelessWidget {
   final MotionEdit onEdit;
   final bool zebra;
 
-  /// Set only on a dashed lane: the code reads this and nothing tunes it.
-  final VoidCallback? onCreate;
+  /// Give this lane another tween. On a dashed lane that means the property
+  /// starts existing; on a tuned one, a span at the playhead.
+  final VoidCallback onCreate;
 
   @override
   Widget build(BuildContext context) {
@@ -586,34 +585,54 @@ class _LaneRow extends StatelessWidget {
               ),
             ),
           ),
-          if (onCreate case var create?)
-            Tooltip(
-              message: 'Tune it — writes a first span into the values file.',
-              child: Tappable(
-                onTap: create,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
-                  child: Icon(
-                    Icons.add,
-                    size: 14,
-                    color: context.colors.accent,
-                  ),
-                ),
+          Tooltip(
+            message: property.segments.isEmpty
+                ? 'Tune it — writes a first span into the values file.'
+                : 'Add a span at the playhead, opening at the value it '
+                      'already has there.',
+            child: Tappable(
+              onTap: onCreate,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: FwSpacing.sm),
+                child: Icon(Icons.add, size: 14, color: context.colors.accent),
               ),
             ),
+          ),
+          // Wide enough for `#FF1A1F26`, which is the longest thing a value can
+          // be. It used to be, and then every lane gained a `+` and took the
+          // room — so an eight-digit colour wrapped onto a second line inside a
+          // 26px row and overflowed it.
           SizedBox(
-            width: onCreate == null ? 92 : 62,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: FwSpacing.md),
-                child: Text(
-                  property.value?.label ?? '—',
-                  style: context.type.caption.copyWith(
-                    color: context.colors.mut,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+            width: 92,
+            child: Padding(
+              padding: const EdgeInsets.only(right: FwSpacing.md),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                spacing: FwSpacing.xs,
+                children: [
+                  if (property.value case MotionColorView(:var color))
+                    Container(
+                      width: 11,
+                      height: 11,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: context.colors.line),
+                      ),
+                    ),
+                  Flexible(
+                    child: Text(
+                      property.value?.label ?? '—',
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.type.caption.copyWith(
+                        color: context.colors.mut,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -935,20 +954,26 @@ class _SpanPainter extends CustomPainter {
       !const ListEquality<(int, int)>().equals(old.bounds, bounds);
 }
 
-/// The right-hand rail: what the selected segment is, in numbers.
+/// The right-hand rail: what the selected segment is, in numbers you can type
+/// over.
 ///
-/// Read-only for now. It is where the values, the timing and the easing become
-/// visible at all — until this existed the panel could retime a span and never
-/// say what the span was worth at either end.
+/// Every field here writes through the same `MotionEdit` the drag uses, so
+/// there is one write path and one place that can refuse. A field that will not
+/// parse simply does not commit — it keeps the text and leaves the file alone,
+/// rather than writing a zero for what you meant.
 class MotionInspector extends StatelessWidget {
   const MotionInspector({
     super.key,
     required this.scope,
     required this.selection,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   final MotionScopeView? scope;
   final MotionSelection? selection;
+  final MotionEdit onEdit;
+  final Future<void> Function(MotionSelection selection) onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -994,9 +1019,41 @@ class MotionInspector extends StatelessWidget {
                 Row(
                   spacing: FwSpacing.md,
                   children: [
-                    Expanded(child: _Field('Start', '${segment.startMs} ms')),
                     Expanded(
-                      child: _Field('Duration', '${segment.durationMs} ms'),
+                      child: _Field(
+                        'Start',
+                        '${segment.startMs}',
+                        suffix: 'ms',
+                        // Moves the span rather than trimming it. Dragging the
+                        // middle is already what the lane means by a new start,
+                        // and two gestures spelling the same edit differently
+                        // is one too many.
+                        onCommit: (text) => _int(
+                          text,
+                          (value) => _change(
+                            selection,
+                            (span) => span.copyWith(
+                              startMs: value,
+                              endMs: value + span.durationMs,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: _Field(
+                        'Duration',
+                        '${segment.durationMs}',
+                        suffix: 'ms',
+                        onCommit: (text) => _int(
+                          text,
+                          (value) => _change(
+                            selection,
+                            (span) =>
+                                span.copyWith(endMs: span.startMs + value),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -1004,17 +1061,115 @@ class MotionInspector extends StatelessWidget {
                 Row(
                   spacing: FwSpacing.md,
                   children: [
-                    Expanded(child: _Field.value('From', segment.from)),
-                    Expanded(child: _Field.value('To', segment.to)),
+                    Expanded(
+                      child: _Field.value(
+                        'From',
+                        segment.from,
+                        onCommit: (text) => _literal(
+                          text,
+                          segment.from,
+                          (value) => _change(
+                            selection,
+                            (span) => span.copyWith(from: value),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: _Field.value(
+                        'To',
+                        segment.to,
+                        onCommit: (text) => _literal(
+                          text,
+                          segment.to,
+                          (value) => _change(
+                            selection,
+                            (span) => span.copyWith(to: value),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: FwSpacing.lg),
                 _Heading('Curve'),
                 const SizedBox(height: FwSpacing.sm),
-                _CurveBox(segment.curve),
+                _CurvePicker(
+                  name: segment.curve,
+                  onPick: (name) => _change(
+                    selection,
+                    // Not `copyWith`: it cannot put a curve back to none, since
+                    // `curve ?? this.curve` reads null as "unchanged".
+                    (span) => MotionSpan(
+                      startMs: span.startMs,
+                      endMs: span.endMs,
+                      from: span.from,
+                      to: span.to,
+                      curve: name,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: FwSpacing.xxl),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Tappable(
+                    onTap: () => unawaited(onDelete(selection)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: FwSpacing.sm,
+                      children: [
+                        Icon(
+                          Icons.delete_outline,
+                          size: 14,
+                          color: context.colors.red,
+                        ),
+                        Text(
+                          'Delete span',
+                          style: context.type.caption.copyWith(
+                            color: context.colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
     );
+  }
+
+  void _change(
+    MotionSelection selection,
+    MotionSpan Function(MotionSpan) change,
+  ) => unawaited(
+    onEdit(selection.target, selection.property, selection.index, change),
+  );
+
+  /// Commits only what parses. A field that will not read as a number keeps its
+  /// text and writes nothing, which is the difference between "I mistyped" and
+  /// "the file now says zero".
+  static void _int(String text, void Function(int) then) {
+    var value = int.tryParse(text.trim());
+    if (value != null && value >= 0) then(value);
+  }
+
+  /// Reads back what the field prints: a bare number, or `#AARRGGBB` — the same
+  /// spelling [MotionColorView.label] produces, so a value copies out of one
+  /// field and into another.
+  static void _literal(
+    String text,
+    MotionValueView? was,
+    void Function(MotionLiteral) then,
+  ) {
+    var raw = text.trim();
+    if (was is MotionColorView) {
+      var hex = raw.replaceFirst(RegExp('^(#|0x)', caseSensitive: false), '');
+      var argb = int.tryParse(hex, radix: 16);
+      if (argb != null && hex.length == 8) then(MotionColor(argb));
+      return;
+    }
+    var value = double.tryParse(raw);
+    if (value != null) then(MotionNumber(value));
   }
 }
 
@@ -1034,19 +1189,72 @@ class _Heading extends StatelessWidget {
   );
 }
 
-class _Field extends StatelessWidget {
-  const _Field(this.label, this.text, {this.swatch});
+/// A labelled box you can type into.
+///
+/// The controller is seeded once and refreshed only while the field is *not*
+/// focused: a poll lands every second, and re-seeding under the cursor would
+/// take the text out from under whoever is typing it.
+class _Field extends StatefulWidget {
+  const _Field(
+    this.label,
+    this.text, {
+    required this.onCommit,
+    this.suffix,
+    this.swatch,
+  });
 
   /// A value field, which is the same box plus a swatch when it is a colour.
-  factory _Field.value(String label, MotionValueView? value) => _Field(
+  factory _Field.value(
+    String label,
+    MotionValueView? value, {
+    required ValueChanged<String> onCommit,
+  }) => _Field(
     label,
-    value?.label ?? '—',
+    value?.label ?? '',
+    onCommit: onCommit,
     swatch: value is MotionColorView ? value.color : null,
   );
 
   final String label;
   final String text;
+  final String? suffix;
   final Color? swatch;
+  final ValueChanged<String> onCommit;
+
+  @override
+  State<_Field> createState() => _FieldState();
+}
+
+class _FieldState extends State<_Field> {
+  late final _controller = TextEditingController(text: widget.text);
+  late final _focus = FocusNode()..addListener(_onFocus);
+
+  @override
+  void didUpdateWidget(_Field old) {
+    super.didUpdateWidget(old);
+    if (!_focus.hasFocus && widget.text != _controller.text) {
+      _controller.text = widget.text;
+    }
+  }
+
+  void _onFocus() {
+    // Commit on the way out as well as on submit, because tabbing away from a
+    // field you just edited is the commonest way to mean "yes, that one".
+    if (!_focus.hasFocus) _commit();
+  }
+
+  void _commit() {
+    if (_controller.text == widget.text) return;
+    widget.onCommit(_controller.text);
+  }
+
+  @override
+  void dispose() {
+    _focus.removeListener(_onFocus);
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1054,7 +1262,7 @@ class _Field extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          label,
+          widget.label,
           style: context.type.caption.copyWith(color: context.colors.mut),
         ),
         const SizedBox(height: 3),
@@ -1069,7 +1277,7 @@ class _Field extends StatelessWidget {
           child: Row(
             spacing: FwSpacing.sm,
             children: [
-              if (swatch case var colour?)
+              if (widget.swatch case var colour?)
                 Container(
                   width: 13,
                   height: 13,
@@ -1079,19 +1287,69 @@ class _Field extends StatelessWidget {
                     border: Border.all(color: context.colors.line),
                   ),
                 ),
-              Flexible(
-                child: Text(
-                  text,
-                  overflow: TextOverflow.ellipsis,
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  focusNode: _focus,
+                  onSubmitted: (_) => _commit(),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                  ),
                   style: context.type.caption.copyWith(
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ),
+              if (widget.suffix case var suffix?)
+                Text(
+                  suffix,
+                  style: context.type.caption.copyWith(
+                    color: context.colors.mut2,
+                  ),
+                ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The curve box, opened as a menu over every curve the writer can spell.
+///
+/// The list is [motionCurveNames] rather than one kept here, so a picker can
+/// never offer a name the writer would then refuse.
+class _CurvePicker extends StatelessWidget {
+  const _CurvePicker({required this.name, required this.onPick});
+
+  final String? name;
+  final ValueChanged<String?> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      menuChildren: [
+        MenuItemButton(
+          onPressed: () => onPick(null),
+          child: Text('Default', style: context.type.caption),
+        ),
+        for (var candidate in motionCurveNames)
+          MenuItemButton(
+            onPressed: () => onPick(candidate),
+            leadingIcon: Icon(
+              candidate == name ? Icons.check : null,
+              size: 14,
+              color: context.colors.accent,
+            ),
+            child: Text(candidate, style: context.type.caption),
+          ),
+      ],
+      builder: (context, controller, _) => Tappable(
+        onTap: () => controller.isOpen ? controller.close() : controller.open(),
+        child: _CurveBox(name),
+      ),
     );
   }
 }
