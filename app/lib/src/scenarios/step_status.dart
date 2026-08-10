@@ -4,10 +4,13 @@ import '../plugins/native/scenarios_results.dart';
 import '../ui/theme.dart';
 
 /// How a step names itself in the flow and on its page: what the `Shot` called
-/// it, `step` for an automatic capture — and `failed` for the frame a scenario
-/// broke on, which nothing named because nobody asked for it.
+/// it, else what its verb did (`tap #pay`) — and `failed` for the frame a
+/// scenario broke on, which nothing named because nobody asked for it.
+///
+/// The bare `step` is the last resort, for an artifact written before steps
+/// carried their action.
 String scenarioStepLabel(ScenarioRunStep step) =>
-    step.failure != null ? 'failed' : step.name ?? 'step';
+    step.failure != null ? 'failed' : step.name ?? step.action?.label ?? 'step';
 
 /// The transition *into* a step, as a sentence: `tap "Pay"`, `screen`,
 /// `pumpWidget MyApp`. Null on a run captured before the verb was recorded,

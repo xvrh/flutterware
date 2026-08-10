@@ -809,6 +809,7 @@ class ScenarioTester {
       stray: stray,
       verb: verb,
       target: target,
+      position: position,
     );
   }
 
@@ -830,6 +831,11 @@ class ScenarioTester {
       branch: _pendingBranch,
       shot: null,
       settled: true,
+      // The position this step *would* have had. A failure is never captured
+      // twice, so nothing is keyed on it — but a comparison aligning two runs
+      // needs somewhere to put it, and "the place the flow stopped" is the
+      // only honest answer.
+      position: '${_state.plan.path}#${_ordinal + 1}',
       failure: '${_inContext(error)}',
     );
   }
@@ -846,6 +852,7 @@ class ScenarioTester {
     int stray = 0,
     String? verb,
     String? target,
+    required String position,
     String? failure,
   }) async {
     var listener = scenarioRunListener;
@@ -913,6 +920,7 @@ class ScenarioTester {
             navBrightness: style?.systemNavigationBarIconBrightness?.name,
             verb: verb,
             target: target,
+            position: position,
             events: events,
             eventsDropped: dropped,
             motion: motion,

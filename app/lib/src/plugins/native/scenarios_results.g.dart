@@ -60,10 +60,12 @@ Map<String, dynamic> _$ScenarioRunOutcomeToJson(ScenarioRunOutcome instance) =>
 Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
     <String, dynamic>{
       'index': instance.index,
+      'position': instance.position,
       'parent': ?instance.parent,
       'branch': ?instance.branch,
       'name': ?instance.name,
       'auto': instance.auto,
+      'action': ?instance.action?.toJson(),
       'tags': instance.tags,
       'image': instance.image,
       'format': instance.format,
@@ -91,6 +93,13 @@ Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
       'settled': instance.settled,
       'strayFrames': instance.strayFrames,
       'failure': ?instance.failure,
+    };
+
+Map<String, dynamic> _$ScenarioStepActionToJson(ScenarioStepAction instance) =>
+    <String, dynamic>{
+      'verb': instance.verb,
+      'target': ?instance.target,
+      'kind': ?instance.kind,
     };
 
 Map<String, dynamic> _$ScenarioRunErrorToJson(ScenarioRunError instance) =>

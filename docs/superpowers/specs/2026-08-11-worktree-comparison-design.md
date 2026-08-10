@@ -226,6 +226,14 @@ since the last split — uses it for replay dedup, and throws it away. Putting i
 in the step record is nearly free and gives the aligner a branch-scoped anchor,
 so an insertion shifts positions within one branch segment instead of globally.
 
+Built 2026-08-11, and building it corrected one thing: a choice in that path is
+a branch's **index** in its `split`, not its label — `'0.1#3'`, not
+`'guest.express#3'`. So renaming a branch leaves every position beneath it
+untouched, and *reordering the map* moves them all. That is the right way round
+for §7b, and it is why the two keys divide the work the way they do: branches
+match by label, and positions only ever match *within* an already-matched
+branch.
+
 This change is **independent of comparison and should ship ahead of it**: the
 flow view, `fw run scenarios list`, the MCP surface and the auto-write generator
 all currently say `step 3`.

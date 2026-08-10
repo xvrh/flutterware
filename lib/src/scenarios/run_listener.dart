@@ -9,6 +9,7 @@ import 'motion.dart';
 class ScenarioStepCapture {
   ScenarioStepCapture({
     required this.index,
+    required this.position,
     required this.parent,
     required this.branch,
     required this.name,
@@ -22,6 +23,7 @@ class ScenarioStepCapture {
     required this.navBrightness,
     this.verb,
     this.target,
+    required this.position,
     this.events = const [],
     this.eventsDropped = 0,
     this.motion = ScenarioMotionFrames.empty,
@@ -34,6 +36,18 @@ class ScenarioStepCapture {
   /// 1-based position in the scenario's capture sequence.
   final int index;
 
+  /// Where this step sits in the scenario's *shape*: the split choices taken
+  /// to reach it, then the count since the last one — `'#2'` on the trunk,
+  /// `'0.1#3'` two splits deep.
+  ///
+  /// A choice is a branch's **index** in its `split`, not its label, so
+  /// renaming a branch leaves every position under it untouched.
+  ///
+  /// [index] counts captures and so shifts for every step after an insertion;
+  /// this shifts only within its own branch segment, which is what makes it
+  /// worth writing down beside the index rather than instead of it.
+  final String position;
+
   /// The [index] of the step this one follows, or null for the first. A
   /// linear scenario chains; a `split` gives one parent several children —
   /// the flow graph's edges, exactly.
@@ -45,6 +59,7 @@ class ScenarioStepCapture {
 
   /// The [Shot]'s name, or null for an automatic capture.
   final String? name;
+
 
   final List<String> tags;
 
@@ -66,6 +81,18 @@ class ScenarioStepCapture {
   /// the flow from an arrow into a sentence.
   final String? verb;
   final String? target;
+
+  /// How [target] was named — a key, visible text, a type. What a comparison
+  /// reads to know how far it can trust the label: an author's key is theirs
+  /// alone, and visible text is translated, so `tap "Pay"` and `tap "Payer"`
+  /// are one step run under two languages.
+  /// Where this step sits in the scenario's *shape*: the split choices taken
+  /// to reach it, then the count since the last one.
+  ///
+  /// Not the index. An index counts steps in one run; this names a place two
+  /// runs can share, which is what lets a comparison say "the same step now
+  /// aims somewhere else" rather than reporting a deletion and a coincidence.
+  final String position;
 
   /// What the app did on the way here: everything recorded between the
   /// previous capture and this one, in the order it happened.

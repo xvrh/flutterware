@@ -3770,6 +3770,12 @@ final resultShapes = <String, ResultShape>{
               'doc': '1-based position in the scenario\'s capture sequence.',
             },
             <String, Object?>{
+              'name': 'position',
+              'type': 'String',
+              'doc':
+                  'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
+            },
+            <String, Object?>{
               'name': 'parent',
               'type': 'int',
               'optional': true,
@@ -3794,6 +3800,28 @@ final resultShapes = <String, ResultShape>{
               'type': 'bool',
               'doc':
                   'True when nothing named this capture — a collapsible detail step.',
+            },
+            <String, Object?>{
+              'name': 'action',
+              'type': 'ScenarioStepAction',
+              'optional': true,
+              'doc': 'The verb that produced this capture.',
+              'shape': <String, Object?>{
+                'type': 'ScenarioStepAction',
+                'fields': <Object?>[
+                  <String, Object?>{'name': 'verb', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'target',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'kind',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                ],
+              },
             },
             <String, Object?>{'name': 'tags', 'type': 'List<String>'},
             <String, Object?>{
@@ -4016,6 +4044,12 @@ final resultShapes = <String, ResultShape>{
                         '1-based position in the scenario\'s capture sequence.',
                   },
                   <String, Object?>{
+                    'name': 'position',
+                    'type': 'String',
+                    'doc':
+                        'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
+                  },
+                  <String, Object?>{
                     'name': 'parent',
                     'type': 'int',
                     'optional': true,
@@ -4040,6 +4074,28 @@ final resultShapes = <String, ResultShape>{
                     'type': 'bool',
                     'doc':
                         'True when nothing named this capture — a collapsible detail step.',
+                  },
+                  <String, Object?>{
+                    'name': 'action',
+                    'type': 'ScenarioStepAction',
+                    'optional': true,
+                    'doc': 'The verb that produced this capture.',
+                    'shape': <String, Object?>{
+                      'type': 'ScenarioStepAction',
+                      'fields': <Object?>[
+                        <String, Object?>{'name': 'verb', 'type': 'String'},
+                        <String, Object?>{
+                          'name': 'target',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'kind',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                      ],
+                    },
                   },
                   <String, Object?>{'name': 'tags', 'type': 'List<String>'},
                   <String, Object?>{
@@ -4279,6 +4335,12 @@ final resultShapes = <String, ResultShape>{
                               '1-based position in the scenario\'s capture sequence.',
                         },
                         <String, Object?>{
+                          'name': 'position',
+                          'type': 'String',
+                          'doc':
+                              'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
+                        },
+                        <String, Object?>{
                           'name': 'parent',
                           'type': 'int',
                           'optional': true,
@@ -4304,6 +4366,31 @@ final resultShapes = <String, ResultShape>{
                           'type': 'bool',
                           'doc':
                               'True when nothing named this capture — a collapsible detail step.',
+                        },
+                        <String, Object?>{
+                          'name': 'action',
+                          'type': 'ScenarioStepAction',
+                          'optional': true,
+                          'doc': 'The verb that produced this capture.',
+                          'shape': <String, Object?>{
+                            'type': 'ScenarioStepAction',
+                            'fields': <Object?>[
+                              <String, Object?>{
+                                'name': 'verb',
+                                'type': 'String',
+                              },
+                              <String, Object?>{
+                                'name': 'target',
+                                'type': 'String',
+                                'optional': true,
+                              },
+                              <String, Object?>{
+                                'name': 'kind',
+                                'type': 'String',
+                                'optional': true,
+                              },
+                            ],
+                          },
                         },
                         <String, Object?>{
                           'name': 'tags',
@@ -4510,6 +4597,12 @@ final resultShapes = <String, ResultShape>{
         'doc': '1-based position in the scenario\'s capture sequence.',
       },
       <String, Object?>{
+        'name': 'position',
+        'type': 'String',
+        'doc':
+            'Where the step sits in the scenario\'s *shape* — the `split` choices taken to reach it by index, then the count since the last one: `\'#2\'` on the trunk, `\'0.1#3\'` two splits deep.',
+      },
+      <String, Object?>{
         'name': 'parent',
         'type': 'int',
         'optional': true,
@@ -4534,6 +4627,28 @@ final resultShapes = <String, ResultShape>{
         'type': 'bool',
         'doc':
             'True when nothing named this capture — a collapsible detail step.',
+      },
+      <String, Object?>{
+        'name': 'action',
+        'type': 'ScenarioStepAction',
+        'optional': true,
+        'doc': 'The verb that produced this capture.',
+        'shape': <String, Object?>{
+          'type': 'ScenarioStepAction',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'verb', 'type': 'String'},
+            <String, Object?>{
+              'name': 'target',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'kind',
+              'type': 'String',
+              'optional': true,
+            },
+          ],
+        },
       },
       <String, Object?>{'name': 'tags', 'type': 'List<String>'},
       <String, Object?>{
@@ -4797,6 +4912,14 @@ final resultShapes = <String, ResultShape>{
         'doc':
             'How many images were written, over every package and assignment.',
       },
+    ],
+  }),
+  'ScenarioStepAction': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioStepAction',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'verb', 'type': 'String'},
+      <String, Object?>{'name': 'target', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'kind', 'type': 'String', 'optional': true},
     ],
   }),
   'SplashArtifactEntry': ResultShape.fromJson(<String, Object?>{

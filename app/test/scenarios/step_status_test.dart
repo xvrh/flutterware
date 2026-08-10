@@ -9,13 +9,16 @@ import 'package:flutterware_app/src/ui/theme.dart';
 void main() {
   ScenarioRunStep step({
     String? name,
+    ScenarioStepAction? action,
     bool settled = true,
     int strayFrames = 0,
     String? failure,
   }) => ScenarioRunStep(
     index: 1,
+    position: '#1',
     auto: name == null,
     name: name,
+    action: action,
     image: 'none.png',
     format: 'png',
     width: 1,
@@ -39,8 +42,31 @@ void main() {
 
   test('the label names the shot, the automatic step, and the failure', () {
     expect(scenarioStepLabel(step(name: 'Cart')), 'Cart');
-    expect(scenarioStepLabel(step()), 'step');
+    expect(
+      scenarioStepLabel(
+        step(
+          action: ScenarioStepAction(verb: 'tap', target: '#pay'),
+        ),
+      ),
+      'tap #pay',
+    );
     expect(scenarioStepLabel(step(name: 'Cart', failure: 'boom')), 'failed');
+  });
+
+  test('a shot outranks the verb that took it', () {
+    expect(
+      scenarioStepLabel(
+        step(
+          name: 'Cart',
+          action: ScenarioStepAction(verb: 'tap'),
+        ),
+      ),
+      'Cart',
+    );
+  });
+
+  test('a step from before actions existed still names itself', () {
+    expect(scenarioStepLabel(step()), 'step');
   });
 
   testWidgets('a healthy step says nothing at all', (tester) async {

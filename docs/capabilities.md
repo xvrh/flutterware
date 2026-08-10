@@ -937,10 +937,15 @@ packages: List<ScenarioRunPackage>
     ms: int
     steps: List<ScenarioRunStep>
       index: int   # 1-based position in the scenario's capture sequence.
+      position: String   # Where the step sits in the scenario's *shape* — the `split` choices taken to reach it by index, then the count since the last one: `'#2'` on the trunk, `'0.1#3'` two splits deep.
       parent: int?   # The [index] of the step this one follows; null for the scenario's first.
       branch: String?   # The `split` branch label when this step is a branch's first capture.
       name: String?   # The `Shot`'s name; null for an automatic capture.
       auto: bool   # True when nothing named this capture — a collapsible detail step.
+      action: ScenarioStepAction?   # The verb that produced this capture.
+        verb: String
+        target: String?
+        kind: String?
       tags: List<String>
       image: String   # The captured image, in [format], **relative to the worktree root** — the same convention the catalog's artifacts follow, so the value survives being read on another machine and an agent whose tools are scoped to the repo can open it.
       format: String   # `png`, or `raw` — bare rgba8888 rows, [width]×[height]×4 bytes.
