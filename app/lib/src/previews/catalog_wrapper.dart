@@ -71,8 +71,9 @@ import '${uriFor(demo)}';
 import '${uriFor(demo)}' as fw$index;
 
 // The annotation, evaluated as Dart rather than interpreted statically.
-// `transform()` returns a plain Preview and drops id/figma/formFactor, so the
-// annotation itself is kept alongside it.
+// Kept whole rather than reduced: the entrypoint calls Flutter's own
+// `transform()` on it, which is where a subclass folds its extra state into a
+// plain `Preview` — so what a subclass carries has to still be here to fold.
 //
 // Typed as `Preview`, the annotation's own type, so a project's registered
 // subclass of it lands here too. Declaring the subtype instead is what once

@@ -151,37 +151,36 @@ previewer, those previews open here unchanged — on a real device frame, with
 is only for what the annotation does not carry: a shell (`PreviewShell`) and
 knobs (`context.previews.parameters.*`).
 
-**Previews live in `demo/`.** Every `.dart` file under it is scanned; nothing
-outside it is. A package that keeps them elsewhere says so once:
+**Previews are found wherever you write them.** The whole package is scanned —
+beside the widget in `lib/`, in `demo/`, wherever — skipping what `git` skips,
+so nothing you have ignored is compiled. A package that wants the scan bounded
+to one directory says so once:
 
 ```dart
-fw.use(Previews(packages: [.new(app, directory: 'examples')]));
+fw.use(Previews(packages: [.new(app, directory: 'demo')]));
 ```
 
 If you have never written one, `fw run previews new --name='Buttons'` writes
-the first — or press **New demo** in the panel, which is what it shows when it
-finds none.
+the first — or press **New preview** in the panel, which is what it shows when
+it finds none. New files land in `demo/`, or in the directory you named.
 
 The GUI renders your entries live, and moving between them is near-instant.
 From the CLI or from an agent, those same entries can be screenshotted,
 inspected (widget tree, layout, what a build printed, what is under a point),
 and audited in bulk for anything that fails to compile or render.
 
-![The UI catalog panel, showing a Buttons demo rendered live beside the entry
+![The Previews panel, showing a Buttons preview rendered live beside the entry
 tree and the inspection pane](doc/screenshots/ui_catalog.png)
 
 The preview is a real Flutter engine in its own process, not a re-render of
-your widget in the tool's. A demo can pin its own canvas — a phone, a tablet —
-and get that device's size and pixel ratio from `MediaQuery`, because the
+your widget in the tool's. A preview can pin its own canvas — a phone, a tablet
+— and get that device's size and pixel ratio from `MediaQuery`, because the
 guest's window *is* the device screen:
 
-![The same catalog showing a demo pinned to an iPhone 13 canvas, drawn inside a
-device frame](doc/screenshots/ui_catalog_device.png)
+![The same panel showing a preview pinned to an iPhone 13 canvas, drawn inside
+a device frame](doc/screenshots/ui_catalog_device.png)
 
-`Demo` extends Flutter's own `Preview`, so one annotation serves both the
-flutterware catalog and Flutter's widget previewer.
-
-> The catalog is **macOS only** for now. The other tools run everywhere.
+> Previews are **macOS only** for now. The other tools run everywhere.
 
 ### Scenarios
 

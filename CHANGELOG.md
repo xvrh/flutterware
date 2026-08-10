@@ -1,11 +1,28 @@
 ## 0.5.2
 
-- New entry model: declare demos with `@Demo(...)` (extends Flutter's
-  `Preview`), and declare axes with `CatalogShell` / `TopBarState`.
-- `ui_catalog.dart` exports only what a project writes: `Demo`, `FormFactor`,
-  `Figma`, `UICatalog*`, `CatalogShell`, `TopBarState`. The guest-side
-  machinery the flutterware GUI drives lives in `ui_catalog_guest.dart`,
-  which only generated code imports.
+The UI catalog tool is now **Previews**, and entries are declared with
+Flutter's own annotation. Breaking, with no deprecation path.
+
+- **`@Demo` is gone.** Annotate with `@Preview` from
+  `package:flutter/widget_previews.dart`; a preview written for Flutter's own
+  previewer is an entry here with nothing to change. `formFactor:` went with
+  it — pin a canvas from the panel instead.
+- **The whole package is scanned**, not `demo/` only, so a preview beside the
+  widget it shows is found. Files `git` ignores are skipped, and symlinks are
+  not followed. `Previews(directory: …)` narrows the scan, and moves where
+  `new` writes.
+- **New library `previews.dart`** — what `@Preview` does not carry:
+  `PreviewShell` and `TopBarState` for the top bar's axes, and
+  `context.previews.parameters.*` for knobs. It is imported only when you want
+  one of those; declaring a preview imports nothing of flutterware's.
+- **`ui_catalog.dart` is now only the in-app catalog** — `UICatalog`,
+  `FormFactor`, `Figma` — the browsable page you ship inside your own app.
+  `CatalogShell` moved to `previews.dart` as `PreviewShell`, and
+  `UICatalogState` is `PreviewState`.
+- `ui_catalog_guest.dart`, which only generated code imports, is
+  `previews_guest.dart`.
+- The plugin is `Previews(...)` (was `UiCatalog(...)`) and its id is
+  `flutterware.previews`, so the CLI reads `fw run previews …`.
 
 ## 0.5.1
 

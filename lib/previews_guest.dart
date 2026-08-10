@@ -1,13 +1,13 @@
 /// The guest's own plumbing — for generated code, not for projects.
 ///
-/// The catalog's generated entrypoint is written into the user's project and
-/// imports the package like any other consumer, so this surface has to be
-/// importable. It is a separate library so that fact does not put host-driven
-/// machinery beside the in-app catalog in the published API: `ui_catalog.dart` is the
-/// semver commitment, this file follows the generators.
+/// The generated entrypoint is written into the user's project and imports the
+/// package like any other consumer, so this surface has to be importable. It is
+/// a separate library so that fact does not put host-driven machinery beside
+/// the published API: `previews.dart` and `ui_catalog.dart` are the semver
+/// commitments, this file follows the generators.
 ///
-/// Nothing here is expected to be called by hand. A project declaring demos,
-/// knobs and shells needs only `ui_catalog.dart`.
+/// Nothing here is expected to be called by hand. A project writing previews
+/// needs `@Preview` from Flutter and, for a shell or a knob, `previews.dart`.
 library;
 
 export 'src/ui_catalog/guest.dart' show CatalogGuest, CatalogParameters;
