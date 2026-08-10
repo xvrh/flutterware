@@ -399,20 +399,24 @@ class CatalogSession extends ChangeNotifier {
     if (value == _inspectingSemantics) return;
     _inspectingSemantics = value;
     var inspect = _inspect;
+    // Null when the panel opened before the guest was up — the connect path
+    // catches up, exactly as it does for the watch and the logs.
     if (inspect == null) return;
     if (value) {
-      // Enable, then read: the read settles through the frame that builds
-      // the first tree.
-      _fireAndForget(
-        inspect.setSemantics(true).then((_) => readSemantics()),
-        'enabling semantics',
-      );
+      _enableSemantics(inspect);
     } else {
       // Tolerant, like unwatch: this runs from disposes, where the guest may
       // already be gone.
       unawaited(inspect.setSemantics(false));
     }
   }
+
+  /// Turns the guest's semantics on, then reads — the read settles through
+  /// the frame that builds the first tree.
+  void _enableSemantics(InspectClient inspect) => _fireAndForget(
+    inspect.setSemantics(true).then((_) => readSemantics()),
+    'enabling semantics',
+  );
 
   /// What the entry on screen has printed, oldest first.
   ///
@@ -1084,13 +1088,14 @@ class CatalogSession extends ChangeNotifier {
         abandoned: () => _disposed,
       );
       // The panel usually mounts *before* this — a cold start puts it on screen
-      // with a spinner while the daemon compiles — and both of these need a
+      // with a spinner while the daemon compiles — and all of these need a
       // client to attach to. Asked for once at mount and once here, because
-      // either can be the one that comes second; both are idempotent.
+      // either can be the one that comes second; all are idempotent.
       if (_panelOpen) {
         _startWatch();
         _startLogs();
       }
+      if (_inspectingSemantics) _enableSemantics(_inspect!);
       // Announced only now: a URI published before the service answers is a
       // URI that fails to connect. From here on `fw` and an agent can read the
       // entry on screen rather than rendering their own copy of it. No await

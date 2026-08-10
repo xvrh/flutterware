@@ -291,7 +291,7 @@ class GuestInspector {
   /// [Text] only, deliberately. `Tooltip` and the rest of the labelled widgets
   /// live in `package:flutter/material.dart`, and this file imports `widgets`
   /// so that a guest is not made to link Material to be inspected.
-  String? _preview(Map<String, Object?> json) => switch (_elementOf(json)) {
+  static String? _preview(Element? element) => switch (element) {
     Element(widget: Text(:var data?)) => 'Text("$data")',
     _ => null,
   };
@@ -324,7 +324,10 @@ class GuestInspector {
     var children = json['children'] as List? ?? const [];
     var description = json['description'] as String?;
     var type = json['widgetRuntimeType'] as String? ?? description ?? '';
-    var render = _elementOf(json)?.renderObject;
+    // Resolved once for the three readers below: the id round-trips through
+    // the inspector's object registry, which is not free per node.
+    var element = _elementOf(json);
+    var render = element?.renderObject;
     if (render != null) {
       // First writer wins. Several widgets in a summary tree can share one
       // render object — a `Padding` under a `Semantics` under a builder all
@@ -339,10 +342,11 @@ class GuestInspector {
       type: type,
       // Only when it says more than the type does. `Text("Save")` earns its
       // place; a `Padding` described as "Padding" is the type twice.
-      description: _preview(json) ?? (description == type ? null : description),
+      description:
+          _preview(element) ?? (description == type ? null : description),
       createdByLocalProject: json['createdByLocalProject'] as bool? ?? false,
       offstage: offstage,
-      properties: _propertiesOf(_elementOf(json)?.widget),
+      properties: _propertiesOf(element?.widget),
       source: switch (json['creationLocation']) {
         Map location => InspectSource.fromJson(
           location.cast<String, Object?>(),
