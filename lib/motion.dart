@@ -38,7 +38,13 @@
 /// physics and data-driven reorders are outside it.
 library;
 
-export 'src/motion/guest.dart' show MotionRegistry, MotionSurface;
+export 'src/motion/guest.dart'
+    show
+        MotionRegistry,
+        MotionSurface,
+        curveByName,
+        curveName,
+        motionCurveNames;
 export 'src/motion/target.dart' show Motion, MotionTarget;
 export 'src/motion/controller.dart' show MotionController, MotionSource;
 export 'src/motion/motion_box.dart' show MotionBox;

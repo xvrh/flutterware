@@ -319,6 +319,23 @@ Object? _encode(Object? value) => switch (value) {
 /// a false positive.
 String? curveName(Curve curve) => _curveNames[curve];
 
+/// The curve a name refers to, or null for a name this runtime cannot write.
+///
+/// The inverse of [curveName], and it lives beside the table rather than in the
+/// editor because an editor that offers a curve has to plot the curve it is
+/// offering. A second table in the GUI would be a second table to drift, and
+/// the failure would be silent: a picker listing a name the writer then refuses.
+Curve? curveByName(String name) => _curvesByName[name];
+
+/// Every curve the editor may write, in the order a picker should offer them —
+/// linear and the eases first, the theatrical ones last.
+List<String> get motionCurveNames =>
+    List<String>.unmodifiable(_curveNames.values);
+
+final _curvesByName = {
+  for (var entry in _curveNames.entries) entry.value: entry.key,
+};
+
 final _curveNames = <Curve, String>{
   Curves.linear: 'linear',
   Curves.decelerate: 'decelerate',

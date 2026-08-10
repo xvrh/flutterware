@@ -96,8 +96,8 @@ const playerMotion = MotionValues(
       ],
       'borderRadius': [
         Seg<double>(
-          start: Duration.zero,
-          end: Duration(milliseconds: 560),
+          start: Duration(milliseconds: 137),
+          end: Duration(milliseconds: 355),
           from: 14,
           to: 26,
           curve: Curves.easeOutQuint,
