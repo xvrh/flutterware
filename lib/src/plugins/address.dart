@@ -4,7 +4,15 @@ import 'package:collection/collection.dart';
 /// all carry.
 ///
 /// ```
-/// fw://<project>/<worktree>/<plugin>/<plugin-specific segments…>?<axes>
+/// fw://<project>/<space>/<the space's own path…>?<axes>
+/// ```
+///
+/// with exactly one space defined today:
+///
+/// ```
+/// fw:///worktrees                              the collection
+/// fw:///worktrees/<name>                       one worktree's home
+/// fw:///worktrees/<name>/<plugin>/<segments…>  a plugin panel
 /// ```
 ///
 /// The framework parses up to and including the plugin segment. **Everything
@@ -30,10 +38,16 @@ import 'package:collection/collection.dart';
 class Address {
   static const scheme = 'fw';
 
+  /// The only [space] there is today. The slot exists so a cross-worktree
+  /// screen can be addressed without competing with a checkout for the first
+  /// path segment — the same reasoning that made `Worktree.mainName` a
+  /// character git cannot produce, applied one level up.
+  static const worktreesSpace = 'worktrees';
+
   /// The one name in the [plugin] slot that is **not** a plugin:
-  /// `fw://<worktree>/config` is the shell's own screen for the worktree's
-  /// `tool/flutterware.dart` — what it resolved to, what each reload cost, and
-  /// why it failed when it did.
+  /// `fw:///worktrees/<worktree>/config` is the shell's own screen for the
+  /// worktree's `tool/flutterware.dart` — what it resolved to, what each reload
+  /// cost, and why it failed when it did.
   ///
   /// It sits in the plugin slot rather than getting a field of its own because
   /// it is addressed exactly like a plugin: one thing per worktree, mounted
@@ -57,6 +71,15 @@ class Address {
   /// every address ever written down.
   final String? project;
 
+  /// The top-level namespace. [worktreesSpace] is the only one today; the slot
+  /// exists so a cross-worktree screen can be addressed without competing with
+  /// a checkout for the first path segment.
+  ///
+  /// Parsed as data, never validated here — an unknown space is a *resolution*
+  /// failure, reported where an unknown worktree already is, which is what
+  /// keeps this file free of a registry.
+  final String? space;
+
   /// Git's own name for the worktree (see `Worktree.name`), or null when the
   /// address names no worktree at all — which is where the shell sits before
   /// the first one opens.
@@ -75,18 +98,33 @@ class Address {
   /// order they were written in.
   final Map<String, String> axes;
 
+  /// [space] defaults to the one a worktree lives in, so the many call sites
+  /// that name a worktree and a plugin read exactly as they did before the
+  /// space segment existed.
   Address({
     this.project,
+    String? space,
     this.worktree,
     this.plugin,
     List<String> segments = const [],
     Map<String, String> axes = const {},
-  }) : segments = List.unmodifiable(segments),
+  }) : space = space ?? (worktree != null ? worktreesSpace : null),
+       segments = List.unmodifiable(segments),
        axes = Map.unmodifiable({
          for (var key in axes.keys.toList()..sort()) key: axes[key]!,
        }) {
     if (project != null && project!.isEmpty) {
       throw ArgumentError.value(project, 'project', 'Must not be empty.');
+    }
+    if (this.space != null && this.space!.isEmpty) {
+      throw ArgumentError.value(space, 'space', 'Must not be empty.');
+    }
+    if (worktree != null && this.space != worktreesSpace) {
+      throw ArgumentError.value(
+        space,
+        'space',
+        'A worktree lives in the $worktreesSpace space; no other space has one.',
+      );
     }
     if (worktree != null && worktree!.isEmpty) {
       throw ArgumentError.value(worktree, 'worktree', 'Must not be empty.');
@@ -117,12 +155,14 @@ class Address {
 
   Address copyWith({
     String? project,
+    String? space,
     String? worktree,
     String? plugin,
     List<String>? segments,
     Map<String, String>? axes,
   }) => Address(
     project: project ?? this.project,
+    space: space ?? this.space,
     worktree: worktree ?? this.worktree,
     plugin: plugin ?? this.plugin,
     segments: segments ?? this.segments,
@@ -140,6 +180,7 @@ class Address {
   /// is what a tree or a list keys on.
   Address get bare => Address(
     project: project,
+    space: space,
     worktree: worktree,
     plugin: plugin,
     segments: segments,
@@ -187,16 +228,17 @@ class Address {
     // project"; it is not a segment and never was one.
     var project = parts.first;
     var path = parts.skip(1).toList();
-    // `fw:///wt/` and `fw:///wt` name the same worktree.
+    // `fw:///worktrees/wt/` and `fw:///worktrees/wt` name the same worktree.
     if (path.isNotEmpty && path.last.isEmpty) path.removeLast();
     if (path.any((s) => s.isEmpty)) return null;
 
     try {
       return Address(
         project: project.isEmpty ? null : Uri.decodeComponent(project),
-        worktree: path.isEmpty ? null : Uri.decodeComponent(path.first),
-        plugin: path.length < 2 ? null : Uri.decodeComponent(path[1]),
-        segments: [for (var s in path.skip(2)) Uri.decodeComponent(s)],
+        space: path.isEmpty ? null : Uri.decodeComponent(path.first),
+        worktree: path.length < 2 ? null : Uri.decodeComponent(path[1]),
+        plugin: path.length < 3 ? null : Uri.decodeComponent(path[2]),
+        segments: [for (var s in path.skip(3)) Uri.decodeComponent(s)],
         axes: axes,
       );
     } on ArgumentError {
@@ -215,12 +257,15 @@ class Address {
     // Always the leading slash, so `fw:///` names nothing and reads as an empty
     // authority rather than as a truncated address.
     out.write('/');
-    if (worktree != null) {
-      out.write(_encode(worktree!));
-      if (plugin != null) {
-        out.write('/${_encode(plugin!)}');
-        for (var segment in segments) {
-          out.write('/${_encode(segment)}');
+    if (space != null) {
+      out.write(_encode(space!));
+      if (worktree != null) {
+        out.write('/${_encode(worktree!)}');
+        if (plugin != null) {
+          out.write('/${_encode(plugin!)}');
+          for (var segment in segments) {
+            out.write('/${_encode(segment)}');
+          }
         }
       }
     }
@@ -255,6 +300,7 @@ class Address {
   bool operator ==(Object other) =>
       other is Address &&
       other.project == project &&
+      other.space == space &&
       other.worktree == worktree &&
       other.plugin == plugin &&
       const ListEquality<String>().equals(other.segments, segments) &&
@@ -263,6 +309,7 @@ class Address {
   @override
   int get hashCode => Object.hash(
     project,
+    space,
     worktree,
     plugin,
     const ListEquality<String>().hash(segments),

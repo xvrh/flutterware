@@ -139,7 +139,7 @@ flutter:
 
     expect(
       '${written.single}',
-      'fw:///test/flutterware.assets/./assets/logo.png',
+      'fw:///worktrees/test/flutterware.assets/./assets/logo.png',
     );
     // And the pane followed the address rather than a local selection. More
     // than once: the detail names the key as its title and again as the file
@@ -185,7 +185,7 @@ flutter:
 
     expect(
       '${written.last}',
-      'fw:///test/flutterware.assets/./assets/logo.png?bg=dark',
+      'fw:///worktrees/test/flutterware.assets/./assets/logo.png?bg=dark',
     );
   });
 

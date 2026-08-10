@@ -256,17 +256,24 @@ class AddressReadout extends StatelessWidget {
     );
 
     // `fw://` then the empty project then the leading slash — one inert piece,
-    // because there is nothing to click or read in the middle of it.
+    // because there is nothing to click or read in the middle of it. The space
+    // that follows is inert for the same reason it is here at all: there is one
+    // of them, and nowhere else to go.
     var head = <Widget>[part('fw://${address.project ?? ''}/', colors.mut3)];
+    if (address.space case var space?) {
+      head.add(part(space, colors.mut3));
+    }
     if (address.worktree case var worktree?) {
-      head.add(
-        _WorktreeSwitcher(
-          current: worktree,
-          worktrees: worktrees,
-          onPick: onPickWorktree,
-          style: mono,
-        ),
-      );
+      head
+        ..add(separator())
+        ..add(
+          _WorktreeSwitcher(
+            current: worktree,
+            worktrees: worktrees,
+            onPick: onPickWorktree,
+            style: mono,
+          ),
+        );
     }
     if (address.plugin case var plugin?) {
       head

@@ -188,7 +188,7 @@ void main() {
       expect(hit.address.segments, ['app', 'demo/dashboard.dart#dashboard']);
       expect(
         hit.address.toString(),
-        'fw:///main/flutterware.ui_catalog/app/demo%2Fdashboard.dart%23dashboard',
+        'fw:///worktrees/main/flutterware.ui_catalog/app/demo%2Fdashboard.dart%23dashboard',
       );
     });
 

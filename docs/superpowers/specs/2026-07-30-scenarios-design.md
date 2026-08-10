@@ -271,7 +271,7 @@ both registries / capability regeneration):
   node model — the same vocabulary an agent already reads from the catalog,
   already token-lean.
 - **Address**:
-  `fw:///<worktree>/flutterware.scenarios/<pkg>/<file>/<scenario>/<step-id>?language=fr&device=iphone-se`
+  `fw:///worktrees/<worktree>/flutterware.scenarios/<pkg>/<file>/<scenario>/<step-id>?language=fr&device=iphone-se`
   — language / device / text scale / brightness are **axes**, applied
   assignments recorded on every artifact, per the catalog's rule that a
   screenshot is under-specified without them.

@@ -104,6 +104,23 @@ opens, and `fw:///` is free to mean an empty project. Session-relative
 addressing can come back when something actually wants it, and by then the
 project slot will say how it should work.
 
+**Amended 2026-08-10 — a space segment sits between the project and the
+worktree.** See `2026-08-10-address-spaces-brief.md`. The grammar above is now
+
+```
+fw://<project>/<space>/<the space's own path…>?<params>
+fw:///worktrees/<worktree>/<plugin>/<tail…>?<params>
+```
+
+with `worktrees` the only space. Everything §3 decided still holds — the
+authority is still the project, the empty authority still means this session's
+repo, and `Uri.parse` still agrees — but the first *path* segment is no longer
+the worktree, so every address written in this document is one segment short of
+what parses today. The change exists because any cross-worktree screen would
+otherwise have to compete with a real checkout for that segment, and no reserved
+word is safe from git. There is no compatibility branch: the old shape does not
+parse.
+
 **The project slot stays empty until deep links exist.** One shell is one repo,
 so nothing can collide today. When it is populated it needs to be legible,
 stable across machines, and always present — `<basename>~<short root sha>` is

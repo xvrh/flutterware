@@ -9,7 +9,7 @@ import 'worktree.dart';
 /// The config screen's root, so a test can scope to it.
 const configScreenKey = Key('config-screen');
 
-/// **`fw://<worktree>/config`** — the shell's own screen for
+/// **`fw:///worktrees/<worktree>/config`** — the shell's own screen for
 /// `tool/flutterware.dart`.
 ///
 /// Deliberately not a plugin. Which plugins exist is this file's decision, so a

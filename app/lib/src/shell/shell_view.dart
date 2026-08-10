@@ -319,9 +319,9 @@ class _LaunchFallbackBanner extends StatelessWidget {
 }
 
 /// Says one line and offers the screen. The compiler's own output lives on
-/// `fw://<worktree>/config`, where the reload button and the history of previous
-/// reloads are, and rendering it in two places would mean maintaining it in two
-/// places.
+/// `fw:///worktrees/<worktree>/config`, where the reload button and the
+/// history of previous reloads are, and rendering it in two places would mean
+/// maintaining it in two places.
 class _ConfigErrorBanner extends StatelessWidget {
   const _ConfigErrorBanner(this.shell);
 
@@ -463,7 +463,7 @@ class _ConfigLoadLineState extends State<_ConfigLoadLine> {
   }
 }
 
-/// Opens `fw://<worktree>/config`.
+/// Opens `fw:///worktrees/<worktree>/config`.
 ///
 /// **This used to reload on click**, which put the action in the chrome and its
 /// result nowhere: a reload that rebuilt one plugin, or refused because a plugin

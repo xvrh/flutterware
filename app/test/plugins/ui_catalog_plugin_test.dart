@@ -87,7 +87,7 @@ Widget counter() => const Placeholder();
       var address = subject.addressFor('.', 'demo/counter.dart#counter');
       expect(
         address.toString(),
-        'fw:///${p.basename(root.path)}/flutterware.ui_catalog'
+        'fw:///worktrees/${p.basename(root.path)}/flutterware.ui_catalog'
         '/./demo/counter.dart%23counter',
       );
     });

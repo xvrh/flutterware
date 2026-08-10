@@ -64,7 +64,7 @@ class Shot {
   /// File name under [outputDirectory], without the extension.
   final String name;
 
-  /// Everything after `fw://<project>/<worktree>` — filled in per run, because
+  /// Everything after `fw:///worktrees/<worktree>` — filled in per run, because
   /// only the checkout knows what its worktree is called.
   final String path;
 
@@ -132,7 +132,7 @@ Future<void> main(List<String> arguments) async {
     if (only.isNotEmpty && !only.contains(shot.name)) continue;
     stdout.write('  ${shot.name.padRight(20)}');
     var result = await _capture(
-      'fw:///$worktree${shot.path}',
+      'fw:///worktrees/$worktree${shot.path}',
       shot.file,
       height: shot.height,
       rebuild: rebuild,

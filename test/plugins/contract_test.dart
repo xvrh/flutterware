@@ -159,9 +159,10 @@ Tests  3 failing
     });
 
     test('refuses the id the shell reserves for its own config screen', () {
-      // `fw://<worktree>/config` is the one place that explains why this file
-      // did not load. A plugin able to take that address could hide it — so the
-      // reservation is enforced here rather than documented and hoped for.
+      // `fw:///worktrees/<worktree>/config` is the one place that explains why
+      // this file did not load. A plugin able to take that address could hide
+      // it — so the reservation is enforced here rather than documented and
+      // hoped for.
       expect(
         () => Flutterware.configure(
           (fw) => fw.use(_BarePlugin(Address.shellConfig)),
