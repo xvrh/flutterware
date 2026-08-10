@@ -216,6 +216,15 @@ ${iconBackground == null ? '' : '        <item name="android:windowSplashScreenI
       var generated = recompose(SplashSurface.android12, SplashTheme.light)!;
       expect(generated.branding, isNotNull);
       expect(generated.branding!.path, contains('xxxhdpi-v31'));
+
+      // **In dp, which is not a detail.** `SplashRender` sizes a `none` layer
+      // with no natural size to the whole screen, so leaving these null drew
+      // 800×320 across the entire phone — three teal slabs behind the icon,
+      // reported as "the Android 12 tile has two logos in it". 800 ÷ 4 is the
+      // 200dp Android sizes this slot at, which is why the generator writes
+      // that number.
+      expect(generated.branding!.naturalWidth, 200);
+      expect(generated.branding!.naturalHeight, 80);
     });
 
     test('and no branding in the theme means none in the picture', () {

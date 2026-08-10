@@ -277,6 +277,12 @@ SplashComposition? _recomposeAndroid12(
     iconBackgroundColor: iconBackground,
     iconCanvas: android12IconCanvasDp,
     iconMaskFraction: android12MaskFraction,
+    // **The dp size is not optional on a `none` fit.** A layer with no natural
+    // size falls back to the screen in `SplashRender`, so leaving it null drew
+    // an 800×320 branding across the whole phone — three teal slabs behind the
+    // icon, which is what "the Android 12 tile has two logos in it" turned out
+    // to be. `drawable-xxxhdpi-v31/android12branding.png` is 800px because
+    // 800 ÷ 4 is the 200dp Android sizes this slot at.
     branding: branding == null
         ? null
         : SplashLayer(
@@ -284,6 +290,8 @@ SplashComposition? _recomposeAndroid12(
             absolutePath: p.join(packageRoot, branding.path),
             fit: SplashFit.none,
             alignment: SplashAlignment.bottomCenter,
+            naturalWidth: _dp(branding.pixelWidth, branding.density),
+            naturalHeight: _dp(branding.pixelHeight, branding.density),
           ),
     // No animated icon in the theme means Android draws the launcher icon.
     usesLauncherIcon: !hasIcon,
@@ -291,6 +299,15 @@ SplashComposition? _recomposeAndroid12(
 }
 
 String? _stripHash(String? value) => value?.replaceFirst('#', '').trim();
+
+/// A drawable's pixels as the dp Android draws them at — its own density bucket
+/// divided out. Null when either half is unknown, which is the honest answer and
+/// the one the renderer treats as "size me to the screen".
+double? _dp(int? pixels, String? density) {
+  var scale = splashDensityScale(density);
+  if (pixels == null || scale == null) return null;
+  return pixels / scale;
+}
 
 // ---- Web ------------------------------------------------------------------
 
