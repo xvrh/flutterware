@@ -13,7 +13,7 @@
 library;
 
 import 'dart:math' as math;
-import 'dart:ui' show Color;
+import 'dart:ui' show Color, Rect;
 
 import 'package:collection/collection.dart';
 
@@ -152,11 +152,20 @@ class MotionTargetView {
   const MotionTargetView({
     required this.name,
     required this.named,
+    this.extent,
     this.offered = const [],
     this.properties = const [],
   });
 
   final String name;
+
+  /// Where this target is on the guest's screen, or null when nothing has
+  /// pointed at it.
+  ///
+  /// Null is the ordinary case, not an error: a target is not a widget, so only
+  /// the ones wrapped in a `MotionExtent` — or in a `MotionBox`, which wraps one
+  /// itself — have anywhere to be.
+  final Rect? extent;
 
   /// Whether the last build asked for it. False means the tuning is there and
   /// nothing points at it any more.
@@ -203,6 +212,16 @@ class MotionTargetView {
   static MotionTargetView parse(Map<String, dynamic> raw) => MotionTargetView(
     name: '${raw['name']}',
     named: raw['named'] == true,
+    extent: switch (raw['extent']) {
+      {'x': num x, 'y': num y, 'width': num width, 'height': num height} =>
+        Rect.fromLTWH(
+          x.toDouble(),
+          y.toDouble(),
+          width.toDouble(),
+          height.toDouble(),
+        ),
+      _ => null,
+    },
     offered: (raw['offered'] as List? ?? const []).cast<String>(),
     properties: [
       for (var property in (raw['properties'] as List? ?? const []))

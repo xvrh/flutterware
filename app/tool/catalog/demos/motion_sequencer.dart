@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutterware_app/src/motion/lane_model.dart';
 import 'package:flutterware_app/src/motion/values_file.dart';
+import 'package:flutterware_app/src/plugins/native/motion_highlight.dart';
 import 'package:flutterware_app/src/plugins/native/motion_sequencer.dart';
 import 'package:flutterware_app/src/ui/design/tokens.dart';
 
@@ -548,3 +549,72 @@ Future<void> _noEdit(
 ) async {}
 
 Future<void> _noDelete(MotionSelection _) async {}
+
+/// The ring the panel draws over the guest, off a mock stage.
+///
+/// The real one sits on a `Texture` whose box *is* the guest's coordinate
+/// space, so the rects here need no more mapping than they would there — which
+/// is the whole reason the painter takes a plain `Rect`.
+@Preview(name: 'Stage ring', group: 'Motion', wrapper: wrapInApp)
+Widget motionStageRing() => Material(
+  child: Row(
+    children: [
+      for (var (label, extent) in <(String, Rect?)>[
+        ('a box in the middle', Rect.fromLTWH(60, 90, 140, 90)),
+        // Hard against the top: the label has nowhere above to go and drops
+        // inside rather than off the stage.
+        ('flush with the top', Rect.fromLTWH(40, 0, 180, 60)),
+        ('nothing pointed at it', null),
+      ])
+        Expanded(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(6),
+                child: Text(label, style: _caption),
+              ),
+              Expanded(
+                child: _MockStage(
+                  child: MotionStageHighlight(extent: extent, label: 'artwork'),
+                ),
+              ),
+            ],
+          ),
+        ),
+    ],
+  ),
+);
+
+const _caption = TextStyle(fontSize: 11);
+
+/// Stands in for the guest texture: a dark box with something in it to ring.
+class _MockStage extends StatelessWidget {
+  const _MockStage({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ClipRect(
+    child: ColoredBox(
+      color: const Color(0xFF12141A),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            left: 60,
+            top: 90,
+            child: Container(
+              width: 140,
+              height: 90,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A3340),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          child,
+        ],
+      ),
+    ),
+  );
+}

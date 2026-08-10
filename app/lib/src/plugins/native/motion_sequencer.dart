@@ -1069,6 +1069,18 @@ class MotionInspector extends StatelessWidget {
                     ),
                   ],
                 ),
+                // Said rather than left to be noticed. Most targets have no
+                // extent — a target is not a widget — and a ring that silently
+                // never appeared would read as a broken feature rather than as
+                // one nobody has opted into here.
+                if (scope?.target(selection.target)?.extent == null) ...[
+                  const SizedBox(height: FwSpacing.lg),
+                  _Note(
+                    'No extent, so nothing is ringed on the stage. '
+                    'Wrap it — MotionExtent(${selection.target}, child: …) — '
+                    'to point at it. Applies nothing.',
+                  ),
+                ],
                 const SizedBox(height: FwSpacing.lg),
                 _Heading('Curve'),
                 const SizedBox(height: FwSpacing.sm),
@@ -1149,6 +1161,36 @@ class MotionInspector extends StatelessWidget {
     var value = double.tryParse(raw);
     if (value != null) then(MotionNumber(value));
   }
+}
+
+/// An aside in the rail, with an amber edge — the shape the spec gives the
+/// "needs wiring" snippet, which lands here too.
+class _Note extends StatelessWidget {
+  const _Note(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(
+      horizontal: FwSpacing.md,
+      vertical: FwSpacing.sm,
+    ),
+    decoration: BoxDecoration(
+      color: context.colors.panel,
+      border: Border(
+        left: BorderSide(color: context.colors.amber, width: 2),
+        top: BorderSide(color: context.colors.line),
+        right: BorderSide(color: context.colors.line),
+        bottom: BorderSide(color: context.colors.line),
+      ),
+      borderRadius: BorderRadius.circular(7),
+    ),
+    child: Text(
+      text,
+      style: context.type.caption.copyWith(color: context.colors.ink2),
+    ),
+  );
 }
 
 class _Heading extends StatelessWidget {

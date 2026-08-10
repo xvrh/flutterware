@@ -18,6 +18,7 @@ import '../../ui/tappable.dart';
 import '../native_plugin.dart';
 import 'motion_address.dart';
 import 'motion_core.dart';
+import 'motion_highlight.dart';
 import 'motion_sequencer.dart';
 
 export 'motion_core.dart' show MotionCore, motionPluginId;
@@ -770,7 +771,16 @@ class _MotionStageState extends State<_MotionStage> {
                   Expanded(
                     child: ColoredBox(
                       color: context.colors.bg,
-                      child: _preview(context, session),
+                      child: _preview(
+                        context,
+                        session,
+                        // Only what is selected. Ringing every target at once
+                        // would be a screen of rectangles and no answer to the
+                        // question the ring is for — which one is this lane?
+                        _selection == null
+                            ? null
+                            : scope?.target(_selection!.target),
+                      ),
                     ),
                   ),
                   Divider(height: 1, color: context.colors.line),
@@ -824,7 +834,11 @@ class _MotionStageState extends State<_MotionStage> {
     );
   }
 
-  Widget _preview(BuildContext context, CatalogSession? session) {
+  Widget _preview(
+    BuildContext context,
+    CatalogSession? session,
+    MotionTargetView? highlight,
+  ) {
     var engine = session?.engine;
     if (session?.errorMessage case var error?) {
       return Center(
@@ -857,9 +871,17 @@ class _MotionStageState extends State<_MotionStage> {
             dpr,
           );
         });
-        return engine.textureId == null
-            ? const SizedBox.expand()
-            : Texture(textureId: engine.textureId!);
+        if (engine.textureId == null) return const SizedBox.expand();
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Texture(textureId: engine.textureId!),
+            MotionStageHighlight(
+              extent: highlight?.extent,
+              label: highlight?.name,
+            ),
+          ],
+        );
       },
     );
   }

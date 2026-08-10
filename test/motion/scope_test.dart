@@ -260,4 +260,24 @@ void main() {
       expect(find.byType(ImageFiltered), findsOneWidget);
     });
   });
+
+  testWidgets('a controller built inline survives the next build', (
+    tester,
+  ) async {
+    // Every build hands the scope a different controller, so it releases and
+    // re-adopts — and each adoption makes an AnimationController. Under
+    // SingleTickerProviderStateMixin the second build died on Flutter's
+    // "multiple tickers were created" assertion, which names neither this
+    // class nor the mistake.
+    Widget build(double progress) => _scope(
+      controller: MotionController(progress: progress, autoplay: false),
+    );
+
+    await tester.pumpWidget(build(0));
+    await tester.pumpWidget(build(0.5));
+    await tester.pumpWidget(build(1));
+
+    expect(tester.takeException(), isNull);
+    expect(_stateOf(tester).controller.progress, 1);
+  });
 }

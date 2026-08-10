@@ -66,6 +66,8 @@ class _PlayerState extends State<_Player> {
       builder: (m) {
         var glow = m.target('glow');
         var sheet = m.target('sheet');
+        var art = m.target('art');
+        var play = m.target('play');
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -111,7 +113,14 @@ class _PlayerState extends State<_Player> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _Cover(m.target('art')),
+                          // Two of the seven targets say where they are, and
+                          // the other five deliberately do not — so the panel
+                          // rings `art` and `play` and says plainly that it
+                          // cannot ring the rest. `MotionExtent` applies
+                          // nothing; it is the opt-in a target needs when no
+                          // `MotionBox` is giving it an extent, which in this
+                          // file is all of them.
+                          MotionExtent(art, child: _Cover(art)),
                           const SizedBox(height: 14),
                           _Titles(
                             title: m.target('title'),
@@ -119,7 +128,7 @@ class _PlayerState extends State<_Player> {
                           ),
                           _Reveal(
                             target: m.target('reveal'),
-                            child: _Controls(m.target('play')),
+                            child: MotionExtent(play, child: _Controls(play)),
                           ),
                         ],
                       ),

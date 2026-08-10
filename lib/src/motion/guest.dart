@@ -28,6 +28,10 @@ abstract class MotionSurface {
   /// asking what things are worth must not change what the panel is told is
   /// wired.
   Object? peek(String target, String property);
+
+  /// Where a target is on screen, in the guest's own coordinates, or null when
+  /// nothing has pointed at it. See `MotionExtent`.
+  Rect? extentOf(String target);
 }
 
 /// The door a motion is driven through from outside it.
@@ -244,9 +248,23 @@ Map<String, Object?> _describeTarget(
       if (offer.startsWith('$name.')) offer.substring(name.length + 1),
   };
 
+  // The guest's own coordinates, which is what a host painting into a surface
+  // of the guest's logical size expects — the same contract the inspect layer
+  // already draws node rects under.
+  var extent = scope.extentOf(name);
+
   return {
     'name': name,
     'named': named,
+    'extent': ?switch (extent) {
+      null => null,
+      var rect => {
+        'x': rect.left,
+        'y': rect.top,
+        'width': rect.width,
+        'height': rect.height,
+      },
+    },
     'offered': offered.toList()..sort(),
     'properties': [
       for (var property in properties)

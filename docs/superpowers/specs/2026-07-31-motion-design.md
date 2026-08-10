@@ -1014,3 +1014,79 @@ scenarios already capture per step in a running tester, so a stop is one more
 capture. The goldens are not: five frames × N motions × N devices of PNGs in
 the repo, and image goldens are brittle across platforms and renderers.
 `flutter_tester` is steadier than a device, not immune.
+
+## Pointing at a target on screen — 2026-08-10
+
+The panel can ring the element a lane drives. Hovering a lane and seeing the
+thing light up is in the concept, and the concept could do it because its stage
+was a mock with a hand-written `{title: sTitle, …}` map. The real one cannot,
+and the reason is worth writing down because it nearly became an argument for
+deleting half the API.
+
+### A target is not a widget
+
+`art.width` goes on a `SizedBox`, `art.rotate` on a `Transform`,
+`art.elevation` inside a `BoxShadow`. Three call sites, and **no element that
+*is* `art`**. Nothing can be inferred: Flutter exposes no supported "which
+element is building", and even if it did, every read happens inside the scope's
+`builder` closure, so they would all resolve to the `MotionScope` — the whole
+screen.
+
+`MotionBox` is the exception. It is a widget, so it has a `RenderObject`, so it
+has a rect.
+
+### Standardising on `MotionBox` was considered and is not possible
+
+The obvious conclusion — make everything go through `MotionBox` — was measured
+against `motion_player.dart` before being rejected. It tunes **19 properties**.
+Seven are in the box's frozen set. The other twelve — `borderRadius`, `padding`,
+`elevation`, `color`, `width`, `height`, `fontSize`, `progress` — are things no
+parent can impose. That is rejected variant 3 restated, and it is why the
+call-site half exists at all. Box-only would shrink Motion to an entrance
+animator and take `progress`, and with it the player's reveal, along with it.
+
+### So the extent is opted into, separately from behaviour
+
+```dart
+MotionExtent(art, child: const CoverArt())
+```
+
+Applies nothing, changes no layout, adds no layer. `MotionBox` wraps one itself,
+so anything already going through a box needs nothing.
+
+**Separate from `MotionBox` on purpose.** Tying the extent to it would make
+people wrap widgets in something that applies eight transform-shaped properties
+in order to get a *tooling* affordance — and on a target whose `rotate` is
+already read at its call site, it would apply that rotation twice. A tool that
+distorts the code it is pointing at is worse than one that cannot point.
+
+This is a different category from the annotations variants 1, 2 and 6 died on.
+Those were required and changed what the code did. This is optional and does
+nothing; skip it and the lane has no ring, and everything else works the same.
+
+### The rect is transformed, not measured
+
+`getTransformTo(null)` walks the whole chain to the root, so a target inside a
+`MotionBox` reports where it has been **moved and scaled to**. Taking the layout
+box instead would leave the ring sitting still through the one thing a motion
+editor exists to watch. The union is reported when several widgets name one
+target, because a target read once per row of a list is several widgets and the
+honest answer is the box containing them.
+
+Coordinates are the guest's own, which is what the inspect layer's node rects
+already use and what the panel's `Texture` box already is — the panel is the
+thing calling `engine.resize`, so no mapping is needed at either end.
+
+### Found by running it
+
+`MotionScope` used `SingleTickerProviderStateMixin`, and a scope makes an
+`AnimationController` on every controller adoption — so
+`MotionScope(controller: MotionController(...))` written inline in a `build`
+died on the second build, with Flutter's generic "multiple tickers were created"
+assertion naming neither this class nor the mistake. Every adoption already
+pairs with a `detach` that disposes its ticker, so the plural mixin costs
+nothing. It is `TickerProviderStateMixin` now, and the inline spelling works.
+
+Nothing in the extent work needed that fixed. It surfaced because a test wrote
+the controller inline, which is the spelling a person would reach for first.
+

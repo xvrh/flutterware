@@ -1,4 +1,4 @@
-import 'dart:ui' show Color, Offset;
+import 'package:flutter/widgets.dart';
 
 import 'values.dart';
 
@@ -66,6 +66,57 @@ class Motion {
   Object? read(String target, String property) {
     (_offering ? offered : reads).add('$target.$property');
     return peek(target, property);
+  }
+
+  /// Widgets that have said where a target is.
+  ///
+  /// **Not build-scoped**, unlike [reads] and [named]: a widget registers when
+  /// it mounts and leaves when it is disposed, so this survives the
+  /// [beginBuild] that clears the rest.
+  ///
+  /// Nothing here can be inferred. A target is not a widget — `art.width` goes
+  /// on a `SizedBox`, `art.rotate` on a `Transform`, `art.elevation` inside a
+  /// `BoxShadow` — so there is no element that *is* `art`, and somebody has to
+  /// point. `MotionExtent` and `MotionBox` are how.
+  final _extents = <String, Set<BuildContext>>{};
+
+  void addExtent(String target, BuildContext context) =>
+      (_extents[target] ??= {}).add(context);
+
+  void removeExtent(String target, BuildContext context) {
+    var registered = _extents[target];
+    if (registered == null) return;
+    registered.remove(context);
+    if (registered.isEmpty) _extents.remove(target);
+  }
+
+  /// The targets something has pointed at, whether or not they laid out.
+  Set<String> get extents => _extents.keys.toSet();
+
+  /// Where [target] is, in the root's coordinates, or null when nothing has
+  /// pointed at it or nothing it points to has been laid out.
+  ///
+  /// The union rather than the first, because a target read once per row of a
+  /// list is several widgets and the honest answer is the box containing them.
+  ///
+  /// Transformed rather than measured: `getTransformTo(null)` walks the whole
+  /// chain to the root, so a target inside a `MotionBox` reports where it has
+  /// been *moved and scaled to* rather than where it was laid out. Reporting
+  /// the layout box would leave the ring behind during the one thing a motion
+  /// editor exists to watch.
+  Rect? extentOf(String target) {
+    Rect? bounds;
+    for (var context in _extents[target] ?? const <BuildContext>{}) {
+      if (!context.mounted) continue;
+      var render = context.findRenderObject();
+      if (render is! RenderBox || !render.hasSize || !render.attached) continue;
+      var rect = MatrixUtils.transformRect(
+        render.getTransformTo(null),
+        Offset.zero & render.size,
+      );
+      bounds = bounds == null ? rect : bounds.expandToInclude(rect);
+    }
+    return bounds;
   }
 
   /// What a property is worth right now, **without recording a read**.

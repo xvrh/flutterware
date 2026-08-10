@@ -47,6 +47,7 @@ export 'src/motion/guest.dart'
         motionCurveNames;
 export 'src/motion/target.dart' show Motion, MotionTarget;
 export 'src/motion/controller.dart' show MotionController, MotionSource;
+export 'src/motion/extent.dart' show MotionExtent;
 export 'src/motion/motion_box.dart' show MotionBox;
 export 'src/motion/scope.dart' show MotionScope, MotionScopeState;
 export 'src/motion/values.dart' show MotionValues, Seg;

@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 
+import 'extent.dart';
 import 'target.dart';
 
 /// Applies a target's transform-shaped properties in one widget.
@@ -80,7 +81,12 @@ class MotionBox extends StatelessWidget {
       ),
     );
 
-    var result = child;
+    // Innermost, so the ring the editor draws is where the child has been moved
+    // and scaled *to*: the transform below is an ancestor of this box, and
+    // `getTransformTo(null)` walks through it. Registered from out here the
+    // rect would be the layout box and would sit still through the one thing a
+    // motion editor exists to watch.
+    Widget result = MotionExtent(target, child: child);
 
     if (blur > 0) {
       result = ImageFiltered(

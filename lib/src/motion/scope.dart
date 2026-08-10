@@ -49,8 +49,17 @@ class MotionScope extends StatefulWidget {
   State<MotionScope> createState() => MotionScopeState();
 }
 
+/// `TickerProviderStateMixin`, not the `Single` one, and it is not a nicety.
+///
+/// A scope adopts a controller on mount and again whenever it is handed a
+/// different one, and each adoption makes an `AnimationController` — so writing
+/// `MotionScope(controller: MotionController(...))` inline in a `build` crashed
+/// on the second build with Flutter's generic "multiple tickers were created"
+/// assertion, which names neither this class nor the mistake. Every adoption
+/// pairs with a `detach` that disposes its ticker, so the plural mixin costs
+/// nothing and the inline spelling simply works.
 class MotionScopeState extends State<MotionScope>
-    with SingleTickerProviderStateMixin
+    with TickerProviderStateMixin
     implements MotionSurface {
   late Motion _motion;
   late MotionController _controller;
@@ -79,6 +88,9 @@ class MotionScopeState extends State<MotionScope>
   @override
   Object? peek(String target, String property) =>
       _motion.peek(target, property);
+
+  @override
+  Rect? extentOf(String target) => _motion.extentOf(target);
 
   @override
   void initState() {
