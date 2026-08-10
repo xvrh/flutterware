@@ -20,6 +20,7 @@ const _declaredPlugins = [
   'flutterware.dependencies',
   'flutterware.assets',
   'flutterware.previews',
+  'flutterware.motion',
   'flutterware.splash',
   'flutterware.launcher_icon',
   'flutterware.server',

@@ -42,6 +42,35 @@ Flutter's own annotation. Breaking, with no deprecation path.
   one costs a frame, while these are compiled in and changing one costs a full
   rebuild and reinstall. The manifest key and the `launch` result field follow.
 
+### Motion — new
+
+A timeline editor for widget animations whose file format is Dart. Additive:
+nothing here changes existing code, and a project that does not declare
+`Motion(...)` is unaffected.
+
+- **`package:flutterware/motion.dart`** — `MotionScope`, `MotionValues`, `Seg`,
+  `MotionController`, `MotionTarget`, `MotionBox`, `MotionExtent`. You name a
+  target and read its properties where they are used; the tuned numbers live in
+  a `<screen>.motion.dart` the editor writes and you do not. With no such file
+  every property falls back to its resting value and the code still runs, so
+  the tool is optional at runtime.
+- **A motion is a pure function of `t`.** No wall clock in the model, which is
+  what makes scrubbing, playing, headless capture and a golden frame the same
+  code path.
+- **`MotionExtent(target, child: …)`** applies nothing and exists only so the
+  panel can ring the element a lane drives. A target is not a widget, so
+  nothing can be inferred; `MotionBox` registers one itself.
+- **`package:flutterware/flutter_test.dart`** gains `MotionTester` —
+  `tester.seekMotion(0.5)`, `motionValue(…)`, `motionDuration()` — driving a
+  motion in the test isolate with no RPC and no frame to wait for.
+- **`package:flutterware/motion_vocabulary.dart`** is the same closed property
+  set without Flutter, for tooling that reads code rather than running it.
+- **The plugin** is `Motion(packages: [...])`, id `flutterware.motion`, with
+  `fw run motion capture|filmstrip|list`.
+- `MotionScope` now mixes in `TickerProviderStateMixin` rather than the single
+  variant, so writing `MotionScope(controller: MotionController(...))` inline
+  in a `build` no longer dies on the second build.
+
 ## 0.5.1
 
 - Upgrade dependencies
