@@ -7,6 +7,7 @@ import '../shell/worktree_filter.dart';
 import '../ui/theme.dart';
 import 'explorer_row.dart';
 import 'facts.dart';
+import 'facts_text.dart';
 
 /// One worktree and everything known about it.
 ///
@@ -157,6 +158,10 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
                       var (entry, match) = rows[i];
                       var worktree = entry.worktree;
                       return WorktreeRow(
+                        // Identity, so a row that moves takes its own hover and
+                        // expansion with it instead of inheriting the state of
+                        // whatever used to sit at this index.
+                        key: ValueKey(worktree.path),
                         label: entry.label,
                         branch: worktree.branch,
                         isMain: worktree.isMain,
@@ -199,19 +204,34 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
     return rows;
   }
 
-  int _compare(ExplorerEntry a, ExplorerEntry b) => switch (widget.sort) {
-    ExplorerSort.activity => _activityOf(b).compareTo(_activityOf(a)),
-    ExplorerSort.needsYou => _needs(b).compareTo(_needs(a)),
-    ExplorerSort.name => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
-    ExplorerSort.branch => (a.worktree.branch ?? '').compareTo(
-      b.worktree.branch ?? '',
-    ),
-  };
+  /// **A total order, in every mode.** `List.sort` is not stable in Dart, so a
+  /// comparator that returns 0 for two rows lets them trade places on any
+  /// rebuild — and with watchers running, rebuilds happen every couple of
+  /// seconds. Every mode therefore ends at the path, which nothing can change.
+  int _compare(ExplorerEntry a, ExplorerEntry b) {
+    var first = switch (widget.sort) {
+      // By the age the row prints — see [activityAge]. Sorting by the exact
+      // timestamp made two working agents swap on every keystroke of theirs.
+      ExplorerSort.activity => _age(a).compareTo(_age(b)),
+      // Then by freshness within each half, so "needs you" is a partition of
+      // the activity order rather than a different list.
+      ExplorerSort.needsYou =>
+        _needs(b).compareTo(_needs(a)) != 0
+            ? _needs(b).compareTo(_needs(a))
+            : _age(a).compareTo(_age(b)),
+      ExplorerSort.name => a.label.toLowerCase().compareTo(
+        b.label.toLowerCase(),
+      ),
+      ExplorerSort.branch => (a.worktree.branch ?? '').compareTo(
+        b.worktree.branch ?? '',
+      ),
+    };
+    return first != 0 ? first : a.worktree.path.compareTo(b.worktree.path);
+  }
 
   int _needs(ExplorerEntry e) => e.facts.needsYou ? 1 : 0;
 
-  int _activityOf(ExplorerEntry e) =>
-      e.facts.activity.value?.at.millisecondsSinceEpoch ?? 0;
+  Duration _age(ExplorerEntry e) => activityAge(e.facts, widget.now);
 }
 
 class _Header extends StatelessWidget {

@@ -663,14 +663,19 @@ class FwCli {
 
     // Most recently touched first, which is the same order the explorer opens
     // on and for the same reason: it answers "which one was I in".
+    //
+    // **By the age it prints, then by path** — the same total order the GUI
+    // uses, and for a reason that shows up there rather than here: two rows
+    // that read `now` must not trade places. Sharing the rule keeps two
+    // renderings of one list from disagreeing about which worktree is second.
+    var now = DateTime.now();
     var ordered = worktrees.toList()
       ..sort((a, b) {
-        var at = facts[a.path]?.activity.value?.at;
-        var bt = facts[b.path]?.activity.value?.at;
-        if (at == null && bt == null) return 0;
-        if (at == null) return 1;
-        if (bt == null) return -1;
-        return bt.compareTo(at);
+        var byAge = activityAge(
+          facts[a.path] ?? const WorktreeFacts(),
+          now,
+        ).compareTo(activityAge(facts[b.path] ?? const WorktreeFacts(), now));
+        return byAge != 0 ? byAge : a.path.compareTo(b.path);
       });
 
     if (json) {

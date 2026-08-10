@@ -150,3 +150,33 @@ String ago(DateTime then, DateTime now) {
   if (d.inHours < 24) return '${d.inHours}h';
   return '${d.inDays}d';
 }
+
+/// The age [ago] would *print*, as a number — and the only thing the list may
+/// be ordered by.
+///
+/// **Two rows showing the same age must never swap places.** Sorting by the raw
+/// timestamp broke that: two agents working at once are both a few seconds old,
+/// both render `now`, and their millisecond order changes every time either one
+/// writes a line — so the list reshuffled every couple of seconds while saying
+/// nothing had changed. The order was expressing a difference the row does not
+/// show and the eye cannot use.
+///
+/// Ordering by what is displayed means the list can only move when a label
+/// moves. It cannot be steadier than that without lying about freshness.
+Duration coarseAge(DateTime then, DateTime now) {
+  var d = now.difference(then);
+  if (d.inMinutes < 1) return Duration.zero;
+  if (d.inMinutes < 60) return Duration(minutes: d.inMinutes);
+  if (d.inHours < 24) return Duration(hours: d.inHours);
+  return Duration(days: d.inDays);
+}
+
+/// [coarseAge] for a whole worktree, oldest-last.
+///
+/// A worktree with no activity at all sorts to the end rather than to the top:
+/// "never touched" is the opposite of "just touched", and a fresh clone full of
+/// unknowns must not push the row you were in off the screen.
+Duration activityAge(WorktreeFacts facts, DateTime now) {
+  var at = facts.activity.value?.at;
+  return at == null ? const Duration(days: 1000000) : coarseAge(at, now);
+}
