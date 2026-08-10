@@ -614,6 +614,91 @@ fw run server sql [--name=…] [--top=…]
 | `top` | integer | no | 20 | — |
 
 
+### `flutterware.motion`
+
+#### `capture` — Capture
+
+Renders one motion at a point on its playhead and writes a PNG. The whole of an animation an agent can afford to look at: `t` is an axis like a device or a language, so the same call at several values is a filmstrip.
+
+```sh
+fw run motion capture --motion=<string> [--t=…] [--package=…] [--device=…]
+```
+
+Returns `Artifact`:
+
+```
+kind: String   # A MIME type where one fits — see the constants above.
+address: String   # What this is an artifact of, axes included.
+path: String?   # Where it was written, when it was written.
+text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
+meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `motion` | string | yes | — | The `motion:` identifier, as `list` reports it — `homeMotion` |
+| `t` | string | no | — | Where on the motion, 0 to 1. The end when omitted. |
+| `package` | choice | no | — | Which declared package; the only one when omitted |
+| `device` | choice | no | — | A device to render as; the panel otherwise |
+
+#### `filmstrip` — Filmstrip
+
+Renders a motion at several points on its playhead and composes them into one contact sheet. This is how to look at an animation without watching it: one image, N moments, each labelled with its t and its milliseconds.
+
+```sh
+fw run motion filmstrip --motion=<string> [--frames=…] [--package=…] [--device=…]
+```
+
+Returns `Artifact`:
+
+```
+kind: String   # A MIME type where one fits — see the constants above.
+address: String   # What this is an artifact of, axes included.
+path: String?   # Where it was written, when it was written.
+text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
+meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `motion` | string | yes | — | The `motion:` identifier, as `list` reports it |
+| `frames` | integer | no | — | How many, including both ends. 5 when omitted. |
+| `package` | choice | no | — | Which declared package; the only one when omitted |
+| `device` | choice | no | — | A device to render as; the panel otherwise |
+
+#### `list` — List
+
+Every motion of a package, with its targets and where each is read — from the syntactic scan, without compiling or running anything. Read the diagnostics: a target named by an expression rather than a literal is real at run time and invisible here.
+
+```sh
+fw run motion list [--package=…]
+```
+
+Returns `MotionListResult`:
+
+```
+packages: List<MotionListPackage>
+  path: String
+  directory: String   # The scanned directory, relative to the package.
+  motions: List<MotionListMotion>
+    file: String   # Package-relative source file.
+    line: int
+    values: String?   # The identifier passed to `motion:`, which names the values file's const.
+    address: String?   # Where to open it, playhead included — append `?t=` to park it.
+    targets: List<MotionListTarget>
+      name: String
+      line: int
+      properties: List<String>   # Vocabulary properties read at a call site.
+      boxed: bool   # Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.
+  diagnostics: List<String>   # What the scan noticed and could not act on.
+  error: String?   # Set when the package could not be scanned, in which case [motions] means nothing.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+
+
 ### `flutterware.scenarios`
 
 #### `list` — List

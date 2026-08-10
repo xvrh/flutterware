@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
+import '../motion/filmstrip.dart';
+
 // The knob types, not the umbrella `ui_catalog.dart`: that one exports the
 // demo annotations, which reach `package:flutter/widgets.dart` and would make
 // `fw` unlinkable. `knob.dart` is plain Dart by design and says so.
@@ -72,6 +74,9 @@ class HeadlessCatalog {
 
     /// Draw every node of the tree over the picture, id and all.
     bool annotate = false,
+
+    /// Where to park the entry's motion, 0..1.
+    double? motionT,
   }) async {
     var observed = await observe(
       entryId: entryId,
@@ -83,6 +88,7 @@ class HeadlessCatalog {
       annotate: annotate,
       cropNode: node,
       wantKnobs: true,
+      motionT: motionT,
     );
     return CatalogCapture(
       // `observe` was asked for a screenshot, so it took one or threw.
@@ -90,6 +96,49 @@ class HeadlessCatalog {
       knobs: observed.knobs?.knobs ?? const [],
     );
   }
+
+  /// N frames of one entry's motion, as one contact sheet.
+  ///
+  /// **One guest, N seeks.** Calling [capture] in a loop would compile, launch
+  /// and tear down a guest per frame, which is most of the cost and all of the
+  /// wall clock — the seek itself is a frame. This is the whole reason the
+  /// filmstrip is a method here rather than a loop in the caller.
+  Future<CatalogFilmstrip> filmstrip({
+    required String entryId,
+    required String output,
+    required List<double> stops,
+    CaptureViewport viewport = CaptureViewport.panel,
+    Map<String, String> knobs = const {},
+    Map<String, String> axes = const {},
+    int cellWidth = 320,
+  }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
+    if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
+    if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
+
+    var scratch = Directory(p.join(p.dirname(output), 'frames'))
+      ..createSync(recursive: true);
+    var frames = <FilmstripFrame>[];
+    try {
+      var durationMs = 0;
+      for (var (index, t) in stops.indexed) {
+        var landed = await guest.seekMotion(t);
+        durationMs = landed.$2;
+        var file = await guest.capture(
+          p.join(scratch.path, 'frame-$index.png'),
+          pixelRatio: viewport.pixelRatio,
+        );
+        frames.add(FilmstripFrame(file: file, t: t, ms: landed.$1));
+      }
+      return CatalogFilmstrip(
+        file: composeFilmstrip(frames, output: output, cellWidth: cellWidth),
+        stops: stops,
+        durationMs: durationMs,
+      );
+    } finally {
+      // The sheet is the artifact; the frames were scaffolding.
+      if (scratch.existsSync()) scratch.deleteSync(recursive: true);
+    }
+  });
 
   /// Connects, compiles [entryId], launches one guest and hands it to [body].
   ///
@@ -284,10 +333,17 @@ class HeadlessCatalog {
     String? screenshot,
     bool annotate = false,
     String? cropNode,
+
+    /// Where to park the entry's motion, 0..1. See [_GuestSession.seekMotion].
+    double? motionT,
   }) => _withGuest(entryId: entryId, viewport: viewport, (guest) async {
     if (axes.isNotEmpty) await guest.applyAxes(entryId, axes);
     if (knobs.isNotEmpty) await guest.applyKnobs(entryId, knobs);
     await guest.applyDebug(debug);
+    // After the knobs and the axes, because both rebuild the demo and a
+    // rebuilt scope would start wherever its controller says rather than where
+    // this was asked to put it.
+    if (motionT != null) await guest.seekMotion(motionT);
 
     // Read whenever anything needs it, which is more often than the caller asked
     // for it: a hit resolves ids against a tree, a crop needs a node's rect, and
@@ -482,6 +538,19 @@ Object? coerceKnob(KnobDescriptor knob, String value) => switch (knob.kind) {
           ),
   KnobKind.string => value,
 };
+
+/// A contact sheet, and where on the playhead its frames were taken.
+class CatalogFilmstrip {
+  CatalogFilmstrip({
+    required this.file,
+    required this.stops,
+    required this.durationMs,
+  });
+
+  final File file;
+  final List<double> stops;
+  final int durationMs;
+}
 
 /// A captured frame, and the knobs it was rendered with.
 class CatalogCapture {
@@ -837,6 +906,44 @@ class _GuestSession {
     if (values.isEmpty) return;
     await _renderScratchFrame();
     await applyDebugFlags(_vmService, values);
+  }
+
+  /// Parks the entry's motion at [t], 0..1.
+  ///
+  /// A frame first, for the reason [applyDebug] gives: a `MotionScope`
+  /// registers its extensions when it *mounts*, so a seek asked for before the
+  /// demo has built comes back "method not found" rather than seeking.
+  ///
+  /// The seek itself answers after the guest's next frame, so by the time this
+  /// returns the picture is already at `t` and the capture that follows needs no
+  /// settling of its own.
+  var _motionReady = false;
+
+  Future<(int, int)> seekMotion(double t) async {
+    // Only the first one pays for it. Once the scope has mounted the extension
+    // stays registered, and a filmstrip that rendered a throwaway frame before
+    // every seek would double the cost of the thing it exists to make cheap.
+    if (!_motionReady) {
+      await _renderScratchFrame();
+      _motionReady = true;
+    }
+    var reply = await _vmService.callExtension(
+      'ext.flutterware.motion.seek',
+      args: {'t': '$t'},
+    );
+    if (reply == null) {
+      throw ArgumentError.value(
+        t,
+        't',
+        'this entry has no mounted MotionScope to seek',
+      );
+    }
+    var listed = await _vmService.callExtension('ext.flutterware.motion.list');
+    var scope = ((listed?['scopes'] as List?) ?? const []).firstOrNull;
+    return (
+      (reply['ms'] as num?)?.toInt() ?? 0,
+      ((scope as Map?)?['durationMs'] as num?)?.toInt() ?? 0,
+    );
   }
 
   /// Draws one frame nobody looks at, so the demo has built.

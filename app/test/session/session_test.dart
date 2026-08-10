@@ -40,6 +40,7 @@ void main() {
       'flutterware.dependencies',
       'flutterware.assets',
       'flutterware.previews',
+      'flutterware.motion',
       'flutterware.splash',
       'flutterware.server',
       'flutterware.run',

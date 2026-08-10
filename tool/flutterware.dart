@@ -28,6 +28,10 @@ void main() => Flutterware.configure((fw) {
       ],
     ),
   );
+  // `app` only, and pointed at the catalog demos rather than `lib`: a motion
+  // needs a mounted screen to scrub, and in this repo the screens that mount
+  // one are the demos that exist to exercise it.
+  fw.use(Motion(packages: [.new(app, directory: 'tool/catalog/demos')]));
   // `example` only. `root` is a library and `app` is this GUI — neither has a
   // native splash to resolve, which is why `NativeSplash` offers no `each`.
   fw.use(NativeSplash(packages: [.new(example)]));

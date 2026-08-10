@@ -1778,6 +1778,227 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'style', 'type': 'String', 'optional': true},
     ],
   }),
+  'MotionListMotion': ResultShape.fromJson(<String, Object?>{
+    'type': 'MotionListMotion',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'file',
+        'type': 'String',
+        'doc': 'Package-relative source file.',
+      },
+      <String, Object?>{'name': 'line', 'type': 'int'},
+      <String, Object?>{
+        'name': 'values',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The identifier passed to `motion:`, which names the values file\'s const.',
+      },
+      <String, Object?>{
+        'name': 'address',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Where to open it, playhead included — append `?t=` to park it.',
+      },
+      <String, Object?>{
+        'name': 'targets',
+        'type': 'List<MotionListTarget>',
+        'shape': <String, Object?>{
+          'type': 'MotionListTarget',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{'name': 'line', 'type': 'int'},
+            <String, Object?>{
+              'name': 'properties',
+              'type': 'List<String>',
+              'doc': 'Vocabulary properties read at a call site.',
+            },
+            <String, Object?>{
+              'name': 'boxed',
+              'type': 'bool',
+              'doc':
+                  'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'MotionListPackage': ResultShape.fromJson(<String, Object?>{
+    'type': 'MotionListPackage',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'path', 'type': 'String'},
+      <String, Object?>{
+        'name': 'directory',
+        'type': 'String',
+        'doc': 'The scanned directory, relative to the package.',
+      },
+      <String, Object?>{
+        'name': 'motions',
+        'type': 'List<MotionListMotion>',
+        'shape': <String, Object?>{
+          'type': 'MotionListMotion',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'file',
+              'type': 'String',
+              'doc': 'Package-relative source file.',
+            },
+            <String, Object?>{'name': 'line', 'type': 'int'},
+            <String, Object?>{
+              'name': 'values',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The identifier passed to `motion:`, which names the values file\'s const.',
+            },
+            <String, Object?>{
+              'name': 'address',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Where to open it, playhead included — append `?t=` to park it.',
+            },
+            <String, Object?>{
+              'name': 'targets',
+              'type': 'List<MotionListTarget>',
+              'shape': <String, Object?>{
+                'type': 'MotionListTarget',
+                'fields': <Object?>[
+                  <String, Object?>{'name': 'name', 'type': 'String'},
+                  <String, Object?>{'name': 'line', 'type': 'int'},
+                  <String, Object?>{
+                    'name': 'properties',
+                    'type': 'List<String>',
+                    'doc': 'Vocabulary properties read at a call site.',
+                  },
+                  <String, Object?>{
+                    'name': 'boxed',
+                    'type': 'bool',
+                    'doc':
+                        'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'diagnostics',
+        'type': 'List<String>',
+        'doc': 'What the scan noticed and could not act on.',
+      },
+      <String, Object?>{
+        'name': 'error',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Set when the package could not be scanned, in which case [motions] means nothing.',
+      },
+    ],
+  }),
+  'MotionListResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'MotionListResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'packages',
+        'type': 'List<MotionListPackage>',
+        'shape': <String, Object?>{
+          'type': 'MotionListPackage',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'path', 'type': 'String'},
+            <String, Object?>{
+              'name': 'directory',
+              'type': 'String',
+              'doc': 'The scanned directory, relative to the package.',
+            },
+            <String, Object?>{
+              'name': 'motions',
+              'type': 'List<MotionListMotion>',
+              'shape': <String, Object?>{
+                'type': 'MotionListMotion',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'file',
+                    'type': 'String',
+                    'doc': 'Package-relative source file.',
+                  },
+                  <String, Object?>{'name': 'line', 'type': 'int'},
+                  <String, Object?>{
+                    'name': 'values',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The identifier passed to `motion:`, which names the values file\'s const.',
+                  },
+                  <String, Object?>{
+                    'name': 'address',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'Where to open it, playhead included — append `?t=` to park it.',
+                  },
+                  <String, Object?>{
+                    'name': 'targets',
+                    'type': 'List<MotionListTarget>',
+                    'shape': <String, Object?>{
+                      'type': 'MotionListTarget',
+                      'fields': <Object?>[
+                        <String, Object?>{'name': 'name', 'type': 'String'},
+                        <String, Object?>{'name': 'line', 'type': 'int'},
+                        <String, Object?>{
+                          'name': 'properties',
+                          'type': 'List<String>',
+                          'doc': 'Vocabulary properties read at a call site.',
+                        },
+                        <String, Object?>{
+                          'name': 'boxed',
+                          'type': 'bool',
+                          'doc':
+                              'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+            <String, Object?>{
+              'name': 'diagnostics',
+              'type': 'List<String>',
+              'doc': 'What the scan noticed and could not act on.',
+            },
+            <String, Object?>{
+              'name': 'error',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Set when the package could not be scanned, in which case [motions] means nothing.',
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'MotionListTarget': ResultShape.fromJson(<String, Object?>{
+    'type': 'MotionListTarget',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'name', 'type': 'String'},
+      <String, Object?>{'name': 'line', 'type': 'int'},
+      <String, Object?>{
+        'name': 'properties',
+        'type': 'List<String>',
+        'doc': 'Vocabulary properties read at a call site.',
+      },
+      <String, Object?>{
+        'name': 'boxed',
+        'type': 'bool',
+        'doc':
+            'Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.',
+      },
+    ],
+  }),
   'RasterFactsResult': ResultShape.fromJson(<String, Object?>{
     'type': 'RasterFactsResult',
     'fields': <Object?>[
