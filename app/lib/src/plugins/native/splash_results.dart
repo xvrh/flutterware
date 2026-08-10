@@ -208,11 +208,16 @@ class SplashArtifactsResult implements PluginResult {
   SplashArtifactsResult({
     required this.package,
     required this.generated,
+    this.flavor,
     this.artifacts = const [],
     this.stale = false,
   });
 
   final String package;
+
+  /// Which config these belong to. A flavor writes its own files, so a list
+  /// that did not say which one it was for could not be checked.
+  final String? flavor;
 
   /// False when nothing has been generated yet, which is what distinguishes
   /// "run `generate` first" from "the generator produced nothing".

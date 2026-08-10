@@ -858,13 +858,14 @@ changed: bool   # Something the scan depends on had moved since the last read.
 The real generated files as they are on disk — ground truth, once generate has run
 
 ```sh
-fw run splash artifacts [--package=…]
+fw run splash artifacts [--package=…] [--flavor=…]
 ```
 
 Returns `SplashArtifactsResult`:
 
 ```
 package: String
+flavor: String?   # Which config these belong to.
 generated: bool   # False when nothing has been generated yet, which is what distinguishes "run `generate` first" from "the generator produced nothing".
 stale: bool   # The config has been edited since these were written.
 artifacts: List<SplashArtifactEntry>
@@ -882,6 +883,7 @@ artifacts: List<SplashArtifactEntry>
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; the first when omitted |
+| `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
 
 #### `generate` — Run flutter_native_splash:create
 

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
+import '../../splash/model/color.dart';
 import '../../splash/model/fingerprint.dart';
 import '../../splash/model/generated.dart';
 import '../../splash/model/scan.dart';
@@ -358,7 +359,14 @@ class SplashCore extends PluginCore {
     return [
       ViewSection(title, [
         ViewTable(
-          const ['Surface', 'Theme', 'Background', 'Image', 'Placement'],
+          const [
+            'Surface',
+            'Theme',
+            'Background',
+            'Image',
+            'Placement',
+            'From',
+          ],
           [
             for (var surface in SplashSurface.values)
               for (var theme in SplashTheme.values)
@@ -403,6 +411,17 @@ class SplashCore extends PluginCore {
     ];
   }
 
+  /// One cell of `fw status`'s table.
+  ///
+  /// **Reads the generated files where they exist, exactly as `describe` and the
+  /// panel do.** This row used to be built from `compositionFor` — the config
+  /// prediction — while `describe` had already moved to [SplashConfigScan
+  /// .pictureFor]. The table therefore printed `assets/logo.png` and the
+  /// config's placement while `describe`, over the same scan, printed what the
+  /// drawables actually say. Three surfaces over one core is the point of this
+  /// arrangement; two of them answering differently is the failure it exists to
+  /// prevent. The `From` column carries which one it was, because a picture and
+  /// its provenance are one fact.
   List<String> _matrixRow(
     SplashConfigScan scan,
     SplashSurface surface,
@@ -410,19 +429,20 @@ class SplashCore extends PluginCore {
   ) {
     var resolution = scan.resolutionFor(surface, theme);
     if (!resolution.enabled) {
-      return [surface.label, theme.label, 'disabled', '', ''];
+      return [surface.label, theme.label, 'disabled', '', '', ''];
     }
-    var composition = scan.compositionFor(surface, theme);
+    var picture = scan.pictureFor(surface, theme);
+    var composition = picture.composition;
     return [
       surface.label,
       theme.label + (resolution.fallsBackToLight ? ' (light)' : ''),
-      resolution.backgroundImage.isPresent
-          ? resolution.backgroundImage.value!
-          : resolution.color.value == null
-          ? '—'
-          : '#${resolution.color.value}',
+      composition.backgroundImage?.path ??
+          (composition.backgroundColor == null
+              ? '—'
+              : formatSplashColor(composition.backgroundColor!)),
       composition.image?.path ?? '—',
-      composition.image == null ? '' : resolution.placementSummary,
+      composition.image == null ? '' : composition.summary,
+      picture.isGenerated ? 'generated' : 'config',
     ];
   }
 
@@ -505,7 +525,11 @@ class SplashCore extends PluginCore {
       description:
           'The real generated files as they are on disk — ground truth, once '
           'generate has run',
-      parameters: [_packageParameter],
+      // Flavored, like `describe` and `generate`. A flavor writes its own set of
+      // files, so an action that could not name one always answered for
+      // whichever config happened to be first — and the panel, which follows the
+      // address, was showing a different flavor's files at the same moment.
+      parameters: [_packageParameter, _flavorParameter],
     ),
     PluginAction(
       'generate',
@@ -542,7 +566,7 @@ class SplashCore extends PluginCore {
 
     return switch (actionId) {
       'describe' => _describe(path, arguments),
-      'artifacts' => _artifacts(path),
+      'artifacts' => _artifacts(path, arguments),
       'generate' => await _generate(path, arguments),
       // The base refusal rather than a second copy of it, so this one also
       // names what is declared.
@@ -637,33 +661,55 @@ class SplashCore extends PluginCore {
     );
   }
 
-  Future<SplashReloadResult> _reload(String path) async {
+  /// Re-reads [path] off disk, and answers whether anything moved.
+  ///
+  /// Public because the panel's Reload calls this rather than
+  /// `invoke('reload')` — a panel calls its core directly, and awaiting a method
+  /// is what lets a button hold a running state and then report. `fw` and MCP
+  /// reach the same work through the action, which wraps this for the wire.
+  Future<bool> reload(String path) async {
     await _load(path);
     var before = _fingerprints[path];
 
     invalidate(path);
     await _load(path);
 
+    var failure = _failures[path];
+    if (failure != null) throw StateError(failure);
+    return before != _fingerprints[path];
+  }
+
+  Future<SplashReloadResult> _reload(String path) async {
+    // The action reports a failed re-read as a result rather than as a throw:
+    // `reload` is precisely what you call to find out that a config is broken.
+    var changed = false;
+    try {
+      changed = await reload(path);
+    } catch (_) {}
+
     return SplashReloadResult(
       package: path,
       configPath: _scans[path]?.main?.config.path,
       scannedAt: (_scannedAt[path] ?? DateTime.now()).toIso8601String(),
-      changed: before != _fingerprints[path],
+      changed: changed,
     );
   }
 
-  SplashArtifactsResult _artifacts(String path) {
-    var scan = _scans[path]!;
-    var config = scan.main;
-    var artifacts = config?.artifacts ?? const <SplashArtifact>[];
+  SplashArtifactsResult _artifacts(
+    String path,
+    Map<String, Object?> arguments,
+  ) {
+    var config = _configArgument(path, arguments);
     var packageRoot = host.workspace.packageFor(path).absolutePath;
 
     return SplashArtifactsResult(
       package: path,
-      generated: artifacts.isNotEmpty,
-      stale: config?.stale ?? false,
+      flavor: config.config.flavor,
+      generated: config.artifacts.isNotEmpty,
+      stale: config.stale,
       artifacts: [
-        for (var artifact in artifacts) _artifactEntry(artifact, packageRoot),
+        for (var artifact in config.artifacts)
+          _artifactEntry(artifact, packageRoot),
       ],
     );
   }
@@ -693,7 +739,6 @@ class SplashCore extends PluginCore {
     await _load(path);
 
     var refreshed = _scans[path]?.forFlavor(config.config.flavor);
-    var packageRoot = root;
 
     return SplashGenerateResult(
       package: path,
@@ -703,7 +748,7 @@ class SplashCore extends PluginCore {
       output: '${result.stdout}${result.stderr}'.trim(),
       artifacts: [
         for (var artifact in refreshed?.artifacts ?? const <SplashArtifact>[])
-          _artifactEntry(artifact, packageRoot),
+          _artifactEntry(artifact, root),
       ],
     );
   }

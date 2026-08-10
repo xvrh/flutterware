@@ -113,14 +113,22 @@ class SplashConfigScan {
     required this.problems,
     required this.stale,
     this.launcherIcon,
-    this.packageRoot,
+    this.recompositions = const {},
   });
 
   final SplashConfig config;
 
-  /// Absolute, so the generated resources can be read back. Null only in tests
-  /// that build a scan by hand.
-  final String? packageRoot;
+  /// What the generated files say each cell looks like, read once when the scan
+  /// ran. Missing for a cell that had nothing to read back.
+  ///
+  /// **Read here rather than on demand.** Recomposing parses `web/index.html`
+  /// and a stack of drawable XML off disk, and it used to happen inside
+  /// [pictureFor] — which the panel calls nine times per build. That was 5.8ms
+  /// of synchronous I/O on the UI isolate every time anything rebuilt, on a
+  /// project with 66 artifacts. Everything else here is computed once by
+  /// `_scanConfig` and kept; this was the one exception, and it was the
+  /// expensive one.
+  final Map<(SplashSurface, SplashTheme), SplashComposition> recompositions;
 
   /// Keyed by the path the config wrote, so a lookup needs nothing but the
   /// config value.
@@ -180,20 +188,11 @@ class SplashConfigScan {
     );
   }
 
-  /// What the *generated files* say this cell looks like, or null when there is
+  /// What the *generated files* say this cell looks like, or null when there was
   /// nothing to read — see `recompose.dart`. Most callers want [pictureFor],
   /// which pairs this with the fallback and says which one it handed back.
-  SplashComposition? recomposedFor(SplashSurface surface, SplashTheme theme) {
-    var root = packageRoot;
-    if (root == null) return null;
-    return recomposeSplash(
-      packageRoot: root,
-      surface: surface,
-      theme: theme,
-      artifacts: artifacts,
-      flavor: config.flavor,
-    );
-  }
+  SplashComposition? recomposedFor(SplashSurface surface, SplashTheme theme) =>
+      recompositions[(surface, theme)];
 
   /// The problems that belong to one cell, plus the config-wide ones.
   List<SplashProblem> problemsFor(SplashSurface surface, SplashTheme theme) => [
@@ -202,8 +201,6 @@ class SplashConfigScan {
           (problem.theme == null || problem.theme == theme))
         problem,
   ];
-
-  bool get blocksGeneration => problems.any((p) => p.blocksGeneration);
 }
 
 /// Scans [packageRoot], which must be absolute.
@@ -387,9 +384,19 @@ SplashConfigScan _scanConfig(String packageRoot, SplashConfig config) {
     config: config,
     images: images,
     launcherIcon: launcherIcon,
-    packageRoot: packageRoot,
     artifacts: artifacts,
     stale: stale,
+    recompositions: {
+      for (var surface in SplashSurface.values)
+        for (var theme in SplashTheme.values)
+          (surface, theme): ?recomposeSplash(
+            packageRoot: packageRoot,
+            surface: surface,
+            theme: theme,
+            artifacts: artifacts,
+            flavor: config.flavor,
+          ),
+    },
     problems: validateSplash(
       config,
       facts: (path) => images[path],

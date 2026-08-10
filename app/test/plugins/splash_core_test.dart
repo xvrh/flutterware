@@ -563,6 +563,50 @@ flutter_native_splash:
       expect(result.artifacts, isEmpty);
     });
 
+    test('answers for the flavor it was asked about', () async {
+      // The panel follows the address, so it was showing production's files
+      // while this action — which read `configs.first` and had no flavor
+      // parameter — reported staging's, in the same process at the same moment.
+      write('flutter_native_splash-staging.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+''');
+      write('flutter_native_splash-production.yaml', '''
+flutter_native_splash:
+  color: "000000"
+''');
+      // Generated for production only, so the two answers cannot look alike.
+      write(
+        'ios/Runner/Assets.xcassets/LaunchBackground.imageset/Contents.json',
+        '{}',
+      );
+      writePng(
+        'ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage.png',
+        1,
+        1,
+      );
+
+      var c = core();
+      await c.computeAll();
+
+      var production =
+          (await c.invoke('artifacts', arguments: {'flavor': 'production'}))!
+              as SplashArtifactsResult;
+      expect(production.flavor, 'production');
+
+      var staging =
+          (await c.invoke('artifacts', arguments: {'flavor': 'staging'}))!
+              as SplashArtifactsResult;
+      expect(staging.flavor, 'staging');
+
+      // And a flavor that is not there is refused rather than silently answered
+      // for whichever config sorted first.
+      await expectLater(
+        c.invoke('artifacts', arguments: {'flavor': 'nope'}),
+        throwsA(isA<StateError>()),
+      );
+    });
+
     test(
       'does not mistake stock Flutter launch images for generated output',
       () async {

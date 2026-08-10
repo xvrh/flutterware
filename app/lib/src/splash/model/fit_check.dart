@@ -62,9 +62,9 @@ class SplashFitFinding {
 /// excluded outright: no surface here ships one, and the web splash is a
 /// browser viewport rather than a device.
 ///
-/// Deliberately narrower than `splashPreviewDevicesFor` in `surface.dart`,
-/// which is what the picker offers: choosing to look at the web splash on a
-/// wide monitor is reasonable, and warning about it is not.
+/// Deliberately narrower than what the panel's size axis offers: choosing to
+/// look at the web splash on a wide monitor is reasonable, and warning about it
+/// is not.
 List<Device> splashDevicesFor(SplashSurface surface) {
   var platform = switch (surface) {
     SplashSurface.android || SplashSurface.android12 => DevicePlatform.android,

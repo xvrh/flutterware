@@ -3835,6 +3835,12 @@ final resultShapes = <String, ResultShape>{
     'fields': <Object?>[
       <String, Object?>{'name': 'package', 'type': 'String'},
       <String, Object?>{
+        'name': 'flavor',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Which config these belong to.',
+      },
+      <String, Object?>{
         'name': 'generated',
         'type': 'bool',
         'doc':
