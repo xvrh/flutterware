@@ -401,14 +401,29 @@ class _MotionStageState extends State<_MotionStage> {
   /// The guest's own answer, or null before it has given one.
   Map<String, dynamic>? _scope;
 
-  /// What the slider is showing while a drag is in flight.
+  /// Where the panel says the playhead is, or null while the guest drives.
   ///
-  /// The guest is the truth and it answers *after the frame*, so echoing it
-  /// straight back would make the thumb lag the finger by a frame on every
-  /// sample. Held locally for the duration of the drag and dropped after.
-  double? _dragging;
+  /// **The panel owns the playhead whenever the motion is not playing.** The
+  /// guest answers after the frame, so echoing it back would lag the finger;
+  /// worse, releasing a drag used to hand ownership straight back, and a
+  /// `MotionController` autoplays by default — so the guest's answer was
+  /// "progress 1" and every scrub snapped to the end the moment you let go.
+  ///
+  /// Only a transport verb gives it back, because that is the only time the
+  /// guest knows something about the playhead that the panel does not.
+  double? _playhead;
+
+  /// The newest position asked for, waiting for the socket.
+  double? _wanted;
 
   var _seeking = false;
+
+  /// Whether the playhead has been put somewhere deliberate yet.
+  ///
+  /// A motion autoplays on mount, so without this the panel opens on a screen
+  /// that has already finished — the one frame of an animation that tells you
+  /// least about it.
+  var _parked = false;
   var _ticking = false;
 
   /// Why the last write was refused, or empty. Shown rather than swallowed: a
@@ -476,7 +491,7 @@ class _MotionStageState extends State<_MotionStage> {
   /// only while a transport is in flight — needs the panel to know when the
   /// motion *ended*, which is the thing it is asking about.
   Future<void> _followPlayhead() async {
-    if (_ticking || _dragging != null) return;
+    if (_ticking || _playhead != null) return;
     if (_scope == null || _scope!['playing'] != true) return;
     _ticking = true;
     try {
@@ -501,23 +516,39 @@ class _MotionStageState extends State<_MotionStage> {
     setState(
       () => _scope = scopes == null || scopes.isEmpty ? null : scopes.first,
     );
+    // The address decides where to open, and the start decides when it does
+    // not — never wherever the autoplay happened to finish before anybody
+    // looked. Once only, so a refresh mid-scrub does not drag you back.
+    if (!_parked && _scope != null) {
+      _parked = true;
+      unawaited(_seek(widget.place.t ?? 0));
+    }
   }
 
-  /// One seek, and never two at once.
+  /// One seek in flight, and the last one always lands.
   ///
-  /// A drag samples far faster than a guest can draw, and queueing every sample
-  /// would leave the preview finishing a scrub you abandoned seconds ago. The
-  /// last position always lands because the drag end seeks again.
+  /// A drag samples far faster than a guest can draw, so intermediate positions
+  /// are skipped — but *skipped*, not dropped: the newest wanted position is
+  /// kept and sent as soon as the socket frees up. The previous guard simply
+  /// returned while one was in flight, so the final position of a drag was
+  /// never sent at all, and the playhead settled wherever the one sample that
+  /// got through had left it.
   Future<void> _seek(double t) async {
-    setState(() => _dragging = t);
+    setState(() => _playhead = t);
+    _wanted = t;
     if (_seeking) return;
     _seeking = true;
     try {
-      var reply = await _session?.callGuestExtension(
-        'ext.flutterware.motion.seek',
-        args: {'t': '$t'},
-      );
-      if (!mounted || reply == null) return;
+      while (true) {
+        var wanted = _wanted;
+        if (wanted == null) break;
+        _wanted = null;
+        await _session?.callGuestExtension(
+          'ext.flutterware.motion.seek',
+          args: {'t': '$wanted'},
+        );
+        if (!mounted) return;
+      }
       // The values change with the playhead; the lanes do not. Refreshing the
       // whole tree on every drag sample is what makes a scrubber feel heavy.
       await _refresh();
@@ -620,7 +651,7 @@ class _MotionStageState extends State<_MotionStage> {
       return;
     }
 
-    var atMs = ((_dragging ?? scope!.progress) * scope!.durationMs).round();
+    var atMs = ((_playhead ?? scope!.progress) * scope!.durationMs).round();
     var span = spanFor(
       property: property,
       atMs: atMs,
@@ -691,6 +722,9 @@ class _MotionStageState extends State<_MotionStage> {
   }
 
   Future<void> _transport(String verb) async {
+    // Play and restart hand the playhead back; pause leaves it where it is, and
+    // the panel goes on owning it so the next scrub has something to start from.
+    if (verb != 'pause') setState(() => _playhead = null);
     await _session?.callGuestExtension(
       'ext.flutterware.motion.transport',
       args: {'verb': verb},
@@ -711,7 +745,7 @@ class _MotionStageState extends State<_MotionStage> {
   Widget build(BuildContext context) {
     var session = _session;
     var scope = MotionScopeView.parse(_scope);
-    var t = _dragging ?? scope?.progress ?? 0;
+    var t = _playhead ?? scope?.progress ?? 0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -742,7 +776,7 @@ class _MotionStageState extends State<_MotionStage> {
                   Divider(height: 1, color: context.colors.line),
                   _Transport(
                     scope: _scope,
-                    value: _dragging,
+                    value: _playhead,
                     onTransport: _transport,
                     railOpen: showRail,
                     onToggleRail: () => setState(() => _showRail = !showRail),
@@ -765,7 +799,6 @@ class _MotionStageState extends State<_MotionStage> {
                         if (selection != null) _showRail = true;
                       }),
                       onSeek: _seek,
-                      onSeekEnd: () => setState(() => _dragging = null),
                       onEdit: _edit,
                       onCreate: _create,
                     ),

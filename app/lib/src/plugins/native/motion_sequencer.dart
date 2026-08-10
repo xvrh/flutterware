@@ -48,7 +48,6 @@ class MotionSequencer extends StatefulWidget {
     required this.selection,
     required this.onSelect,
     required this.onSeek,
-    required this.onSeekEnd,
     required this.onEdit,
     required this.onCreate,
   });
@@ -62,7 +61,6 @@ class MotionSequencer extends StatefulWidget {
   final MotionSelection? selection;
   final ValueChanged<MotionSelection?> onSelect;
   final ValueChanged<double> onSeek;
-  final VoidCallback onSeekEnd;
   final MotionEdit onEdit;
   final Future<void> Function(String target, String property) onCreate;
 
@@ -96,7 +94,6 @@ class _MotionSequencerState extends State<MotionSequencer> {
                 duration: scope.durationMs,
                 t: widget.t,
                 onSeek: widget.onSeek,
-                onSeekEnd: widget.onSeekEnd,
               ),
             ),
           ],
@@ -175,7 +172,6 @@ class _MotionSequencerState extends State<MotionSequencer> {
               : _collapsed.add(target.name),
         ),
         onSeek: widget.onSeek,
-        onSeekEnd: widget.onSeekEnd,
       ),
       if (!collapsed) ...[
         for (var (index, property) in target.properties.indexed)
@@ -202,17 +198,11 @@ class _MotionSequencerState extends State<MotionSequencer> {
 
 /// Ticks, labels, and the whole width as a scrub surface.
 class _Ruler extends StatelessWidget {
-  const _Ruler({
-    required this.duration,
-    required this.t,
-    required this.onSeek,
-    required this.onSeekEnd,
-  });
+  const _Ruler({required this.duration, required this.t, required this.onSeek});
 
   final int duration;
   final double t;
   final ValueChanged<double> onSeek;
-  final VoidCallback onSeekEnd;
 
   /// A step that lands on a round number and leaves at most eight labels, so a
   /// 620ms motion is read in hundreds rather than in sevenths of itself.
@@ -249,14 +239,9 @@ class _Ruler extends StatelessWidget {
           cursor: SystemMouseCursors.resizeLeftRight,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTapDown: (details) {
-              seek(details.localPosition);
-              onSeekEnd();
-            },
+            onTapDown: (details) => seek(details.localPosition),
             onHorizontalDragDown: (details) => seek(details.localPosition),
             onHorizontalDragUpdate: (details) => seek(details.localPosition),
-            onHorizontalDragEnd: (_) => onSeekEnd(),
-            onHorizontalDragCancel: onSeekEnd,
             child: SizedBox(
               height: 24,
               child: Stack(
@@ -340,7 +325,6 @@ class _GroupRow extends StatelessWidget {
     required this.collapsed,
     required this.onToggle,
     required this.onSeek,
-    required this.onSeekEnd,
   });
 
   final MotionTargetView target;
@@ -348,7 +332,6 @@ class _GroupRow extends StatelessWidget {
   final bool collapsed;
   final VoidCallback onToggle;
   final ValueChanged<double> onSeek;
-  final VoidCallback onSeekEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -408,14 +391,9 @@ class _GroupRow extends StatelessWidget {
                   cursor: SystemMouseCursors.resizeLeftRight,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTapDown: (details) {
-                      seek(details.localPosition);
-                      onSeekEnd();
-                    },
+                    onTapDown: (details) => seek(details.localPosition),
                     onHorizontalDragDown: (d) => seek(d.localPosition),
                     onHorizontalDragUpdate: (d) => seek(d.localPosition),
-                    onHorizontalDragEnd: (_) => onSeekEnd(),
-                    onHorizontalDragCancel: onSeekEnd,
                     child: ColoredBox(
                       color: context.colors.panel2,
                       child: span == null || duration <= 0

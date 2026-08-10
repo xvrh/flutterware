@@ -55,6 +55,13 @@ const receiptMotion = MotionValues(
           to: 0,
           curve: Curves.easeOutCubic,
         ),
+        Seg<double>(
+          start: Duration(milliseconds: 565),
+          end: Duration(milliseconds: 746),
+          from: -0.35,
+          to: 0,
+          curve: Curves.easeOutCubic,
+        ),
       ],
       // Grey until it has landed: the colour is what makes it read as
       // *becoming* confirmed rather than starting that way.
