@@ -301,6 +301,9 @@ class ShellController extends ChangeNotifier {
   /// An agent event refreshes agents only — no subprocesses. See
   /// [WorktreeWatcher] for why the two kinds are not one signal.
   void _startWatchingRepo(String repoRoot) {
+    // One per shell. A second `start` would otherwise leave the first watcher
+    // holding its streams with nothing to cancel it.
+    if (_worktreeWatcher != null) return;
     var watcher =
         (_buildWorktreeWatcher ??
         (root) => WorktreeWatcher(
@@ -883,8 +886,28 @@ class ShellController extends ChangeNotifier {
     return goToWorktree(open[(index + delta) % open.length]);
   }
 
+  /// **Silent after disposal, rather than throwing.**
+  ///
+  /// Half of what this class does is asynchronous and started by something
+  /// outside it — a config save, a filesystem event, a config load that is still
+  /// resolving plugins. Each of those resumes after an `await` and notifies, and
+  /// a window closing in that window would take `notifyListeners` on a disposed
+  /// notifier, which throws. Cancelling the subscriptions in [dispose] does not
+  /// help: the callback has already started.
+  ///
+  /// The alternative is a `_disposed` check after every await in the class,
+  /// which is the same rule enforced in more places and forgotten in one.
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
+  var _disposed = false;
+
   @override
   void dispose() {
+    _disposed = true;
     for (var path in _open.keys.toList()) {
       _closeAt(path);
     }

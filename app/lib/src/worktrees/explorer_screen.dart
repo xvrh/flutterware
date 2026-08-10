@@ -334,11 +334,51 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _Filter extends StatelessWidget {
+/// The filter box, and **the one controller on this screen**.
+///
+/// It has to be stateful. A `TextEditingController` built in `build` is a new
+/// controller on every rebuild, which throws away the selection and the composing
+/// region — and once the filesystem watchers landed, this screen rebuilds every
+/// couple of seconds whether or not anybody is typing, so the field became
+/// unusable: the caret jumped to the start mid-word and the keyboard appeared to
+/// lose the field.
+///
+/// The controller therefore outlives the builds, and the incoming [query] is
+/// pushed into it **only when it actually differs** — a blind assignment on every
+/// rebuild would move the caret to the end for the same reason, one keystroke
+/// later.
+class _Filter extends StatefulWidget {
   const _Filter({required this.query, required this.onChanged});
 
   final String query;
   final ValueChanged<String>? onChanged;
+
+  @override
+  State<_Filter> createState() => _FilterState();
+}
+
+class _FilterState extends State<_Filter> {
+  late final _controller = TextEditingController(text: widget.query);
+
+  @override
+  void didUpdateWidget(_Filter old) {
+    super.didUpdateWidget(old);
+    // Only when something *else* changed the query — a cleared filter, an
+    // address that carried one. Typing round-trips through `onChanged` and comes
+    // back identical, and this must not touch the field then.
+    if (widget.query != _controller.text) {
+      _controller.value = TextEditingValue(
+        text: widget.query,
+        selection: TextSelection.collapsed(offset: widget.query.length),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -350,8 +390,8 @@ class _Filter extends StatelessWidget {
     // Width is the caller's business — it caps this at 240 and lets it shrink
     // below that on a narrow window.
     return TextField(
-      controller: TextEditingController(text: query),
-      onChanged: onChanged,
+      controller: _controller,
+      onChanged: widget.onChanged,
       style: context.type.bodySmall,
       decoration: InputDecoration(
         isDense: true,

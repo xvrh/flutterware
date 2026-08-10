@@ -66,8 +66,9 @@ class ClaudeAgentProbe implements AgentProbe {
   Future<AgentFacts?> probe(String worktreePath) async {
     try {
       var directory = Directory(p.join(projectsRoot, encodePath(worktreePath)));
-      if (!directory.existsSync())
+      if (!directory.existsSync()) {
         return const AgentFacts(state: AgentState.none);
+      }
 
       var newest = _newestSession(directory);
       if (newest == null) return const AgentFacts(state: AgentState.none);

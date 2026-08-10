@@ -430,7 +430,11 @@ class _ChangesCell extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     if (fact.state == FactState.failed) return _Broken(fact.failure);
-    if (fact.state == FactState.unknown) return const _Nothing();
+    // **On the value, not on the state.** `unknown` is not the only state that
+    // carries nothing — `unavailable` does too, and enumerating states here
+    // meant this cell was one provider change away from a null assertion in the
+    // middle of a list. The other three cells already ask the question this way.
+    if (!fact.hasValue) return const _Nothing();
 
     var git = fact.value!;
     var shape = git.changes;
@@ -474,8 +478,7 @@ class _ChangesCell extends StatelessWidget {
       // `20f` is twenty files; nothing on screen says so, and a legend would be
       // a permanent explanation of something you learn once.
       message: [
-        '${shape.files} file${shape.files == 1 ? '' : 's'} changed against '
-            '${git.base ?? 'the base branch'}',
+        '${shape.files} file${shape.files == 1 ? '' : 's'} changed against ${git.base ?? 'the base branch'}',
         '+${shape.added} added, −${shape.removed} removed',
         if (git.dirty > 0)
           '${git.dirty} uncommitted file${git.dirty == 1 ? '' : 's'} (●)',
@@ -650,7 +653,7 @@ class _AgentCell extends StatelessWidget {
     var colors = context.colors;
     if (fact.state == FactState.failed) return _Broken(fact.failure);
     if (fact.state == FactState.unavailable) return const _Nothing('no agent');
-    if (fact.state == FactState.unknown) return const _Nothing();
+    if (!fact.hasValue) return const _Nothing();
 
     var agent = fact.value!;
     if (agent.state == AgentState.none) return const _Nothing('no agent');

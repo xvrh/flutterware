@@ -79,6 +79,12 @@ class WorktreeFactsProbe {
     List<Worktree> worktrees, {
     bool refreshForge = false,
   }) async {
+    // Nothing to report, and — the reason this is here rather than being
+    // obviously pointless — nothing to await the forge call either, so asking a
+    // server about a list we are not going to draw would leave its answer
+    // arriving after the cache had already been written.
+    if (worktrees.isEmpty) return {};
+
     // **Started first, awaited last.** The forge is a network call an order of
     // magnitude slower than everything else here (0.74 s against ~25 ms), so it
     // runs underneath the whole git sweep rather than in front of it.

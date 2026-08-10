@@ -234,7 +234,7 @@ class _AgentSummary extends StatelessWidget {
           )
         else ...[
           Text(
-            [agent.state.name, if (agent.model case var m?) m].join('  ·  '),
+            [agent.state.name, ?agent.model].join('  ·  '),
             style: context.type.bodySmall,
           ),
           if (agent.title case var it?) ...[

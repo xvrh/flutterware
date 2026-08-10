@@ -106,6 +106,77 @@ void main() {
     }
   });
 
+  testWidgets('a refresh landing mid-word does not disturb the filter', (
+    tester,
+  ) async {
+    var query = '';
+    // The screen as the shell drives it: the parent owns the query and hands it
+    // back down, and the facts underneath change on their own.
+    Future<void> pump(List<ExplorerEntry> entries) => tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Material(
+          child: StatefulBuilder(
+            builder: (context, setState) => WorktreeExplorerView(
+              entries: entries,
+              now: now,
+              query: query,
+              onQueryChanged: (value) => setState(() => query = value),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await pump([_entry('alpha', now, seconds: 5)]);
+    await tester.enterText(find.byType(TextField), 'alph');
+    await tester.pump();
+
+    // Put the caret back into the middle of the word, as it would be if you
+    // were correcting a typo.
+    var field = tester.widget<TextField>(find.byType(TextField));
+    field.controller!.selection = const TextSelection.collapsed(offset: 2);
+    await tester.pump();
+
+    // A watcher fires: new facts, a rebuild nobody asked for.
+    await pump([_entry('alpha', now, seconds: 1)]);
+
+    var after = tester.widget<TextField>(find.byType(TextField)).controller!;
+    expect(after.text, 'alph', reason: 'the query survived the rebuild');
+    expect(
+      after.selection.baseOffset,
+      2,
+      reason: 'and so did the caret — a new controller would have reset it',
+    );
+    expect(
+      find.byType(WorktreeRow),
+      findsOneWidget,
+      reason: 'still filtering on what was typed',
+    );
+  });
+
+  testWidgets('a query set from outside still lands', (tester) async {
+    Future<void> pump(String query) => tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Material(
+          child: WorktreeExplorerView(
+            entries: [_entry('alpha', now, seconds: 5)],
+            now: now,
+            query: query,
+          ),
+        ),
+      ),
+    );
+
+    await pump('');
+    await pump('alpha');
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'alpha',
+    );
+  });
+
   testWidgets('needs-you is a partition of the same order', (tester) async {
     var entries = [
       _entry('quiet-fresh', now, seconds: 5),
