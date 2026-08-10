@@ -1,7 +1,9 @@
 # Comparison — what a worktree did to the pictures
 
 **Date:** 2026-08-11
-**Status:** design, brainstormed with the owner. **Nothing is built.** Every
+**Status:** design, brainstormed with the owner. **Steps 1–4 of §12 are
+built** (2026-08-11) and §12 records which commit did what; the renderer, the
+CLI, the space and the viewer are not. Every
 decision below was taken in that conversation and **all of them are settled** —
 §13 lists them, and §14 is the short list of constants deliberately left for
 measurement. Every number is cited to the findings doc that measured it; nothing
@@ -415,16 +417,24 @@ handles SDK management.
 
 ## 12. Build order
 
-1. **Derived step labels** (§7a) — independent, improves four existing surfaces,
-   and the aligner is worthless without it.
-2. **Preview clock pin** (§6) and the **SDK-mismatch detector** (§11) — both are
-   correctness gaps today.
-3. **Shot cache + skip rule** (§2, §3) — testable with no UI at all:
-   *comparing a branch that changes nothing renders nothing.*
-4. **The diff kernel** (§4, §5) — raw RGBA, threshold, clusters, tree deltas, in
-   an isolate. Still no screen.
+1. ✅ **Derived step labels** (§7a) — `c7bb9d9c`. Independent, improves four
+   existing surfaces, and the aligner is worthless without it.
+2. ✅ **Preview clock pin** (§6) — `9e29155d`, smoke-tested through a real
+   guest — and the **SDK-mismatch detector** (§11) — `bbc2ac6f`.
+3. ✅ **Shot cache + skip rule** (§2, §3) — `55207ba6`; **base checkout**
+   (§1) — `b396d464`. One seam is open: `ClosureMemo` has readers and no
+   writer, because the per-entry closure comes from the compiler and nothing
+   asks it for one yet. Until step 5 fills it, every entry answers "unknown"
+   and nothing is skipped — correct, and slow.
+4. ✅ **The diff kernel** (§4, §5) — `9b8379fd`. Pixels, tree, texts, the
+   severity ladder. Not yet run in an isolate: it has no caller to be off the
+   UI thread of.
 5. **`fw compare` + `index.json`** (§8) — CLI and MCP first, which forces the
-   schema honest before a widget can hide it.
+   schema honest before a widget can hide it. Needs two things the kernel does
+   not: a **batch capture** in `HeadlessCatalog` (one guest, reload per entry,
+   raw frame + tree out — `auditAll` is the shape, it collects errors where
+   this needs pixels), and the **compiler's per-entry source list** over the
+   daemon protocol, to give `ClosureMemo` its writer.
 6. **The space** (§9) — overview, preview modes, merged split tree, two live
    revisions.
 7. **The static viewer** — in v1, and dumb: it reads `index.json` and renders,
