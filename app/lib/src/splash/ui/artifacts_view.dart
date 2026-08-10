@@ -50,15 +50,15 @@ class SplashArtifactsView extends StatelessWidget {
           Text('Generated output', style: type.sectionLabel),
           const SizedBox(height: 6),
           Text(
-            // Naming the command rather than the button. "Run the Generate
-            // action" tells you which thing to press and nothing about what it
-            // will do to your project — and this one rewrites files under
-            // android/, ios/ and web/.
+            // The command, not a button — there is no button. This panel
+            // reads; the generator is run by whoever edited the config, and it
+            // reports what it did through `fw run splash generate`, which hands
+            // back the exit code and the generator's own output.
             'Nothing has been generated yet. The matrix above is what the '
             'config will produce; nothing on disk has been made from it.\n\n'
-            'Run `dart run flutter_native_splash:create` in this package — the '
-            'Generate action runs exactly that, using the version the project '
-            'pins.',
+            'Run `dart run flutter_native_splash:create` in this package, or '
+            '`fw run splash generate`, which runs exactly that with the version '
+            'the project pins and reports how it went.',
             style: type.caption.copyWith(color: colors.mut),
           ),
         ],

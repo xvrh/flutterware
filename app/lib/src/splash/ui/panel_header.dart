@@ -51,7 +51,6 @@ class SplashPanelHeader extends StatelessWidget {
     this.size,
     this.onSize,
     this.onReload,
-    this.onGenerate,
   });
 
   final String package;
@@ -76,10 +75,6 @@ class SplashPanelHeader extends StatelessWidget {
   final ValueChanged<SplashScreenSize?>? onSize;
 
   final VoidCallback? onReload;
-
-  /// Null when a problem stops `create` from running at all — offering a button
-  /// that is going to exit non-zero is worse than not offering one.
-  final VoidCallback? onGenerate;
 
   @override
   Widget build(BuildContext context) {
@@ -134,13 +129,7 @@ class SplashPanelHeader extends StatelessWidget {
             ],
           ),
         ),
-        _Toolbar(
-          size: size,
-          onSize: onSize,
-          onReload: onReload,
-          onGenerate: onGenerate,
-          generated: state != SplashGeneratedState.never,
-        ),
+        _Toolbar(size: size, onSize: onSize, onReload: onReload),
       ],
     );
   }
@@ -199,20 +188,23 @@ class _StatusPill extends StatelessWidget {
 /// a device id: a device names a platform with it, so a chosen iPhone redrew two
 /// tiles and quietly ignored six. A size class names none — see
 /// [SplashScreenSize].
+///
+/// **Nothing here writes to the project.** There was a
+/// `Run flutter_native_splash:create` button for a while. It threw away
+/// everything that would have made it trustworthy — `generate` returns the
+/// generator's own stdout and stderr precisely because they name the file it
+/// choked on, and the button discarded all of it, so a failed run looked like a
+/// quiet re-scan. And running the generator belongs to whoever edited the
+/// config: in the loop this panel is for, that is an agent, which calls the
+/// action and gets `ok`, `exitCode` and `output` back as data — a better
+/// surface than any dialog. What is left of this panel never touches your
+/// repo.
 class _Toolbar extends StatelessWidget {
-  const _Toolbar({
-    required this.generated,
-    this.size,
-    this.onSize,
-    this.onReload,
-    this.onGenerate,
-  });
+  const _Toolbar({this.size, this.onSize, this.onReload});
 
-  final bool generated;
   final SplashScreenSize? size;
   final ValueChanged<SplashScreenSize?>? onSize;
   final VoidCallback? onReload;
-  final VoidCallback? onGenerate;
 
   @override
   Widget build(BuildContext context) {
@@ -238,17 +230,6 @@ class _Toolbar extends StatelessWidget {
               tooltip: 'Read the config and its images again',
               onPressed: onReload!,
             ),
-          if (onGenerate != null) ...[
-            const Gap(FwSpacing.md),
-            SplashToolbarButton(
-              label: generated
-                  ? 'Re-run flutter_native_splash:create'
-                  : 'Run flutter_native_splash:create',
-              tooltip: 'Rewrites files under android/, ios/ and web/',
-              primary: true,
-              onPressed: onGenerate!,
-            ),
-          ],
         ],
       ),
     );

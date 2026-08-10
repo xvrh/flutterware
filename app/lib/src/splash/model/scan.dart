@@ -169,7 +169,7 @@ class SplashConfigScan {
       reason: !isGenerated
           ? 'Nothing has been generated yet, so this is what the config will '
                 'produce — not what any device shows. Run '
-                'flutter_native_splash:create to make it real.'
+                'flutter_native_splash:create in this package to make it real.'
           : surface == SplashSurface.ios
           // Not "nothing was generated": there is plenty on disk, we simply
           // cannot read a storyboard back into a picture.

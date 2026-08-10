@@ -58,7 +58,6 @@ class _Headers extends StatelessWidget {
             scannedAt: DateTime(2026, 8, 10, 11, 27, 2),
             onSize: (_) {},
             onReload: () {},
-            onGenerate: () {},
           ),
         ),
         _Case(
@@ -73,11 +72,10 @@ class _Headers extends StatelessWidget {
             size: SplashScreenSize.smallPhone,
             onSize: (_) {},
             onReload: () {},
-            onGenerate: () {},
           ),
         ),
         _Case(
-          'Never generated, and a problem stops create — no run button',
+          'Never generated',
           SplashPanelHeader(
             package: 'examples/example',
             configPath: 'flutter_native_splash.yaml',
@@ -101,7 +99,6 @@ class _Headers extends StatelessWidget {
             onFlavor: (_) {},
             onSize: (_) {},
             onReload: () {},
-            onGenerate: () {},
           ),
         ),
       ],

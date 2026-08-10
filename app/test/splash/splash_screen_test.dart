@@ -13,6 +13,7 @@ import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/splash/model/surface.dart';
 import 'package:flutterware_app/src/splash/screen.dart';
 import 'package:flutterware_app/src/splash/ui/cell_inspector.dart';
+import 'package:flutterware_app/src/splash/ui/panel_header.dart';
 import 'package:flutterware_app/src/splash/ui/splash_render.dart';
 import 'package:flutterware_app/src/splash/ui/variant_tile.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
@@ -373,9 +374,14 @@ flutter_native_splash:
         ),
         findsOneWidget,
       );
-      // And the command is on offer, not only named: a reader who has just been
-      // told the picture is a guess wants the one action that makes it real.
-      expect(find.text('Run flutter_native_splash:create'), findsOneWidget);
+      // The command is named, and nothing offers to run it. This panel reads;
+      // the generator belongs to whoever edited the config, and it reports what
+      // it did through the action — which hands back the exit code and the
+      // generator's own output — rather than through a button that discarded
+      // both. Reload is the only control, and it only re-reads.
+      expect(find.textContaining('flutter_native_splash:create'), findsWidgets);
+      expect(find.byType(SplashToolbarButton), findsOneWidget);
+      expect(find.text('Reload'), findsOneWidget);
     });
   });
 }

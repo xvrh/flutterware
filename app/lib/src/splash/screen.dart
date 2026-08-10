@@ -106,41 +106,6 @@ class SplashScreen extends StatelessWidget {
 
     var config = scan.forFlavor(flavor) ?? scan.main!;
 
-    // The one thing this panel writes, and it writes nothing of its own: it
-    // runs the generator. Confirmed first, because it rewrites files under
-    // android/, ios/ and web/, and the count of them is the part nobody
-    // expects.
-    void runCreate() => unawaited(() async {
-      var go = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Run flutter_native_splash:create?'),
-          content: Text(
-            'Generates the splash from ${config.config.path} and rewrites '
-            'files under android/, ios/ and web/.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Run it'),
-            ),
-          ],
-        ),
-      );
-      if (go != true) return;
-      await core.invoke(
-        'generate',
-        arguments: {
-          'package': package,
-          if (config.config.flavor != null) 'flavor': config.config.flavor,
-        },
-      );
-    }());
-
     var open = surface != null && theme != null;
 
     return Column(
@@ -160,7 +125,6 @@ class SplashScreen extends StatelessWidget {
           onSize: onSelectSize,
           onReload: () =>
               unawaited(core.invoke('reload', arguments: {'package': package})),
-          onGenerate: config.blocksGeneration ? null : runCreate,
         ),
         Expanded(
           child: Row(

@@ -729,9 +729,26 @@ fixes (`SplashFix`, `writer.dart`, `fix`, `set`), click-to-edit
 write for dark, since the readback now draws it and the tile caption says it.
 
 Kept, and this is the whole plugin now: read the config, read the generated
-files back, draw eight cells with their provenance, list the problems that are
-facts about *your files*, and run the generator. `describe`, `artifacts`,
-`reload`, `generate`.
+files back, draw eight cells with their provenance, and list the problems that
+are facts about *your files*. `describe`, `artifacts`, `reload`, `generate`.
+
+**The panel itself writes nothing** — decided 2026-08-10, after a
+`Run flutter_native_splash:create` button lasted a day. Two reasons, and the
+second is the one that settles it:
+
+- It discarded everything that would have made it trustworthy. `generate`
+  returns `ok`, `exitCode` and the generator's own stdout and stderr, kept whole
+  *because they name the file it choked on* — and the button awaited the call
+  and dropped all three. A failed run looked like a quiet re-scan.
+- Running the generator belongs to whoever edited the config. In the loop this
+  plugin is for — an agent edits the YAML, runs the generator, captures the
+  panel with `fw capture <address> -o shot.png`, and a person looks at the
+  picture — the human never presses it. The agent calls the action and gets the
+  exit code and the output back as data, which is a better surface than any
+  dialog.
+
+`generate` stays as an action for exactly that caller. `Reload` stays in the
+toolbar because it only re-reads.
 
 **The reasoning is not that the editor did not work** — it did; the fix buttons
 edited a real config and kept its comments. It is that every button was computed
