@@ -614,8 +614,15 @@ class _MotionStageState extends State<_MotionStage> {
                       problems: _writeProblems,
                       t: t,
                       selection: _selection,
-                      onSelect: (selection) =>
-                          setState(() => _selection = selection),
+                      // Picking a span *is* the request to see it. There is
+                      // nothing else a selection does — the outline on the bar
+                      // is feedback that the click landed, not a purpose — so
+                      // a rail that stayed shut would make the gesture do
+                      // nothing visible at all.
+                      onSelect: (selection) => setState(() {
+                        _selection = selection;
+                        if (selection != null) _showRail = true;
+                      }),
                       onSeek: _seek,
                       onSeekEnd: () => setState(() => _dragging = null),
                       onEdit: _edit,
