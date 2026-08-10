@@ -177,8 +177,18 @@ The PR title also feeds the label-priority stack (§7).
 
 Read from Claude Code's session files. **Verified on 2026-08-10**, not assumed:
 
-- `~/.claude/projects/<cwd with / → ->/<sessionId>.jsonl`, one directory per
+- `~/.claude/projects/<encoded cwd>/<sessionId>.jsonl`, one directory per
   worktree, several sessions each; newest mtime is the current one.
+
+  **The encoding is `/`, `\`, `_` and `.` → `-`** — derived by checking the rule
+  against every directory on one machine, where it reproduces 55 of the 57 that
+  have a readable session. `/` alone is not enough and the shortfall is not
+  cosmetic: a machine that keeps its checkouts under `claude_worktrees/` finds
+  **none** of them, which is exactly what happened the first time this ran.
+
+  The two that do not match are not encoding failures — those directories hold a
+  session whose recorded `cwd` is a *different* worktree, resumed or copied. It
+  is the case the `cwd` check below exists for, and it is not hypothetical.
 - The title is in `{"type":"custom-title","customTitle":"…"}` records, **appended
   repeatedly** — the last one wins.
 - `{"type":"last-prompt","lastPrompt":"…"}` gives the last user prompt.
@@ -255,11 +265,31 @@ Measured, 14 worktrees, warm:
 | `git diff --numstat base...head` | 8 ms | per worktree |
 | `gh pr list --json …` | 890 ms | once, **all branches** |
 
+And the whole probe, once built (14 worktrees, git + agent):
+
+| | cold cache | warm cache |
+|---|---|---|
+| `fw worktrees` | **209 ms** | **97 ms** |
+
+The cache removes 54%. What remains is the per-worktree `git status` that cannot
+be batched — 14 × ~25 ms over 4 workers — which is the floor this design
+predicted and the number to watch if it ever moves.
+
 Four rules:
 
-1. **Batch what git can batch.** `for-each-ref` gives last-commit time and
-   `%(upstream:track)` ahead/behind for *every* branch in one process. Only dirty
-   state genuinely needs a per-worktree cwd — 14 spawns instead of 42.
+1. **Batch what git can batch.** `for-each-ref` gives last-commit time and the
+   head sha for *every* branch in one process. Only dirty state genuinely needs
+   a per-worktree cwd.
+
+   > **Corrected 2026-08-10 by building it.** This said `%(upstream:track)`
+   > supplies ahead/behind. It does not: **not one** of the 14 worktrees
+   > measured had an upstream configured, so the field is empty and
+   > `# branch.ab` never appears in `status` either. Ahead/behind comes from
+   > `rev-list --left-right --count <base>...<head>` against the base branch.
+   > That is strictly better — it is commit-only, so it runs from any directory
+   > and is keyed by the *same* sha pair as the numstat, riding a cache that had
+   > to exist anyway. `status`'s `branch.ab` is still read when it is there,
+   > which on the base branch itself it usually is.
 2. **`--no-optional-locks` on every status.** It exists for polling tools;
    without it we write each worktree's index from a background refresh and fight
    the user's own git.

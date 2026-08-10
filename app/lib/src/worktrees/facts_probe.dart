@@ -14,6 +14,7 @@ import 'dart:async';
 import '../shell/worktree.dart';
 import 'facts.dart';
 import 'facts_store.dart';
+import 'providers/agent.dart';
 import 'providers/git.dart';
 
 class WorktreeFactsProbe {
@@ -21,9 +22,11 @@ class WorktreeFactsProbe {
     required this.repoRoot,
     required this.store,
     GitProbe? git,
+    AgentProbe? agent,
     this.concurrency = 4,
     DateTime Function()? now,
   }) : git = git ?? GitProbe(),
+       agent = agent ?? ClaudeAgentProbe(),
        _now = now ?? DateTime.now;
 
   /// The main checkout — where the batched calls run, and where every
@@ -32,6 +35,11 @@ class WorktreeFactsProbe {
 
   final WorktreeFactsStore store;
   final GitProbe git;
+
+  /// Nice to have, never required. Everything it reports is optional, and a
+  /// probe that finds nothing is indistinguishable from a repo with no agents —
+  /// which is the point.
+  final AgentProbe agent;
 
   /// How many worktrees are probed at once.
   ///
@@ -69,11 +77,14 @@ class WorktreeFactsProbe {
     required String? base,
     required String? baseSha,
   }) async {
+    var agentFacts = await agent.probe(worktree.path);
+
     var status = await git.status(worktree.path);
     if (status == null) {
       return WorktreeFacts(
         git: const Fact.failed('git could not read this worktree'),
-        activity: _activity(worktree, null),
+        agent: _agentFact(agentFacts),
+        activity: _activity(worktree, null, agentFacts),
       );
     }
 
@@ -101,9 +112,20 @@ class WorktreeFactsProbe {
             ? null
             : WorktreeFactsStore.diffKey(baseSha, headSha),
       ),
-      activity: _activity(worktree, tips[branch]?.committedAt),
+      agent: _agentFact(agentFacts),
+      activity: _activity(worktree, tips[branch]?.committedAt, agentFacts),
     );
   }
+
+  /// `unavailable`, not `failed`, when there is no session.
+  ///
+  /// Nothing is broken about a checkout no agent has ever touched, and the two
+  /// states render differently on purpose — one is a quiet dash, the other is a
+  /// complaint that would never clear.
+  Fact<AgentFacts> _agentFact(AgentFacts? facts) =>
+      facts == null || facts.state == AgentState.none
+      ? const Fact.unavailable('no agent session for this checkout')
+      : Fact.fresh(facts, computedAt: _now());
 
   /// The cached half. A sha pair has one diff forever, so a hit is not a stale
   /// answer that happens to be right — it is *the* answer, and the only reason
@@ -140,14 +162,19 @@ class WorktreeFactsProbe {
 
   /// The maximum of the clocks we have, and *which one it was*.
   ///
-  /// The agent clock joins this when its provider lands; the shape is already
-  /// the maximum-with-attribution so adding one is adding a candidate, not
-  /// changing the rule.
-  Fact<ActivityFacts> _activity(Worktree worktree, DateTime? committedAt) {
+  /// "Last touched" is three clocks that disagree, so this takes the newest and
+  /// records which one won. A bare relative time meaning a commit on one row and
+  /// an agent message on the next is worse than no time at all.
+  Fact<ActivityFacts> _activity(
+    Worktree worktree,
+    DateTime? committedAt,
+    AgentFacts? agent,
+  ) {
     var candidates = <(DateTime, ActivitySource)>[
       if (committedAt != null) (committedAt, ActivitySource.commit),
       if (store.openedAt(worktree.path) case var at?)
         (at, ActivitySource.opened),
+      if (agent?.at case var at?) (at, ActivitySource.agent),
     ];
     if (candidates.isEmpty) return const Fact.unknown();
     candidates.sort((a, b) => b.$1.compareTo(a.$1));
