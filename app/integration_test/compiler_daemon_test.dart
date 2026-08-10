@@ -472,6 +472,68 @@ void main() {
     });
   });
 
+  test('a preview written while the daemon is warm is in the next '
+      "client's handshake", () async {
+    // **The handshake is the only entry list a headless caller ever sees.** It
+    // checks the id it was given against `ready.entries` and refuses before it
+    // reaches the `select` whose rescan would have found the entry — so the
+    // staleness was self-sustaining: a preview written after the daemon started
+    // was invisible to every client that attached, and re-running the command
+    // read the same snapshot again. Measured on this repo: `fw run previews
+    // entries` listed a new entry, and `screenshot` answered "no such entry"
+    // for it until the daemon's ten-minute idle timeout expired.
+    //
+    // Nothing here tells the daemon anything — no refresh, no select. A client
+    // arriving is the notice.
+    var relative = 'tool/catalog/demos/fixture_attached.dart';
+    var file = File(p.join(demosDir, 'fixture_attached.dart'));
+    addTearDown(() async {
+      if (!file.existsSync()) return;
+      var withdrawn = daemon.catalogChanges.firstWhere(
+        (c) => !c.entries.any((e) => e.path == relative),
+      );
+      file.deleteSync();
+      daemon.refresh();
+      await withdrawn.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => const CatalogChanged(entries: []),
+      );
+    });
+
+    Future<DaemonReady> attach() async {
+      var (client, fresh) = await CompilerDaemonClient.connect(
+        dartExecutable: dartExecutable,
+        config: config,
+        onLog: (line) => print('  [daemon] $line'),
+      );
+      addTearDown(client.close);
+      // Otherwise a daemon that had died and been replaced would pass this by
+      // rescanning at startup, which is the one case that was never broken.
+      expect(fresh.reused, isTrue, reason: 'it attached to the warm daemon');
+      return fresh;
+    }
+
+    file.writeAsStringSync(_preview('fixtureAttached', 'a new file'));
+    expect(
+      (await attach()).entries.map((e) => e.id),
+      contains('$relative#fixtureAttached'),
+    );
+
+    // And the half the report was about: an entry added to a file the daemon
+    // has already scanned, generated a wrapper for and compiled. It reaches the
+    // scan by a different route — the file's mtime rather than the walk finding
+    // a name it had never seen — and both were equally invisible.
+    file.writeAsStringSync(
+      '${_preview('fixtureAttached', 'a new file')}\n'
+      "@Preview(name: 'Second')\n"
+      "Widget fixtureAppended() => const Center(child: Text('appended'));\n",
+    );
+    expect(
+      (await attach()).entries.map((e) => e.id),
+      containsAll(['$relative#fixtureAttached', '$relative#fixtureAppended']),
+    );
+  });
+
   test('a second project does not collide with the first', () async {
     // Every daemon runs out of the GUI's package, so they all wanted one
     // `app/build/catalog`: the generated entrypoint, the compiler's output, the
