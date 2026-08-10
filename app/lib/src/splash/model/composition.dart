@@ -94,6 +94,7 @@ class SplashComposition {
     this.brandingBottomPadding = 0,
     this.fullscreen = false,
     this.fallsBackToLight = false,
+    this.usesLauncherIcon = false,
   });
 
   final SplashSurface surface;
@@ -136,8 +137,46 @@ class SplashComposition {
   /// chain resolved nothing and the OS will do the same.
   final bool fallsBackToLight;
 
+  /// [image] is the app's launcher icon rather than anything the config named —
+  /// what Android 12 draws when `android_12.image` resolves nothing.
+  ///
+  /// Carried separately from the layer because the picture is honest and the
+  /// caption still has to say the image is not the author's choice.
+  final bool usesLauncherIcon;
+
   bool get isEmpty =>
       backgroundColor == null && backgroundImage == null && image == null;
+
+  /// The same composition with one layer replaced.
+  ///
+  /// Exists for the studio, whose live tile is this cell with the image it is
+  /// about to write standing in for the one on disk. Restricted to the layers,
+  /// because everything else here was decided by the cascade and swapping it
+  /// would be drawing a splash the config does not describe.
+  SplashComposition withLayers({
+    SplashLayer? image,
+    SplashLayer? backgroundImage,
+    SplashLayer? branding,
+    bool usesLauncherIcon = false,
+  }) => SplashComposition(
+    surface: surface,
+    theme: theme,
+    enabled: enabled,
+    backgroundColor: backgroundColor,
+    backgroundImage: backgroundImage ?? this.backgroundImage,
+    image: image ?? this.image,
+    iconBackgroundColor: iconBackgroundColor,
+    iconCanvas: iconCanvas,
+    iconMaskFraction: iconMaskFraction,
+    branding: branding ?? this.branding,
+    brandingAlignment: brandingAlignment,
+    brandingBottomPadding: brandingBottomPadding,
+    fullscreen: fullscreen,
+    fallsBackToLight: fallsBackToLight,
+    // The stand-in is the author's image by definition, so the "this is your
+    // launcher icon" caption must not survive it.
+    usesLauncherIcon: usesLauncherIcon,
+  );
 
   Map<String, Object?> toJson() => {
     'surface': surface.name,
@@ -158,6 +197,7 @@ class SplashComposition {
     },
     if (fullscreen) 'fullscreen': true,
     if (fallsBackToLight) 'fallsBackToLight': true,
+    if (usesLauncherIcon) 'usesLauncherIcon': true,
   };
 
   static SplashComposition fromJson(Map<String, Object?> json) {
@@ -192,6 +232,7 @@ class SplashComposition {
           (json['brandingBottomPadding'] as num?)?.toInt() ?? 0,
       fullscreen: json['fullscreen'] == true,
       fallsBackToLight: json['fallsBackToLight'] == true,
+      usesLauncherIcon: json['usesLauncherIcon'] == true,
     );
   }
 
@@ -202,7 +243,9 @@ class SplashComposition {
       if (backgroundColor != null)
         'background ${formatSplashColor(backgroundColor!)}',
       if (backgroundImage != null) 'background image ${backgroundImage!.path}',
-      if (image != null)
+      if (usesLauncherIcon)
+        'no android_12 image — the launcher icon ${image!.path} instead'
+      else if (image != null)
         'image ${image!.path} ${_placement(image!)}'
       else
         'no image',
@@ -241,6 +284,7 @@ class SplashComposition {
 SplashComposition composeSplash(
   SplashResolution resolution, {
   required SplashImageFacts? Function(String path) facts,
+  SplashImageFacts? launcherIcon,
 }) {
   SplashLayer? layerFor(
     Resolved<String> resolved, {
@@ -274,6 +318,26 @@ SplashComposition composeSplash(
 
   var isAndroid12 = resolution.surface == SplashSurface.android12;
 
+  // The Android 12 cell with no icon of its own is not empty — the generator
+  // writes no `windowSplashScreenAnimatedIcon`, and Android draws the launcher
+  // icon into that slot. Drawing nothing here would be the one thing a preview
+  // must not do: show a picture no device will ever produce.
+  var usesLauncherIcon =
+      isAndroid12 && !resolution.image.isPresent && launcherIcon != null;
+
+  var image = usesLauncherIcon
+      ? SplashLayer(
+          path: launcherIcon.path,
+          absolutePath: launcherIcon.absolutePath,
+          fit: SplashFit.contain,
+          alignment: SplashAlignment.center,
+        )
+      : layerFor(
+          resolution.image,
+          fit: resolution.fit,
+          alignment: resolution.alignment,
+        );
+
   return SplashComposition(
     surface: resolution.surface,
     theme: resolution.theme,
@@ -286,11 +350,8 @@ SplashComposition composeSplash(
       fit: SplashFit.cover,
       alignment: SplashAlignment.center,
     ),
-    image: layerFor(
-      resolution.image,
-      fit: resolution.fit,
-      alignment: resolution.alignment,
-    ),
+    image: image,
+    usesLauncherIcon: usesLauncherIcon,
     iconBackgroundColor: parseSplashColor(resolution.iconBackgroundColor.value),
     iconCanvas: isAndroid12 ? android12IconCanvasDp : null,
     iconMaskFraction: isAndroid12 ? android12MaskFraction : null,

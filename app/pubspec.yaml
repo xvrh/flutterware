@@ -53,6 +53,9 @@ dependencies:
     path: ../
   github:
   glob:
+  # The generator's own parser, so the splash panel reads `web/index.html` back
+  # the way `flutter_native_splash` wrote it.
+  html:
   http:
   image:
   intl:
@@ -95,15 +98,31 @@ dependencies:
   web:
   web_socket_channel:
   win32:
+  # Reads back the Android resources flutter_native_splash writes — styles.xml
+  # and launch_background.xml — so the preview can be checked against what
+  # actually shipped. See app/lib/src/splash/model/recompose.dart.
+  xml:
   yaml:
+  # Surgical edits to a splash config that leave the rest of the file — comments,
+  # key order, quoting style — exactly as the author wrote it. A round-trip
+  # through `loadYaml` and back would not.
+  # See app/lib/src/splash/model/writer.dart.
+  yaml_edit:
 
 dev_dependencies:
   build_runner:
   fake_async:
+  # Lets a widget test stand in for the file picker, so the studio's whole loop —
+  # pick, crop, write, set the key — is covered without a test-only parameter on
+  # the production dialog. See app/test/splash/splash_studio_dialog_test.dart.
+  file_selector_platform_interface:
   flutter_test:
     sdk: flutter
   json_serializable:
   lints:
+  # `MockPlatformInterfaceMixin`, which is how a fake is allowed past
+  # `PlatformInterface.verify`.
+  plugin_platform_interface:
   test:
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

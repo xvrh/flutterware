@@ -10,15 +10,34 @@
 ///   reports a conversion, not an error.
 /// - **An unknown key is fatal.** It is not ignored and not warned about — the
 ///   generator prints and calls `exit(1)`, so one typo stops the whole run.
+/// - **A missing `android_12.image` does not leave a bare colour.** This one was
+///   written the wrong way round and shipped that way. When `android12ImagePath`
+///   is null the generator *removes* `windowSplashScreenAnimatedIcon` from the
+///   launch theme (`android.dart`, `_applyAndroid12Styles`), and Android's
+///   default for that attribute is the application's launcher icon. The package
+///   says so itself, beside the call: `//create android 12 image if provided.
+///   (otherwise uses launch icon)`. So the splash is the launcher icon on the
+///   window background — which is both more alarming and more actionable than
+///   "a bare colour", and is the "why is my app icon on my splash screen"
+///   complaint everybody files.
 ///
 /// [SplashProblem.blocksGeneration] marks the rules that stop `create` dead, so
 /// a reader can tell "this will not build" from "this will look wrong".
+///
+/// **Every rule here names the edit; none of them makes it.** A problem is a
+/// sentence with the key in it — "Set `branding_bottom_padding_ios` to at
+/// least 34" — and the reader goes to the file. The buttons that used to write
+/// those keys are gone with the rest of the editor: they were computed from a
+/// transcription of somebody else's generator, and a wrong picture is a wrong
+/// picture where a wrong button is a wrong edit to your project.
 library;
 
 import 'package:flutterware/plugins.dart';
 
 import 'color.dart';
+import 'composition.dart';
 import 'config.dart';
+import 'fit_check.dart';
 import 'image_facts.dart';
 import 'surface.dart';
 
@@ -115,6 +134,7 @@ class SplashProblem {
     this.key,
     this.surface,
     this.theme,
+    this.device,
     this.blocksGeneration = false,
   });
 
@@ -128,6 +148,13 @@ class SplashProblem {
   final SplashSurface? surface;
   final SplashTheme? theme;
 
+  /// The device this is about — `iphone-se`, `android-small`.
+  ///
+  /// Only the fit rules set it, and they set it so the reader can *go and look*:
+  /// a sentence saying the logo is clipped on a small phone is worth much less
+  /// than the same sentence with the picture one click behind it.
+  final String? device;
+
   /// `dart run flutter_native_splash:create` will `exit(1)` on this.
   final bool blocksGeneration;
 
@@ -137,6 +164,7 @@ class SplashProblem {
     if (key != null) 'key': key,
     if (surface != null) 'surface': surface!.name,
     if (theme != null) 'theme': theme!.name,
+    if (device != null) 'device': device,
     if (blocksGeneration) 'blocksGeneration': true,
   };
 
@@ -161,11 +189,13 @@ List<SplashProblem> validateSplash(
 
   for (var key in config.raw.keys) {
     if (!splashKnownKeys.contains(key)) {
+      var meant = _nearest(key, splashKnownKeys, taken: config.raw.keys);
       problems.add(
         SplashProblem(
           Tone.error,
           '"$key" is not a flutter_native_splash parameter. The generator '
-          'prints this and exits, so nothing is written at all.',
+          'prints this and exits, so nothing is written at all.'
+          '${meant == null ? '' : ' Did you mean "$meant"?'}',
           key: key,
           blocksGeneration: true,
         ),
@@ -174,10 +204,16 @@ List<SplashProblem> validateSplash(
   }
   for (var key in config.android12Section.keys) {
     if (!splashAndroid12Keys.contains(key)) {
+      var meant = _nearest(
+        key,
+        splashAndroid12Keys,
+        taken: config.android12Section.keys,
+      );
       problems.add(
         SplashProblem(
           Tone.error,
-          '"$key" is not valid inside android_12.',
+          '"$key" is not valid inside android_12.'
+          '${meant == null ? '' : ' Did you mean "$meant"?'}',
           key: 'android_12.$key',
           blocksGeneration: true,
         ),
@@ -273,11 +309,12 @@ List<SplashProblem> validateSplash(
         Tone.warn,
         config.hasAndroid12Section
             ? 'The android_12 section sets no "image", so every device from '
-                  'Android 12 on shows a bare colour. The top-level "image" '
-                  'does not reach this surface.'
+                  'Android 12 on shows your launcher icon rather than this '
+                  'image, masked to a circle. The top-level "image" does not '
+                  'reach this surface.'
             : 'There is no android_12 section, so every device from Android 12 '
-                  'on shows a bare colour. The top-level "image" is read only '
-                  'by the legacy path.',
+                  'on shows your launcher icon, masked to a circle. The '
+                  'top-level "image" is read only by the legacy path.',
         key: 'android_12.image',
         surface: SplashSurface.android12,
       ),
@@ -350,40 +387,36 @@ List<SplashProblem> validateSplash(
       );
     }
 
-    var dark = resolveSplash(config, surface, SplashTheme.dark);
-    if (dark.fallsBackToLight) {
-      problems.add(
-        SplashProblem(
-          Tone.info,
-          'No dark configuration for ${surface.label}. The dark keys are a '
-          'chain of their own — "_dark_${surface.keySuffix}" then "_dark", '
-          'never falling through to the light keys — so no dark resources are '
-          'generated and the OS shows the light splash in dark mode.',
-          surface: surface,
-          theme: SplashTheme.dark,
-        ),
+    // **The two dark rules that lived here are gone.** They narrated what
+    // `create` would write for dark and which image would be drawn — the panel
+    // now reads both back off the disk and draws them, and the tile caption
+    // already says "no dark config, the OS shows the light splash". Both were
+    // also wrong at some point, in the same direction, from the same source.
+  }
+
+  // ---- Does it fit on a real screen? -------------------------------------
+  //
+  // The only rules here that are not about the generator. Everything above is
+  // "what will `create` write"; this is "what will that look like on a phone",
+  // and it is the question the eight fixed-size tiles could never answer.
+  //
+  // Reported per cell but **collapsed to the worst device**, not one problem per
+  // device. Fourteen lines saying the same thing about fourteen Android phones
+  // is how a warning list becomes wallpaper; the widest miss is the one that
+  // decides the fix, and the others follow from it.
+  for (var surface in SplashSurface.values) {
+    if (!config.enabled(surface)) continue;
+    for (var theme in SplashTheme.values) {
+      var composition = composeSplash(
+        resolveSplash(config, surface, theme),
+        facts: facts,
       );
-    } else if (light.image.isPresent && !dark.image.isPresent) {
-      // The nastier half of the same rule, and the more common one. Setting
-      // `color_dark` alone is enough to make dark resources real — so dark mode
-      // stops falling back to the light splash and starts showing the dark
-      // colour with **no logo on it**. It looks deliberate, which is why nobody
-      // catches it until a screenshot arrives.
-      var key = surface == SplashSurface.android12
-          ? 'android_12.image_dark'
-          : 'image_dark';
-      problems.add(
-        SplashProblem(
-          Tone.warn,
-          'The dark ${surface.label} splash has a background but no image. '
-          'A dark colour is enough to make dark resources real, so this will '
-          'not fall back to the light splash — it will show an empty '
-          'background. Set "$key".',
-          key: key,
-          surface: surface,
-          theme: SplashTheme.dark,
-        ),
-      );
+      var findings = checkSplashFit(composition);
+      for (var issue in SplashFitIssue.values) {
+        var worst = findings.where((f) => f.issue == issue).firstOrNull;
+        if (worst == null) continue;
+        problems.add(_fitProblem(worst, surface, theme));
+      }
     }
   }
 
@@ -441,6 +474,62 @@ List<SplashProblem> validateSplash(
   return problems;
 }
 
+/// Phrases one fit finding.
+///
+/// Every message carries the device *and the number*, because "too big" is not
+/// actionable and "48dp too wide on a small phone" is: it names the edit.
+SplashProblem _fitProblem(
+  SplashFitFinding finding,
+  SplashSurface surface,
+  SplashTheme theme,
+) {
+  var over = finding.amount.round();
+  return switch (finding.issue) {
+    SplashFitIssue.imageClipped => SplashProblem(
+      Tone.warn,
+      'The image is ${over}dp wider than ${finding.device.label} '
+      '(${finding.device.width.round()}×${finding.device.height.round()}), so '
+      'its edges are cut off there. A source image is read at a quarter of its '
+      'pixel size, so a ${sourceDensity.toInt()}× export is the usual cause.',
+      surface: surface,
+      theme: theme,
+      device: finding.device.id,
+    ),
+    SplashFitIssue.brandingUnderSafeArea => _brandingPaddingProblem(
+      finding,
+      surface,
+      theme,
+      over,
+    ),
+  };
+}
+
+/// Branding under the home indicator, with the one number that clears it.
+///
+/// The key is platform-suffixed rather than global. The inset is a property of
+/// *that* platform's hardware — 34dp on a notched iPhone, 24 on an Android
+/// gesture bar — so a global `branding_bottom_padding` set from the worst iPhone
+/// would over-pad every Android device to answer an iOS problem.
+SplashProblem _brandingPaddingProblem(
+  SplashFitFinding finding,
+  SplashSurface surface,
+  SplashTheme theme,
+  int over,
+) {
+  var key = 'branding_bottom_padding_${surface.keySuffix}';
+  var padding = finding.device.insetBottom.ceil();
+  return SplashProblem(
+    Tone.warn,
+    'The branding sits ${over}dp inside the bottom safe area on '
+    '${finding.device.label} — under the home indicator. Set "$key" to at '
+    'least $padding.',
+    key: key,
+    surface: surface,
+    theme: theme,
+    device: finding.device.id,
+  );
+}
+
 /// Flags a value that is not in its vocabulary. The generator does not check
 /// these — it silently falls back to its default — so a typo here is invisible
 /// until someone looks at a device.
@@ -456,16 +545,74 @@ void _checkVocabulary(
   for (var part in parts) {
     var token = part.trim();
     if (token.isEmpty || legal.contains(token)) continue;
+    var meant = _nearest(token, legal);
     problems.add(
       SplashProblem(
         Tone.warn,
         '"$key: $value" uses "$token", which is not one of '
         '${legal.join(', ')}. The generator does not validate this — it just '
-        'falls back to its default.',
+        'falls back to its default.'
+        '${meant == null ? '' : ' Did you mean "$meant"?'}',
         key: key,
       ),
     );
   }
+}
+
+/// The entry of [candidates] that [word] was probably meant to be, or null when
+/// nothing is close enough to say so.
+///
+/// Three guards, all of which exist to stop a confident wrong suggestion — which
+/// is worse than none, because a rename button that writes the wrong key turns
+/// one broken config into a differently broken one:
+///
+/// - **Short words are never suggested for.** At three characters a distance of
+///   two is most of the alphabet.
+/// - **A tie is not a suggestion.** `color_dark_ois` is one edit from
+///   `color_dark_ios` and nothing else; `image_dark_xyz` is three from several
+///   things and should get silence.
+/// - **A key the config already uses is not offered**, since renaming onto it
+///   would overwrite a value the author wrote on purpose.
+String? _nearest(
+  String word,
+  Iterable<String> candidates, {
+  Iterable<String> taken = const [],
+}) {
+  if (word.length < 4) return null;
+  String? best;
+  // Strictly less than 3, so a distance of 2 is the most that ever matches.
+  var bestDistance = 3;
+  for (var candidate in candidates) {
+    if (taken.contains(candidate)) continue;
+    var distance = _editDistance(word, candidate);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = candidate;
+    } else if (distance == bestDistance) {
+      best = null;
+    }
+  }
+  return best;
+}
+
+/// Levenshtein distance, two rows rather than a full matrix.
+int _editDistance(String a, String b) {
+  var previous = List<int>.generate(b.length + 1, (i) => i);
+  var current = List<int>.filled(b.length + 1, 0);
+  for (var i = 1; i <= a.length; i++) {
+    current[0] = i;
+    for (var j = 1; j <= b.length; j++) {
+      var substitution = previous[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1);
+      var deletion = previous[j] + 1;
+      var insertion = current[j - 1] + 1;
+      current[j] = substitution < deletion ? substitution : deletion;
+      if (insertion < current[j]) current[j] = insertion;
+    }
+    var swap = previous;
+    previous = current;
+    current = swap;
+  }
+  return previous[b.length];
 }
 
 /// Every image path the config names, with the key that named it.

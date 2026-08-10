@@ -3812,7 +3812,21 @@ final resultShapes = <String, ResultShape>{
       },
       <String, Object?>{'name': 'surface', 'type': 'String'},
       <String, Object?>{'name': 'theme', 'type': 'String'},
+      <String, Object?>{
+        'name': 'role',
+        'type': 'String',
+        'doc':
+            'Which layer this is — `image`, `background`, `branding`, `icon`.',
+      },
       <String, Object?>{'name': 'density', 'type': 'String', 'optional': true},
+      <String, Object?>{'name': 'pixelWidth', 'type': 'int', 'optional': true},
+      <String, Object?>{'name': 'pixelHeight', 'type': 'int', 'optional': true},
+      <String, Object?>{
+        'name': 'logicalWidth',
+        'type': 'double',
+        'optional': true,
+        'doc': 'The size it occupies on screen.',
+      },
       <String, Object?>{'name': 'modified', 'type': 'String'},
     ],
   }),
@@ -3820,6 +3834,12 @@ final resultShapes = <String, ResultShape>{
     'type': 'SplashArtifactsResult',
     'fields': <Object?>[
       <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{
+        'name': 'flavor',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Which config these belong to.',
+      },
       <String, Object?>{
         'name': 'generated',
         'type': 'bool',
@@ -3846,9 +3866,31 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{'name': 'surface', 'type': 'String'},
             <String, Object?>{'name': 'theme', 'type': 'String'},
             <String, Object?>{
+              'name': 'role',
+              'type': 'String',
+              'doc':
+                  'Which layer this is — `image`, `background`, `branding`, `icon`.',
+            },
+            <String, Object?>{
               'name': 'density',
               'type': 'String',
               'optional': true,
+            },
+            <String, Object?>{
+              'name': 'pixelWidth',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'pixelHeight',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'logicalWidth',
+              'type': 'double',
+              'optional': true,
+              'doc': 'The size it occupies on screen.',
             },
             <String, Object?>{'name': 'modified', 'type': 'String'},
           ],
@@ -3885,6 +3927,18 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'doc':
             'Where the image lands, in words — so the CLI answers the question without rendering anything.',
+      },
+      <String, Object?>{
+        'name': 'generated',
+        'type': 'bool',
+        'doc':
+            '[placement] was read back from the files `create` wrote, rather than derived from the config.',
+      },
+      <String, Object?>{
+        'name': 'predictedBecause',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Why there was nothing to read back.',
       },
       <String, Object?>{
         'name': 'properties',
@@ -3938,6 +3992,13 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
             },
             <String, Object?>{
+              'name': 'device',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The screen this is about, for the rules that sweep the device table — `iphone-se`.',
+            },
+            <String, Object?>{
               'name': 'blocksGeneration',
               'type': 'bool',
               'doc': '`create` will exit rather than write anything.',
@@ -3975,9 +4036,31 @@ final resultShapes = <String, ResultShape>{
             <String, Object?>{'name': 'surface', 'type': 'String'},
             <String, Object?>{'name': 'theme', 'type': 'String'},
             <String, Object?>{
+              'name': 'role',
+              'type': 'String',
+              'doc':
+                  'Which layer this is — `image`, `background`, `branding`, `icon`.',
+            },
+            <String, Object?>{
               'name': 'density',
               'type': 'String',
               'optional': true,
+            },
+            <String, Object?>{
+              'name': 'pixelWidth',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'pixelHeight',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'logicalWidth',
+              'type': 'double',
+              'optional': true,
+              'doc': 'The size it occupies on screen.',
             },
             <String, Object?>{'name': 'modified', 'type': 'String'},
           ],
@@ -3993,6 +4076,13 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'key', 'type': 'String', 'optional': true},
       <String, Object?>{'name': 'surface', 'type': 'String', 'optional': true},
       <String, Object?>{'name': 'theme', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'device',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The screen this is about, for the rules that sweep the device table — `iphone-se`.',
+      },
       <String, Object?>{
         'name': 'blocksGeneration',
         'type': 'bool',
@@ -4014,6 +4104,25 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'optional': true,
         'doc': 'The config key that won the cascade — `color_dark_android`.',
+      },
+    ],
+  }),
+  'SplashReloadResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'SplashReloadResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{
+        'name': 'configPath',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Which file the re-read found, or null when the package has no splash config at all.',
+      },
+      <String, Object?>{'name': 'scannedAt', 'type': 'String'},
+      <String, Object?>{
+        'name': 'changed',
+        'type': 'bool',
+        'doc': 'Something the scan depends on had moved since the last read.',
       },
     ],
   }),

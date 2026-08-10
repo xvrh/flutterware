@@ -808,6 +808,8 @@ configKind: String
 flavor: String?
 enabled: bool   # False when the project switched this platform off.
 placement: String   # Where the image lands, in words — so the CLI answers the question without rendering anything.
+generated: bool   # [placement] was read back from the files `create` wrote, rather than derived from the config.
+predictedBecause: String?   # Why there was nothing to read back.
 properties: List<SplashProperty>
   name: String   # `color`, `image`, `branding`.
   value: String
@@ -819,6 +821,7 @@ problems: List<SplashProblemEntry>
   key: String?
   surface: String?
   theme: String?
+  device: String?   # The screen this is about, for the rules that sweep the device table — `iphone-se`.
   blocksGeneration: bool   # `create` will exit rather than write anything.
 ```
 
@@ -829,35 +832,62 @@ problems: List<SplashProblemEntry>
 | `theme` | choice | no | light | — |
 | `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
 
-#### `artifacts` — Artifacts
+#### `reload` — Reload
 
-The real generated files as they are on disk — ground truth, once generate has run
+Re-reads the config and everything it references, now. The panel notices most edits on its own; this is what covers the filesystems where it cannot, and it answers "did my edit land in the file this project actually reads?"
 
 ```sh
-fw run splash artifacts [--package=…]
+fw run splash reload [--package=…]
 ```
 
-Returns `SplashArtifactsResult`:
+Returns `SplashReloadResult`:
 
 ```
 package: String
-generated: bool   # False when nothing has been generated yet, which is what distinguishes "run `generate` first" from "the generator produced nothing".
-stale: bool   # The config has been edited since these were written.
-artifacts: List<SplashArtifactEntry>
-  path: String   # Worktree-relative, so an agent whose tools are scoped to the repo can open it.
-  surface: String
-  theme: String
-  density: String?
-  modified: String
+configPath: String?   # Which file the re-read found, or null when the package has no splash config at all.
+scannedAt: String
+changed: bool   # Something the scan depends on had moved since the last read.
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; the first when omitted |
 
-#### `generate` — Generate
+#### `artifacts` — Artifacts
 
-Runs `dart run flutter_native_splash:create`, which rewrites files under android/, ios/ and web/
+The real generated files as they are on disk — ground truth, once generate has run
+
+```sh
+fw run splash artifacts [--package=…] [--flavor=…]
+```
+
+Returns `SplashArtifactsResult`:
+
+```
+package: String
+flavor: String?   # Which config these belong to.
+generated: bool   # False when nothing has been generated yet, which is what distinguishes "run `generate` first" from "the generator produced nothing".
+stale: bool   # The config has been edited since these were written.
+artifacts: List<SplashArtifactEntry>
+  path: String   # Worktree-relative, so an agent whose tools are scoped to the repo can open it.
+  surface: String
+  theme: String
+  role: String   # Which layer this is — `image`, `background`, `branding`, `icon`.
+  density: String?
+  pixelWidth: int?
+  pixelHeight: int?
+  logicalWidth: double?   # The size it occupies on screen.
+  modified: String
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the first when omitted |
+| `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
+
+#### `generate` — Run flutter_native_splash:create
+
+Runs `dart run flutter_native_splash:create` in the package, using the version the project pins. This is what turns the config into real files; until it runs, everything the panel shows is a prediction. Rewrites files under android/, ios/ and web/.
 
 ```sh
 fw run splash generate [--package=…] [--flavor=…]
@@ -875,7 +905,11 @@ artifacts: List<SplashArtifactEntry>   # What exists afterwards — the point of
   path: String   # Worktree-relative, so an agent whose tools are scoped to the repo can open it.
   surface: String
   theme: String
+  role: String   # Which layer this is — `image`, `background`, `branding`, `icon`.
   density: String?
+  pixelWidth: int?
+  pixelHeight: int?
+  logicalWidth: double?   # The size it occupies on screen.
   modified: String
 ```
 

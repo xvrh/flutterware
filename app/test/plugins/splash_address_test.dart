@@ -9,7 +9,7 @@ import 'package:flutterware_app/src/splash/model/surface.dart';
 void main() {
   SplashPlace? roundTrip(SplashPlace place) => splashPlace(
     splashSegments(place.package, place.flavor),
-    splashAxes(surface: place.surface, theme: place.theme),
+    splashAxes(surface: place.surface, theme: place.theme, size: place.size),
   );
 
   test('a package on its own round-trips', () {
@@ -32,6 +32,28 @@ void main() {
         expect(roundTrip(place), place, reason: '$surface/$theme');
       }
     }
+  });
+
+  test('a screen size round-trips as a third axis', () {
+    var place = const SplashPlace(
+      '.',
+      surface: SplashSurface.ios,
+      theme: SplashTheme.dark,
+      size: 'small-phone',
+    );
+    expect(roundTrip(place), place);
+  });
+
+  test('a size this build has never heard of survives the trip', () {
+    // Kept raw rather than resolved, so it can be reported. Silently becoming
+    // "the default" would draw a picture that is wrong without looking wrong.
+    var place = const SplashPlace('.', size: 'nokia-3310');
+    expect(roundTrip(place)!.size, 'nokia-3310');
+  });
+
+  test('no size round-trips to no size', () {
+    expect(splashAxes(surface: SplashSurface.ios).containsKey('size'), false);
+    expect(roundTrip(const SplashPlace('.'))!.size, isNull);
   });
 
   test('a flavor round-trips alongside a cell', () {

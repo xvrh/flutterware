@@ -15,10 +15,34 @@
 library;
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
 import 'surface.dart';
+
+/// Which layer of the splash a generated file is.
+///
+/// The splash is a stack, not a picture: `launch_background.xml` is a layer-list
+/// of a background, an image and a branding bitmap. Without the role, a
+/// comparison against the prediction has no way to know which of three PNGs in
+/// one folder is the one it should be looking at.
+enum SplashArtifactRole {
+  /// `splash.png` / `LaunchImage.png` / `light-1x.png` — the logo layer.
+  image,
+
+  /// `background.png`. **A PNG, not a colour drawable** — the generator renders
+  /// the configured colour to a bitmap, which is what makes recomposing the
+  /// real splash from disk a matter of stacking files.
+  background,
+
+  /// `branding.png` / `android12branding.png`.
+  branding,
+
+  /// `android12splash.png` — the masked Android 12 icon, which is a different
+  /// slot from [image] rather than a variant of it.
+  icon,
+}
 
 /// One file the generator produced.
 class SplashArtifact {
@@ -26,8 +50,11 @@ class SplashArtifact {
     required this.path,
     required this.surface,
     required this.theme,
+    required this.role,
     required this.modified,
     this.density,
+    this.pixelWidth,
+    this.pixelHeight,
   });
 
   /// Package-relative, so it reads the same on another machine.
@@ -35,21 +62,103 @@ class SplashArtifact {
 
   final SplashSurface surface;
   final SplashTheme theme;
+  final SplashArtifactRole role;
 
   /// `xxhdpi`, `@3x`, `4x` — whatever the platform calls it. Null when the
   /// platform has only one.
   final String? density;
 
+  /// Read from the PNG header, not by decoding — see [readPngHeaderSize].
+  final int? pixelWidth;
+  final int? pixelHeight;
+
   final DateTime modified;
+
+  /// The size this file occupies on screen, in logical pixels.
+  ///
+  /// **Android only, and deliberately.** The rule is verified against the
+  /// generator: it writes each density at `source * pixelDensity ~/ 4`, and
+  /// Android draws an `xxxhdpi` drawable at a quarter of its pixels. So every
+  /// density of one image should report the *same* dp — a mismatch is a
+  /// generated set somebody edited by hand. iOS and web get null rather than a
+  /// number nobody has checked.
+  double? get logicalWidth {
+    var scale = splashDensityScale(density);
+    if (scale == null || pixelWidth == null) return null;
+    if (surface == SplashSurface.ios || surface == SplashSurface.web) {
+      return null;
+    }
+    return pixelWidth! / scale;
+  }
 
   Map<String, Object?> toJson() => {
     'path': path,
     'surface': surface.name,
     'theme': theme.name,
+    'role': role.name,
     if (density != null) 'density': density,
+    if (pixelWidth != null) 'width': pixelWidth,
+    if (pixelHeight != null) 'height': pixelHeight,
     'modified': modified.toIso8601String(),
   };
 }
+
+/// What one Android density bucket multiplies a dp by.
+///
+/// Null for anything that is not a density — `v21`, `v31` and a bare `drawable`
+/// are API-level and default buckets, not sizes, and treating them as one would
+/// invent numbers.
+///
+/// A qualifier may carry **both**: the Android 12 branding lands in
+/// `drawable-xxxhdpi-v31`, which is a density *and* an API level. Reading that
+/// as "not a density" made every one of those artifacts score the same, so the
+/// readback named `drawable-hdpi-v31` — the first and lowest — as the file that
+/// shipped, and reported a dp width computed from the wrong bucket.
+double? splashDensityScale(String? density) => switch (_bucket(density)) {
+  'mdpi' => 1,
+  'hdpi' => 1.5,
+  'xhdpi' => 2,
+  'xxhdpi' => 3,
+  'xxxhdpi' => 4,
+  _ => null,
+};
+
+/// The density part of a qualifier, with any trailing API level removed.
+String? _bucket(String? density) {
+  if (density == null) return null;
+  var parts = density.split('-');
+  for (var part in parts) {
+    if (part.endsWith('dpi')) return part;
+  }
+  return null;
+}
+
+/// A PNG's dimensions, read from its header rather than by decoding it.
+///
+/// **24 bytes off the front of the file**, because the alternative is reading
+/// every generated PNG whole — an `xxxhdpi` splash is comfortably a megabyte,
+/// there are dozens of them, and this runs on the UI isolate every time the
+/// fingerprint moves. A valid PNG always puts IHDR first: 8-byte signature,
+/// 4-byte length, `IHDR`, then two big-endian 32-bit values.
+(int, int)? readPngHeaderSize(File file) {
+  RandomAccessFile? handle;
+  try {
+    handle = file.openSync();
+    var bytes = handle.readSync(24);
+    if (bytes.length < 24) return null;
+    for (var i = 0; i < 8; i++) {
+      if (bytes[i] != _pngSignature[i]) return null;
+    }
+    var data = ByteData.sublistView(bytes);
+    return (data.getUint32(16), data.getUint32(20));
+  } on FileSystemException {
+    return null;
+  } finally {
+    handle?.closeSync();
+  }
+}
+
+const _pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
 /// The Android resource root, which moves when the project uses flavors.
 ///
@@ -71,13 +180,18 @@ List<SplashArtifact> findSplashArtifacts(String packageRoot, {String? flavor}) {
     SplashSurface surface,
     SplashTheme theme,
     String? density,
+    SplashArtifactRole role,
   ) {
+    var size = readPngHeaderSize(file);
     found.add(
       SplashArtifact(
         path: p.relative(file.path, from: packageRoot),
         surface: surface,
         theme: theme,
+        role: role,
         density: density,
+        pixelWidth: size?.$1,
+        pixelHeight: size?.$2,
         modified: file.statSync().modified,
       ),
     );
@@ -100,13 +214,32 @@ List<SplashArtifact> findSplashArtifacts(String packageRoot, {String? flavor}) {
           .replaceFirst('night-', '');
       for (var file in entry.listSync().whereType<File>()) {
         var name = p.basename(file.path);
-        var surface = switch (name) {
-          'android12splash.png' => SplashSurface.android12,
-          'splash.png' || 'branding.png' => SplashSurface.android,
-          _ => null,
+        // `background.png` matters as much as the rest: it is the *colour*,
+        // rendered to a bitmap, and it is the bottom layer of
+        // `launch_background.xml`. Skipping it made the browser show a splash
+        // with no background in it.
+        var (surface, role) = switch (name) {
+          'android12splash.png' => (
+            SplashSurface.android12,
+            SplashArtifactRole.icon,
+          ),
+          'android12branding.png' => (
+            SplashSurface.android12,
+            SplashArtifactRole.branding,
+          ),
+          'splash.png' => (SplashSurface.android, SplashArtifactRole.image),
+          'branding.png' => (
+            SplashSurface.android,
+            SplashArtifactRole.branding,
+          ),
+          'background.png' => (
+            SplashSurface.android,
+            SplashArtifactRole.background,
+          ),
+          _ => (null, SplashArtifactRole.image),
         };
         if (surface != null) {
-          add(file, surface, theme, density == folder ? null : density);
+          add(file, surface, theme, density == folder ? null : density, role);
         }
       }
     }
@@ -141,7 +274,12 @@ List<SplashArtifact> findSplashArtifacts(String packageRoot, {String? flavor}) {
       var theme = name.toLowerCase().contains('dark')
           ? SplashTheme.dark
           : SplashTheme.light;
-      add(file, SplashSurface.ios, theme, density);
+      var role = switch (set) {
+        'BrandingImage' => SplashArtifactRole.branding,
+        'LaunchBackground' => SplashArtifactRole.background,
+        _ => SplashArtifactRole.image,
+      };
+      add(file, SplashSurface.ios, theme, density, role);
     }
   }
 
@@ -153,7 +291,12 @@ List<SplashArtifact> findSplashArtifacts(String packageRoot, {String? flavor}) {
       var name = p.basenameWithoutExtension(file.path);
       var theme = name.contains('dark') ? SplashTheme.dark : SplashTheme.light;
       var density = RegExp(r'(\dx)$').firstMatch(name)?.group(1);
-      add(file, SplashSurface.web, theme, density);
+      var role = switch (name) {
+        _ when name.startsWith('branding') => SplashArtifactRole.branding,
+        _ when name.contains('background') => SplashArtifactRole.background,
+        _ => SplashArtifactRole.image,
+      };
+      add(file, SplashSurface.web, theme, density, role);
     }
   }
 

@@ -2,8 +2,10 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:flutterware/devices.dart';
 
 import '../model/composition.dart';
+import '../model/fit_check.dart';
 import '../model/surface.dart';
 
 /// A [SplashComposition], drawn.
@@ -17,9 +19,26 @@ import '../model/surface.dart';
 /// That is what lets the same widget be mounted in the panel and in a headless
 /// guest handed the same JSON: two hosts, one renderer, nothing to drift.
 class SplashRender extends StatelessWidget {
-  const SplashRender(this.composition, {super.key});
+  const SplashRender(
+    this.composition, {
+    super.key,
+    this.device,
+    this.showSafeAreas = false,
+  });
 
   final SplashComposition composition;
+
+  /// The screen this is being drawn as, when one was chosen. Only the safe-area
+  /// overlay reads it — the canvas *size* is decided by the caller, which is
+  /// what keeps this widget free of layout policy.
+  final Device? device;
+
+  /// Draw the notch and home-indicator bands.
+  ///
+  /// Off by default and off under capture, because it is annotation rather than
+  /// splash: a screenshot with our overlay baked into it is not a picture of
+  /// what ships.
+  final bool showSafeAreas;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +61,56 @@ class SplashRender extends StatelessWidget {
           if (composition.branding != null) _Branding(composition),
           if (!composition.fullscreen &&
               composition.surface != SplashSurface.web)
-            _StatusBar(background: background),
+            _StatusBar(background: background, height: device?.insetTop),
+          if (showSafeAreas && device != null)
+            _SafeAreas(device!, background: background),
+        ],
+      ),
+    );
+  }
+}
+
+/// Where the parts of the screen the OS keeps begin — the notch band and the
+/// home indicator.
+///
+/// **A rule at the boundary, not a band over the content.** The first version
+/// filled both insets with a translucent grey, and on an iPhone that is a 59dp
+/// slab across the top of an 852dp screen: it reads as part of the splash, which
+/// is the one thing a preview must never make you believe. A hairline says the
+/// same thing — "below here is yours" — without covering anything.
+///
+/// It is the only thing in this file that is not a claim about what the
+/// generator produces, which is why it is opt-in and off under capture.
+class _SafeAreas extends StatelessWidget {
+  const _SafeAreas(this.device, {this.background});
+
+  final Device device;
+  final int? background;
+
+  @override
+  Widget build(BuildContext context) {
+    var dark =
+        background == null || Color(background!).computeLuminance() < 0.5;
+    var line = dark ? const Color(0x59FFFFFF) : const Color(0x59000000);
+    var wash = dark ? const Color(0x0DFFFFFF) : const Color(0x0D000000);
+
+    Widget edge(double inset, {required bool top}) => Container(
+      height: inset,
+      decoration: BoxDecoration(
+        color: wash,
+        border: Border(
+          top: top ? BorderSide.none : BorderSide(color: line),
+          bottom: top ? BorderSide(color: line) : BorderSide.none,
+        ),
+      ),
+    );
+
+    return IgnorePointer(
+      child: Column(
+        children: [
+          if (device.insetTop > 0) edge(device.insetTop, top: true),
+          const Spacer(),
+          if (device.insetBottom > 0) edge(device.insetBottom, top: false),
         ],
       ),
     );
@@ -71,41 +139,24 @@ class _Layer extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        var natural = Size(
-          layer.naturalWidth ?? constraints.maxWidth,
-          layer.naturalHeight ?? constraints.maxHeight,
+        // `splashDrawnSize` is the same arithmetic the fit sweep runs. Sharing
+        // it is the point: a warning that says the logo is clipped and a picture
+        // that shows it fitting would leave nobody able to tell which was
+        // lying.
+        var (width, height) = splashDrawnSize(
+          fit: layer.fit,
+          naturalWidth: layer.naturalWidth ?? constraints.maxWidth,
+          naturalHeight: layer.naturalHeight ?? constraints.maxHeight,
+          screenWidth: constraints.maxWidth,
+          screenHeight: constraints.maxHeight,
         );
-
-        var size = switch (layer.fit) {
-          SplashFit.none => natural,
-          SplashFit.fill => constraints.biggest,
-          SplashFit.fillWidth => Size(constraints.maxWidth, natural.height),
-          SplashFit.fillHeight => Size(natural.width, constraints.maxHeight),
-          SplashFit.contain => _scaled(
-            natural,
-            constraints.biggest,
-            cover: false,
-          ),
-          SplashFit.cover => _scaled(natural, constraints.biggest, cover: true),
-        };
 
         return Align(
           alignment: alignment,
-          child: SizedBox(width: size.width, height: size.height, child: image),
+          child: SizedBox(width: width, height: height, child: image),
         );
       },
     );
-  }
-
-  /// `contain` and `cover` differ only in which ratio wins, so they are one
-  /// calculation rather than two `BoxFit`s — and doing it here means the size
-  /// is known, which is what the Android 12 mask and the branding both need.
-  static Size _scaled(Size source, Size target, {required bool cover}) {
-    if (source.width <= 0 || source.height <= 0) return target;
-    var x = target.width / source.width;
-    var y = target.height / source.height;
-    var scale = cover ? math.max(x, y) : math.min(x, y);
-    return Size(source.width * scale, source.height * scale);
   }
 }
 
@@ -254,9 +305,13 @@ class _Branding extends StatelessWidget {
 /// its only job is to make `fullscreen: true` visibly do something. Inventing
 /// convincing chrome would be inventing pixels the generator never produces.
 class _StatusBar extends StatelessWidget {
-  const _StatusBar({this.background});
+  const _StatusBar({this.background, this.height});
 
   final int? background;
+
+  /// The chosen device's top inset, so the band is the height the OS actually
+  /// takes rather than a guess. Falls back to 20 when no device is chosen.
+  final double? height;
 
   @override
   Widget build(BuildContext context) {
@@ -267,7 +322,7 @@ class _StatusBar extends StatelessWidget {
     return Align(
       alignment: Alignment.topCenter,
       child: SizedBox(
-        height: 20,
+        height: height == null || height! <= 0 ? 20 : height!,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [

@@ -22,8 +22,16 @@ import 'composition.dart';
 import 'config.dart';
 import 'generated.dart';
 import 'image_facts.dart';
+import 'recompose.dart';
 import 'surface.dart';
 import 'validation.dart';
+
+/// What a `flutter_native_splash-<flavor>.yaml` is called.
+///
+/// Public because the fingerprint has to find the same files this scan does —
+/// a flavor file that one of them recognises and the other does not is a config
+/// whose edits never reach the panel.
+final splashFlavorFilePattern = RegExp(r'^flutter_native_splash-(.+)\.yaml$');
 
 /// Everything one package's splash setup turned out to be.
 class SplashScan {
@@ -68,6 +76,34 @@ class SplashScan {
   ];
 }
 
+/// One cell's picture, and where it came from.
+///
+/// **The provenance is not a footnote, it is the confidence.** A picture read
+/// back from the generated files is what the device will show. A picture
+/// derived from the config is our reading of a third-party generator's rules,
+/// and this plugin has already shipped that reading backwards once. The two
+/// must never look alike on screen, so every consumer takes them together.
+class SplashPicture {
+  const SplashPicture.generated(this.composition)
+    : isGenerated = true,
+      reason = null;
+
+  const SplashPicture.predicted(this.composition, {required this.reason})
+    : isGenerated = false;
+
+  final SplashComposition composition;
+
+  /// Read back from the files `create` wrote, rather than derived from config.
+  final bool isGenerated;
+
+  /// Why there was nothing to read back. Null when [isGenerated].
+  final String? reason;
+
+  /// Short enough for a matrix cell, where the full [reason] would not fit and
+  /// eight copies of it would drown the pictures.
+  String get label => isGenerated ? 'From the generated files' : 'Prediction';
+}
+
 /// One config file, everything it references, and everything wrong with it.
 class SplashConfigScan {
   SplashConfigScan({
@@ -76,13 +112,31 @@ class SplashConfigScan {
     required this.artifacts,
     required this.problems,
     required this.stale,
+    this.launcherIcon,
+    this.recompositions = const {},
   });
 
   final SplashConfig config;
 
+  /// What the generated files say each cell looks like, read once when the scan
+  /// ran. Missing for a cell that had nothing to read back.
+  ///
+  /// **Read here rather than on demand.** Recomposing parses `web/index.html`
+  /// and a stack of drawable XML off disk, and it used to happen inside
+  /// [pictureFor] — which the panel calls nine times per build. That was 5.8ms
+  /// of synchronous I/O on the UI isolate every time anything rebuilt, on a
+  /// project with 66 artifacts. Everything else here is computed once by
+  /// `_scanConfig` and kept; this was the one exception, and it was the
+  /// expensive one.
+  final Map<(SplashSurface, SplashTheme), SplashComposition> recompositions;
+
   /// Keyed by the path the config wrote, so a lookup needs nothing but the
   /// config value.
   final Map<String, SplashImageFacts> images;
+
+  /// The app icon Android 12 shows when `android_12.image` resolves nothing.
+  /// Null when the package has no Android folder or no mipmaps.
+  final SplashImageFacts? launcherIcon;
 
   /// What the generator has already produced. Empty until `generate` runs.
   final List<SplashArtifact> artifacts;
@@ -103,7 +157,42 @@ class SplashConfigScan {
   /// The composition for one cell — what the panel draws and what the guest is
   /// handed.
   SplashComposition compositionFor(SplashSurface surface, SplashTheme theme) =>
-      composeSplash(resolutionFor(surface, theme), facts: factsFor);
+      composeSplash(
+        resolutionFor(surface, theme),
+        facts: factsFor,
+        launcherIcon: launcherIcon,
+      );
+
+  /// What one cell looks like, and whether that is a fact or a guess.
+  ///
+  /// The generated files win wherever they exist. iOS is the one surface where
+  /// they never can — `LaunchScreen.storyboard` is constraints, which is a
+  /// layout engine rather than a recipe — so it is predicted permanently, and
+  /// the [SplashPicture.reason] says so rather than leaving it to be inferred.
+  SplashPicture pictureFor(SplashSurface surface, SplashTheme theme) {
+    var generated = recomposedFor(surface, theme);
+    if (generated != null) return SplashPicture.generated(generated);
+    return SplashPicture.predicted(
+      compositionFor(surface, theme),
+      reason: !isGenerated
+          ? 'Nothing has been generated yet, so this is what the config will '
+                'produce — not what any device shows. Run '
+                'flutter_native_splash:create in this package to make it real.'
+          : surface == SplashSurface.ios
+          // Not "nothing was generated": there is plenty on disk, we simply
+          // cannot read a storyboard back into a picture.
+          ? 'Predicted from the config. iOS is the one surface that cannot be '
+                'read back — LaunchScreen.storyboard is constraints, not a '
+                'recipe.'
+          : 'Predicted from the config. Nothing was generated for this surface.',
+    );
+  }
+
+  /// What the *generated files* say this cell looks like, or null when there was
+  /// nothing to read — see `recompose.dart`. Most callers want [pictureFor],
+  /// which pairs this with the fallback and says which one it handed back.
+  SplashComposition? recomposedFor(SplashSurface surface, SplashTheme theme) =>
+      recompositions[(surface, theme)];
 
   /// The problems that belong to one cell, plus the config-wide ones.
   List<SplashProblem> problemsFor(SplashSurface surface, SplashTheme theme) => [
@@ -112,8 +201,6 @@ class SplashConfigScan {
           (problem.theme == null || problem.theme == theme))
         problem,
   ];
-
-  bool get blocksGeneration => problems.any((p) => p.blocksGeneration);
 }
 
 /// Scans [packageRoot], which must be absolute.
@@ -208,11 +295,10 @@ _ConfigSearch _findConfigs(String packageRoot) {
 
   var dir = Directory(packageRoot);
   if (dir.existsSync()) {
-    var pattern = RegExp(r'^flutter_native_splash-(.+)\.yaml$');
     var files = dir.listSync().whereType<File>().toList()
       ..sort((a, b) => a.path.compareTo(b.path));
     for (var file in files) {
-      var match = pattern.firstMatch(p.basename(file.path));
+      var match = splashFlavorFilePattern.firstMatch(p.basename(file.path));
       if (match == null) continue;
       var raw = section(file, required: true);
       if (raw == null) continue;
@@ -241,10 +327,51 @@ class _ConfigSearch {
   final List<String> errors;
 }
 
+/// The launcher icon Android 12 falls back to, at the best density it has.
+///
+/// **Not referenced by the config, and that is the point.** When
+/// `android_12.image` resolves nothing the generator writes no
+/// `windowSplashScreenAnimatedIcon`, and Android draws the app icon instead — so
+/// the honest preview of that cell is this file, not an empty rectangle.
+///
+/// Read straight from the mipmaps rather than through the icon tool's
+/// `AppIcons`, which loads and resizes every icon on every platform for a
+/// screen this scan is not drawing. If a third reader ever appears, hoist it.
+///
+/// Two approximations, both of which draw something truer than nothing:
+/// `android:icon` in the manifest is assumed to be `@mipmap/ic_launcher`, and an
+/// adaptive icon (`mipmap-anydpi-v26/ic_launcher.xml`, two layers composed and
+/// masked by the OS) is stood in for by the flat PNG beside it.
+SplashImageFacts? _findLauncherIcon(String packageRoot) {
+  var res = Directory(
+    p.join(packageRoot, 'android', 'app', 'src', 'main', 'res'),
+  );
+  if (!res.existsSync()) return null;
+
+  // Densest first, so the preview scales down rather than up.
+  const densities = ['xxxhdpi', 'xxhdpi', 'xhdpi', 'hdpi', 'mdpi'];
+  for (var density in densities) {
+    for (var name in ['ic_launcher.png', 'ic_launcher_foreground.png']) {
+      var file = File(p.join(res.path, 'mipmap-$density', name));
+      if (file.existsSync()) {
+        return _measure(packageRoot, p.relative(file.path, from: packageRoot));
+      }
+    }
+  }
+  return null;
+}
+
 SplashConfigScan _scanConfig(String packageRoot, SplashConfig config) {
   var images = <String, SplashImageFacts>{};
   for (var path in _referencedPaths(config)) {
     images.putIfAbsent(path, () => _measure(packageRoot, path));
+  }
+
+  // Keyed by its own path like any other, so `composeSplash` reaches it through
+  // the same `facts` lookup and needs no second channel.
+  var launcherIcon = _findLauncherIcon(packageRoot);
+  if (launcherIcon != null) {
+    images.putIfAbsent(launcherIcon.path, () => launcherIcon);
   }
 
   var artifacts = findSplashArtifacts(packageRoot, flavor: config.flavor);
@@ -256,8 +383,20 @@ SplashConfigScan _scanConfig(String packageRoot, SplashConfig config) {
   return SplashConfigScan(
     config: config,
     images: images,
+    launcherIcon: launcherIcon,
     artifacts: artifacts,
     stale: stale,
+    recompositions: {
+      for (var surface in SplashSurface.values)
+        for (var theme in SplashTheme.values)
+          (surface, theme): ?recomposeSplash(
+            packageRoot: packageRoot,
+            surface: surface,
+            theme: theme,
+            artifacts: artifacts,
+            flavor: config.flavor,
+          ),
+    },
     problems: validateSplash(
       config,
       facts: (path) => images[path],

@@ -8,6 +8,10 @@
 /// drawn.
 library;
 
+// Pure Dart, like this file — the device table is shared with `fw` and MCP,
+// which are compiled with `dart compile exe`.
+import 'package:flutterware/devices.dart';
+
 /// Which rendering path draws the splash.
 ///
 /// [android12] is a surface of its own rather than a flag on [android] because
@@ -258,9 +262,98 @@ SplashAlignment parseBrandingMode(String? mode) => switch (mode?.trim()) {
 /// them at a quarter of their pixel dimensions.
 const sourceDensity = 4.0;
 
+/// The device a surface is previewed on when the address names none.
+///
+/// A real screen rather than one arbitrary rectangle for everything. The old
+/// single 393×852 canvas meant the iOS tile and the Android tile were literally
+/// the same picture, which hid the only thing worth comparing them for.
+String? defaultSplashDeviceId(SplashSurface surface) => switch (surface) {
+  // The shape almost every current Android phone is, gesture bar included.
+  SplashSurface.android || SplashSurface.android12 => 'android-tall',
+  SplashSurface.ios => 'iphone-16',
+  // The web splash is a full-page background in a browser, not a device.
+  SplashSurface.web => null,
+};
+
+/// How big a screen to draw every cell at — the matrix's one size axis.
+///
+/// **A class, not a device, and that is the whole point.** Naming a device names
+/// a platform with it: an iPhone SE cannot be a canvas for the Android row, so a
+/// picker offering nineteen devices over eight tiles moved two of them and
+/// silently ignored the rest. A size class belongs to no platform, so one
+/// control can honestly move all eight — each surface resolves the class to its
+/// own hardware through [splashDeviceIdFor], and gets its own insets with it.
+///
+/// Every platform here has the same four sizes on sale, which is why this works
+/// rather than merely reads well: a small phone, a typical one, a large one and
+/// a tablet exist on iOS and on Android alike.
+enum SplashScreenSize {
+  smallPhone('small-phone', 'Small phone'),
+  phone('phone', 'Phone'),
+  largePhone('large-phone', 'Large phone'),
+  tablet('tablet', 'Tablet');
+
+  const SplashScreenSize(this.id, this.label);
+
+  /// What goes in an address — `?size=large-phone`.
+  final String id;
+  final String label;
+
+  static SplashScreenSize? byId(String id) {
+    for (var value in values) {
+      if (value.id == id) return value;
+    }
+    return null;
+  }
+}
+
+/// The screen [size] means on [surface] — a real device, with real insets.
+///
+/// Null [size] is each surface's own default, which is what the matrix shows
+/// until somebody picks something.
+///
+/// **Web borrows the iOS dimensions and none of its hardware.** A browser on a
+/// phone is a real place a web splash is seen, and the viewport is the only
+/// thing that matters there — so the tile takes the size and draws no safe
+/// areas, because a browser has no notch.
+String? splashDeviceIdFor(SplashSurface surface, SplashScreenSize? size) {
+  if (size == null) return defaultSplashDeviceId(surface);
+  return switch (surface) {
+    SplashSurface.android || SplashSurface.android12 => switch (size) {
+      SplashScreenSize.smallPhone => 'android-small',
+      SplashScreenSize.phone => 'android-tall',
+      SplashScreenSize.largePhone => 'android-big',
+      SplashScreenSize.tablet => 'android-medium-tablet',
+    },
+    SplashSurface.ios || SplashSurface.web => switch (size) {
+      SplashScreenSize.smallPhone => 'iphone-se',
+      SplashScreenSize.phone => 'iphone-16',
+      SplashScreenSize.largePhone => 'iphone-16-pro-max',
+      SplashScreenSize.tablet => 'ipad-pro-13',
+    },
+  };
+}
+
+/// Which class a concrete device falls into — the inverse of
+/// [splashDeviceIdFor], for the devices it does not name.
+///
+/// The fit sweep reports against every phone and tablet in the table, not just
+/// the four this axis can select, so a finding about an iPhone 13 mini has to
+/// land somewhere. Classifying by size rather than by a lookup means it always
+/// does, and it is also what pins down what the four class names mean: under
+/// 380dp is small, 430 and over is large, a tablet is a tablet.
+SplashScreenSize? splashSizeForDevice(String deviceId) {
+  var device = deviceById(deviceId);
+  if (device == null) return null;
+  if (device.kind == DeviceKind.tablet) return SplashScreenSize.tablet;
+  if (device.width < 380) return SplashScreenSize.smallPhone;
+  if (device.width >= 430) return SplashScreenSize.largePhone;
+  return SplashScreenSize.phone;
+}
+
 /// The logical canvas a surface is previewed at, in the order (width, height).
 ///
-/// It has to live here rather than in the panel, and it has to be a fixed
+/// It has to live here rather than in the panel, and it has to be a real
 /// device-sized canvas rather than whatever box the tile happens to be. A
 /// natural-size placement is 256dp because the source is 1024px at 4×, and
 /// "256dp" only means anything against a real screen — rendering it into a
@@ -268,13 +361,21 @@ const sourceDensity = 4.0;
 /// exist. So the render is always at these dimensions and scaled down to fit
 /// afterwards, which keeps every proportion true.
 ///
-/// The panel and the headless guest both read this, so an exported PNG is the
-/// same picture at a different scale rather than a different picture.
-(double, double) splashPreviewSize(SplashSurface surface) => switch (surface) {
-  // A desktop browser viewport; the web splash is a full-page background.
-  SplashSurface.web => (1280, 800),
-  _ => (393, 852),
-};
+/// [width] and [height] come from the chosen device when there is one. The
+/// panel and the headless guest both read this, so an exported PNG is the same
+/// picture at a different scale rather than a different picture.
+(double, double) splashPreviewSize(
+  SplashSurface surface, {
+  double? width,
+  double? height,
+}) {
+  if (width != null && height != null) return (width, height);
+  return switch (surface) {
+    // A desktop browser viewport; the web splash is a full-page background.
+    SplashSurface.web => (1280, 800),
+    _ => (393, 852),
+  };
+}
 
 /// The fraction of an Android 12 icon canvas that survives the mask.
 ///
