@@ -64,7 +64,9 @@ class SplashScreen extends StatelessWidget {
   /// Clears them again — closes the inspector.
   final VoidCallback? onShowAll;
 
-  /// Writes `?device=`, so the picker can move every tile onto one screen.
+  /// Writes `?device=`. The picker is on the inspector rather than over the
+  /// matrix, because a device only ever applies to the surfaces of its own
+  /// platform — see [splashPreviewDevicesFor].
   final ValueChanged<String?>? onSelectDevice;
 
   /// Writes the flavor segment.
@@ -156,8 +158,6 @@ class SplashScreen extends StatelessWidget {
           flavors: scan.flavors,
           selectedFlavor: config.config.flavor,
           onFlavor: onSelectFlavor,
-          device: device,
-          onDevice: onSelectDevice,
           onReload: () =>
               unawaited(core.invoke('reload', arguments: {'package': package})),
           onGenerate: config.blocksGeneration ? null : runCreate,
@@ -218,6 +218,7 @@ class SplashScreen extends StatelessWidget {
                             artifact,
                       ],
                       device: _deviceFor(surface!, device),
+                      onDevice: onSelectDevice,
                       onClose: onShowAll,
                     ),
                   ),

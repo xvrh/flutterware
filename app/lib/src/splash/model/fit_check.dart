@@ -55,12 +55,16 @@ class SplashFitFinding {
   final double amount;
 }
 
-/// The devices a surface will actually be seen on.
+/// The devices a surface will actually be seen on — what the warnings sweep.
 ///
 /// Platform-filtered, because "your Android splash is clipped on an iPad" is
 /// noise, and noise is what makes people stop reading warnings. Desktop is
 /// excluded outright: no surface here ships one, and the web splash is a
 /// browser viewport rather than a device.
+///
+/// Deliberately narrower than `splashPreviewDevicesFor` in `surface.dart`,
+/// which is what the picker offers: choosing to look at the web splash on a
+/// wide monitor is reasonable, and warning about it is not.
 List<Device> splashDevicesFor(SplashSurface surface) {
   var platform = switch (surface) {
     SplashSurface.android || SplashSurface.android12 => DevicePlatform.android,

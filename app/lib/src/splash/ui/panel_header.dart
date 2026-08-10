@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/plugins.dart';
-
 import '../../capture/capture_mode.dart';
-import '../../ui/menu.dart';
 import '../../ui/theme.dart';
 
 /// Whether anything on disk was made from the config, said in one phrase.
@@ -49,8 +46,6 @@ class SplashPanelHeader extends StatelessWidget {
     this.flavors = const [],
     this.selectedFlavor,
     this.onFlavor,
-    this.device,
-    this.onDevice,
     this.onReload,
     this.onGenerate,
   });
@@ -70,10 +65,6 @@ class SplashPanelHeader extends StatelessWidget {
   final List<String> flavors;
   final String? selectedFlavor;
   final ValueChanged<String?>? onFlavor;
-
-  /// The device every tile is drawn as, or null for each surface's own default.
-  final String? device;
-  final ValueChanged<String?>? onDevice;
 
   final VoidCallback? onReload;
 
@@ -135,8 +126,6 @@ class SplashPanelHeader extends StatelessWidget {
           ),
         ),
         _Toolbar(
-          device: device,
-          onDevice: onDevice,
           onReload: onReload,
           onGenerate: onGenerate,
           generated: state != SplashGeneratedState.never,
@@ -190,22 +179,19 @@ class _StatusPill extends StatelessWidget {
 
 /// The controls, on their own rule below the title.
 ///
-/// Borrowed wholesale from the asset inspector: a bordered strip, a `Wrap` so a
-/// narrow panel puts the actions on a second line instead of overflowing, and
-/// segmented pills rather than the accent-coloured text links this panel used
-/// to call buttons.
+/// Borrowed from the asset inspector: a bordered strip and real bordered
+/// buttons, rather than the accent-coloured text links this panel used to call
+/// controls.
+///
+/// **The device picker is not here.** It was, briefly, and it was a control that
+/// looked global and applied to two tiles out of eight — a device belongs to a
+/// platform, so an iOS phone can only ever redraw the iOS row. It lives on the
+/// inspector now, where it is attached to one cell and offers only the screens
+/// that cell can be.
 class _Toolbar extends StatelessWidget {
-  const _Toolbar({
-    required this.generated,
-    this.device,
-    this.onDevice,
-    this.onReload,
-    this.onGenerate,
-  });
+  const _Toolbar({required this.generated, this.onReload, this.onGenerate});
 
   final bool generated;
-  final String? device;
-  final ValueChanged<String?>? onDevice;
   final VoidCallback? onReload;
   final VoidCallback? onGenerate;
 
@@ -225,8 +211,6 @@ class _Toolbar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          if (onDevice != null)
-            _DevicePicker(device: device, onSelect: onDevice!),
           const Spacer(),
           if (onReload != null)
             SplashToolbarButton(
@@ -295,89 +279,6 @@ class SplashToolbarButton extends StatelessWidget {
       ),
     );
     return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
-  }
-}
-
-/// Which screen the matrix is drawn as.
-///
-/// **This existed and could not be reached.** `?device=iphone-se` has worked
-/// from the address bar since the device axis landed, and there has never been
-/// a control for it — so the sweep that is half of what this plugin is for was
-/// invisible unless you knew the parameter name.
-///
-/// A menu rather than a segmented row: nineteen devices in three groups is a
-/// list, and `Menu` already knows how to draw one with headers.
-class _DevicePicker extends StatelessWidget {
-  const _DevicePicker({required this.device, required this.onSelect});
-
-  final String? device;
-  final ValueChanged<String?> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var chosen = device == null ? null : deviceById(device!);
-
-    var groups = <String, List<Device>>{};
-    for (var candidate in Devices.all) {
-      groups.putIfAbsent(candidate.group, () => []).add(candidate);
-    }
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('Device', style: context.type.micro),
-        const Gap(FwSpacing.md),
-        Menu(
-          entries: [
-            MenuItem(
-              // Not "None": every tile is drawn as *some* device, and the
-              // default is per surface — an iPhone for iOS, a tall Android for
-              // the two Android rows.
-              'Each surface’s default',
-              onSelected: () => onSelect(null),
-            ),
-            for (var entry in groups.entries) ...[
-              const MenuDivider(),
-              MenuHeader(entry.key),
-              for (var candidate in entry.value)
-                MenuItem(
-                  '${candidate.label}  ·  '
-                  '${candidate.width.round()}×${candidate.height.round()}',
-                  onSelected: () => onSelect(candidate.id),
-                ),
-            ],
-          ],
-          builder: (context, controller) => InkWell(
-            onTap: controller.toggle,
-            borderRadius: BorderRadius.circular(context.radii.radius),
-            child: Container(
-              padding: const EdgeInsets.only(
-                left: FwSpacing.lg,
-                right: FwSpacing.md,
-                top: FwSpacing.xs,
-                bottom: FwSpacing.xs,
-              ),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(context.radii.radius),
-                border: Border.all(color: colors.line),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    chosen?.label ?? 'Default',
-                    style: context.type.caption.copyWith(color: colors.ink),
-                  ),
-                  const Gap(FwSpacing.xs),
-                  Icon(Icons.keyboard_arrow_down, size: 14, color: colors.mut2),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 }
 

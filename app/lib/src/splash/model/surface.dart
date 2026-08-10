@@ -8,6 +8,10 @@
 /// drawn.
 library;
 
+// Pure Dart, like this file — the device table is shared with `fw` and MCP,
+// which are compiled with `dart compile exe`.
+import 'package:flutterware/devices.dart';
+
 /// Which rendering path draws the splash.
 ///
 /// [android12] is a surface of its own rather than a flag on [android] because
@@ -270,6 +274,41 @@ String? defaultSplashDeviceId(SplashSurface surface) => switch (surface) {
   // The web splash is a full-page background in a browser, not a device.
   SplashSurface.web => null,
 };
+
+/// The screens a surface can honestly be *drawn* as — what the picker offers.
+///
+/// **A device belongs to a platform, and so does a splash.** Redrawing the
+/// Android row at an iPhone SE's 375×667, with an iPhone's notch and home
+/// indicator, would be a picture of a phone that does not exist — so a chosen
+/// device only ever applies to the surfaces of its own platform.
+///
+/// That rule was right and the control on top of it was not: a single picker
+/// over the whole matrix, listing all nineteen devices, quietly changing two
+/// tiles out of eight. The picker sits on the inspector now and asks this, so
+/// everything it offers applies to the cell it is attached to.
+///
+/// **Not the same list as `splashDevicesFor` in `fit_check.dart`**, and the
+/// difference is the job. That one is the *sweep*: which screens a warning
+/// should be computed against, where desktop is noise and web has no device at
+/// all. This one is what a reader may choose to look at, so web gets the
+/// desktop sizes — its canvas is a browser viewport, and a laptop against a
+/// wide monitor is the same question the phones answer.
+List<Device> splashPreviewDevicesFor(SplashSurface surface) {
+  var platforms = switch (surface) {
+    SplashSurface.android ||
+    SplashSurface.android12 => [DevicePlatform.android],
+    SplashSurface.ios => [DevicePlatform.ios],
+    SplashSurface.web => [
+      DevicePlatform.macos,
+      DevicePlatform.windows,
+      DevicePlatform.linux,
+    ],
+  };
+  return [
+    for (var device in Devices.all)
+      if (platforms.contains(device.platform)) device,
+  ];
+}
 
 /// The logical canvas a surface is previewed at, in the order (width, height).
 ///
