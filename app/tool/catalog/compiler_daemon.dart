@@ -565,6 +565,16 @@ class _Daemon {
     return result;
   }
 
+  /// Looks for entries alone, for a client that has just arrived.
+  ///
+  /// Queued like everything else, because a rescan rewrites the generated
+  /// wrappers and the entrypoint that a compile in flight is reading.
+  Future<void> rescan() {
+    var result = _queue.then((_) => _rescanIfNeeded());
+    _queue = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
   /// Compiles [id] for [session], one request at a time.
   Future<DaemonCompiled> select(
     _Session session,
@@ -1223,6 +1233,28 @@ class _Session {
       await _daemon._prepared.future;
     } catch (_) {
       return; // The failure was already sent.
+    }
+    if (arrivedAfterPrepare) {
+      // **The handshake is a snapshot, and for a client attaching to a warm
+      // daemon it was a snapshot of whenever that daemon happened to start.**
+      // Nothing else rescans on this path: a headless capture checks the id it
+      // was given against these entries and refuses before it ever reaches the
+      // `select` whose rescan would have found it — so a preview written after
+      // the daemon started was invisible to every later client, permanently,
+      // and re-running only re-read the same stale list. Measured: `fw run
+      // previews entries` listed a new entry that `screenshot` called "no such
+      // entry" for the daemon's whole ten-minute idle life.
+      //
+      // Only for a client that arrived after preparing. The one that spawned
+      // the daemon is already answered by [_prepare]'s own scan, which ran
+      // after it asked.
+      try {
+        await _daemon.rescan();
+      } catch (e, s) {
+        // A rescan that failed leaves the previous entries, which is what this
+        // client would have got anyway. Not a reason to refuse to serve it.
+        stderr.writeln('[catalog] rescan for $id failed: $e\n$s');
+      }
     }
     try {
       // After preparing, not on connect: the shared bundle this mirrors does
