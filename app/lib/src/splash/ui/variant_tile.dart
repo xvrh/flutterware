@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
 import '../../ui/theme.dart';
-import '../model/color.dart';
 import '../model/composition.dart';
 import '../model/config.dart';
 import '../model/scan.dart';
@@ -10,12 +9,21 @@ import '../model/surface.dart';
 import '../model/validation.dart';
 import 'splash_render.dart';
 
-/// One cell of the matrix: a splash at device scale, and why it looks like that.
+/// One cell of the matrix: a splash at device scale, its name, and where the
+/// picture came from.
 ///
-/// The caption is not decoration. A cell that says `#101418 · from
-/// color_dark_android` answers the question the picture provokes; without it,
-/// eight pictures side by side leave you knowing something is wrong and not
-/// where to change it.
+/// **Two lines, and they used to be six.** The tile carried the whole
+/// resolution — a colour swatch and its key, the image and its key, the
+/// branding and its key, the placement sentence — because those lines were the
+/// editor's click targets. The editor is gone, and eight tiles of wrapped grey
+/// text were competing with the eight pictures they were under. The values
+/// moved to `SplashCellInspector`, where they are a table and where somebody
+/// has actually come to read them.
+///
+/// What is left is what changes how you read the picture rather than what is
+/// in it: that the platform is off, that dark resolved nothing, that Android is
+/// drawing your launcher icon. Those are states, not values, and each is a
+/// short chip with the full sentence in its tooltip.
 class SplashVariantTile extends StatelessWidget {
   const SplashVariantTile({
     super.key,
@@ -82,7 +90,7 @@ class SplashVariantTile extends StatelessWidget {
             slotHeight: slotHeight,
             onTap: onTap,
           ),
-          const SizedBox(height: 8),
+          const Gap(FwSpacing.md),
           Row(
             children: [
               Expanded(
@@ -103,65 +111,74 @@ class SplashVariantTile extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 2),
+          const Gap(FwSpacing.xxs),
           _Origin(picture),
-          const SizedBox(height: 4),
-          ..._captions(context),
+          ..._notes(context),
         ],
       ),
     );
   }
 
-  List<Widget> _captions(BuildContext context) {
-    var type = context.type;
-    var colors = context.colors;
-
+  /// The state chips — never more than one in practice, and usually none.
+  List<Widget> _notes(BuildContext context) {
     if (!resolution.enabled) {
       return [
-        Text(
-          'Disabled in config',
-          style: type.caption.copyWith(color: colors.mut),
+        _Note(
+          'Disabled',
+          tooltip: 'This platform is switched off in the config.',
         ),
       ];
     }
-
     return [
       if (resolution.fallsBackToLight)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 2),
-          child: Text(
-            'No dark config — the OS shows the light splash',
-            style: type.caption.copyWith(color: colors.amber),
-          ),
+        _Note(
+          'No dark config',
+          warn: true,
+          tooltip:
+              'The dark keys are a chain of their own and never fall through '
+              'to the light ones, so the OS shows the light splash.',
         ),
-      // The picture is already honest; this says the image in it is Android's
-      // choice rather than the author's, which the picture cannot.
       if (composition.usesLauncherIcon)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 2),
-          child: Text(
-            'No android_12 image — this is your launcher icon',
-            style: type.caption.copyWith(color: colors.amber),
-          ),
-        ),
-      for (var (label, resolved) in [
-        (
-          'background',
-          resolution.backgroundImage.isPresent
-              ? resolution.backgroundImage
-              : resolution.color,
-        ),
-        ('image', resolution.image),
-        ('icon bg', resolution.iconBackgroundColor),
-        ('branding', resolution.branding),
-      ])
-        if (resolved.isPresent) _Provenance(label: label, resolved: resolved),
-      if (resolution.image.isPresent)
-        Text(
-          resolution.placementSummary,
-          style: type.caption.copyWith(color: colors.mut),
+        _Note(
+          'Launcher icon',
+          warn: true,
+          tooltip:
+              'No android_12 image is set, so Android draws your launcher '
+              'icon here, masked to a circle.',
         ),
     ];
+  }
+}
+
+/// A short state chip under a tile.
+class _Note extends StatelessWidget {
+  const _Note(this.label, {this.tooltip, this.warn = false});
+
+  final String label;
+  final String? tooltip;
+  final bool warn;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var chip = Container(
+      margin: const EdgeInsets.only(top: FwSpacing.xs),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.sm,
+        vertical: 1,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: warn ? colors.amber : colors.line),
+      ),
+      child: Text(
+        label,
+        style: context.type.micro.copyWith(
+          color: warn ? colors.amber : colors.mut2,
+        ),
+      ),
+    );
+    return tooltip == null ? chip : Tooltip(message: tooltip!, child: chip);
   }
 }
 
@@ -188,73 +205,6 @@ class _Origin extends StatelessWidget {
     );
     var reason = picture.reason;
     return reason == null ? text : Tooltip(message: reason, child: text);
-  }
-}
-
-/// Whether a caption line holds a colour rather than a path.
-///
-/// `background` is both, depending on what resolved — the caller passes the
-/// colour under that label only when no background image won, so the label is
-/// enough to tell them apart at the point it is read.
-bool _isColorLabel(String label) => label == 'background' || label == 'icon bg';
-
-/// A value and the key it came from, on one line.
-///
-/// **The key is the point.** `#101418 · color_dark_android` is the answer to
-/// "why does this cell look like that" and it names the line to go and change.
-/// It used to be a button that changed it for you; that is the editor, and the
-/// editor is gone.
-class _Provenance extends StatelessWidget {
-  const _Provenance({required this.label, required this.resolved});
-
-  final String label;
-  final Resolved<String> resolved;
-
-  @override
-  Widget build(BuildContext context) {
-    var type = context.type;
-    var colors = context.colors;
-    var value = resolved.value!;
-    // A colour reads better as a swatch than as six hex digits.
-    var isColor = _isColorLabel(label);
-
-    var row = DefaultTextStyle(
-      style: type.caption.copyWith(color: colors.mut),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (isColor) ...[
-            Container(
-              width: 10,
-              height: 10,
-              margin: const EdgeInsets.only(top: 2, right: 4),
-              decoration: BoxDecoration(
-                color: Color(parseSplashColor(value) ?? 0xFF000000),
-                borderRadius: BorderRadius.circular(2),
-                border: Border.all(color: colors.line),
-              ),
-            ),
-          ],
-          Expanded(
-            child: Text(
-              isColor ? '#$value' : value.split('/').last,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              resolved.key ?? '',
-              textAlign: TextAlign.right,
-              overflow: TextOverflow.ellipsis,
-              style: type.micro.copyWith(color: colors.mut3),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return Padding(padding: const EdgeInsets.only(bottom: 2), child: row);
   }
 }
 

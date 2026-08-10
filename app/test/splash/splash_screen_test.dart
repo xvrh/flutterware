@@ -12,6 +12,7 @@ import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/splash/model/surface.dart';
 import 'package:flutterware_app/src/splash/screen.dart';
+import 'package:flutterware_app/src/splash/ui/cell_inspector.dart';
 import 'package:flutterware_app/src/splash/ui/splash_render.dart';
 import 'package:flutterware_app/src/splash/ui/variant_tile.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
@@ -133,7 +134,7 @@ flutter_native_splash:
     expect(find.text('Web · Light'), findsOneWidget);
   });
 
-  testWidgets('captions each value with the key that produced it', (
+  testWidgets('says where each picture came from, and nothing else', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(2400, 2400);
@@ -149,10 +150,65 @@ flutter_native_splash:
 
     await mount(tester);
 
-    // Without this the eight pictures tell you something is wrong and not where
-    // to change it.
-    expect(find.text('color_dark_android'), findsWidgets);
-    expect(find.text('#000000'), findsWidgets);
+    // The provenance stays on the tile: it is the one thing a reader has to
+    // know before believing any of the eight pictures.
+    expect(find.text('Prediction'), findsWidgets);
+    // The values do not. Six wrapped grey lines under a 168px thumbnail, times
+    // eight, is what made the matrix unreadable — they are in the inspector,
+    // which is where somebody has come to read them.
+    expect(find.text('color_dark_android'), findsNothing);
+    expect(find.text('#000000'), findsNothing);
+  });
+
+  testWidgets('opens the inspector beside the matrix, not instead of it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(2800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    writePng('assets/logo.png', 1024, 1024);
+    write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  color_dark: "101418"
+  image: assets/logo.png
+''');
+
+    await mount(
+      tester,
+      surface: SplashSurface.android,
+      theme: SplashTheme.dark,
+    );
+
+    // All eight are still there. Selecting one used to replace the page, which
+    // took the comparison away at the moment somebody got interested in a cell.
+    expect(find.byType(SplashVariantTile), findsNWidgets(8));
+    expect(find.byType(SplashCellInspector), findsOneWidget);
+    // And the values are in it, keyed as they resolved.
+    expect(find.text('color_dark'), findsOneWidget);
+  });
+
+  testWidgets('closes the inspector without a back button', (tester) async {
+    tester.view.physicalSize = const Size(2800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+''');
+
+    var closed = false;
+    await mount(
+      tester,
+      surface: SplashSurface.android,
+      theme: SplashTheme.light,
+      onShowAll: () => closed = true,
+    );
+
+    await tester.tap(find.byIcon(Icons.close));
+    expect(closed, isTrue);
   });
 
   testWidgets('says so when a config file is not usable', (tester) async {
@@ -164,13 +220,17 @@ color: "FFFFFF"
     await mount(tester);
 
     expect(find.byType(SplashVariantTile), findsNothing);
-    expect(find.textContaining('flutter_native_splash:'), findsOneWidget);
+    expect(
+      find.text('The config file is not one the generator would read'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('explains itself when there is no config at all', (tester) async {
     await mount(tester);
+    expect(find.text('No splash configured'), findsOneWidget);
     expect(
-      find.textContaining('No flutter_native_splash config'),
+      find.textContaining('flutter_native_splash.yaml beside it'),
       findsOneWidget,
     );
   });
@@ -193,7 +253,7 @@ flutter_native_splash:
     expect(find.textContaining('stops `create` from running'), findsWidgets);
   });
 
-  group('one cell at a time', () {
+  group('the inspector', () {
     setUp(() {
       writePng('assets/logo.png', 1024, 1024);
       write('flutter_native_splash.yaml', '''
@@ -205,10 +265,8 @@ flutter_native_splash:
 ''');
     });
 
-    testWidgets('an address naming both axes shows that cell alone', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1600, 2000);
+    testWidgets('names the cell it is about', (tester) async {
+      tester.view.physicalSize = const Size(2800, 2400);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
@@ -218,15 +276,13 @@ flutter_native_splash:
         theme: SplashTheme.dark,
       );
 
-      // One prediction, not eight thumbnails with a border round one of them.
-      expect(find.byType(SplashVariantTile), findsOneWidget);
-      expect(find.text('Android · Dark'), findsWidgets);
+      // In the pane's own title bar, and on the tile it came from — the tile
+      // stays on screen, which is the whole point of not navigating.
+      expect(find.text('Android · Dark'), findsNWidgets(2));
     });
 
-    testWidgets('shows the generated files, alone, once generated', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1600, 2000);
+    testWidgets('draws the generated files, not the config', (tester) async {
+      tester.view.physicalSize = const Size(2800, 2400);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
@@ -254,23 +310,27 @@ flutter_native_splash:
         theme: SplashTheme.light,
       );
 
-      // One picture, not two. Showing the prediction beside the readback made
-      // the reader arbitrate between them, which is the panel's job.
-      expect(find.byType(SplashRender), findsOneWidget);
-      expect(find.text('From the generated files'), findsOneWidget);
-      expect(find.textContaining('Prediction'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(SplashCellInspector),
+          matching: find.text('From the generated files'),
+        ),
+        findsOneWidget,
+      );
+      // And the files behind it, so a reader can go and check.
+      expect(find.text('Files'), findsOneWidget);
+      expect(find.text('splash.png'), findsWidgets);
     });
 
-    testWidgets('says why there is nothing to compare against', (tester) async {
-      tester.view.physicalSize = const Size(1600, 2000);
+    testWidgets('says why a cell is a prediction', (tester) async {
+      tester.view.physicalSize = const Size(2800, 2400);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
       // Generated, so "nothing has been generated" is off the table and the
       // real iOS answer is the one that has to show.
       write(
-        'ios/Runner/Assets.xcassets/LaunchBackground.imageset/'
-            'Contents.json',
+        'ios/Runner/Assets.xcassets/LaunchBackground.imageset/Contents.json',
         '{}',
       );
       writePng('android/app/src/main/res/drawable/background.png', 1, 1);
@@ -279,12 +339,12 @@ flutter_native_splash:
 
       // Never "nothing generated" for iOS — there may be plenty on disk, we
       // simply cannot read a storyboard back.
-      expect(find.textContaining('cannot be read back'), findsOne);
+      expect(find.textContaining('cannot be read back'), findsOneWidget);
     });
 
     testWidgets('a project that has never run create is told so, not shown a '
         'black rectangle', (tester) async {
-      tester.view.physicalSize = const Size(1600, 2000);
+      tester.view.physicalSize = const Size(2800, 2400);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
@@ -307,30 +367,15 @@ flutter_native_splash:
 
       expect(find.text('From the generated files'), findsNothing);
       expect(
-        find.textContaining('Nothing has been generated yet'),
+        find.descendant(
+          of: find.byType(SplashCellInspector),
+          matching: find.textContaining('Nothing has been generated yet'),
+        ),
         findsOneWidget,
       );
       // And the command is on offer, not only named: a reader who has just been
       // told the picture is a guess wants the one action that makes it real.
       expect(find.text('Run flutter_native_splash:create'), findsOneWidget);
-    });
-
-    testWidgets('offers the way back to the matrix', (tester) async {
-      tester.view.physicalSize = const Size(1600, 2000);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-
-      var showedAll = false;
-      await mount(
-        tester,
-        surface: SplashSurface.web,
-        theme: SplashTheme.light,
-        onShowAll: () => showedAll = true,
-      );
-
-      // Back sits before the title, where every reader's eye goes for it.
-      await tester.tap(find.text('← All eight'));
-      expect(showedAll, isTrue);
     });
   });
 }

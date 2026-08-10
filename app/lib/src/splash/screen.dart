@@ -3,22 +3,29 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
-import '../capture/capture_mode.dart';
+import 'package:flutter/services.dart';
+
 import '../plugins/native/splash_core.dart';
+import '../ui/empty_state.dart';
 import '../ui/theme.dart';
 import 'model/config.dart';
 import 'model/scan.dart';
 import 'model/surface.dart';
 import 'model/validation.dart';
 import 'ui/artifacts_view.dart';
+import 'ui/cell_inspector.dart';
+import 'ui/panel_header.dart';
 import 'ui/variant_tile.dart';
 
-/// The whole matrix at once: four surfaces, two themes, side by side.
+/// The whole matrix at once: four surfaces, two themes, side by side — and,
+/// when one is selected, an inspector beside them rather than instead of them.
 ///
 /// Showing them together is the point. Any one of these is easy to get from a
 /// device; what nobody can hold in their head is that the same eight lines of
 /// YAML produce *these eight pictures*, and that two of them are usually not
-/// what the author expected.
+/// what the author expected. Which is why selecting one no longer replaces the
+/// page: the comparison used to disappear at exactly the moment you got
+/// interested in one cell, and left a text link to get back.
 class SplashScreen extends StatelessWidget {
   const SplashScreen(
     this.core, {
@@ -30,6 +37,8 @@ class SplashScreen extends StatelessWidget {
     this.device,
     this.onSelectCell,
     this.onShowAll,
+    this.onSelectDevice,
+    this.onSelectFlavor,
   });
 
   final SplashCore core;
@@ -38,8 +47,9 @@ class SplashScreen extends StatelessWidget {
   /// Which `flutter_native_splash-<flavor>.yaml`, from the address.
   final String? flavor;
 
-  /// The cell the address names, if it names one. Highlighted rather than shown
-  /// alone — the comparison is the feature.
+  /// The cell the address names, if it names one. Outlined in the matrix and
+  /// opened in the inspector — never shown alone, because the comparison is the
+  /// feature.
   final SplashSurface? surface;
   final SplashTheme? theme;
 
@@ -51,13 +61,25 @@ class SplashScreen extends StatelessWidget {
   /// own, where navigating means nothing.
   final void Function(SplashSurface, SplashTheme)? onSelectCell;
 
-  /// Clears them again — back to the matrix.
+  /// Clears them again — closes the inspector.
   final VoidCallback? onShowAll;
+
+  /// Writes `?device=`, so the picker can move every tile onto one screen.
+  final ValueChanged<String?>? onSelectDevice;
+
+  /// Writes the flavor segment.
+  final ValueChanged<String?>? onSelectFlavor;
 
   @override
   Widget build(BuildContext context) {
     var failure = core.failureFor(package);
-    if (failure != null) return _Message(failure, tone: Tone.error);
+    if (failure != null) {
+      return EmptyState(
+        icon: Icons.error_outline,
+        title: 'This package could not be read',
+        message: failure,
+      );
+    }
 
     var scan = core.scanFor(package);
     if (scan == null) {
@@ -65,14 +87,20 @@ class SplashScreen extends StatelessWidget {
     }
 
     if (scan.configErrors.isNotEmpty) {
-      return _Message(scan.configErrors.join('\n\n'), tone: Tone.error);
+      return EmptyState(
+        icon: Icons.error_outline,
+        title: 'The config file is not one the generator would read',
+        message: scan.configErrors.join('\n\n'),
+      );
     }
 
     if (!scan.isConfigured) {
-      return const _Message(
-        'No flutter_native_splash config in this package.\n\n'
-        'Add a `flutter_native_splash:` section to pubspec.yaml, or a '
-        'flutter_native_splash.yaml beside it.',
+      return const EmptyState(
+        icon: Icons.image_outlined,
+        title: 'No splash configured',
+        message:
+            'Add a `flutter_native_splash:` section to pubspec.yaml, or a '
+            'flutter_native_splash.yaml beside it.',
       );
     }
 
@@ -113,222 +141,136 @@ class SplashScreen extends StatelessWidget {
       );
     }());
 
-    return ListView(
-      padding: const EdgeInsets.all(24),
+    var open = surface != null && theme != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Header(
-          scan: scan,
-          config: config,
-          selected: flavor,
+        SplashPanelHeader(
+          package: package,
+          configPath: config.config.path,
+          fromPubspec: config.config.kind == SplashConfigKind.pubspec,
+          state: _stateOf(config),
+          fileCount: config.artifacts.length,
           scannedAt: core.scannedAt(package),
+          flavors: scan.flavors,
+          selectedFlavor: config.config.flavor,
+          onFlavor: onSelectFlavor,
+          device: device,
+          onDevice: onSelectDevice,
           onReload: () =>
               unawaited(core.invoke('reload', arguments: {'package': package})),
           onGenerate: config.blocksGeneration ? null : runCreate,
         ),
-        const SizedBox(height: 20),
-        // An address naming both axes names one cell, so show that cell rather
-        // than outlining it inside seven others. It is also what makes
-        // `fw capture …?surface=android12&theme=dark` produce a picture worth
-        // looking at instead of a thumbnail with a blue border.
-        if (surface != null && theme != null)
-          _SingleCell(
-            config: config,
-            surface: surface!,
-            theme: theme!,
-            device: device,
-            onShowAll: onShowAll,
-          )
-        else ...[
-          _Matrix(
-            config: config,
-            surface: surface,
-            theme: theme,
-            device: device,
-            onSelect: onSelectCell,
-          ),
-          if (config.problems.isNotEmpty) ...[
-            const SizedBox(height: 28),
-            _Problems(config.problems),
-          ],
-          const SizedBox(height: 28),
-          SplashArtifactsView(
-            artifacts: config.artifacts,
-            packageRoot: core.packageRootFor(package),
-            stale: config.stale,
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.scan,
-    required this.config,
-    this.selected,
-    this.scannedAt,
-    this.onReload,
-    this.onGenerate,
-  });
-
-  final SplashScan scan;
-  final SplashConfigScan config;
-  final String? selected;
-
-  /// When the panel last read the disk. Printed as a wall-clock time rather
-  /// than "2 minutes ago", which would need a ticker to stay true — and a
-  /// staleness display that is itself stale is worse than none.
-  final DateTime? scannedAt;
-
-  final VoidCallback? onReload;
-
-  /// Null when a problem stops `create` from running at all — offering a button
-  /// that is going to exit non-zero is worse than not offering one.
-  final VoidCallback? onGenerate;
-
-  @override
-  Widget build(BuildContext context) {
-    var type = context.type;
-    var colors = context.colors;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(config.config.path, style: type.heading),
-            const SizedBox(width: 8),
-            if (config.config.kind == SplashConfigKind.pubspec)
-              Text(
-                'from the pubspec section',
-                style: type.caption.copyWith(color: colors.mut),
-              ),
-            const Spacer(),
-            Text(
-              config.isGenerated
-                  ? config.stale
-                        ? 'Generated, then edited'
-                        : '${config.artifacts.length} files generated'
-                  // Not "never generated", which reads as a property of the
-                  // config rather than as a thing you have not done yet.
-                  : 'create has never run — this is a prediction',
-              style: type.caption.copyWith(
-                color: config.stale ? colors.amber : colors.mut,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            // A wall clock is the textbook thing `CaptureMode` exists for: it
-            // changes on every run and means nothing about the project, so a
-            // committed screenshot would churn on each regeneration. The button
-            // stays — it is part of what the panel *is*.
-            if (scannedAt != null && !CaptureMode.isCapturing(context))
-              Text(
-                'Read at ${_clock(scannedAt!)}',
-                style: type.micro.copyWith(color: colors.mut3),
-              ),
-            const SizedBox(width: 8),
-            if (onReload != null) _ReloadButton(onPressed: onReload!),
-            // Offered whenever anything on screen is a prediction rather than a
-            // readback — which is the only state where a reader has a question
-            // this button answers.
-            if (onGenerate != null &&
-                (!config.isGenerated || config.stale)) ...[
-              const SizedBox(width: 8),
-              _LinkButton(
-                label: config.isGenerated
-                    ? 'Re-run flutter_native_splash:create'
-                    : 'Run flutter_native_splash:create',
-                onPressed: onGenerate!,
-              ),
-            ],
-          ],
-        ),
-        if (scan.flavors.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (var entry in scan.configs)
-                _FlavorChip(
-                  label: entry.config.flavor ?? 'default',
-                  selected: entry.config.flavor == selected,
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(FwSpacing.xxl),
+                  children: [
+                    _Matrix(
+                      config: config,
+                      surface: surface,
+                      theme: theme,
+                      device: device,
+                      onSelect: onSelectCell,
+                    ),
+                    // Config-wide only. Anything that belongs to one cell is in
+                    // the inspector, beside the picture it is about — which is
+                    // where somebody reading it can see what it means.
+                    if (_configWide(config).isNotEmpty) ...[
+                      const Gap(FwSpacing.xxxl),
+                      _Problems(_configWide(config)),
+                    ],
+                    const Gap(FwSpacing.xxxl),
+                    SplashArtifactsView(
+                      artifacts: config.artifacts,
+                      packageRoot: core.packageRootFor(package),
+                      stale: config.stale,
+                    ),
+                  ],
+                ),
+              ),
+              if (open)
+                // Escape closes it. Claimed here rather than at the panel root
+                // so focus is taken only while the inspector is up, and handed
+                // back the moment it goes.
+                CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.escape): () =>
+                        onShowAll?.call(),
+                  },
+                  child: Focus(
+                    autofocus: true,
+                    child: SplashCellInspector(
+                      picture: config.pictureFor(surface!, theme!),
+                      resolution: config.resolutionFor(surface!, theme!),
+                      problems: config
+                          .problemsFor(surface!, theme!)
+                          .where((p) => p.surface != null)
+                          .toList(),
+                      artifacts: [
+                        for (var artifact in config.artifacts)
+                          if (artifact.surface == surface &&
+                              artifact.theme == theme)
+                            artifact,
+                      ],
+                      device: _deviceFor(surface!, device),
+                      onClose: onShowAll,
+                    ),
+                  ),
                 ),
             ],
           ),
-        ],
+        ),
       ],
     );
   }
 }
 
-String _two(int value) => '$value'.padLeft(2, '0');
+/// Which of the three states the header's pill is in.
+SplashGeneratedState _stateOf(SplashConfigScan config) => !config.isGenerated
+    ? SplashGeneratedState.never
+    : config.stale
+    ? SplashGeneratedState.stale
+    : SplashGeneratedState.current;
 
-String _clock(DateTime time) =>
-    '${_two(time.hour)}:${_two(time.minute)}:${_two(time.second)}';
+/// The problems that belong to the config rather than to one cell.
+List<SplashProblem> _configWide(SplashConfigScan config) => [
+  for (var problem in config.problems)
+    if (problem.surface == null) problem,
+];
 
-/// The manual re-read.
+/// The screen a surface draws as.
 ///
-/// **Permanent, not a fallback for when detection breaks.** Polling can miss an
-/// edit on a network mount or a filesystem with coarse mtimes, and the failure
-/// is silent — a stale preview looks exactly like a correct one. A button that
-/// is always there costs one row and removes the whole class of "I don't trust
-/// what this is showing me".
-class _ReloadButton extends StatelessWidget {
-  const _ReloadButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Tooltip(
-      message: 'Read the config and its images again',
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          child: Text(
-            'Reload',
-            style: context.type.micro.copyWith(color: colors.accent),
-          ),
-        ),
-      ),
-    );
+/// **Resolved per surface, not once for the matrix.** The picker writes one
+/// `?device=`, but an iPhone is not a canvas for the Android tiles — asking for
+/// an iPhone SE and getting the Android row redrawn at 375×667 would be a
+/// picture of a phone that does not exist. So a chosen device applies to the
+/// surfaces of its own platform and the rest keep their defaults.
+Device? _deviceFor(SplashSurface surface, String? device) {
+  var chosen = device == null ? null : deviceById(device);
+  if (chosen != null) {
+    var platform = switch (surface) {
+      SplashSurface.android ||
+      SplashSurface.android12 => DevicePlatform.android,
+      SplashSurface.ios => DevicePlatform.ios,
+      SplashSurface.web => null,
+    };
+    if (chosen.platform == platform) return chosen;
   }
-}
-
-class _FlavorChip extends StatelessWidget {
-  const _FlavorChip({required this.label, required this.selected});
-
-  final String label;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: selected ? colors.accentSoft : colors.panel2,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: selected ? colors.accent : colors.line),
-      ),
-      child: Text(label, style: context.type.caption),
-    );
-  }
+  var fallback = defaultSplashDeviceId(surface);
+  return fallback == null ? null : deviceById(fallback);
 }
 
 /// Surfaces across, themes down.
 ///
 /// Laid out as a `Wrap` rather than a fixed grid so a narrow panel reflows
-/// instead of squeezing eight phones into a column too thin to read.
+/// instead of squeezing eight phones into a column too thin to read — which is
+/// also what lets the inspector take 380px out of the width without the matrix
+/// breaking.
 class _Matrix extends StatelessWidget {
   const _Matrix({
     required this.config,
@@ -344,33 +286,11 @@ class _Matrix extends StatelessWidget {
   final String? device;
   final void Function(SplashSurface, SplashTheme)? onSelect;
 
-  /// The screen a surface draws as.
-  ///
-  /// **Resolved per surface, not once for the matrix.** The address carries one
-  /// `?device=`, but an iPhone is not a canvas for the Android tiles — asking
-  /// for an iPhone SE and getting the Android row redrawn at 375×667 would be a
-  /// picture of a phone that does not exist. So a chosen device applies to the
-  /// surfaces of its own platform and the rest keep their defaults.
-  Device? _deviceFor(SplashSurface surface) {
-    var chosen = device == null ? null : deviceById(device!);
-    if (chosen != null) {
-      var platform = switch (surface) {
-        SplashSurface.android ||
-        SplashSurface.android12 => DevicePlatform.android,
-        SplashSurface.ios => DevicePlatform.ios,
-        SplashSurface.web => null,
-      };
-      if (chosen.platform == platform) return chosen;
-    }
-    var fallback = defaultSplashDeviceId(surface);
-    return fallback == null ? null : deviceById(fallback);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 20,
-      runSpacing: 24,
+      spacing: FwSpacing.xl,
+      runSpacing: FwSpacing.xxl,
       children: [
         for (var s in SplashSurface.values)
           for (var t in SplashTheme.values)
@@ -382,7 +302,7 @@ class _Matrix extends StatelessWidget {
                   .problemsFor(s, t)
                   .where((p) => p.surface != null)
                   .toList(),
-              device: _deviceFor(s),
+              device: _deviceFor(s, device),
               selected: s == surface && t == theme,
               onTap: onSelect == null ? null : () => onSelect!(s, t),
             ),
@@ -391,151 +311,7 @@ class _Matrix extends StatelessWidget {
   }
 }
 
-/// One cell, large.
-///
-/// **One picture, not two.** It used to show the prediction and the
-/// recomposition side by side and let the reader work out which to believe;
-/// that is a question a panel should answer rather than delegate, and the two
-/// tiles were the source of every "why is this one black" in first contact. So
-/// the generated files are the picture wherever they exist, the prediction is
-/// the picture where they cannot, and a line under it says which happened.
-///
-/// The exception is a config edited since `create` last ran, where the two
-/// pictures are different *facts* — what ships today and what would ship after
-/// re-running — and showing both is the whole answer.
-class _SingleCell extends StatelessWidget {
-  const _SingleCell({
-    required this.config,
-    required this.surface,
-    required this.theme,
-    this.device,
-    this.onShowAll,
-  });
-
-  final SplashConfigScan config;
-  final SplashSurface surface;
-  final SplashTheme theme;
-  final String? device;
-  final VoidCallback? onShowAll;
-
-  @override
-  Widget build(BuildContext context) {
-    var type = context.type;
-    var colors = context.colors;
-
-    var chosen = device == null ? null : deviceById(device!);
-    var fallback = defaultSplashDeviceId(surface);
-    var resolved = chosen ?? (fallback == null ? null : deviceById(fallback));
-
-    var picture = config.pictureFor(surface, theme);
-    // The second tile, and only when it says something the first cannot: the
-    // config has moved since `create` ran, so the picture on the left is the
-    // splash on the device and this is the one waiting behind it.
-    var pending = picture.isGenerated && config.stale
-        ? config.compositionFor(surface, theme)
-        : null;
-    var problems = config
-        .problemsFor(surface, theme)
-        .where((p) => p.surface != null)
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            // Back goes on the left, before the title, because that is where
-            // every reader's eye and every other application puts it. It was on
-            // the far right of the row reading "Show all eight", which is a
-            // description of the destination and not an offer to leave.
-            if (onShowAll != null) ...[
-              _LinkButton(label: '← All eight', onPressed: onShowAll!),
-              const SizedBox(width: 10),
-            ],
-            Text('${surface.label} · ${theme.label}', style: type.sectionLabel),
-            const SizedBox(width: 10),
-            if (resolved != null)
-              Text(
-                '${resolved.label} · '
-                '${resolved.width.round()}×${resolved.height.round()}',
-                style: type.caption.copyWith(color: colors.mut),
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 24,
-          runSpacing: 20,
-          children: [
-            SplashVariantTile(
-              picture: picture,
-              resolution: config.resolutionFor(surface, theme),
-              problems: problems,
-              device: resolved,
-              width: 260,
-              slotHeight: 480,
-            ),
-            if (pending != null)
-              SizedBox(
-                width: 260,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SplashScreenBox(
-                      composition: pending,
-                      enabled: true,
-                      selected: false,
-                      device: resolved,
-                      slotHeight: 480,
-                    ),
-                    const SizedBox(height: 8),
-                    Text('After you re-run create', style: type.bodyStrong),
-                    const SizedBox(height: 4),
-                    Text(
-                      'The config has changed since the splash was generated. '
-                      'This is what the new config predicts; the picture on the '
-                      'left is what devices show until create runs again.',
-                      style: type.caption.copyWith(color: colors.amber),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        if (picture.reason case var reason?) ...[
-          const SizedBox(height: 10),
-          Text(reason, style: type.caption.copyWith(color: colors.mut)),
-        ],
-        if (problems.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          _Problems(problems),
-        ],
-      ],
-    );
-  }
-}
-
-class _LinkButton extends StatelessWidget {
-  const _LinkButton({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onPressed,
-    borderRadius: BorderRadius.circular(4),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      child: Text(
-        label,
-        style: context.type.caption.copyWith(color: context.colors.accent),
-      ),
-    ),
-  );
-}
-
+/// The problems that are about the config as a whole.
 class _Problems extends StatelessWidget {
   const _Problems(this.problems);
 
@@ -556,15 +332,15 @@ class _Problems extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Problems', style: type.sectionLabel),
-        const SizedBox(height: 8),
+        const Gap(FwSpacing.md),
         for (var problem in problems)
           Padding(
-            padding: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.only(bottom: FwSpacing.lg),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(top: 5, right: 8),
+                  padding: const EdgeInsets.only(top: 5, right: FwSpacing.md),
                   child: Container(
                     width: 6,
                     height: 6,
@@ -581,14 +357,14 @@ class _Problems extends StatelessWidget {
                       Text(problem.message, style: type.body),
                       if (problem.key != null || problem.blocksGeneration)
                         Padding(
-                          padding: const EdgeInsets.only(top: 2),
+                          padding: const EdgeInsets.only(top: FwSpacing.xxs),
                           child: Text(
                             [
                               if (problem.key != null) problem.key!,
                               if (problem.blocksGeneration)
                                 'stops `create` from running',
-                            ].join(' · '),
-                            style: type.micro.copyWith(color: colors.mut2),
+                            ].join('  ·  '),
+                            style: type.micro.copyWith(color: colors.mut3),
                           ),
                         ),
                     ],
@@ -598,29 +374,6 @@ class _Problems extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _Message extends StatelessWidget {
-  const _Message(this.text, {this.tone = Tone.neutral});
-
-  final String text;
-  final Tone tone;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: context.type.bodyMuted.copyWith(
-            color: tone == Tone.error ? context.colors.red : null,
-          ),
-        ),
-      ),
     );
   }
 }

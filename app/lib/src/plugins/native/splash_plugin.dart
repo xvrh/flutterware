@@ -132,6 +132,13 @@ class _SplashPanelState extends State<_SplashPanel> {
         onShowAll: () => AddressScope.write(
           context,
         ).setParams({'surface': null, 'theme': null}),
+        onSelectDevice: (id) =>
+            AddressScope.write(context).setParams({'device': id}),
+        // The flavor is a segment, not an axis: it selects a different config
+        // file, and everything below it — every cell, every problem, every
+        // generated file — belongs to that file rather than to this one.
+        onSelectFlavor: (name) =>
+            AddressScope.write(context).setSegments([place.package, ?name]),
       ),
     );
   }
