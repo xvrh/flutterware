@@ -148,12 +148,25 @@ const fwCommands = [
     usage:
         'capture [<address>] -o <file> [--size=WxH] [--theme=light|dark] '
         '[--pixel-ratio=N] [--timeout=<seconds>]',
-    summary: 'photograph the GUI at an address',
+    summary: 'photograph the GUI window itself, at an address',
     details:
         'Opens the GUI, goes to `<address>`, waits until nothing is still\n'
         'working, writes a PNG and exits. No window is left behind and '
         'nothing\nhas to be clicked, so this is what a documentation script '
         'calls.\n'
+        '\n'
+        '**This photographs the window, chrome and all** — the rail, the tree,\n'
+        'the tab bar with the branch name in it, and the panel somewhere '
+        'inside.\nThat is the point when the subject *is* flutterware. It is '
+        'the wrong\ntool for looking at a widget you are working on: to '
+        'photograph a preview\nitself, at its own size and nothing else '
+        'around it, use\n\n'
+        "    fw run previews screenshot --entry='<file.dart#symbol>'\n"
+        '\n'
+        'which renders headlessly in about a second and needs no GUI at all.\n'
+        '`fw run previews entries` reports both — the `id` that action takes '
+        'and\nthe `address` this one does — so holding an address is not a '
+        'reason to\nprefer this.\n'
         '\n'
         'Give `--size` and `--theme` for anything you intend to commit. '
         'Without\nthem the picture is whatever size the window opened at, in '

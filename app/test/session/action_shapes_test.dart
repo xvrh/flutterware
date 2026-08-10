@@ -72,6 +72,27 @@ void main() {
     expect(knob.fields.map((f) => f.name), isNot(contains('defaultValue')));
   });
 
+  test('a member kept off the wire is kept out of the document', () {
+    // `@JsonKey(includeToJson: false)` says so in one word, and until it was
+    // read the document listed three kinds of member no reply ever contains: a
+    // declared field the producer keeps for itself (`ScenarioRunStep.root` —
+    // "Not on the wire", says its own dartdoc), a convenience getter
+    // (`imageFile`), and the `ProducesArtifacts` hook every result that carries
+    // a picture now implements.
+    var step = resultShapes['ScenarioRunStep']!;
+    expect(step.fields.map((f) => f.name), isNot(contains('root')));
+    expect(step.fields.map((f) => f.name), isNot(contains('imageFile')));
+    // The getter case is the one that needs the accessor read as well as the
+    // field: a computed member's field is synthetic and carries no metadata,
+    // so a check that looked only at the field caught none of them.
+    expect(
+      resultShapes['CatalogInspectResult']!.fields.map((f) => f.name),
+      isNot(contains('artifacts')),
+    );
+    // And what is sent is still described.
+    expect(step.fields.map((f) => f.name), contains('image'));
+  });
+
   group('a hand-written toJson', () {
     // `Artifact` is the most-returned result of all and writes its own map, so
     // for a while it published nothing. It is described now by reading that

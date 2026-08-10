@@ -152,6 +152,13 @@ class ShapeExtractor {
     var fields = <ResultField>[];
     for (var field in type.fields) {
       if (field.isStatic || field.isPrivate) continue;
+      // Declared on the class but deliberately not sent. `ProducesArtifacts`
+      // is the reason this exists: a result implements it so that a surface
+      // which can render a picture finds one, and marks the getter
+      // `includeToJson: false` because the artifact is already on the wire
+      // under its own name. Documenting it anyway put a field in the shape
+      // that no reply ever contains.
+      if (_omittedFromJson(field)) continue;
       var nested = _walkable(field.type);
       fields.add(
         ResultField(
@@ -199,6 +206,27 @@ class ShapeExtractor {
           'JsonSerializable') {
         return true;
       }
+    }
+    return false;
+  }
+
+  /// Whether `@JsonKey(includeToJson: false)` keeps this field off the wire.
+  ///
+  /// The getter is checked as well as the field, and that is the whole trick: a
+  /// computed member — `imageFile`, `artifacts` — is a getter with a
+  /// *synthetic* field behind it, and the annotation is written on the getter,
+  /// so the synthetic field carries no metadata at all. Reading only the field
+  /// caught the declared ones and silently kept every computed one, which is
+  /// most of them.
+  static bool _omittedFromJson(FieldElement field) =>
+      _hasIncludeToJsonFalse(field.metadata.annotations) ||
+      _hasIncludeToJsonFalse(field.getter?.metadata.annotations ?? const []);
+
+  static bool _hasIncludeToJsonFalse(List<ElementAnnotation> annotations) {
+    for (var annotation in annotations) {
+      var value = annotation.computeConstantValue();
+      if (value?.type?.element?.name != 'JsonKey') continue;
+      if (value?.getField('includeToJson')?.toBoolValue() == false) return true;
     }
     return false;
   }
