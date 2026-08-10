@@ -109,8 +109,8 @@ const playerMotion = MotionValues(
         Seg<double>(
           start: Duration.zero,
           end: Duration(milliseconds: 620),
-          from: 0.7871895410111699,
-          to: 20,
+          from: 4.2650298383670755,
+          to: 19.125370826325277,
           curve: Curves.easeOutCubic,
         ),
       ],
@@ -118,7 +118,7 @@ const playerMotion = MotionValues(
         Seg<double>(
           start: Duration(milliseconds: 52),
           end: Duration(milliseconds: 572),
-          from: 0.5181250000000007,
+          from: -0.5475000000000003,
           to: 20,
           curve: Curves.easeOutCubic,
         ),
@@ -183,9 +183,9 @@ const playerMotion = MotionValues(
       ],
       'translateY': [
         Seg<double>(
-          start: Duration(milliseconds: 240),
-          end: Duration(milliseconds: 620),
-          from: 14,
+          start: Duration(milliseconds: 230),
+          end: Duration(milliseconds: 610),
+          from: 7.510416666666642,
           to: 0,
           curve: Curves.easeOutCubic,
         ),

@@ -89,6 +89,7 @@ void main() {
     // async zone — the future would simply never complete.
     await tester.runAsync(core.computeAll);
     core.debugSetProbe(handle, const RunProbe(app: true, launcher: true));
+    var screenshot = Uint8List.fromList(_onePixelPng);
     core.debugRead = (_) async => InspectRead(
       tree: InspectTree(
         entryId: null,
@@ -98,7 +99,7 @@ void main() {
           createdByLocalProject: true,
         ),
       ),
-      image: Uint8List.fromList(_onePixelPng),
+      image: screenshot,
     );
 
     var address = ValueNotifier(
@@ -119,6 +120,19 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump();
+
+    // Decode the screenshot here rather than leaving a codec in flight. The
+    // pumps above run in fake async, so `Image.memory` only schedules its
+    // decode; the real work would then land in whichever test runs next, which
+    // reports it as an image-resource exception that test never caused. Same
+    // bytes instance, so this is the provider the widget is already waiting on.
+    await tester.runAsync(
+      () => precacheImage(
+        MemoryImage(screenshot),
+        tester.element(find.byType(Image)),
+      ),
+    );
     await tester.pump();
 
     // The read completed. Before the fix this threw inside `initState`, the
@@ -251,11 +265,16 @@ void main() {
   });
 }
 
-/// The smallest valid PNG — `Image.memory` has to decode something.
+/// One opaque white pixel: signature, IHDR, IDAT, IEND.
+///
+/// It has to decode, not merely look like a PNG. An undecodable blob does not
+/// fail the test that mounts it — nothing awaits the codec — it fails whichever
+/// test runs next, as an image-resource exception with no visible cause.
 const _onePixelPng = [
-  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, //
-  0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137,
-  0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 250, 207, 0, 0,
-  3, 1, 1, 0, 24, 221, 141, 219, 0, 0, 0, 0, 73, 69, 78, 68,
-  174, 66, 96, 130,
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, //
+  73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
+  8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0,
+  13, 73, 68, 65, 84, 120, 218, 99, 96, 96, 96, 248,
+  15, 0, 1, 4, 1, 0, 128, 187, 209, 91, 0, 0,
+  0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
 ];

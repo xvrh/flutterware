@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../ui/field_row.dart';
 import '../ui/theme.dart';
 import 'model/asset_catalog.dart';
 import 'model/asset_scan.dart';
@@ -225,16 +226,16 @@ class AssetDetailView extends StatelessWidget {
       children: [
         SelectableText(asset.key, style: context.type.heading),
         const Gap(FwSpacing.lg),
-        _Field('Kind', assetKindOf(asset.key).label),
+        FieldRow('Kind', assetKindOf(asset.key).label),
         if (dimensions case var size?)
-          _Field(
+          FieldRow(
             'Dimensions',
             '${size.width.toInt()} × ${size.height.toInt()}',
           ),
-        _Field('Size', formatBytes(file.length)),
+        FieldRow('Size', formatBytes(file.length)),
         if (asset.files.length > 1)
-          _Field('Total, all densities', formatBytes(asset.totalBytes)),
-        _Field(
+          FieldRow('Total, all densities', formatBytes(asset.totalBytes)),
+        FieldRow(
           'Package',
           asset.package == null ? 'this package' : 'package:${asset.package}',
         ),
@@ -244,44 +245,20 @@ class AssetDetailView extends StatelessWidget {
         // The declaration, not just the file: a directory declaration is the
         // only answer to "why is this in my bundle", and it is not derivable
         // from the path.
-        _Field('Declared as', asset.declaration),
-        _Field('File', relative),
+        FieldRow('Declared as', asset.declaration),
+        FieldRow('File', relative),
         if (asset.files.length > 1) ...[
           const Gap(FwSpacing.xl),
           Text('Densities', style: context.type.sectionLabel),
           const Gap(FwSpacing.md),
           for (var variant in asset.files)
-            _Field(
+            FieldRow(
               variant.scale == null ? '1×' : '${_trim(variant.scale!)}×',
               '${p.relative(variant.path, from: asset.packageRoot)}'
               '   ${formatBytes(variant.length)}',
             ),
         ],
       ],
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: FwSpacing.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 150,
-            child: Text(label, style: context.type.bodyMuted),
-          ),
-          Expanded(child: SelectableText(value, style: context.type.body)),
-        ],
-      ),
     );
   }
 }

@@ -1269,6 +1269,42 @@ void main() {
       expect(result.error, isNotNull);
     });
   });
+
+  group('what the window is told to wait for', () {
+    // `fw capture` waits for every plugin in the worktree session, not for the
+    // one panel it was sent to photograph. So a branch here that reports busy
+    // because data is *missing* rather than *coming* holds up every capture in
+    // the app — measured at 300 of the 360 seconds a cold one took, waiting on
+    // a device scan nobody had started, to photograph the previews panel.
+
+    test('a core nobody has opened is not finding devices', () {
+      expect(
+        core.isFindingDevices,
+        isFalse,
+        reason: 'nothing is looking, so there is nothing to wait for',
+      );
+      expect(core.devices, isEmpty, reason: 'and it still has no list');
+    });
+
+    test('a core the panel opened is', () {
+      RunCore.debugLive = false;
+      addTearDown(() => RunCore.debugLive = true);
+
+      core.track();
+
+      expect(core.isFindingDevices, isTrue);
+    });
+
+    test('an empty cache does not mean a scan is under way', () {
+      // The exact shape of the bug: no daemon and no devices read as "still
+      // finding them", when in a capture process both are permanent.
+      DeviceCache.write(runDir.path, const []);
+
+      expect(core.isLive, isFalse);
+      expect(core.devices, isEmpty);
+      expect(core.isFindingDevices, isFalse);
+    });
+  });
 }
 
 RunCore _coreFor(Directory worktree, {Map<String, Object?> config = const {}}) {

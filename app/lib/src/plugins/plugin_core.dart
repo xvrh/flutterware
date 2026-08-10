@@ -38,11 +38,22 @@ abstract class PluginCore {
 
   /// Runs one of [report]'s actions. [arguments] are keyed by
   /// `ActionParameter.id`, whether they came from a form, a flag or an agent.
+  ///
+  /// The failure names what *is* declared, like every other refusal on this
+  /// surface — "no such device. Accepted: …", 'No plugin "nope". Declared: …'.
+  /// This was the one that did not, and it is the one a caller most often
+  /// reaches by guessing at a name.
   Future<Object?> invoke(
     String actionId, {
     Map<String, Object?> arguments = const {},
   }) async {
-    throw ArgumentError.value(actionId, 'actionId', 'unknown action on $id');
+    var declared = report.actions.map((action) => action.id).toList();
+    throw ArgumentError.value(
+      actionId,
+      'actionId',
+      'unknown action on $id. '
+          '${declared.isEmpty ? 'It declares none.' : 'Declared: ${declared.join(', ')}'}',
+    );
   }
 
   /// What this plugin has that matches [query].

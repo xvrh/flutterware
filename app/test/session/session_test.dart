@@ -42,6 +42,7 @@ void main() {
       'flutterware.previews',
       'flutterware.motion',
       'flutterware.splash',
+      'flutterware.launcher_icon',
       'flutterware.server',
       'flutterware.run',
       'flutterware.scenarios',

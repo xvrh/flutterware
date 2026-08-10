@@ -18,6 +18,8 @@ Map<String, dynamic> _$SplashDescribeResultToJson(
   'flavor': ?instance.flavor,
   'enabled': instance.enabled,
   'placement': instance.placement,
+  'generated': instance.generated,
+  'predictedBecause': ?instance.predictedBecause,
   'properties': instance.properties.map((e) => e.toJson()).toList(),
   'fallsBackToLight': instance.fallsBackToLight,
   'problems': instance.problems.map((e) => e.toJson()).toList(),
@@ -37,7 +39,16 @@ Map<String, dynamic> _$SplashProblemEntryToJson(SplashProblemEntry instance) =>
       'key': ?instance.key,
       'surface': ?instance.surface,
       'theme': ?instance.theme,
+      'device': ?instance.device,
       'blocksGeneration': instance.blocksGeneration,
+    };
+
+Map<String, dynamic> _$SplashReloadResultToJson(SplashReloadResult instance) =>
+    <String, dynamic>{
+      'package': instance.package,
+      'configPath': ?instance.configPath,
+      'scannedAt': instance.scannedAt,
+      'changed': instance.changed,
     };
 
 Map<String, dynamic> _$SplashGenerateResultToJson(
@@ -66,6 +77,10 @@ Map<String, dynamic> _$SplashArtifactEntryToJson(
   'path': instance.path,
   'surface': instance.surface,
   'theme': instance.theme,
+  'role': instance.role,
   'density': ?instance.density,
+  'pixelWidth': ?instance.pixelWidth,
+  'pixelHeight': ?instance.pixelHeight,
+  'logicalWidth': ?instance.logicalWidth,
   'modified': instance.modified,
 };

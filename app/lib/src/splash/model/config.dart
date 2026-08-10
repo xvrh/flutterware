@@ -100,11 +100,16 @@ class SplashConfig {
   ///
   /// **Light and dark are two independent two-step chains.** Dark never falls
   /// through to light — `color_dark_android ?? color_dark` and then nothing. A
-  /// project that sets `color` and no `color_dark` resolves *nothing* for dark,
-  /// which is not a preview artefact: the generator writes no `-night`
-  /// resources, so the OS shows the light splash in dark mode. That is a real
-  /// and very common outcome, and [SplashResolution.fallsBackToLight] is how a
-  /// reader is told it is looking at it.
+  /// project that sets `color` and no `color_dark` resolves *nothing* for dark
+  /// here.
+  ///
+  /// **That is the config level, and it is only half the story.** The files the
+  /// generator writes are platform *resources*, and every platform resolves a
+  /// missing dark resource to the light one — so "nothing resolved" does not
+  /// mean "nothing is shown". [resolveSplash] is where that second half lives,
+  /// and reading this method as the whole answer is what produced the plugin's
+  /// most confident wrong claim. Nothing here should grow a fallback; the
+  /// distinction is the point.
   Resolved<String> resolve(
     String base,
     SplashSurface surface,
@@ -148,8 +153,12 @@ class SplashConfig {
   ///
   /// **No fallback to the top-level `image`** — `android12Image` is read from
   /// the section and nowhere else. This is the footgun: an app with a perfectly
-  /// good `image:` and no `android_12:` section shows a bare colour on every
-  /// device from Android 12 on. [SplashValidation] reports it.
+  /// good `image:` and no `android_12:` section shows its *launcher icon* on
+  /// every device from Android 12 on, because the generator then writes no
+  /// `windowSplashScreenAnimatedIcon` and that attribute's platform default is
+  /// the app icon. `validateSplash` reports it, and `composeSplash` draws the
+  /// launcher icon rather than nothing, so the preview shows what will really
+  /// happen.
   Resolved<String> android12Image(SplashTheme theme) {
     var section = android12Section;
     if (theme == SplashTheme.dark) {
@@ -306,6 +315,28 @@ class SplashResolution {
   bool get isEmpty =>
       !color.isPresent && !backgroundImage.isPresent && !image.isPresent;
 
+  /// This light resolution, labelled as the dark cell it will be shown in.
+  ///
+  /// Everything keeps its light key, which is the honest answer and what the
+  /// captions print: the value really did come from `color`, and that is
+  /// precisely the thing the reader needs to know.
+  SplashResolution _asDarkFallback() => SplashResolution(
+    surface: surface,
+    theme: SplashTheme.dark,
+    enabled: enabled,
+    color: color,
+    backgroundImage: backgroundImage,
+    image: image,
+    branding: branding,
+    iconBackgroundColor: iconBackgroundColor,
+    fit: fit,
+    alignment: alignment,
+    brandingAlignment: brandingAlignment,
+    brandingBottomPadding: brandingBottomPadding,
+    fullscreen: fullscreen,
+    fallsBackToLight: true,
+  );
+
   Map<String, Object?> toJson() => {
     'surface': surface.name,
     'theme': theme.name,
@@ -353,15 +384,61 @@ SplashResolution resolveSplash(
 ) {
   var isAndroid12 = surface == SplashSurface.android12;
 
+  // Dark falls back to light at the **resource** level, and this is where that
+  // finally happens rather than only being described.
+  //
+  // The config cascade really does not fall through: `color_dark` never reads
+  // `color`. But the *files* the generator writes are resources, and every
+  // platform resolves a missing dark one to the light one:
+  //
+  // - **Android** — the dark `launch_background.xml` is written with
+  //   `showImage: imagePath != null`, the **light** path, so it references
+  //   `@drawable/splash` whether or not a dark one exists. With no
+  //   `drawable-night-*/splash.png`, Android's own resource resolution picks the
+  //   non-night folder.
+  // - **iOS** — `Contents.json` is `darkImagePath != null ? …Dark : …`, so with
+  //   no dark image the asset catalog has no dark appearance at all and the one
+  //   image serves both.
+  // - **Web** — `darkImagePath ??= imagePath`, in as many words.
+  //
+  // Modelling this as "dark resolved nothing, so draw nothing" produced the
+  // plugin's most confident and most wrong claim: that a project with
+  // `color_dark` and no `image_dark` ships a dark splash with no logo on it. It
+  // ships the light logo on the dark colour, which is what most people wanted.
+  if (theme == SplashTheme.dark && _fallsBackToLight(config, surface)) {
+    // Nothing dark is generated at all, so *every* resource resolves to the
+    // light folder: this cell is the light cell. Drawing it as empty is how the
+    // dark tile came to be a black rectangle underneath a caption saying the OS
+    // shows the light splash.
+    return resolveSplash(config, surface, SplashTheme.light)._asDarkFallback();
+  }
+
+  /// The dark value, or the light resource it resolves to when unset.
+  Resolved<String> resource(String base) {
+    if (theme == SplashTheme.light) return config.resolve(base, surface, theme);
+    var dark = config.resolve(base, surface, theme);
+    if (dark.isPresent) return dark;
+    return config.resolve(base, surface, SplashTheme.light);
+  }
+
   var color = isAndroid12
       ? config.android12Color(theme)
       : config.resolve('color', surface, theme);
   var image = isAndroid12
+      // Android 12's own cascade already falls back — `android12Image(dark)`
+      // reads `image_dark` then `image` — so the section needs nothing here.
       ? config.android12Image(theme)
-      : config.resolve('image', surface, theme);
+      : resource('image');
+  // Web used to be special-cased here, on the claim that a missing
+  // `branding_dark` left `index.html` pointing at files the generator had
+  // deleted. `web.dart` says `brandingDarkImagePath ??= brandingImagePath`
+  // one line above the call that writes them, and has in every version back to
+  // 2.4.2 — so `branding-dark-*.png` are the light branding, resized. Written
+  // while correcting the previous version of this same rule, and caught by
+  // recomposing web from disk, where the files are simply there.
   var branding = isAndroid12
       ? config.android12Branding(theme)
-      : config.resolve('branding', surface, theme);
+      : resource('branding');
 
   // Android 12 draws a window background and an icon. A background image is not
   // part of that path at all, so it is not merely unused here — it is absent.
@@ -377,17 +454,6 @@ SplashResolution resolveSplash(
     SplashSurface.ios => parseIosContentMode(config.iosContentMode),
     SplashSurface.web => parseWebImageMode(config.webImageMode),
   };
-
-  // Dark falls back to light at the *resource* level, not the config level, so
-  // the question is whether the dark chain produced anything at all — and for
-  // Android 12 the colour always resolves (it ends at the top-level `color`),
-  // so it cannot be the test.
-  var fallsBackToLight =
-      theme == SplashTheme.dark &&
-      !config.resolve('color', surface, theme).isPresent &&
-      !config.resolve('image', surface, theme).isPresent &&
-      !config.resolve('background_image', surface, theme).isPresent &&
-      (!isAndroid12 || !config.android12Image(SplashTheme.dark).isPresent);
 
   return SplashResolution(
     surface: surface,
@@ -409,6 +475,23 @@ SplashResolution resolveSplash(
     fullscreen:
         config.fullscreen &&
         (surface == SplashSurface.android || surface == SplashSurface.ios),
-    fallsBackToLight: fallsBackToLight,
+    // The whole-theme case returned early above; anything reaching here has
+    // dark resources of its own.
+    fallsBackToLight: false,
   );
+}
+
+/// Whether the dark chain resolves nothing at all, so the generator writes no
+/// dark resources and the OS shows the light splash.
+///
+/// Not "is any dark key set" — it is specifically the keys that make the
+/// generator write a `-night` folder. For Android 12 the colour always resolves
+/// (it ends at the top-level `color`), so it cannot be part of the test.
+bool _fallsBackToLight(SplashConfig config, SplashSurface surface) {
+  const dark = SplashTheme.dark;
+  return !config.resolve('color', surface, dark).isPresent &&
+      !config.resolve('image', surface, dark).isPresent &&
+      !config.resolve('background_image', surface, dark).isPresent &&
+      (surface != SplashSurface.android12 ||
+          !config.android12Image(dark).isPresent);
 }

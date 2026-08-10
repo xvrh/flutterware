@@ -23,7 +23,9 @@ class SplashDescribeResult implements PluginResult {
     required this.configKind,
     required this.enabled,
     required this.placement,
+    required this.generated,
     this.flavor,
+    this.predictedBecause,
     this.properties = const [],
     this.fallsBackToLight = false,
     this.problems = const [],
@@ -50,6 +52,17 @@ class SplashDescribeResult implements PluginResult {
   /// Where the image lands, in words — so the CLI answers the question without
   /// rendering anything.
   final String placement;
+
+  /// [placement] was read back from the files `create` wrote, rather than
+  /// derived from the config.
+  ///
+  /// **The first thing a caller should look at.** A false here means the answer
+  /// is this plugin's reading of a third-party generator's rules — useful, and
+  /// not the same kind of claim. The properties below are config either way.
+  final bool generated;
+
+  /// Why there was nothing to read back. Null when [generated].
+  final String? predictedBecause;
 
   final List<SplashProperty> properties;
 
@@ -96,6 +109,7 @@ class SplashProblemEntry {
     this.key,
     this.surface,
     this.theme,
+    this.device,
     this.blocksGeneration = false,
   });
 
@@ -105,10 +119,50 @@ class SplashProblemEntry {
   final String? surface;
   final String? theme;
 
+  /// The screen this is about, for the rules that sweep the device table —
+  /// `iphone-se`. The panel's own axis is a size class rather than a device, so
+  /// a link into it lands on the nearest one; the exact device stays here
+  /// because "clipped on an iPhone 13 mini" is the actionable sentence.
+  final String? device;
+
   /// `create` will exit rather than write anything.
   final bool blocksGeneration;
 
   Map<String, Object?> toJson() => _$SplashProblemEntryToJson(this);
+}
+
+/// `reload` — the config re-read off disk, now.
+///
+/// [changed] is the whole reason this returns anything at all. A reload that
+/// finds nothing different is the answer to "my edit is not showing up": the
+/// edit did not land where the project reads from, and the next thing to look at
+/// is [configPath].
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class SplashReloadResult implements PluginResult {
+  SplashReloadResult({
+    required this.package,
+    required this.scannedAt,
+    required this.changed,
+    this.configPath,
+  });
+
+  final String package;
+
+  /// Which file the re-read found, or null when the package has no splash
+  /// config at all.
+  final String? configPath;
+
+  final String scannedAt;
+
+  /// Something the scan depends on had moved since the last read.
+  final bool changed;
+
+  @override
+  Map<String, Object?> toJson() => _$SplashReloadResultToJson(this);
 }
 
 /// `generate` — what running the real generator did.
@@ -154,11 +208,16 @@ class SplashArtifactsResult implements PluginResult {
   SplashArtifactsResult({
     required this.package,
     required this.generated,
+    this.flavor,
     this.artifacts = const [],
     this.stale = false,
   });
 
   final String package;
+
+  /// Which config these belong to. A flavor writes its own files, so a list
+  /// that did not say which one it was for could not be checked.
+  final String? flavor;
 
   /// False when nothing has been generated yet, which is what distinguishes
   /// "run `generate` first" from "the generator produced nothing".
@@ -183,8 +242,12 @@ class SplashArtifactEntry {
     required this.path,
     required this.surface,
     required this.theme,
+    required this.role,
     required this.modified,
     this.density,
+    this.pixelWidth,
+    this.pixelHeight,
+    this.logicalWidth,
   });
 
   /// Worktree-relative, so an agent whose tools are scoped to the repo can open
@@ -193,7 +256,22 @@ class SplashArtifactEntry {
 
   final String surface;
   final String theme;
+
+  /// Which layer this is — `image`, `background`, `branding`, `icon`. A splash
+  /// is a stack of files, and without this there is no way to tell which of
+  /// three PNGs in one folder is the logo.
+  final String role;
+
   final String? density;
+
+  final int? pixelWidth;
+  final int? pixelHeight;
+
+  /// The size it occupies on screen. **Android only** — the rule is checked
+  /// against the generator there and nowhere else, so the other platforms get
+  /// null rather than a number nobody has verified.
+  final double? logicalWidth;
+
   final String modified;
 
   Map<String, Object?> toJson() => _$SplashArtifactEntryToJson(this);

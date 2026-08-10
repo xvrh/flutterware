@@ -10,6 +10,7 @@ import 'package:flutterware_app/src/plugins/native/splash_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
+import 'package:flutterware_app/src/splash/model/surface.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
@@ -40,6 +41,9 @@ void main() {
           ],
         },
       ),
+      // No timer: `checkForChanges` is driven by hand, which is steadier than
+      // waiting on a clock and says the same thing.
+      pollInterval: Duration.zero,
     );
   }
 
@@ -252,8 +256,12 @@ flutter_native_splash:
     });
 
     test(
-      'legacy art with no android_12 section warns about the bare colour',
+      'legacy art with no android_12 section warns about the launcher icon',
       () async {
+        // Not "a bare colour", which is what this said until it was checked
+        // against the generator: with no `android_12.image` it writes no
+        // `windowSplashScreenAnimatedIcon`, and Android's default for that
+        // attribute is the app icon.
         writePng('assets/logo.png', 1024, 1024);
         write('flutter_native_splash.yaml', '''
 flutter_native_splash:
@@ -265,7 +273,53 @@ flutter_native_splash:
         var found = await problems(c, surface: 'android12');
         var warning = found.singleWhere((p) => p.key == 'android_12.image');
         expect(warning.tone, 'warn');
-        expect(warning.message, contains('bare colour'));
+        expect(warning.message, contains('launcher icon'));
+        expect(warning.message, isNot(contains('bare colour')));
+      },
+    );
+
+    test(
+      'the android 12 cell draws the launcher icon it will really show',
+      () async {
+        // The picture has to be what a device produces, not an empty rectangle.
+        writePng('assets/logo.png', 1024, 1024);
+        writePng(
+          'android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png',
+          192,
+          192,
+        );
+        write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  image: assets/logo.png
+''');
+        var c = core();
+        await c.computeAll();
+
+        var result =
+            (await c.invoke('describe', arguments: {'surface': 'android12'}))!
+                as SplashDescribeResult;
+        expect(result.placement, contains('launcher icon'));
+        expect(result.placement, contains('ic_launcher.png'));
+      },
+    );
+
+    test(
+      'a project with no mipmaps says nothing about a launcher icon',
+      () async {
+        writePng('assets/logo.png', 1024, 1024);
+        write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  image: assets/logo.png
+''');
+        var c = core();
+        await c.computeAll();
+
+        var result =
+            (await c.invoke('describe', arguments: {'surface': 'android12'}))!
+                as SplashDescribeResult;
+        expect(result.placement, contains('no image'));
       },
     );
 
@@ -335,33 +389,59 @@ flutter_native_splash:
       },
     );
 
-    test(
-      'a dark colour with no dark image warns about the empty splash',
-      () async {
-        // The common half-configured case: `color_dark` alone makes dark
-        // resources real, so dark mode stops falling back to the light splash and
-        // starts showing a bare colour.
-        writePng('assets/logo.png', 1024, 1024);
-        write('flutter_native_splash.yaml', '''
+    test('a dark colour with no dark image draws the light logo', () async {
+      // The common half-configured case, and the one this plugin got
+      // **backwards** and shipped: it claimed `color_dark` alone produced a
+      // dark splash with no logo on it, and warned about it. Every platform
+      // resolves the missing dark resource to the light one, so what ships is
+      // the light logo on the dark colour — usually the intent.
+      //
+      // The rule that narrated all this is gone with the rest of the
+      // transcription. The picture says it, which is what a picture is for.
+      writePng('assets/logo.png', 1024, 1024);
+      write('flutter_native_splash.yaml', '''
 flutter_native_splash:
   color: "FFFFFF"
   color_dark: "101418"
   image: assets/logo.png
 ''');
-        var c = core();
-        await c.computeAll();
-        var found = await problems(c, theme: 'dark');
-        var warning = found.singleWhere((p) => p.key == 'image_dark');
-        expect(warning.tone, 'warn');
-        expect(warning.message, contains('no image'));
+      var c = core();
+      await c.computeAll();
 
-        // The light cell is fine, and must not inherit the complaint.
-        expect(
-          (await problems(c)).where((p) => p.key == 'image_dark'),
-          isEmpty,
-        );
-      },
-    );
+      expect(await problems(c, theme: 'dark'), isEmpty);
+
+      var dark = c
+          .scanFor('.')!
+          .main!
+          .compositionFor(SplashSurface.android, SplashTheme.dark);
+      expect(dark.image, isNotNull);
+      expect(dark.image!.path, 'assets/logo.png');
+      expect(dark.backgroundColor, 0xFF101418);
+    });
+
+    test('a cell with no dark config at all draws the light splash', () async {
+      // The caption has always said "the OS shows the light splash". The
+      // picture beside it was a **black rectangle**, because "the dark chain
+      // resolved nothing" was modelled as "draw nothing" — so the tile
+      // contradicted its own caption on the most common config there is.
+      writePng('assets/logo.png', 1024, 1024);
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  image: assets/logo.png
+''');
+      var c = core();
+      await c.computeAll();
+
+      var dark = c
+          .scanFor('.')!
+          .main!
+          .compositionFor(SplashSurface.android, SplashTheme.dark);
+      expect(dark.backgroundColor, 0xFFFFFFFF);
+      expect(dark.image!.path, 'assets/logo.png');
+      // Still flagged as the fallback, which is what the caption reads.
+      expect(dark.fallsBackToLight, isTrue);
+    });
 
     test('a fully configured dark variant raises nothing', () async {
       writePng('assets/logo.png', 1024, 1024);
@@ -483,6 +563,50 @@ flutter_native_splash:
       expect(result.artifacts, isEmpty);
     });
 
+    test('answers for the flavor it was asked about', () async {
+      // The panel follows the address, so it was showing production's files
+      // while this action — which read `configs.first` and had no flavor
+      // parameter — reported staging's, in the same process at the same moment.
+      write('flutter_native_splash-staging.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+''');
+      write('flutter_native_splash-production.yaml', '''
+flutter_native_splash:
+  color: "000000"
+''');
+      // Generated for production only, so the two answers cannot look alike.
+      write(
+        'ios/Runner/Assets.xcassets/LaunchBackground.imageset/Contents.json',
+        '{}',
+      );
+      writePng(
+        'ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage.png',
+        1,
+        1,
+      );
+
+      var c = core();
+      await c.computeAll();
+
+      var production =
+          (await c.invoke('artifacts', arguments: {'flavor': 'production'}))!
+              as SplashArtifactsResult;
+      expect(production.flavor, 'production');
+
+      var staging =
+          (await c.invoke('artifacts', arguments: {'flavor': 'staging'}))!
+              as SplashArtifactsResult;
+      expect(staging.flavor, 'staging');
+
+      // And a flavor that is not there is refused rather than silently answered
+      // for whichever config sorted first.
+      await expectLater(
+        c.invoke('artifacts', arguments: {'flavor': 'nope'}),
+        throwsA(isA<StateError>()),
+      );
+    });
+
     test(
       'does not mistake stock Flutter launch images for generated output',
       () async {
@@ -572,6 +696,78 @@ flutter_native_splash:
         expect(result.artifacts.every((a) => a.density == 'xxhdpi'), isTrue);
       },
     );
+
+    test('tells the layers apart, background included', () async {
+      // A splash is a stack, and `background.png` — the *colour*, rendered to a
+      // bitmap — used to be skipped outright.
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+''');
+      writePng('android/app/src/main/res/drawable-xxhdpi/splash.png', 10, 10);
+      writePng('android/app/src/main/res/drawable/background.png', 4, 4);
+      writePng('android/app/src/main/res/drawable-xxhdpi/branding.png', 8, 8);
+      writePng(
+        'android/app/src/main/res/drawable-xxhdpi/android12splash.png',
+        10,
+        10,
+      );
+
+      var c = core();
+      await c.computeAll();
+      var result = (await c.invoke('artifacts'))! as SplashArtifactsResult;
+
+      expect(result.artifacts.map((a) => a.role).toSet(), {
+        'image',
+        'background',
+        'branding',
+        'icon',
+      });
+    });
+
+    test("reads each file's real size without decoding it", () async {
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+''');
+      writePng('android/app/src/main/res/drawable-xxhdpi/splash.png', 768, 768);
+
+      var c = core();
+      await c.computeAll();
+      var result = (await c.invoke('artifacts'))! as SplashArtifactsResult;
+      var splash = result.artifacts.single;
+
+      expect(splash.pixelWidth, 768);
+      expect(splash.pixelHeight, 768);
+      // xxhdpi is 3×, and the generator writes `source * density ~/ 4` — so a
+      // 1024px source lands here as 768px, which is 256dp. Every density of one
+      // image should agree on that number.
+      expect(splash.logicalWidth, 256);
+    });
+
+    test('claims no dp for platforms where the rule is unverified', () async {
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+''');
+      write(
+        'ios/Runner/Assets.xcassets/LaunchBackground.imageset/Contents.json',
+        '{}',
+      );
+      writePng(
+        'ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@3x.png',
+        300,
+        300,
+      );
+
+      var c = core();
+      await c.computeAll();
+      var result = (await c.invoke('artifacts'))! as SplashArtifactsResult;
+      var ios = result.artifacts.firstWhere((a) => a.surface == 'ios');
+
+      expect(ios.pixelWidth, 300);
+      expect(ios.logicalWidth, isNull);
+    });
   });
 
   group('the report', () {
@@ -603,6 +799,197 @@ flutter_native_splash:
       expect(c.report.children.single.status, Status.none);
       expect(c.report.badge.isEmpty, isTrue);
       expect(c.scanFor('.'), isNull);
+    });
+  });
+
+  group('does it fit a real screen', () {
+    test('an oversized image names the phone it is clipped on', () async {
+      // 2048px at 4× is 512dp, which no Android phone is wide enough for.
+      writePng('assets/logo.png', 2048, 2048);
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  image: assets/logo.png
+''');
+      var c = core();
+      await c.computeAll();
+
+      var clipped = (await problems(
+        c,
+      )).singleWhere((p) => p.message.contains('cut off'));
+      expect(clipped.tone, 'warn');
+      // The device is what makes it actionable — and navigable.
+      expect(clipped.device, 'android-small');
+      expect(clipped.message, contains('Small phone'));
+    });
+
+    test('a sensibly sized image raises nothing at all', () async {
+      writePng('assets/logo.png', 1024, 1024);
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  image: assets/logo.png
+''');
+      var c = core();
+      await c.computeAll();
+      expect(
+        (await problems(c)).where((p) => p.message.contains('cut off')),
+        isEmpty,
+      );
+    });
+
+    test(
+      'branding with no padding is flagged against the home indicator',
+      () async {
+        writePng('assets/logo.png', 1024, 1024);
+        writePng('assets/branding.png', 800, 320);
+        write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  image: assets/logo.png
+  branding: assets/branding.png
+''');
+        var c = core();
+        await c.computeAll();
+
+        // The key is platform-suffixed, because the number that clears it comes
+        // from that platform's hardware — 34dp on a notched iPhone. A global
+        // `branding_bottom_padding` set from the worst iPhone would over-pad
+        // every Android device to answer an iOS problem.
+        var found = (await problems(
+          c,
+          surface: 'ios',
+        )).singleWhere((p) => p.key == 'branding_bottom_padding_ios');
+        expect(found.message, contains('home indicator'));
+        expect(found.device, isNotNull);
+        // The message names the key and the number; nothing writes it.
+        expect(found.message, contains('at least'));
+      },
+    );
+
+    test('one problem per issue, not one per device', () async {
+      // Fourteen lines saying the same thing about fourteen phones is how a
+      // warning list turns into wallpaper.
+      writePng('assets/logo.png', 2048, 2048);
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  image: assets/logo.png
+''');
+      var c = core();
+      await c.computeAll();
+      expect(
+        (await problems(c)).where((p) => p.message.contains('cut off')).length,
+        1,
+      );
+    });
+  });
+
+  group('staying current', () {
+    test(
+      'an edited config is picked up without anything being clicked',
+      () async {
+        write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+''');
+        var c = core();
+        await c.computeAll();
+        expect(c.scanFor('.')!.main!.config.raw['color'], 'FFFFFF');
+
+        write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  color_dark: "101418"
+''');
+        await c.checkForChanges();
+
+        expect(c.scanFor('.')!.main!.config.raw['color_dark'], '101418');
+      },
+    );
+
+    test('a re-exported image is picked up too', () async {
+      // The half a config watcher would miss: the file that moved is not the
+      // config, it is what the config points at.
+      writePng('assets/logo.png', 1024, 1024);
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  android_12:
+    image: assets/logo.png
+''');
+      var c = core();
+      await c.computeAll();
+      expect(await problems(c, surface: 'android12'), isNotEmpty);
+
+      // 1152 is the canvas the generator wants with no icon background, so the
+      // size warning should go away on its own.
+      writePng('assets/logo.png', 1152, 1152);
+      await c.checkForChanges();
+
+      var found = await problems(c, surface: 'android12');
+      expect(found.where((p) => p.key == 'android_12.image'), isEmpty);
+    });
+
+    test('an untouched project is not re-read', () async {
+      // The point of a fingerprint rather than a timer that just rescans: a
+      // quiet project must cost nothing but the `stat`s.
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+''');
+      var c = core();
+      await c.computeAll();
+      var first = c.scannedAt('.');
+
+      await c.checkForChanges();
+      expect(c.scannedAt('.'), first);
+    });
+
+    test('reload reads again and says whether anything had moved', () async {
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+''');
+      var c = core();
+      await c.computeAll();
+
+      var quiet = (await c.invoke('reload'))! as SplashReloadResult;
+      expect(quiet.changed, isFalse);
+      expect(quiet.configPath, 'flutter_native_splash.yaml');
+
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  color_dark: "101418"
+''');
+      var moved = (await c.invoke('reload'))! as SplashReloadResult;
+      expect(moved.changed, isTrue);
+      expect(c.scanFor('.')!.main!.config.raw['color_dark'], '101418');
+    });
+
+    test('reload works on a package that has never been read', () async {
+      // It is also the recovery path, so it must not require a good scan first.
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+''');
+      var c = core();
+      var result = (await c.invoke('reload'))! as SplashReloadResult;
+      expect(result.configPath, 'flutter_native_splash.yaml');
+      expect(c.scanFor('.'), isNotNull);
+    });
+
+    test('retaining twice keeps polling until both let go', () async {
+      var c = core();
+      var first = c.retain();
+      var second = c.retain();
+      first();
+      first(); // Idempotent — a double release must not take the other retain.
+      second();
+      // Nothing to assert but that it did not throw and disposes cleanly; the
+      // counter is the thing under test.
+      c.dispose();
     });
   });
 }

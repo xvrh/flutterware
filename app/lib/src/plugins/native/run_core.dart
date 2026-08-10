@@ -88,6 +88,30 @@ class RunCore extends PluginCore {
   /// than a recollection.
   bool get isLive => _daemon != null;
 
+  /// True while a device list is on its way and has not arrived.
+  ///
+  /// **[_tracking] is the whole point of this, and leaving it out cost every
+  /// `fw capture` on this repo its entire timeout.** A capture process opens
+  /// the shell, goes to one panel and photographs it; it never mounts the Run
+  /// panel, so it never calls [track], so no daemon is ever started and
+  /// [devices] stays empty forever. The condition this replaces —
+  /// `!isLive && devices.isEmpty` — read that as "still finding devices" and
+  /// held the window busy until the wait gave up. Measured: 300 of the 360
+  /// seconds a cold capture took, waiting for a scan nobody had started, to
+  /// photograph a panel that has nothing to do with devices.
+  ///
+  /// So: busy only while something is actually looking. Nothing in flight is
+  /// not a slow answer, it is no question.
+  ///
+  /// It ends when [_startDaemon] does, either way — a daemon or an error. The
+  /// gap between the daemon coming up and its first `device.added` is not
+  /// covered, and that is deliberate: the flutter daemon has no "here is the
+  /// initial list" event, only a stream of additions, so any wait for a first
+  /// device is a wait with no guaranteed end. A capture that catches the list
+  /// one frame early is a bounded imprecision; the alternative was an
+  /// unbounded one.
+  bool get isFindingDevices => _tracking && !isLive && _daemonError == null;
+
   /// The runs currently announced, newest first — every worktree's, because a
   /// device held by another checkout is exactly the case this answers.
   List<RunHandle> get handles => _handles;

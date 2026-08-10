@@ -7,7 +7,12 @@ import 'package:path/path.dart' as p;
 import '../constants.dart';
 import '../plugins/plugin_core.dart';
 import '../shell/repo_layout.dart';
+import '../shell/worktree_discovery.dart';
 import '../utils/flutter_sdk.dart';
+import '../worktrees/facts.dart';
+import '../worktrees/facts_probe.dart';
+import '../worktrees/facts_store.dart';
+import '../worktrees/facts_text.dart';
 import 'action_shapes.generated.dart';
 import 'gui.dart';
 import 'init.dart';
@@ -53,6 +58,23 @@ const fwCommands = [
         'Loading is parsing — pubspecs, demo files. Nothing here compiles, '
         'spawns\na daemon or touches the network; that work lives behind '
         '`fw run`.',
+  ),
+  FwCommand(
+    'worktrees',
+    usage: 'worktrees [--refresh] [--json]',
+    summary: 'every checkout of this repo, and what is going on in each',
+    details:
+        'The CLI rendering of the explorer. Runs no project code — it reads '
+        'git,\nagent session files and `gh`/`glab` — so a worktree you have '
+        'never\nopened reports as fully as one you are looking at.\n\n'
+        'Batched where the tools allow it: one `for-each-ref` covers every '
+        'branch,\none `pr list` covers every pull request, and a branch diff '
+        'is cached\nunder ~/.flutterware by its two commits, which cannot '
+        'change once written.\n\n'
+        'Pull requests are the one answer that lives on a server, so they are '
+        'kept\nfor five minutes. `--refresh` asks again.\n\n'
+        'A column every worktree leaves empty is not printed: no `gh`, no '
+        'agent,\nor a format that stopped parsing all read as one column less.',
   ),
   FwCommand(
     'actions',
@@ -148,12 +170,25 @@ const fwCommands = [
     usage:
         'capture [<address>] -o <file> [--size=WxH] [--theme=light|dark] '
         '[--pixel-ratio=N] [--timeout=<seconds>]',
-    summary: 'photograph the GUI at an address',
+    summary: 'photograph the GUI window itself, at an address',
     details:
         'Opens the GUI, goes to `<address>`, waits until nothing is still\n'
         'working, writes a PNG and exits. No window is left behind and '
         'nothing\nhas to be clicked, so this is what a documentation script '
         'calls.\n'
+        '\n'
+        '**This photographs the window, chrome and all** — the rail, the tree,\n'
+        'the tab bar with the branch name in it, and the panel somewhere '
+        'inside.\nThat is the point when the subject *is* flutterware. It is '
+        'the wrong\ntool for looking at a widget you are working on: to '
+        'photograph a preview\nitself, at its own size and nothing else '
+        'around it, use\n\n'
+        "    fw run previews screenshot --entry='<file.dart#symbol>'\n"
+        '\n'
+        'which renders headlessly in about a second and needs no GUI at all.\n'
+        '`fw run previews entries` reports both — the `id` that action takes '
+        'and\nthe `address` this one does — so holding an address is not a '
+        'reason to\nprefer this.\n'
         '\n'
         'Give `--size` and `--theme` for anything you intend to commit. '
         'Without\nthem the picture is whatever size the window opened at, in '
@@ -288,6 +323,10 @@ class FwCli {
       return switch (command) {
         'init' => await _init(),
         'status' => await _status(json: json),
+        'worktrees' => await _worktrees(
+          json: json,
+          refresh: rest.remove('--refresh'),
+        ),
         'actions' => await _actions(json: json),
         'run' => await _run(rest, json: json),
         'app' => await _app(
@@ -607,6 +646,75 @@ class FwCli {
     } finally {
       session.dispose();
     }
+  }
+
+  /// Every checkout of the repository, and what is going on in each.
+  ///
+  /// **Opens no session, and deliberately.** A session is per worktree and
+  /// costs running that worktree's config; this command is about all of them,
+  /// most of which are not open. The facts layer exists precisely so that a
+  /// checkout nobody has opened still reports — see the explorer design, §1.
+  Future<int> _worktrees({required bool json, bool refresh = false}) async {
+    var root = findRepoRoot(Directory.current.path);
+    if (root == null) {
+      return fail('not inside a project: ${Directory.current.path}');
+    }
+
+    var worktrees = await WorktreeDiscovery().discover(root);
+
+    // **The main checkout, not the one we are standing in.** Branch diffs are
+    // repository-wide — a sha pair means the same thing from every worktree —
+    // so a cache keyed by the current directory would be one copy per checkout,
+    // each of them cold, each of them recomputing what its neighbour just did.
+    // Discovery always reports the main checkout first.
+    var repoRoot = worktrees.firstOrNull?.path ?? root;
+    var store = WorktreeFactsStore.open(repoRoot);
+    var facts = await WorktreeFactsProbe(
+      repoRoot: repoRoot,
+      store: store,
+    ).probe(worktrees, refreshForge: refresh);
+
+    // Most recently touched first, which is the same order the explorer opens
+    // on and for the same reason: it answers "which one was I in".
+    //
+    // **By the age it prints, then by path** — the same total order the GUI
+    // uses, and for a reason that shows up there rather than here: two rows
+    // that read `now` must not trade places. Sharing the rule keeps two
+    // renderings of one list from disagreeing about which worktree is second.
+    var now = DateTime.now();
+    var ordered = worktrees.toList()
+      ..sort((a, b) {
+        var byAge = activityAge(
+          facts[a.path] ?? const WorktreeFacts(),
+          now,
+        ).compareTo(activityAge(facts[b.path] ?? const WorktreeFacts(), now));
+        return byAge != 0 ? byAge : a.path.compareTo(b.path);
+      });
+
+    if (json) {
+      _printJson({
+        'root': root,
+        'worktrees': [
+          for (var worktree in ordered)
+            {
+              'name': worktree.name,
+              'path': worktree.path,
+              'branch': worktree.branch,
+              'isMain': worktree.isMain,
+              ...?facts[worktree.path]?.toJson(),
+            },
+        ],
+      });
+      return 0;
+    }
+
+    for (var line in worktreeTable([
+      for (var worktree in ordered)
+        (worktree, facts[worktree.path] ?? const WorktreeFacts()),
+    ], now: DateTime.now())) {
+      out.writeln(line);
+    }
+    return 0;
   }
 
   /// What can be invoked, and what each action needs to be told.

@@ -21,12 +21,13 @@ cd app && dart run bin/fw.dart <command>
 | command | what it does |
 |---|---|
 | `status [--json]` | what every plugin says about itself |
+| `worktrees [--refresh] [--json]` | every checkout of this repo, and what is going on in each |
 | `actions [--json]` | what can be invoked, and with what |
 | `run <plugin> <action> [--k=v]` | invoke one action |
 | `init` | record what this project needs, once |
 | `app [--release] [--json]` | open the flutterware GUI |
 | `mcp` | serve this project to an agent, over stdio |
-| `capture [<address>] -o <file> [--size=WxH] [--theme=light|dark] [--pixel-ratio=N] [--timeout=<seconds>]` | photograph the GUI at an address |
+| `capture [<address>] -o <file> [--size=WxH] [--theme=light|dark] [--pixel-ratio=N] [--timeout=<seconds>]` | photograph the GUI window itself, at an address |
 | `help [<command>]` | this, or one command in detail |
 
 `-v` on any command shows the output of whatever it has to build, instead of
@@ -63,7 +64,7 @@ Stdout belongs to the protocol — logs and build narration go to stderr.
 
 ### `flutterware_status`
 
-What every declared flutterware plugin says about itself: status, sub-entries per package, and a text projection of the panel. Loads what has not been loaded yet, so the answer describes the project rather than what a previous call happened to warm. Loading is parsing — pubspecs, demo files — and never compiles, spawns a daemon or touches the network; that work lives behind flutterware_invoke.
+What every declared flutterware plugin says about itself: status, sub-entries per package, and a text projection of the panel. Loads what has not been loaded yet, so the answer describes the project rather than what a previous call happened to warm. Loading is parsing — pubspecs, demo files — and never compiles, spawns a daemon or touches the network; that work lives behind flutterware_invoke. What each plugin can be *told to do* is flutterware_actions, not this.
 
 Takes no arguments.
 
@@ -762,9 +763,6 @@ packages: List<ScenarioRunPackage>
       width: int
       height: int
       tree: String   # The widget-tree JSON captured at the same moment, relative like [image].
-      root: String   # The worktree the two paths above are relative to.
-      imageFile: File
-      treeFile: File
       texts: List<String>   # The visible texts — the projection an agent reads next to the pixels.
       address: String   # The step's `fw://` address.
       statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
@@ -777,12 +775,6 @@ packages: List<ScenarioRunPackage>
       stack: String?
   error: String?   # Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.
 ok: bool
-artifacts: List<Artifact>
-  kind: String   # A MIME type where one fits — see the constants above.
-  address: String   # What this is an artifact of, axes included.
-  path: String?   # Where it was written, when it was written.
-  text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
-  meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
 axes: Map<String, String>?   # The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.
 ```
 
@@ -880,6 +872,57 @@ restarted: List<String>   # The package paths whose harness was dropped.
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 
 
+### `flutterware.launcher_icon`
+
+#### `inventory` — Inventory
+
+Every launcher icon on disk, what the OS does with each, and which of them the project never actually references
+
+```sh
+fw run launcher_icon inventory [--package=…] [--flavor=…]
+```
+
+Returns `IconInventoryResult`:
+
+```
+package: String
+address: String   # The address of this package, pasteable back into the shell.
+flavor: String?   # Which Android source set this reports on, or null for `main`.
+flavors: List<String>   # The other source sets that exist.
+iosCatalog: String   # `none`, `appIconSet`, `iconComposer` or `both`.
+iconBundles: List<String>
+minSdk: int?   # Null when it could not be read, which is an answer rather than a failure: the current Flutter template writes `minSdk = flutter.minSdkVersion`, which is not a number until Gradle runs.
+minSdkSource: String?
+roles: List<IconRoleEntry>
+  role: String   # The address vocabulary — `android.adaptive-foreground`.
+  label: String
+  platform: String
+  treatment: String   # What the OS does to the pixels: `asAuthored`, `whiteSilhouette` or `desaturateAndTint`.
+  mask: String   # The shape the OS clips to, if any.
+  since: String?   # The OS version this role begins to mean anything at.
+  referenced: bool?   # Whether the project's own wiring points at this.
+  color: String?   # The adaptive background when it is a colour rather than an image.
+  files: List<IconFileEntry>
+    path: String   # Worktree-relative rather than package-relative: an agent's tools are scoped to the repo, not to one package inside it.
+    modified: String
+    width: int?
+    height: int?
+    hasAlpha: bool
+    density: String?   # `xxhdpi`, `3x`, or null where the platform has one size.
+    icoFrames: List<int>   # The sizes an `.ico` packs.
+    declaredSize: int?   # What an Apple asset catalog claims this file's size is, when it disagrees with [width].
+findings: List<IconFindingEntry>
+  tone: String
+  message: String
+  role: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the first when omitted |
+| `flavor` | string | no | — | Which Android source set under android/app/src/; main when omitted |
+
+
 ### `flutterware.splash`
 
 #### `describe` — Describe
@@ -902,6 +945,8 @@ configKind: String
 flavor: String?
 enabled: bool   # False when the project switched this platform off.
 placement: String   # Where the image lands, in words — so the CLI answers the question without rendering anything.
+generated: bool   # [placement] was read back from the files `create` wrote, rather than derived from the config.
+predictedBecause: String?   # Why there was nothing to read back.
 properties: List<SplashProperty>
   name: String   # `color`, `image`, `branding`.
   value: String
@@ -913,6 +958,7 @@ problems: List<SplashProblemEntry>
   key: String?
   surface: String?
   theme: String?
+  device: String?   # The screen this is about, for the rules that sweep the device table — `iphone-se`.
   blocksGeneration: bool   # `create` will exit rather than write anything.
 ```
 
@@ -923,35 +969,62 @@ problems: List<SplashProblemEntry>
 | `theme` | choice | no | light | — |
 | `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
 
-#### `artifacts` — Artifacts
+#### `reload` — Reload
 
-The real generated files as they are on disk — ground truth, once generate has run
+Re-reads the config and everything it references, now. The panel notices most edits on its own; this is what covers the filesystems where it cannot, and it answers "did my edit land in the file this project actually reads?"
 
 ```sh
-fw run splash artifacts [--package=…]
+fw run splash reload [--package=…]
 ```
 
-Returns `SplashArtifactsResult`:
+Returns `SplashReloadResult`:
 
 ```
 package: String
-generated: bool   # False when nothing has been generated yet, which is what distinguishes "run `generate` first" from "the generator produced nothing".
-stale: bool   # The config has been edited since these were written.
-artifacts: List<SplashArtifactEntry>
-  path: String   # Worktree-relative, so an agent whose tools are scoped to the repo can open it.
-  surface: String
-  theme: String
-  density: String?
-  modified: String
+configPath: String?   # Which file the re-read found, or null when the package has no splash config at all.
+scannedAt: String
+changed: bool   # Something the scan depends on had moved since the last read.
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; the first when omitted |
 
-#### `generate` — Generate
+#### `artifacts` — Artifacts
 
-Runs `dart run flutter_native_splash:create`, which rewrites files under android/, ios/ and web/
+The real generated files as they are on disk — ground truth, once generate has run
+
+```sh
+fw run splash artifacts [--package=…] [--flavor=…]
+```
+
+Returns `SplashArtifactsResult`:
+
+```
+package: String
+flavor: String?   # Which config these belong to.
+generated: bool   # False when nothing has been generated yet, which is what distinguishes "run `generate` first" from "the generator produced nothing".
+stale: bool   # The config has been edited since these were written.
+artifacts: List<SplashArtifactEntry>
+  path: String   # Worktree-relative, so an agent whose tools are scoped to the repo can open it.
+  surface: String
+  theme: String
+  role: String   # Which layer this is — `image`, `background`, `branding`, `icon`.
+  density: String?
+  pixelWidth: int?
+  pixelHeight: int?
+  logicalWidth: double?   # The size it occupies on screen.
+  modified: String
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the first when omitted |
+| `flavor` | string | no | — | Which flutter_native_splash-<flavor>.yaml; the default config when omitted |
+
+#### `generate` — Run flutter_native_splash:create
+
+Runs `dart run flutter_native_splash:create` in the package, using the version the project pins. This is what turns the config into real files; until it runs, everything the panel shows is a prediction. Rewrites files under android/, ios/ and web/.
 
 ```sh
 fw run splash generate [--package=…] [--flavor=…]
@@ -969,7 +1042,11 @@ artifacts: List<SplashArtifactEntry>   # What exists afterwards — the point of
   path: String   # Worktree-relative, so an agent whose tools are scoped to the repo can open it.
   surface: String
   theme: String
+  role: String   # Which layer this is — `image`, `background`, `branding`, `icon`.
   density: String?
+  pixelWidth: int?
+  pixelHeight: int?
+  logicalWidth: double?   # The size it occupies on screen.
   modified: String
 ```
 

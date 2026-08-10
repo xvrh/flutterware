@@ -22,6 +22,7 @@ const _declaredPlugins = [
   'flutterware.previews',
   'flutterware.motion',
   'flutterware.splash',
+  'flutterware.launcher_icon',
   'flutterware.server',
   'flutterware.run',
   'flutterware.scenarios',
@@ -149,6 +150,77 @@ void main() {
     await toClient.close();
   });
 
+  group('what a reply does not repeat', () {
+    // Every byte here is read by a model, and an action declaration is static:
+    // the same list, in every reply, for the whole session. `flutterware_actions`
+    // serves it once. Measured before this rule existed: 77% of a status and 94%
+    // of a screenshot's reply were declarations, and an agent iterating on a
+    // widget paid the second on every edit.
+
+    test(
+      'status describes the project, not what it can be told to do',
+      () async {
+        var payload = _decode(
+          await connection.callTool(
+            CallToolRequest(name: 'flutterware_status'),
+          ),
+        );
+        var plugins = (payload['plugins']! as List)
+            .cast<Map<String, Object?>>();
+        expect(plugins, isNotEmpty);
+        for (var plugin in plugins) {
+          expect(
+            plugin,
+            isNot(contains('actions')),
+            reason: '${plugin['id']} repeated its declarations into a status',
+          );
+        }
+        // What a status is actually for is still there.
+        expect(plugins.map((p) => p['id']), _declaredPlugins);
+        expect(plugins.every((p) => p.containsKey('status')), isTrue);
+      },
+    );
+
+    test(
+      'the report after an invoke carries state, not declarations',
+      () async {
+        var payload = _decode(
+          await connection.callTool(
+            CallToolRequest(
+              name: 'flutterware_invoke',
+              arguments: {'plugin': 'dependencies', 'action': 'list'},
+            ),
+          ),
+        );
+        var report = payload['report']! as Map<String, Object?>;
+        expect(report, isNot(contains('actions')));
+        // The point of sending it at all: what changed.
+        expect(report, contains('status'));
+      },
+    );
+
+    test('and the declarations are still one tool away', () async {
+      var payload = _decode(
+        await connection.callTool(CallToolRequest(name: 'flutterware_actions')),
+      );
+      var plugins = (payload['plugins']! as List).cast<Map<String, Object?>>();
+      expect(plugins.every((p) => p.containsKey('actions')), isTrue);
+    });
+
+    test('replies are compact — indentation is bytes no model reads', () async {
+      var text = _text(
+        await connection.callTool(CallToolRequest(name: 'flutterware_status')),
+      );
+      expect(
+        text,
+        isNot(contains('\n')),
+        reason:
+            'Pretty-printing was 39% of a status and 47% of an actions reply. '
+            '`fw --json` keeps its indentation; that one is read by a person.',
+      );
+    });
+  });
+
   test('actions lists what can be invoked, with parameters', () async {
     var payload = _decode(
       await connection.callTool(CallToolRequest(name: 'flutterware_actions')),
@@ -202,6 +274,10 @@ void main() {
       );
       expect(result.isError, isTrue);
       expect(_text(result), contains('unknown action'));
+      // Like every other refusal on this surface, it names what *is* there —
+      // this was the one that did not, and it is the one a caller reaches by
+      // guessing at a name.
+      expect(_text(result), contains('list'));
     });
 
     test('missing required argument', () async {

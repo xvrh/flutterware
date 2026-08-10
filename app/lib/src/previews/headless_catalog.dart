@@ -156,12 +156,20 @@ class HeadlessCatalog {
     );
     _GuestSession? guest;
     try {
-      var known = {for (var entry in ready.entries) entry.id};
+      // The quarantine counts as known, and the difference matters to whoever
+      // reads the error: an entry that does not compile exists, and selecting
+      // it is how the daemon retries it — so letting it through produces the
+      // compiler's own diagnostics below, where refusing here produced "no such
+      // entry" for a file the caller is looking at.
+      var known = {
+        for (var entry in ready.entries) entry.id,
+        for (var broken in ready.quarantined) broken.entry.id,
+      };
       if (!known.contains(entryId)) {
         throw ArgumentError.value(
           entryId,
           'entryId',
-          'no such entry. Known ids: ${known.join(', ')}',
+          'no such entry. Known ids: ${(known.toList()..sort()).join(', ')}',
         );
       }
       // A whole kernel, not a delta: the guest loads it from disk at launch.

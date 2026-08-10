@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 import '../app/paths.dart' as paths;
-import '../icon/image_provider.dart';
-import '../icon/model/service.dart';
 import '../project.dart';
 import '../ui/colors.dart';
 import '../utils/async_value.dart';
@@ -49,11 +47,7 @@ class _ProjectInfoCard extends StatelessWidget {
         padding: const EdgeInsets.all(15),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            _Icon(project),
-            const SizedBox(width: 15),
-            Expanded(child: _data()),
-          ],
+          children: [Expanded(child: _data())],
         ),
       ),
     );
@@ -142,42 +136,6 @@ class _ProjectInfoCard extends StatelessWidget {
   }
 }
 
-class _Icon extends StatelessWidget {
-  final Project project;
-
-  const _Icon(this.project);
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: Colors.black12, width: 1),
-      ),
-      child: InkWell(
-        onTap: () {
-          context.router.go('/project/${paths.icon}');
-        },
-        child: SizedBox(
-          width: IconService.previewSize.toDouble(),
-          height: IconService.previewSize.toDouble(),
-          child: ValueStreamBuilder<Snapshot<SampleIcon>>(
-            stream: project.icons.sample.snapshots,
-            builder: (context, snapshot, child) {
-              var file = snapshot.data?.file;
-              if (file != null) {
-                return Image(image: AppIconImageProvider(file));
-              }
-              return const SizedBox();
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _ToolsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -187,7 +145,6 @@ class _ToolsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Link('Launcher icon update', '/project/${paths.icon}'),
             _Link(
               'Pub dependencies overview',
               '/project/${paths.dependencies}',

@@ -10,7 +10,10 @@ import 'package:flutterware_app/src/plugins/native/splash_core.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
+import 'package:flutterware_app/src/splash/model/surface.dart';
 import 'package:flutterware_app/src/splash/screen.dart';
+import 'package:flutterware_app/src/splash/ui/cell_inspector.dart';
+import 'package:flutterware_app/src/ui/action_button.dart';
 import 'package:flutterware_app/src/splash/ui/splash_render.dart';
 import 'package:flutterware_app/src/splash/ui/variant_tile.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
@@ -64,13 +67,34 @@ void main() {
     );
   }
 
-  Future<SplashCore> mount(WidgetTester tester) async {
+  Future<SplashCore> mount(
+    WidgetTester tester, {
+    SplashSurface? surface,
+    SplashTheme? theme,
+    VoidCallback? onShowAll,
+  }) async {
     var c = core();
     await c.computeAll();
     await tester.pumpWidget(
       MaterialApp(
         theme: appTheme,
-        home: Scaffold(body: SplashScreen(c, package: '.')),
+        home: Scaffold(
+          // Subscribed the way the plugin subscribes. `SplashScreen` is
+          // stateless and redraws only when something above it says to — in
+          // production that is `NativePlugin`'s `AnimatedBuilder`, and a test
+          // that skipped it would be asserting against a panel that can never
+          // update.
+          body: StreamBuilder<int>(
+            stream: c.changes.stream,
+            builder: (context, _) => SplashScreen(
+              c,
+              package: '.',
+              surface: surface,
+              theme: theme,
+              onShowAll: onShowAll,
+            ),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -111,7 +135,7 @@ flutter_native_splash:
     expect(find.text('Web · Light'), findsOneWidget);
   });
 
-  testWidgets('captions each value with the key that produced it', (
+  testWidgets('says where each picture came from, and nothing else', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(2400, 2400);
@@ -127,10 +151,65 @@ flutter_native_splash:
 
     await mount(tester);
 
-    // Without this the eight pictures tell you something is wrong and not where
-    // to change it.
-    expect(find.text('color_dark_android'), findsWidgets);
-    expect(find.text('#000000'), findsWidgets);
+    // The provenance stays on the tile: it is the one thing a reader has to
+    // know before believing any of the eight pictures.
+    expect(find.text('Prediction'), findsWidgets);
+    // The values do not. Six wrapped grey lines under a 168px thumbnail, times
+    // eight, is what made the matrix unreadable — they are in the inspector,
+    // which is where somebody has come to read them.
+    expect(find.text('color_dark_android'), findsNothing);
+    expect(find.text('#000000'), findsNothing);
+  });
+
+  testWidgets('opens the inspector beside the matrix, not instead of it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(2800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    writePng('assets/logo.png', 1024, 1024);
+    write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  color_dark: "101418"
+  image: assets/logo.png
+''');
+
+    await mount(
+      tester,
+      surface: SplashSurface.android,
+      theme: SplashTheme.dark,
+    );
+
+    // All eight are still there. Selecting one used to replace the page, which
+    // took the comparison away at the moment somebody got interested in a cell.
+    expect(find.byType(SplashVariantTile), findsNWidgets(8));
+    expect(find.byType(SplashCellInspector), findsOneWidget);
+    // And the values are in it, keyed as they resolved.
+    expect(find.text('color_dark'), findsOneWidget);
+  });
+
+  testWidgets('closes the inspector without a back button', (tester) async {
+    tester.view.physicalSize = const Size(2800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+''');
+
+    var closed = false;
+    await mount(
+      tester,
+      surface: SplashSurface.android,
+      theme: SplashTheme.light,
+      onShowAll: () => closed = true,
+    );
+
+    await tester.tap(find.byIcon(Icons.close));
+    expect(closed, isTrue);
   });
 
   testWidgets('says so when a config file is not usable', (tester) async {
@@ -142,13 +221,17 @@ color: "FFFFFF"
     await mount(tester);
 
     expect(find.byType(SplashVariantTile), findsNothing);
-    expect(find.textContaining('flutter_native_splash:'), findsOneWidget);
+    expect(
+      find.text('The config file is not one the generator would read'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('explains itself when there is no config at all', (tester) async {
     await mount(tester);
+    expect(find.text('No splash configured'), findsOneWidget);
     expect(
-      find.textContaining('No flutter_native_splash config'),
+      find.textContaining('flutter_native_splash.yaml beside it'),
       findsOneWidget,
     );
   });
@@ -169,5 +252,136 @@ flutter_native_splash:
     expect(find.text('Problems'), findsOneWidget);
     expect(find.textContaining('was not found'), findsOneWidget);
     expect(find.textContaining('stops `create` from running'), findsWidgets);
+  });
+
+  group('the inspector', () {
+    setUp(() {
+      writePng('assets/logo.png', 1024, 1024);
+      write('flutter_native_splash.yaml', '''
+flutter_native_splash:
+  color: "FFFFFF"
+  color_dark: "101418"
+  image: assets/logo.png
+  image_dark: assets/logo.png
+''');
+    });
+
+    testWidgets('names the cell it is about', (tester) async {
+      tester.view.physicalSize = const Size(2800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await mount(
+        tester,
+        surface: SplashSurface.android,
+        theme: SplashTheme.dark,
+      );
+
+      // In the pane's own title bar, and on the tile it came from — the tile
+      // stays on screen, which is the whole point of not navigating.
+      expect(find.text('Android · Dark'), findsNWidgets(2));
+    });
+
+    testWidgets('draws the generated files, not the config', (tester) async {
+      tester.view.physicalSize = const Size(2800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      write('android/app/src/main/res/drawable/launch_background.xml', '''
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <bitmap android:gravity="fill" android:src="@drawable/background" />
+    </item>
+    <item>
+        <bitmap android:gravity="center" android:src="@drawable/splash" />
+    </item>
+</layer-list>
+''');
+      writePng(
+        'android/app/src/main/res/drawable-xxxhdpi/splash.png',
+        1024,
+        1024,
+      );
+      writePng('android/app/src/main/res/drawable/background.png', 4, 4);
+
+      await mount(
+        tester,
+        surface: SplashSurface.android,
+        theme: SplashTheme.light,
+      );
+
+      expect(
+        find.descendant(
+          of: find.byType(SplashCellInspector),
+          matching: find.text('From the generated files'),
+        ),
+        findsOneWidget,
+      );
+      // And the files behind it, so a reader can go and check.
+      expect(find.text('Files'), findsOneWidget);
+      expect(find.text('splash.png'), findsWidgets);
+    });
+
+    testWidgets('says why a cell is a prediction', (tester) async {
+      tester.view.physicalSize = const Size(2800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      // Generated, so "nothing has been generated" is off the table and the
+      // real iOS answer is the one that has to show.
+      write(
+        'ios/Runner/Assets.xcassets/LaunchBackground.imageset/Contents.json',
+        '{}',
+      );
+      writePng('android/app/src/main/res/drawable/background.png', 1, 1);
+
+      await mount(tester, surface: SplashSurface.ios, theme: SplashTheme.light);
+
+      // Never "nothing generated" for iOS — there may be plenty on disk, we
+      // simply cannot read a storyboard back.
+      expect(find.textContaining('cannot be read back'), findsOneWidget);
+    });
+
+    testWidgets('a project that has never run create is told so, not shown a '
+        'black rectangle', (tester) async {
+      tester.view.physicalSize = const Size(2800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      // What `flutter create` leaves in every project. Reading it as generator
+      // output drew an empty composition — no colour, no layers — as a black
+      // rectangle labelled "What shipped", which is a picture of a splash no
+      // device would ever produce.
+      write('android/app/src/main/res/drawable/launch_background.xml', '''
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@android:color/white" />
+</layer-list>
+''');
+
+      await mount(
+        tester,
+        surface: SplashSurface.android,
+        theme: SplashTheme.light,
+      );
+
+      expect(find.text('From the generated files'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(SplashCellInspector),
+          matching: find.textContaining('Nothing has been generated yet'),
+        ),
+        findsOneWidget,
+      );
+      // The command is named, and nothing offers to run it. This panel reads;
+      // the generator belongs to whoever edited the config, and it reports what
+      // it did through the action — which hands back the exit code and the
+      // generator's own output — rather than through a button that discarded
+      // both. Reload is the only control, and it only re-reads.
+      expect(find.textContaining('flutter_native_splash:create'), findsWidgets);
+      expect(find.byType(FwActionButton), findsOneWidget);
+      expect(find.text('Reload'), findsOneWidget);
+    });
   });
 }

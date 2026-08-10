@@ -5,7 +5,7 @@
 # variant that is only half declared, and an android_12 section — which is the
 # section every one of these files needs and most of them do not have.
 flutter_native_splash:
-  color: 'FFFFFF'
+  color: FFFF00
   image: assets/splash/logo.png
   branding: assets/splash/branding.png
   branding_mode: bottom
@@ -28,3 +28,5 @@ flutter_native_splash:
     # mask. Getting this wrong is the single most common splash bug there is.
     image: assets/splash/android12_logo.png
     branding: assets/splash/branding.png
+  image_dark: assets/splash/logo.png
+  branding_bottom_padding_ios: 34

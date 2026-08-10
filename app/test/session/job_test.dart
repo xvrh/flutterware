@@ -18,6 +18,16 @@ import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 /// Flutter SDK, a config file or a plugin that does anything.
 const _worktree = Worktree(path: '/tmp/wt', branch: 'feature/x');
 
+/// A result whose answer is data, carrying one file worth looking at.
+class _DataCarryingArtifact implements ProducesArtifacts {
+  _DataCarryingArtifact(this.screenshot);
+
+  final Artifact screenshot;
+
+  @override
+  List<Artifact> get artifacts => [screenshot];
+}
+
 class _FakeCore extends PluginCore {
   _FakeCore(super.host, {this.result, this.throws});
 
@@ -134,6 +144,29 @@ void main() {
     var result = await _one(result: 'went').invoke('one', 'go').done;
     expect(result.value, 'went');
     expect(result.artifacts, isEmpty);
+  });
+
+  test('a data result declares the picture it carries', () async {
+    // The route a result takes when its *answer* is data and a file is one
+    // field of it — `inspect --screenshot`, a scenario run's failing frame.
+    // Without it a surface that can render a picture never finds one, and an
+    // agent that asked to see something is handed a path instead. Which is what
+    // `inspect` did: it held an Artifact in a field and implemented nothing.
+    var artifact = Artifact(
+      kind: 'image/png',
+      path: 'build/shot.png',
+      address: Address(worktree: 'wt', plugin: 'a.one', segments: const ['x']),
+    );
+    var result = await _one(
+      result: _DataCarryingArtifact(artifact),
+    ).invoke('one', 'go').done;
+
+    expect(result.artifacts, [artifact]);
+    expect(
+      result.value,
+      isA<_DataCarryingArtifact>(),
+      reason: 'the data is still the answer; the artifact is the footnote',
+    );
   });
 
   group('events', () {

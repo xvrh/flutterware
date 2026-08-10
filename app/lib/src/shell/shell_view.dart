@@ -10,6 +10,8 @@ import '../capture/capture_mode.dart';
 import '../capture/capture_request.dart';
 import '../plugins/native_plugin.dart';
 import '../ui/theme.dart';
+import '../worktrees/explorer_screen.dart';
+import '../worktrees/facts.dart';
 import 'address_bar.dart';
 import 'config_load.dart';
 import 'config_screen.dart';
@@ -171,7 +173,13 @@ class ShellView extends StatelessWidget {
                   Expanded(
                     child: Row(
                       children: [
-                        if (shell.sidebarVisible) _Sidebar(shell),
+                        // Derived rather than assigned: the rail lists *this
+                        // worktree's* plugins and the explorer is about all of
+                        // them, so it has nothing to show. Writing
+                        // `sidebarVisible = false` on arrival would clobber a
+                        // window preference the user set, and not give it back.
+                        if (shell.sidebarVisible && !shell.isExplorer)
+                          _Sidebar(shell),
                         Expanded(child: _Panel(shell)),
                       ],
                     ),
@@ -198,39 +206,62 @@ class _Band extends StatelessWidget {
     var colors = context.colors;
     return Container(
       height: _bandHeight,
-      decoration: BoxDecoration(
-        color: colors.panel,
-        border: Border(bottom: BorderSide(color: colors.line)),
-      ),
-      padding: const EdgeInsets.only(left: _trafficLightInset),
-      child: Row(
+      color: colors.panel,
+      child: Stack(
         children: [
-          // Where a desktop app puts it: in the chrome, always in the same
-          // place, so the rail can go to nothing at all rather than leaving a
-          // strip behind — a panel that hides its own list would otherwise
-          // leave two empty strips side by side.
-          _SidebarButton(shell),
-          const Gap(FwSpacing.xs),
-          Expanded(
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                for (var worktree in shell.openWorktrees)
-                  _WorktreeTab(shell, worktree),
-                _SwitcherButton(shell),
-              ],
+          // **The seam, drawn behind the tabs rather than under them.**
+          //
+          // It used to be the band's own bottom border, which painted across
+          // the full width — including beneath the selected tab, so the tab
+          // that is *showing* the panel below had a line cutting it off from
+          // it. Here a selected tab's opaque background covers the segment it
+          // sits on, and the two read as one surface; an unselected tab is
+          // transparent and lets the seam through, which is what makes the
+          // selected one legible.
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(height: 1, color: colors.line),
+          ),
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.only(left: _trafficLightInset),
+              child: _bandContent(context),
             ),
           ),
-          SearchTrigger(
-            onTap: () => unawaited(showShellSearch(context, shell)),
-          ),
-          const Gap(FwSpacing.md),
-          _ConfigLoadLine(shell),
-          _ConfigButton(shell),
-          const _HotReloadButtons(),
-          const Gap(FwSpacing.md),
         ],
       ),
+    );
+  }
+
+  Widget _bandContent(BuildContext context) {
+    return Row(
+      children: [
+        // Where a desktop app puts it: in the chrome, always in the same
+        // place, so the rail can go to nothing at all rather than leaving a
+        // strip behind — a panel that hides its own list would otherwise
+        // leave two empty strips side by side.
+        _SidebarButton(shell),
+        const Gap(FwSpacing.xs),
+        _ExplorerTab(shell),
+        Expanded(
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              for (var worktree in shell.openWorktrees)
+                _WorktreeTab(shell, worktree),
+              _SwitcherButton(shell),
+            ],
+          ),
+        ),
+        SearchTrigger(onTap: () => unawaited(showShellSearch(context, shell))),
+        const Gap(FwSpacing.md),
+        _ConfigLoadLine(shell),
+        _ConfigButton(shell),
+        const _HotReloadButtons(),
+        const Gap(FwSpacing.md),
+      ],
     );
   }
 }
@@ -610,6 +641,97 @@ class _HotReloadButtonsState extends State<_HotReloadButtons> {
       padding: EdgeInsets.zero,
     ),
   );
+}
+
+/// Finds the pinned explorer tab.
+const explorerTabKey = ValueKey('tab:explorer');
+
+/// The explorer, as a tab that is always open and cannot be closed.
+///
+/// **A tab rather than a button in the right-hand cluster, and the badge is
+/// why.** The explorer's job is ambient — *N worktrees will not progress until
+/// you do something* — and that number wants a permanent pixel. A pinned tab
+/// carries it natively; a meta-cluster icon carries it badly and a menu item
+/// cannot carry it at all.
+///
+/// The band therefore stops meaning "a tab per open worktree" and starts meaning
+/// *a strip of open places, one of which is always open* — which is exactly what
+/// a pinned tab means in a browser. No close button follows from that rather
+/// than needing an excuse.
+///
+/// **Not a house.** `Icons.home_outlined` is the sidebar's "Overview" row —
+/// *this worktree's* home — and one glyph meaning two different scopes in one
+/// window is worse than an unfamiliar glyph meaning one.
+class _ExplorerTab extends StatelessWidget {
+  const _ExplorerTab(this.shell);
+
+  final ShellController shell;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var selected = shell.isExplorer;
+    var needsYou = shell.worktreeFacts?.needsYou ?? 0;
+    var radius = Radius.circular(context.radii.radiusSmall);
+    var edge = BorderSide(color: selected ? colors.line : Colors.transparent);
+
+    return Tooltip(
+      message: needsYou == 0
+          ? 'Worktrees — every checkout of this repo'
+          : '$needsYou worktree${needsYou == 1 ? '' : 's'} waiting on you',
+      child: _Hoverable(
+        onTap: shell.selectExplorer,
+        builder: (context, hovered) => Container(
+          key: explorerTabKey,
+          height: _bandHeight - _tabInset,
+          margin: const EdgeInsets.only(top: _tabInset, right: FwSpacing.xs),
+          padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
+          decoration: BoxDecoration(
+            color: selected
+                ? colors.bg
+                : hovered
+                ? colors.hoverOverlay
+                : Colors.transparent,
+            borderRadius: BorderRadius.only(topLeft: radius, topRight: radius),
+            border: Border(top: edge, left: edge, right: edge),
+          ),
+          child: Center(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  Icons.account_tree_outlined,
+                  size: 15,
+                  color: selected ? colors.accent : colors.mut,
+                ),
+                if (needsYou > 0)
+                  Positioned(
+                    right: -5,
+                    top: -4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      constraints: const BoxConstraints(minWidth: 11),
+                      decoration: BoxDecoration(
+                        color: colors.accent,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '$needsYou',
+                        textAlign: TextAlign.center,
+                        style: context.type.micro.copyWith(
+                          color: colors.onPrimary,
+                          height: 1.1,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// The key a worktree's tab carries, so a test can point at the tab rather than
@@ -1299,7 +1421,9 @@ class _Panel extends StatelessWidget {
     var session = shell.selectedSession;
 
     Widget body;
-    if (worktree == null) {
+    if (shell.isExplorer) {
+      body = _Explorer(shell);
+    } else if (worktree == null) {
       body = const _Message(title: 'No worktree open');
     } else if (session == null) {
       body = _Loading(worktree.displayName);
@@ -1327,6 +1451,61 @@ class _Panel extends StatelessWidget {
     }
 
     return Container(color: colors.bg, child: body);
+  }
+}
+
+/// Mounts the explorer, and refreshes it on the way in.
+///
+/// **Becoming visible is one of the three refresh triggers**, and this is where
+/// it lives — a screen appearing is the only moment that knows it happened.
+/// Not a timer: with the branch diffs cached by their commits, arriving costs
+/// the per-worktree `git status` and nothing else.
+class _Explorer extends StatefulWidget {
+  const _Explorer(this.shell);
+
+  final ShellController shell;
+
+  @override
+  State<_Explorer> createState() => _ExplorerState();
+}
+
+class _ExplorerState extends State<_Explorer> {
+  var _sort = ExplorerSort.activity;
+  var _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(widget.shell.refreshWorktreeFacts());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var shell = widget.shell;
+    var facts = shell.worktreeFacts;
+    return WorktreeExplorerView(
+      entries: [
+        for (var worktree in shell.worktrees)
+          ExplorerEntry(
+            worktree: worktree,
+            facts: facts?.factsFor(worktree) ?? const WorktreeFacts(),
+            isOpen: shell.isOpen(worktree),
+          ),
+      ],
+      now: DateTime.now(),
+      query: _query,
+      sort: _sort,
+      refreshedAt: facts?.refreshedAt,
+      isRefreshing: facts?.isRefreshing ?? false,
+      currentWorktreePath: shell.selected?.path,
+      onQueryChanged: (value) => setState(() => _query = value),
+      onSortChanged: (value) => setState(() => _sort = value),
+      onRefresh: () => unawaited(shell.refreshWorktreeFacts(force: true)),
+      // **Only the Open button opens.** Tapping a row expands it instead —
+      // opening costs a config subprocess and a tab, and this screen exists so
+      // you can decide before spending that.
+      onOpen: (entry) => unawaited(shell.open(entry.worktree)),
+    );
   }
 }
 
