@@ -65,7 +65,8 @@ class _NewScenarioDialogState extends State<_NewScenarioDialog> {
 
   /// Where the file lands, spelled exactly as the action derives it.
   String get _target =>
-      '${widget.core.directoryFor(widget.package)}/${scenarioFileName(_named)}';
+      '${widget.core.newScenarioDirectoryFor(widget.package)}/'
+      '${scenarioFileName(_named)}';
 
   Future<void> _create() async {
     if (_named.isEmpty || _creating) return;

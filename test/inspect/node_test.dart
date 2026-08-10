@@ -299,5 +299,90 @@ void main() {
     test('an empty tree answers nothing', () {
       expect(InspectTree.empty.nodeAtPoint(0, 0), isNull);
     });
+
+    test('an offstage subtree is never the answer', () {
+      // The shape a push leaves behind: the covered route's widgets keep
+      // their old rects, which overlap the new screen — and sit *deeper*, so
+      // before the flag they beat the widget actually on the picture.
+      var pushed = InspectTree(
+        entryId: 'e',
+        root: box(
+          '',
+          'App',
+          0,
+          0,
+          200,
+          100,
+          children: [
+            InspectNode(
+              id: '0',
+              type: 'MenuScreen',
+              offstage: true,
+              layout: const InspectLayout(x: 0, y: 0, width: 200, height: 100),
+              children: [
+                // Deeper than anything on the new screen, and deliberately
+                // not flagged itself: the walk prunes at the flagged top, so
+                // a tree marked only there is still cut whole.
+                box(
+                  '0/0',
+                  'Card',
+                  0,
+                  0,
+                  200,
+                  40,
+                  children: [box('0/0/0', 'Text', 8, 8, 40, 16)],
+                ),
+              ],
+            ),
+            box('1', 'DrinkScreen', 0, 0, 200, 100),
+          ],
+        ),
+      );
+      expect(pushed.nodeAtPoint(10, 10)?.type, 'DrinkScreen');
+    });
+  });
+
+  group('nodesFoldingOffstage', () {
+    // App > [ Menu*(offstage) > Card* > Text*, Drink ] — the walk marks whole
+    // subtrees, as the capture does.
+    var root = InspectNode(
+      id: '',
+      type: 'App',
+      children: [
+        InspectNode(
+          id: '0',
+          type: 'Menu',
+          offstage: true,
+          children: [
+            InspectNode(
+              id: '0/0',
+              type: 'Card',
+              offstage: true,
+              children: [
+                const InspectNode(id: '0/0/0', type: 'Text', offstage: true),
+              ],
+            ),
+          ],
+        ),
+        const InspectNode(id: '1', type: 'Drink'),
+      ],
+    );
+
+    test('folds a hidden subtree to its top node', () {
+      expect(root.nodesFoldingOffstage.map((n) => n.type), [
+        'App',
+        'Menu',
+        'Drink',
+      ]);
+    });
+
+    test('a walk started at hidden content reports all of it', () {
+      // Whoever names the folded node has asked for what is inside.
+      expect(root.children.first.nodesFoldingOffstage.map((n) => n.type), [
+        'Menu',
+        'Card',
+        'Text',
+      ]);
+    });
   });
 }

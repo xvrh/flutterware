@@ -117,6 +117,14 @@ void main() {
     expect(address.value.axes['node'], '0');
     expect(find.text('Select a widget'), findsNothing);
 
+    // The Semantics tab: the reader's words, with the role badged and the
+    // actions listed, read from the file the fake wrote.
+    await tester.tap(find.text('Semantics'));
+    await tester.pump();
+    expect(find.text('"Add to cart"'), findsOneWidget);
+    expect(find.text('button'), findsOneWidget);
+    expect(find.text('tap'), findsOneWidget);
+
     // The texts moved into the dock, one tab over.
     await tester.tap(find.text('Texts'));
     await tester.pump();
@@ -350,7 +358,7 @@ void main() {
 
     // The 240px list says the short half — which directory is empty, and the
     // button that fills it.
-    expect(find.text('No scenarios in test/scenarios.'), findsOneWidget);
+    expect(find.text('No scenarios under test/.'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'New scenario'), findsWidgets);
 
     // The long half is the help page, in the detail pane where a code example
@@ -656,6 +664,73 @@ void main() {
     expect(find.text('No scenario matches “zzz”.'), findsOneWidget);
   });
 
+  // The labels drop what every file shares — computed from the files, so a
+  // suite spread across test/ shows the part that differs and the header
+  // names the directory they all sit under.
+  testWidgets('a spread suite is labelled by what differs', (tester) async {
+    var core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: Worktree(path: root.path),
+        workspace: Workspace(
+          root: root.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    core.debugInstallRunner('.', _FakeRunner());
+    var plugin = ScenariosPlugin(core);
+
+    File('${root.path}/test/scenarios/checkout_test.dart')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync("void main() => scenario('Pays', () {});\n");
+    File('${root.path}/test/widgets/menu_test.dart')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync("void main() => scenario('Opens', () {});\n");
+
+    await tester.runAsync(() async {
+      core.track('.');
+      while (core.scanResultFor('.') == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: AddressRoot(
+            address: ValueNotifier(
+              Address(worktree: 'wt', plugin: scenariosPluginId),
+            ),
+            onChanged: (_) {},
+            child: Builder(builder: plugin.buildPanel),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('test'), findsOneWidget);
+    expect(
+      find.text('scenarios/checkout_test.dart', findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.text('widgets/menu_test.dart', findRichText: true),
+      findsOneWidget,
+    );
+  });
+
   // The action refuses to overwrite, and the dialog stays open saying so —
   // the answer is another name typed into the field still on screen.
   testWidgets('a name whose file exists is reported in place', (tester) async {
@@ -779,6 +854,22 @@ class _FakeRunner extends ScenarioRunner {
           },
         }),
       );
+      // And a semantics file — the Semantics tab reads it from disk.
+      var semantics = '$outDir/$index-$name.semantics.json';
+      File(semantics).writeAsStringSync(
+        jsonEncode({
+          'rect': {'x': 0, 'y': 0, 'width': 1, 'height': 1},
+          'children': [
+            {
+              'rect': {'x': 0, 'y': 0, 'width': 1, 'height': 1},
+              'label': 'Add to cart',
+              'flags': ['isButton'],
+              'actions': ['tap'],
+              'children': <Object?>[],
+            },
+          ],
+        }),
+      );
       return {
         'index': index,
         if (index > 0) 'parent': index - 1,
@@ -789,6 +880,7 @@ class _FakeRunner extends ScenarioRunner {
         'width': 1,
         'height': 1,
         'tree': tree,
+        'semantics': semantics,
         'texts': [text],
       };
     }

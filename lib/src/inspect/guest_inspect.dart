@@ -160,7 +160,7 @@ class GuestInspector {
       return (
         tree: InspectTree(
           entryId: entryId,
-          root: _convert(demo, '', byRenderObject),
+          root: _convert(demo, '', byRenderObject, null, false),
         ),
         byRenderObject: byRenderObject,
       );
@@ -257,10 +257,17 @@ class GuestInspector {
   }
 
   /// One inspector node and its children, in our shape, with [path] as the id.
+  ///
+  /// [ancestorRender] and [ancestorOffstage] carry the nearest converted
+  /// ancestor's render object and verdict, so each render edge is judged once
+  /// on the way down rather than re-climbed per node — and a subtree under an
+  /// offstage ancestor is marked without climbing at all.
   InspectNode _convert(
     Map<String, Object?> json,
     String path,
     Map<RenderObject, String> byRenderObject,
+    RenderObject? ancestorRender,
+    bool ancestorOffstage,
   ) {
     var children = json['children'] as List? ?? const [];
     var description = json['description'] as String?;
@@ -272,6 +279,9 @@ class GuestInspector {
       // report the same box — and the outermost is the one a click means.
       byRenderObject.putIfAbsent(render, () => path);
     }
+    var offstage =
+        ancestorOffstage ||
+        (render != null && !_shown(render, upTo: ancestorRender));
     return InspectNode(
       id: path,
       type: type,
@@ -279,6 +289,7 @@ class GuestInspector {
       // place; a `Padding` described as "Padding" is the type twice.
       description: _preview(json) ?? (description == type ? null : description),
       createdByLocalProject: json['createdByLocalProject'] as bool? ?? false,
+      offstage: offstage,
       source: switch (json['creationLocation']) {
         Map location => InspectSource.fromJson(
           location.cast<String, Object?>(),
@@ -293,9 +304,56 @@ class GuestInspector {
               child.cast<String, Object?>(),
               path.isEmpty ? '$index' : '$path/$index',
               byRenderObject,
+              render ?? ancestorRender,
+              offstage,
             ),
       ],
     );
+  }
+
+  /// Whether [render] is actually shown, judged over the render chain up to
+  /// (and excluding) [upTo] — the nearest converted ancestor's render object.
+  ///
+  /// **The oracle is `visitChildrenForSemantics`.** The summary tree keeps the
+  /// user's widgets and drops the framework's, and the framework's is where
+  /// all the hiding happens — `_RenderTheater` skipping the routes a pushed
+  /// screen covers, `RenderOffstage`, `RenderIndexedStack` showing one child
+  /// of several. So the marker never survives into the tree, only the hidden
+  /// content does, wearing rects from the last time it was laid out. What
+  /// every one of those hiders has in common is that it also keeps the hidden
+  /// child out of the semantics walk, by overriding this exact method — it is
+  /// the same mechanism that keeps a covered route out of a screen reader.
+  ///
+  /// The known exceptions — the classes that skip the semantics walk while
+  /// still painting the child — are exempted by type. All four are public,
+  /// and the list was taken from the SDK's overrides, not guessed (see
+  /// `2026-08-10-inspect-consolidation.md`).
+  static bool _shown(RenderObject render, {required RenderObject? upTo}) {
+    var node = render;
+    while (!identical(node, upTo)) {
+      var parent = node.parent;
+      if (parent == null) break;
+      if (!_visitsForSemantics(parent, node)) return false;
+      node = parent;
+    }
+    return true;
+  }
+
+  static bool _visitsForSemantics(RenderObject parent, RenderObject child) {
+    // Semantics-excluded but painted: skipping the semantics walk is these
+    // classes' entire job, and their child is on screen all the same.
+    if (parent is RenderExcludeSemantics ||
+        parent is RenderIgnorePointer ||
+        parent is RenderAbsorbPointer ||
+        parent is RenderSliverIgnorePointer ||
+        parent is SemanticsAnnotationsMixin) {
+      return true;
+    }
+    var found = false;
+    parent.visitChildrenForSemantics((visited) {
+      if (identical(visited, child)) found = true;
+    });
+    return found;
   }
 }
 

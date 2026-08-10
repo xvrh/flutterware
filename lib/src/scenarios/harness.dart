@@ -20,6 +20,7 @@ import 'profile.dart';
 import 'run_args.dart';
 import 'scenario.dart';
 import 'run_listener.dart';
+import 'semantics_capture.dart';
 
 // ignore_for_file: implementation_imports
 
@@ -604,6 +605,13 @@ Future<Map<String, Object?>> _runOne(
     // is fetched per step by whoever wants it.
     var tree = inspector.read().toJson();
     File('$base.tree.json').writeAsStringSync(jsonEncode(tree));
+    // And the fourth: what a screen reader gets. Absent rather than empty
+    // when there is no semantics tree to read — which under `testWidgets`'s
+    // default handle is never, but a capture must not invent a screen.
+    var semantics = captureSemanticsTree();
+    if (semantics != null) {
+      File('$base.semantics.json').writeAsStringSync(jsonEncode(semantics));
+    }
     var step = {
       'index': capture.index,
       'parent': ?capture.parent,
@@ -616,6 +624,7 @@ Future<Map<String, Object?>> _runOne(
       'width': capture.width,
       'height': capture.height,
       'tree': '$base.tree.json',
+      if (semantics != null) 'semantics': '$base.semantics.json',
       'texts': capture.texts,
       'statusBrightness': ?capture.statusBrightness,
       'navBrightness': ?capture.navBrightness,

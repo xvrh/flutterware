@@ -234,6 +234,7 @@ class ScenarioRunStep {
     required this.texts,
     required this.address,
     required this.root,
+    this.semantics,
     this.parent,
     this.branch,
     this.name,
@@ -282,6 +283,12 @@ class ScenarioRunStep {
   /// The widget-tree JSON captured at the same moment, relative like [image].
   final String tree;
 
+  /// The semantics-tree JSON — what a screen reader gets — relative like
+  /// [image]. Null on artifacts from before the capture existed, and when the
+  /// run had no semantics tree to read; the tab states the absence rather
+  /// than inventing an empty screen.
+  final String? semantics;
+
   /// The worktree the two paths above are relative to.
   ///
   /// Not on the wire: a reader on another machine has its own checkout, and a
@@ -296,6 +303,10 @@ class ScenarioRunStep {
 
   @JsonKey(includeToJson: false)
   File get treeFile => File(p.join(root, tree));
+
+  @JsonKey(includeToJson: false)
+  File? get semanticsFile =>
+      semantics == null ? null : File(p.join(root, semantics!));
 
   /// The visible texts — the projection an agent reads next to the pixels.
   final List<String> texts;

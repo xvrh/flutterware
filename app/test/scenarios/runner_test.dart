@@ -69,6 +69,12 @@ void main() {
             jsonDecode(File(step['tree']! as String).readAsStringSync())
                 as Map<String, dynamic>;
         expect(tree['root'], isNotNull);
+        // The fourth leg: what a screen reader gets, beside the widget tree.
+        var semantics =
+            jsonDecode(File(step['semantics']! as String).readAsStringSync())
+                as Map<String, dynamic>;
+        expect(semantics['rect'], isNotNull);
+        expect(semantics['children'], isNotEmpty);
       }
       var last = steps.last;
       expect((last['texts']! as List).cast<String>(), contains('a label'));

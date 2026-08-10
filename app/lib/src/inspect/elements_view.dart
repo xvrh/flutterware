@@ -139,7 +139,14 @@ class _TreeView extends StatefulWidget {
 class _TreeViewState extends State<_TreeView> {
   static const _rowHeight = 22.0;
 
-  final _closed = <String>{};
+  /// The rows whose fold the user flipped away from its default.
+  ///
+  /// A set of exceptions rather than of closed ids, because the default is no
+  /// longer uniform: an ordinary row starts open, and the top of an offstage
+  /// subtree starts **closed** — a covered route's ninety widgets are a
+  /// distraction wearing rects from a screen that is not the picture.
+  final _toggled = <String>{};
+
   final _scroll = ScrollController();
 
   @override
@@ -155,6 +162,14 @@ class _TreeViewState extends State<_TreeView> {
     if (id != null && id != old.selectedId) _reveal(id);
   }
 
+  /// Whether [node]'s children are shown. The default is open, except at the
+  /// top of an offstage subtree — [parentOffstage] is what says "top", so
+  /// expanding one does not reveal a pile of still-folded descendants.
+  bool _open(InspectNode node, {required bool parentOffstage}) {
+    var byDefault = !node.offstage || parentOffstage;
+    return _toggled.contains(node.id) ? !byDefault : byDefault;
+  }
+
   /// Unfolds whatever was hiding [id] and scrolls it into view.
   ///
   /// The picker can land three levels inside a folded subtree and below the
@@ -164,9 +179,22 @@ class _TreeViewState extends State<_TreeView> {
   void _reveal(String id) {
     var parts = id.isEmpty ? const <String>[] : id.split('/');
     var opened = false;
-    // Every ancestor, root first: '' then '0' then '0/1' for '0/1/2'.
+    // Every ancestor, root first, walked by child index so each one's
+    // *default* is known — an address can name a node inside an offstage
+    // subtree, and revealing it means overriding that fold too.
+    var node = widget.root;
+    var parentOffstage = false;
     for (var i = 0; i <= parts.length - 1; i++) {
-      if (_closed.remove(parts.take(i).join('/'))) opened = true;
+      if (i > 0) {
+        var index = int.tryParse(parts[i - 1]);
+        if (index == null || index >= node.children.length) break;
+        parentOffstage = node.offstage;
+        node = node.children[index];
+      }
+      if (!_open(node, parentOffstage: parentOffstage)) {
+        if (!_toggled.remove(node.id)) _toggled.add(node.id);
+        opened = true;
+      }
     }
     if (opened) setState(() {});
 
@@ -186,18 +214,20 @@ class _TreeViewState extends State<_TreeView> {
     });
   }
 
-  /// The visible rows, flattened, with the depth each should be drawn at.
-  List<(InspectNode, int)> _rows() {
-    var rows = <(InspectNode, int)>[];
-    void walk(InspectNode node, int depth) {
-      rows.add((node, depth));
-      if (_closed.contains(node.id)) return;
+  /// The visible rows, flattened, with the depth each should be drawn at and
+  /// whether its parent was already offstage — which is what tells the top of
+  /// a hidden subtree (folded, marked) from its inside (just dim).
+  List<(InspectNode, int, bool)> _rows() {
+    var rows = <(InspectNode, int, bool)>[];
+    void walk(InspectNode node, int depth, bool parentOffstage) {
+      rows.add((node, depth, parentOffstage));
+      if (!_open(node, parentOffstage: parentOffstage)) return;
       for (var child in node.children) {
-        walk(child, depth + 1);
+        walk(child, depth + 1, node.offstage);
       }
     }
 
-    walk(widget.root, 0);
+    walk(widget.root, 0, false);
     return rows;
   }
 
@@ -216,7 +246,7 @@ class _TreeViewState extends State<_TreeView> {
             itemCount: rows.length,
             itemExtent: _rowHeight,
             itemBuilder: (context, index) {
-              var (node, depth) = rows[index];
+              var (node, depth, parentOffstage) = rows[index];
               return _TreeRow(
                 node: node,
                 depth: depth,
@@ -228,7 +258,10 @@ class _TreeViewState extends State<_TreeView> {
                 // type is what you scan by.
                 showSize: constraints.maxWidth > 320,
                 highlight: widget.highlight,
-                open: !_closed.contains(node.id),
+                open: _open(node, parentOffstage: parentOffstage),
+                // Marked at the top of the hidden subtree; inside it, the
+                // dimming already says so once per row.
+                markOffstage: node.offstage && !parentOffstage,
                 selected: node.id == widget.selectedId,
                 onHover: (over) {
                   if (over) {
@@ -242,7 +275,7 @@ class _TreeViewState extends State<_TreeView> {
                   }
                 },
                 onToggle: () => setState(() {
-                  if (!_closed.remove(node.id)) _closed.add(node.id);
+                  if (!_toggled.remove(node.id)) _toggled.add(node.id);
                 }),
                 onTap: () =>
                     AddressScope.write(context).setParam('node', node.id),
@@ -262,6 +295,7 @@ class _TreeRow extends StatelessWidget {
     required this.indent,
     required this.showSize,
     required this.open,
+    required this.markOffstage,
     required this.selected,
     required this.onToggle,
     required this.onTap,
@@ -271,6 +305,11 @@ class _TreeRow extends StatelessWidget {
 
   final InspectNode node;
   final int depth;
+
+  /// Whether to say "offstage" on this row — true at the top of a hidden
+  /// subtree, where the fold starts closed and a bare dim row would read as
+  /// merely framework plumbing.
+  final bool markOffstage;
 
   /// How far the row is pushed in, **capped**: twelve levels at twelve pixels
   /// each is most of a narrow panel, and an indent that eats the whole row is
@@ -348,8 +387,9 @@ class _TreeRow extends StatelessWidget {
                           // The demo's own widgets bright, the plumbing
                           // between them dim: a summary tree is mostly the
                           // former, and the few that are not are what you
-                          // scroll past.
-                          color: node.createdByLocalProject
+                          // scroll past. Offstage content is dim whoever
+                          // wrote it — it is not on the picture.
+                          color: node.createdByLocalProject && !node.offstage
                               ? colors.ink
                               : colors.mut,
                         ),
@@ -367,6 +407,13 @@ class _TreeRow extends StatelessWidget {
                             color: colors.mut2,
                           ),
                         ),
+                      ),
+                    ],
+                    if (markOffstage) ...[
+                      const SizedBox(width: FwSpacing.sm),
+                      Text(
+                        'offstage',
+                        style: context.type.micro.copyWith(color: colors.mut3),
                       ),
                     ],
                   ],
@@ -461,6 +508,13 @@ class _Detail extends StatelessWidget {
           // back — `screenshot --node`, `tree --node` — so it is selectable
           // rather than decorative.
           _Pair(label: 'id', value: it.id.isEmpty ? '(root)' : it.id),
+          if (it.offstage)
+            // Why the rect below must not be trusted against the picture: it
+            // is where this was, the last time it was on one.
+            _Pair(
+              label: 'shown',
+              value: 'offstage — in the tree, not on the screen',
+            ),
           if (it.source case var source?)
             _Pair(
               label: 'source',

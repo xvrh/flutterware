@@ -763,6 +763,7 @@ packages: List<ScenarioRunPackage>
       width: int
       height: int
       tree: String   # The widget-tree JSON captured at the same moment, relative like [image].
+      semantics: String?   # The semantics-tree JSON — what a screen reader gets — relative like [image].
       texts: List<String>   # The visible texts — the projection an agent reads next to the pixels.
       address: String   # The step's `fw://` address.
       statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
@@ -1237,6 +1238,7 @@ tree: List<CatalogTreeNode>?   # The tree, when `--tree` asked for it.
   description: String?   # The framework's one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.
   source: String?   # `path/to/file.dart:12:5`, project-relative.
   local: bool   # Whether the framework counts this as the user's code rather than `package:flutter`'s.
+  offstage: bool?   # Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.
   rect: String?   # Where it ended up: `x,y w×h`.
   constraints: String?   # What the parent allowed: `w 0.0..900.0, h 0.0..∞`.
   flex: String?   # For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.
@@ -1248,6 +1250,7 @@ matches: List<CatalogTreeNode>?   # The nodes matching `--find`.
   description: String?   # The framework's one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.
   source: String?   # `path/to/file.dart:12:5`, project-relative.
   local: bool   # Whether the framework counts this as the user's code rather than `package:flutter`'s.
+  offstage: bool?   # Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.
   rect: String?   # Where it ended up: `x,y w×h`.
   constraints: String?   # What the parent allowed: `w 0.0..900.0, h 0.0..∞`.
   flex: String?   # For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.
@@ -1259,6 +1262,7 @@ at: List<CatalogTreeNode>?   # The chain under `--at`, outermost first — the t
   description: String?   # The framework's one-line description when it says more than [type] does — `Text("Save")` rather than `Text`.
   source: String?   # `path/to/file.dart:12:5`, project-relative.
   local: bool   # Whether the framework counts this as the user's code rather than `package:flutter`'s.
+  offstage: bool?   # Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.
   rect: String?   # Where it ended up: `x,y w×h`.
   constraints: String?   # What the parent allowed: `w 0.0..900.0, h 0.0..∞`.
   flex: String?   # For a `Row`, `Column` or `Flex`: `horizontal, start, center, max`.
@@ -1276,7 +1280,7 @@ screenshot: Artifact?   # The picture, when `--screenshot` asked for one.
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `entry` | choice (from `entries`) | yes | — | The id of the entry to inspect |
-| `tree` | boolean | no | false | Report the widget tree, scoped to the preview rather than the catalog around it. Off by default because a real preview is thousands of tokens of tree — try `find` first. |
+| `tree` | boolean | no | false | Report the widget tree, scoped to the preview rather than the catalog around it. Off by default because a real preview is thousands of tokens of tree — try `find` first. Offstage content (a route kept alive under the current one, an `Offstage`) is folded to one node marked `offstage: true`; pass its id to `node` to read inside it. |
 | `find` | string | no | — | Report only the nodes matching this, case-insensitively against each node's type and against the words it puts on screen — `ElevatedButton`, `Save`, `SizedBox`. What you want instead of `tree` when the question is "where is the submit button". |
 | `at` | string | no | — | Report the widgets under this point as `x,y`, outermost first — the chain, because the thing under a cursor is usually a Text and the thing you meant is the button around it. In the same coordinates a screenshot is taken in, so a point read off one lands here without a transform. |
 | `errors` | boolean | no | true | Report build failures and layout overflows. On by default, and with no other flag it is the whole answer. `check` says whether an entry *compiles*, which is a different question. |

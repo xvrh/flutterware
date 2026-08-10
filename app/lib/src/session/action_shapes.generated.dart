@@ -1023,6 +1023,13 @@ final resultShapes = <String, ResultShape>{
                   'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
             },
             <String, Object?>{
+              'name': 'offstage',
+              'type': 'bool',
+              'optional': true,
+              'doc':
+                  'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
+            },
+            <String, Object?>{
               'name': 'rect',
               'type': 'String',
               'optional': true,
@@ -1094,6 +1101,13 @@ final resultShapes = <String, ResultShape>{
               'type': 'bool',
               'doc':
                   'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+            },
+            <String, Object?>{
+              'name': 'offstage',
+              'type': 'bool',
+              'optional': true,
+              'doc':
+                  'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
             },
             <String, Object?>{
               'name': 'rect',
@@ -1168,6 +1182,13 @@ final resultShapes = <String, ResultShape>{
               'type': 'bool',
               'doc':
                   'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+            },
+            <String, Object?>{
+              'name': 'offstage',
+              'type': 'bool',
+              'optional': true,
+              'doc':
+                  'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
             },
             <String, Object?>{
               'name': 'rect',
@@ -1477,6 +1498,13 @@ final resultShapes = <String, ResultShape>{
         'type': 'bool',
         'doc':
             'Whether the framework counts this as the user\'s code rather than `package:flutter`\'s.',
+      },
+      <String, Object?>{
+        'name': 'offstage',
+        'type': 'bool',
+        'optional': true,
+        'doc':
+            'Present and true when this widget is in the tree but not on the screen — a route kept alive under the current one, `Offstage`, a hidden `IndexedStack` child.',
       },
       <String, Object?>{
         'name': 'rect',
@@ -3646,6 +3674,13 @@ final resultShapes = <String, ResultShape>{
                   'The widget-tree JSON captured at the same moment, relative like [image].',
             },
             <String, Object?>{
+              'name': 'semantics',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The semantics-tree JSON — what a screen reader gets — relative like [image].',
+            },
+            <String, Object?>{
               'name': 'texts',
               'type': 'List<String>',
               'doc':
@@ -3802,6 +3837,13 @@ final resultShapes = <String, ResultShape>{
                     'type': 'String',
                     'doc':
                         'The widget-tree JSON captured at the same moment, relative like [image].',
+                  },
+                  <String, Object?>{
+                    'name': 'semantics',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The semantics-tree JSON — what a screen reader gets — relative like [image].',
                   },
                   <String, Object?>{
                     'name': 'texts',
@@ -3983,6 +4025,13 @@ final resultShapes = <String, ResultShape>{
                               'The widget-tree JSON captured at the same moment, relative like [image].',
                         },
                         <String, Object?>{
+                          'name': 'semantics',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The semantics-tree JSON — what a screen reader gets — relative like [image].',
+                        },
+                        <String, Object?>{
                           'name': 'texts',
                           'type': 'List<String>',
                           'doc':
@@ -4120,6 +4169,13 @@ final resultShapes = <String, ResultShape>{
         'type': 'String',
         'doc':
             'The widget-tree JSON captured at the same moment, relative like [image].',
+      },
+      <String, Object?>{
+        'name': 'semantics',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The semantics-tree JSON — what a screen reader gets — relative like [image].',
       },
       <String, Object?>{
         'name': 'texts',

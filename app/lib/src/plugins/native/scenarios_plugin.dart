@@ -197,7 +197,7 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
             // "there are none" is a finding, not the absence of one.
             (_core.scanResultFor(place.package)?.scenarios.isEmpty ?? false)) {
           detail = ScenarioHelpPage(
-            directory: _core.directoryFor(place.package),
+            directory: _core.newScenarioDirectoryFor(place.package),
             onNew: () => unawaited(_newScenario(context, _core, place.package)),
           );
         } else {
@@ -299,7 +299,7 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _ListPaneHeader(
-          directory: core.directoryFor(package),
+          directory: _displayDirectory(),
           onNew: () => unawaited(_newScenario(context, core, package)),
           onHelp: () => AddressScope.write(
             context,
@@ -312,6 +312,15 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
         Expanded(child: _body(context)),
       ],
     );
+  }
+
+  /// What the header names: the directory the suite actually sits under when
+  /// the scan has found one, the scan root while it has not.
+  String _displayDirectory() {
+    var scanned = core.scanResultFor(package)?.scenarios ?? const [];
+    if (scanned.isEmpty) return core.scanRootFor(package);
+    var common = commonScenarioDirectory([for (var ref in scanned) ref.file]);
+    return common.isEmpty ? core.scanRootFor(package) : common;
   }
 
   Widget _body(BuildContext context) {
@@ -347,7 +356,7 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
             ),
             const Gap(FwSpacing.lg),
             Text(
-              'No scenarios in ${core.directoryFor(package)}.',
+              'No scenarios under ${core.scanRootFor(package)}/.',
               style: context.type.caption.copyWith(color: context.colors.mut),
             ),
           ],
@@ -355,11 +364,16 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
       );
     }
 
-    // Every file lives under the configured directory, so the prefix says
-    // nothing — the header drops it and the tooltip keeps the whole path. It
-    // is also what the filter matches on, for the same reason: nobody types
-    // the part every row shares.
-    var prefix = '${core.directoryFor(package)}/';
+    // The prefix every file shares says nothing — the labels drop it and the
+    // tooltip keeps the whole path. Computed from the files rather than the
+    // configuration, since discovery walks all of `test/` and where the suite
+    // actually sits is the files' own fact. It is also what the filter
+    // matches on, for the same reason: nobody types the part every row
+    // shares.
+    var common = commonScenarioDirectory([
+      for (var ref in result.scenarios) ref.file,
+    ]);
+    var prefix = common.isEmpty ? '' : '$common/';
     String sectionLabel(String file) =>
         file.startsWith(prefix) ? file.substring(prefix.length) : file;
 

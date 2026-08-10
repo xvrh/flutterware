@@ -592,6 +592,10 @@ class _CatalogViewState extends State<CatalogView> {
                 var node = hovered == null
                     ? null
                     : _session.treeForSelection?.nodeAt(hovered);
+                // An offstage node's rect is stale — where it was, the last
+                // time it was on a screen — so hovering its row lights the
+                // row and leaves the picture alone.
+                if (node?.offstage ?? false) node = null;
                 return ValueListenableBuilder(
                   valueListenable: _session.watchedBox,
                   builder: (context, live, _) => CustomPaint(

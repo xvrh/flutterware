@@ -434,13 +434,19 @@ class ScenarioTester {
   Future<void> tap(dynamic target, {Shot? shot, Settle? settle}) => _step(
     shot,
     settle,
-    () async => tester.tap(await _resolve(target, 'tap')),
+    // `warnIfMissed: false` on the underlying verbs because `_resolve` has
+    // already decided reachability — and loudly, where the SDK's warning is a
+    // console line the flow sails past.
+    () async => tester.tap(await _resolve(target, 'tap'), warnIfMissed: false),
   );
 
   Future<void> longPress(dynamic target, {Shot? shot, Settle? settle}) => _step(
     shot,
     settle,
-    () async => tester.longPress(await _resolve(target, 'longPress')),
+    () async => tester.longPress(
+      await _resolve(target, 'longPress'),
+      warnIfMissed: false,
+    ),
   );
 
   Future<void> enterText(
@@ -461,7 +467,11 @@ class ScenarioTester {
       _step(
         shot,
         settle,
-        () async => tester.drag(await _resolve(target, 'drag'), by),
+        () async => tester.drag(
+          await _resolve(target, 'drag'),
+          by,
+          warnIfMissed: false,
+        ),
       );
 
   /// Scrolls until [target] is on screen, then captures it there.
@@ -653,9 +663,10 @@ class ScenarioTester {
       ? error
       : ScenarioFailure(List.of(_branchTrail), error);
 
-  /// Resolves a verb's target and insists it names exactly one widget.
+  /// Resolves a verb's target and insists it names exactly one widget the
+  /// pointer can actually reach.
   ///
-  /// The same check the underlying `tap` fails on anyway — made legible, and
+  /// The same checks the underlying `tap` fails on anyway — made legible, and
   /// made *before* the action, so the message can say what to do rather than
   /// dump the matching render objects.
   Future<Finder> _resolve(dynamic target, String verb) async {
@@ -664,11 +675,15 @@ class ScenarioTester {
     }
     var finder = finderFor(target);
     var count = finder.evaluate().length;
-    if (count == 1) return finder;
     var described = target is String ? '"$target"' : '$target';
+    if (count == 1) {
+      await _ensureReachable(finder, described, verb);
+      return finder;
+    }
     if (count == 0) {
       throw ScenarioTargetError(
-        'nothing matches $described, which `s.$verb` needs.\n'
+        'nothing matches $described, which `s.$verb` needs. A widget further '
+        'down a lazy list is not built yet — `s.scrollTo` walks to it.\n'
         'Visible text: ${_describeVisibleTexts()}',
       );
     }
@@ -676,6 +691,57 @@ class ScenarioTester {
       '$count widgets match $described, and `s.$verb` needs one. '
       'Narrow it: give the widget a Key and use that, or pass a Finder — '
       '`finder.first`, `find.descendant(of: …, matching: …)`.',
+    );
+  }
+
+  /// Every pointer verb lands at its target's center, so the target must be
+  /// reachable there — actionability, checked before the action, where
+  /// `flutter_test` prints a console warning after a miss and lets the flow
+  /// sail on from the wrong screen.
+  ///
+  /// Found but unreachable usually means "built but below the fold" — a
+  /// `SingleChildScrollView`, a list child inside cache extent — so the verb
+  /// first scrolls it into view, as the user it stands in for would. That is
+  /// also what keeps one scenario honest across a device matrix: a button
+  /// under the fold of the small phone is above it on the tablet, and neither
+  /// run should need to say so. What scrolling cannot fix is refused loudly:
+  /// covered by another widget, or off screen with nothing scrolling to it.
+  Future<void> _ensureReachable(
+    Finder finder,
+    String described,
+    String verb,
+  ) async {
+    if (_reaches(finder)) return;
+    // On a target with no scrollable ancestor `Scrollable.ensureVisible` is a
+    // no-op, so the recheck decides — no case to distinguish here.
+    await tester.ensureVisible(finder);
+    await tester.pump();
+    if (_reaches(finder)) return;
+    var render = finder.evaluate().single.renderObject! as RenderBox;
+    var center = render.localToGlobal(render.size.center(Offset.zero));
+    var bounds = Offset.zero & tester.binding.renderViews.single.size;
+    throw ScenarioTargetError(
+      bounds.contains(center)
+          ? '$described is on screen, but `s.$verb` at its center would not '
+                'reach it — another widget covers it, or an IgnorePointer/'
+                'AbsorbPointer swallows the pointer. `s.tester` is the raw '
+                'tester if hitting whatever is on top is the point.'
+          : '$described sits off screen at $center and nothing scrolls it '
+                'into view.',
+    );
+  }
+
+  /// Whether a pointer event at the target's center would reach it — the
+  /// check `flutter_test`'s `warnIfMissed` makes, as a boolean.
+  bool _reaches(Finder finder) {
+    var render = finder.evaluate().single.renderObject;
+    // No box to aim at: leave it to the underlying verb, whose own errors
+    // name the shape problem better than a reachability check can.
+    if (render is! RenderBox || !render.hasSize) return true;
+    var center = render.localToGlobal(render.size.center(Offset.zero));
+    var result = tester.hitTestOnBinding(center);
+    return result.path.any(
+      (entry) => isRenderObjectAncestorOfTarget(render, entry.target),
     );
   }
 

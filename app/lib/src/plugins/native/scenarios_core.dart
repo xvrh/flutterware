@@ -107,14 +107,26 @@ class ScenariosCore extends PluginCore {
       if (host.workspace.exists(path)) path,
   ];
 
-  /// The scenario directory declared for [path], or the convention.
-  String directoryFor(String path) {
+  /// Where discovery looks for [path]'s scenarios: the declared directory, or
+  /// all of `test/` — a scenario is an ordinary widget test and may sit next
+  /// to the rest of them.
+  String scanRootFor(String path) =>
+      _configuredDirectoryFor(path) ?? defaultScenariosScanRoot;
+
+  /// Where a new scenario file goes for [path]: the declared directory, or
+  /// the `test/scenarios` convention. Narrower than [scanRootFor] on purpose —
+  /// "where do we look" widened to `test/`, but "where should the next file
+  /// go" still deserves a conventional answer.
+  String newScenarioDirectoryFor(String path) =>
+      _configuredDirectoryFor(path) ?? defaultScenariosDirectory;
+
+  String? _configuredDirectoryFor(String path) {
     for (var config in host.packageConfigs) {
       if (config['path'] == path) {
         if (config['directory'] case String directory) return directory;
       }
     }
-    return defaultScenariosDirectory;
+    return null;
   }
 
   /// The locale tags declared for [path] in `tool/flutterware.dart` —
@@ -170,7 +182,7 @@ class ScenariosCore extends PluginCore {
     if (_scans.containsKey(path)) return;
     var scanner = ScenarioScanner(
       packageRoot: host.workspace.packageFor(path).directory.path,
-      directory: directoryFor(path),
+      directory: scanRootFor(path),
     );
     // Parsing runs off-isolate, as the catalog's scan does.
     _scans[path] = Isolate.run(scanner.scan)
@@ -400,7 +412,7 @@ class ScenariosCore extends PluginCore {
   void _rescan(String path) {
     var scanner = ScenarioScanner(
       packageRoot: host.workspace.packageFor(path).directory.path,
-      directory: directoryFor(path),
+      directory: scanRootFor(path),
     );
     _scans[path] = Isolate.run(scanner.scan)
         .then<void>((result) => _results[path] = result)
@@ -1111,7 +1123,8 @@ class ScenariosCore extends PluginCore {
       );
     }
     var relative =
-        (file as String?) ?? '${directoryFor(path)}/${scenarioFileName(name)}';
+        (file as String?) ??
+        '${newScenarioDirectoryFor(path)}/${scenarioFileName(name)}';
     if (p.isAbsolute(relative) || p.split(relative).contains('..')) {
       throw ArgumentError.value(
         relative,
@@ -1182,13 +1195,13 @@ class ScenariosCore extends PluginCore {
           if (_errors[path] case var error?)
             ScenarioListPackage(
               path: path,
-              directory: directoryFor(path),
+              directory: scanRootFor(path),
               error: '$error',
             )
           else
             ScenarioListPackage(
               path: path,
-              directory: directoryFor(path),
+              directory: scanRootFor(path),
               scenarios: [
                 for (var ref in _results[path]!.scenarios)
                   ScenarioListEntry(
@@ -1201,7 +1214,7 @@ class ScenariosCore extends PluginCore {
               // Only when there are none: an empty list is the one moment the
               // reader is certainly asking "so how do I write one".
               authoring: _results[path]!.scenarios.isEmpty
-                  ? scenarioAuthoringHint(directoryFor(path))
+                  ? scenarioAuthoringHint(newScenarioDirectoryFor(path))
                   : null,
             ),
       ],
@@ -1393,7 +1406,7 @@ class ScenariosCore extends PluginCore {
     if (result.scenarios.isEmpty) {
       return 'Nothing matched ${_describeSelector(file, scenario, tag)} — this '
           'package has no scenarios at all.\n\n'
-          '${scenarioAuthoringHint(directoryFor(path))}';
+          '${scenarioAuthoringHint(newScenarioDirectoryFor(path))}';
     }
     // A tag-only miss: the scan cannot say which tags exist — it never
     // evaluates an argument — so this says what a tag is rather than guessing
@@ -1484,7 +1497,7 @@ class ScenariosCore extends PluginCore {
       path,
       () => ScenarioRunner(
         packageRoot: host.workspace.packageFor(path).directory.path,
-        directory: directoryFor(path),
+        directory: scanRootFor(path),
         flutterSdkRoot: host.workspace.flutterSdk.root,
         onLog: (line) {
           _runnerLogs[path] = line;
@@ -1535,6 +1548,10 @@ class ScenariosCore extends PluginCore {
       width: step['width'] as int? ?? 0,
       height: step['height'] as int? ?? 0,
       tree: _relative(step['tree']! as String),
+      semantics: switch (step['semantics']) {
+        String path => _relative(path),
+        _ => null,
+      },
       texts: (step['texts']! as List).cast<String>(),
       statusBrightness: step['statusBrightness'] as String?,
       navBrightness: step['navBrightness'] as String?,

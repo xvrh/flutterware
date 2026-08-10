@@ -265,6 +265,11 @@ class RunInspector {
   /// need a live `Element`: what a node's box is, and which render object it
   /// belongs to.
   ///
+  /// `InspectNode.offstage` is a known, deliberate divergence: detecting it
+  /// takes the render chain, which this path cannot reach, so trees read here
+  /// still list a covered route's widgets unmarked — same as `layout`, another
+  /// entry on the guest-runtime ledger.
+  ///
   /// The id is the child-index path, exactly as [InspectNode.id] specifies —
   /// derived from shape, never the inspector's own `valueId`, which is minted
   /// per object group and dies with it. What this path *can* offer that the

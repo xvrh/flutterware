@@ -32,12 +32,14 @@ void main() {
     String? description,
     InspectSource? source,
     bool local = true,
+    bool offstage = false,
   }) => InspectNode(
     id: id,
     type: type,
     description: description,
     source: source,
     createdByLocalProject: local,
+    offstage: offstage,
     layout: layout,
     children: children,
   );
@@ -177,6 +179,84 @@ void main() {
 
       expect(find.text('Padding'), findsOneWidget, reason: 'the row remains');
       expect(find.text('Text'), findsNothing);
+    });
+  });
+
+  group('offstage', () {
+    // The shape a push leaves behind: the covered route beside the current
+    // one, its whole subtree flagged by the walk.
+    var pushed = InspectTree(
+      entryId: beta.id,
+      root: node(
+        '',
+        'App',
+        children: [
+          node(
+            '0',
+            'MenuScreen',
+            offstage: true,
+            layout: const InspectLayout(x: 0, y: 0, width: 320, height: 200),
+            children: [node('0/0', 'Card', offstage: true)],
+          ),
+          node('1', 'DrinkScreen'),
+        ],
+      ),
+    );
+
+    testWidgets('a hidden subtree starts folded, and says why', (tester) async {
+      await pump(tester, sessionOf(withTree: pushed));
+
+      expect(find.text('MenuScreen'), findsOneWidget);
+      expect(find.text('offstage'), findsOneWidget);
+      expect(find.text('Card'), findsNothing, reason: 'folded by default');
+      expect(find.text('DrinkScreen'), findsOneWidget);
+    });
+
+    testWidgets('one click unfolds the whole of it', (tester) async {
+      await pump(tester, sessionOf(withTree: pushed));
+
+      // Chevrons in row order: App's, then MenuScreen's closed one.
+      await tester.tap(find.byIcon(Icons.arrow_right).first);
+      await tester.pump();
+
+      expect(
+        find.text('Card'),
+        findsOneWidget,
+        reason:
+            'inside the subtree the default flips back to open — '
+            'expanding the top must not reveal a pile of still-folded rows',
+      );
+    });
+
+    testWidgets('a selection inside it is revealed, not answered into a fold', (
+      tester,
+    ) async {
+      await pump(tester, sessionOf(withTree: pushed));
+      expect(find.text('Card'), findsNothing);
+
+      address.value = Address(
+        worktree: address.value.worktree,
+        plugin: address.value.plugin,
+        axes: {...address.value.axes, 'inspect.node': '0/0'},
+      );
+      await tester.pump();
+
+      // Twice: the unfolded row, and the detail pane's headline for it.
+      expect(find.text('Card'), findsAtLeastNWidgets(1));
+    });
+
+    testWidgets('the detail pane states it over the stale rect', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        sessionOf(withTree: pushed),
+        params: const {'inspect.node': '0'},
+      );
+      expect(
+        find.textContaining('offstage — in the tree, not on the screen'),
+        findsOneWidget,
+      );
     });
   });
 
