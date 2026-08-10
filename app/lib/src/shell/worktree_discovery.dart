@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import '../comparison/base_checkout.dart';
 import 'worktree.dart';
 
 /// Lists the project's worktrees by asking git.
@@ -67,7 +68,14 @@ class WorktreeDiscovery {
 
     if (result.exitCode != 0) return [_fallback(directory)];
 
-    var worktrees = parseWorktreeList('${result.stdout}');
+    var worktrees = [
+      for (var worktree in parseWorktreeList('${result.stdout}'))
+        // A comparison checks the base commit out as a real git worktree, so
+        // git reports it here. It is a build fixture nobody chose to be in,
+        // and this screen answers *which one was I in* — so it does not
+        // belong on the list.
+        if (!BaseCheckout.isBasePath(worktree.path)) worktree,
+    ];
     if (worktrees.isEmpty) return [_fallback(directory)];
 
     return [for (var w in worktrees) _named(w)];
