@@ -618,3 +618,55 @@ class _MockStage extends StatelessWidget {
     ),
   );
 }
+
+/// One inspector per property kind, so every editor the vocabulary can ask for
+/// is on screen at once.
+///
+/// `opacity` and `scale` earn sliders, `rotate` a dial, `translateY` and
+/// `padding` neither — their soft ranges are hints about where to start, not
+/// bounds worth drawing. `color` keeps the hex field it has always had.
+@Preview(name: 'Value editors', group: 'Motion', wrapper: wrapInApp)
+Widget motionValueEditors() => Material(
+  child: Row(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (var (property, from, to) in const <(String, Object, Object)>[
+        ('opacity', 0, 0.9),
+        ('rotate', -0.96, 0.35),
+        ('translateY', 24, 0),
+        ('color', 0xFF1A1F26, 0xFF232A34),
+      ])
+        Expanded(
+          child: MotionInspector(
+            scope: MotionScopeView(
+              id: 'x',
+              durationMs: _dur,
+              positionMs: 0,
+              progress: 0,
+              playing: false,
+              targets: [
+                MotionTargetView(
+                  name: 'card',
+                  named: true,
+                  // Given an extent, so the "no extent" note does not crowd
+                  // out the thing this preview is for.
+                  extent: const Rect.fromLTWH(0, 0, 10, 10),
+                  properties: [
+                    MotionPropertyView(
+                      name: property,
+                      state: MotionLaneState.wired,
+                      value: _value(from),
+                      segments: [_seg(0, 400, from, to)],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            selection: MotionSelection('card', property, 0),
+            onEdit: _noEdit,
+            onDelete: _noDelete,
+          ),
+        ),
+    ],
+  ),
+);

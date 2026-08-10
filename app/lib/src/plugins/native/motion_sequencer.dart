@@ -16,8 +16,10 @@ import 'dart:math' as math;
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/motion.dart' show curveByName, motionCurveNames;
+import 'package:flutterware/motion_vocabulary.dart';
 
 import '../../motion/lane_model.dart';
+import '../../motion/property_editor.dart';
 import '../../motion/values_file.dart';
 import '../../ui/design/spacing.dart';
 import '../../ui/design/tokens.dart';
@@ -1036,39 +1038,57 @@ class MotionInspector extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: FwSpacing.md),
-                Row(
-                  spacing: FwSpacing.md,
-                  children: [
-                    Expanded(
-                      child: _Field.value(
-                        'From',
-                        segment.from,
-                        onCommit: (text) => _literal(
-                          text,
-                          segment.from,
-                          (value) => _change(
+                // Side by side for numbers, stacked for colours: `#FF1A1F26`
+                // does not fit half a 264px rail beside a swatch, and a value
+                // cut off mid-hex reads as a different colour.
+                if (segment.from is MotionColorView ||
+                    segment.to is MotionColorView) ...[
+                  _ValueEditor(
+                    label: 'From',
+                    value: segment.from,
+                    property: selection.property,
+                    onCommit: (value) => _change(
+                      selection,
+                      (span) => span.copyWith(from: value),
+                    ),
+                  ),
+                  const SizedBox(height: FwSpacing.md),
+                  _ValueEditor(
+                    label: 'To',
+                    value: segment.to,
+                    property: selection.property,
+                    onCommit: (value) =>
+                        _change(selection, (span) => span.copyWith(to: value)),
+                  ),
+                ] else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: FwSpacing.md,
+                    children: [
+                      Expanded(
+                        child: _ValueEditor(
+                          label: 'From',
+                          value: segment.from,
+                          property: selection.property,
+                          onCommit: (value) => _change(
                             selection,
                             (span) => span.copyWith(from: value),
                           ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: _Field.value(
-                        'To',
-                        segment.to,
-                        onCommit: (text) => _literal(
-                          text,
-                          segment.to,
-                          (value) => _change(
+                      Expanded(
+                        child: _ValueEditor(
+                          label: 'To',
+                          value: segment.to,
+                          property: selection.property,
+                          onCommit: (value) => _change(
                             selection,
                             (span) => span.copyWith(to: value),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
                 // Said rather than left to be noticed. Most targets have no
                 // extent — a target is not a widget — and a ring that silently
                 // never appeared would read as a broken feature rather than as
@@ -1142,25 +1162,423 @@ class MotionInspector extends StatelessWidget {
     var value = int.tryParse(text.trim());
     if (value != null && value >= 0) then(value);
   }
+}
 
-  /// Reads back what the field prints: a bare number, or `#AARRGGBB` — the same
-  /// spelling [MotionColorView.label] produces, so a value copies out of one
-  /// field and into another.
-  static void _literal(
-    String text,
-    MotionValueView? was,
-    void Function(MotionLiteral) then,
-  ) {
-    var raw = text.trim();
-    if (was is MotionColorView) {
-      var hex = raw.replaceFirst(RegExp('^(#|0x)', caseSensitive: false), '');
-      var argb = int.tryParse(hex, radix: 16);
-      if (argb != null && hex.length == 8) then(MotionColor(argb));
-      return;
+/// A value, with whatever control its property earns.
+///
+/// One place decides colour-or-number, and `property_editor.dart` decides the
+/// rest off the vocabulary — so adding a property to the closed set gives it an
+/// editor without anybody touching this file.
+class _ValueEditor extends StatelessWidget {
+  const _ValueEditor({
+    required this.label,
+    required this.value,
+    required this.property,
+    required this.onCommit,
+  });
+
+  final String label;
+  final MotionValueView? value;
+  final String property;
+  final ValueChanged<MotionLiteral> onCommit;
+
+  @override
+  Widget build(BuildContext context) {
+    if (value case MotionColorView colour) {
+      return _Field(
+        label,
+        colour.label,
+        swatch: colour.color,
+        onCommit: (text) {
+          var hex = text.trim().replaceFirst(
+            RegExp('^(#|0x)', caseSensitive: false),
+            '',
+          );
+          var argb = int.tryParse(hex, radix: 16);
+          if (argb != null && hex.length == 8) onCommit(MotionColor(argb));
+        },
+      );
     }
-    var value = double.tryParse(raw);
-    if (value != null) then(MotionNumber(value));
+
+    var prop = propFor(property);
+    var stored = switch (value) {
+      MotionNumberView(:var value) => value,
+      _ => 0.0,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: context.type.caption.copyWith(color: context.colors.mut),
+        ),
+        const SizedBox(height: 3),
+        _ScrubNumber(
+          value: stored,
+          prop: prop,
+          onCommit: (next) => onCommit(MotionNumber(next)),
+        ),
+        switch (editorShapeFor(prop)) {
+          MotionEditorShape.scrub => const SizedBox.shrink(),
+          MotionEditorShape.slider => _BoundedSlider(
+            value: stored,
+            prop: prop,
+            onCommit: (next) => onCommit(MotionNumber(next)),
+          ),
+          MotionEditorShape.dial => _AngleDial(
+            value: stored,
+            prop: prop,
+            onCommit: (next) => onCommit(MotionNumber(next)),
+          ),
+        },
+      ],
+    );
   }
+}
+
+/// A number you drag, and click to type.
+///
+/// Drag-to-scrub rather than a text field you must select and retype: the thing
+/// you want nine times out of ten is *a bit more*, and a field makes you spell
+/// out a whole number to say it. The pixel-to-value rate comes from the
+/// property's soft range, so the same gesture means a sensible amount whether
+/// it runs 0..1 or 0..64.
+///
+/// **Held locally and written once**, like the span drag: a sample-by-sample
+/// write would be a file read, a write and a reload per pixel, and sixty undo
+/// entries for one gesture.
+class _ScrubNumber extends StatefulWidget {
+  const _ScrubNumber({
+    required this.value,
+    required this.prop,
+    required this.onCommit,
+  });
+
+  final double value;
+  final MotionProp? prop;
+  final ValueChanged<double> onCommit;
+
+  @override
+  State<_ScrubNumber> createState() => _ScrubNumberState();
+}
+
+class _ScrubNumberState extends State<_ScrubNumber> {
+  double? _held;
+  var _typing = false;
+  late final _controller = TextEditingController();
+  late final _focus = FocusNode()..addListener(_onFocus);
+
+  double get _shown => _held ?? widget.value;
+
+  void _onFocus() {
+    if (!_focus.hasFocus && _typing) _commitTyped();
+  }
+
+  void _startTyping() {
+    setState(() {
+      _typing = true;
+      _controller.text = formatDisplay(widget.prop, widget.value);
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controller.text.length,
+      );
+    });
+    _focus.requestFocus();
+  }
+
+  void _commitTyped() {
+    var shown = double.tryParse(_controller.text.trim());
+    setState(() => _typing = false);
+    // Refuses rather than writing a zero for what somebody meant.
+    if (shown == null) return;
+    widget.onCommit(fromDisplay(widget.prop, shown));
+  }
+
+  void _drag(double dx) {
+    var shown =
+        toDisplay(widget.prop, _shown) + dx * scrubPerPixel(widget.prop);
+    setState(() => _held = fromDisplay(widget.prop, shown));
+  }
+
+  void _release() {
+    var held = _held;
+    setState(() => _held = null);
+    if (held != null) widget.onCommit(held);
+  }
+
+  @override
+  void dispose() {
+    _focus.removeListener(_onFocus);
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var unit = unitOf(widget.prop);
+    return Container(
+      height: 27,
+      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
+      decoration: BoxDecoration(
+        color: context.colors.bg,
+        border: Border.all(
+          color: _held != null ? context.colors.accent : context.colors.line,
+        ),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: _typing
+          ? Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focus,
+                    onSubmitted: (_) => _commitTyped(),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    style: context.type.caption.copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                if (unit.isNotEmpty)
+                  Text(
+                    unit,
+                    style: context.type.caption.copyWith(
+                      color: context.colors.mut2,
+                    ),
+                  ),
+              ],
+            )
+          : MouseRegion(
+              cursor: SystemMouseCursors.resizeLeftRight,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _startTyping,
+                onHorizontalDragUpdate: (d) => _drag(d.delta.dx),
+                onHorizontalDragEnd: (_) => _release(),
+                onHorizontalDragCancel: _release,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        formatDisplay(widget.prop, _shown),
+                        style: context.type.caption.copyWith(
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                    if (unit.isNotEmpty)
+                      Text(
+                        unit,
+                        style: context.type.caption.copyWith(
+                          color: context.colors.mut2,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+/// For a property whose soft range *is* its meaning — an opacity of 0.5 is
+/// half, and where it sits between 0 and 1 is the whole of what you want to see.
+class _BoundedSlider extends StatefulWidget {
+  const _BoundedSlider({
+    required this.value,
+    required this.prop,
+    required this.onCommit,
+  });
+
+  final double value;
+  final MotionProp? prop;
+  final ValueChanged<double> onCommit;
+
+  @override
+  State<_BoundedSlider> createState() => _BoundedSliderState();
+}
+
+class _BoundedSliderState extends State<_BoundedSlider> {
+  double? _held;
+
+  @override
+  Widget build(BuildContext context) {
+    var (min, max) = displayRange(widget.prop);
+    var shown = toDisplay(widget.prop, _held ?? widget.value);
+    return SizedBox(
+      height: 22,
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          trackHeight: 2,
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+          overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+        ),
+        child: Slider(
+          // A hint, not a clamp — so a value the file already carries beyond
+          // the soft range widens the slider rather than being dragged back
+          // inside it the moment you touch the control.
+          min: math.min(min, shown),
+          max: math.max(max, shown),
+          value: shown,
+          onChanged: (next) =>
+              setState(() => _held = fromDisplay(widget.prop, next)),
+          onChangeEnd: (next) {
+            setState(() => _held = null);
+            widget.onCommit(fromDisplay(widget.prop, next));
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// A dial, for angles.
+///
+/// A number of degrees answers "how far"; only a dial answers "which way",
+/// which is the question you actually have about a rotation. Zero is at twelve
+/// o'clock and positive winds clockwise, matching `Transform.rotate` — which is
+/// where these values are read.
+///
+/// The drag accumulates the *change* in pointer angle rather than snapping to
+/// it, so winding past a full turn keeps going instead of wrapping back to
+/// zero, and a 540° rotation stays expressible.
+class _AngleDial extends StatefulWidget {
+  const _AngleDial({
+    required this.value,
+    required this.prop,
+    required this.onCommit,
+  });
+
+  final double value;
+  final MotionProp? prop;
+  final ValueChanged<double> onCommit;
+
+  @override
+  State<_AngleDial> createState() => _AngleDialState();
+}
+
+class _AngleDialState extends State<_AngleDial> {
+  static const _size = 34.0;
+
+  double? _held;
+  double? _lastPointer;
+
+  double get _shown => _held ?? widget.value;
+
+  double _pointerAngle(Offset local) {
+    var centre = const Offset(_size / 2, _size / 2);
+    var v = local - centre;
+    // Zero at twelve o'clock, clockwise positive.
+    return math.atan2(v.dx, -v.dy);
+  }
+
+  void _update(Offset local) {
+    var angle = _pointerAngle(local);
+    var last = _lastPointer;
+    _lastPointer = angle;
+    if (last == null) return;
+    var delta = angle - last;
+    // The short way round, so crossing twelve o'clock does not jump a turn.
+    if (delta > math.pi) delta -= 2 * math.pi;
+    if (delta < -math.pi) delta += 2 * math.pi;
+    setState(() => _held = _shown + delta);
+  }
+
+  void _release() {
+    var held = _held;
+    setState(() {
+      _held = null;
+      _lastPointer = null;
+    });
+    if (held != null) widget.onCommit(held);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: FwSpacing.xs),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (d) => _lastPointer = _pointerAngle(d.localPosition),
+          onPanUpdate: (d) => _update(d.localPosition),
+          onPanEnd: (_) => _release(),
+          onPanCancel: _release,
+          child: CustomPaint(
+            size: const Size(_size, _size),
+            painter: _DialPainter(
+              radians: _shown,
+              tone: context.colors.accent,
+              rim: context.colors.line,
+              face: context.colors.bg,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DialPainter extends CustomPainter {
+  _DialPainter({
+    required this.radians,
+    required this.tone,
+    required this.rim,
+    required this.face,
+  });
+
+  final double radians;
+  final Color tone;
+  final Color rim;
+  final Color face;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    var centre = size.center(Offset.zero);
+    var radius = size.shortestSide / 2 - 1;
+
+    canvas
+      ..drawCircle(centre, radius, Paint()..color = face)
+      ..drawCircle(
+        centre,
+        radius,
+        Paint()
+          ..color = rim
+          ..style = PaintingStyle.stroke,
+      )
+      // The mark at twelve, so "which way" has something to be measured from.
+      ..drawLine(
+        centre + Offset(0, -radius),
+        centre + Offset(0, -radius + 3),
+        Paint()
+          ..color = rim
+          ..strokeWidth = 1,
+      )
+      ..drawLine(
+        centre,
+        centre + Offset(math.sin(radians), -math.cos(radians)) * (radius - 2),
+        Paint()
+          ..color = tone
+          ..strokeWidth = 2
+          ..strokeCap = StrokeCap.round,
+      )
+      ..drawCircle(centre, 2, Paint()..color = tone);
+  }
+
+  @override
+  bool shouldRepaint(_DialPainter old) =>
+      old.radians != radians ||
+      old.tone != tone ||
+      old.rim != rim ||
+      old.face != face;
 }
 
 /// An aside in the rail, with an amber edge — the shape the spec gives the
@@ -1222,18 +1640,6 @@ class _Field extends StatefulWidget {
     this.suffix,
     this.swatch,
   });
-
-  /// A value field, which is the same box plus a swatch when it is a colour.
-  factory _Field.value(
-    String label,
-    MotionValueView? value, {
-    required ValueChanged<String> onCommit,
-  }) => _Field(
-    label,
-    value?.label ?? '',
-    onCommit: onCommit,
-    swatch: value is MotionColorView ? value.color : null,
-  );
 
   final String label;
   final String text;

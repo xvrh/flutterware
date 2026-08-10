@@ -68,6 +68,9 @@ class _PlayerState extends State<_Player> {
         var sheet = m.target('sheet');
         var art = m.target('art');
         var play = m.target('play');
+        var title = m.target('title');
+        var artist = m.target('artist');
+        var reveal = m.target('reveal');
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -86,13 +89,16 @@ class _PlayerState extends State<_Player> {
                     scale: glow.scale,
                     child: Opacity(
                       opacity: glow.opacity,
-                      child: Container(
-                        width: 460,
-                        height: 460,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [Color(0x59C2483D), Color(0x00C2483D)],
+                      child: MotionExtent(
+                        glow,
+                        child: Container(
+                          width: 460,
+                          height: 460,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [Color(0x59C2483D), Color(0x00C2483D)],
+                            ),
                           ),
                         ),
                       ),
@@ -100,37 +106,44 @@ class _PlayerState extends State<_Player> {
                   ),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 300),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 20),
-                      padding: EdgeInsets.all(sheet.padding),
-                      decoration: BoxDecoration(
-                        color: sheet.color ?? const Color(0xFF1A1F26),
-                        borderRadius: BorderRadius.circular(
-                          sheet.borderRadius ?? 20,
+                    child: MotionExtent(
+                      sheet,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 20),
+                        padding: EdgeInsets.all(sheet.padding),
+                        decoration: BoxDecoration(
+                          color: sheet.color ?? const Color(0xFF1A1F26),
+                          borderRadius: BorderRadius.circular(
+                            sheet.borderRadius ?? 20,
+                          ),
+                          boxShadow: shadowFor(sheet.elevation, Colors.black),
                         ),
-                        boxShadow: shadowFor(sheet.elevation, Colors.black),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Two of the seven targets say where they are, and
-                          // the other five deliberately do not — so the panel
-                          // rings `art` and `play` and says plainly that it
-                          // cannot ring the rest. `MotionExtent` applies
-                          // nothing; it is the opt-in a target needs when no
-                          // `MotionBox` is giving it an extent, which in this
-                          // file is all of them.
-                          MotionExtent(art, child: _Cover(art)),
-                          const SizedBox(height: 14),
-                          _Titles(
-                            title: m.target('title'),
-                            artist: m.target('artist'),
-                          ),
-                          _Reveal(
-                            target: m.target('reveal'),
-                            child: MotionExtent(play, child: _Controls(play)),
-                          ),
-                        ],
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Every target here says where it is. There is not
+                            // one `MotionBox` in this file, so without these the
+                            // panel could ring nothing at all — which is exactly
+                            // what the first version of this demo taught, having
+                            // opted only two of the seven in.
+                            //
+                            // `MotionExtent` applies nothing. It is one line and
+                            // the ring is the whole of what it buys.
+                            MotionExtent(art, child: _Cover(art)),
+                            const SizedBox(height: 14),
+                            _Titles(title: title, artist: artist),
+                            MotionExtent(
+                              reveal,
+                              child: _Reveal(
+                                target: reveal,
+                                child: MotionExtent(
+                                  play,
+                                  child: _Controls(play),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -204,23 +217,29 @@ class _Titles extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'Nightjar',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: title.fontSize ?? 15,
-            height: 1.15,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.2,
-            color: _paper,
+        MotionExtent(
+          title,
+          child: Text(
+            'Nightjar',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: title.fontSize ?? 15,
+              height: 1.15,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
+              color: _paper,
+            ),
           ),
         ),
         const SizedBox(height: 4),
         Opacity(
           opacity: artist.opacity,
-          child: Text(
-            'Hollow Coves',
-            style: TextStyle(fontSize: artist.fontSize ?? 12, color: _muted),
+          child: MotionExtent(
+            artist,
+            child: Text(
+              'Hollow Coves',
+              style: TextStyle(fontSize: artist.fontSize ?? 12, color: _muted),
+            ),
           ),
         ),
       ],
