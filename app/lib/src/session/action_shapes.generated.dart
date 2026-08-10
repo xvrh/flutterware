@@ -3153,13 +3153,6 @@ final resultShapes = <String, ResultShape>{
                   'The widget-tree JSON captured at the same moment, relative like [image].',
             },
             <String, Object?>{
-              'name': 'root',
-              'type': 'String',
-              'doc': 'The worktree the two paths above are relative to.',
-            },
-            <String, Object?>{'name': 'imageFile', 'type': 'File'},
-            <String, Object?>{'name': 'treeFile', 'type': 'File'},
-            <String, Object?>{
               'name': 'texts',
               'type': 'List<String>',
               'doc':
@@ -3317,13 +3310,6 @@ final resultShapes = <String, ResultShape>{
                     'doc':
                         'The widget-tree JSON captured at the same moment, relative like [image].',
                   },
-                  <String, Object?>{
-                    'name': 'root',
-                    'type': 'String',
-                    'doc': 'The worktree the two paths above are relative to.',
-                  },
-                  <String, Object?>{'name': 'imageFile', 'type': 'File'},
-                  <String, Object?>{'name': 'treeFile', 'type': 'File'},
                   <String, Object?>{
                     'name': 'texts',
                     'type': 'List<String>',
@@ -3504,14 +3490,6 @@ final resultShapes = <String, ResultShape>{
                               'The widget-tree JSON captured at the same moment, relative like [image].',
                         },
                         <String, Object?>{
-                          'name': 'root',
-                          'type': 'String',
-                          'doc':
-                              'The worktree the two paths above are relative to.',
-                        },
-                        <String, Object?>{'name': 'imageFile', 'type': 'File'},
-                        <String, Object?>{'name': 'treeFile', 'type': 'File'},
-                        <String, Object?>{
                           'name': 'texts',
                           'type': 'List<String>',
                           'doc':
@@ -3587,45 +3565,6 @@ final resultShapes = <String, ResultShape>{
       },
       <String, Object?>{'name': 'ok', 'type': 'bool'},
       <String, Object?>{
-        'name': 'artifacts',
-        'type': 'List<Artifact>',
-        'shape': <String, Object?>{
-          'type': 'Artifact',
-          'fields': <Object?>[
-            <String, Object?>{
-              'name': 'kind',
-              'type': 'String',
-              'doc': 'A MIME type where one fits — see the constants above.',
-            },
-            <String, Object?>{
-              'name': 'address',
-              'type': 'String',
-              'doc': 'What this is an artifact of, axes included.',
-            },
-            <String, Object?>{
-              'name': 'path',
-              'type': 'String',
-              'optional': true,
-              'doc': 'Where it was written, when it was written.',
-            },
-            <String, Object?>{
-              'name': 'text',
-              'type': 'String',
-              'optional': true,
-              'doc':
-                  'The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.',
-            },
-            <String, Object?>{
-              'name': 'meta',
-              'type': 'Map<String, Object?>',
-              'optional': true,
-              'doc':
-                  'Anything the producer wants the reader to know: timings, compile stats, exit codes.',
-            },
-          ],
-        },
-      },
-      <String, Object?>{
         'name': 'axes',
         'type': 'Map<String, String>',
         'optional': true,
@@ -3689,13 +3628,6 @@ final resultShapes = <String, ResultShape>{
         'doc':
             'The widget-tree JSON captured at the same moment, relative like [image].',
       },
-      <String, Object?>{
-        'name': 'root',
-        'type': 'String',
-        'doc': 'The worktree the two paths above are relative to.',
-      },
-      <String, Object?>{'name': 'imageFile', 'type': 'File'},
-      <String, Object?>{'name': 'treeFile', 'type': 'File'},
       <String, Object?>{
         'name': 'texts',
         'type': 'List<String>',

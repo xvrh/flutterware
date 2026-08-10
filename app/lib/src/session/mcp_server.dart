@@ -97,7 +97,8 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         'what has not been loaded yet, so the answer describes the project '
         'rather than what a previous call happened to warm. Loading is parsing '
         '— pubspecs, demo files — and never compiles, spawns a daemon or '
-        'touches the network; that work lives behind flutterware_invoke.',
+        'touches the network; that work lives behind flutterware_invoke. What '
+        'each plugin can be *told to do* is flutterware_actions, not this.',
     inputSchema: Schema.object(properties: {}),
   );
 
@@ -109,7 +110,14 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         return _json({
           'root': session.root,
           'worktree': session.worktree.branch ?? session.worktree.path,
-          'plugins': [for (var report in session.reports) report.toJson()],
+          'plugins': [
+            // Without the declarations, which is what the other tool is for.
+            // Carrying them here made this call three quarters a duplicate of
+            // flutterware_actions — 33k tokens of first contact on
+            // flutterware's own repo, before a question had been asked.
+            for (var report in session.reports)
+              report.toJson(includeActions: false),
+          ],
         });
       });
 
@@ -204,7 +212,14 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
       },
       // The report after the fact, so an agent sees what changed without
       // a second round-trip.
-      'report': core.report.toJson(),
+      //
+      // **Its status, its children and its view — not its declarations.** What
+      // changed is the first three; the fourth is the same static list the
+      // caller read once from flutterware_actions, and repeating it made a
+      // screenshot's reply 94% boilerplate. An agent iterating on a widget
+      // calls this every edit, so that was the cost paid most often here: ~6.9k
+      // tokens per call on the sample project, ~9.8k on flutterware's own repo.
+      'report': core.report.toJson(includeActions: false),
     };
 
     // An image artifact comes back as an image, not as a path. An agent
@@ -230,8 +245,13 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
     return _json(summary);
   });
 
-  static String _encode(Object? value) =>
-      const JsonEncoder.withIndent('  ').convert(value);
+  /// Compact, unlike the CLI's `--json`.
+  ///
+  /// The reader here is a model, and indentation is the one thing on this wire
+  /// that no reader benefits from: it was 47% of a `flutterware_actions` reply
+  /// and 39% of a status. `fw --json` keeps its indentation — that one is read
+  /// by a person and piped into `jq`.
+  static String _encode(Object? value) => jsonEncode(value);
 
   static CallToolResult _json(Object? value) =>
       CallToolResult(content: [TextContent(text: _encode(value))]);

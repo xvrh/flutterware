@@ -26,7 +26,7 @@ cd app && dart run bin/fw.dart <command>
 | `init` | record what this project needs, once |
 | `app [--release] [--json]` | open the flutterware GUI |
 | `mcp` | serve this project to an agent, over stdio |
-| `capture [<address>] -o <file> [--size=WxH] [--theme=light|dark] [--pixel-ratio=N] [--timeout=<seconds>]` | photograph the GUI at an address |
+| `capture [<address>] -o <file> [--size=WxH] [--theme=light|dark] [--pixel-ratio=N] [--timeout=<seconds>]` | photograph the GUI window itself, at an address |
 | `help [<command>]` | this, or one command in detail |
 
 `-v` on any command shows the output of whatever it has to build, instead of
@@ -63,7 +63,7 @@ Stdout belongs to the protocol — logs and build narration go to stderr.
 
 ### `flutterware_status`
 
-What every declared flutterware plugin says about itself: status, sub-entries per package, and a text projection of the panel. Loads what has not been loaded yet, so the answer describes the project rather than what a previous call happened to warm. Loading is parsing — pubspecs, demo files — and never compiles, spawns a daemon or touches the network; that work lives behind flutterware_invoke.
+What every declared flutterware plugin says about itself: status, sub-entries per package, and a text projection of the panel. Loads what has not been loaded yet, so the answer describes the project rather than what a previous call happened to warm. Loading is parsing — pubspecs, demo files — and never compiles, spawns a daemon or touches the network; that work lives behind flutterware_invoke. What each plugin can be *told to do* is flutterware_actions, not this.
 
 Takes no arguments.
 
@@ -677,9 +677,6 @@ packages: List<ScenarioRunPackage>
       width: int
       height: int
       tree: String   # The widget-tree JSON captured at the same moment, relative like [image].
-      root: String   # The worktree the two paths above are relative to.
-      imageFile: File
-      treeFile: File
       texts: List<String>   # The visible texts — the projection an agent reads next to the pixels.
       address: String   # The step's `fw://` address.
       statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
@@ -692,12 +689,6 @@ packages: List<ScenarioRunPackage>
       stack: String?
   error: String?   # Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.
 ok: bool
-artifacts: List<Artifact>
-  kind: String   # A MIME type where one fits — see the constants above.
-  address: String   # What this is an artifact of, axes included.
-  path: String?   # Where it was written, when it was written.
-  text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
-  meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
 axes: Map<String, String>?   # The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.
 ```
 

@@ -421,7 +421,7 @@ class CatalogRenderError {
   includeIfNull: false,
   createFactory: false,
 )
-class CatalogInspectResult implements PluginResult {
+class CatalogInspectResult implements PluginResult, ProducesArtifacts {
   CatalogInspectResult({
     required this.entry,
     required this.address,
@@ -505,6 +505,22 @@ class CatalogInspectResult implements PluginResult {
   /// would have made this the one place in the surface where a picture is less
   /// than an artifact.
   final Artifact? screenshot;
+
+  /// [screenshot], where a surface that can render a picture will look for it.
+  ///
+  /// **Without this the flag quietly did half its job.** `screenshot` returns an
+  /// `Artifact` as its whole value, so MCP turns it into an image and the agent
+  /// sees the widget; `inspect --screenshot` carries one in a *field*, which
+  /// reaches `JobResult.artifacts` only through this interface — so it came back
+  /// as a path and nothing else. The caller most likely to hit that is the one
+  /// that took the action's own advice and folded the picture into the render it
+  /// was already paying for.
+  ///
+  /// `includeToJson: false` because the artifact is already on the wire under
+  /// `screenshot`; this is the same value by the route a renderer looks down.
+  @override
+  @JsonKey(includeToJson: false)
+  List<Artifact> get artifacts => [?screenshot];
 
   @override
   Map<String, Object?> toJson() => _$CatalogInspectResultToJson(this);

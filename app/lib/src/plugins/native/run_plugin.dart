@@ -41,9 +41,16 @@ class RunPlugin extends NativePlugin<RunCore> {
   /// Starting a `flutter daemon` takes seconds and a cold build takes minutes,
   /// and the panel is worth photographing for neither. Without this a window
   /// capture catches the empty state and reports it as the device list.
+  ///
+  /// Every branch here has to describe work that is **in flight**. A plugin is
+  /// registered as a settle source for as long as its worktree session is open
+  /// — not for as long as its panel is mounted — so a branch that reports busy
+  /// because data is *missing* rather than *coming* holds up the capture of
+  /// every other panel in the window, forever. See [RunCore.isFindingDevices]
+  /// for the one that did.
   @override
   String? get busyWith {
-    if (!core.isLive && core.devices.isEmpty) return 'finding devices';
+    if (core.isFindingDevices) return 'finding devices';
     if (core.isStarting) return 'building';
     // The open pane is mid-read. Without this a capture settles on an empty
     // Screen tab saying `Reading the app…` — which is exactly what the first

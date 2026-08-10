@@ -393,11 +393,9 @@ class SplashCore extends PluginCore {
       'describe' => _describe(path, arguments),
       'artifacts' => _artifacts(path),
       'generate' => await _generate(path, arguments),
-      _ => throw ArgumentError.value(
-        actionId,
-        'actionId',
-        'unknown action on $id',
-      ),
+      // The base refusal rather than a second copy of it, so this one also
+      // names what is declared.
+      _ => await super.invoke(actionId, arguments: arguments),
     };
   }
 
