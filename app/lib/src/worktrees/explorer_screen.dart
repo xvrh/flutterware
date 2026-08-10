@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../shell/worktree.dart';
 import '../shell/worktree_filter.dart';
@@ -112,10 +115,121 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
   /// would turn the comparison into a memory test.
   final _expanded = <String>{};
 
+  /// Where the keyboard is, **as a path rather than an index**.
+  ///
+  /// An index would be a bug with a schedule attached: the watchers re-probe in
+  /// the background, a row can arrive or leave, and the list is ordered by
+  /// freshness — so an index that meant `claude/thing` when you pressed Down
+  /// can mean something else by the time you press Enter. A path cannot drift.
+  String? _cursor;
+
+  final _scroll = ScrollController();
+
+  /// One key per row, so the cursor can be scrolled into view.
+  ///
+  /// Keyed by path and reused, because a `GlobalKey` that changed identity
+  /// every build would rebuild the row's state with it.
+  final _rowKeys = <String, GlobalKey>{};
+
+  /// The filter's node, and the screen's key handling — **the same node**.
+  ///
+  /// The field keeps focus the whole time you are here, so typing filters
+  /// without a gesture to reach for it, and the keys the list wants are taken
+  /// on the way in. That is exactly how `CommandPalette` is wired; a screen with
+  /// a filter and a list is the same instrument.
+  late final FocusNode _focus = FocusNode(
+    onKeyEvent: _onKey,
+    debugLabel: 'worktree explorer',
+  );
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
   void _toggle(String path) => setState(
     () =>
         _expanded.contains(path) ? _expanded.remove(path) : _expanded.add(path),
   );
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    // Recomputed rather than remembered: it is the same list the last build
+    // drew, and a cached copy is one refresh away from being a different one.
+    var rows = _filtered();
+
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowDown:
+        _move(rows, 1);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowUp:
+        _move(rows, -1);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.enter:
+      case LogicalKeyboardKey.numpadEnter:
+        var entry = _cursorEntry(rows);
+        if (entry == null) return KeyEventResult.ignored;
+        // **The same split the mouse has.** Enter expands, because clicking a
+        // row expands; opening costs a subprocess and a tab, so it keeps its
+        // modifier the way it keeps its button.
+        var keyboard = HardwareKeyboard.instance;
+        if (keyboard.isMetaPressed || keyboard.isControlPressed) {
+          widget.onOpen?.call(entry);
+        } else {
+          _toggle(entry.worktree.path);
+        }
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.escape:
+        // Clears the filter, and only that. Escape with nothing to clear is
+        // left alone, so whatever the shell does with it still happens.
+        if (widget.query.isEmpty) return KeyEventResult.ignored;
+        widget.onQueryChanged?.call('');
+        return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  ExplorerEntry? _cursorEntry(List<(ExplorerEntry, FilterMatch?)> rows) {
+    for (var (entry, _) in rows) {
+      if (entry.worktree.path == _cursor) return entry;
+    }
+    return null;
+  }
+
+  void _move(List<(ExplorerEntry, FilterMatch?)> rows, int delta) {
+    if (rows.isEmpty) return;
+    var index = rows.indexWhere((r) => r.$1.worktree.path == _cursor);
+    // No cursor yet — or one that the filter has just excluded. Down starts at
+    // the top and Up at the bottom, which is what the key means when there is
+    // nothing to move from.
+    var next = index < 0
+        ? (delta > 0 ? 0 : rows.length - 1)
+        : (index + delta).clamp(0, rows.length - 1);
+    setState(() => _cursor = rows[next].$1.worktree.path);
+    _revealCursor();
+  }
+
+  void _revealCursor() {
+    // After layout, so the row being scrolled to has been built. A step of one
+    // is nearly always already within the list's cache extent; a jump further
+    // than that simply does not scroll, which is better than throwing.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      var context = _rowKeys[_cursor]?.currentContext;
+      if (context == null || !context.mounted) return;
+      unawaited(
+        Scrollable.ensureVisible(
+          context,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 80),
+        ),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -138,6 +252,7 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
       child: Column(
         children: [
           _Header(
+            focusNode: _focus,
             total: widget.entries.length,
             shown: rows.length,
             query: widget.query,
@@ -153,6 +268,7 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
             child: rows.isEmpty
                 ? const Center(child: NoWorktreeMatches())
                 : ListView.builder(
+                    controller: _scroll,
                     itemCount: rows.length,
                     itemBuilder: (context, i) {
                       var (entry, match) = rows[i];
@@ -160,8 +276,11 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
                       return WorktreeRow(
                         // Identity, so a row that moves takes its own hover and
                         // expansion with it instead of inheriting the state of
-                        // whatever used to sit at this index.
-                        key: ValueKey(worktree.path),
+                        // whatever used to sit at this index. A `GlobalKey`
+                        // rather than a `ValueKey` because the cursor has to
+                        // find this row's context to scroll it into view.
+                        key: _rowKeys[worktree.path] ??= GlobalKey(),
+                        cursor: worktree.path == _cursor,
                         label: entry.label,
                         branch: worktree.branch,
                         isMain: worktree.isMain,
@@ -181,6 +300,7 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
                     },
                   ),
           ),
+          const _KeyHints(),
         ],
       ),
     );
@@ -234,6 +354,37 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
   Duration _age(ExplorerEntry e) => activityAge(e.facts, widget.now);
 }
 
+/// What the keyboard does, said once, quietly.
+///
+/// A keyboard nobody can discover is a keyboard nobody uses — and ⌘↵ in
+/// particular is not guessable. One muted strip costs 22 pixels and is the whole
+/// documentation.
+class _KeyHints extends StatelessWidget {
+  const _KeyHints();
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Container(
+      height: 22,
+      padding: const EdgeInsets.symmetric(horizontal: explorerInsetLeft),
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: colors.line)),
+      ),
+      child: Text(
+        // The key handler takes either modifier everywhere — being forgiving
+        // about that costs nothing — but the hint has to name the one this
+        // machine's keyboard actually has on it.
+        '↑↓ move    ↵ detail    '
+        '${defaultTargetPlatform == TargetPlatform.macOS ? '⌘↵' : 'ctrl+↵'}'
+        ' open    esc clear',
+        style: context.type.micro.copyWith(color: colors.mut3),
+      ),
+    );
+  }
+}
+
 class _Header extends StatelessWidget {
   const _Header({
     required this.total,
@@ -246,8 +397,10 @@ class _Header extends StatelessWidget {
     required this.onQueryChanged,
     required this.onSortChanged,
     required this.onRefresh,
+    required this.focusNode,
   });
 
+  final FocusNode focusNode;
   final int total;
   final int shown;
   final String query;
@@ -292,7 +445,11 @@ class _Header extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 240),
-                child: _Filter(query: query, onChanged: onQueryChanged),
+                child: _Filter(
+                  query: query,
+                  focusNode: focusNode,
+                  onChanged: onQueryChanged,
+                ),
               ),
             ),
           ),
@@ -348,9 +505,17 @@ class _Header extends StatelessWidget {
 /// rebuild would move the caret to the end for the same reason, one keystroke
 /// later.
 class _Filter extends StatefulWidget {
-  const _Filter({required this.query, required this.onChanged});
+  const _Filter({
+    required this.query,
+    required this.focusNode,
+    required this.onChanged,
+  });
 
   final String query;
+
+  /// Owned by the screen, because the keys the *list* needs are taken on this
+  /// node's way in — see `_WorktreeExplorerViewState._onKey`.
+  final FocusNode focusNode;
   final ValueChanged<String>? onChanged;
 
   @override
@@ -391,6 +556,10 @@ class _FilterState extends State<_Filter> {
     // below that on a narrow window.
     return TextField(
       controller: _controller,
+      focusNode: widget.focusNode,
+      // So the screen is typeable the moment it appears. There is nothing else
+      // here that wants the keyboard, and the list's own keys pass through.
+      autofocus: true,
       onChanged: widget.onChanged,
       style: context.type.bodySmall,
       decoration: InputDecoration(

@@ -333,6 +333,15 @@ Widget explorerRowStates() => _Sheet(
       ),
     ),
     _Labelled(
+      'the keyboard is on this one — accentSoft, not the hover tone',
+      _Row(
+        label: 'The UI catalog becomes Previews',
+        branch: 'claude/ui-catalog-design-38b6c0',
+        facts: _repo[1].facts,
+        cursor: true,
+      ),
+    ),
+    _Labelled(
       'someone asked for changes',
       _Row(
         label: 'Run plugin entry restrictions',
@@ -467,6 +476,7 @@ class _Row extends StatelessWidget {
     this.isOpen = false,
     this.isCurrent = false,
     this.expanded = false,
+    this.cursor = false,
   });
 
   final String label;
@@ -476,9 +486,11 @@ class _Row extends StatelessWidget {
   final bool isOpen;
   final bool isCurrent;
   final bool expanded;
+  final bool cursor;
 
   @override
   Widget build(BuildContext context) => WorktreeRow(
+    cursor: cursor,
     label: label,
     branch: branch,
     isMain: isMain,

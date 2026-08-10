@@ -32,6 +32,7 @@ class WorktreeRow extends StatefulWidget {
     this.showAgent = true,
     this.showForge = true,
     this.expanded = false,
+    this.cursor = false,
     this.path,
     this.onToggleExpand,
     this.onOpen,
@@ -39,6 +40,13 @@ class WorktreeRow extends StatefulWidget {
 
   /// Whether the detail is showing below the row.
   final bool expanded;
+
+  /// Whether the keyboard is on this row.
+  ///
+  /// Deliberately **not** the same tone as hover: the pointer already draws its
+  /// own cursor on the glass, so its highlight is a hint, while this one is the
+  /// thing Enter will act on and has to be findable after you have looked away.
+  final bool cursor;
 
   /// The checkout's directory, for the detail. Null in a demo that has none.
   final String? path;
@@ -130,7 +138,15 @@ class _WorktreeRowState extends State<WorktreeRow> {
         onTap: widget.onToggleExpand,
         child: Container(
           decoration: BoxDecoration(
-            color: _hovered ? colors.hoverOverlay : Colors.transparent,
+            // `accentSoft` for the keyboard and `hoverOverlay` for the pointer —
+            // the same two tones, in the same order, that the command palette
+            // uses. Not a left edge: that slot is 2px of accent meaning "open",
+            // and a border would inset the row out of line with the header.
+            color: widget.cursor
+                ? colors.accentSoft
+                : _hovered
+                ? colors.hoverOverlay
+                : Colors.transparent,
             border: Border(bottom: BorderSide(color: colors.line)),
           ),
           child: Column(
