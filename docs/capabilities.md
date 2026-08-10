@@ -786,6 +786,57 @@ restarted: List<String>   # The package paths whose harness was dropped.
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 
 
+### `flutterware.launcher_icon`
+
+#### `inventory` — Inventory
+
+Every launcher icon on disk, what the OS does with each, and which of them the project never actually references
+
+```sh
+fw run launcher_icon inventory [--package=…] [--flavor=…]
+```
+
+Returns `IconInventoryResult`:
+
+```
+package: String
+address: String   # The address of this package, pasteable back into the shell.
+flavor: String?   # Which Android source set this reports on, or null for `main`.
+flavors: List<String>   # The other source sets that exist.
+iosCatalog: String   # `none`, `appIconSet`, `iconComposer` or `both`.
+iconBundles: List<String>
+minSdk: int?   # Null when it could not be read, which is an answer rather than a failure: the current Flutter template writes `minSdk = flutter.minSdkVersion`, which is not a number until Gradle runs.
+minSdkSource: String?
+roles: List<IconRoleEntry>
+  role: String   # The address vocabulary — `android.adaptive-foreground`.
+  label: String
+  platform: String
+  treatment: String   # What the OS does to the pixels: `asAuthored`, `whiteSilhouette` or `desaturateAndTint`.
+  mask: String   # The shape the OS clips to, if any.
+  since: String?   # The OS version this role begins to mean anything at.
+  referenced: bool?   # Whether the project's own wiring points at this.
+  color: String?   # The adaptive background when it is a colour rather than an image.
+  files: List<IconFileEntry>
+    path: String   # Worktree-relative rather than package-relative: an agent's tools are scoped to the repo, not to one package inside it.
+    modified: String
+    width: int?
+    height: int?
+    hasAlpha: bool
+    density: String?   # `xxhdpi`, `3x`, or null where the platform has one size.
+    icoFrames: List<int>   # The sizes an `.ico` packs.
+    declaredSize: int?   # What an Apple asset catalog claims this file's size is, when it disagrees with [width].
+findings: List<IconFindingEntry>
+  tone: String
+  message: String
+  role: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; the first when omitted |
+| `flavor` | string | no | — | Which Android source set under android/app/src/; main when omitted |
+
+
 ### `flutterware.splash`
 
 #### `describe` — Describe

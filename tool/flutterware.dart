@@ -31,6 +31,9 @@ void main() => Flutterware.configure((fw) {
   // `example` only. `root` is a library and `app` is this GUI — neither has a
   // native splash to resolve, which is why `NativeSplash` offers no `each`.
   fw.use(NativeSplash(packages: [.new(example)]));
+  // `example` again, and for the same reason: only a package that is an app
+  // has launcher icons to look at.
+  fw.use(LauncherIcon(packages: [.new(example)]));
   fw.use(ServerInspection());
   // `example` only: it is the one package here that is an app you would put on
   // a phone. `app` is this GUI and `root` is a library.

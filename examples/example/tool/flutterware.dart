@@ -13,6 +13,7 @@ void main() => Flutterware.configure((fw) {
   fw.use(Dependencies(packages: [.new(app)]));
   fw.use(Assets(packages: [.new(app)]));
   fw.use(NativeSplash(packages: [.new(app)]));
+  fw.use(LauncherIcon(packages: [.new(app)]));
   // No `directory:` — the ordinary case, where the whole package is scanned
   // and previews are found wherever they were written.
   fw.use(Previews(packages: [.new(app)]));

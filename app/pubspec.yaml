@@ -100,7 +100,9 @@ dependencies:
   win32:
   # Reads back the Android resources flutter_native_splash writes — styles.xml
   # and launch_background.xml — so the preview can be checked against what
-  # actually shipped. See app/lib/src/splash/model/recompose.dart.
+  # actually shipped. See app/lib/src/splash/model/recompose.dart. The launcher
+  # icon panel reads the manifest and the adaptive-icon XML the same way — see
+  # app/lib/src/launcher_icon/model/wiring.dart.
   xml:
   yaml:
   # Surgical edits to a splash config that leave the rest of the file — comments,

@@ -1778,6 +1778,278 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'style', 'type': 'String', 'optional': true},
     ],
   }),
+  'IconFileEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'IconFileEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'path',
+        'type': 'String',
+        'doc':
+            'Worktree-relative rather than package-relative: an agent\'s tools are scoped to the repo, not to one package inside it.',
+      },
+      <String, Object?>{'name': 'modified', 'type': 'String'},
+      <String, Object?>{'name': 'width', 'type': 'int', 'optional': true},
+      <String, Object?>{'name': 'height', 'type': 'int', 'optional': true},
+      <String, Object?>{'name': 'hasAlpha', 'type': 'bool'},
+      <String, Object?>{
+        'name': 'density',
+        'type': 'String',
+        'optional': true,
+        'doc': '`xxhdpi`, `3x`, or null where the platform has one size.',
+      },
+      <String, Object?>{
+        'name': 'icoFrames',
+        'type': 'List<int>',
+        'doc': 'The sizes an `.ico` packs.',
+      },
+      <String, Object?>{
+        'name': 'declaredSize',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'What an Apple asset catalog claims this file\'s size is, when it disagrees with [width].',
+      },
+    ],
+  }),
+  'IconFindingEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'IconFindingEntry',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'tone', 'type': 'String'},
+      <String, Object?>{'name': 'message', 'type': 'String'},
+      <String, Object?>{'name': 'role', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'IconInventoryResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'IconInventoryResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'package', 'type': 'String'},
+      <String, Object?>{
+        'name': 'address',
+        'type': 'String',
+        'doc': 'The address of this package, pasteable back into the shell.',
+      },
+      <String, Object?>{
+        'name': 'flavor',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Which Android source set this reports on, or null for `main`.',
+      },
+      <String, Object?>{
+        'name': 'flavors',
+        'type': 'List<String>',
+        'doc': 'The other source sets that exist.',
+      },
+      <String, Object?>{
+        'name': 'iosCatalog',
+        'type': 'String',
+        'doc': '`none`, `appIconSet`, `iconComposer` or `both`.',
+      },
+      <String, Object?>{'name': 'iconBundles', 'type': 'List<String>'},
+      <String, Object?>{
+        'name': 'minSdk',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'Null when it could not be read, which is an answer rather than a failure: the current Flutter template writes `minSdk = flutter.minSdkVersion`, which is not a number until Gradle runs.',
+      },
+      <String, Object?>{
+        'name': 'minSdkSource',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'roles',
+        'type': 'List<IconRoleEntry>',
+        'shape': <String, Object?>{
+          'type': 'IconRoleEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'role',
+              'type': 'String',
+              'doc': 'The address vocabulary — `android.adaptive-foreground`.',
+            },
+            <String, Object?>{'name': 'label', 'type': 'String'},
+            <String, Object?>{'name': 'platform', 'type': 'String'},
+            <String, Object?>{
+              'name': 'treatment',
+              'type': 'String',
+              'doc':
+                  'What the OS does to the pixels: `asAuthored`, `whiteSilhouette` or `desaturateAndTint`.',
+            },
+            <String, Object?>{
+              'name': 'mask',
+              'type': 'String',
+              'doc': 'The shape the OS clips to, if any.',
+            },
+            <String, Object?>{
+              'name': 'since',
+              'type': 'String',
+              'optional': true,
+              'doc': 'The OS version this role begins to mean anything at.',
+            },
+            <String, Object?>{
+              'name': 'referenced',
+              'type': 'bool',
+              'optional': true,
+              'doc': 'Whether the project\'s own wiring points at this.',
+            },
+            <String, Object?>{
+              'name': 'color',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The adaptive background when it is a colour rather than an image.',
+            },
+            <String, Object?>{
+              'name': 'files',
+              'type': 'List<IconFileEntry>',
+              'shape': <String, Object?>{
+                'type': 'IconFileEntry',
+                'fields': <Object?>[
+                  <String, Object?>{
+                    'name': 'path',
+                    'type': 'String',
+                    'doc':
+                        'Worktree-relative rather than package-relative: an agent\'s tools are scoped to the repo, not to one package inside it.',
+                  },
+                  <String, Object?>{'name': 'modified', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'width',
+                    'type': 'int',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'height',
+                    'type': 'int',
+                    'optional': true,
+                  },
+                  <String, Object?>{'name': 'hasAlpha', 'type': 'bool'},
+                  <String, Object?>{
+                    'name': 'density',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        '`xxhdpi`, `3x`, or null where the platform has one size.',
+                  },
+                  <String, Object?>{
+                    'name': 'icoFrames',
+                    'type': 'List<int>',
+                    'doc': 'The sizes an `.ico` packs.',
+                  },
+                  <String, Object?>{
+                    'name': 'declaredSize',
+                    'type': 'int',
+                    'optional': true,
+                    'doc':
+                        'What an Apple asset catalog claims this file\'s size is, when it disagrees with [width].',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'findings',
+        'type': 'List<IconFindingEntry>',
+        'shape': <String, Object?>{
+          'type': 'IconFindingEntry',
+          'fields': <Object?>[
+            <String, Object?>{'name': 'tone', 'type': 'String'},
+            <String, Object?>{'name': 'message', 'type': 'String'},
+            <String, Object?>{
+              'name': 'role',
+              'type': 'String',
+              'optional': true,
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  'IconRoleEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'IconRoleEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'role',
+        'type': 'String',
+        'doc': 'The address vocabulary — `android.adaptive-foreground`.',
+      },
+      <String, Object?>{'name': 'label', 'type': 'String'},
+      <String, Object?>{'name': 'platform', 'type': 'String'},
+      <String, Object?>{
+        'name': 'treatment',
+        'type': 'String',
+        'doc':
+            'What the OS does to the pixels: `asAuthored`, `whiteSilhouette` or `desaturateAndTint`.',
+      },
+      <String, Object?>{
+        'name': 'mask',
+        'type': 'String',
+        'doc': 'The shape the OS clips to, if any.',
+      },
+      <String, Object?>{
+        'name': 'since',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The OS version this role begins to mean anything at.',
+      },
+      <String, Object?>{
+        'name': 'referenced',
+        'type': 'bool',
+        'optional': true,
+        'doc': 'Whether the project\'s own wiring points at this.',
+      },
+      <String, Object?>{
+        'name': 'color',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The adaptive background when it is a colour rather than an image.',
+      },
+      <String, Object?>{
+        'name': 'files',
+        'type': 'List<IconFileEntry>',
+        'shape': <String, Object?>{
+          'type': 'IconFileEntry',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'path',
+              'type': 'String',
+              'doc':
+                  'Worktree-relative rather than package-relative: an agent\'s tools are scoped to the repo, not to one package inside it.',
+            },
+            <String, Object?>{'name': 'modified', 'type': 'String'},
+            <String, Object?>{'name': 'width', 'type': 'int', 'optional': true},
+            <String, Object?>{
+              'name': 'height',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{'name': 'hasAlpha', 'type': 'bool'},
+            <String, Object?>{
+              'name': 'density',
+              'type': 'String',
+              'optional': true,
+              'doc': '`xxhdpi`, `3x`, or null where the platform has one size.',
+            },
+            <String, Object?>{
+              'name': 'icoFrames',
+              'type': 'List<int>',
+              'doc': 'The sizes an `.ico` packs.',
+            },
+            <String, Object?>{
+              'name': 'declaredSize',
+              'type': 'int',
+              'optional': true,
+              'doc':
+                  'What an Apple asset catalog claims this file\'s size is, when it disagrees with [width].',
+            },
+          ],
+        },
+      },
+    ],
+  }),
   'RasterFactsResult': ResultShape.fromJson(<String, Object?>{
     'type': 'RasterFactsResult',
     'fields': <Object?>[

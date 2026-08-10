@@ -1,0 +1,272 @@
+/// What the project itself says about which icons the OS should reach.
+///
+/// This is the half that makes the viewer more than a file browser. A PNG in
+/// `mipmap-xxhdpi/` proves nothing: whether Android ever draws it depends on
+/// `mipmap-anydpi-v26/ic_launcher.xml`, on `android:icon` in the manifest, and
+/// on the project's `minSdk`. Reading those three answers "is this file dead?",
+/// which nothing else in the toolchain will tell you.
+///
+/// **These are reads of the project, not of a generator's config.** Nothing here
+/// opens `icons_launcher.yaml` or `flutter_launcher_icons.yaml` — the whole
+/// point is that the answer is the same however the files got there.
+///
+/// Parsed rather than pattern-matched, which is not merely tidier. The manifest
+/// carries `android:icon` in several places — on `<application>`, and on any
+/// `<activity>` that overrides it — and only the one on `<application>` is the
+/// launcher icon. `icons_launcher` rewrites *every* line containing the
+/// attribute (`android.dart`, `_updateAndroidManifestIconLauncher`), which is
+/// the bug that regex invites. Reading `manifest > application` by name cannot
+/// make that mistake.
+library;
+
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+import 'package:xml/xml.dart';
+
+/// An `<adaptive-icon>` file and the layers it declares.
+class AdaptiveXml {
+  const AdaptiveXml({
+    required this.path,
+    this.background,
+    this.foreground,
+    this.monochrome,
+  });
+
+  /// Package-relative.
+  final String path;
+
+  /// The resource each layer points at — `@mipmap/ic_launcher_foreground`,
+  /// `@color/ic_launcher_background` — or null when the element is absent.
+  ///
+  /// Absent is the interesting value: a `<monochrome>` that is not there is why
+  /// a themed-icon PNG on disk never appears on a device.
+  final String? background;
+  final String? foreground;
+  final String? monochrome;
+
+  bool get hasMonochrome => monochrome != null;
+
+  /// The resource names this file references, without their `@type/` prefix.
+  Set<String> get referencedNames => {
+    for (var value in [background, foreground, monochrome])
+      if (value != null) resourceName(value),
+  };
+}
+
+/// Everything the Android project says about its own icons.
+class AndroidWiring {
+  const AndroidWiring({
+    this.minSdk,
+    this.minSdkSource,
+    this.manifestIcon,
+    this.manifestRoundIcon,
+    this.launcher,
+    this.launcherRound,
+    this.backgroundColor,
+  });
+
+  /// Null when it could not be determined — which is a legitimate answer, not a
+  /// failure. See [readMinSdk].
+  final int? minSdk;
+
+  /// Which file [minSdk] came from, so a surprising number is traceable.
+  final String? minSdkSource;
+
+  /// `android:icon` and `android:roundIcon` from `<application>` — not from any
+  /// `<activity>` that overrides them, which is a different icon for a
+  /// different purpose.
+  final String? manifestIcon;
+  final String? manifestRoundIcon;
+
+  final AdaptiveXml? launcher;
+  final AdaptiveXml? launcherRound;
+
+  /// `ic_launcher_background` from `values/colors.xml`, when the adaptive
+  /// background is a colour rather than an image.
+  final String? backgroundColor;
+
+  /// Whether adaptive icons reach the project's whole install base.
+  ///
+  /// Null when [minSdk] is unknown — three-valued on purpose, so the panel can
+  /// say "unknown" rather than guess in either direction.
+  bool? get adaptiveReachesEveryone => minSdk == null ? null : minSdk! >= 26;
+
+  bool? get themedIconsReachEveryone => minSdk == null ? null : minSdk! >= 33;
+
+  /// Every resource name the OS is told to reach, from any of the three
+  /// sources. What a file has to appear in to be something other than dead.
+  Set<String> get referencedNames => {
+    for (var value in [manifestIcon, manifestRoundIcon])
+      if (value != null) resourceName(value),
+    ...?launcher?.referencedNames,
+    ...?launcherRound?.referencedNames,
+  };
+}
+
+/// `@mipmap/ic_launcher` → `ic_launcher`.
+String resourceName(String reference) => reference.split('/').last;
+
+/// Parses an Android resource colour to ARGB, or null when it is not one.
+///
+/// The platform accepts `#RGB`, `#ARGB`, `#RRGGBB` and `#AARRGGBB`, and the
+/// short forms expand by doubling each digit. Kept apart from the splash
+/// plugin's `parseSplashColor`, which is a transcription of one generator's
+/// stricter rule — six digits only, no alpha — and would reject values Android
+/// itself accepts.
+int? parseResourceColor(String? value) {
+  if (value == null) return null;
+  var digits = value.trim().replaceFirst('#', '');
+  if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(digits)) return null;
+
+  var expanded = switch (digits.length) {
+    3 || 4 => digits.split('').map((d) => '$d$d').join(),
+    6 || 8 => digits,
+    _ => null,
+  };
+  if (expanded == null) return null;
+
+  var parsed = int.tryParse(expanded, radix: 16);
+  if (parsed == null) return null;
+  return expanded.length == 6 ? 0xFF000000 | parsed : parsed;
+}
+
+/// Reads the wiring for one Android source set.
+///
+/// [resFolder] and [manifestPath] are absolute; paths in the result are made
+/// relative to [packageRoot].
+AndroidWiring readAndroidWiring({
+  required String packageRoot,
+  required String resFolder,
+  required String manifestPath,
+}) {
+  var (minSdk, minSdkSource) = readMinSdk(packageRoot);
+  var application = _parse(
+    File(manifestPath),
+  )?.rootElement.getElement('application');
+
+  return AndroidWiring(
+    minSdk: minSdk,
+    minSdkSource: minSdkSource,
+    manifestIcon: application?.getAttribute('android:icon'),
+    manifestRoundIcon: application?.getAttribute('android:roundIcon'),
+    launcher: _readAdaptive(packageRoot, resFolder, 'ic_launcher.xml'),
+    launcherRound: _readAdaptive(
+      packageRoot,
+      resFolder,
+      'ic_launcher_round.xml',
+    ),
+    backgroundColor: _readBackgroundColor(resFolder),
+  );
+}
+
+/// The project's `minSdk`, and the file it came from.
+///
+/// Written here rather than reused from a generator because the generators get
+/// it wrong in ways that matter. `icons_launcher` strips every non-digit from
+/// the matching line, so `minSdk = 24 // was 21` yields 2421; and its last
+/// fallback reads `android/local.properties` with no existence check, throwing
+/// an uncaught `FileSystemException` on a clean checkout where that gitignored
+/// file has not been generated yet.
+///
+/// This strips comments before matching, and returns null rather than a default
+/// when the value is a Gradle expression it cannot evaluate — `minSdk =
+/// flutter.minSdkVersion`, which is what the current Flutter template emits.
+/// Null is honest; 21 would be a guess that reads as a fact.
+(int?, String?) readMinSdk(String packageRoot) {
+  for (var relative in [
+    p.join('android', 'app', 'build.gradle.kts'),
+    p.join('android', 'app', 'build.gradle'),
+  ]) {
+    var file = File(p.join(packageRoot, relative));
+    if (!file.existsSync()) continue;
+
+    List<String> lines;
+    try {
+      lines = file.readAsLinesSync();
+    } catch (_) {
+      continue;
+    }
+
+    for (var line in lines) {
+      var match = _minSdkPattern.firstMatch(_stripLineComment(line));
+      if (match != null) return (int.tryParse(match.group(1)!), relative);
+    }
+  }
+  return (null, null);
+}
+
+/// `minSdk 24`, `minSdk = 24`, `minSdkVersion 24`. A non-numeric value — a
+/// Gradle property reference — deliberately does not match.
+final _minSdkPattern = RegExp(r'\bminSdk(?:Version)?\s*=?\s*(\d+)\b');
+
+/// Everything before an unquoted `//`.
+///
+/// Naive about `//` inside a string literal, which does not occur in the two
+/// lines this is ever pointed at.
+String _stripLineComment(String line) {
+  var index = line.indexOf('//');
+  return index < 0 ? line : line.substring(0, index);
+}
+
+AdaptiveXml? _readAdaptive(
+  String packageRoot,
+  String resFolder,
+  String fileName,
+) {
+  var file = File(p.join(resFolder, 'mipmap-anydpi-v26', fileName));
+  var document = _parse(file);
+  if (document == null) return null;
+
+  return AdaptiveXml(
+    path: p.relative(file.path, from: packageRoot),
+    background: _layerDrawable(document.rootElement, 'background'),
+    foreground: _layerDrawable(document.rootElement, 'foreground'),
+    monochrome: _layerDrawable(document.rootElement, 'monochrome'),
+  );
+}
+
+/// The drawable one adaptive-icon layer points at.
+///
+/// Both spellings resolve: the attribute on the layer element itself, and the
+/// wrapper form where an `<inset>` or `<layer-list>` child carries it, which is
+/// what Android Studio's Image Asset tool emits.
+String? _layerDrawable(XmlElement root, String layer) {
+  var element = root.getElement(layer);
+  if (element == null) return null;
+
+  var onElement = element.getAttribute('android:drawable');
+  if (onElement != null) return onElement;
+
+  for (var descendant in element.descendantElements) {
+    var drawable = descendant.getAttribute('android:drawable');
+    if (drawable != null) return drawable;
+  }
+  return null;
+}
+
+String? _readBackgroundColor(String resFolder) {
+  var document = _parse(File(p.join(resFolder, 'values', 'colors.xml')));
+  if (document == null) return null;
+
+  for (var color in document.rootElement.findElements('color')) {
+    if (color.getAttribute('name') == 'ic_launcher_background') {
+      return color.innerText.trim();
+    }
+  }
+  return null;
+}
+
+/// Parses [file], or null when it is absent, unreadable or malformed.
+///
+/// Malformed is null rather than a throw for the reason the splash scan gives
+/// about YAML: a file being edited is briefly unparseable, and a panel that
+/// redraws without it beats a scan that fails.
+XmlDocument? _parse(File file) {
+  if (!file.existsSync()) return null;
+  try {
+    return XmlDocument.parse(file.readAsStringSync());
+  } catch (_) {
+    return null;
+  }
+}
