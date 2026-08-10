@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'parameters.dart';
+import 'knobs.dart';
 
-class ParametersEditor extends StatelessWidget {
-  final EditableParameters parameters;
+class KnobsEditor extends StatelessWidget {
+  final EditableKnobs knobs;
 
-  const ParametersEditor(this.parameters, {super.key});
+  const KnobsEditor(this.knobs, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -22,12 +22,12 @@ class ParametersEditor extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.only(bottom: 50),
         children: [
-          for (var parameter in parameters.parameters.entries)
+          for (var knob in knobs.knobs.entries)
             _KnobLine(
-              name: parameter.key,
+              name: knob.key,
               editor: ListenableBuilder(
-                listenable: parameter.value,
-                builder: (context, _) => _editorFor(parameter.value),
+                listenable: knob.value,
+                builder: (context, _) => _editorFor(knob.value),
               ),
             ),
         ],
@@ -35,14 +35,14 @@ class ParametersEditor extends StatelessWidget {
     );
   }
 
-  Widget _editorFor(Parameter parameter) {
-    return switch (parameter) {
-      StringParameter() => _StringEditor(parameter),
-      BoolParameter() => _BoolEditor(parameter),
-      NumParameter<num>() => _NumEditor(parameter),
-      PickerParameter() => _PickerEditor(parameter),
-      DateTimeParameter() => _DateTimeEditor(parameter),
-      ActionButtonParameter() => _ButtonEditor(parameter),
+  Widget _editorFor(Knob knob) {
+    return switch (knob) {
+      StringKnob() => _StringEditor(knob),
+      BoolKnob() => _BoolEditor(knob),
+      NumKnob<num>() => _NumEditor(knob),
+      PickerKnob() => _PickerEditor(knob),
+      DateTimeKnob() => _DateTimeEditor(knob),
+      ActionButtonKnob() => _ButtonEditor(knob),
     };
   }
 }
@@ -80,9 +80,9 @@ class _KnobLine extends StatelessWidget {
 }
 
 class _StringEditor extends StatefulWidget {
-  final StringParameter parameter;
+  final StringKnob knob;
 
-  const _StringEditor(this.parameter);
+  const _StringEditor(this.knob);
 
   @override
   State<_StringEditor> createState() => _StringEditorState();
@@ -90,9 +90,7 @@ class _StringEditor extends StatefulWidget {
 
 class _StringEditorState extends State<_StringEditor> {
   final _globalKey = GlobalKey();
-  late final _textController = TextEditingController(
-    text: widget.parameter.value,
-  );
+  late final _textController = TextEditingController(text: widget.knob.value);
 
   @override
   void initState() {
@@ -103,7 +101,7 @@ class _StringEditorState extends State<_StringEditor> {
       if (text.isEmpty) {
         text = null;
       }
-      widget.parameter.value = text;
+      widget.knob.value = text;
     });
   }
 
@@ -115,7 +113,7 @@ class _StringEditorState extends State<_StringEditor> {
       maxLines: null,
       decoration: InputDecoration(
         isDense: true,
-        hintText: widget.parameter.defaultValue,
+        hintText: widget.knob.defaultValue,
       ),
     );
   }
@@ -128,50 +126,49 @@ class _StringEditorState extends State<_StringEditor> {
 }
 
 class _BoolEditor extends StatelessWidget {
-  final BoolParameter parameter;
+  final BoolKnob knob;
 
-  const _BoolEditor(this.parameter);
+  const _BoolEditor(this.knob);
 
   @override
   Widget build(BuildContext context) {
     return Checkbox(
-      value: parameter.value ?? parameter.defaultValue,
+      value: knob.value ?? knob.defaultValue,
       onChanged: (v) {
-        parameter.value = v;
+        knob.value = v;
       },
     );
   }
 }
 
 class _NumEditor extends StatelessWidget {
-  final NumParameter parameter;
+  final NumKnob knob;
 
-  const _NumEditor(this.parameter);
+  const _NumEditor(this.knob);
 
   @override
   Widget build(BuildContext context) {
-    if (parameter.min != null && parameter.max != null) {
+    if (knob.min != null && knob.max != null) {
       return Slider(
-        label: parameter.requiredValue.toString(),
-        value: parameter.requiredValue.toDouble(),
-        min: parameter.min!.toDouble(),
-        max: parameter.max!.toDouble(),
+        label: knob.requiredValue.toString(),
+        value: knob.requiredValue.toDouble(),
+        min: knob.min!.toDouble(),
+        max: knob.max!.toDouble(),
         onChanged: (v) {
-          var value = parameter.isInt ? v.toInt() : v;
-          parameter.value = value;
+          var value = knob.isInt ? v.toInt() : v;
+          knob.value = value;
         },
       );
     } else {
       return TextFormField(
         decoration: InputDecoration(
-          hintText: parameter.defaultValue.toString(),
+          hintText: knob.defaultValue.toString(),
           isDense: true,
         ),
-        initialValue:
-            parameter.value?.toString() ?? parameter.defaultValue.toString(),
+        initialValue: knob.value?.toString() ?? knob.defaultValue.toString(),
         onChanged: (e) {
-          var value = parameter.isInt ? int.tryParse(e) : double.tryParse(e);
-          parameter.value = value;
+          var value = knob.isInt ? int.tryParse(e) : double.tryParse(e);
+          knob.value = value;
         },
       );
     }
@@ -179,36 +176,36 @@ class _NumEditor extends StatelessWidget {
 }
 
 class _PickerEditor<T> extends StatelessWidget {
-  final PickerParameter parameter;
+  final PickerKnob knob;
 
-  const _PickerEditor(this.parameter, {super.key});
+  const _PickerEditor(this.knob, {super.key});
 
   @override
   Widget build(BuildContext context) {
     return DropdownButton(
-      value: parameter.requiredValue,
+      value: knob.requiredValue,
       items: [
-        for (var v in parameter.options.entries)
+        for (var v in knob.options.entries)
           DropdownMenuItem(
             value: v.value,
-            child: pickerOptionWidget(parameter, v.key, v.value),
+            child: pickerOptionWidget(knob, v.key, v.value),
           ),
       ],
       onChanged: (v) {
-        parameter.value = v;
+        knob.value = v;
       },
     );
   }
 }
 
 class _DateTimeEditor extends StatelessWidget {
-  final DateTimeParameter parameter;
+  final DateTimeKnob knob;
 
-  const _DateTimeEditor(this.parameter);
+  const _DateTimeEditor(this.knob);
 
   @override
   Widget build(BuildContext context) {
-    var value = parameter.requiredValue;
+    var value = knob.requiredValue;
 
     String pad(int value) => '$value'.padLeft(2, '0');
 
@@ -217,7 +214,7 @@ class _DateTimeEditor extends StatelessWidget {
       formatted = '<null>';
     } else {
       formatted = '${value.year}-${pad(value.month)}-${pad(value.day)}';
-      if (!parameter.dateOnly) {
+      if (!knob.dateOnly) {
         formatted += ' ${pad(value.hour)}:${pad(value.minute)}';
       }
     }
@@ -235,7 +232,7 @@ class _DateTimeEditor extends StatelessWidget {
             );
             if (pickedDate != null) {
               var pickedTime = TimeOfDay(hour: 0, minute: 0);
-              if (!parameter.dateOnly && context.mounted) {
+              if (!knob.dateOnly && context.mounted) {
                 pickedTime =
                     await showTimePicker(
                       context: context,
@@ -245,7 +242,7 @@ class _DateTimeEditor extends StatelessWidget {
                     ) ??
                     pickedTime;
               }
-              var newValue = parameter.value = pickedDate.copyWith(
+              var newValue = knob.value = pickedDate.copyWith(
                 hour: pickedTime.hour,
                 minute: pickedTime.minute,
               );
@@ -257,13 +254,13 @@ class _DateTimeEditor extends StatelessWidget {
           },
           child: Text(formatted),
         ),
-        if (parameter.isNullable && value != null)
+        if (knob.isNullable && value != null)
           Padding(
             padding: const EdgeInsets.only(left: 10),
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(minimumSize: Size.zero),
               onPressed: () {
-                parameter.value = null;
+                knob.value = null;
               },
               child: Text('Clear'),
             ),
@@ -288,7 +285,7 @@ class _DateTimeEditor extends StatelessWidget {
   }
 
   void switchUtc(bool isUtc, DateTime value) {
-    parameter.value = isUtc
+    knob.value = isUtc
         ? DateTime.utc(
             value.year,
             value.month,
@@ -307,15 +304,12 @@ class _DateTimeEditor extends StatelessWidget {
 }
 
 class _ButtonEditor<T> extends StatelessWidget {
-  final ActionButtonParameter parameter;
+  final ActionButtonKnob knob;
 
-  const _ButtonEditor(this.parameter);
+  const _ButtonEditor(this.knob);
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton(
-      onPressed: parameter.onPressed,
-      child: Text(parameter.text),
-    );
+    return FilledButton(onPressed: knob.onPressed, child: Text(knob.text));
   }
 }

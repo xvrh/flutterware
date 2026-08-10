@@ -16,7 +16,7 @@ class _Knobs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var parameters = context.previews.parameters;
+    var parameters = context.knobs;
     var label = parameters.string('label', 'Hello');
     var count = parameters.int('count', 2, min: 0, max: 9);
     var dense = parameters.bool('dense', false);

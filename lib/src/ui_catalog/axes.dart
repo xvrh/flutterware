@@ -37,7 +37,7 @@ abstract class TopBarState {
 /// The guest's side of the top bar: what the shell on screen declared, and the
 /// two extensions the host reads and writes them through.
 ///
-/// Deliberately the mirror image of `CatalogParameters`. Both learn what there
+/// Deliberately the mirror image of `CatalogKnobs`. Both learn what there
 /// is by *running* the thing that declares it; what separates them is scope.
 /// A knob is filed under the entry that asked for it and goes away with it, an
 /// axis is filed under its shell and does not.

@@ -3,7 +3,19 @@ import 'dart:core';
 
 import 'package:flutter/widgets.dart';
 
-class Parameters {
+/// The controls an entry declares by asking for them while it builds.
+///
+/// **A knob is a read with a default, not a declaration.** Nothing registers
+/// one: `context.knobs.bool('Edit mode', false)` *is* the declaration, and the
+/// same call answers with `false` where nothing is hosting — a real app, a
+/// test, Flutter's own previewer. That is what makes it safe to leave in a
+/// widget that ships.
+///
+/// This base class is that unhosted answer. [EditableKnobs] is the hosted one.
+class Knobs {
+  /// What a knob answers with when no [KnobsProvider] is above it.
+  static final unanswered = Knobs();
+
   String string(String name, String defaultValue) {
     return defaultValue;
   }
@@ -68,24 +80,24 @@ class Parameters {
   void button(String name, String text, VoidCallback onTap) {}
 }
 
-class EditableParameters implements Parameters {
+class EditableKnobs implements Knobs {
   final void Function() onRefresh;
   final void Function() onAdded;
-  final parameters = <String, Parameter>{};
+  final knobs = <String, Knob>{};
 
-  EditableParameters({required this.onRefresh, required this.onAdded});
+  EditableKnobs({required this.onRefresh, required this.onAdded});
 
   /// The names declared since [beginPass], or null when no pass is open.
   ///
   /// A knob exists because a build asked for it, which makes a build the only
   /// thing that can retire one: a knob renamed or deleted in the source is
   /// simply never asked for again, and without a pass to notice that, it
-  /// lingers in [parameters] as a control that reads nothing.
+  /// lingers in [knobs] as a control that reads nothing.
   Set<String>? _pass;
 
   /// Starts recording which knobs a build declares.
   ///
-  /// Between this and [endPass], [parameters] is the *union* of the last build
+  /// Between this and [endPass], [knobs] is the *union* of the last build
   /// and this one — a knob is only known to be gone once the pass closes.
   void beginPass() => _pass = <String>{};
 
@@ -95,44 +107,44 @@ class EditableParameters implements Parameters {
     _pass = null;
     if (declared == null) return 0;
     var retired = [
-      for (var name in parameters.keys)
+      for (var name in knobs.keys)
         if (!declared.contains(name)) name,
     ];
     for (var name in retired) {
-      var parameter = parameters.remove(name);
-      parameter?.removeListener(_onRefresh);
-      parameter?.dispose();
+      var knob = knobs.remove(name);
+      knob?.removeListener(_onRefresh);
+      knob?.dispose();
     }
     // Re-ordered to match the build, not the order things were first seen: a
     // knob belongs in the panel where the demo asks for it, so one inserted
     // halfway through a build appears halfway down rather than at the bottom.
     // Without this a rename reads as a knob that moved as well as changed.
-    var ordered = {for (var name in declared) name: ?parameters[name]};
-    parameters
+    var ordered = {for (var name in declared) name: ?knobs[name]};
+    knobs
       ..clear()
       ..addAll(ordered);
     return retired.length;
   }
 
-  T _addParameter<T extends Parameter>(String name, T Function() putIfAbsent) {
+  T _addKnob<T extends Knob>(String name, T Function() putIfAbsent) {
     _pass?.add(name);
-    var existingParameter = parameters[name];
-    T parameter;
-    if (existingParameter is T) {
-      parameter = existingParameter;
+    var existingKnob = knobs[name];
+    T knob;
+    if (existingKnob is T) {
+      knob = existingKnob;
     } else {
-      if (existingParameter != null) {
-        existingParameter.dispose();
-        existingParameter = null;
+      if (existingKnob != null) {
+        existingKnob.dispose();
+        existingKnob = null;
       }
 
-      parameter = putIfAbsent();
-      parameter.addListener(_onRefresh);
-      parameters[name] = parameter;
+      knob = putIfAbsent();
+      knob.addListener(_onRefresh);
+      knobs[name] = knob;
 
       onAdded();
     }
-    return parameter;
+    return knob;
   }
 
   void _onRefresh() {
@@ -141,10 +153,9 @@ class EditableParameters implements Parameters {
 
   @override
   String string(String name, String defaultValue) {
-    var parameter = _addParameter(name, () => StringParameter())
-      ..defaultValue = defaultValue;
+    var knob = _addKnob(name, () => StringKnob())..defaultValue = defaultValue;
 
-    return parameter.requiredValue;
+    return knob.requiredValue;
   }
 
   @override
@@ -154,12 +165,12 @@ class EditableParameters implements Parameters {
     core.num? min,
     core.num? max,
   }) {
-    var parameter = _addParameter(name, () => NumParameter<core.num>(0))
+    var knob = _addKnob(name, () => NumKnob<core.num>(0))
       ..defaultValue = defaultValue
       ..min = min
       ..max = max;
 
-    return parameter.requiredValue;
+    return knob.requiredValue;
   }
 
   @override
@@ -169,12 +180,12 @@ class EditableParameters implements Parameters {
     core.int? min,
     core.int? max,
   }) {
-    var parameter = _addParameter(name, () => NumParameter<core.int>(0))
+    var knob = _addKnob(name, () => NumKnob<core.int>(0))
       ..defaultValue = defaultValue
       ..min = min
       ..max = max;
 
-    return parameter.requiredValue;
+    return knob.requiredValue;
   }
 
   @override
@@ -184,19 +195,18 @@ class EditableParameters implements Parameters {
     core.double? min,
     core.double? max,
   }) {
-    var parameter = _addParameter(name, () => NumParameter<core.double>(0))
+    var knob = _addKnob(name, () => NumKnob<core.double>(0))
       ..defaultValue = defaultValue
       ..min = min
       ..max = max;
 
-    return parameter.requiredValue;
+    return knob.requiredValue;
   }
 
   @override
   core.bool bool(String name, core.bool defaultValue) {
-    var parameter = _addParameter(name, () => BoolParameter())
-      ..defaultValue = defaultValue;
-    return parameter.requiredValue;
+    var knob = _addKnob(name, () => BoolKnob())..defaultValue = defaultValue;
+    return knob.requiredValue;
   }
 
   @override
@@ -207,14 +217,13 @@ class EditableParameters implements Parameters {
     Color Function(T value)? swatch,
     IconData Function(T value)? icon,
   }) {
-    var parameter =
-        _addParameter(name, () => PickerParameter<T>(options: options))
-          ..defaultValue = defaultValue
-          ..options = options
-          ..swatch = swatch
-          ..icon = icon;
+    var knob = _addKnob(name, () => PickerKnob<T>(options: options))
+      ..defaultValue = defaultValue
+      ..options = options
+      ..swatch = swatch
+      ..icon = icon;
 
-    return parameter.requiredValue;
+    return knob.requiredValue;
   }
 
   @override
@@ -223,11 +232,11 @@ class EditableParameters implements Parameters {
     DateTime? defaultValue, {
     core.bool dateOnly = false,
   }) {
-    var parameter = _addParameter(
+    var knob = _addKnob(
       name,
-      () => DateTimeParameter(isNullable: true, dateOnly: dateOnly),
+      () => DateTimeKnob(isNullable: true, dateOnly: dateOnly),
     )..defaultValue = defaultValue;
-    return parameter.requiredValue;
+    return knob.requiredValue;
   }
 
   @override
@@ -236,32 +245,29 @@ class EditableParameters implements Parameters {
     DateTime defaultValue, {
     core.bool dateOnly = false,
   }) {
-    var parameter = _addParameter(
+    var knob = _addKnob(
       name,
-      () => DateTimeParameter(isNullable: false, dateOnly: dateOnly),
+      () => DateTimeKnob(isNullable: false, dateOnly: dateOnly),
     )..defaultValue = defaultValue;
-    return parameter.requiredValue!;
+    return knob.requiredValue!;
   }
 
   @override
   void button(String name, String text, VoidCallback onPressed) {
-    _addParameter(
-        name,
-        () => ActionButtonParameter(text: text, onPressed: onPressed),
-      )
+    _addKnob(name, () => ActionButtonKnob(text: text, onPressed: onPressed))
       ..text = text
       ..onPressed = onPressed;
   }
 
   void dispose() {
-    for (var parameter in parameters.values) {
-      parameter.dispose();
+    for (var knob in knobs.values) {
+      knob.dispose();
     }
   }
 }
 
-sealed class Parameter<T> with ChangeNotifier {
-  Parameter(this.defaultValue);
+sealed class Knob<T> with ChangeNotifier {
+  Knob(this.defaultValue);
 
   T defaultValue;
 
@@ -276,48 +282,44 @@ sealed class Parameter<T> with ChangeNotifier {
   T get requiredValue => _value ?? defaultValue;
 }
 
-class StringParameter extends Parameter<String> {
-  StringParameter() : super('');
+class StringKnob extends Knob<String> {
+  StringKnob() : super('');
 }
 
-class BoolParameter extends Parameter<bool> {
-  BoolParameter() : super(false);
+class BoolKnob extends Knob<bool> {
+  BoolKnob() : super(false);
 }
 
-class NumParameter<T extends num> extends Parameter<T> {
+class NumKnob<T extends num> extends Knob<T> {
   T? min, max;
 
-  NumParameter(super.defaultValue);
+  NumKnob(super.defaultValue);
 
   bool get isInt => T == int;
 }
 
-class PickerParameter<T> extends Parameter<T> {
+class PickerKnob<T> extends Knob<T> {
   Map<String, T> options;
   Color Function(T value)? swatch;
   IconData Function(T value)? icon;
 
-  PickerParameter({required this.options, this.swatch, this.icon})
+  PickerKnob({required this.options, this.swatch, this.icon})
     : super(options.values.first);
 
   // Resolved here, inside the class, so the call runs with the reified [T] —
-  // calling [swatch]/[icon] through the raw `PickerParameter` type would fail
+  // calling [swatch]/[icon] through the raw `PickerKnob` type would fail
   // the function cast.
   Color? swatchFor(Object? value) => swatch?.call(value as T);
 
   IconData? iconFor(Object? value) => icon?.call(value as T);
 }
 
-/// Renders a picker option: its [PickerParameter.swatch] colour dot or
-/// [PickerParameter.icon] (if set) before the [label]. Shared by the top bar
+/// Renders a picker option: its [PickerKnob.swatch] colour dot or
+/// [PickerKnob.icon] (if set) before the [label]. Shared by the top bar
 /// and the knobs panel so a picker looks the same in both.
-Widget pickerOptionWidget(
-  PickerParameter parameter,
-  String label,
-  Object? value,
-) {
-  var swatch = parameter.swatchFor(value);
-  var icon = parameter.iconFor(value);
+Widget pickerOptionWidget(PickerKnob knob, String label, Object? value) {
+  var swatch = knob.swatchFor(value);
+  var icon = knob.iconFor(value);
   return Row(
     mainAxisSize: MainAxisSize.min,
     children: [
@@ -335,17 +337,16 @@ Widget pickerOptionWidget(
   );
 }
 
-class DateTimeParameter extends Parameter<DateTime?> {
+class DateTimeKnob extends Knob<DateTime?> {
   final bool isNullable;
   final bool dateOnly;
-  DateTimeParameter({required this.isNullable, required this.dateOnly})
+  DateTimeKnob({required this.isNullable, required this.dateOnly})
     : super(null);
 }
 
-class ActionButtonParameter extends Parameter {
+class ActionButtonKnob extends Knob {
   String text;
   VoidCallback onPressed;
 
-  ActionButtonParameter({required this.text, required this.onPressed})
-    : super(null);
+  ActionButtonKnob({required this.text, required this.onPressed}) : super(null);
 }

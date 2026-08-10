@@ -4,8 +4,8 @@ import '../third_party/device_frame/lib/device_frame.dart';
 import 'app.dart';
 import 'device_choice_panel.dart';
 import 'figma/view.dart';
-import 'parameters.dart';
-import 'parameters_editor.dart';
+import 'knobs.dart';
+import 'knobs_editor.dart';
 import 'toolbar.dart';
 import 'ui_catalog.dart';
 
@@ -27,24 +27,23 @@ class DetailView extends StatefulWidget {
   State<DetailView> createState() => _DetailViewState();
 }
 
-class _DetailViewState extends State<DetailView> implements PreviewState {
+class _DetailViewState extends State<DetailView> {
   final _deviceFrameKey = GlobalKey<__SingleDeviceWrapperState>();
   Key _appKey = UniqueKey();
   final _knobsPanelKey = GlobalKey();
 
-  @override
-  late final EditableParameters parameters = EditableParameters(
-    onRefresh: _onRefreshParameter,
-    onAdded: _onAddedParameter,
+  late final EditableKnobs knobs = EditableKnobs(
+    onRefresh: _onRefreshKnob,
+    onAdded: _onAddedKnob,
   );
 
-  void _onRefreshParameter() {
+  void _onRefreshKnob() {
     setState(() {
       _appKey = UniqueKey();
     });
   }
 
-  void _onAddedParameter() {
+  void _onAddedKnob() {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
       setState(() {});
     });
@@ -89,7 +88,7 @@ class _DetailViewState extends State<DetailView> implements PreviewState {
       );
     }
 
-    mainWidget = UICatalogStateProvider(state: this, child: mainWidget);
+    mainWidget = KnobsProvider(knobs: knobs, child: mainWidget);
 
     var breadcrumbHeight = 40.0;
     var breadcrumb = Padding(
@@ -149,12 +148,9 @@ class _DetailViewState extends State<DetailView> implements PreviewState {
             child: mainWidget,
           ),
         ),
-        if (parameters.parameters.isNotEmpty) ...[
+        if (knobs.knobs.isNotEmpty) ...[
           Divider(),
-          SizedBox(
-            height: 200,
-            child: ParametersEditor(parameters, key: _knobsPanelKey),
-          ),
+          SizedBox(height: 200, child: KnobsEditor(knobs, key: _knobsPanelKey)),
         ],
       ],
     );

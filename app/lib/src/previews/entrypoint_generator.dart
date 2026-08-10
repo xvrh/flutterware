@@ -169,7 +169,7 @@ void main() => GuestLogs.instance.install(() {
   GuestTextInput.instance.install();
   // Before runApp, and once: the panel may ask what knobs exist before the
   // first frame, and the extensions have to outlive every entry switch.
-  CatalogParameters.instance.registerExtensions();
+  CatalogKnobs.instance.registerExtensions();
   // The axes are pushed *in* rather than read out, and the push can land
   // before the shell that reads them has built — so this has to be up before
   // anything renders, not merely before the first question.
@@ -179,7 +179,7 @@ void main() => GuestLogs.instance.install(() {
   // answer: a headless host draws nothing until a frame is asked for.
   var inspector = GuestInspector(
     rootOf: () => CatalogGuest.demoRoot,
-    entryIdOf: () => CatalogParameters.instance.entryId,
+    entryIdOf: () => CatalogKnobs.instance.entryId,
   )..registerExtensions();
   // Off until something asks. The extension has to exist from the start for
   // the same reason the others do, but the per-frame work behind it costs
@@ -187,7 +187,7 @@ void main() => GuestLogs.instance.install(() {
   GuestWatch(
     inspector: inspector,
     rootOf: () => CatalogGuest.demoRoot,
-    entryIdOf: () => CatalogParameters.instance.entryId,
+    entryIdOf: () => CatalogKnobs.instance.entryId,
   ).registerExtensions();
   // Framework errors, on stdout *and* kept where they can be asked for.
   //

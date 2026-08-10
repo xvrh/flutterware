@@ -156,7 +156,7 @@ Future<void> _reportExtensions(_Guest guest) async {
     'ext.flutter.inspector.widgetLocationIdMap',
     'ext.flutter.accessibilityEvaluations',
     'ext.flutter.debugPaint',
-    'ext.flutterware.parameters',
+    'ext.flutterware.knobs',
   ]) {
     stdout.writeln('${rpcs.contains(wanted) ? 'YES' : 'no '}  $wanted');
   }

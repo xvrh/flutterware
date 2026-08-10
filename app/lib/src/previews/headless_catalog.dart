@@ -163,7 +163,7 @@ class HeadlessCatalog {
   ///
   /// A knob is a runtime fact — a demo declares one by *asking* for it while it
   /// builds — so no amount of parsing finds them. The guest registers
-  /// `ext.flutterware.parameters` and answers with what its last build
+  /// `ext.flutterware.knobs` and answers with what its last build
   /// declared.
   ///
   /// Empty when the entry declares none, or when the guest is old enough not to

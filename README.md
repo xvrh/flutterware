@@ -149,7 +149,7 @@ That is the whole of it. If you already write `@Preview` for Flutter's own
 previewer, those previews open here unchanged — on a real device frame, with
 `dart:io`, plugins, knobs and screenshots. `package:flutterware/previews.dart`
 is only for what the annotation does not carry: a shell (`PreviewShell`) and
-knobs (`context.previews.parameters.*`).
+knobs (`context.knobs.*`).
 
 **Previews are found wherever you write them.** The whole package is scanned —
 beside the widget in `lib/`, in `demo/`, wherever — skipping what `git` skips,
@@ -262,7 +262,7 @@ They are independent of the tools above.
 
 | Library | What it is |
 |---|---|
-| `previews.dart` | What a `@Preview` needs beyond Flutter's annotation: `PreviewShell` for the top bar's axes, and `context.previews.parameters.*` for knobs |
+| `previews.dart` | What a `@Preview` needs beyond Flutter's annotation: `PreviewShell` for the top bar's axes, and `context.knobs.*` for knobs |
 | `ui_catalog.dart` | `UICatalog` — a standalone, browsable catalog app with its own map-based API, hosting the same previews; builds for the web or runs on a device |
 | `devbar.dart` | A hidden developer overlay inside your app: logs, network, analytics, device frames, knobs, feature flags |
 | `feature_flag.dart` | Feature flags, readable and overridable at runtime |

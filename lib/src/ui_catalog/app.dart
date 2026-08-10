@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../third_party/device_frame/lib/device_frame.dart';
 import 'default_device_list.dart';
 import 'form_factor.dart';
+import 'knobs.dart';
 import 'detail.dart';
 import 'device_choice_panel.dart';
 import 'figma/provider.dart';
@@ -194,8 +195,8 @@ class UICatalogAppState extends State<UICatalog> {
           ],
         ),
       );
-      return UICatalogStateProvider(
-        state: PreviewState.empty,
+      return KnobsProvider(
+        knobs: Knobs.unanswered,
         child: Builder(
           builder: (context) {
             return widget.appBuilder(context, scaffold);

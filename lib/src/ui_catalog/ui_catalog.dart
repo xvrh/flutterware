@@ -1,65 +1,54 @@
-import 'dart:core' as core;
-import 'dart:core';
-
 import 'package:flutter/material.dart';
 
-import 'parameters.dart';
+import 'knobs.dart';
 
 export 'app.dart' show UICatalog;
 
-/// What a preview asks for while it builds — `context.previews.parameters.*`.
-extension PreviewsExtension on BuildContext {
-  PreviewState get previews => PreviewState.of(this);
-}
-
-/// The same thing, under the name the in-app catalog has always used.
+/// The controls this entry asks for while it builds — `context.knobs.bool(…)`.
 ///
-/// Two accessors over one state, and deliberately so: knobs are written on both
-/// sides of the split. A preview says `previews`, a ui_book page says
-/// `uiCatalog`, and neither reads like the other tool's vocabulary.
-extension UIBookExtension on BuildContext {
-  PreviewState get uiCatalog => PreviewState.of(this);
+/// One accessor, for a preview and for an in-app catalog page alike. There were
+/// two — `previews` and `uiCatalog` — because the state they returned was named
+/// after a tool rather than after what it holds; naming it [Knobs] left nothing
+/// for the second one to disambiguate.
+///
+/// App-wide switches — a flavour, a locale, a theme — are **not** knobs. They
+/// are declared by the project's `PreviewShell` through `TopBarState`, and they
+/// persist across entries because they belong to the shell rather than to
+/// whatever it is wrapping. That they are not reachable from a context is
+/// deliberate; see `TopBarState`.
+extension KnobsExtension on BuildContext {
+  Knobs get knobs => KnobsProvider.maybeOf(this)?.knobs ?? Knobs.unanswered;
 }
 
-class UICatalogStateProvider extends InheritedWidget {
-  final PreviewState state;
-
-  const UICatalogStateProvider({
+/// What answers [KnobsExtension.knobs] below it.
+///
+/// Absent — in the real app, in a test, in Flutter's own previewer — every knob
+/// answers with the default written at the call site, which is what makes a
+/// knob safe to write in a widget that ships.
+class KnobsProvider extends InheritedWidget {
+  const KnobsProvider({
     super.key,
     required super.child,
-    required this.state,
+    required this.knobs,
+    this.revision = 0,
   });
 
-  static UICatalogStateProvider? maybeOf(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<UICatalogStateProvider>();
-  }
+  final Knobs knobs;
 
-  @override
-  bool updateShouldNotify(UICatalogStateProvider oldWidget) {
-    return oldWidget.state != state;
-  }
-}
-
-abstract class PreviewState {
-  static final empty = _EmptyPreviewState();
-
-  /// Controls belonging to one entry, read while it builds.
+  /// Bumped by a host that re-answers *through the same [Knobs] object*.
   ///
-  /// App-wide switches — a flavour, a locale, a theme — are not declared here.
-  /// They are declared in the project's `PreviewShell`, which hands them out
-  /// through `TopBarState` rather than through this, and they persist across
-  /// entries because they belong to the shell rather than to whatever it is
-  /// wrapping. That they are *not* reachable from a context is deliberate; see
-  /// `TopBarState`.
-  Parameters get parameters;
+  /// Reading a knob is what subscribes a widget to this, and dependents are
+  /// notified by comparison — so a host holding one editable set for the life of
+  /// a session would never notify anything. The guest bumps this per build pass;
+  /// a host that hands over a fresh object each time can leave it alone.
+  final int revision;
 
-  static PreviewState of(BuildContext context) {
-    final provider = UICatalogStateProvider.maybeOf(context);
-    return provider?.state ?? PreviewState.empty;
+  static KnobsProvider? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<KnobsProvider>();
   }
-}
 
-class _EmptyPreviewState implements PreviewState {
   @override
-  final parameters = Parameters();
+  bool updateShouldNotify(KnobsProvider oldWidget) {
+    return oldWidget.knobs != knobs || oldWidget.revision != revision;
+  }
 }

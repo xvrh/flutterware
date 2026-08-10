@@ -706,7 +706,7 @@ class _KnobPanel extends StatelessWidget {
           // Says what a knob *is*, because this is the state most entries are
           // in and it is the only moment anybody reads this pane.
           'This entry declares no knobs.\nA demo gets one by asking while it '
-          'builds — context.uiCatalog.parameters.string("label", "Hello").',
+          'builds — context.knobs.string("label", "Hello").',
           textAlign: TextAlign.center,
           style: context.type.caption.copyWith(color: context.colors.mut),
         ),

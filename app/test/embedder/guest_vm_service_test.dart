@@ -144,7 +144,7 @@ void main() {
     addTearDown(guest.close);
     var vm = GuestVmService.forTesting(guest.service, 'isolates/1');
 
-    expect(await vm.callExtension('ext.flutterware.parameters'), isNull);
+    expect(await vm.callExtension('ext.flutterware.knobs'), isNull);
     expect(guest.calls, 1);
   });
 }

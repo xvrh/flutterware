@@ -79,7 +79,7 @@ const _inlinedOptions = 50;
 const _knobsDoc =
     'Values to turn before this runs: `name=value,name=value`, or a JSON '
     'object. A knob is whatever the preview asked for while it built — a '
-    'preview calling `context.previews.parameters.string("label", "Hello")` '
+    'preview calling `context.knobs.string("label", "Hello")` '
     'declares one named `label` — so the names come from the preview itself '
     'and differ per '
     'entry. Read them with `describe --entry=<id> --knobs=true`. Each value is '

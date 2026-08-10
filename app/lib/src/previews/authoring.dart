@@ -65,7 +65,7 @@ register it in — $scanned.
   derives a group from its own name.
 - Two `@Preview`s on one declaration are two entries, which is how variants are
   spelled.
-- `context.previews.parameters.string('label', 'Hello')` inside the preview
+- `context.knobs.string('label', 'Hello')` inside the preview
   declares a knob you can turn from the panel, the CLI and an agent. That one
   needs `package:flutterware/previews.dart`; nothing above it does.
 
@@ -184,7 +184,7 @@ Widget $symbol() => Center(
 //
 // @Preview(name: '$name, parameterised')
 // Widget ${symbol}Knobs(BuildContext context) {
-//   var label = context.previews.parameters.string('label', 'A button');
+//   var label = context.knobs.string('label', 'A button');
 //   return Center(child: FilledButton(onPressed: () {}, child: Text(label)));
 // }
 ''';

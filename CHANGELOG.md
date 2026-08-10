@@ -12,13 +12,20 @@ Flutter's own annotation. Breaking, with no deprecation path.
   not followed. `Previews(directory: …)` narrows the scan, and moves where
   `new` writes.
 - **New library `previews.dart`** — what `@Preview` does not carry:
-  `PreviewShell` and `TopBarState` for the top bar's axes, and
-  `context.previews.parameters.*` for knobs. It is imported only when you want
-  one of those; declaring a preview imports nothing of flutterware's.
+  `PreviewShell` and `TopBarState` for the top bar's axes, and `context.knobs.*`
+  for knobs. It is imported only when you want one of those; declaring a preview
+  imports nothing of flutterware's.
+- **Knobs are called knobs in Dart too.** `context.previews.parameters.*` and
+  `context.uiCatalog.parameters.*` are both now **`context.knobs.*`**, the type
+  is `Knobs` (exported, so knob-setting can be factored out), and the devbar's
+  `DevbarKnobs` typedef — which existed only to give the class the right name —
+  is gone. The CLI's `--knobs=`, `KnobDescriptor` and the panel already said
+  knob; only the Dart API disagreed, and "parameters" means the *non*-interactive
+  tier in Storybook and the arguments of a function in Dart.
 - **`ui_catalog.dart` is now only the in-app catalog** — `UICatalog`,
-  `FormFactor`, `Figma` — the browsable page you ship inside your own app.
-  `CatalogShell` moved to `previews.dart` as `PreviewShell`, and
-  `UICatalogState` is `PreviewState`.
+  `FormFactor`, `Figma`, plus `Knobs` — the browsable page you ship inside your
+  own app. `CatalogShell` moved to `previews.dart` as `PreviewShell`;
+  `UICatalogState` is gone, and `UICatalogStateProvider` is `KnobsProvider`.
 - `ui_catalog_guest.dart`, which only generated code imports, is
   `previews_guest.dart`.
 - The plugin is `Previews(...)` (was `UiCatalog(...)`) and its id is

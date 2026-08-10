@@ -93,7 +93,7 @@ class InspectClient {
 
   /// The knobs [entryId] declared while it built.
   Future<KnobReport?> knobs(String entryId) => _settle(
-    'ext.flutterware.parameters',
+    'ext.flutterware.knobs',
     KnobReport.fromJson,
     (report) => report.entryId,
     entryId,
@@ -184,7 +184,7 @@ class InspectClient {
   /// headless caller; the panel's two writes were still tolerant.
   Future<bool> setKnobs(String payload) async {
     var json = await vmService.requireExtension(
-      'ext.flutterware.setParameters',
+      'ext.flutterware.setKnobs',
       args: {'payload': payload},
     );
     return json?['applied'] == true;

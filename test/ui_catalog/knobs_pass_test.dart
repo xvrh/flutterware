@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware/src/ui_catalog/parameters.dart';
+import 'package:flutterware/src/ui_catalog/knobs.dart';
 
 /// A knob exists because a build read it, which makes a build the only thing
 /// that can retire one — there is no list of knobs to delete from. Without a
@@ -7,14 +7,14 @@ import 'package:flutterware/src/ui_catalog/parameters.dart';
 /// nothing to remove it, and lingers in the panel as a control that reads
 /// nothing.
 void main() {
-  late EditableParameters parameters;
+  late EditableKnobs parameters;
   var refreshes = 0;
   var additions = 0;
 
   setUp(() {
     refreshes = 0;
     additions = 0;
-    parameters = EditableParameters(
+    parameters = EditableKnobs(
       onRefresh: () => refreshes++,
       onAdded: () => additions++,
     );
@@ -26,7 +26,7 @@ void main() {
       parameters.string(name, 'default');
     }
     parameters.endPass();
-    return parameters.parameters.keys.toList();
+    return parameters.knobs.keys.toList();
   }
 
   test('a knob the pass did not declare is retired', () {
@@ -55,9 +55,9 @@ void main() {
 
   test('a knob keeps its value across a pass that still declares it', () {
     declare(['label']);
-    parameters.parameters['label']!.value = 'set by hand';
+    parameters.knobs['label']!.value = 'set by hand';
     declare(['label', 'other']);
-    expect(parameters.parameters['label']!.value, 'set by hand');
+    expect(parameters.knobs['label']!.value, 'set by hand');
   });
 
   test('without a pass nothing is retired', () {
@@ -66,12 +66,12 @@ void main() {
     parameters.string('label', 'default');
     parameters.string('count', 'default');
     expect(parameters.endPass(), 0);
-    expect(parameters.parameters.keys, ['label', 'count']);
+    expect(parameters.knobs.keys, ['label', 'count']);
   });
 
   test('a retired knob stops reporting to its owner', () {
     declare(['label']);
-    var retired = parameters.parameters['label']!;
+    var retired = parameters.knobs['label']!;
     declare(['other']);
     expect(
       () => retired.value = 'ignored',

@@ -7,12 +7,13 @@
 /// purpose: Previews is where you work, a catalog is what you ship.
 ///
 /// It hosts the same previews. `UICatalog` renders whatever the scan found,
-/// knobs and all, which is why [PreviewState] is re-exported here — an author
-/// writing a ui_book page says `context.uiCatalog`, an author writing a preview
-/// says `context.previews`, and both reach the same state.
+/// knobs and all, which is why [Knobs] is re-exported here — `context.knobs`
+/// reads the same on a ui_book page as in a preview, because it is the same
+/// thing being read.
 library;
 
 export 'src/ui_catalog/form_factor.dart' show FormFactor;
 export 'src/ui_catalog/figma.dart' show Figma;
+export 'src/ui_catalog/knobs.dart' show Knobs;
 export 'src/ui_catalog/ui_catalog.dart'
-    show UICatalog, PreviewState, UICatalogStateProvider, UIBookExtension;
+    show UICatalog, KnobsProvider, KnobsExtension;

@@ -17,8 +17,8 @@ import 'catalog_wrapper.dart';
 /// **It hosts the old [UICatalog] widget**, and that is not a stopgap. The
 /// tree, the search, the device frames and the parameters panel all already
 /// work against the model the new demos produce: a demo declares its knobs by
-/// calling `context.uiCatalog.parameters.*`, which is the same API the old
-/// catalog reads, and `DetailView` owns an `EditableParameters` and installs
+/// calling `context.knobs.*`, which is the same API the old
+/// catalog reads, and `DetailView` owns an `EditableKnobs` and installs
 /// the provider itself. Knobs travel over the VM service in the GUI only
 /// because the panel is in another process; here the panel and the demo are one
 /// isolate and there is no wire at all.
