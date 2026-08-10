@@ -252,13 +252,18 @@ class ServerInspection extends Plugin {
 ///   RunPackage(app, entrypoints: [
 ///     Entrypoint('lib/main.dart', name: 'App'),
 ///     Entrypoint('lib/main_staging.dart', name: 'Staging', defines: [
-///       DartDefine('API_BASE_URL', from: DefineSource.servers),
+///       DartDefine('API_HOST', from: DefineSource.hostAddresses),
+///       DartDefine('API_PORT',
+///           from: DefineSource.script('tool/local_env.dart',
+///               args: ['port', 'server'])),
 ///     ]),
 ///   ]),
 /// ]));
 /// ```
 ///
-/// See `docs/superpowers/specs/2026-07-31-app-launcher-cockpit-brainstorm.md`.
+/// See `docs/superpowers/specs/2026-07-31-app-launcher-cockpit-brainstorm.md`,
+/// and `2026-08-11-computed-define-sources.md` for what a define's `from:` can
+/// work out for itself.
 ///
 /// Offers no `each`, like [LauncherIcon] and for the same reason: only a
 /// package that is an app can be run onto a phone.
@@ -463,9 +468,9 @@ class DartDefine {
 
   /// Values the tool can work out for itself, added to [options].
   ///
-  /// This is what turns "inject the local server's address" from typing into
-  /// picking: the tool already knows what is running and what this machine is
-  /// reachable at, so the value should not have to be looked up by hand.
+  /// This is what turns "point the app at this machine" from typing into
+  /// picking: the tool already knows what this machine is reachable at, so the
+  /// value should not have to be looked up by hand.
   final DefineSource? from;
 
   Map<String, Object?> toJson() => {
@@ -474,26 +479,106 @@ class DartDefine {
     if (description != null) 'description': description,
     if (defaultValue != null) 'default': defaultValue,
     if (options.isNotEmpty) 'options': options,
-    if (from != null) 'from': from!.name,
+    if (from != null) 'from': from!.toJson(),
   };
 }
 
 /// Where a [DartDefine]'s offered values are found.
-enum DefineSource {
-  /// The base URLs of the dev servers announcing themselves right now — what
-  /// `package:flutterware/server.dart` publishes in its handle.
-  servers,
+///
+/// Two of them, and they are not the same kind of thing: [hostAddresses] is
+/// something the tool knows, while [DefineSource.script] is something the
+/// project knows and the tool goes and asks. Only the second can answer "what
+/// port did this worktree get", because only the project allocated it.
+///
+/// There was a third, `servers`, offering the base URLs of dev servers
+/// announcing themselves through `package:flutterware/server.dart`. It was
+/// deleted: the offered values are a `List<String>`, so two servers arrived as
+/// two bare URLs with nothing to tell them apart — and the scan was not even
+/// scoped to this worktree, so they came from every project on the machine.
+/// A source whose answer you cannot identify is worse than no source.
+sealed class DefineSource {
+  const DefineSource();
 
   /// This machine's addresses on the local network. What a phone has to be
   /// told, since `localhost` on a phone is the phone.
-  hostAddresses;
+  static const DefineSource hostAddresses = HostAddressesSource();
 
-  static DefineSource? byName(String name) {
-    for (var value in values) {
-      if (value.name == name) return value;
+  /// A Dart script in this worktree that prints the value, or a JSON array of
+  /// values to choose from.
+  ///
+  /// ```dart
+  /// DartDefine('LOCALDEV_SERVER_PORT',
+  ///     from: DefineSource.script('tool/local_env.dart',
+  ///         args: ['port', 'server'])),
+  /// ```
+  ///
+  /// **A script, not a command, because a command would have to name an
+  /// executable and no config file can know which one.** A `dart` on PATH is
+  /// routinely older than the SDK the project pins — this repo's own is — so a
+  /// config saying `dart` would be saying "whichever SDK happens to be first",
+  /// which is not a thing anybody means. Run with the same `dart` that compiles
+  /// and runs this config file, from the worktree root.
+  ///
+  /// **Selection belongs in [args], not here.** An earlier draft had a `pick:`
+  /// naming a key in a JSON object the script printed; it would have grown a
+  /// path syntax the first time somebody's output was nested. Passing the
+  /// selection as an argument puts it in the tool that owns the data, where it
+  /// can be a real function of that tool's model.
+  ///
+  /// Run when the values are needed, not when the config is read: the answer to
+  /// "which port is this worktree on" changes when the stack goes up or down,
+  /// which is not a moment the config file knows about.
+  const factory DefineSource.script(String path, {List<String> args}) =
+      ScriptSource;
+
+  Map<String, Object?> toJson();
+
+  /// Reads back what [toJson] wrote, or null for a shape this build has no
+  /// member for.
+  ///
+  /// Null rather than a throw, for the reason `_platformsOf` gives on the app
+  /// side: the config imports the `flutterware` version the *project* pins,
+  /// which can run ahead of the GUI reading its manifest. A source we cannot
+  /// resolve has to mean a define with fewer suggestions, never a define that
+  /// disappears.
+  static DefineSource? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    if (raw['source'] == 'hostAddresses') return hostAddresses;
+    if (raw['script'] case String path) {
+      return ScriptSource(
+        path,
+        args: [
+          for (var arg in (raw['args'] as List? ?? const []))
+            if (arg is String) arg,
+        ],
+      );
     }
     return null;
   }
+}
+
+/// See [DefineSource.hostAddresses].
+final class HostAddressesSource extends DefineSource {
+  const HostAddressesSource();
+
+  @override
+  Map<String, Object?> toJson() => {'source': 'hostAddresses'};
+}
+
+/// See [DefineSource.script].
+final class ScriptSource extends DefineSource {
+  const ScriptSource(this.path, {this.args = const []});
+
+  /// Worktree-relative, `/`-separated — `tool/local_env.dart`.
+  final String path;
+
+  final List<String> args;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'script': path,
+    if (args.isNotEmpty) 'args': args,
+  };
 }
 
 /// The launcher-icon editor. Only meaningful for packages that are apps, so it

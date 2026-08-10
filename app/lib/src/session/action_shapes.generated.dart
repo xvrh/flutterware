@@ -1576,7 +1576,7 @@ final resultShapes = <String, ResultShape>{
         'name': 'options',
         'type': 'List<String>',
         'doc':
-            'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+            'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now, such as this machine\'s addresses on the local network or a list a script in the project printed.',
       },
       <String, Object?>{
         'name': 'kind',
@@ -2875,7 +2875,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'options',
               'type': 'List<String>',
               'doc':
-                  'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+                  'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now, such as this machine\'s addresses on the local network or a list a script in the project printed.',
             },
             <String, Object?>{
               'name': 'kind',
@@ -2990,7 +2990,7 @@ final resultShapes = <String, ResultShape>{
                     'name': 'options',
                     'type': 'List<String>',
                     'doc':
-                        'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+                        'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now, such as this machine\'s addresses on the local network or a list a script in the project printed.',
                   },
                   <String, Object?>{
                     'name': 'kind',
@@ -3114,7 +3114,7 @@ final resultShapes = <String, ResultShape>{
                           'name': 'options',
                           'type': 'List<String>',
                           'doc':
-                              'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+                              'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now, such as this machine\'s addresses on the local network or a list a script in the project printed.',
                         },
                         <String, Object?>{
                           'name': 'kind',

@@ -5,11 +5,11 @@ import 'dart:typed_data';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
-import 'package:flutterware/server.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../../run/connection.dart';
+import '../../run/define_scripts.dart';
 import '../../run/defines.dart';
 import '../../run/entrypoints.dart';
 import '../../run/flavors.dart';
@@ -242,12 +242,36 @@ class RunCore extends PluginCore {
       entrypointsFor(path).any((entry) => entry.declared);
 
   /// This machine's addresses on the local network — what a phone has to be
-  /// told, since `localhost` on a phone is the phone.
+  /// told, since `localhost` on a phone is the phone — each with the interface
+  /// it was found on.
   ///
   /// Cached from [computeAll] because a define's offered values are built inside
   /// [report], which may not do I/O of any kind.
-  List<String> get hostAddresses => _hostAddresses;
-  var _hostAddresses = <String>[];
+  List<({String interface, String address})> get hostAddresses =>
+      _hostAddresses;
+  var _hostAddresses = <({String interface, String address})>[];
+
+  /// What each [ScriptSource] said last time it was asked, by script and args.
+  ///
+  /// **Not filled by [computeAll], unlike everything else here**, because
+  /// asking means running a process and `computeAll` may not. Filled by
+  /// [resolveScriptSources], which the surfaces that chose to pay for it call:
+  /// the `entrypoints` action, the panel on mount, and every launch.
+  ///
+  /// **Not keyed on the script's content**, deliberately. The answer changes
+  /// when the dev stack goes up or down, which does not touch the file — a
+  /// cache that invalidated on the source would hold a port from before the
+  /// stack moved and be confident about it.
+  final _scriptOutcomes = <String, ScriptOutcome>{};
+
+  /// Keyed by script and args, separated by a character no argument can
+  /// contain: `args: ['a b']` and `args: ['a', 'b']` are two different
+  /// questions and must not share an answer.
+  static String _scriptKey(ScriptSource source) =>
+      [source.path, ...source.args].join('\u0000');
+
+  ScriptOutcome? outcomeOf(ScriptSource source) =>
+      _scriptOutcomes[_scriptKey(source)];
 
   @override
   Future<void> computeAll() async {
@@ -279,12 +303,19 @@ class RunCore extends PluginCore {
     return const {};
   }
 
-  /// The IPv4 addresses of this machine's real interfaces.
+  /// The IPv4 addresses of this machine's real interfaces, each named by the
+  /// interface it came from.
   ///
   /// A syscall rather than a socket, and it is here rather than behind an
   /// action because "which address can the phone reach me at" is the answer a
   /// define has to offer *before* anybody presses anything.
-  static Future<List<String>> _readHostAddresses() async {
+  ///
+  /// No attempt to guess which one is *the* address. Nothing here can tell a
+  /// Wi-Fi address from a VPN's without asking the network, which is precisely
+  /// what this must not do — so the interface name goes out with each one and
+  /// the reader decides.
+  static Future<List<({String interface, String address})>>
+  _readHostAddresses() async {
     try {
       var interfaces = await NetworkInterface.list(
         includeLoopback: false,
@@ -293,7 +324,8 @@ class RunCore extends PluginCore {
       );
       return [
         for (var interface in interfaces)
-          for (var address in interface.addresses) address.address,
+          for (var address in interface.addresses)
+            (interface: interface.name, address: address.address),
       ];
     } on Object {
       // No permission, no interfaces, an OS that refuses — none of it is worth
@@ -312,6 +344,9 @@ class RunCore extends PluginCore {
     _tracking = true;
     unawaited(computeAll().then((_) => notifyChanged()));
     if (debugLive) {
+      // Same bargain as the daemon: the form is about to show what each define
+      // will be, and it cannot show a computed one without asking for it.
+      unawaited(resolveScriptSources().then((_) => notifyChanged()));
       unawaited(_startDaemon());
       unawaited(_probeAll());
       _scheduleProbe();
@@ -990,6 +1025,9 @@ class RunCore extends PluginCore {
 
   Future<RunEntrypointsResult> _entrypointsAction(String? package) async {
     await computeAll();
+    // A caller who asked what the defines are is a caller who chose to pay for
+    // the answer, which computeAll may not spend a process on.
+    await resolveScriptSources();
     var wanted = package == null
         ? packages
         : [
@@ -1046,28 +1084,112 @@ class RunCore extends PluginCore {
   /// Everything worth offering for [define] — the config's own list plus
   /// whatever its `from:` points at right now.
   ///
-  /// This is what makes "inject the local server's address" a choice rather
-  /// than something to go and look up: the running servers and this machine's
-  /// LAN addresses are both things the tool already knows. Public because the
-  /// panel's dialog and the `entrypoints` action must offer the same values —
-  /// a list only one surface had would be a capability the others could not
-  /// see.
+  /// This is what makes "point the app at this machine" a choice rather than
+  /// something to go and look up. Public because the panel's dialog and the
+  /// `entrypoints` action must offer the same values — a list only one surface
+  /// had would be a capability the others could not see.
+  ///
+  /// Bare values, with no decoration: this is what gets baked into the build,
+  /// and an agent reading `entrypoints` wants the value. Which interface an
+  /// address belongs to is [hostInterfaceOf], asked for separately by the one
+  /// surface that can render it.
   List<String> optionsFor(DartDefine define) {
     var options = [...define.options];
     switch (define.from) {
-      case DefineSource.servers:
-        for (var handle in scanServerHandles(runDirProvider())) {
-          var url = handle.baseUrl;
-          if (url != null && !options.contains(url)) options.add(url);
+      case HostAddressesSource():
+        for (var host in hostAddresses) {
+          if (!options.contains(host.address)) options.add(host.address);
         }
-      case DefineSource.hostAddresses:
-        for (var address in hostAddresses) {
-          if (!options.contains(address)) options.add(address);
+      case ScriptSource source:
+        // Only the list form. A script that computed a single value did not
+        // offer a choice, and putting it here as well would show it twice —
+        // once pre-filled in the field and once as a chip that changes nothing.
+        for (var value in outcomeOf(source)?.options ?? const <String>[]) {
+          if (!options.contains(value)) options.add(value);
         }
       case null:
         break;
     }
     return options;
+  }
+
+  /// Asks every [ScriptSource] any declared define points at, concurrently.
+  ///
+  /// Every call re-asks. The point of a script source is that it knows
+  /// something that changes without the project changing — which port this
+  /// worktree's stack came up on — so a resolution kept from last time would be
+  /// the wrong kind of fast.
+  ///
+  /// Distinct by script *and* args: two defines fed by the same tool with
+  /// different arguments are two questions, while two defines that ask the
+  /// identical thing are one process.
+  Future<void> resolveScriptSources() => _resolveScripts([
+    for (var path in packages)
+      for (var entry in entrypointsFor(path)) ...entry.defines,
+  ]);
+
+  /// Asks the script sources among [defines], concurrently, and records what
+  /// they said.
+  ///
+  /// **Takes the defines rather than reading them off this core**, which is
+  /// what makes it safe to call from [launch]. The sweep above walks
+  /// `entrypointsFor`, which is empty until `computeAll` has run — so a launch
+  /// that relied on it would find no source to ask, then refuse itself for a
+  /// value that was never looked up. Resolving exactly the defines the caller
+  /// is about to use cannot disagree with the caller.
+  Future<void> _resolveScripts(Iterable<DartDefine> defines) async {
+    var sources = <String, ScriptSource>{};
+    for (var define in defines) {
+      if (define.from case ScriptSource source) {
+        sources[_scriptKey(source)] = source;
+      }
+    }
+    if (sources.isEmpty) return;
+    var dart = p.join(host.workspace.flutterSdk.root, 'bin', 'dart');
+    var asked = sources.entries.toList();
+    var outcomes = await Future.wait([
+      for (var entry in asked)
+        runDefineScript(
+          entry.value,
+          dartExecutable: dart,
+          worktreePath: host.worktree.path,
+        ),
+    ]);
+    for (var (index, entry) in asked.indexed) {
+      _scriptOutcomes[entry.key] = outcomes[index];
+    }
+  }
+
+  /// The value a script source computed for [define], when one did.
+  ///
+  /// Beats what the config wrote and what the code falls back to, because it is
+  /// the only one of the three that was worked out just now. A config's
+  /// `defaultValue` is a guess made when the file was written; a scanned one is
+  /// what the app does when nobody says anything.
+  String? scriptValueFor(DartDefine define) => switch (define.from) {
+    ScriptSource source => outcomeOf(source)?.value,
+    _ => null,
+  };
+
+  /// Why [define] cannot be resolved, when its script source could not answer.
+  String? scriptProblemFor(DartDefine define) => switch (define.from) {
+    ScriptSource source => outcomeOf(source)?.problem,
+    _ => null,
+  };
+
+  /// The interface an offered address was found on — `en0` — or null when it
+  /// is not one of ours.
+  ///
+  /// Worth carrying because [hostAddresses] is every non-loopback IPv4 this
+  /// machine has, which on a laptop is the Wi-Fi address plus a VPN `utun`,
+  /// a Docker bridge and whatever a VM left behind. Exactly one of them is the
+  /// one the phone can reach, and without the interface name the list gives a
+  /// reader no way to tell which.
+  String? hostInterfaceOf(String address) {
+    for (var host in hostAddresses) {
+      if (host.address == address) return host.interface;
+    }
+    return null;
   }
 
   DartDefineEntry _defineEntry(
@@ -1077,17 +1199,33 @@ class RunCore extends PluginCore {
     name: define.name,
     label: define.label,
     description: define.description,
-    // The config's word first; the code's real fallback when it said nothing.
-    defaultValue: define.defaultValue ?? read?.defaultValue,
+    // A script's answer first, because it is the only one worked out just now;
+    // then the config's word; then the code's real fallback.
+    defaultValue:
+        scriptValueFor(define) ?? define.defaultValue ?? read?.defaultValue,
     options: optionsFor(define),
     kind: read?.kind,
     readAt: read?.file,
-    problem: read == null
-        ? 'nothing in this package reads ${define.name}. Setting it compiles '
-              'and changes nothing — check the spelling against the '
-              'fromEnvironment call.'
-        : null,
+    problem: _defineProblem(define, read),
   );
+
+  /// What is wrong with [define], worst first.
+  ///
+  /// A script that could not answer outranks a define nothing reads, because it
+  /// is the one that will otherwise be discovered by an app talking to the
+  /// wrong backend.
+  String? _defineProblem(DartDefine define, DefineRef? read) {
+    if (scriptProblemFor(define) case var problem?) {
+      return '$problem. Until it answers, ${define.name} has no computed '
+          'value and a launch that does not set it will be refused.';
+    }
+    if (read == null) {
+      return 'nothing in this package reads ${define.name}. Setting it '
+          'compiles and changes nothing — check the spelling against the '
+          'fromEnvironment call.';
+    }
+    return null;
+  }
 
   Future<RunLaunchResult> _launchAction(Map<String, Object?> arguments) async {
     await computeAll();
@@ -1100,11 +1238,8 @@ class RunCore extends PluginCore {
       arguments['entrypoint'] as String?,
     );
     _checkDevice(device, entry);
-    var defines = _resolveKnobs(
-      package,
-      entry,
-      PreviewsCore.parsePairs(arguments['defines']),
-    );
+    var defines = PreviewsCore.parsePairs(arguments['defines']);
+    _checkDefineNames(package, entry, defines);
 
     var handle = await launch(
       device: device,
@@ -1167,6 +1302,9 @@ class RunCore extends PluginCore {
   /// Starts a run. The panel's entry point too — a button that could only be
   /// reached through `invoke` would be behaviour the other surfaces could not
   /// see.
+  ///
+  /// [defines] is what the caller *chose*; the defaults and anything a script
+  /// source computes are filled in here, so both surfaces bake in the same set.
   Future<RunHandle> launch({
     required String device,
     required String package,
@@ -1174,6 +1312,7 @@ class RunCore extends PluginCore {
     String? flavor,
     Map<String, String> defines = const {},
   }) async {
+    var resolved = await _resolveDefines(entry, defines);
     var deviceName = devices
         .where((candidate) => candidate.id == device)
         .map((candidate) => candidate.displayName)
@@ -1190,7 +1329,7 @@ class RunCore extends PluginCore {
       entrypoint: entry.path,
       entrypointName: entry.declared ? entry.name : null,
       flavor: flavor,
-      defines: defines,
+      defines: resolved,
     );
     _handles = [handle, ..._handles];
     notifyChanged();
@@ -1264,8 +1403,7 @@ class RunCore extends PluginCore {
     }
   }
 
-  /// The defines a launch will bake in: what the caller gave, over the defaults,
-  /// with anything neither declared nor read anywhere refused.
+  /// Refuses a define name neither declared nor read anywhere in the package.
   ///
   /// Refused rather than passed through, because a misspelled define compiles
   /// perfectly and does nothing — the app reads the fallback and behaves as if
@@ -1275,7 +1413,11 @@ class RunCore extends PluginCore {
   /// defines known were the declared ones, so a package that declared none had to
   /// accept anything; now `APII` is refused against the defines the code
   /// genuinely reads, and the error can name them.
-  Map<String, String> _resolveKnobs(
+  ///
+  /// Only the action path needs this — the panel builds its fields from the same
+  /// list, so it cannot produce a name that is not on it. Filling in defaults is
+  /// [_resolveDefines], which both paths share.
+  void _checkDefineNames(
     String package,
     EntrypointRef entry,
     Map<String, String> given,
@@ -1284,26 +1426,69 @@ class RunCore extends PluginCore {
       for (var (:define, read: _) in definesFor(package, entry))
         define.name: define,
     };
-    if (known.isNotEmpty) {
-      for (var name in given.keys) {
-        if (!known.containsKey(name)) {
-          throw ArgumentError.value(
-            name,
-            'defines',
-            '${entry.name} has no such define; it takes '
-                '${known.keys.join(', ')}',
-          );
-        }
+    if (known.isEmpty) return;
+    for (var name in given.keys) {
+      if (!known.containsKey(name)) {
+        throw ArgumentError.value(
+          name,
+          'defines',
+          '${entry.name} has no such define; it takes '
+              '${known.keys.join(', ')}',
+        );
       }
     }
-    return {
-      // Only what the *config* chose. A scanned define's default is the value the
-      // code already falls back to, so passing it back as a `--dart-define`
-      // sets nothing, lengthens the build command and fills the run's handle
-      // with values nobody picked.
-      for (var define in entry.defines) define.name: ?define.defaultValue,
-      ...given,
-    };
+  }
+
+  /// The defines a launch will bake in: what the caller gave, over what a script
+  /// source computed, over what the config declared.
+  ///
+  /// **Both launch paths go through this**, which is the point of it being here
+  /// rather than in the action. They used to disagree: the action omitted a
+  /// scanned default while the panel seeded its text field with one and then
+  /// sent it, so the same launch through two surfaces produced two different
+  /// build commands.
+  ///
+  /// **A script source that could not answer refuses the launch.** Everything
+  /// else in this file degrades — an unreadable handle is a handle that does not
+  /// exist, an OS that will not list interfaces means a shorter list. This one
+  /// may not, because the define it failed to compute is compiled in, and an app
+  /// built against the wrong port behaves exactly like an app built against the
+  /// right one until it is talking to another worktree's database.
+  Future<Map<String, String>> _resolveDefines(
+    EntrypointRef entry,
+    Map<String, String> given,
+  ) async {
+    await _resolveScripts(entry.defines);
+    var resolved = <String, String>{};
+    var unresolved = <String>[];
+    // Only what the *config* declared. A scanned define's default is the value
+    // the code already falls back to, so passing it back as a `--dart-define`
+    // sets nothing, lengthens the build command and fills the run's handle with
+    // values nobody picked — and only a config can declare a `from:` at all.
+    for (var define in entry.defines) {
+      if (given.containsKey(define.name)) continue;
+      if (define.from case ScriptSource source) {
+        var outcome = outcomeOf(source);
+        if (outcome == null || outcome.failed) {
+          unresolved.add(
+            '${define.name} (${outcome?.problem ?? 'not resolved'})',
+          );
+          continue;
+        }
+        if (outcome.value case var value?) {
+          resolved[define.name] = value;
+          continue;
+        }
+      }
+      if (define.defaultValue case var value?) resolved[define.name] = value;
+    }
+    if (unresolved.isNotEmpty) {
+      throw StateError(
+        'cannot work out ${unresolved.join(', ')}. Fix the script, or pass the '
+        'define explicitly to launch without it.',
+      );
+    }
+    return {...resolved, ...given};
   }
 
   Future<RunControlResult> _controlAction(
