@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -188,17 +189,26 @@ class CaptureRequest {
   /// short name where a full one belongs — `ui_catalog` for
   /// `flutterware.previews`, which is exactly the mistake that produced this
   /// check.
-  String? _landingError(ShellController shell) {
-    var wanted = address?.plugin;
-    if (wanted == null) return null;
-    if (shell.selectedPluginId == wanted) return null;
-    var declared = shell.selectedSession?.plugins.map((p) => p.id).toList();
-    return [
-      'the window did not land on "$wanted".',
-      if (declared != null && declared.isNotEmpty)
-        'This worktree declares: ${declared.join(', ')}.',
-    ].join(' ');
-  }
+  ///
+  /// **The segments are checked too, and skipping them let the worst version of
+  /// this through.** The plugin test only ever asked "is this the right panel",
+  /// and a catalog panel that could not reach the entry it was asked for does
+  /// not fail — it opens on another one and writes that back to the address.
+  /// Measured: a capture of `demo/buttons.dart#buttons` came back reporting
+  /// `ok: true` with a picture of `demo/asset_smoke.dart#assetSmoke`, filed
+  /// under the name of the demo it was supposed to show. Right panel, wrong
+  /// subject, and nothing anywhere said so.
+  ///
+  /// Axes are deliberately not compared. A panel resolves them — `?device=` is
+  /// answered, a knob picks up its default — so the address that comes back
+  /// carries more than the one that went in, legitimately. What must match is
+  /// *what is being shown*, which is the plugin and the segments.
+  String? _landingError(ShellController shell) => landingError(
+    wanted: address,
+    landedPlugin: shell.selectedPluginId,
+    landedSegments: shell.address.segments,
+    declared: shell.selectedSession?.plugins.map((p) => p.id).toList(),
+  );
 
   /// Fills in the worktree the shell already opened, when the address left it
   /// out.
@@ -239,4 +249,33 @@ class CaptureRequest {
   /// On stdout, as JSON, because the reader is `fw capture`.
   static void _report(Map<String, Object?> body) =>
       stdout.writeln(jsonEncode(body));
+}
+
+/// The landing check itself, off the controller so it can be tested.
+///
+/// See [CaptureRequest._landingError] for what it is protecting against;
+/// everything it needs is four plain values, and a `ShellController` is not one
+/// of the things a test of "did we land where we were sent" should have to
+/// build.
+String? landingError({
+  required Address? wanted,
+  required String? landedPlugin,
+  required List<String> landedSegments,
+  required List<String>? declared,
+}) {
+  if (wanted?.plugin == null) return null;
+  if (landedPlugin != wanted!.plugin) {
+    return [
+      'the window did not land on "${wanted.plugin}".',
+      if (declared != null && declared.isNotEmpty)
+        'This worktree declares: ${declared.join(', ')}.',
+    ].join(' ');
+  }
+  if (wanted.segments.isEmpty ||
+      const ListEquality<String>().equals(landedSegments, wanted.segments)) {
+    return null;
+  }
+  return 'the window landed on "${landedSegments.join('/')}" rather than '
+      '"${wanted.segments.join('/')}". The panel opened, but on something '
+      'else — usually because what was asked for is not there.';
 }
