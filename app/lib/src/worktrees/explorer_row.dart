@@ -28,9 +28,21 @@ class WorktreeRow extends StatefulWidget {
     this.isCurrent = false,
     this.match,
     this.scale = 1,
+    this.showAgent = true,
+    this.showForge = true,
     this.onTap,
     this.onOpen,
   });
+
+  /// Whether these columns are drawn at all.
+  ///
+  /// **Decided across the list, not per row** — otherwise the cells stop lining
+  /// up, which is the one thing a table has to do. A column no row can fill is
+  /// 150 pixels of dashes: it is what a repo with no agents looks like, what a
+  /// machine with no `gh` looks like, and what an agent format that stopped
+  /// parsing looks like. One rule covers all three.
+  final bool showAgent;
+  final bool showForge;
 
   /// The label-priority winner: agent title, then PR title, then branch, then
   /// the directory. Resolved above this widget — the row does not know the
@@ -112,14 +124,16 @@ class _WorktreeRowState extends State<WorktreeRow> {
                 width: _changesWidth,
                 child: _ChangesCell(fact: facts.git, scale: widget.scale),
               ),
-              SizedBox(
-                width: _agentWidth,
-                child: _AgentCell(fact: facts.agent, now: widget.now),
-              ),
-              SizedBox(
-                width: _prWidth,
-                child: _PrCell(fact: facts.forge),
-              ),
+              if (widget.showAgent)
+                SizedBox(
+                  width: _agentWidth,
+                  child: _AgentCell(fact: facts.agent, now: widget.now),
+                ),
+              if (widget.showForge)
+                SizedBox(
+                  width: _prWidth,
+                  child: _PrCell(fact: facts.forge),
+                ),
               SizedBox(
                 width: _whenWidth,
                 child: _WhenCell(fact: facts.activity, now: widget.now),

@@ -10,6 +10,7 @@ import '../context.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/plugin_core.dart';
 import '../plugins/registry.dart';
+import '../worktrees/facts_controller.dart';
 import '../plugins/worktree_session.dart';
 import '../utils/flutter_sdk.dart';
 import 'config_load.dart';
@@ -66,13 +67,24 @@ class ShellController extends ChangeNotifier {
     required this.manifestLoader,
     this.coreRegistry,
     WorktreeDiscovery? discovery,
+    WorktreeFactsController Function(String repoRoot)? worktreeFacts,
     Stream<WatchEvent> Function(String directory)? watchEvents,
     Duration? watchDebounce,
   }) : _discovery = discovery ?? WorktreeDiscovery(),
        // ignore: prefer_initializing_formals
+       _buildWorktreeFacts = worktreeFacts,
+       // ignore: prefer_initializing_formals
        _watchEvents = watchEvents,
        // ignore: prefer_initializing_formals
        _watchDebounce = watchDebounce;
+
+  /// How the explorer's facts are built, once the main checkout is known.
+  ///
+  /// **Injectable because the default writes to the real `~/.flutterware`.**
+  /// Opening a worktree records the "you opened this" clock, so a widget test
+  /// that pumped the shell was touching the developer's home directory — and
+  /// would have raced any other test doing the same.
+  final WorktreeFactsController Function(String repoRoot)? _buildWorktreeFacts;
 
   /// Injectable so a test can drive a save without a filesystem.
   final Stream<WatchEvent> Function(String directory)? _watchEvents;
@@ -257,6 +269,27 @@ class ShellController extends ChangeNotifier {
     return path == null ? null : _open[path]?.session;
   }
 
+  /// True while the window is showing the explorer — `fw:///worktrees`, the
+  /// worktrees space with nothing selected inside it.
+  bool get isExplorer =>
+      address.worktree == null && address.space == Address.worktreesSpace;
+
+  /// Moves to the explorer.
+  void selectExplorer() => go(Address(space: Address.worktreesSpace));
+
+  /// The explorer's facts, or null before the first discovery has run.
+  ///
+  /// Built once the main checkout is known, because branch diffs are
+  /// repository-wide and their cache is keyed by it.
+  WorktreeFactsController? get worktreeFacts => _worktreeFacts;
+  WorktreeFactsController? _worktreeFacts;
+
+  /// Re-probes every worktree. What the explorer calls when it appears and when
+  /// its refresh button is pressed.
+  Future<void> refreshWorktreeFacts() async {
+    if (_worktreeFacts case var facts?) await facts.refresh(_worktrees);
+  }
+
   /// True while the address names the shell's own config screen.
   ///
   /// It occupies the plugin slot but is not a plugin, so it is neither
@@ -336,6 +369,17 @@ class ShellController extends ChangeNotifier {
     // discovery falls back to — so it wants the project root, not `lib/src`.
     var root = findRepoRoot(launchDirectory) ?? launchDirectory;
     _worktrees = await _discovery.discover(root);
+
+    // The main checkout, which discovery always reports first — not the
+    // launch directory. The facts cache is keyed by it because what it holds
+    // (a diff between two commits) is repository-wide, and keying it by the
+    // current checkout would give every worktree its own permanently cold copy.
+    if (_worktrees.firstOrNull case var main?) {
+      _worktreeFacts =
+          (_buildWorktreeFacts ??
+                (root) => WorktreeFactsController(repoRoot: root))(main.path)
+            ..addListener(notifyListeners);
+    }
     notifyListeners();
 
     var launch = _worktreeContaining(launchDirectory);
@@ -416,6 +460,9 @@ class ShellController extends ChangeNotifier {
   /// this is separate from either.
   Future<void> _openTab(Worktree worktree) {
     _open[worktree.path] = _Open(worktree);
+    // One of the three clocks the explorer takes the maximum of, and the only
+    // one nothing else on the machine records.
+    _worktreeFacts?.markOpened(worktree);
     _startWatching(worktree);
     // The tab is on screen before the manifest subprocess starts; everything
     // below it draws a loader until the session lands.
@@ -663,6 +710,18 @@ class ShellController extends ChangeNotifier {
   /// tab switched away from and back comes home to the same place.
   GoResult go(Address destination) {
     var name = destination.worktree;
+
+    // **A space with no worktree is the explorer**, and it is a real place —
+    // the one destination in the shell that is about every checkout rather than
+    // one. It has no tab to open and no session to wait for, so it lands
+    // immediately and returns before any of the per-worktree machinery below.
+    if (name == null && destination.space == Address.worktreesSpace) {
+      if (destination == address) return GoResult.unchanged;
+      _address.value = destination;
+      notifyListeners();
+      return GoResult.ok;
+    }
+
     var worktree = name == null ? null : worktreeNamed(name);
     if (worktree == null) return GoResult.worktreeUnknown;
 
@@ -780,6 +839,8 @@ class ShellController extends ChangeNotifier {
     for (var path in _open.keys.toList()) {
       _closeAt(path);
     }
+    _worktreeFacts?.removeListener(notifyListeners);
+    _worktreeFacts?.dispose();
     _address.dispose();
     super.dispose();
   }

@@ -109,6 +109,14 @@ class WorktreeExplorerView extends StatelessWidget {
     // makes the widths mean something relative to each other.
     var busiest = rows.fold(0, (max, r) => math.max(max, r.$1.branchLines));
 
+    // Decided once for the whole list, so the cells stay in line. See
+    // `WorktreeRow.showAgent`.
+    var showAgent = rows.any(
+      (r) =>
+          (r.$1.facts.agent.value?.state ?? AgentState.none) != AgentState.none,
+    );
+    var showForge = rows.any((r) => r.$1.facts.forge.hasValue);
+
     return ColoredBox(
       color: colors.bg,
       child: Column(
@@ -143,6 +151,8 @@ class WorktreeExplorerView extends StatelessWidget {
                         now: now,
                         match: match,
                         scale: busiest == 0 ? 0 : entry.branchLines / busiest,
+                        showAgent: showAgent,
+                        showForge: showForge,
                         onTap: () => onSelect?.call(entry),
                         onOpen: () => onOpen?.call(entry),
                       );
@@ -234,8 +244,20 @@ class _Header extends StatelessWidget {
             style: context.type.caption.copyWith(color: colors.mut2),
           ),
           const Gap(FwSpacing.xxl),
-          _Filter(query: query, onChanged: onQueryChanged),
-          const Spacer(),
+          // Absorbs the slack rather than claiming a fixed 240 beside a
+          // `Spacer` — which overflows the moment the window is narrower than
+          // the sum of everything on this row, and a header that overflows is
+          // the first thing anyone sees.
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 240),
+                child: _Filter(query: query, onChanged: onQueryChanged),
+              ),
+            ),
+          ),
+          const Gap(FwSpacing.lg),
           Text('Sort', style: context.type.micro.copyWith(color: colors.mut3)),
           const Gap(FwSpacing.sm),
           _SortMenu(sort: sort, onChanged: onSortChanged),
@@ -286,31 +308,30 @@ class _Filter extends StatelessWidget {
       borderRadius: BorderRadius.circular(context.radii.radius),
       borderSide: BorderSide(color: color),
     );
-    return SizedBox(
-      width: 240,
-      child: TextField(
-        controller: TextEditingController(text: query),
-        onChanged: onChanged,
-        style: context.type.bodySmall,
-        decoration: InputDecoration(
-          isDense: true,
-          filled: true,
-          fillColor: colors.panel,
-          prefixIcon: Icon(Icons.search, size: 14, color: colors.mut3),
-          prefixIconConstraints: const BoxConstraints.tightFor(
-            width: 28,
-            height: 20,
-          ),
-          hintText: 'Filter',
-          hintStyle: context.type.bodySmall.copyWith(color: colors.mut3),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: FwSpacing.md,
-            vertical: FwSpacing.sm,
-          ),
-          border: border(colors.line),
-          enabledBorder: border(colors.line),
-          focusedBorder: border(colors.accent),
+    // Width is the caller's business — it caps this at 240 and lets it shrink
+    // below that on a narrow window.
+    return TextField(
+      controller: TextEditingController(text: query),
+      onChanged: onChanged,
+      style: context.type.bodySmall,
+      decoration: InputDecoration(
+        isDense: true,
+        filled: true,
+        fillColor: colors.panel,
+        prefixIcon: Icon(Icons.search, size: 14, color: colors.mut3),
+        prefixIconConstraints: const BoxConstraints.tightFor(
+          width: 28,
+          height: 20,
         ),
+        hintText: 'Filter',
+        hintStyle: context.type.bodySmall.copyWith(color: colors.mut3),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.md,
+          vertical: FwSpacing.sm,
+        ),
+        border: border(colors.line),
+        enabledBorder: border(colors.line),
+        focusedBorder: border(colors.accent),
       ),
     );
   }

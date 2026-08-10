@@ -200,25 +200,24 @@ class CaptureRequest {
     ].join(' ');
   }
 
-  /// Fills in the worktree the shell already opened, when the address left it
-  /// out.
+  /// Fills in the worktree the shell already opened, when the address named a
+  /// plugin without one.
   ///
-  /// **Currently unreachable, and kept deliberately.** The architecture spec
-  /// says addresses are session-relative by default and spells the example
-  /// `fw:///ui_catalog/…`. The grammar `Address` actually implements has a
-  /// *project* authority and a *space* ahead of the worktree, so that spelling
-  /// parses as a space named `ui_catalog` and no plugin at all — and since the
-  /// worktree slot is positional, no valid address names a plugin while
-  /// omitting it. So a parsed address reaching here always has a worktree and
-  /// this returns it unchanged.
+  /// **The plugin test is what makes this safe, and it was added because the
+  /// explorer broke it.** This used to fill in a worktree whenever the address
+  /// lacked one, on the reasoning that no parseable address could — the worktree
+  /// slot being positional ahead of the plugin. `fw:///worktrees` is exactly
+  /// that address: a complete, deliberately worktree-less place, and rewriting
+  /// it sent `fw capture fw:///worktrees` to a worktree's panel instead, which
+  /// reported success and produced a picture of the wrong screen.
   ///
-  /// The gap is real: a documentation script should not have to write this
-  /// machine's branch name. Closing it is either a relative form on the CLI
-  /// (`fw capture flutterware.previews`) or a correction to the spec, and
-  /// that is a decision rather than a cleanup. This stays so that whichever
-  /// way it goes, the shell side already works.
+  /// An address naming a plugin but no worktree is still unreachable through the
+  /// parser, so this remains a shape the CLI cannot yet produce. The gap it was
+  /// written for is real — a documentation script should not have to write this
+  /// machine's branch name — and closing it is a relative form on the CLI or a
+  /// correction to the spec, which is a decision rather than a cleanup.
   static Address _resolve(Address destination, ShellController shell) =>
-      destination.worktree != null
+      destination.worktree != null || destination.plugin == null
       ? destination
       : destination.copyWith(worktree: shell.address.worktree);
 
