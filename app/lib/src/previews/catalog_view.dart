@@ -13,6 +13,7 @@ import '../embedder/embedded_engine.dart';
 import '../embedder/input_region.dart';
 import '../inspect/node_highlight.dart';
 import '../inspect/pick_region.dart';
+import '../inspect/semantics_node.dart';
 import '../ui/design/design.dart';
 import '../utils/image_clipboard.dart';
 import 'app_chords.dart';
@@ -82,6 +83,11 @@ class _CatalogViewState extends State<CatalogView> {
   /// rectangle would be absurd. Only the overlay listens.
   final _highlight = ValueNotifier<String?>(null);
 
+  /// The Semantics tab's hover — its own notifier, as on the step page: the
+  /// id spaces differ, and only the elements one round-trips through the
+  /// picker and the watch.
+  final _semanticsHighlight = ValueNotifier<SemanticsSnapshotNode?>(null);
+
   /// Whether a click on the preview picks a widget instead of reaching the demo.
   final _picking = ValueNotifier<bool>(false);
 
@@ -133,6 +139,7 @@ class _CatalogViewState extends State<CatalogView> {
     _highlight
       ..removeListener(_trackHighlighted)
       ..dispose();
+    _semanticsHighlight.dispose();
     _picking.dispose();
     super.dispose();
   }
@@ -336,6 +343,7 @@ class _CatalogViewState extends State<CatalogView> {
                                     session: _session,
                                     available: constraints.maxHeight,
                                     highlight: _highlight,
+                                    semanticsHighlight: _semanticsHighlight,
                                     picking: _picking,
                                     controls: (context) =>
                                         _KnobPanel(session: _session),
@@ -577,32 +585,47 @@ class _CatalogViewState extends State<CatalogView> {
                 // row and leaves the picture alone.
                 if (node?.offstage ?? false) node = null;
                 return ValueListenableBuilder(
-                  valueListenable: _session.watchedBox,
-                  builder: (context, live, _) {
-                    // The guest's own last frame, when it is about this node.
-                    // The tree's rect is of the build it was read from, which
-                    // on anything animating is already wrong — and a
-                    // rectangle in the wrong place does not read as slightly
-                    // stale, it reads as broken. The node is still what names
-                    // the box: a live rect with no node behind it would be a
-                    // rectangle labelled nothing.
-                    var box = live?.id == hovered ? live : null;
-                    var rect = switch ((node, box)) {
-                      (null, _) => null,
-                      (_, var b?) => Rect.fromLTWH(b.x, b.y, b.width, b.height),
-                      (var n?, null) => switch (n.layout) {
-                        var l? => Rect.fromLTWH(l.x, l.y, l.width, l.height),
-                        null => null,
-                      },
-                    };
-                    return CustomPaint(
-                      painter: NodeHighlightPainter(
-                        rect: rect,
-                        label: node?.type,
-                        color: context.colors.accent,
-                      ),
-                    );
-                  },
+                  valueListenable: _semanticsHighlight,
+                  builder: (context, semanticsLit, _) => ValueListenableBuilder(
+                    valueListenable: _session.watchedBox,
+                    builder: (context, live, _) {
+                      // The guest's own last frame, when it is about this
+                      // node. The tree's rect is of the build it was read
+                      // from, which on anything animating is already wrong —
+                      // and a rectangle in the wrong place does not read as
+                      // slightly stale, it reads as broken. The node is still
+                      // what names the box: a live rect with no node behind
+                      // it would be a rectangle labelled nothing. The
+                      // elements highlight wins over the semantics one — it
+                      // is the one the picker writes, and the two tabs cannot
+                      // be hovered at once.
+                      var box = live?.id == hovered ? live : null;
+                      var (rect, label) = switch ((node, box, semanticsLit)) {
+                        (var n?, var b?, _) => (
+                          Rect.fromLTWH(b.x, b.y, b.width, b.height),
+                          n.type,
+                        ),
+                        (var n?, null, _) when n.layout != null => (
+                          Rect.fromLTWH(
+                            n.layout!.x,
+                            n.layout!.y,
+                            n.layout!.width,
+                            n.layout!.height,
+                          ),
+                          n.type,
+                        ),
+                        (null, _, var s?) => (s.rect, s.headline),
+                        _ => (null, null),
+                      };
+                      return CustomPaint(
+                        painter: NodeHighlightPainter(
+                          rect: rect,
+                          label: label,
+                          color: context.colors.accent,
+                        ),
+                      );
+                    },
+                  ),
                 );
               },
             ),

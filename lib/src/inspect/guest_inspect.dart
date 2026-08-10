@@ -7,9 +7,12 @@ import 'dart:developer' as developer;
 // lives. Still no `material` — a guest should not have to link Material to be
 // inspectable.
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'node.dart';
+import 'semantics.dart';
+import 'semantics_capture.dart';
 
 /// Reads the live widget tree out of a running guest.
 ///
@@ -46,6 +49,17 @@ class GuestInspector {
         jsonEncode(read().toJson()),
       );
     });
+    developer.registerExtension('ext.flutterware.semantics', (_, args) async {
+      switch (args['on']) {
+        case 'true':
+          enableSemantics(true);
+        case 'false':
+          enableSemantics(false);
+      }
+      return developer.ServiceExtensionResponse.result(
+        jsonEncode(readSemantics().toJson()),
+      );
+    });
     developer.registerExtension('ext.flutterware.hitTest', (_, args) async {
       var x = double.tryParse(args['x'] ?? '');
       var y = double.tryParse(args['y'] ?? '');
@@ -77,6 +91,44 @@ class GuestInspector {
   /// 44 nodes either way, zero of them non-local. If the whole tree is ever
   /// wanted it is a host-side call and its own decision.
   InspectTree read() => _build().tree;
+
+  /// The handle that keeps semantics on while somebody is looking.
+  ///
+  /// A live app has semantics **off** — unlike `testWidgets`, which holds a
+  /// handle by default — and building the tree costs every frame, so it runs
+  /// only between the panel opening the Semantics tab and closing it. Held
+  /// here rather than in the extension closure so [enableSemantics] is
+  /// callable in-process too.
+  SemanticsHandle? _semantics;
+
+  /// Turns the semantics tree on or off.
+  ///
+  /// Idempotent both ways. Turning on schedules a frame, because the tree is
+  /// built *by* a frame and an idle guest would otherwise never produce one —
+  /// the read polls until it appears.
+  void enableSemantics(bool on) {
+    if (on) {
+      if (_semantics != null) return;
+      _semantics = SemanticsBinding.instance.ensureSemantics();
+      SchedulerBinding.instance.ensureVisualUpdate();
+    } else {
+      _semantics?.dispose();
+      _semantics = null;
+    }
+  }
+
+  /// The semantics tree, as `semantics_capture.dart` shapes it.
+  ///
+  /// The entry id is withheld until there is a tree, so a poll settling on
+  /// the id keeps waiting through the frame that builds it rather than
+  /// accepting "nothing yet" as this entry's answer.
+  InspectSemantics readSemantics() {
+    var root = captureSemanticsTree();
+    return InspectSemantics(
+      entryId: root == null ? null : entryIdOf(),
+      root: root,
+    );
+  }
 
   /// The nodes under a point, outermost first.
   ///

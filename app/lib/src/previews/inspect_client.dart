@@ -11,6 +11,8 @@ import 'package:flutterware/src/inspect/node.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/log.dart';
 // ignore: implementation_imports
+import 'package:flutterware/src/inspect/semantics.dart';
+// ignore: implementation_imports
 import 'package:flutterware/src/inspect/watch.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/ui_catalog/axis.dart';
@@ -90,6 +92,35 @@ class InspectClient {
     (tree) => tree.entryId,
     entryId,
   );
+
+  /// The semantics tree [entryId] is showing — what a screen reader gets.
+  ///
+  /// Settles on the entry like [tree], and the guest holds up its end by
+  /// withholding the entry id until a tree exists: enabling semantics takes a
+  /// frame, and the retries here are what ride it out. Call [setSemantics]
+  /// first — a live app has semantics off, and reading without enabling
+  /// settles on nothing.
+  Future<InspectSemantics?> semantics(String entryId) => _settle(
+    'ext.flutterware.semantics',
+    InspectSemantics.fromJson,
+    (read) => read.entryId,
+    entryId,
+  );
+
+  /// Turns the guest's semantics tree on or off.
+  ///
+  /// On is **required** like the other writes — a tab reading a guest that
+  /// silently failed to enable would show "no semantics" about an app that
+  /// has plenty. Off is tolerant, because it runs from disposes.
+  Future<void> setSemantics(bool on) => on
+      ? vmService.requireExtension(
+          'ext.flutterware.semantics',
+          args: const {'on': 'true'},
+        )
+      : vmService.callExtension(
+          'ext.flutterware.semantics',
+          args: const {'on': 'false'},
+        );
 
   /// The knobs [entryId] declared while it built.
   Future<KnobReport?> knobs(String entryId) => _settle(

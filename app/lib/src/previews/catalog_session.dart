@@ -40,6 +40,7 @@ enum CatalogSessionPhase { starting, ready, error }
 enum InspectTab {
   controls('Controls'),
   elements('Elements'),
+  semantics('Semantics'),
   problems('Problems'),
   console('Console');
 
@@ -332,6 +333,19 @@ class CatalogSession extends ChangeNotifier {
   InspectTree? get treeForSelection =>
       tree?.entryId == (selected ?? active)?.id ? tree : null;
 
+  /// The semantics tree the guest last reported — what a screen reader gets.
+  ///
+  /// Same live-guest rule as [tree], and one more reason it cannot be an
+  /// action's re-render: semantics is **off** in a live app until the guest is
+  /// asked to hold a handle, which [inspectingSemantics] does only while the
+  /// tab is open.
+  InspectSemantics? semantics;
+
+  /// The semantics, but only when they describe what is selected — the rule
+  /// [treeForSelection] follows, and for the same reason.
+  InspectSemantics? get semanticsForSelection =>
+      semantics?.entryId == (selected ?? active)?.id ? semantics : null;
+
   /// What the entry on screen reported while building and painting.
   ///
   /// **Read after every build regardless of which tab is open**, unlike the
@@ -369,6 +383,35 @@ class CatalogSession extends ChangeNotifier {
     // Opening the panel is itself a request — the entry on screen arrived
     // before anybody asked for its tree.
     if (value) unawaited(readTree());
+  }
+
+  /// Whether the semantics tree is **on screen** — the Semantics tab showing,
+  /// and the panel not collapsed.
+  ///
+  /// The same shape as [inspecting] with one extra duty: the flag drives the
+  /// *guest's* semantics on and off. A live app builds no semantics until
+  /// something holds a handle, and building it costs every frame — so the
+  /// guest pays only between opening the tab and leaving it.
+  /// **Does not notify**, for the reason [inspecting] does not.
+  bool get inspectingSemantics => _inspectingSemantics;
+  var _inspectingSemantics = false;
+  set inspectingSemantics(bool value) {
+    if (value == _inspectingSemantics) return;
+    _inspectingSemantics = value;
+    var inspect = _inspect;
+    if (inspect == null) return;
+    if (value) {
+      // Enable, then read: the read settles through the frame that builds
+      // the first tree.
+      _fireAndForget(
+        inspect.setSemantics(true).then((_) => readSemantics()),
+        'enabling semantics',
+      );
+    } else {
+      // Tolerant, like unwatch: this runs from disposes, where the guest may
+      // already be gone.
+      unawaited(inspect.setSemantics(false));
+    }
   }
 
   /// What the entry on screen has printed, oldest first.
@@ -594,6 +637,9 @@ class CatalogSession extends ChangeNotifier {
     // Promptly, because a shape change is rare by nature — an animation moves
     // geometry, not structure — so there is nothing here to smooth out.
     if (push.structureChanged && _inspecting) unawaited(_rereadTree());
+    if (push.structureChanged && _inspectingSemantics) {
+      unawaited(readSemantics());
+    }
     if (push.resized) _settleResize();
     if (push.scrolled) _settleScroll();
   }
@@ -622,6 +668,7 @@ class CatalogSession extends ChangeNotifier {
     _scrollSettle = Timer(const Duration(milliseconds: 120), () {
       if (_disposed || !_panelOpen) return;
       if (_inspecting) unawaited(_rereadTree());
+      if (_inspectingSemantics) unawaited(readSemantics());
     });
   }
 
@@ -645,6 +692,7 @@ class CatalogSession extends ChangeNotifier {
     _resizeSettle = Timer(const Duration(milliseconds: 250), () {
       if (_disposed || !_panelOpen) return;
       if (_inspecting) unawaited(_rereadTree());
+      if (_inspectingSemantics) unawaited(readSemantics());
       unawaited(forgetErrors());
     });
   }
@@ -740,6 +788,21 @@ class CatalogSession extends ChangeNotifier {
     var read = await inspect.tree(entry.id);
     if (read == null || _disposed) return;
     tree = read;
+    notifyListeners();
+  }
+
+  /// Asks the guest what a screen reader would get for the entry on screen.
+  ///
+  /// Worth calling only while [inspectingSemantics] holds the guest's
+  /// semantics on — reading a guest that builds none settles on nothing and
+  /// leaves what is held here alone.
+  Future<void> readSemantics() async {
+    var inspect = _inspect;
+    var entry = selected ?? active;
+    if (inspect == null || entry == null) return;
+    var read = await inspect.semantics(entry.id);
+    if (read == null || _disposed) return;
+    semantics = read;
     notifyListeners();
   }
 
@@ -1158,6 +1221,7 @@ class CatalogSession extends ChangeNotifier {
       // and whether the build that produced them complained.
       await readErrors();
       if (_inspecting) await readTree();
+      if (_inspectingSemantics) await readSemantics();
     } finally {
       _pushingKnobs = false;
     }
@@ -1386,6 +1450,7 @@ class CatalogSession extends ChangeNotifier {
     // and a demo that throws should say so whether or not you were looking.
     unawaited(readErrors());
     if (_inspecting) unawaited(readTree());
+    if (_inspectingSemantics) unawaited(readSemantics());
     // The guest cleared its own buffer on the switch, so this one has to go
     // too — otherwise the console reads as the new demo having printed what the
     // old one did. The sequence mark is deliberately *not* reset: the guest

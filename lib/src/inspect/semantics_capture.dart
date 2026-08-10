@@ -1,12 +1,15 @@
 import 'package:flutter/rendering.dart';
 
 /// The semantics tree as assistive tech reads it, serialized — a scenario
-/// step's fourth leg, beside the pixels, the texts and the widget tree.
+/// step's fourth leg beside the pixels, the texts and the widget tree, and
+/// what the catalog's live `ext.flutterware.semantics` serves.
 /// Design: `docs/superpowers/specs/2026-08-10-scenarios-semantics-tab.md`.
 ///
 /// Null when no view has a semantics tree to read. Under a scenario that
 /// never happens — `testWidgets` holds a semantics handle by default — but a
-/// capture must state the absence rather than invent an empty screen.
+/// **live app has semantics off** until something holds a `SemanticsHandle`
+/// (the catalog guest's extension does, while the tab is open), and a capture
+/// must state the absence rather than invent an empty screen.
 ///
 /// The shape, per node: `rect` in **screen logical pixels** (the space the
 /// screenshot and the widget tree's layout boxes are in), `label` / `value` /

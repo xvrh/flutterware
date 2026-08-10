@@ -14,7 +14,8 @@ import '../plugins/native/scenarios_results.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import 'framed_shot.dart';
-import 'semantics_view.dart';
+import '../inspect/semantics_node.dart';
+import '../inspect/semantics_view.dart';
 import 'step_status.dart';
 
 /// One step, pushed over the flow: the frame big, the inspect dock under it —

@@ -260,6 +260,54 @@ void main() {
     });
   });
 
+  group('the semantics tab', () {
+    Map<String, Object?> aTree() => {
+      'rect': {'x': 0, 'y': 0, 'width': 320, 'height': 200},
+      'children': [
+        {
+          'rect': {'x': 8, 'y': 8, 'width': 100, 'height': 40},
+          'label': 'Add to cart',
+          'flags': ['isButton'],
+          'actions': ['tap'],
+        },
+      ],
+    };
+
+    testWidgets('shows what a screen reader gets, roles badged', (
+      tester,
+    ) async {
+      var session = sessionOf(withTree: tree)
+        ..inspectTab = InspectTab.semantics
+        ..semantics = InspectSemantics(entryId: beta.id, root: aTree());
+      await pump(tester, session);
+
+      expect(find.text('"Add to cart"'), findsOneWidget);
+      expect(find.text('button'), findsOneWidget);
+      expect(find.text('tap'), findsOneWidget);
+    });
+
+    testWidgets('says it is reading until the guest reports', (tester) async {
+      var session = sessionOf(withTree: tree)
+        ..inspectTab = InspectTab.semantics;
+      await pump(tester, session);
+      expect(find.text('Reading what a screen reader gets…'), findsOneWidget);
+    });
+
+    testWidgets('refuses a read that names another entry', (tester) async {
+      // A read from before the switch, exactly as the tree tab treats it.
+      var session = sessionOf(withTree: tree)
+        ..inspectTab = InspectTab.semantics
+        ..semantics = InspectSemantics(
+          entryId: 'demo/other.dart#other',
+          root: aTree(),
+        );
+      await pump(tester, session);
+
+      expect(find.text('"Add to cart"'), findsNothing);
+      expect(find.text('Reading what a screen reader gets…'), findsOneWidget);
+    });
+  });
+
   group('selection', () {
     testWidgets('a click writes the node onto the address', (tester) async {
       await pump(tester, sessionOf(withTree: tree));
@@ -346,6 +394,7 @@ void main() {
                   session: session,
                   available: 600,
                   highlight: highlight,
+                  semanticsHighlight: ValueNotifier(null),
                   picking: ValueNotifier(false),
                   controls: (_) => const SizedBox(),
                 ),
@@ -493,6 +542,7 @@ void main() {
                   session: session,
                   available: 600,
                   highlight: ValueNotifier(null),
+                  semanticsHighlight: ValueNotifier(null),
                   picking: ValueNotifier(false),
                   controls: (_) => const SizedBox(),
                 ),
@@ -653,6 +703,7 @@ void main() {
                       session: session,
                       available: 500,
                       highlight: ValueNotifier(null),
+                      semanticsHighlight: ValueNotifier(null),
                       picking: ValueNotifier(false),
                       controls: (_) => const SizedBox(),
                     ),

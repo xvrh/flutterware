@@ -20,7 +20,7 @@ import 'profile.dart';
 import 'run_args.dart';
 import 'scenario.dart';
 import 'run_listener.dart';
-import 'semantics_capture.dart';
+import '../inspect/semantics_capture.dart';
 
 // ignore_for_file: implementation_imports
 

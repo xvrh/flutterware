@@ -13,9 +13,16 @@ tree-rect and hands `NodeHighlightPainter` a plain rect + label), and the
 picker grammar lives once in `InspectPickRegion`
 (`app/lib/src/inspect/pick_region.dart`) — the catalog and the step page pass
 resolvers, and disarm-after-pick moved into the region so an async commit
-cannot leave the mode armed. Parts 3–4 remain a plan. Originally written to
-answer "the inspect reports are duplicated at three places; should we
-consolidate, and can we hide offstage content everywhere at once?"
+cannot leave the mode armed. Part 3 **built**: semantics moved into
+the inspect kit (`lib/src/inspect/semantics_capture.dart`, pure wire model
+`semantics.dart`, app-side `semantics_node.dart` + `semantics_view.dart`) and
+the catalog grew a live Semantics tab over `ext.flutterware.semantics` — with
+one discovery the plan missed: a **live app has semantics off** (unlike
+`testWidgets`), so the extension holds a `SemanticsHandle` only while the tab
+is open, and withholds the entry id until the enabling frame has built a tree
+so the client's settling poll rides it out. Part 4 remains a plan. Originally
+written to answer "the inspect reports are duplicated at three places; should
+we consolidate, and can we hide offstage content everywhere at once?"
 **Lineage:** `2026-07-31-sl3-inspect-surface-findings.md` (what the VM service
 can and cannot give the run cockpit), `2026-08-10-scenarios-semantics-tab.md`
 (the semantics leg, currently scenarios-only).
@@ -133,18 +140,28 @@ One flag in the shared model, so every host and every consumer inherits it:
   picker for free the day it has rects, and not before. Grammar tested once
   in `app/test/inspect/pick_region_test.dart`.
 
-## Part 3 — semantics grows legs
+## Part 3 — semantics grows legs (built)
 
-- Move the semantics pieces out of `scenarios/` into the inspect kit:
-  `lib/src/scenarios/semantics_capture.dart` → `lib/src/inspect/`, and split
-  `SemanticsSnapshotNode` (model) from `SemanticsView` (view) on the app
-  side. Rename nothing else; the `.semantics.json` format is already
-  host-neutral.
-- **Previews gains a live Semantics tab nearly free**: the guest registers
-  `ext.flutterware.semantics` beside `ext.flutterware.tree`, serving the same
-  capture the harness writes; the panel adds the tab with the same view and
-  the same overlay highlight. The 211µs capture cost is noise at
-  refresh-on-demand cadence.
+- The semantics pieces moved out of `scenarios/` into the inspect kit:
+  `lib/src/inspect/semantics_capture.dart` (capture),
+  `lib/src/inspect/semantics.dart` (pure wire model `InspectSemantics` —
+  `fw` links the client, so the typed node stays app-side), and
+  `app/lib/src/inspect/semantics_node.dart` + `semantics_view.dart`. The
+  `.semantics.json` format is unchanged; the view serves a step's snapshot
+  and the live read without knowing which.
+- **Previews' live Semantics tab**, over `ext.flutterware.semantics` in
+  `GuestInspector.registerExtensions` — no generator change. What the plan
+  missed and the build settled: a **live app has semantics off** until
+  something holds a `SemanticsHandle` (`testWidgets` holds one by default,
+  which is why scenarios never noticed). So the extension takes `on` — the
+  session enables while the tab is open and releases on leaving, the guest
+  pays per-frame semantics only while somebody looks — and the read
+  **withholds the entry id until a tree exists**, because enabling takes a
+  frame and `InspectClient._settle` polls on the id: an absence with a name
+  would settle as the answer. Re-reads ride the same signals as the tree
+  (structure pushes, scroll/resize settling, knob pushes, entry switches);
+  the overlay draws the hovered row's rect with the elements highlight
+  winning, as on the step page.
 - **Run cannot follow yet** — the framework exposes no semantics over the VM
   service. Another entry on the guest-runtime ledger, beside global rects.
 

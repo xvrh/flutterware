@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware/src/scenarios/semantics_capture.dart';
+import 'package:flutterware/src/inspect/semantics_capture.dart';
 
 /// The semantics serializer: logical rects, traversal order, merged folding,
 /// names instead of bitmasks.
