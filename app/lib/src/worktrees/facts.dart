@@ -361,6 +361,20 @@ class WorktreeFacts {
   final Fact<ForgeFacts> forge;
   final Fact<ActivityFacts> activity;
 
+  /// For the refresh that only re-reads one provider — an agent writing to its
+  /// session file must not drag fourteen `git status` calls behind it.
+  WorktreeFacts copyWith({
+    Fact<GitFacts>? git,
+    Fact<AgentFacts>? agent,
+    Fact<ForgeFacts>? forge,
+    Fact<ActivityFacts>? activity,
+  }) => WorktreeFacts(
+    git: git ?? this.git,
+    agent: agent ?? this.agent,
+    forge: forge ?? this.forge,
+    activity: activity ?? this.activity,
+  );
+
   /// **Will this worktree fail to progress until you act?**
   ///
   /// Not a count of agents and not a count of worktrees — that is what makes it

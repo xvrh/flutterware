@@ -11,6 +11,7 @@ import '../plugins/manifest_loader.dart';
 import '../plugins/plugin_core.dart';
 import '../plugins/registry.dart';
 import '../worktrees/facts_controller.dart';
+import '../worktrees/watchers.dart';
 import '../plugins/worktree_session.dart';
 import '../utils/flutter_sdk.dart';
 import 'config_load.dart';
@@ -68,11 +69,14 @@ class ShellController extends ChangeNotifier {
     this.coreRegistry,
     WorktreeDiscovery? discovery,
     WorktreeFactsController Function(String repoRoot)? worktreeFacts,
+    WorktreeWatcher Function(String repoRoot)? worktreeWatcher,
     Stream<WatchEvent> Function(String directory)? watchEvents,
     Duration? watchDebounce,
   }) : _discovery = discovery ?? WorktreeDiscovery(),
        // ignore: prefer_initializing_formals
        _buildWorktreeFacts = worktreeFacts,
+       // ignore: prefer_initializing_formals
+       _buildWorktreeWatcher = worktreeWatcher,
        // ignore: prefer_initializing_formals
        _watchEvents = watchEvents,
        // ignore: prefer_initializing_formals
@@ -85,6 +89,7 @@ class ShellController extends ChangeNotifier {
   /// that pumped the shell was touching the developer's home directory — and
   /// would have raced any other test doing the same.
   final WorktreeFactsController Function(String repoRoot)? _buildWorktreeFacts;
+  final WorktreeWatcher Function(String repoRoot)? _buildWorktreeWatcher;
 
   /// Injectable so a test can drive a save without a filesystem.
   final Stream<WatchEvent> Function(String directory)? _watchEvents;
@@ -284,6 +289,43 @@ class ShellController extends ChangeNotifier {
   WorktreeFactsController? get worktreeFacts => _worktreeFacts;
   WorktreeFactsController? _worktreeFacts;
 
+  /// Watches the repository, so the explorer is a cockpit rather than a
+  /// snapshot.
+  ///
+  /// **The shell does this rather than the facts controller** because a git
+  /// event can mean a worktree appeared, and the list of worktrees is the
+  /// shell's. So a git event is a rescan *and* a re-probe: `git worktree list`
+  /// is 10 ms, which is noise beside the sweep that follows it, and it is what
+  /// makes a checkout you just created show up without touching anything.
+  ///
+  /// An agent event refreshes agents only — no subprocesses. See
+  /// [WorktreeWatcher] for why the two kinds are not one signal.
+  void _startWatchingRepo(String repoRoot) {
+    var watcher =
+        (_buildWorktreeWatcher ??
+        (root) => WorktreeWatcher(
+          repoRoot: root,
+          onFailure: (what, error) =>
+              // Losing a watch costs liveness, never correctness: the screen
+              // still refreshes on arrival and on the button.
+              _logger.fine('not watching $what: $error'),
+        ))(repoRoot);
+    _worktreeWatcher = watcher;
+    _watcherEvents = watcher.changes.listen((change) async {
+      switch (change) {
+        case WorktreeChange.git:
+          await rescanWorktrees();
+          await refreshWorktreeFacts();
+        case WorktreeChange.agent:
+          await _worktreeFacts?.refreshAgents(_worktrees);
+      }
+    });
+    watcher.start();
+  }
+
+  WorktreeWatcher? _worktreeWatcher;
+  StreamSubscription<WorktreeChange>? _watcherEvents;
+
   /// Re-probes every worktree. What the explorer calls when it appears and when
   /// its refresh button is pressed.
   ///
@@ -385,6 +427,7 @@ class ShellController extends ChangeNotifier {
           (_buildWorktreeFacts ??
                 (root) => WorktreeFactsController(repoRoot: root))(main.path)
             ..addListener(notifyListeners);
+      _startWatchingRepo(main.path);
     }
     notifyListeners();
 
@@ -845,6 +888,8 @@ class ShellController extends ChangeNotifier {
     for (var path in _open.keys.toList()) {
       _closeAt(path);
     }
+    unawaited(_watcherEvents?.cancel());
+    unawaited(_worktreeWatcher?.dispose());
     _worktreeFacts?.removeListener(notifyListeners);
     _worktreeFacts?.dispose();
     _address.dispose();

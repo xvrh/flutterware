@@ -257,6 +257,42 @@ file-watches on `.git/HEAD` and `.git/index` for the main checkout. **Four
 watchers, not fourteen.** Never watch `.git/` recursively — `objects/` churns on
 every fetch.
 
+> **Corrected 2026-08-10 by building it**, and by watching a real repository
+> rather than reasoning about it. Three watchers cover git, not four, and one
+> of them had to change shape:
+>
+> - **`refs/heads` must be recursive.** A commit landed on
+>   `refs/heads/claude/slashed` — a branch with a `/` in it is a *directory*
+>   under `refs/heads`, so the flat watch this section implied would have seen
+>   **nothing at all** on this repository, where every branch is named
+>   `claude/…`. That failure would have looked like "watching doesn't work on my
+>   machine".
+> - **`.git` flat replaces the two file watches.** One non-recursive watch on
+>   `.git` covers HEAD, index and packed-refs, survives git's
+>   write-a-lock-then-rename, and — measured — is the only watch that fires for
+>   a commit in the *main* checkout. It does not recurse into `objects/`.
+> - **The two kinds are not one signal.** A git event re-runs git; an agent
+>   event re-reads files. They arrive at wildly different rates, so they
+>   coalesce separately and the listener refreshes only what moved. An agent
+>   mid-answer appends to its session file continuously: a single signal would
+>   have meant fourteen `git status` calls every couple of seconds, in the
+>   background, for as long as anybody was working. `probeAgents` is the cheap
+>   path — a `stat` and a 64 KB tail per worktree, zero subprocesses.
+>
+> Each kind is debounced 300 ms **with a 2 s floor**. The floor is what a
+> streaming agent runs into: a debounce alone never finds a quiet moment, so the
+> screen would either never update or update on every line.
+>
+> A git event also **rescans** — `git worktree list` is 10 ms, noise beside the
+> sweep it precedes, and it is what makes a checkout you just created appear
+> without touching anything. That is why the shell owns the watcher: the list of
+> worktrees is the shell's.
+>
+> And one deliberate silence: if `<main>/.git` does not exist, **nothing is
+> watched, including agents.** A project that is not under git has one worktree
+> that nothing can change, and watching every agent session on the machine for
+> it is a cost with no answer attached.
+
 **One `gh pr list` covers every branch.** `--json number,title,headRefName,
 isDraft,reviewDecision,statusCheckRollup --limit 100` returns everything joinable
 on `headRefName`. The PR tier is two concurrent subprocesses for the whole repo,
@@ -264,7 +300,8 @@ not one per worktree — see the correction in §4 for why the second one is fre
 
 | trigger | refreshes | cost |
 |---|---|---|
-| filesystem events | branch, ahead/behind, HEAD moves, agent state | 4 git watchers + 1 on `~/.claude/projects/` |
+| filesystem events, git | branch, ahead/behind, HEAD moves, **and a rescan** | 3 watchers under `.git` |
+| filesystem events, agent | agent state only — no subprocesses | 1 watcher on `~/.claude/projects/` |
 | becoming visible | dirty counts; PR if past TTL (~5 min) | ~100 ms pooled; +0.9 s if PR stale |
 | manual button | everything, unconditionally | ~1 s worst case |
 
@@ -524,7 +561,9 @@ enforces it).
 ```
 app/lib/src/worktrees/
   facts.dart              Fact, FactState, WorktreeFacts, ChangeShape   pure Dart
-  facts_controller.dart   scheduler, cache, watchers                    pure Dart
+  facts_controller.dart   the scheduler                                 Flutter
+  facts_store.dart        the cache: branch diffs, PRs, opened clocks   pure Dart
+  watchers.dart           four directories, two coalesced signals       pure Dart
   providers/git.dart      batched for-each-ref, status, numstat         pure Dart
   providers/agent.dart    AgentProbe + ClaudeSession (tail reader)      pure Dart
   providers/forge.dart    gh / glab                                     pure Dart
@@ -565,7 +604,9 @@ Each slice is independently useful and independently reviewable.
    `providers/forge.dart`, a 5-minute TTL persisted in the store, `--refresh` on
    the CLI and `force: true` behind the GUI's refresh button. See the correction
    in §4.
-5. **Expansion, row actions, keyboard**, degenerate states.
+5. **Expansion, row actions, keyboard**, degenerate states. Expansion landed
+   2026-08-10 (§7); the filesystem watchers landed with it — `watchers.dart`,
+   wired in `ShellController._startWatchingRepo`, see the correction in §5.
 
 Slice 1 depends on the address rework only for slice 2 onwards; it can start in
 parallel.

@@ -105,6 +105,46 @@ class WorktreeFactsProbe {
     return facts;
   }
 
+  /// Re-reads **only** the agents, keeping every other fact as it was.
+  ///
+  /// What a `~/.claude/projects` event costs: a `stat` and a 64 KB tail read per
+  /// worktree, and not one subprocess. An agent mid-answer writes to its session
+  /// file continuously, so this path is taken every couple of seconds for as
+  /// long as anybody is working — which is affordable exactly because it runs no
+  /// git.
+  ///
+  /// Activity is folded rather than recomputed: no git event fired, so the
+  /// commit and opened clocks cannot have moved past what [previous] already
+  /// took the maximum of.
+  Future<Map<String, WorktreeFacts>> probeAgents(
+    List<Worktree> worktrees,
+    Map<String, WorktreeFacts> previous,
+  ) async {
+    var facts = <String, WorktreeFacts>{};
+    await _pooled(worktrees, (worktree) async {
+      var was = previous[worktree.path] ?? const WorktreeFacts();
+      var agentFacts = await agent.probe(worktree.path);
+      facts[worktree.path] = was.copyWith(
+        agent: _agentFact(agentFacts),
+        activity: _laterActivity(was.activity, agentFacts),
+      );
+    });
+    return facts;
+  }
+
+  Fact<ActivityFacts> _laterActivity(
+    Fact<ActivityFacts> previous,
+    AgentFacts? agent,
+  ) {
+    var at = agent?.at;
+    if (at == null) return previous;
+    if (previous.value case var was? when was.at.isAfter(at)) return previous;
+    return Fact.fresh(
+      ActivityFacts(at: at, source: ActivitySource.agent),
+      computedAt: _now(),
+    );
+  }
+
   Future<WorktreeFacts> _probeOne(
     Worktree worktree, {
     required Map<String, BranchTip> tips,

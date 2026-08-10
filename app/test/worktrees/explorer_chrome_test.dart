@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -20,6 +21,8 @@ import 'package:flutterware_app/src/worktrees/facts_store.dart';
 import 'package:flutterware_app/src/worktrees/providers/agent.dart';
 import 'package:flutterware_app/src/worktrees/providers/forge.dart';
 import 'package:flutterware_app/src/worktrees/providers/git.dart';
+import 'package:flutterware_app/src/worktrees/watchers.dart';
+import 'package:path/path.dart' as p;
 
 const _listing =
     'worktree /repo\nbranch refs/heads/main\n\n'
@@ -34,15 +37,22 @@ class _StubAgent implements AgentProbe {
   _StubAgent(this.waiting);
 
   final bool waiting;
+  var calls = 0;
 
   @override
-  Future<AgentFacts?> probe(String worktreePath) async => AgentFacts(
-    state: waiting && worktreePath == '/repo-explorer'
-        ? AgentState.waiting
-        : AgentState.none,
-    title: 'Something being worked on',
-    at: DateTime(2026, 8, 10, 14),
-  );
+  Future<AgentFacts?> probe(String worktreePath) async =>
+      _counted(worktreePath);
+
+  AgentFacts _counted(String worktreePath) {
+    calls++;
+    return AgentFacts(
+      state: waiting && worktreePath == '/repo-explorer'
+          ? AgentState.waiting
+          : AgentState.none,
+      title: 'Something being worked on',
+      at: DateTime(2026, 8, 10, 14),
+    );
+  }
 }
 
 /// A forge that never leaves the process, and counts what it was asked.
@@ -86,6 +96,25 @@ class _StubLoader implements ManifestLoader {
 
 late Directory _temp;
 late _StubForge _forge;
+late _StubAgent _agent;
+late Directory _watchedRepo;
+late StreamController<String> _gitEvents;
+late StreamController<String> _agentEvents;
+late int _discoveries;
+
+/// The real watcher, with its filesystem replaced.
+///
+/// Not a fake: the coalescing rules are the part that decides how often the
+/// screen refreshes, and a fake would have tested a mock of them. What is
+/// substituted is only where the paths come from.
+WorktreeWatcher _watcher(String _) => WorktreeWatcher(
+  repoRoot: _watchedRepo.path,
+  agentRoot: p.join(_watchedRepo.path, 'agents'),
+  debounce: Duration.zero,
+  minInterval: Duration.zero,
+  watch: (path, {required recursive}) =>
+      path.contains('agents') ? _agentEvents.stream : _gitEvents.stream,
+);
 
 ShellController _controller({bool agentWaiting = false}) => ShellController(
   appContext: AppContext(logger: LogClient.print()),
@@ -94,9 +123,12 @@ ShellController _controller({bool agentWaiting = false}) => ShellController(
   coreRegistry: PluginCoreRegistry(),
   manifestLoader: _StubLoader(),
   discovery: WorktreeDiscovery(
-    runProcess: (_, _, {workingDirectory}) async =>
-        ProcessResult(0, 0, _listing, ''),
+    runProcess: (_, _, {workingDirectory}) async {
+      _discoveries++;
+      return ProcessResult(0, 0, _listing, '');
+    },
   ),
+  worktreeWatcher: _watcher,
   worktreeFacts: (root) => WorktreeFactsController(
     repoRoot: root,
     probe: WorktreeFactsProbe(
@@ -105,7 +137,7 @@ ShellController _controller({bool agentWaiting = false}) => ShellController(
         root,
         at: File('${_temp.path}/worktrees.json'),
       ),
-      agent: _StubAgent(agentWaiting),
+      agent: _agent = _StubAgent(agentWaiting),
       forge: _forge,
       git: GitProbe(
         runProcess: (_, arguments, {workingDirectory}) async => ProcessResult(
@@ -136,6 +168,19 @@ void main() {
   setUp(() {
     _temp = Directory.systemTemp.createTempSync('fw-explorer-test');
     _forge = _StubForge();
+    _agent = _StubAgent(false);
+    _discoveries = 0;
+    _gitEvents = StreamController<String>.broadcast();
+    _agentEvents = StreamController<String>.broadcast();
+    _watchedRepo = Directory('${_temp.path}/watched')..createSync();
+    for (var dir in ['.git/worktrees', '.git/refs/heads', 'agents']) {
+      Directory('${_watchedRepo.path}/$dir').createSync(recursive: true);
+    }
+  });
+
+  tearDown(() {
+    unawaited(_gitEvents.close());
+    unawaited(_agentEvents.close());
   });
   tearDown(() => _temp.deleteSync(recursive: true));
 
@@ -249,6 +294,49 @@ void main() {
     await tester.tap(find.byIcon(Icons.refresh));
     await tester.pumpAndSettle();
     expect(_forge.calls, 2, reason: 'the button means now');
+  });
+
+  testWidgets('a commit anywhere reaches the list without being asked', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(explorerTabKey));
+    await tester.pumpAndSettle();
+
+    var discoveriesAtRest = _discoveries;
+    var agentProbesAtRest = _agent.calls;
+
+    // What `git commit` looks like from outside: a write under `.git`.
+    _gitEvents.add('${_watchedRepo.path}/.git/refs/heads/feature/explorer');
+    await tester.pumpAndSettle();
+
+    // Rescan *and* re-probe. The rescan is what makes a worktree you just
+    // created appear — `git worktree list` is 10 ms, noise beside the sweep it
+    // precedes.
+    expect(_discoveries, greaterThan(discoveriesAtRest));
+    expect(_agent.calls, greaterThan(agentProbesAtRest));
+  });
+
+  testWidgets('an agent writing does not spawn a single git process', (
+    tester,
+  ) async {
+    var shell = await _pump(tester);
+    await tester.tap(find.byKey(explorerTabKey));
+    await tester.pumpAndSettle();
+
+    var discoveriesAtRest = _discoveries;
+    var agentProbesAtRest = _agent.calls;
+
+    _agentEvents.add('${_watchedRepo.path}/agents/a-repo/session.jsonl');
+    await tester.pumpAndSettle();
+
+    // The agents were re-read — that is the cell worth being live for.
+    expect(_agent.calls, greaterThan(agentProbesAtRest));
+    // And nothing else was. An agent mid-answer writes continuously; if this
+    // path ran git, a window left open in the background would spawn a sweep
+    // every couple of seconds for as long as anybody was working.
+    expect(_discoveries, discoveriesAtRest);
+    expect(shell.isExplorer, isTrue);
   });
 
   testWidgets('the badge counts only what will not progress without you', (

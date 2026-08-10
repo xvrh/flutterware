@@ -87,6 +87,25 @@ class WorktreeFactsController extends ChangeNotifier {
     }
   }
 
+  /// Re-reads the agents and nothing else. What a session-file event triggers.
+  ///
+  /// **Not coalesced with [refresh]**, deliberately: it is file IO with no
+  /// subprocesses behind it, and making it wait on a git sweep would give the
+  /// one genuinely live cell the latency of the slowest one. It does skip while
+  /// a full sweep is in flight, since that sweep is about to report newer
+  /// agents anyway.
+  Future<void> refreshAgents(List<Worktree> worktrees) async {
+    if (_inFlight != null || _disposed) return;
+    try {
+      var updated = await _probe.probeAgents(worktrees, _facts);
+      if (_disposed) return;
+      _facts = updated;
+      _notify();
+    } catch (e) {
+      debugPrint('worktree agent refresh failed: $e');
+    }
+  }
+
   /// Notifies on a microtask rather than now.
   ///
   /// **Because a refresh starts from `initState`.** Becoming visible is one of
