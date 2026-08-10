@@ -25,7 +25,6 @@ class SplashVariantTile extends StatelessWidget {
     this.device,
     this.selected = false,
     this.onTap,
-    this.onEditValue,
     this.width = 168,
     this.slotHeight = defaultSlotHeight,
   });
@@ -51,14 +50,6 @@ class SplashVariantTile extends StatelessWidget {
 
   final bool selected;
   final VoidCallback? onTap;
-
-  /// Opens the editor for one caption line — the label it is under, the key
-  /// that produced it, and the value it currently has.
-  ///
-  /// Null in a test or a capture, which is what keeps the tile drawable with no
-  /// core behind it.
-  final void Function(String label, String key, String value, bool isColor)?
-  onEditValue;
 
   final double width;
   final double slotHeight;
@@ -164,19 +155,7 @@ class SplashVariantTile extends StatelessWidget {
         ('icon bg', resolution.iconBackgroundColor),
         ('branding', resolution.branding),
       ])
-        if (resolved.isPresent)
-          _Provenance(
-            label: label,
-            resolved: resolved,
-            onEdit: onEditValue == null
-                ? null
-                : () => onEditValue!(
-                    label,
-                    resolved.key!,
-                    resolved.value!,
-                    _isColorLabel(label),
-                  ),
-          ),
+        if (resolved.isPresent) _Provenance(label: label, resolved: resolved),
       if (resolution.image.isPresent)
         Text(
           resolution.placementSummary,
@@ -219,14 +198,17 @@ class _Origin extends StatelessWidget {
 /// enough to tell them apart at the point it is read.
 bool _isColorLabel(String label) => label == 'background' || label == 'icon bg';
 
-/// A value and the key it came from, on one line — and, when there is somewhere
-/// for the edit to go, the place you click to change it.
+/// A value and the key it came from, on one line.
+///
+/// **The key is the point.** `#101418 · color_dark_android` is the answer to
+/// "why does this cell look like that" and it names the line to go and change.
+/// It used to be a button that changed it for you; that is the editor, and the
+/// editor is gone.
 class _Provenance extends StatelessWidget {
-  const _Provenance({required this.label, required this.resolved, this.onEdit});
+  const _Provenance({required this.label, required this.resolved});
 
   final String label;
   final Resolved<String> resolved;
-  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -272,24 +254,7 @@ class _Provenance extends StatelessWidget {
       ),
     );
 
-    if (onEdit == null) {
-      return Padding(padding: const EdgeInsets.only(bottom: 2), child: row);
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Tooltip(
-        // Naming the key here is the point: it is where the edit will land, and
-        // it is the answer to "why did changing this not do what I expected".
-        message: 'Change ${resolved.key}',
-        child: InkWell(
-          key: ValueKey('edit:${resolved.key}'),
-          onTap: onEdit,
-          borderRadius: BorderRadius.circular(3),
-          child: row,
-        ),
-      ),
-    );
+    return Padding(padding: const EdgeInsets.only(bottom: 2), child: row);
   }
 }
 

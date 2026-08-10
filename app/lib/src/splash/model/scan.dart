@@ -204,27 +204,6 @@ class SplashConfigScan {
   ];
 
   bool get blocksGeneration => problems.any((p) => p.blocksGeneration);
-
-  /// Every repair on offer, deduplicated by id.
-  ///
-  /// One fix reaching several problems is the normal case, not an edge: the same
-  /// `branding_bottom_padding_ios` answers the light cell and the dark one, and
-  /// listing it twice would suggest there were two edits to make.
-  List<SplashFix> get fixes {
-    var byId = <String, SplashFix>{};
-    for (var problem in problems) {
-      var fix = problem.fix;
-      if (fix != null) byId.putIfAbsent(fix.id, () => fix);
-    }
-    return byId.values.toList();
-  }
-
-  SplashFix? fixFor(String id) {
-    for (var fix in fixes) {
-      if (fix.id == id) return fix;
-    }
-    return null;
-  }
 }
 
 /// Scans [packageRoot], which must be absolute.

@@ -40,51 +40,8 @@ Map<String, dynamic> _$SplashProblemEntryToJson(SplashProblemEntry instance) =>
       'surface': ?instance.surface,
       'theme': ?instance.theme,
       'device': ?instance.device,
-      'fix': ?instance.fix,
-      'fixLabel': ?instance.fixLabel,
       'blocksGeneration': instance.blocksGeneration,
     };
-
-Map<String, dynamic> _$SplashFixResultToJson(SplashFixResult instance) =>
-    <String, dynamic>{
-      'package': instance.package,
-      'flavor': ?instance.flavor,
-      'fix': instance.fix,
-      'label': instance.label,
-      'configPath': instance.configPath,
-      'writes': instance.writes.map((e) => e.toJson()).toList(),
-      'remainingProblems': instance.remainingProblems,
-    };
-
-Map<String, dynamic> _$SplashSetResultToJson(SplashSetResult instance) =>
-    <String, dynamic>{
-      'package': instance.package,
-      'flavor': ?instance.flavor,
-      'key': instance.key,
-      'value': ?instance.value,
-      'configPath': instance.configPath,
-      'remainingProblems': instance.remainingProblems,
-    };
-
-Map<String, dynamic> _$SplashPrepareResultToJson(
-  SplashPrepareResult instance,
-) => <String, dynamic>{
-  'package': instance.package,
-  'flavor': ?instance.flavor,
-  'target': instance.target,
-  'theme': instance.theme,
-  'key': instance.key,
-  'output': instance.output,
-  'width': instance.width,
-  'height': instance.height,
-  'explanation': instance.explanation,
-  'sourceCopiedTo': ?instance.sourceCopiedTo,
-  'cornerOverhang': instance.cornerOverhang,
-  'remainingProblems': instance.remainingProblems,
-};
-
-Map<String, dynamic> _$SplashWriteEntryToJson(SplashWriteEntry instance) =>
-    <String, dynamic>{'key': instance.key, 'value': ?instance.value};
 
 Map<String, dynamic> _$SplashReloadResultToJson(SplashReloadResult instance) =>
     <String, dynamic>{

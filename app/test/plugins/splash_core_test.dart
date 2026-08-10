@@ -389,47 +389,35 @@ flutter_native_splash:
       },
     );
 
-    test(
-      'a dark colour with no dark image draws the light logo, and says so',
-      () async {
-        // The common half-configured case, and the one this plugin got
-        // **backwards** and shipped. It claimed `color_dark` alone produced a
-        // dark splash with no logo on it. Every platform resolves the missing
-        // dark resource to the light one, so what ships is the light logo on
-        // the dark colour — usually the intent.
-        writePng('assets/logo.png', 1024, 1024);
-        write('flutter_native_splash.yaml', '''
+    test('a dark colour with no dark image draws the light logo', () async {
+      // The common half-configured case, and the one this plugin got
+      // **backwards** and shipped: it claimed `color_dark` alone produced a
+      // dark splash with no logo on it, and warned about it. Every platform
+      // resolves the missing dark resource to the light one, so what ships is
+      // the light logo on the dark colour — usually the intent.
+      //
+      // The rule that narrated all this is gone with the rest of the
+      // transcription. The picture says it, which is what a picture is for.
+      writePng('assets/logo.png', 1024, 1024);
+      write('flutter_native_splash.yaml', '''
 flutter_native_splash:
   color: "FFFFFF"
   color_dark: "101418"
   image: assets/logo.png
 ''');
-        var c = core();
-        await c.computeAll();
+      var c = core();
+      await c.computeAll();
 
-        var found = await problems(c, theme: 'dark');
-        expect(
-          found.where((p) => p.message.contains('empty background')),
-          isEmpty,
-        );
-        var note = found.singleWhere(
-          (p) => p.message.contains('uses the light image'),
-        );
-        // Information, not an alarm: there is nothing wrong and nothing to fix.
-        expect(note.tone, 'info');
-        expect(note.fix, isNull);
+      expect(await problems(c, theme: 'dark'), isEmpty);
 
-        // And the picture agrees with the sentence — the dark cell draws the
-        // light logo rather than an empty background.
-        var dark = c
-            .scanFor('.')!
-            .main!
-            .compositionFor(SplashSurface.android, SplashTheme.dark);
-        expect(dark.image, isNotNull);
-        expect(dark.image!.path, 'assets/logo.png');
-        expect(dark.backgroundColor, 0xFF101418);
-      },
-    );
+      var dark = c
+          .scanFor('.')!
+          .main!
+          .compositionFor(SplashSurface.android, SplashTheme.dark);
+      expect(dark.image, isNotNull);
+      expect(dark.image!.path, 'assets/logo.png');
+      expect(dark.backgroundColor, 0xFF101418);
+    });
 
     test('a cell with no dark config at all draws the light splash', () async {
       // The caption has always said "the OS shows the light splash". The
@@ -830,7 +818,8 @@ flutter_native_splash:
         )).singleWhere((p) => p.key == 'branding_bottom_padding_ios');
         expect(found.message, contains('home indicator'));
         expect(found.device, isNotNull);
-        expect(found.fix, 'branding-padding:ios');
+        // The message names the key and the number; nothing writes it.
+        expect(found.message, contains('at least'));
       },
     );
 
@@ -947,191 +936,6 @@ flutter_native_splash:
       expect(c.scanFor('.'), isNotNull);
     });
 
-    test('a fix lands in the file and the panel stops reporting it', () async {
-      // The whole loop, through the action rather than the model: the write is
-      // spliced into the real file, the scan is thrown away, and the problem is
-      // gone from what the next reader sees.
-      write('flutter_native_splash.yaml', '''
-# Kept out of the pubspec on purpose.
-flutter_native_splash:
-  color: "FFFFFF"
-  colour_dark: "101418"   # typo
-''');
-      var c = core();
-      await c.computeAll();
-      expect(
-        (await problems(c)).where((p) => p.key == 'colour_dark'),
-        isNotEmpty,
-      );
-
-      var result =
-          (await c.invoke('fix', arguments: {'fix': 'rename:colour_dark'}))!
-              as SplashFixResult;
-
-      expect(result.configPath, 'flutter_native_splash.yaml');
-      expect(result.label, 'Rename to "color_dark"');
-      expect(
-        [for (var w in result.writes) w.key],
-        ['colour_dark', 'color_dark'],
-      );
-
-      var after = File(
-        p.join(root.path, 'flutter_native_splash.yaml'),
-      ).readAsStringSync();
-      // The comments the author wrote survive a tool editing their file.
-      expect(after, contains('# Kept out of the pubspec on purpose.'));
-      expect(after, contains('color_dark: "101418"'));
-
-      expect((await problems(c)).where((p) => p.key == 'colour_dark'), isEmpty);
-      expect(c.scanFor('.')!.main!.config.raw['color_dark'], '101418');
-    });
-
-    test('the problems name the fix that clears them', () async {
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "#fff"
-''');
-      var c = core();
-      await c.computeAll();
-
-      var problem = (await problems(c)).firstWhere((p) => p.key == 'color');
-      // Discovery has to come off the problem itself; a caller who has to guess
-      // that `fix` exists will never find it.
-      expect(problem.fix, 'color:color');
-      expect(problem.fixLabel, 'Write "#fff" as FFFFFF');
-    });
-
-    test('an unknown fix id says what is on offer instead', () async {
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "#fff"
-''');
-      var c = core();
-      await c.computeAll();
-
-      await expectLater(
-        c.invoke('fix', arguments: {'fix': 'rename:nonsense'}),
-        throwsA(
-          isA<ArgumentError>().having(
-            (e) => '${e.message}',
-            'message',
-            contains('color:color'),
-          ),
-        ),
-      );
-    });
-
-    test('a fix is written to the flavor file it belongs to', () async {
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-''');
-      write('flutter_native_splash-staging.yaml', '''
-flutter_native_splash:
-  color: "#0f0"
-''');
-      var c = core();
-      await c.computeAll();
-
-      await c.invoke(
-        'fix',
-        arguments: {'fix': 'color:color', 'flavor': 'staging'},
-      );
-
-      expect(
-        File(
-          p.join(root.path, 'flutter_native_splash-staging.yaml'),
-        ).readAsStringSync(),
-        contains('00FF00'),
-      );
-      // And the default config, which had no such problem, is untouched.
-      expect(
-        File(
-          p.join(root.path, 'flutter_native_splash.yaml'),
-        ).readAsStringSync(),
-        contains('color: "FFFFFF"'),
-      );
-    });
-
-    test('set writes one key and the panel sees it', () async {
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-''');
-      var c = core();
-      await c.computeAll();
-
-      var result =
-          (await c.invoke(
-                'set',
-                arguments: {'key': 'color_dark', 'value': '101418'},
-              ))!
-              as SplashSetResult;
-
-      expect(result.key, 'color_dark');
-      expect(result.configPath, 'flutter_native_splash.yaml');
-      expect(c.scanFor('.')!.main!.config.raw['color_dark'], '101418');
-    });
-
-    test('set removes the key when no value is given', () async {
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-  color_dark: "101418"
-''');
-      var c = core();
-      await c.computeAll();
-
-      await c.invoke('set', arguments: {'key': 'color_dark'});
-      expect(
-        c.scanFor('.')!.main!.config.raw.containsKey('color_dark'),
-        isFalse,
-      );
-    });
-
-    test('set refuses a key the generator would reject', () async {
-      // Checked before the write, not reported after it. An unknown key makes
-      // `create` exit, so writing one would take a project that builds and stop
-      // it — and the plugin would have been the one to do it.
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-''');
-      var c = core();
-      await c.computeAll();
-
-      await expectLater(
-        c.invoke('set', arguments: {'key': 'colour_dark', 'value': '101418'}),
-        throwsA(isA<ArgumentError>()),
-      );
-      expect(
-        File(
-          p.join(root.path, 'flutter_native_splash.yaml'),
-        ).readAsStringSync(),
-        isNot(contains('colour_dark')),
-      );
-    });
-
-    test('set reaches inside the android_12 section', () async {
-      writePng('assets/android12.png', 1152, 1152);
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-''');
-      var c = core();
-      await c.computeAll();
-
-      await c.invoke(
-        'set',
-        arguments: {'key': 'android_12.image', 'value': 'assets/android12.png'},
-      );
-
-      expect(
-        c.scanFor('.')!.main!.config.android12Section['image'],
-        'assets/android12.png',
-      );
-    });
-
     test('retaining twice keeps polling until both let go', () async {
       var c = core();
       var first = c.retain();
@@ -1142,303 +946,6 @@ flutter_native_splash:
       // Nothing to assert but that it did not throw and disposes cleanly; the
       // counter is the thing under test.
       c.dispose();
-    });
-  });
-
-  group('preparing an image', () {
-    /// The PNG the generator would want, as it lands on disk.
-    img.Image output(SplashCore c, String relative) =>
-        img.decodePng(File(p.join(root.path, relative)).readAsBytesSync())!;
-
-    test('makes the 1152 canvas and points the key at it', () async {
-      writePng('assets/logo.png', 2048, 2048);
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-''');
-      var c = core();
-      await c.computeAll();
-
-      var result =
-          (await c.invoke(
-                'prepare',
-                arguments: {
-                  'source': 'assets/logo.png',
-                  'target': 'android12Icon',
-                },
-              ))!
-              as SplashPrepareResult;
-
-      expect(result.key, 'android_12.image');
-      expect((result.width, result.height), (1152, 1152));
-      // Which is the whole point: the file it made is one the size rule has
-      // nothing to say about.
-      expect(
-        (await problems(c)).where((p) => p.message.contains('should be 1152')),
-        isEmpty,
-      );
-
-      var png = output(c, result.output);
-      expect((png.width, png.height), (1152, 1152));
-      expect(
-        c.scanFor('.')!.main!.config.android12Section['image'],
-        result.output,
-      );
-    });
-
-    test('960 when an icon background is set — the config decides, not the '
-        'caller', () async {
-      writePng('assets/logo.png', 2048, 2048);
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-  android_12:
-    icon_background_color: "FFFFFF"
-''');
-      var c = core();
-      await c.computeAll();
-
-      var result =
-          (await c.invoke(
-                'prepare',
-                arguments: {
-                  'source': 'assets/logo.png',
-                  'target': 'android12Icon',
-                },
-              ))!
-              as SplashPrepareResult;
-
-      expect(result.width, 960);
-    });
-
-    test('the splash image is four times the width you asked for', () async {
-      writePng('assets/logo.png', 2048, 1024);
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-''');
-      var c = core();
-      await c.computeAll();
-
-      var result =
-          (await c.invoke(
-                'prepare',
-                arguments: {
-                  'source': 'assets/logo.png',
-                  'target': 'image',
-                  'width': 200,
-                },
-              ))!
-              as SplashPrepareResult;
-
-      expect((result.width, result.height), (800, 400));
-      expect(result.key, 'image');
-      // And the preview now says the logo is 200dp wide, because that is what a
-      // 800px source at 4× density means.
-      var composition = c
-          .scanFor('.')!
-          .main!
-          .compositionFor(SplashSurface.android, SplashTheme.light);
-      expect(composition.image!.naturalWidth, 200);
-    });
-
-    test('the dark theme writes the dark key', () async {
-      writePng('assets/logo.png', 1024, 1024);
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-  color_dark: "101418"
-''');
-      var c = core();
-      await c.computeAll();
-
-      var result =
-          (await c.invoke(
-                'prepare',
-                arguments: {
-                  'source': 'assets/logo.png',
-                  'target': 'android12Icon',
-                  'theme': 'dark',
-                },
-              ))!
-              as SplashPrepareResult;
-
-      expect(result.key, 'android_12.image_dark');
-      expect(result.output, contains('dark'));
-    });
-
-    test(
-      'reports the corner overhang rather than shrinking to avoid it',
-      () async {
-        writePng('assets/logo.png', 1000, 1000);
-        write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-''');
-        var c = core();
-        await c.computeAll();
-
-        var result =
-            (await c.invoke(
-                  'prepare',
-                  arguments: {
-                    'source': 'assets/logo.png',
-                    'target': 'android12Icon',
-                  },
-                ))!
-                as SplashPrepareResult;
-
-        // A square source fitted to the 768 box has corners outside the 768
-        // circle. Not an error — a logo with transparent corners is unaffected,
-        // and fitting to the circle would shrink every icon by 30% to protect
-        // corners that are usually empty.
-        expect(result.cornerOverhang, greaterThan(0));
-        expect(result.width, 1152);
-      },
-    );
-
-    test('a scale given by hand wins over the default fit', () async {
-      writePng('assets/logo.png', 1000, 1000);
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-''');
-      var c = core();
-      await c.computeAll();
-
-      // The second pass an agent makes after seeing an overhang, and the same
-      // argument the crop surface sends. One path, not a GUI-only capability.
-      var result =
-          (await c.invoke(
-                'prepare',
-                arguments: {
-                  'source': 'assets/logo.png',
-                  'target': 'android12Icon',
-                  'scale': '0.5',
-                },
-              ))!
-              as SplashPrepareResult;
-
-      expect(result.cornerOverhang, 0);
-    });
-
-    test('writes beside the assets the project already points at', () async {
-      // A project with a convention has already said what it is; putting a
-      // second splash image somewhere else would invent a second one next to it.
-      writePng('assets/branding/logo.png', 1024, 1024);
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-  image: assets/branding/logo.png
-''');
-      var c = core();
-      await c.computeAll();
-
-      var result =
-          (await c.invoke(
-                'prepare',
-                arguments: {
-                  'source': 'assets/branding/logo.png',
-                  'target': 'android12Icon',
-                },
-              ))!
-              as SplashPrepareResult;
-
-      expect(p.dirname(result.output), p.join('assets', 'branding'));
-    });
-
-    test('falls back to assets/splash when there is no convention', () async {
-      writePng('logo.png', 1024, 1024);
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-''');
-      var c = core();
-      await c.computeAll();
-
-      var result =
-          (await c.invoke(
-                'prepare',
-                arguments: {'source': 'logo.png', 'target': 'android12Icon'},
-              ))!
-              as SplashPrepareResult;
-
-      expect(p.dirname(result.output), p.join('assets', 'splash'));
-    });
-
-    test(
-      'copies a source from outside the package, and not one inside',
-      () async {
-        var outside = Directory.systemTemp.createTempSync('splash_outside');
-        addTearDown(() => outside.deleteSync(recursive: true));
-        File(
-          p.join(outside.path, 'brand.png'),
-        ).writeAsBytesSync(img.encodePng(img.Image(width: 1024, height: 1024)));
-
-        write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-''');
-        var c = core();
-        await c.computeAll();
-
-        var imported =
-            (await c.invoke(
-                  'prepare',
-                  arguments: {
-                    'source': p.join(outside.path, 'brand.png'),
-                    'target': 'android12Icon',
-                  },
-                ))!
-                as SplashPrepareResult;
-
-        // The drag-and-drop case: the original is on somebody's desktop and gone
-        // by next week, so re-cropping needs it kept.
-        expect(imported.sourceCopiedTo, isNotNull);
-        expect(
-          File(p.join(root.path, imported.sourceCopiedTo!)).existsSync(),
-          isTrue,
-        );
-
-        writePng('assets/logo.png', 1024, 1024);
-        var local =
-            (await c.invoke(
-                  'prepare',
-                  arguments: {
-                    'source': 'assets/logo.png',
-                    'target': 'android12Branding',
-                  },
-                ))!
-                as SplashPrepareResult;
-
-        // Already in the project, already findable — a copy would be clutter.
-        expect(local.sourceCopiedTo, isNull);
-      },
-    );
-
-    test('says which file it cannot read rather than throwing at it', () async {
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-''');
-      write('assets/broken.png', 'not a png');
-      var c = core();
-      await c.computeAll();
-
-      await expectLater(
-        c.invoke(
-          'prepare',
-          arguments: {'source': 'assets/gone.png', 'target': 'android12Icon'},
-        ),
-        throwsA(isA<ArgumentError>()),
-      );
-      await expectLater(
-        c.invoke(
-          'prepare',
-          arguments: {'source': 'assets/broken.png', 'target': 'android12Icon'},
-        ),
-        throwsA(isA<ArgumentError>()),
-      );
     });
   });
 }

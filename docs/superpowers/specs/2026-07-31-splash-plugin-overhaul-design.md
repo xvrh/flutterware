@@ -270,6 +270,9 @@ does.
 
 ## Phase 2 — Fixes, not an editor
 
+> **Deleted 2026-08-10.** Built, shipped, and reverted — see § Phases 2 and 3
+> are deleted. Read this section as a record of what was tried, not as a plan.
+
 The principle: **write only what we must, surgically, and never round-trip the
 file.** The moment we own the config we are in the tarpit of comment
 preservation, key ordering and merge conflicts. Every write below is one or two
@@ -336,6 +339,8 @@ nudges a colour.
 ---
 
 ## Phase 3 — The image studio
+
+> **Deleted 2026-08-10**, with phase 2. See § Phases 2 and 3 are deleted.
 
 The strongest case for editing, and the reason is a loop that currently costs
 five minutes and a round-trip to a real device:
@@ -451,8 +456,8 @@ Encoding uses `package:image` inside `Isolate.run`, exactly as
 | 1c-a | artifact browser, roles, per-density dp | 1.5d | **done** |
 | 1c-b | recomposition from `launch_background.xml` / `styles.xml` | 1.5d | **done, Android only** |
 | 1d | single-cell mode for `fw capture` | 0.5d | **done** |
-| 2 | `SplashWriter`, fixes on problems, click-to-edit | 3d | **done** |
-| 3 | the image studio | 5d | **done** |
+| 2 | `SplashWriter`, fixes on problems, click-to-edit | 3d | **built, then deleted 2026-08-10** |
+| 3 | the image studio | 5d | **built, then deleted 2026-08-10** |
 
 Amendments made while building, each recorded at the code:
 
@@ -709,6 +714,40 @@ reading more carefully next time. It is the argument for § The inversion.
 
 **iOS is the one surface left**, and permanently: a storyboard is constraints,
 which is a layout engine rather than a recipe. The tile says so.
+
+### Phases 2 and 3 are deleted (2026-08-10)
+
+Reverted the same day they were reviewed, on Xavier's call after opening the
+panel: *"everything is too complex."* The tile was spending four caption lines
+on an editing affordance, and the plugin had become the third-largest feature in
+the app for a splash screen.
+
+Gone: the studio (model, isolate renderer, 715-line dialog, `prepare`), the
+fixes (`SplashFix`, `writer.dart`, `fix`, `set`), click-to-edit
+(`edit_target.dart`, the value dialog, the tappable captions), and their tests
+— about 3,500 lines. Also gone: the two rules that narrated what `create` would
+write for dark, since the readback now draws it and the tile caption says it.
+
+Kept, and this is the whole plugin now: read the config, read the generated
+files back, draw eight cells with their provenance, list the problems that are
+facts about *your files*, and run the generator. `describe`, `artifacts`,
+`reload`, `generate`.
+
+**The reasoning is not that the editor did not work** — it did; the fix buttons
+edited a real config and kept its comments. It is that every button was computed
+from a transcription of a third-party generator, and two of those transcriptions
+shipped backwards inside eight days. A wrong picture is a wrong picture. A wrong
+fix button is a wrong edit to somebody's project.
+
+Same conclusion as [[project_launcher_icon_viewer_scope]] reached for icons on
+2026-07-31, arrived at here the expensive way. What survives is what that
+decision would have predicted: a viewer, plus the one action that runs the real
+generator.
+
+The numbers the studio knew — 1152 square with only the inner 768 circle
+showing, a splash image drawn at a quarter of its pixel size — are still in
+`validation.dart`'s Android 12 rules and in `surface.dart`. They are worth a
+sentence in the panel; they were not worth a cropping UI.
 
 **All of it is committed**, phase 3 included. The order matters more than the
 dates: phase 1 is the "seeing" half and is what the plugin already claims to be;

@@ -8,12 +8,9 @@ import '../plugins/native/splash_core.dart';
 import '../ui/theme.dart';
 import 'model/config.dart';
 import 'model/scan.dart';
-import 'model/studio.dart';
 import 'model/surface.dart';
 import 'model/validation.dart';
 import 'ui/artifacts_view.dart';
-import 'ui/edit_value_dialog.dart';
-import 'ui/studio_dialog.dart';
 import 'ui/variant_tile.dart';
 
 /// The whole matrix at once: four surfaces, two themes, side by side.
@@ -81,62 +78,10 @@ class SplashScreen extends StatelessWidget {
 
     var config = scan.forFlavor(flavor) ?? scan.main!;
 
-    // Straight through the action, not through a second copy of the write path.
-    // The button, `fw run … fix` and an agent's MCP call are then the same code
-    // reaching the same file — which is the only way they can be relied on to
-    // mean the same thing by "fix it".
-    void applyFix(SplashFix fix) => unawaited(
-      core.invoke(
-        'fix',
-        arguments: {
-          'package': package,
-          'fix': fix.id,
-          if (config.config.flavor != null) 'flavor': config.config.flavor,
-        },
-      ),
-    );
-
-    // Editing the value the caption points at. Which key it lands on is the
-    // dialog's question, not this one's — see `model/edit_target.dart`.
-    void editValue(
-      SplashSurface cellSurface,
-      String label,
-      String key,
-      String value,
-      bool isColor,
-    ) => unawaited(
-      showSplashValueDialog(
-        context,
-        core: core,
-        package: package,
-        flavor: config.config.flavor,
-        surface: cellSurface,
-        label: label,
-        key: key,
-        value: value,
-        isColor: isColor,
-      ),
-    );
-
-    // Opened from the header, and from any problem about a key the studio can
-    // make. That second door is the one that matters: somebody reading "there is
-    // no android_12 image" is exactly the person who needs the 1152 canvas, and
-    // making them find a menu instead is how a tool ends up unused.
-    void openStudio({SplashStudioTarget? target, SplashTheme? forTheme}) =>
-        unawaited(
-          showSplashStudioDialog(
-            context,
-            core: core,
-            package: package,
-            config: config,
-            target: target ?? SplashStudioTarget.android12Icon,
-            theme: forTheme ?? SplashTheme.light,
-          ),
-        );
-
-    // The next step, wherever the panel is showing a prediction. Confirmed
-    // first, unlike a fix: this one rewrites files under android/, ios/ and
-    // web/, and the count of them is the part nobody expects.
+    // The one thing this panel writes, and it writes nothing of its own: it
+    // runs the generator. Confirmed first, because it rewrites files under
+    // android/, ios/ and web/, and the count of them is the part nobody
+    // expects.
     void runCreate() => unawaited(() async {
       var go = await showDialog<bool>(
         context: context,
@@ -178,7 +123,6 @@ class SplashScreen extends StatelessWidget {
           scannedAt: core.scannedAt(package),
           onReload: () =>
               unawaited(core.invoke('reload', arguments: {'package': package})),
-          onStudio: openStudio,
           onGenerate: config.blocksGeneration ? null : runCreate,
         ),
         const SizedBox(height: 20),
@@ -193,9 +137,6 @@ class SplashScreen extends StatelessWidget {
             theme: theme!,
             device: device,
             onShowAll: onShowAll,
-            onFix: applyFix,
-            onEditValue: editValue,
-            onStudio: openStudio,
           )
         else ...[
           _Matrix(
@@ -204,16 +145,10 @@ class SplashScreen extends StatelessWidget {
             theme: theme,
             device: device,
             onSelect: onSelectCell,
-            onEditValue: editValue,
           ),
           if (config.problems.isNotEmpty) ...[
             const SizedBox(height: 28),
-            _Problems(
-              config.problems,
-              configPath: config.config.path,
-              onFix: applyFix,
-              onStudio: openStudio,
-            ),
+            _Problems(config.problems),
           ],
           const SizedBox(height: 28),
           SplashArtifactsView(
@@ -234,7 +169,6 @@ class _Header extends StatelessWidget {
     this.selected,
     this.scannedAt,
     this.onReload,
-    this.onStudio,
     this.onGenerate,
   });
 
@@ -248,7 +182,6 @@ class _Header extends StatelessWidget {
   final DateTime? scannedAt;
 
   final VoidCallback? onReload;
-  final VoidCallback? onStudio;
 
   /// Null when a problem stops `create` from running at all — offering a button
   /// that is going to exit non-zero is worse than not offering one.
@@ -301,10 +234,6 @@ class _Header extends StatelessWidget {
               ),
             const SizedBox(width: 8),
             if (onReload != null) _ReloadButton(onPressed: onReload!),
-            if (onStudio != null) ...[
-              const SizedBox(width: 8),
-              _LinkButton(label: 'Prepare an image…', onPressed: onStudio!),
-            ],
             // Offered whenever anything on screen is a prediction rather than a
             // readback — which is the only state where a reader has a question
             // this button answers.
@@ -407,7 +336,6 @@ class _Matrix extends StatelessWidget {
     this.theme,
     this.device,
     this.onSelect,
-    this.onEditValue,
   });
 
   final SplashConfigScan config;
@@ -415,7 +343,6 @@ class _Matrix extends StatelessWidget {
   final SplashTheme? theme;
   final String? device;
   final void Function(SplashSurface, SplashTheme)? onSelect;
-  final void Function(SplashSurface, String, String, String, bool)? onEditValue;
 
   /// The screen a surface draws as.
   ///
@@ -458,10 +385,6 @@ class _Matrix extends StatelessWidget {
               device: _deviceFor(s),
               selected: s == surface && t == theme,
               onTap: onSelect == null ? null : () => onSelect!(s, t),
-              onEditValue: onEditValue == null
-                  ? null
-                  : (label, key, value, isColor) =>
-                        onEditValue!(s, label, key, value, isColor),
             ),
       ],
     );
@@ -487,9 +410,6 @@ class _SingleCell extends StatelessWidget {
     required this.theme,
     this.device,
     this.onShowAll,
-    this.onFix,
-    this.onEditValue,
-    this.onStudio,
   });
 
   final SplashConfigScan config;
@@ -497,10 +417,6 @@ class _SingleCell extends StatelessWidget {
   final SplashTheme theme;
   final String? device;
   final VoidCallback? onShowAll;
-  final void Function(SplashFix)? onFix;
-  final void Function(SplashSurface, String, String, String, bool)? onEditValue;
-  final void Function({SplashStudioTarget? target, SplashTheme? forTheme})?
-  onStudio;
 
   @override
   Widget build(BuildContext context) {
@@ -558,10 +474,6 @@ class _SingleCell extends StatelessWidget {
               device: resolved,
               width: 260,
               slotHeight: 480,
-              onEditValue: onEditValue == null
-                  ? null
-                  : (label, key, value, isColor) =>
-                        onEditValue!(surface, label, key, value, isColor),
             ),
             if (pending != null)
               SizedBox(
@@ -597,26 +509,15 @@ class _SingleCell extends StatelessWidget {
         ],
         if (problems.isNotEmpty) ...[
           const SizedBox(height: 24),
-          _Problems(problems, configPath: config.config.path, onFix: onFix),
+          _Problems(problems),
         ],
       ],
     );
   }
 }
 
-/// The studio offer a problem carries, when it has one.
-///
-/// Only on the rules that actually complain about the image — an `info` note
-/// that a `.jpg` will be converted names an image key too, and putting a "make
-/// one" button under it would be an offer nobody asked for.
-(SplashStudioTarget, SplashTheme)? _studioFor(SplashProblem problem) {
-  if (problem.tone != Tone.warn && problem.tone != Tone.error) return null;
-  var key = problem.key;
-  return key == null ? null : splashStudioTargetForKey(key);
-}
-
 class _LinkButton extends StatelessWidget {
-  const _LinkButton({super.key, required this.label, required this.onPressed});
+  const _LinkButton({required this.label, required this.onPressed});
 
   final String label;
   final VoidCallback onPressed;
@@ -636,24 +537,9 @@ class _LinkButton extends StatelessWidget {
 }
 
 class _Problems extends StatelessWidget {
-  const _Problems(this.problems, {this.configPath, this.onFix, this.onStudio});
+  const _Problems(this.problems);
 
   final List<SplashProblem> problems;
-
-  /// The file a fix would be written to. Named on the button rather than left
-  /// implicit: a project with both a `flutter_native_splash.yaml` and a pubspec
-  /// section reads only one, and "which file did that just edit" is exactly the
-  /// question a tool writing to your project has to answer before it writes.
-  final String? configPath;
-
-  final void Function(SplashFix)? onFix;
-
-  /// Opens the studio for a problem whose key names an image the studio can
-  /// make. Distinct from [onFix] because a fix writes keys and this writes a
-  /// file — and because a repair the plugin worked out and an image somebody
-  /// has to crop are not the same offer.
-  final void Function({SplashStudioTarget? target, SplashTheme? forTheme})?
-  onStudio;
 
   @override
   Widget build(BuildContext context) {
@@ -705,31 +591,6 @@ class _Problems extends StatelessWidget {
                             style: type.micro.copyWith(color: colors.mut2),
                           ),
                         ),
-                      if (_studioFor(problem) case var studio?
-                          when problem.fix == null && onStudio != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: _LinkButton(
-                            key: ValueKey('studio:${problem.key}'),
-                            label: 'Prepare a ${studio.$1.label}…',
-                            onPressed: () => onStudio!(
-                              target: studio.$1,
-                              forTheme: studio.$2,
-                            ),
-                          ),
-                        ),
-                      if (problem.fix != null && onFix != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: _FixButton(
-                            // Named so a test can point at one repair rather
-                            // than at a string that happens to be on it.
-                            key: ValueKey('fix:${problem.fix!.id}'),
-                            fix: problem.fix!,
-                            configPath: configPath,
-                            onPressed: () => onFix!(problem.fix!),
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -737,57 +598,6 @@ class _Problems extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-/// Applies one repair, in one click.
-///
-/// **No confirmation dialog, on purpose.** The label is the edit — 'Rename to
-/// "color_dark"' — and the tooltip names the file and the keys. A modal asking
-/// "are you sure?" would add a step and tell the reader strictly less than the
-/// button already does. What makes that safe is the size of the thing: one or
-/// two keys, spliced into a file that is under version control, in a project
-/// whose whole config is four lines long.
-class _FixButton extends StatelessWidget {
-  const _FixButton({
-    super.key,
-    required this.fix,
-    required this.onPressed,
-    this.configPath,
-  });
-
-  final SplashFix fix;
-  final String? configPath;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var writes = [
-      for (var write in fix.writes)
-        write.value == null
-            ? 'remove ${write.key}'
-            : '${write.key}: ${write.value}',
-    ].join('\n');
-
-    return Tooltip(
-      message: configPath == null ? writes : 'In $configPath\n$writes',
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: colors.line),
-          ),
-          child: Text(
-            fix.label,
-            style: context.type.micro.copyWith(color: colors.accent),
-          ),
-        ),
-      ),
     );
   }
 }

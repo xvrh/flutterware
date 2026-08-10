@@ -24,13 +24,12 @@
 /// [SplashProblem.blocksGeneration] marks the rules that stop `create` dead, so
 /// a reader can tell "this will not build" from "this will look wrong".
 ///
-/// Some problems carry a [SplashFix] — one or two keys to write, and nothing
-/// else. The bar for attaching one is that **the value is derivable and not a
-/// judgement**: a misspelled key has exactly one nearby spelling, a branding
-/// padding has exactly one number that clears the home indicator. Where the
-/// value is a decision — what colour dark mode should be — there is no fix, and
-/// the absence is deliberate. A button that writes an arbitrary guess and calls
-/// it a fix teaches people not to trust the buttons.
+/// **Every rule here names the edit; none of them makes it.** A problem is a
+/// sentence with the key in it — "Set `branding_bottom_padding_ios` to at
+/// least 34" — and the reader goes to the file. The buttons that used to write
+/// those keys are gone with the rest of the editor: they were computed from a
+/// transcription of somebody else's generator, and a wrong picture is a wrong
+/// picture where a wrong button is a wrong edit to your project.
 library;
 
 import 'package:flutterware/plugins.dart';
@@ -41,7 +40,6 @@ import 'config.dart';
 import 'fit_check.dart';
 import 'image_facts.dart';
 import 'surface.dart';
-import 'writer.dart';
 
 /// Every key the generator accepts, transcribed from `_Parameter.all`.
 ///
@@ -128,40 +126,6 @@ const splashConvertibleFormats = {
   'dib',
 };
 
-/// The repair for one problem: a sentence, and the keys to write.
-///
-/// Deliberately **not** a callback. A fix is data, so the same one is a button
-/// in the panel, an entry in `describe`'s output and an argument to the `fix`
-/// action — and the CLI, the GUI and an agent cannot end up with three different
-/// ideas of what "fix it" writes.
-class SplashFix {
-  const SplashFix({
-    required this.id,
-    required this.label,
-    required this.writes,
-  });
-
-  /// Stable for a given config, because it is what `fw run … fix --fix=<id>`
-  /// takes. Derived from the problem rather than from a counter, so a fix does
-  /// not change its name when an unrelated problem is added above it.
-  final String id;
-
-  /// What it will do, in the imperative — 'Rename to "color_dark"'. Shown on
-  /// the button, so it has to read as the action and not as the diagnosis.
-  final String label;
-
-  final List<SplashWrite> writes;
-
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'label': label,
-    'writes': [
-      for (var write in writes)
-        {'key': write.key, if (write.value != null) 'value': write.value},
-    ],
-  };
-}
-
 /// One thing wrong with a config.
 class SplashProblem {
   const SplashProblem(
@@ -171,7 +135,6 @@ class SplashProblem {
     this.surface,
     this.theme,
     this.device,
-    this.fix,
     this.blocksGeneration = false,
   });
 
@@ -192,11 +155,6 @@ class SplashProblem {
   /// than the same sentence with the picture one click behind it.
   final String? device;
 
-  /// What to write to make it go away, when that is one or two keys and the
-  /// value follows from the problem. Null for everything else — see the library
-  /// comment for why that is most of them.
-  final SplashFix? fix;
-
   /// `dart run flutter_native_splash:create` will `exit(1)` on this.
   final bool blocksGeneration;
 
@@ -207,7 +165,6 @@ class SplashProblem {
     if (surface != null) 'surface': surface!.name,
     if (theme != null) 'theme': theme!.name,
     if (device != null) 'device': device,
-    if (fix != null) 'fix': fix!.toJson(),
     if (blocksGeneration) 'blocksGeneration': true,
   };
 
@@ -241,16 +198,6 @@ List<SplashProblem> validateSplash(
           '${meant == null ? '' : ' Did you mean "$meant"?'}',
           key: key,
           blocksGeneration: true,
-          fix: meant == null
-              ? null
-              : SplashFix(
-                  id: 'rename:$key',
-                  label: 'Rename to "$meant"',
-                  writes: [
-                    SplashWrite.remove(key),
-                    SplashWrite(meant, config.raw[key]),
-                  ],
-                ),
         ),
       );
     }
@@ -269,19 +216,6 @@ List<SplashProblem> validateSplash(
           '${meant == null ? '' : ' Did you mean "$meant"?'}',
           key: 'android_12.$key',
           blocksGeneration: true,
-          fix: meant == null
-              ? null
-              : SplashFix(
-                  id: 'rename:android_12.$key',
-                  label: 'Rename to "$meant"',
-                  writes: [
-                    SplashWrite.remove('android_12.$key'),
-                    SplashWrite(
-                      'android_12.$meant',
-                      config.android12Section[key],
-                    ),
-                  ],
-                ),
         ),
       );
     }
@@ -302,7 +236,6 @@ List<SplashProblem> validateSplash(
           'including eight-digit values with alpha.',
           key: key,
           blocksGeneration: true,
-          fix: _colorFix(key, text),
         ),
       );
     }
@@ -317,7 +250,6 @@ List<SplashProblem> validateSplash(
           '"android_12.$key: $text" is not a six-digit hex colour.',
           key: 'android_12.$key',
           blocksGeneration: true,
-          fix: _colorFix('android_12.$key', text),
         ),
       );
     }
@@ -455,59 +387,11 @@ List<SplashProblem> validateSplash(
       );
     }
 
-    var dark = resolveSplash(config, surface, SplashTheme.dark);
-    if (dark.fallsBackToLight) {
-      problems.add(
-        SplashProblem(
-          Tone.info,
-          'No dark configuration for ${surface.label}. The dark keys are a '
-          'chain of their own — "_dark_${surface.keySuffix}" then "_dark", '
-          'never falling through to the light keys — so no dark resources are '
-          'generated and the OS shows the light splash in dark mode.',
-          surface: surface,
-          theme: SplashTheme.dark,
-        ),
-      );
-    } else {
-      // **This rule used to say the opposite of what happens, and shipped that
-      // way.** It claimed a project with `color_dark` and no `image_dark` got a
-      // dark splash with no logo on it — "it will show an empty background" —
-      // which is alarming, plausible, and wrong. Every platform resolves a
-      // missing dark *resource* to the light one (see `resolveSplash` for the
-      // three mechanisms), so what ships is the light logo on the dark colour.
-      // Reasoned from the config instead of read from the generator, exactly
-      // like the Android 12 "bare colour" message before it.
-      //
-      // What is left is worth an `info` and not a warning: the fallback is
-      // usually the intent, and a logo drawn for a light background is only
-      // *sometimes* unreadable on a dark one. Nothing here can tell which, and
-      // there is no fix — writing `image_dark` to the same file it already
-      // falls back to changes nothing at all.
-      //
-      // The web-branding exception this rule grew alongside it is gone too, and
-      // for the same reason at one remove: it claimed `branding-dark-*` were
-      // deleted when `branding_dark` was unset, having read the delete branch of
-      // `_createWebImages` without reading the `brandingDarkImagePath ??=
-      // brandingImagePath` one line above the call. Two rules written from the
-      // same source, one week apart, both wrong in the same direction — which is
-      // the argument for recomposing rather than transcribing, not an argument
-      // for reading more carefully next time.
-      if (light.image.isPresent &&
-          !config.resolve('image', surface, SplashTheme.dark).isPresent) {
-        problems.add(
-          SplashProblem(
-            Tone.info,
-            'The dark ${surface.label} splash uses the light image. No '
-            '"${_darkTwin(light.image.key ?? 'image')}" is set, and a missing '
-            'dark resource resolves to the light one on every platform — so '
-            '"${light.image.value}" is drawn on the dark background. Set a '
-            'dark variant only if the artwork needs one.',
-            surface: surface,
-            theme: SplashTheme.dark,
-          ),
-        );
-      }
-    }
+    // **The two dark rules that lived here are gone.** They narrated what
+    // `create` would write for dark and which image would be drawn — the panel
+    // now reads both back off the disk and draws them, and the tile caption
+    // already says "no dark config, the OS shows the light splash". Both were
+    // also wrong at some point, in the same direction, from the same source.
   }
 
   // ---- Does it fit on a real screen? -------------------------------------
@@ -643,13 +527,6 @@ SplashProblem _brandingPaddingProblem(
     surface: surface,
     theme: theme,
     device: finding.device.id,
-    fix: SplashFix(
-      // Keyed by the platform, not the surface: both Android surfaces write the
-      // same key, so offering it twice would be offering one edit twice.
-      id: 'branding-padding:${surface.keySuffix}',
-      label: 'Set "$key" to $padding',
-      writes: [SplashWrite(key, padding)],
-    ),
   );
 }
 
@@ -677,25 +554,6 @@ void _checkVocabulary(
         'falls back to its default.'
         '${meant == null ? '' : ' Did you mean "$meant"?'}',
         key: key,
-        fix: meant == null
-            ? null
-            : SplashFix(
-                id: 'vocabulary:$key:$token',
-                label: 'Use "$meant"',
-                writes: [
-                  // The whole value, not the token: `android_gravity` is a
-                  // `|`-joined compound, and the other halves of it are still
-                  // wanted.
-                  SplashWrite(
-                    key,
-                    separator == null
-                        ? meant
-                        : parts
-                              .map((p) => p.trim() == token ? meant : p.trim())
-                              .join(separator),
-                  ),
-                ],
-              ),
       ),
     );
   }
@@ -755,38 +613,6 @@ int _editDistance(String a, String b) {
     current = swap;
   }
   return previous[b.length];
-}
-
-/// The dark twin of a light key — `image` to `image_dark`, `image_android` to
-/// `image_dark_android`. The `_dark` goes *before* the platform suffix, which is
-/// the one thing about these key names that is easy to get backwards.
-String _darkTwin(String key) {
-  for (var suffix in ['android', 'ios', 'web']) {
-    if (key.endsWith('_$suffix')) {
-      return '${key.substring(0, key.length - suffix.length - 1)}_dark_$suffix';
-    }
-  }
-  return '${key}_dark';
-}
-
-/// A three-digit colour written out in full.
-///
-/// The only colour mistake with one right answer. `#fff` is what everybody types
-/// and no six-digit reading of it is in doubt; an eight-digit value could be
-/// ARGB or RGBA and guessing which would silently change the colour, so it gets
-/// the diagnosis and no button.
-SplashFix? _colorFix(String key, String text) {
-  var digits = text.replaceAll('#', '').replaceAll(' ', '');
-  if (digits.length != 3) return null;
-  if (int.tryParse(digits, radix: 16) == null) return null;
-  var expanded = [
-    for (var digit in digits.split('')) '$digit$digit',
-  ].join().toUpperCase();
-  return SplashFix(
-    id: 'color:$key',
-    label: 'Write "$text" as $expanded',
-    writes: [SplashWrite(key, expanded)],
-  );
 }
 
 /// Every image path the config names, with the key that named it.
