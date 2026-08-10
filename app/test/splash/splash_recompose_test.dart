@@ -293,11 +293,12 @@ ${iconBackground == null ? '' : '        <item name="android:windowSplashScreenI
       expect(generated.image, isNull);
     });
 
-    test('no dark layer-list is the fallback, stated as null', () {
+    test('no dark layer-list resolves to the light one, as Android does', () {
       // The generator writes `drawable-night/launch_background.xml` only when
-      // the config resolved something dark. Its absence is ground truth that
-      // the OS shows the light splash — the plugin's single most important
-      // claim, checked against the disk rather than against itself.
+      // the config resolved something dark. Its absence does not leave the dark
+      // cell unanswered — it means the device inflates the unqualified file, so
+      // the dark splash *is* the light one. Returning null here made the panel
+      // draw a prediction next to a caption saying what shipped.
       writeLaunchBackground();
       writePng(
         'android/app/src/main/res/drawable-xxxhdpi/splash.png',
@@ -305,8 +306,10 @@ ${iconBackground == null ? '' : '        <item name="android:windowSplashScreenI
         1024,
       );
 
-      expect(recompose(SplashSurface.android, SplashTheme.light), isNotNull);
-      expect(recompose(SplashSurface.android, SplashTheme.dark), isNull);
+      var light = recompose(SplashSurface.android, SplashTheme.light)!;
+      var dark = recompose(SplashSurface.android, SplashTheme.dark)!;
+      expect(dark.image!.path, light.image!.path);
+      expect(dark.theme, SplashTheme.dark);
     });
 
     test('a hand-mangled layer-list is null, not a throw', () {
@@ -344,116 +347,107 @@ ${iconBackground == null ? '' : '        <item name="android:windowSplashScreenI
     });
   });
 
-  group('comparing the two', () {
-    SplashComposition android({
-      SplashFit fit = SplashFit.none,
-      double? width,
-      int brandingPadding = 0,
-      bool branding = false,
-    }) => SplashComposition(
-      surface: SplashSurface.android,
-      theme: SplashTheme.light,
-      enabled: true,
-      image: SplashLayer(
-        path: 'logo.png',
-        fit: fit,
-        alignment: SplashAlignment.center,
-        naturalWidth: width ?? 256,
-        naturalHeight: width ?? 256,
-      ),
-      branding: branding
-          ? const SplashLayer(
-              path: 'b.png',
-              fit: SplashFit.none,
-              alignment: SplashAlignment.bottomCenter,
-            )
-          : null,
-      brandingBottomPadding: brandingPadding,
-    );
-
-    test('agreement is silent', () {
-      expect(
-        compareSplash(predicted: android(), generated: android()),
-        isEmpty,
-      );
-    });
-
-    test('a different placement is reported', () {
-      var notes = compareSplash(
-        predicted: android(),
-        generated: android(fit: SplashFit.cover),
-      );
-      expect(notes.single, contains('image placement'));
-    });
-
-    test('a different size is reported', () {
-      var notes = compareSplash(
-        predicted: android(width: 256),
-        generated: android(width: 512),
-      );
-      expect(notes.single, contains('256'));
-      expect(notes.single, contains('512'));
-    });
-
-    test('a different branding padding is reported', () {
-      var notes = compareSplash(
-        predicted: android(branding: true, brandingPadding: 0),
-        generated: android(branding: true, brandingPadding: 48),
-      );
-      expect(notes.single, contains('branding bottom padding'));
-    });
-  });
-
-  group('through the scan', () {
-    test('a faithful generated set raises no drift', () {
+  group('the picture one cell shows', () {
+    void writeConfig([String extra = '']) {
       write('pubspec.yaml', 'name: sample\n');
       write('flutter_native_splash.yaml', '''
 flutter_native_splash:
   color: "FFFFFF"
   image: assets/logo.png
-''');
+$extra''');
       writePng('assets/logo.png', 1024, 1024);
+    }
+
+    SplashPicture picture(SplashSurface surface, SplashTheme theme) =>
+        scanSplash(
+          packageRoot: root.path,
+          packagePath: '.',
+        ).main!.pictureFor(surface, theme);
+
+    test('is the generated files wherever they exist', () {
+      writeConfig();
       writeLaunchBackground();
       writePng(
         'android/app/src/main/res/drawable-xxxhdpi/splash.png',
         1024,
         1024,
       );
-      writePng('android/app/src/main/res/drawable/background.png', 4, 4);
 
-      var scan = scanSplash(packageRoot: root.path, packagePath: '.');
-      expect(
-        scan.main!.problems.where((p) => p.message.contains('does not match')),
-        isEmpty,
-      );
+      var shown = picture(SplashSurface.android, SplashTheme.light);
+      expect(shown.isGenerated, isTrue);
+      expect(shown.reason, isNull);
+      expect(shown.label, 'From the generated files');
     });
 
-    test('a generated set that disagrees is reported against us', () {
-      write('pubspec.yaml', 'name: sample\n');
-      write('flutter_native_splash.yaml', '''
-flutter_native_splash:
-  color: "FFFFFF"
-  image: assets/logo.png
-''');
-      writePng('assets/logo.png', 1024, 1024);
-      // The drawable says `bottom`, the config says nothing — so the prediction
-      // centres and the shipped splash does not.
-      writeLaunchBackground(gravity: 'bottom');
+    test('is still the generated files in dark with no dark resources', () {
+      // **The `-night` qualifier falls back per file.** With no
+      // `drawable-night/launch_background.xml` the device inflates the
+      // unqualified one, so the dark cell is the light splash — a fact, not a
+      // gap. Calling it "nothing generated" and drawing the prediction instead
+      // describes the directory listing rather than the phone.
+      writeConfig('  color_dark: "101418"\n');
+      writeLaunchBackground();
       writePng(
         'android/app/src/main/res/drawable-xxxhdpi/splash.png',
         1024,
         1024,
       );
-      writePng('android/app/src/main/res/drawable/background.png', 4, 4);
 
-      var scan = scanSplash(packageRoot: root.path, packagePath: '.');
-      var drift = scan.main!.problems.singleWhere(
-        (p) => p.message.contains('does not match'),
+      var shown = picture(SplashSurface.android, SplashTheme.dark);
+      expect(shown.isGenerated, isTrue);
+      expect(shown.composition.image, isNotNull);
+    });
+
+    test('prefers the dark resources when the generator wrote them', () {
+      writeConfig('  color_dark: "101418"\n');
+      writeLaunchBackground();
+      writeLaunchBackground(folder: 'drawable-night', gravity: 'bottom');
+      writePng(
+        'android/app/src/main/res/drawable-xxxhdpi/splash.png',
+        1024,
+        1024,
       );
-      // Never a warning: this indicts our reading of the generator, not the
-      // project, and a perfect config must not grow an amber dot for it.
-      expect(drift.tone.name, 'info');
-      expect(drift.message, contains('not a problem with your project'));
+
+      var shown = picture(SplashSurface.android, SplashTheme.dark);
+      expect(shown.isGenerated, isTrue);
+      // `bottom` is only in the night layer-list, so this is proof the dark file
+      // won rather than the fallback firing anyway.
+      expect(shown.composition.image!.alignment, SplashAlignment.bottomCenter);
+    });
+
+    test('android 12 falls back to values-v31 the same way', () {
+      writeConfig('  color_dark: "101418"\n');
+      writeV31Styles();
+      writePng(
+        'android/app/src/main/res/drawable-xxxhdpi-v31/android12splash.png',
+        768,
+        768,
+      );
+
+      var shown = picture(SplashSurface.android12, SplashTheme.dark);
+      expect(shown.isGenerated, isTrue);
+      expect(shown.composition.image, isNotNull);
+    });
+
+    test('is a prediction on iOS and web, permanently, and says why', () {
+      writeConfig();
+      writeLaunchBackground();
+
+      for (var surface in [SplashSurface.ios, SplashSurface.web]) {
+        var shown = picture(surface, SplashTheme.light);
+        expect(shown.isGenerated, isFalse);
+        expect(shown.label, 'Prediction');
+        expect(shown.reason, contains('Only Android can be read back'));
+      }
+    });
+
+    test('is a prediction that names the next step before create has run', () {
+      writeConfig();
+
+      var shown = picture(SplashSurface.android, SplashTheme.light);
+      expect(shown.isGenerated, isFalse);
+      expect(shown.reason, contains('Nothing has been generated yet'));
+      expect(shown.reason, contains('flutter_native_splash:create'));
     });
   });
 }

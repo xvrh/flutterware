@@ -808,6 +808,8 @@ configKind: String
 flavor: String?
 enabled: bool   # False when the project switched this platform off.
 placement: String   # Where the image lands, in words — so the CLI answers the question without rendering anything.
+generated: bool   # [placement] was read back from the files `create` wrote, rather than derived from the config.
+predictedBecause: String?   # Why there was nothing to read back.
 properties: List<SplashProperty>
   name: String   # `color`, `image`, `branding`.
   value: String

@@ -5,6 +5,7 @@ import '../../ui/theme.dart';
 import '../model/color.dart';
 import '../model/composition.dart';
 import '../model/config.dart';
+import '../model/scan.dart';
 import '../model/surface.dart';
 import '../model/validation.dart';
 import 'splash_render.dart';
@@ -18,7 +19,7 @@ import 'splash_render.dart';
 class SplashVariantTile extends StatelessWidget {
   const SplashVariantTile({
     super.key,
-    required this.composition,
+    required this.picture,
     required this.resolution,
     required this.problems,
     this.device,
@@ -38,9 +39,11 @@ class SplashVariantTile extends StatelessWidget {
   /// phones beside it.
   static const defaultSlotHeight = 320.0;
 
-  final SplashComposition composition;
+  final SplashPicture picture;
   final SplashResolution resolution;
   final List<SplashProblem> problems;
+
+  SplashComposition get composition => picture.composition;
 
   /// The screen to draw as. Null falls back to the surface's own canvas, which
   /// is what a matrix with no `?device=` shows.
@@ -109,6 +112,8 @@ class SplashVariantTile extends StatelessWidget {
                 ),
             ],
           ),
+          const SizedBox(height: 2),
+          _Origin(picture),
           const SizedBox(height: 4),
           ..._captions(context),
         ],
@@ -178,6 +183,32 @@ class SplashVariantTile extends StatelessWidget {
           style: type.caption.copyWith(color: colors.mut),
         ),
     ];
+  }
+}
+
+/// Where the picture above came from, on every tile without exception.
+///
+/// **Both states are labelled, not just the weak one.** A line that appears only
+/// on predictions reads as a warning badge, and its absence reads as nothing at
+/// all rather than as "this one is real" — which leaves the reader unable to
+/// tell a checked cell from an unlabelled one. Saying both costs one micro line
+/// and makes the matrix answerable at a glance.
+class _Origin extends StatelessWidget {
+  const _Origin(this.picture);
+
+  final SplashPicture picture;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var text = Text(
+      picture.label,
+      style: context.type.micro.copyWith(
+        color: picture.isGenerated ? colors.accent : colors.mut3,
+      ),
+    );
+    var reason = picture.reason;
+    return reason == null ? text : Tooltip(message: reason, child: text);
   }
 }
 
@@ -264,10 +295,10 @@ class _Provenance extends StatelessWidget {
 
 /// One splash drawn at device size and scaled to fit its slot.
 ///
-/// Public because the single-cell view draws a *second* one of these — the
-/// composition recomposed from the generated files — beside the prediction, and
-/// the two must be the same widget or the comparison is between two renderers
-/// rather than between two compositions.
+/// Public because a stale project's single-cell view draws a *second* one of
+/// these — what `create` would produce now, beside what it produced last time —
+/// and the two must be the same widget or the difference on screen is between
+/// two renderers rather than between two compositions.
 class SplashScreenBox extends StatelessWidget {
   const SplashScreenBox({
     super.key,

@@ -23,7 +23,9 @@ class SplashDescribeResult implements PluginResult {
     required this.configKind,
     required this.enabled,
     required this.placement,
+    required this.generated,
     this.flavor,
+    this.predictedBecause,
     this.properties = const [],
     this.fallsBackToLight = false,
     this.problems = const [],
@@ -50,6 +52,17 @@ class SplashDescribeResult implements PluginResult {
   /// Where the image lands, in words — so the CLI answers the question without
   /// rendering anything.
   final String placement;
+
+  /// [placement] was read back from the files `create` wrote, rather than
+  /// derived from the config.
+  ///
+  /// **The first thing a caller should look at.** A false here means the answer
+  /// is this plugin's reading of a third-party generator's rules — useful, and
+  /// not the same kind of claim. The properties below are config either way.
+  final bool generated;
+
+  /// Why there was nothing to read back. Null when [generated].
+  final String? predictedBecause;
 
   final List<SplashProperty> properties;
 

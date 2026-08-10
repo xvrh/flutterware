@@ -754,7 +754,10 @@ class SplashCore extends PluginCore {
         SplashTheme.byName('${arguments['theme'] ?? ''}') ?? SplashTheme.light;
 
     var resolution = config.resolutionFor(surface, theme);
-    var composition = config.compositionFor(surface, theme);
+    // The generated files where they exist, exactly as the panel does — an
+    // agent asking "what does the splash look like" and a person looking at the
+    // tile must not be answered from different halves of the plugin.
+    var picture = config.pictureFor(surface, theme);
 
     return SplashDescribeResult(
       package: path,
@@ -766,7 +769,9 @@ class SplashCore extends PluginCore {
       configKind: config.config.kind.name,
       flavor: config.config.flavor,
       enabled: resolution.enabled,
-      placement: composition.summary,
+      placement: picture.composition.summary,
+      generated: picture.isGenerated,
+      predictedBecause: picture.reason,
       fallsBackToLight: resolution.fallsBackToLight,
       properties: [
         for (var (name, resolved) in [

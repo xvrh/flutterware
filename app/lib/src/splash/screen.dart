@@ -134,6 +134,40 @@ class SplashScreen extends StatelessWidget {
           ),
         );
 
+    // The next step, wherever the panel is showing a prediction. Confirmed
+    // first, unlike a fix: this one rewrites files under android/, ios/ and
+    // web/, and the count of them is the part nobody expects.
+    void runCreate() => unawaited(() async {
+      var go = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Run flutter_native_splash:create?'),
+          content: Text(
+            'Generates the splash from ${config.config.path} and rewrites '
+            'files under android/, ios/ and web/.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Run it'),
+            ),
+          ],
+        ),
+      );
+      if (go != true) return;
+      await core.invoke(
+        'generate',
+        arguments: {
+          'package': package,
+          if (config.config.flavor != null) 'flavor': config.config.flavor,
+        },
+      );
+    }());
+
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -145,6 +179,7 @@ class SplashScreen extends StatelessWidget {
           onReload: () =>
               unawaited(core.invoke('reload', arguments: {'package': package})),
           onStudio: openStudio,
+          onGenerate: config.blocksGeneration ? null : runCreate,
         ),
         const SizedBox(height: 20),
         // An address naming both axes names one cell, so show that cell rather
@@ -200,6 +235,7 @@ class _Header extends StatelessWidget {
     this.scannedAt,
     this.onReload,
     this.onStudio,
+    this.onGenerate,
   });
 
   final SplashScan scan;
@@ -213,6 +249,10 @@ class _Header extends StatelessWidget {
 
   final VoidCallback? onReload;
   final VoidCallback? onStudio;
+
+  /// Null when a problem stops `create` from running at all — offering a button
+  /// that is going to exit non-zero is worse than not offering one.
+  final VoidCallback? onGenerate;
 
   @override
   Widget build(BuildContext context) {
@@ -264,6 +304,19 @@ class _Header extends StatelessWidget {
             if (onStudio != null) ...[
               const SizedBox(width: 8),
               _LinkButton(label: 'Prepare an image…', onPressed: onStudio!),
+            ],
+            // Offered whenever anything on screen is a prediction rather than a
+            // readback — which is the only state where a reader has a question
+            // this button answers.
+            if (onGenerate != null &&
+                (!config.isGenerated || config.stale)) ...[
+              const SizedBox(width: 8),
+              _LinkButton(
+                label: config.isGenerated
+                    ? 'Re-run flutter_native_splash:create'
+                    : 'Run flutter_native_splash:create',
+                onPressed: onGenerate!,
+              ),
             ],
           ],
         ),
@@ -396,7 +449,7 @@ class _Matrix extends StatelessWidget {
           for (var t in SplashTheme.values)
             SplashVariantTile(
               key: ValueKey('${s.name}/${t.name}'),
-              composition: config.compositionFor(s, t),
+              picture: config.pictureFor(s, t),
               resolution: config.resolutionFor(s, t),
               problems: config
                   .problemsFor(s, t)
@@ -415,13 +468,18 @@ class _Matrix extends StatelessWidget {
   }
 }
 
-/// One cell, large, with what actually shipped beside it.
+/// One cell, large.
 ///
-/// This is where the two halves of the plugin finally meet. The left picture is
-/// derived from the config through our transcription of the cascade; the right
-/// is derived from the files `create` wrote. Same renderer, same
-/// `SplashComposition` type, different provenance — so a difference between
-/// them is a real difference and not two drawing paths disagreeing.
+/// **One picture, not two.** It used to show the prediction and the
+/// recomposition side by side and let the reader work out which to believe;
+/// that is a question a panel should answer rather than delegate, and the two
+/// tiles were the source of every "why is this one black" in first contact. So
+/// the generated files are the picture wherever they exist, the prediction is
+/// the picture where they cannot, and a line under it says which happened.
+///
+/// The exception is a config edited since `create` last ran, where the two
+/// pictures are different *facts* — what ships today and what would ship after
+/// re-running — and showing both is the whole answer.
 class _SingleCell extends StatelessWidget {
   const _SingleCell({
     required this.config,
@@ -453,8 +511,13 @@ class _SingleCell extends StatelessWidget {
     var fallback = defaultSplashDeviceId(surface);
     var resolved = chosen ?? (fallback == null ? null : deviceById(fallback));
 
-    var predicted = config.compositionFor(surface, theme);
-    var generated = config.recomposedFor(surface, theme);
+    var picture = config.pictureFor(surface, theme);
+    // The second tile, and only when it says something the first cannot: the
+    // config has moved since `create` ran, so the picture on the left is the
+    // splash on the device and this is the one waiting behind it.
+    var pending = picture.isGenerated && config.stale
+        ? config.compositionFor(surface, theme)
+        : null;
     var problems = config
         .problemsFor(surface, theme)
         .where((p) => p.surface != null)
@@ -489,7 +552,7 @@ class _SingleCell extends StatelessWidget {
           runSpacing: 20,
           children: [
             SplashVariantTile(
-              composition: predicted,
+              picture: picture,
               resolution: config.resolutionFor(surface, theme),
               problems: problems,
               device: resolved,
@@ -500,7 +563,7 @@ class _SingleCell extends StatelessWidget {
                   : (label, key, value, isColor) =>
                         onEditValue!(surface, label, key, value, isColor),
             ),
-            if (generated != null)
+            if (pending != null)
               SizedBox(
                 width: 260,
                 child: Column(
@@ -508,55 +571,29 @@ class _SingleCell extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SplashScreenBox(
-                      composition: generated,
+                      composition: pending,
                       enabled: true,
                       selected: false,
                       device: resolved,
                       slotHeight: 480,
                     ),
                     const SizedBox(height: 8),
-                    Text('What shipped', style: type.bodyStrong),
+                    Text('After you re-run create', style: type.bodyStrong),
                     const SizedBox(height: 4),
                     Text(
-                      config.stale
-                          ? 'Read from the generated files — but the config has '
-                                'changed since, so this is the old splash.'
-                          : 'Read from the generated files, not from the config.',
-                      style: type.caption.copyWith(
-                        color: config.stale ? colors.amber : colors.mut,
-                      ),
+                      'The config has changed since the splash was generated. '
+                      'This is what the new config predicts; the picture on the '
+                      'left is what devices show until create runs again.',
+                      style: type.caption.copyWith(color: colors.amber),
                     ),
                   ],
                 ),
               ),
           ],
         ),
-        if (generated == null) ...[
+        if (picture.reason case var reason?) ...[
           const SizedBox(height: 10),
-          Text(
-            // "Never run" outranks everything else, and has to be checked
-            // first. The dark line below it — "no dark resources, so the OS
-            // shows the light splash" — is a real and useful fact *about
-            // generated output*, and saying it about a project that has never
-            // run the generator is telling somebody the result of a thing that
-            // has not happened.
-            !config.isGenerated
-                ? 'Nothing has been generated yet, so there is nothing to '
-                      'check this against. Everything above is what the config '
-                      '*will* produce. Run '
-                      '`dart run flutter_native_splash:create` — the Generate '
-                      'action does exactly that.'
-                : surface == SplashSurface.ios || surface == SplashSurface.web
-                // Saying "nothing generated" here would be a lie: there may be
-                // plenty on disk, we simply cannot read it back.
-                ? 'Only Android can be read back from its generated files — '
-                      'iOS is a storyboard and web is CSS.'
-                : theme == SplashTheme.dark
-                ? 'No dark resources were generated, which is the answer: the '
-                      'OS shows the light splash in dark mode.'
-                : 'Nothing was generated for this surface.',
-            style: type.caption.copyWith(color: colors.mut),
-          ),
+          Text(reason, style: type.caption.copyWith(color: colors.mut)),
         ],
         if (problems.isNotEmpty) ...[
           const SizedBox(height: 24),

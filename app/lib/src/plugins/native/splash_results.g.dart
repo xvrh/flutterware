@@ -18,6 +18,8 @@ Map<String, dynamic> _$SplashDescribeResultToJson(
   'flavor': ?instance.flavor,
   'enabled': instance.enabled,
   'placement': instance.placement,
+  'generated': instance.generated,
+  'predictedBecause': ?instance.predictedBecause,
   'properties': instance.properties.map((e) => e.toJson()).toList(),
   'fallsBackToLight': instance.fallsBackToLight,
   'problems': instance.problems.map((e) => e.toJson()).toList(),

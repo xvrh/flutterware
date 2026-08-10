@@ -181,6 +181,12 @@ gets it for nothing). Safe-area overlay in `ui/splash_render.dart`, gated on a
 
 ### 1c. Predicted next to actual
 
+> **Half superseded, 2026-08-10.** The recomposition landed and is the best
+> thing here. The *comparison* below — two pictures side by side, a mismatch
+> raised as a problem — was built, shipped, caught nothing, and is deleted. See
+> § The inversion for why the argument in this section is wrong, and read the
+> table below knowing that its two rows are not peers.
+
 `model/generated.dart` walks the real generated PNGs with paths, densities and
 mtimes; the panel renders that as a count. Putting the generated image beside the
 prediction is the single change that makes every other claim self-evidencing —
@@ -428,9 +434,11 @@ Encoding uses `package:image` inside `Isolate.run`, exactly as
 3. **Launcher-icon discovery** currently lives in the icon tool, which is
    pre-overhaul code slated for rework. Extract now and accept the churn, or read
    the mipmaps directly in the splash scan and de-duplicate later?
-4. **What a prediction-vs-recomposition mismatch does to the badge.** It means
-   *we* are probably wrong, not the project — so raising it as a config problem
-   in the user's sidebar is arguably lying. A distinct tone, or a quiet report?
+4. ~~**What a prediction-vs-recomposition mismatch does to the badge.**~~
+   **Answered 2026-08-10 by deleting the comparison** — see § The inversion. The
+   question assumed the two pictures were peers. They are not: one is a readback
+   and one is a guess, so the panel shows the readback and says when it could
+   not get one.
 
 ## Sequencing
 
@@ -621,6 +629,49 @@ compares the prediction against the recomposition, and both were derived from th
 same wrong belief about dark fallback. A cross-check only finds what its two
 halves disagree about; it cannot find a mistake they share. The thing that found
 these was opening the panel on a real project.
+
+### The inversion (2026-08-10)
+
+An evaluation pass after phase 3 asked whether the plugin had earned its size:
+~9,200 lines of production code and 5,000 of test, which makes splash the third
+largest feature in the app, ahead of scenarios and sixteen times the launcher
+icon plugin that was *deliberately* scoped down to a viewer eight days earlier
+for reasons that apply here word for word.
+
+The two halves turned out to have very different value density. Reading the
+generated files back, writing the config through `yaml_edit`, and the staleness
+poll — roughly 1,200 lines — are the parts that do what the plugin is for.
+Everything that predicts what the generator will do is a transcription of a
+third-party package, and § "Found by actually opening the panel" is what a
+transcription's failures look like.
+
+So two changes, and no rewrite:
+
+- **`compareSplash` is deleted.** It existed to catch exactly the class of bug
+  the section above describes, and caught none of them, for a reason that is
+  structural rather than incidental. Its one real signal — the config has moved
+  since `create` ran — is `splashIsStale`, which fires on its own. Open question
+  4 above is answered by removing the thing that raised it.
+- **The generated files are the picture; the prediction is the fallback.**
+  `SplashConfigScan.pictureFor` returns a `SplashPicture` carrying its own
+  provenance, every tile says which it got, and `describe` grew a `generated`
+  flag so an agent is told the same thing a person is. The side-by-side is gone:
+  two pictures with no comparison between them made the reader arbitrate, which
+  is the panel's job, and it was the source of every "why is this one black" in
+  first contact.
+
+Two consequences fell out. `recomposeSplash` now resolves `-night` per file the
+way Android does, so a dark cell with no dark resources is the light splash
+*read back from disk* rather than a prediction — which is the same fix as the
+third bullet above, one layer down, and the layer where it is a fact rather than
+a claim. And the header offers `Run flutter_native_splash:create` (confirmed
+first — it rewrites 44 files) wherever the panel is showing a guess, because a
+reader who has just been told the picture is a prediction wants the one action
+that makes it real.
+
+iOS and web are predicted permanently and say so on the tile. Recomposing web
+from `style.css` would move two of the eight cells across; the storyboard would
+not.
 
 **All of it is committed**, phase 3 included. The order matters more than the
 dates: phase 1 is the "seeing" half and is what the plugin already claims to be;

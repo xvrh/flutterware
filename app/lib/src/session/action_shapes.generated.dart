@@ -3923,6 +3923,18 @@ final resultShapes = <String, ResultShape>{
             'Where the image lands, in words — so the CLI answers the question without rendering anything.',
       },
       <String, Object?>{
+        'name': 'generated',
+        'type': 'bool',
+        'doc':
+            '[placement] was read back from the files `create` wrote, rather than derived from the config.',
+      },
+      <String, Object?>{
+        'name': 'predictedBecause',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Why there was nothing to read back.',
+      },
+      <String, Object?>{
         'name': 'properties',
         'type': 'List<SplashProperty>',
         'shape': <String, Object?>{

@@ -501,7 +501,9 @@ flutter_native_splash:
       expect(find.text('Android · Dark'), findsWidgets);
     });
 
-    testWidgets('shows what shipped beside it once generated', (tester) async {
+    testWidgets('shows the generated files, alone, once generated', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1600, 2000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -530,9 +532,11 @@ flutter_native_splash:
         theme: SplashTheme.light,
       );
 
-      expect(find.text('What shipped'), findsOneWidget);
-      // Two pictures: the prediction and the recomposition, same renderer.
-      expect(find.byType(SplashRender), findsNWidgets(2));
+      // One picture, not two. Showing the prediction beside the readback made
+      // the reader arbitrate between them, which is the panel's job.
+      expect(find.byType(SplashRender), findsOneWidget);
+      expect(find.text('From the generated files'), findsOneWidget);
+      expect(find.textContaining('Prediction'), findsNothing);
     });
 
     testWidgets('says why there is nothing to compare against', (tester) async {
@@ -579,17 +583,14 @@ flutter_native_splash:
         theme: SplashTheme.light,
       );
 
-      expect(find.text('What shipped'), findsNothing);
+      expect(find.text('From the generated files'), findsNothing);
       expect(
         find.textContaining('Nothing has been generated yet'),
         findsOneWidget,
       );
-      // And it names the command rather than a button, because the question is
-      // "what have I not done", not "which thing do I press".
-      expect(
-        find.textContaining('flutter_native_splash:create'),
-        findsOneWidget,
-      );
+      // And the command is on offer, not only named: a reader who has just been
+      // told the picture is a guess wants the one action that makes it real.
+      expect(find.text('Run flutter_native_splash:create'), findsOneWidget);
     });
 
     testWidgets('offers the way back to the matrix', (tester) async {

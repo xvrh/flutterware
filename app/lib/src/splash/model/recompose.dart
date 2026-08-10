@@ -20,22 +20,18 @@
 /// `background.png` rather than emitting a `<color>` drawable — so the whole
 /// legacy splash is three bitmaps, one gravity each, and one padding number.
 ///
-/// The value is not a second picture. It is that the two pictures have
-/// *different provenance*:
-///
-/// | | reasons from | wrong if |
-/// |---|---|---|
-/// | prediction | the config → our transcription of the cascade | our transcription is wrong |
-/// | recomposition | the generated files → the platform's rules | we misread the platform |
-///
-/// They must agree, and when they do not, **we are the likely culprit** — the
-/// whole plugin rests on a hand-transcription of somebody else's
-/// `cli_commands.dart`, and this is the only external check on it there will
-/// ever be.
+/// **This is the panel's answer, not a second opinion.** Everything else here
+/// reasons from the config through a hand-transcription of somebody else's
+/// `cli_commands.dart`, and a transcription can be confidently wrong — several
+/// of them were, and the tests agreed with them, because the tests encoded the
+/// same reading. What is on disk cannot be wrong about what is on disk. So a
+/// cell shows this when it exists, and falls back to the prediction only where
+/// there is nothing to read.
 ///
 /// **Android only.** iOS is `LaunchScreen.storyboard`, which is constraints —
 /// a layout engine, not a recipe — and recomposing it would mean implementing
-/// one. Web is next; its `style.css` is the easiest of the three.
+/// one. Web is next; its `style.css` is the easiest of the three. Those two
+/// surfaces are predicted permanently, and the panel says so on the tile.
 library;
 
 import 'dart:io';
@@ -50,11 +46,15 @@ import 'surface.dart';
 
 /// What the generated Android resources say one cell will look like.
 ///
-/// Null when nothing has been generated for it — which for a dark cell is
-/// itself the answer, and an important one: the generator writes
-/// `drawable-night/launch_background.xml` **only** when the config resolved a
-/// dark colour or a dark background image, so its absence is ground truth that
-/// the OS will show the light splash.
+/// Null only when nothing has been generated for this package at all, or when
+/// the surface is one whose output cannot be read back.
+///
+/// A dark cell with no dark resources is *not* null: it is the light splash,
+/// because that is what the device shows. The generator writes
+/// `drawable-night/` and `values-night-v31/` only when the config resolved
+/// something dark, and Android falls back per file to the unqualified folder —
+/// so resolving the same way is what makes this a readback of the device rather
+/// than of the directory listing.
 SplashComposition? recomposeSplash({
   required String packageRoot,
   required SplashSurface surface,
@@ -103,14 +103,13 @@ SplashComposition? _recomposeLegacy(
   SplashTheme theme,
   List<SplashArtifact> artifacts,
 ) {
-  var document = _readXml(
-    File(p.join(res, _drawableFolder(theme), 'launch_background.xml')),
+  var document = _readQualified(
+    res,
+    theme,
+    'drawable',
+    'launch_background.xml',
   );
-  if (document == null) {
-    // For dark this is the fallback fact, not a gap. For light it means nothing
-    // was generated at all, and the caller reads it the same way: no answer.
-    return null;
-  }
+  if (document == null) return null;
 
   SplashLayer? layerFor(SplashArtifactRole role, String? gravity) {
     var artifact = _bestArtifact(artifacts, SplashSurface.android, theme, role);
@@ -203,8 +202,7 @@ SplashComposition? _recomposeAndroid12(
   List<SplashArtifact> artifacts,
 ) {
   // `values-v31` and `values-night-v31`, the theme Android 12 and later read.
-  var folder = theme == SplashTheme.dark ? 'values-night-v31' : 'values-v31';
-  var document = _readXml(File(p.join(res, folder, 'styles.xml')));
+  var document = _readQualified(res, theme, 'values-v31', 'styles.xml');
   if (document == null) return null;
 
   var items = <String, String>{};
@@ -286,8 +284,33 @@ String? _stripHash(String? value) => value?.replaceFirst('#', '').trim();
 
 // ---- Shared ---------------------------------------------------------------
 
-String _drawableFolder(SplashTheme theme) =>
-    theme == SplashTheme.dark ? 'drawable-night' : 'drawable';
+/// One generated resource, resolved the way the platform resolves it.
+///
+/// **`-night` falls back per file, not per folder.** A dark cell whose project
+/// has no `drawable-night/launch_background.xml` is not a cell with no answer —
+/// it is the light splash, because that is the file Android will inflate. The
+/// same holds for `values-night-v31/styles.xml`. Reading only the qualified
+/// folder and calling its absence "nothing generated" describes the directory
+/// listing rather than the device.
+///
+/// The qualifier goes directly after the resource type, before any others:
+/// `drawable` → `drawable-night`, `values-v31` → `values-night-v31`.
+XmlDocument? _readQualified(
+  String res,
+  SplashTheme theme,
+  String base,
+  String file,
+) {
+  if (theme == SplashTheme.dark) {
+    var cut = base.indexOf('-');
+    var night = cut < 0
+        ? '$base-night'
+        : '${base.substring(0, cut)}-night${base.substring(cut)}';
+    var dark = _readXml(File(p.join(res, night, file)));
+    if (dark != null) return dark;
+  }
+  return _readXml(File(p.join(res, base, file)));
+}
 
 /// The densest generated file for a role, so the recomposed picture is drawn
 /// from the same pixels a modern phone would use.
@@ -323,94 +346,10 @@ SplashArtifact? _bestArtifact(
   // what shipped.
   //
   // Reporting "no branding" here was wrong in exactly the same way the
-  // prediction was, which is why drift never caught it: both halves agreed, and
-  // both were describing a device that does not exist.
+  // prediction was — both halves agreed, and both were describing a device that
+  // does not exist.
   return pick(theme) ??
       (theme == SplashTheme.dark ? pick(SplashTheme.light) : null);
-}
-
-/// Where the prediction and the generated files disagree.
-///
-/// **These are not the project's bugs.** Everything else this plugin reports is
-/// something the author can fix; a mismatch here says our reading of
-/// `cli_commands.dart` and the generator's own output have come apart, and the
-/// author's only involvement is that they ran `create`. So it is phrased as a
-/// note against *us*, and it does not raise the sidebar to a warning — a project
-/// whose config is perfect must not grow an amber dot because our transcription
-/// slipped.
-///
-/// Silent when the config has been edited since `create` last ran. The two are
-/// then *supposed* to differ, and reporting it would be reporting staleness
-/// twice under a more alarming name.
-List<String> compareSplash({
-  required SplashComposition predicted,
-  required SplashComposition generated,
-}) {
-  var notes = <String>[];
-
-  void check(String what, Object? mine, Object? theirs) {
-    if ('$mine' == '$theirs') return;
-    notes.add('$what: predicted $mine, generated $theirs');
-  }
-
-  if (predicted.surface == SplashSurface.android12) {
-    check(
-      'Android 12 background',
-      predicted.backgroundColor == null
-          ? 'none'
-          : formatSplashColor(predicted.backgroundColor!),
-      generated.backgroundColor == null
-          ? 'none'
-          : formatSplashColor(generated.backgroundColor!),
-    );
-    check(
-      'Android 12 icon background',
-      predicted.iconBackgroundColor == null
-          ? 'none'
-          : formatSplashColor(predicted.iconBackgroundColor!),
-      generated.iconBackgroundColor == null
-          ? 'none'
-          : formatSplashColor(generated.iconBackgroundColor!),
-    );
-    check(
-      'Android 12 icon',
-      predicted.usesLauncherIcon
-          ? 'the launcher icon'
-          : predicted.image == null
-          ? 'none'
-          : 'an icon',
-      generated.usesLauncherIcon
-          ? 'the launcher icon'
-          : generated.image == null
-          ? 'none'
-          : 'an icon',
-    );
-    return notes;
-  }
-
-  check(
-    'image placement',
-    predicted.image == null
-        ? 'no image'
-        : '${predicted.image!.fit.name} ${predicted.image!.alignment.label}',
-    generated.image == null
-        ? 'no image'
-        : '${generated.image!.fit.name} ${generated.image!.alignment.label}',
-  );
-  check(
-    'image size',
-    predicted.image?.naturalWidth?.round() ?? 'unknown',
-    generated.image?.naturalWidth?.round() ?? 'unknown',
-  );
-  check('branding', predicted.branding != null, generated.branding != null);
-  if (predicted.branding != null && generated.branding != null) {
-    check(
-      'branding bottom padding',
-      predicted.brandingBottomPadding,
-      generated.brandingBottomPadding,
-    );
-  }
-  return notes;
 }
 
 /// Parsed, or null when the file is absent or not XML at all.

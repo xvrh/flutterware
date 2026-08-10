@@ -14,7 +14,6 @@ library;
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutterware/plugins.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
@@ -77,6 +76,34 @@ class SplashScan {
   ];
 }
 
+/// One cell's picture, and where it came from.
+///
+/// **The provenance is not a footnote, it is the confidence.** A picture read
+/// back from the generated files is what the device will show. A picture
+/// derived from the config is our reading of a third-party generator's rules,
+/// and this plugin has already shipped that reading backwards once. The two
+/// must never look alike on screen, so every consumer takes them together.
+class SplashPicture {
+  const SplashPicture.generated(this.composition)
+    : isGenerated = true,
+      reason = null;
+
+  const SplashPicture.predicted(this.composition, {required this.reason})
+    : isGenerated = false;
+
+  final SplashComposition composition;
+
+  /// Read back from the files `create` wrote, rather than derived from config.
+  final bool isGenerated;
+
+  /// Why there was nothing to read back. Null when [isGenerated].
+  final String? reason;
+
+  /// Short enough for a matrix cell, where the full [reason] would not fit and
+  /// eight copies of it would drown the pictures.
+  String get label => isGenerated ? 'From the generated files' : 'Prediction';
+}
+
 /// One config file, everything it references, and everything wrong with it.
 class SplashConfigScan {
   SplashConfigScan({
@@ -128,13 +155,32 @@ class SplashConfigScan {
         launcherIcon: launcherIcon,
       );
 
-  /// What the *generated files* say this cell looks like, or null when nothing
-  /// has been generated for it.
+  /// What one cell looks like, and whether that is a fact or a guess.
   ///
-  /// Android only — see `recompose.dart`. For a dark cell, null is itself the
-  /// answer: the generator writes `drawable-night/launch_background.xml` only
-  /// when the config resolved something dark, so its absence is ground truth
-  /// that the OS falls back to the light splash.
+  /// The generated files win wherever they exist. They cannot exist for iOS or
+  /// web — one is a storyboard and the other is CSS — so those two surfaces are
+  /// predicted permanently, which the [SplashPicture.reason] says out loud.
+  SplashPicture pictureFor(SplashSurface surface, SplashTheme theme) {
+    var generated = recomposedFor(surface, theme);
+    if (generated != null) return SplashPicture.generated(generated);
+    return SplashPicture.predicted(
+      compositionFor(surface, theme),
+      reason: !isGenerated
+          ? 'Nothing has been generated yet, so this is what the config *will* '
+                'produce — not what any device shows. Run '
+                '`flutter_native_splash:create` to make it real.'
+          : surface == SplashSurface.ios || surface == SplashSurface.web
+          // Not "nothing was generated": there is plenty on disk for both, we
+          // simply cannot read a storyboard or a stylesheet back into a picture.
+          ? 'Predicted from the config. Only Android can be read back from its '
+                'generated files — iOS is a storyboard and web is CSS.'
+          : 'Predicted from the config. Nothing was generated for this surface.',
+    );
+  }
+
+  /// What the *generated files* say this cell looks like, or null when there is
+  /// nothing to read — see `recompose.dart`. Most callers want [pictureFor],
+  /// which pairs this with the fallback and says which one it handed back.
   SplashComposition? recomposedFor(SplashSurface surface, SplashTheme theme) {
     var root = packageRoot;
     if (root == null) return null;
@@ -177,20 +223,6 @@ class SplashConfigScan {
     }
     return null;
   }
-
-  /// The same scan with a different problem list — how the drift check adds its
-  /// findings, since comparing against the generated files needs a built scan
-  /// to ask for a composition.
-  SplashConfigScan withProblems(List<SplashProblem> replacement) =>
-      SplashConfigScan(
-        config: config,
-        images: images,
-        launcherIcon: launcherIcon,
-        packageRoot: packageRoot,
-        artifacts: artifacts,
-        stale: stale,
-        problems: replacement,
-      );
 }
 
 /// Scans [packageRoot], which must be absolute.
@@ -370,7 +402,7 @@ SplashConfigScan _scanConfig(String packageRoot, SplashConfig config) {
     artifacts: artifacts,
   );
 
-  var scan = SplashConfigScan(
+  return SplashConfigScan(
     config: config,
     images: images,
     launcherIcon: launcherIcon,
@@ -384,48 +416,6 @@ SplashConfigScan _scanConfig(String packageRoot, SplashConfig config) {
       generatedIsStale: stale,
     ),
   );
-
-  // The prediction against the generated files. Built after the scan because it
-  // needs one — and skipped when the config has moved since `create` last ran,
-  // since the two are then *supposed* to differ and saying so would be
-  // reporting staleness twice under a more alarming name.
-  if (!stale && artifacts.isNotEmpty) {
-    scan = scan.withProblems([...scan.problems, ..._driftProblems(scan)]);
-  }
-  return scan;
-}
-
-/// Where our reading of the config and the generator's own output disagree.
-List<SplashProblem> _driftProblems(SplashConfigScan scan) {
-  var problems = <SplashProblem>[];
-  for (var surface in [SplashSurface.android, SplashSurface.android12]) {
-    if (!scan.config.enabled(surface)) continue;
-    for (var theme in SplashTheme.values) {
-      var generated = scan.recomposedFor(surface, theme);
-
-      // Absent dark resources are the fallback, which the prediction already
-      // models — checking it here would double-report agreement.
-      if (generated == null) continue;
-
-      var notes = compareSplash(
-        predicted: scan.compositionFor(surface, theme),
-        generated: generated,
-      );
-      for (var note in notes) {
-        problems.add(
-          SplashProblem(
-            Tone.info,
-            'What shipped does not match this preview — $note. The generated '
-            'files are the truth here; this is flutterware reading the config '
-            'differently from the generator, not a problem with your project.',
-            surface: surface,
-            theme: theme,
-          ),
-        );
-      }
-    }
-  }
-  return problems;
 }
 
 /// Every path the config points at, deduplicated.
