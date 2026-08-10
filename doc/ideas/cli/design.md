@@ -218,8 +218,8 @@ Registry entry shape (additive; new fields fine):
   "child_pid": 12346,
   "command": "flutter run -d chrome -t demo/_my.dart",
   "kind": "server_local",
-  "cwd": "/Users/.../rimbaud/packages/server",
-  "project_root": "/Users/.../rimbaud",
+  "cwd": "/Users/.../the reference project/packages/server",
+  "project_root": "/Users/.../the reference project",
   "started_at": "2026-05-01T12:34:56Z",
   "ended_at": null,
   "exit_code": null,
@@ -367,7 +367,7 @@ log_retention:
 ```
 
 **[OPEN]** Whether to reuse `tool/tools.yaml` (already exists in
-rimbaud) or introduce a new file. Leaning toward a new file because
+the reference project) or introduce a new file. Leaning toward a new file because
 its consumers and lifecycle are different.
 
 ---
@@ -376,7 +376,7 @@ its consumers and lifecycle are different.
 
 ### 10.1 Decision
 
-The CLI and GUI live in a separate **flutterware** repo. Rimbaud
+The CLI and GUI live in a separate **flutterware** repo. The reference project
 contains only the bash shim, the bash dispatcher, and project-level
 config. This makes the tooling reusable across projects, lets the
 flutterware repo evolve at its own pace, and keeps branding consistent
@@ -394,7 +394,7 @@ flutterware/                          (separate repo)
 │   └── flutterware_gui/              the desktop app (Flutter, later)
 └── README.md
 
-rimbaud/                              (this repo)
+the reference project/                              (this repo)
 ├── bin/fw                            frozen shim
 ├── tool/fw                           bash dispatcher
 ├── flutterware.yaml                  project config (shortcuts, injects, etc.)

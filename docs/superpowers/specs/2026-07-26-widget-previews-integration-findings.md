@@ -96,7 +96,7 @@ analysis.
 
 ## Measurements
 
-All on `rimbaud/packages/web_app` — a real ~300-entry catalog.
+All on the reference project's web-app package — a real ~300-entry catalog.
 
 | operation | scope | cost |
 |---|---|---|
@@ -147,7 +147,7 @@ daemon.** Its app is a plain Flutter app, so the entry list must exist as a
 checked-in file. We generate the entrypoint lazily anyway, so the dev loop needs
 no `build_runner` and no `.g.dart`.
 
-Their path-derived hierarchy is also evidence for dropping our map: rimbaud's
+Their path-derived hierarchy is also evidence for dropping our map: the reference project's
 folders already mirror its hand-written tree.
 
 | map path | file |
@@ -177,7 +177,7 @@ already depends on this to render every entry headlessly. Flutter's previewer
 becomes a *third* host of the same mechanism at zero cost.
 
 **Precondition for dual-host:** the demo closure must be web-safe — Flutter's
-previewer is Chrome-only and `dart:io`/`dart:ffi` throw there. rimbaud already
+previewer is Chrome-only and `dart:io`/`dart:ffi` throw there. the reference project already
 satisfies this, since it builds the whole catalog to web for per-PR links.
 
 ## Honest limits

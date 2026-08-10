@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
 import '../shell/worktree_filter.dart';
+import '../ui/menu.dart';
+import '../ui/popover.dart';
 import '../ui/theme.dart';
 import 'explorer_detail.dart';
 import 'facts.dart';
@@ -36,6 +38,7 @@ class WorktreeRow extends StatefulWidget {
     this.path,
     this.onToggleExpand,
     this.onOpen,
+    this.onRemove,
   });
 
   /// Whether the detail is showing below the row.
@@ -58,6 +61,9 @@ class WorktreeRow extends StatefulWidget {
   /// a stray click would make the cheap surface expensive. Opening is the
   /// deliberate act and has its own button.
   final VoidCallback? onToggleExpand;
+
+  /// Opens the teardown checklist. Null for the primary checkout.
+  final VoidCallback? onRemove;
 
   /// Whether these columns are drawn at all.
   ///
@@ -113,14 +119,69 @@ const explorerInsetLeft = 26.0;
 const explorerInsetRight = 16.0;
 
 const _gutterWidth = explorerInsetLeft;
+
+/// Marks the changes column, which is the first to go when the row runs out of
+/// room. Named so a test can assert it left, rather than asserting on a picture.
+const changesCellKey = ValueKey('worktree-row.changes');
 const _scrollGutter = explorerInsetRight;
 
 const _changesWidth = 220.0;
 const _agentWidth = 190.0;
 const _prWidth = 150.0;
 const _whenWidth = 64.0;
-const _actionsWidth = 76.0;
+// Wider than the 76 it was, and than the 32 the design budgeted: the column
+// now carries Open, a menu trigger and the chevron, and at 76 that Row
+// overflowed by 11px — which clipped the trigger off the right edge, so it
+// looked like it vanished as you reached for it.
+//
+// **92 is measured, not chosen.** The content needs 87; at 96 the *name* cell
+// starts overflowing instead, because the space comes out of the one flexible
+// column. That upper bound is a latent fragility in `_NameCell` — its trailing
+// tag does not give way the way the label does — and it is guarded by
+// `explorer_row_menu_test.dart` rather than trusted, so widening this column
+// again fails a test instead of clipping a row.
+const _actionsWidth = 92.0;
 const _nameMinWidth = 220.0;
+
+/// Which optional columns fit, given how much room the row actually has.
+///
+/// **The row has to survive a narrow window, and it did not.** The fixed
+/// columns come to 758px before the name gets anything, so at an 800px window
+/// the name cell was squeezed to 42 — and a name cell that narrow cannot hold
+/// its own trailing marker. The label ellipsised to nothing, as it should, but
+/// `current` is not text that gives way: it is a fixed 75px sitting in 30px of
+/// space, and the row painted a yellow-and-black stripe over itself.
+///
+/// So the fix is not in the cell. Ellipsis cannot save a row whose *fixed*
+/// parts already exceed it; something has to go. Columns drop widest-first,
+/// which is also least-first by what the screen is for: `changes` is the
+/// fingerprint, while `agent` and PR carry "needs you", and that is the
+/// question the explorer exists to answer.
+///
+/// The name column keeps [_nameMinWidth] throughout, because a list of
+/// worktrees you cannot read the names of is not a list of worktrees.
+({bool changes, bool agent, bool forge}) _affordable(
+  double width, {
+  required bool agent,
+  required bool forge,
+}) {
+  if (width.isInfinite) return (changes: true, agent: agent, forge: forge);
+  var fixed =
+      _gutterWidth + _whenWidth + _actionsWidth + _scrollGutter + _nameMinWidth;
+  var showChanges = true;
+  var showAgent = agent;
+  var showForge = forge;
+  double total() =>
+      fixed +
+      (showChanges ? _changesWidth : 0) +
+      (showAgent ? _agentWidth : 0) +
+      (showForge ? _prWidth : 0);
+
+  if (total() > width) showChanges = false;
+  if (total() > width) showAgent = false;
+  if (total() > width) showForge = false;
+  return (changes: showChanges, agent: showAgent, forge: showForge);
+}
 
 class _WorktreeRowState extends State<WorktreeRow> {
   var _hovered = false;
@@ -154,53 +215,69 @@ class _WorktreeRowState extends State<WorktreeRow> {
             children: [
               SizedBox(
                 height: _rowHeight,
-                child: Row(
-                  children: [
-                    _Gutter(isOpen: widget.isOpen, tone: facts.tone),
-                    Expanded(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          minWidth: _nameMinWidth,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    var afford = _affordable(
+                      constraints.maxWidth,
+                      agent: widget.showAgent,
+                      forge: widget.showForge,
+                    );
+                    return Row(
+                      children: [
+                        _Gutter(isOpen: widget.isOpen, tone: facts.tone),
+                        Expanded(
+                          child: _NameCell(
+                            label: widget.label,
+                            branch: widget.branch,
+                            isMain: widget.isMain,
+                            isCurrent: widget.isCurrent,
+                            match: widget.match,
+                          ),
                         ),
-                        child: _NameCell(
-                          label: widget.label,
-                          branch: widget.branch,
-                          isMain: widget.isMain,
-                          isCurrent: widget.isCurrent,
-                          match: widget.match,
+                        if (afford.changes)
+                          SizedBox(
+                            key: changesCellKey,
+                            width: _changesWidth,
+                            child: _ChangesCell(
+                              fact: facts.git,
+                              scale: widget.scale,
+                            ),
+                          ),
+                        if (afford.agent)
+                          SizedBox(
+                            width: _agentWidth,
+                            child: _AgentCell(
+                              fact: facts.agent,
+                              now: widget.now,
+                            ),
+                          ),
+                        if (afford.forge)
+                          SizedBox(
+                            width: _prWidth,
+                            child: _PrCell(fact: facts.forge),
+                          ),
+                        SizedBox(
+                          width: _whenWidth,
+                          child: _WhenCell(
+                            fact: facts.activity,
+                            now: widget.now,
+                          ),
                         ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: _changesWidth,
-                      child: _ChangesCell(fact: facts.git, scale: widget.scale),
-                    ),
-                    if (widget.showAgent)
-                      SizedBox(
-                        width: _agentWidth,
-                        child: _AgentCell(fact: facts.agent, now: widget.now),
-                      ),
-                    if (widget.showForge)
-                      SizedBox(
-                        width: _prWidth,
-                        child: _PrCell(fact: facts.forge),
-                      ),
-                    SizedBox(
-                      width: _whenWidth,
-                      child: _WhenCell(fact: facts.activity, now: widget.now),
-                    ),
-                    SizedBox(
-                      width: _actionsWidth,
-                      child: _Actions(
-                        hovered: _hovered,
-                        isOpen: widget.isOpen,
-                        expanded: widget.expanded,
-                        onOpen: widget.onOpen,
-                        onToggleExpand: widget.onToggleExpand,
-                      ),
-                    ),
-                    const Gap(_scrollGutter),
-                  ],
+                        SizedBox(
+                          width: _actionsWidth,
+                          child: _Actions(
+                            hovered: _hovered,
+                            isOpen: widget.isOpen,
+                            expanded: widget.expanded,
+                            onOpen: widget.onOpen,
+                            onToggleExpand: widget.onToggleExpand,
+                            onRemove: widget.onRemove,
+                          ),
+                        ),
+                        const Gap(_scrollGutter),
+                      ],
+                    );
+                  },
                 ),
               ),
               if (widget.expanded)
@@ -842,6 +919,7 @@ class _Actions extends StatelessWidget {
     required this.expanded,
     required this.onOpen,
     required this.onToggleExpand,
+    required this.onRemove,
   });
 
   final bool hovered;
@@ -850,28 +928,26 @@ class _Actions extends StatelessWidget {
   final VoidCallback? onOpen;
   final VoidCallback? onToggleExpand;
 
+  /// Null for the primary checkout, which cannot be removed.
+  final VoidCallback? onRemove;
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
     // The chevron persists while expanded, so an open row still says how it
     // got that way and how to close it. Otherwise controls are hover-only: a
     // button beside every row is a wall rather than a list.
-    if (!hovered && !expanded) {
-      return isOpen
-          ? Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                'open',
-                style: context.type.micro.copyWith(color: colors.mut3),
-              ),
-            )
-          : const SizedBox.shrink();
-    }
+    var showControls = hovered || expanded;
     return Align(
       alignment: Alignment.centerRight,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (!showControls && isOpen)
+            Text(
+              'open',
+              style: context.type.micro.copyWith(color: colors.mut3),
+            ),
           if (hovered)
             TextButton(
               onPressed: onOpen,
@@ -888,14 +964,59 @@ class _Actions extends StatelessWidget {
                 style: context.type.micro.copyWith(color: colors.accent),
               ),
             ),
-          Tooltip(
-            message: expanded ? 'Hide the detail' : 'Show the detail',
-            child: Icon(
-              expanded ? Icons.expand_less : Icons.expand_more,
-              size: 16,
-              color: colors.mut2,
+          // Destructive, so behind a menu rather than beside Open: a click that
+          // deletes a checkout should not be one pixel from a click that opens
+          // it.
+          //
+          // **Mounted whenever there is something to open, and hidden by its
+          // own builder rather than by this list.** A trigger that unmounts
+          // when hover ends takes its open menu with it — and reaching for a
+          // menu item is precisely the gesture that leaves the row, so the item
+          // could be seen and never clicked. `controller.isOpen` is what keeps
+          // it alive across that gap.
+          if (onRemove != null)
+            Menu(
+              // **Keyed, and that is what makes the menu clickable at all.**
+              // The `Open` button above disappears when hover ends, so this
+              // widget shifts index within the Row — and unkeyed children are
+              // matched by position, so it would be diffed against a
+              // `TextButton`, lose its element, and take its open popover with
+              // it. Reaching for a menu item is precisely the gesture that ends
+              // the hover, so the item could be seen and never clicked.
+              key: const ValueKey('worktree-row.menu'),
+              entries: [
+                MenuItem(
+                  'Remove worktree…',
+                  icon: Icons.delete_outline,
+                  danger: true,
+                  onSelected: onRemove,
+                ),
+              ],
+              side: PopoverSide.bottom,
+              align: PopoverAlign.end,
+              builder: (context, controller) => hovered || controller.isOpen
+                  ? Tooltip(
+                      message: 'More',
+                      child: InkWell(
+                        onTap: controller.toggle,
+                        child: Icon(
+                          Icons.more_horiz,
+                          size: 16,
+                          color: colors.mut2,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
-          ),
+          if (showControls)
+            Tooltip(
+              message: expanded ? 'Hide the detail' : 'Show the detail',
+              child: Icon(
+                expanded ? Icons.expand_less : Icons.expand_more,
+                size: 16,
+                color: colors.mut2,
+              ),
+            ),
         ],
       ),
     );

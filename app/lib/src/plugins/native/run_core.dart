@@ -518,6 +518,7 @@ class RunCore extends PluginCore {
             status: Status.error(failure.headline ?? 'failed'),
           ),
       ],
+      teardown: _teardown,
       actions: [
         PluginAction(
           'devices',
@@ -945,6 +946,42 @@ class RunCore extends PluginCore {
   /// the entry point as well is only needed when it does not. Both optional:
   /// with exactly one app running there is nothing to disambiguate, and making
   /// the caller say so anyway is ceremony.
+  /// One step per app this worktree launched, so closing the checkout does
+  /// not leave one running on a phone with nothing able to reach it.
+  ///
+  /// **One step per app rather than one "stop 3 apps" row**, which is what
+  /// [TeardownStep.arguments] is for: each row names its own device and says
+  /// how long it has been up, and one can be left ticked while another is not.
+  /// A lumped row can only be taken or left whole, and the reason to leave one
+  /// running — it is on a phone somebody is holding — applies to one app and
+  /// not the rest.
+  ///
+  /// Scoped to *this* worktree. The ledger is deliberately every worktree's, so
+  /// that a device held by another checkout is visible; a teardown that stopped
+  /// those too would be closing one tab and killing somebody else's run.
+  List<TeardownStep> get _teardown => [
+    for (var handle in _handles)
+      if (handle.worktree == host.worktree.path)
+        TeardownStep(
+          'stop',
+          'Stop ${handle.runLabel} on ${handle.deviceLabel}',
+          detail: _startedAgo(handle.startedAt),
+          // The same arguments the `stop` action takes from `fw` and a form,
+          // because it is the same action.
+          arguments: {'device': handle.device, 'entrypoint': handle.entrypoint},
+          checked: true,
+          phase: TeardownPhase.apps,
+        ),
+  ];
+
+  static String _startedAgo(DateTime startedAt) {
+    var elapsed = DateTime.now().difference(startedAt);
+    if (elapsed.inMinutes < 1) return 'started just now';
+    if (elapsed.inHours < 1) return 'started ${elapsed.inMinutes}m ago';
+    if (elapsed.inDays < 1) return 'started ${elapsed.inHours}h ago';
+    return 'started ${elapsed.inDays}d ago';
+  }
+
   List<ActionParameter> get _appSelector => [
     ActionParameter(
       'device',

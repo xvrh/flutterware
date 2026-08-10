@@ -259,7 +259,7 @@ correct `Preview`, our guest reads the full instance. Evidence and measurements:
 - **Discovery is syntactic; resolution is the guest's job.** *Corrected
   2026-07-26 by measurement* — an earlier draft of this section claimed a
   resolved analyzer pass was "one file plus summaries, not a project analysis".
-  That is false: over rimbaud's 180-file demo tree, the **first** resolved unit
+  That is false: over the reference project's 180-file demo tree, the **first** resolved unit
   costs **17.3s** (it needs the linked element model of the whole transitive
   closure), against 12.9s to compile the entire catalog. Subsequent units are
   ~26ms, and a **syntactic scan of all 180 files is 20ms**.

@@ -37,7 +37,7 @@ import is the whole difference.
 
 ## Measurements
 
-`rimbaud/packages/web_app`, 40 units resolved — the same project and the same
+the reference project's web-app package, 40 units resolved — the same project and the same
 order of magnitude as the original 17.3s.
 
 | | first unit | remaining 39 | total |
@@ -59,7 +59,7 @@ re-resolve *and* re-extract everything:
 | project | edited file | round 1 | round 2 | round 3 |
 |---|---|---|---|---|
 | fixtures | `shell.dart` (7 dependents) | 10ms | 2ms | 217ms |
-| rimbaud | `demo/_main.dart` (leaf) | 79ms | 0ms | 2ms |
+| reference | `demo/_main.dart` (leaf) | 79ms | 0ms | 2ms |
 
 Every round reported the correct 9 entries / 2 shells and saw the edit.
 

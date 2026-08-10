@@ -7,7 +7,7 @@ and one mechanism the earlier findings never mentioned.
 sections, end to end.
 **Follows:** `2026-07-26-s3-hot-switch-findings.md` (which proved switching with
 hand-written toy libraries), `2026-07-26-widget-previews-integration-findings.md`.
-**SDK under test:** `3.47.0-0.1.pre` — rimbaud's current pin, two minors past the
+**SDK under test:** `3.47.0-0.1.pre` — the reference project's current pin, two minors past the
 `3.45.0-0.1.pre` the earlier findings measured.
 
 ## The question
@@ -124,9 +124,9 @@ to the guest", working end to end.
 
 ## Not proven
 
-- **Not run against rimbaud.** Its pub resolution is stale (June) and re-resolving
+- **Not run against the reference project.** Its pub resolution is stale (June) and re-resolving
   needs a private SSH git dependency that fails in this sandbox; a `pub get`
-  there would also rewrite its lockfile. The spike reproduces rimbaud's *file
+  there would also rewrite its lockfile. The spike reproduces the reference project's *file
   shape* — a `package:` import, a relative import, demos outside `lib/` — but not
   its scale. S3 measured scale separately.
 - **All three entries live in one demo file**, so a switch added one library, not
@@ -139,7 +139,7 @@ to the guest", working end to end.
 
 ## Incidental: `@Preview` churn, measured
 
-rimbaud has moved 3.45 → 3.47 since the integration findings. Diffing
+the reference project has moved 3.45 → 3.47 since the integration findings. Diffing
 `widget_previews.dart` across the two:
 
 - **`Preview` is byte-identical.** All eight fields, `transform()`, `toBuilder()`,
@@ -162,7 +162,7 @@ Scratchpad only; nothing committed, both repos left clean.
 | file | role |
 |---|---|
 | `lib/demo.dart` | `Demo`/`FormFactor`, and a `Tablet extends Demo` subclass |
-| `demo/src/team/avatar_tile.dart` | three `@Demo` variants, rimbaud's file shape |
+| `demo/src/team/avatar_tile.dart` | three `@Demo` variants, the reference project's file shape |
 | `bin/gen.dart` | syntactic parse → per-entry wrappers + manifest, imports re-relativised |
 | `bin/switch.dart` | resident compiler, `flutter_tester`, reload-to-switch, edit-in-place |
 | `test/transform_test.dart`, `test/generated_wrapper_test.dart` | stages A and B |

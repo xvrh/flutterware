@@ -32,7 +32,7 @@ const webEnvironment = <String, String>{
 /// unit test, so a `package:flutter` import that would fill the machine with a
 /// compiler fork bomb fails in seconds with the chain that pulled it in.
 ///
-/// Ported from rimbaud (`packages/server/lib/src/tools/import_walker/`).
+/// Ported from a sibling project (`packages/server/lib/src/tools/import_walker/`).
 class ImportWalker {
   ImportWalker(this.packageConfig, {this.environment = vmEnvironment});
 

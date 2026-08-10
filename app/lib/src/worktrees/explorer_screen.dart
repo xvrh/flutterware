@@ -88,6 +88,7 @@ class WorktreeExplorerView extends StatefulWidget {
     this.onSortChanged,
     this.onRefresh,
     this.onOpen,
+    this.onRemove,
   });
 
   final List<ExplorerEntry> entries;
@@ -102,6 +103,11 @@ class WorktreeExplorerView extends StatefulWidget {
   final ValueChanged<ExplorerSort>? onSortChanged;
   final VoidCallback? onRefresh;
   final ValueChanged<ExplorerEntry>? onOpen;
+
+  /// Opens the teardown checklist for a row. Never offered for the primary
+  /// checkout — [Worktree.isMain] says it cannot be removed, so the row does
+  /// not carry the affordance rather than carrying a disabled one.
+  final ValueChanged<ExplorerEntry>? onRemove;
 
   @override
   State<WorktreeExplorerView> createState() => _WorktreeExplorerViewState();
@@ -296,6 +302,9 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
                         path: worktree.path,
                         onToggleExpand: () => _toggle(worktree.path),
                         onOpen: () => widget.onOpen?.call(entry),
+                        onRemove: worktree.isMain || widget.onRemove == null
+                            ? null
+                            : () => widget.onRemove!.call(entry),
                       );
                     },
                   ),

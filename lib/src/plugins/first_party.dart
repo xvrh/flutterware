@@ -474,3 +474,210 @@ class LauncherIcon extends Plugin {
 class LauncherIconPackage extends PluginPackage {
   const LauncherIconPackage(super.pkg);
 }
+
+/// A long-lived external thing whose lifecycle is **delegated to project
+/// commands** and whose state is polled — the docker stack, the emulator suite,
+/// the database container the app talks to in development.
+///
+/// See `docs/superpowers/specs/2026-08-10-dev-stack-design.md`.
+///
+/// **It owns nothing.** flutterware runs [probe] to find out what is going on
+/// and runs [start] / [stop] when told to; the project's own CLI stays the
+/// authority on what those mean. That is the whole difference from a
+/// supervisor, and it is why a stack brought up in a terminal, by a teammate's
+/// script or by this plugin all read identically.
+///
+/// ```dart
+/// fw.use(DevStack.background(
+///   workingDirectory: 'packages/server',
+///   probe: Probe.exitCode(['docker', 'compose', 'ps', '--quiet']),
+///   start: ['docker', 'compose', 'up', '--wait'],
+///   stop:  ['docker', 'compose', 'down', '--volumes'],
+///   stopIsDestructive: true,
+/// ));
+/// ```
+///
+/// **Named `.background` for what it requires of the tool**, not for how this
+/// is implemented: the command must return, leaving something running behind
+/// it. A tool you stop with Ctrl-C — `firebase emulators:start`, `tilt up`,
+/// `ngrok http` — cannot be declared this way, because there is no `stop` to
+/// name and nothing to ask whether it is up. That is a second constructor,
+/// `.foreground`, which is designed and deliberately unbuilt; the design
+/// document's §3.3 says why. The constructor is named now so that adding it is
+/// an addition rather than a rename.
+///
+/// One per project. A second stack needs an id the registry can resolve, and
+/// v1's registry is keyed on the exact id.
+class DevStack extends Plugin {
+  DevStack.background({
+    required this.probe,
+    this.start,
+    this.stop,
+    this.workingDirectory,
+    this.poll = const Duration(seconds: 10),
+    this.stopIsDestructive = false,
+    this.commands = const [],
+    String? label,
+  }) : super('flutterware.dev_stack', label: label ?? 'Dev stack');
+
+  /// How to find out what state the stack is in.
+  final Probe probe;
+
+  /// Brings it up. Null for a stack this machine only observes — a shared
+  /// server, a system postgres — which is a complete declaration and gets a
+  /// panel with a status and no controls.
+  final List<String>? start;
+
+  /// Takes it down. Null has the same meaning as a null [start].
+  final List<String>? stop;
+
+  /// Where the commands run, relative to the worktree root. The worktree root
+  /// itself when null.
+  final String? workingDirectory;
+
+  /// How often to re-run [probe] while something is watching.
+  ///
+  /// **The plugin declares the timescale; the shell decides whether to poll at
+  /// all.** Only this declaration knows how fast the subject changes — nobody
+  /// brings a docker stack up twice a minute — and only the shell knows about
+  /// window focus and which panel is on screen. So the shell scales this rather
+  /// than replacing it, and a stack that is nowhere on screen is not polled.
+  final Duration poll;
+
+  /// [stop] destroys data — `down --volumes` drops the database. Renderers make
+  /// the control distinct and ask first.
+  final bool stopIsDestructive;
+
+  /// Everything else the stack's CLI can do: logs, restart, recreate, prune.
+  ///
+  /// Each spawns a **new process**. There is deliberately no way to write to a
+  /// running stack's stdin: a stack that outlives the GUI has no stdin to
+  /// write to, and every tool that offers real control offers it over a socket
+  /// or an HTTP port, which is another command.
+  final List<StackCommand> commands;
+
+  @override
+  Map<String, Object?> get config => {
+    'probe': probe.toJson(),
+    if (start != null) 'start': start,
+    if (stop != null) 'stop': stop,
+    if (workingDirectory != null) 'workingDirectory': workingDirectory,
+    'poll': poll.inMilliseconds,
+    if (stopIsDestructive) 'stopIsDestructive': true,
+    if (commands.isNotEmpty) 'commands': [for (var c in commands) c.toJson()],
+  };
+}
+
+/// How a [DevStack] finds out what state it is in.
+///
+/// Two shapes, because the honest floor and the useful ceiling are different
+/// commands. [Probe.exitCode] works against any health check that already
+/// exists; [Probe.json] needs the tool to say more, and gives more back.
+class Probe {
+  /// **Zero is up, anything else is down.** The command's last non-empty output
+  /// line becomes the detail shown beside the status.
+  ///
+  /// The floor, and it works today against `minikube status`,
+  /// `supabase status` and any health check a project already has, without
+  /// asking anyone to change anything. What it cannot do is tell *down* from *broken*: a health check
+  /// that fails because Docker Desktop is asleep exits non-zero exactly like
+  /// one that fails because nothing is up, and reporting "down" there offers a
+  /// Bring-up button that cannot work. Use [Probe.json] where that distinction
+  /// matters.
+  const Probe.exitCode(this.command) : shape = ProbeShape.exitCode;
+
+  /// The command prints one JSON object on stdout:
+  ///
+  /// ```json
+  /// {
+  ///   "state": "up",
+  ///   "detail": "slot 8200-8208 · 4 containers",
+  ///   "services": [{"name": "postgres", "port": 8200, "state": "up"}]
+  /// }
+  /// ```
+  ///
+  /// `state` is one of `down`, `starting`, `up`, `stopping`, `unavailable`;
+  /// everything else is optional. Output that does not parse is reported as
+  /// `unavailable` with the parse error, because a probe that cannot be read is
+  /// a probe that failed — not a stack that is down.
+  const Probe.json(this.command) : shape = ProbeShape.json;
+
+  final List<String> command;
+  final ProbeShape shape;
+
+  Map<String, Object?> toJson() => {'command': command, 'shape': shape.name};
+
+  static Probe? fromJson(Map<String, Object?> json) {
+    var command = [
+      for (var arg in (json['command'] as List? ?? const [])) '$arg',
+    ];
+    if (command.isEmpty) return null;
+    return ProbeShape.byName(json['shape'] as String?) == ProbeShape.json
+        ? Probe.json(command)
+        : Probe.exitCode(command);
+  }
+}
+
+/// How a [Probe]'s output is read.
+enum ProbeShape {
+  exitCode,
+  json;
+
+  static ProbeShape byName(String? name) =>
+      values.firstWhere((v) => v.name == name, orElse: () => exitCode);
+}
+
+/// One more thing a [DevStack]'s CLI can be asked to do.
+class StackCommand {
+  const StackCommand(
+    this.id,
+    this.label,
+    this.command, {
+    this.description,
+    this.danger = false,
+    this.argument,
+  });
+
+  /// Stable within the plugin — what `fw run dev_stack <id>` names.
+  final String id;
+
+  final String label;
+  final String? description;
+
+  /// Run as declared, with [argument]'s value appended when one is given.
+  final List<String> command;
+
+  /// Destroys data. Renderers make it distinct and ask first.
+  final bool danger;
+
+  /// A free-text argument this command takes — `service` for `restart`,
+  /// `surface` for `open`. Appended to [command]. Null for a command that takes
+  /// nothing.
+  final String? argument;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'label': label,
+    'command': command,
+    if (description != null) 'description': description,
+    if (danger) 'danger': true,
+    if (argument != null) 'argument': argument,
+  };
+
+  static StackCommand? fromJson(Map<String, Object?> json) {
+    var id = json['id'];
+    var label = json['label'];
+    var command = [
+      for (var arg in (json['command'] as List? ?? const [])) '$arg',
+    ];
+    if (id is! String || label is! String || command.isEmpty) return null;
+    return StackCommand(
+      id,
+      label,
+      command,
+      description: json['description'] as String?,
+      danger: json['danger'] == true,
+      argument: json['argument'] as String?,
+    );
+  }
+}
