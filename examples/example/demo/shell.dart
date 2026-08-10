@@ -18,18 +18,16 @@ import 'package:flutterware/previews.dart';
 /// Flutter's own previewer — each switch answers with the default written here.
 Widget wrapInApp(Widget child) => PreviewShell(
   'app',
-  builder: (context, topBar) => MaterialApp(
+  builder: (context, axes) => MaterialApp(
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
-      brightness: topBar.flag('dark', false)
-          ? Brightness.dark
-          : Brightness.light,
+      brightness: axes.flag('dark', false) ? Brightness.dark : Brightness.light,
       colorSchemeSeed: Colors.white,
       inputDecorationTheme: const InputDecorationTheme(
         border: OutlineInputBorder(),
       ),
     ),
-    locale: topBar.picker('locale', {
+    locale: axes.picker('locale', {
       'English': const Locale('en'),
       'Français': const Locale('fr'),
     }, const Locale('en')),

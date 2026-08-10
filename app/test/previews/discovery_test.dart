@@ -325,7 +325,7 @@ enum Flavor { dev, staging, prod }
 
 Widget wrapInApp(Widget child) => PreviewShell(
   'app',
-  builder: (context, topBar) => topBar.flag('compact', false)
+  builder: (context, axes) => axes.flag('compact', false)
       ? child
       : const Placeholder(),
 );

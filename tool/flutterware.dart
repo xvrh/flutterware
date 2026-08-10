@@ -37,7 +37,7 @@ void main() => Flutterware.configure((fw) {
   //
   // Named rather than left to the scan, which would find four `main()`s under
   // `lib/` and offer them by file name. `FW_MARKER` is a real define — see
-  // `examples/example/lib/main.dart` — and is here because a launch knob the
+  // `examples/example/lib/main.dart` — and is here because a launch define the
   // app does not read is a control that does nothing.
   fw.use(
     Run(
@@ -49,8 +49,8 @@ void main() => Flutterware.configure((fw) {
               'lib/main.dart',
               name: 'App',
               description: 'The example app, with the devbar mounted',
-              knobs: [
-                LaunchKnob(
+              defines: [
+                DartDefine(
                   'FW_MARKER',
                   description:
                       'Shown on the home page, to prove which build '

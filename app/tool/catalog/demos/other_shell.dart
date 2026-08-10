@@ -16,12 +16,12 @@ enum Flavour { plain, fancy }
 
 Widget wrapInPlainApp(Widget child) => PreviewShell(
   'plain',
-  builder: (context, topBar) {
-    var loudness = topBar.picker('loudness', {
+  builder: (context, axes) {
+    var loudness = axes.picker('loudness', {
       'Quiet': Loudness.quiet,
       'Loud': Loudness.loud,
     }, Loudness.quiet);
-    var flavor = topBar.picker('flavor', {
+    var flavor = axes.picker('flavor', {
       'Plain': Flavour.plain,
       'Fancy': Flavour.fancy,
     }, Flavour.plain);

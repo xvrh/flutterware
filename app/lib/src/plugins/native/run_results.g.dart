@@ -63,12 +63,12 @@ Map<String, dynamic> _$RunEntrypointEntryToJson(RunEntrypointEntry instance) =>
       'flavorSource': ?instance.flavorSource,
       'platforms': instance.platforms,
       'devices': instance.devices,
-      'knobs': instance.knobs.map((e) => e.toJson()).toList(),
+      'defines': instance.defines.map((e) => e.toJson()).toList(),
     };
 
-Map<String, dynamic> _$RunKnobEntryToJson(RunKnobEntry instance) =>
+Map<String, dynamic> _$DartDefineEntryToJson(DartDefineEntry instance) =>
     <String, dynamic>{
-      'define': instance.define,
+      'define': instance.name,
       'label': ?instance.label,
       'description': ?instance.description,
       'default': ?instance.defaultValue,
@@ -117,7 +117,7 @@ Map<String, dynamic> _$RunAppEntryToJson(RunAppEntry instance) =>
       'package': ?instance.package,
       'entrypoint': instance.entrypoint,
       'entrypointName': ?instance.entrypointName,
-      'knobs': instance.knobs,
+      'defines': instance.defines,
       'since': instance.since,
       'app': instance.app,
       'launcher': instance.launcher,

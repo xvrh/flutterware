@@ -15,9 +15,9 @@
 /// ship inside your own app, hosting these same previews.
 library;
 
-// A shell declares the top bar's axes by asking [TopBarState] for them while it
+// A shell declares the top bar's axes by asking [PreviewAxes] for them while it
 // builds, and is named by a preview's `wrapper:`.
-export 'src/ui_catalog/axes.dart' show PreviewShell, TopBarState;
+export 'src/ui_catalog/axes.dart' show PreviewShell, PreviewAxes;
 // Knobs: `context.knobs.string('label', 'Hello')`, answered by the panel, the
 // CLI and an agent — and by the defaults written at the call site when nothing
 // is hosting. One word, all the way down: it is what `--knobs=` sets and what

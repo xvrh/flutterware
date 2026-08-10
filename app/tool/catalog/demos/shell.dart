@@ -17,15 +17,15 @@ const _probeStyle = TextStyle(fontSize: 10, color: Color(0x8a000000));
 
 Widget wrapInApp(Widget child) => PreviewShell(
   'app',
-  builder: (context, topBar) {
+  builder: (context, axes) {
     // Labels, not identifiers: only the labels cross the wire, so the top bar
     // shows what is written here rather than `Flavor.prod.name`.
-    var flavor = topBar.picker('flavor', {
+    var flavor = axes.picker('flavor', {
       'Dev': Flavor.dev,
       'Staging': Flavor.staging,
       'Production': Flavor.prod,
     }, Flavor.dev);
-    var compact = topBar.flag('compact', false);
+    var compact = axes.flag('compact', false);
     return _Shell(flavor: flavor, compact: compact, child: child);
   },
 );

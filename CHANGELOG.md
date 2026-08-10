@@ -12,9 +12,13 @@ Flutter's own annotation. Breaking, with no deprecation path.
   not followed. `Previews(directory: …)` narrows the scan, and moves where
   `new` writes.
 - **New library `previews.dart`** — what `@Preview` does not carry:
-  `PreviewShell` and `TopBarState` for the top bar's axes, and `context.knobs.*`
+  `PreviewShell` and `PreviewAxes` for the top bar's axes, and `context.knobs.*`
   for knobs. It is imported only when you want one of those; declaring a preview
   imports nothing of flutterware's.
+- **`TopBarState` is `PreviewAxes`**, and a shell's builder is handed `axes`
+  rather than `topBar`. It named the furniture the switches are drawn on, which
+  left nothing in the API to connect it to `--axes=`, `describe --axes=true` or
+  the `axes:` on an artifact's address.
 - **Knobs are called knobs in Dart too.** `context.previews.parameters.*` and
   `context.uiCatalog.parameters.*` are both now **`context.knobs.*`**, the type
   is `Knobs` (exported, so knob-setting can be factored out), and the devbar's
@@ -30,6 +34,13 @@ Flutter's own annotation. Breaking, with no deprecation path.
   `previews_guest.dart`.
 - The plugin is `Previews(...)` (was `UiCatalog(...)`) and its id is
   `flutterware.previews`, so the CLI reads `fw run previews …`.
+- **A `Run` entry point declares `defines`, not `knobs`.** `LaunchKnob` is
+  `DartDefine` (its `define:` field is now `name:`), `KnobSource` is
+  `DefineSource`, `Entrypoint(knobs: …)` is `Entrypoint(defines: …)`, and
+  `fw run run launch --knobs=` is `--defines=`. Both plugins spelled `--knobs=`
+  for opposite costs: a preview knob is read while a widget builds and changing
+  one costs a frame, while these are compiled in and changing one costs a full
+  rebuild and reinstall. The manifest key and the `launch` result field follow.
 
 ## 0.5.1
 

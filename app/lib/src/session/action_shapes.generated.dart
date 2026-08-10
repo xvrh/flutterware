@@ -1529,6 +1529,48 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'durationMs', 'type': 'int'},
     ],
   }),
+  'DartDefineEntry': ResultShape.fromJson(<String, Object?>{
+    'type': 'DartDefineEntry',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'define',
+        'type': 'String',
+        'doc': 'The name `String.fromEnvironment` reads.',
+      },
+      <String, Object?>{'name': 'label', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'description',
+        'type': 'String',
+        'optional': true,
+      },
+      <String, Object?>{'name': 'default', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'options',
+        'type': 'List<String>',
+        'doc':
+            'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
+      },
+      <String, Object?>{
+        'name': 'kind',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            '`String`, `int`, `bool` or `double` — how the app\'s own source reads this define.',
+      },
+      <String, Object?>{
+        'name': 'readAt',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The package-relative file the read is in.',
+      },
+      <String, Object?>{
+        'name': 'problem',
+        'type': 'String',
+        'optional': true,
+        'doc': 'What is wrong with this define, when something is.',
+      },
+    ],
+  }),
   'DependencyEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'DependencyEntry',
     'fields': <Object?>[
@@ -1775,7 +1817,7 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
       },
       <String, Object?>{
-        'name': 'knobs',
+        'name': 'defines',
         'type': 'Map<String, String>',
         'doc': 'The dart-defines it was built with.',
       },
@@ -1855,7 +1897,7 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
             },
             <String, Object?>{
-              'name': 'knobs',
+              'name': 'defines',
               'type': 'Map<String, String>',
               'doc': 'The dart-defines it was built with.',
             },
@@ -2283,16 +2325,15 @@ final resultShapes = <String, ResultShape>{
             'The ids of the devices currently connected that [platforms] allows.',
       },
       <String, Object?>{
-        'name': 'knobs',
-        'type': 'List<RunKnobEntry>',
+        'name': 'defines',
+        'type': 'List<DartDefineEntry>',
         'shape': <String, Object?>{
-          'type': 'RunKnobEntry',
+          'type': 'DartDefineEntry',
           'fields': <Object?>[
             <String, Object?>{
               'name': 'define',
               'type': 'String',
-              'doc':
-                  'The define\'s name, as `String.fromEnvironment` reads it.',
+              'doc': 'The name `String.fromEnvironment` reads.',
             },
             <String, Object?>{
               'name': 'label',
@@ -2332,7 +2373,7 @@ final resultShapes = <String, ResultShape>{
               'name': 'problem',
               'type': 'String',
               'optional': true,
-              'doc': 'What is wrong with this knob, when something is.',
+              'doc': 'What is wrong with this define, when something is.',
             },
           ],
         },
@@ -2399,16 +2440,15 @@ final resultShapes = <String, ResultShape>{
                   'The ids of the devices currently connected that [platforms] allows.',
             },
             <String, Object?>{
-              'name': 'knobs',
-              'type': 'List<RunKnobEntry>',
+              'name': 'defines',
+              'type': 'List<DartDefineEntry>',
               'shape': <String, Object?>{
-                'type': 'RunKnobEntry',
+                'type': 'DartDefineEntry',
                 'fields': <Object?>[
                   <String, Object?>{
                     'name': 'define',
                     'type': 'String',
-                    'doc':
-                        'The define\'s name, as `String.fromEnvironment` reads it.',
+                    'doc': 'The name `String.fromEnvironment` reads.',
                   },
                   <String, Object?>{
                     'name': 'label',
@@ -2448,7 +2488,7 @@ final resultShapes = <String, ResultShape>{
                     'name': 'problem',
                     'type': 'String',
                     'optional': true,
-                    'doc': 'What is wrong with this knob, when something is.',
+                    'doc': 'What is wrong with this define, when something is.',
                   },
                 ],
               },
@@ -2524,16 +2564,15 @@ final resultShapes = <String, ResultShape>{
                         'The ids of the devices currently connected that [platforms] allows.',
                   },
                   <String, Object?>{
-                    'name': 'knobs',
-                    'type': 'List<RunKnobEntry>',
+                    'name': 'defines',
+                    'type': 'List<DartDefineEntry>',
                     'shape': <String, Object?>{
-                      'type': 'RunKnobEntry',
+                      'type': 'DartDefineEntry',
                       'fields': <Object?>[
                         <String, Object?>{
                           'name': 'define',
                           'type': 'String',
-                          'doc':
-                              'The define\'s name, as `String.fromEnvironment` reads it.',
+                          'doc': 'The name `String.fromEnvironment` reads.',
                         },
                         <String, Object?>{
                           'name': 'label',
@@ -2574,7 +2613,7 @@ final resultShapes = <String, ResultShape>{
                           'type': 'String',
                           'optional': true,
                           'doc':
-                              'What is wrong with this knob, when something is.',
+                              'What is wrong with this define, when something is.',
                         },
                       ],
                     },
@@ -2751,48 +2790,6 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
     ],
   }),
-  'RunKnobEntry': ResultShape.fromJson(<String, Object?>{
-    'type': 'RunKnobEntry',
-    'fields': <Object?>[
-      <String, Object?>{
-        'name': 'define',
-        'type': 'String',
-        'doc': 'The define\'s name, as `String.fromEnvironment` reads it.',
-      },
-      <String, Object?>{'name': 'label', 'type': 'String', 'optional': true},
-      <String, Object?>{
-        'name': 'description',
-        'type': 'String',
-        'optional': true,
-      },
-      <String, Object?>{'name': 'default', 'type': 'String', 'optional': true},
-      <String, Object?>{
-        'name': 'options',
-        'type': 'List<String>',
-        'doc':
-            'Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine\'s addresses on the local network.',
-      },
-      <String, Object?>{
-        'name': 'kind',
-        'type': 'String',
-        'optional': true,
-        'doc':
-            '`String`, `int`, `bool` or `double` — how the app\'s own source reads this define.',
-      },
-      <String, Object?>{
-        'name': 'readAt',
-        'type': 'String',
-        'optional': true,
-        'doc': 'The package-relative file the read is in.',
-      },
-      <String, Object?>{
-        'name': 'problem',
-        'type': 'String',
-        'optional': true,
-        'doc': 'What is wrong with this knob, when something is.',
-      },
-    ],
-  }),
   'RunLaunchResult': ResultShape.fromJson(<String, Object?>{
     'type': 'RunLaunchResult',
     'fields': <Object?>[
@@ -2833,7 +2830,7 @@ final resultShapes = <String, ResultShape>{
               'optional': true,
             },
             <String, Object?>{
-              'name': 'knobs',
+              'name': 'defines',
               'type': 'Map<String, String>',
               'doc': 'The dart-defines it was built with.',
             },

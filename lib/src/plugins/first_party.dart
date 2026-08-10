@@ -212,8 +212,8 @@ class ServerInspection extends Plugin {
 /// fw.use(Run(packages: [
 ///   RunPackage(app, entrypoints: [
 ///     Entrypoint('lib/main.dart', name: 'App'),
-///     Entrypoint('lib/main_staging.dart', name: 'Staging', knobs: [
-///       LaunchKnob('API_BASE_URL', from: KnobSource.servers),
+///     Entrypoint('lib/main_staging.dart', name: 'Staging', defines: [
+///       DartDefine('API_BASE_URL', from: DefineSource.servers),
 ///     ]),
 ///   ]),
 /// ]));
@@ -265,7 +265,7 @@ class Entrypoint {
     this.description,
     this.flavor,
     this.platforms = const [],
-    this.knobs = const [],
+    this.defines = const [],
   });
 
   /// Package-relative, `/`-separated — `lib/main_staging.dart`.
@@ -324,7 +324,7 @@ class Entrypoint {
   final List<RunPlatform> platforms;
 
   /// What has to be decided before this can be built.
-  final List<LaunchKnob> knobs;
+  final List<DartDefine> defines;
 
   Map<String, Object?> toJson() => {
     'path': path,
@@ -335,7 +335,7 @@ class Entrypoint {
     // devices; the manifest keeps the author's word so a picker can say
     // `desktop` rather than reciting three platforms back at them.
     if (platforms.isNotEmpty) 'platforms': [for (var p in platforms) p.name],
-    if (knobs.isNotEmpty) 'knobs': [for (var k in knobs) k.toJson()],
+    if (defines.isNotEmpty) 'defines': [for (var d in defines) d.toJson()],
   };
 }
 
@@ -388,13 +388,19 @@ enum RunPlatform {
 /// A `--dart-define` this entry point wants, offered as a control rather than
 /// as something to remember.
 ///
-/// **Launch knobs are the expensive kind.** Changing one is a rebuild, because
-/// the value is compiled in. Prefer a runtime knob — a devbar variable, pushed
-/// into a running app for nothing — and reach for this only when the value has
-/// to be baked in.
-class LaunchKnob {
-  const LaunchKnob(
-    this.define, {
+/// **Named for what it is, because that is what says what it costs.** This was
+/// `LaunchKnob`, which put it in the same word as a preview's knobs — and those
+/// are the opposite kind of thing: a knob is read while a widget builds and
+/// changing one costs a frame, while a define is compiled in and changing one
+/// costs a full rebuild and reinstall. Nothing in the old name said so, and
+/// both were `--knobs=` on the same CLI.
+///
+/// Prefer a runtime control where one will do — a devbar variable, pushed into
+/// a running app for nothing — and reach for this only when the value has to be
+/// baked in.
+class DartDefine {
+  const DartDefine(
+    this.name, {
     this.label,
     this.description,
     this.defaultValue,
@@ -402,11 +408,10 @@ class LaunchKnob {
     this.from,
   });
 
-  /// The define's name, as `String.fromEnvironment` reads it —
-  /// `API_BASE_URL`.
-  final String define;
+  /// The name `String.fromEnvironment` reads — `API_BASE_URL`.
+  final String name;
 
-  /// What a human sees; [define] when absent.
+  /// What a human sees; [name] when absent.
   final String? label;
 
   final String? description;
@@ -422,10 +427,10 @@ class LaunchKnob {
   /// This is what turns "inject the local server's address" from typing into
   /// picking: the tool already knows what is running and what this machine is
   /// reachable at, so the value should not have to be looked up by hand.
-  final KnobSource? from;
+  final DefineSource? from;
 
   Map<String, Object?> toJson() => {
-    'define': define,
+    'define': name,
     if (label != null) 'label': label,
     if (description != null) 'description': description,
     if (defaultValue != null) 'default': defaultValue,
@@ -434,8 +439,8 @@ class LaunchKnob {
   };
 }
 
-/// Where a [LaunchKnob]'s offered values are found.
-enum KnobSource {
+/// Where a [DartDefine]'s offered values are found.
+enum DefineSource {
   /// The base URLs of the dev servers announcing themselves right now — what
   /// `package:flutterware/server.dart` publishes in its handle.
   servers,
@@ -444,7 +449,7 @@ enum KnobSource {
   /// told, since `localhost` on a phone is the phone.
   hostAddresses;
 
-  static KnobSource? byName(String name) {
+  static DefineSource? byName(String name) {
     for (var value in values) {
       if (value.name == name) return value;
     }

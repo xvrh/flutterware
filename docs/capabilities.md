@@ -294,7 +294,7 @@ apps: List<RunAppEntry>
   package: String?
   entrypoint: String
   entrypointName: String?
-  knobs: Map<String, String>   # The dart-defines it was built with.
+  defines: Map<String, String>   # The dart-defines it was built with.
   since: String   # When it started, ISO-8601.
   app: bool   # The app answered on its VM service — it can be inspected and driven.
   launcher: bool   # The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.
@@ -329,15 +329,15 @@ packages: List<RunEntrypointPackage>
     flavorSource: String?   # `entrypoint` or `pubspec` — which of the two put [flavor] there.
     platforms: List<String>   # What this entry point declares it can run on, as the config wrote it — `mobile` stays `mobile`.
     devices: List<String>   # The ids of the devices currently connected that [platforms] allows.
-    knobs: List<RunKnobEntry>
-      define: String   # The define's name, as `String.fromEnvironment` reads it.
+    defines: List<DartDefineEntry>
+      define: String   # The name `String.fromEnvironment` reads.
       label: String?
       description: String?
       default: String?
       options: List<String>   # Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine's addresses on the local network.
       kind: String?   # `String`, `int`, `bool` or `double` — how the app's own source reads this define.
       readAt: String?   # The package-relative file the read is in.
-      problem: String?   # What is wrong with this knob, when something is.
+      problem: String?   # What is wrong with this define, when something is.
 note: String?
 ```
 
@@ -350,7 +350,7 @@ note: String?
 Builds an entry point and runs it on a device. The launcher is detached and its output goes to a log file, so this can return while the app keeps running. A cold build is slow — about ten seconds warm on Android and a minute and a half cold — and on a wireless device it can stall on an OS permission dialog that nobody is looking at.
 
 ```sh
-fw run run launch --device=<choice> [--package=…] [--entrypoint=…] [--flavor=…] [--knobs=…] [--wait=…] [--timeout=…]
+fw run run launch --device=<choice> [--package=…] [--entrypoint=…] [--flavor=…] [--defines=…] [--wait=…] [--timeout=…]
 ```
 
 Returns `RunLaunchResult`:
@@ -364,7 +364,7 @@ app: RunAppEntry   # The run as the ledger now holds it — the same shape `apps
   package: String?
   entrypoint: String
   entrypointName: String?
-  knobs: Map<String, String>   # The dart-defines it was built with.
+  defines: Map<String, String>   # The dart-defines it was built with.
   since: String   # When it started, ISO-8601.
   app: bool   # The app answered on its VM service — it can be inspected and driven.
   launcher: bool   # The `flutter run` that launched it is still alive, which is what makes reload and restart available: those are registered by the tool, not by the app, and they go away with it.
@@ -385,8 +385,8 @@ note: String?
 | `device` | choice | yes | — | Which device to run on |
 | `package` | choice | no | — | Which declared package; the only one when there is one |
 | `entrypoint` | choice | no | — | Package-relative path, as `entrypoints` reports it. The package's only entry point when omitted. |
-| `flavor` | string | no | — | The `--flavor` to build. Defaults to what the entry point declares. A project with product flavors cannot be built without one at all — unlike a knob, leaving it out is a build failure rather than a default value. |
-| `knobs` | string | no | — | Launch knobs to bake in: `NAME=value,NAME=value`, or a JSON object. Each becomes a `--dart-define`, so changing one costs a rebuild — which is why the entry point declares which ones it wants and what values are worth using. |
+| `flavor` | string | no | — | The `--flavor` to build. Defaults to what the entry point declares. A project with product flavors cannot be built without one at all — unlike a define, leaving it out is a build failure rather than a default value. |
+| `defines` | string | no | — | `--dart-define`s to bake in: `NAME=value,NAME=value`, or a JSON object. Compiled in rather than read at run time, so changing one costs a full rebuild — which is why the entry point declares which ones it wants and what values are worth using. Not to be confused with a preview knob, which is read while a widget builds and costs a frame. |
 | `wait` | boolean | no | true | Wait for the app to come up before answering. Off returns as soon as the launcher is spawned, and `apps` is how you find out how it went. |
 | `timeout` | integer | no | 300 | Seconds to wait. A timeout is not a failure — the build carries on and the answer says how far it got. |
 

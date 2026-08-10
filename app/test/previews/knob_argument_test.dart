@@ -10,9 +10,9 @@ import 'package:flutterware_app/src/plugins/native/previews_core.dart';
 /// the value is *spelled*, the other what *kind* it becomes. The pipeline they
 /// feed needs an SDK, a compile and a guest; these do not.
 void main() {
-  group('parseKnobs', () {
+  group('parsePairs', () {
     test('reads name=value pairs, which is what a shell can pass', () {
-      expect(PreviewsCore.parseKnobs('label=Hi,count=7,dense=true'), {
+      expect(PreviewsCore.parsePairs('label=Hi,count=7,dense=true'), {
         'label': 'Hi',
         'count': '7',
         'dense': 'true',
@@ -21,37 +21,37 @@ void main() {
 
     test('keeps everything after the first = ', () {
       // A value may contain one; the name may not.
-      expect(PreviewsCore.parseKnobs('title=a=b'), {'title': 'a=b'});
+      expect(PreviewsCore.parsePairs('title=a=b'), {'title': 'a=b'});
     });
 
     test('trims the name but never the value', () {
       // Leading space in a string knob is a legitimate thing to want to see.
-      expect(PreviewsCore.parseKnobs('label = x '), {'label': ' x '});
+      expect(PreviewsCore.parsePairs('label = x '), {'label': ' x '});
     });
 
     test('reads a JSON object, which is what an agent writes', () {
-      expect(PreviewsCore.parseKnobs('{"count": 7, "dense": true}'), {
+      expect(PreviewsCore.parsePairs('{"count": 7, "dense": true}'), {
         'count': '7',
         'dense': 'true',
       });
     });
 
     test('takes a map straight through, which is how MCP sends one', () {
-      expect(PreviewsCore.parseKnobs({'count': 7, 'dense': true}), {
+      expect(PreviewsCore.parsePairs({'count': 7, 'dense': true}), {
         'count': '7',
         'dense': 'true',
       });
     });
 
     test('nothing asked for is no knobs, not an error', () {
-      expect(PreviewsCore.parseKnobs(null), isEmpty);
+      expect(PreviewsCore.parsePairs(null), isEmpty);
     });
 
     test('refuses a pair with no value rather than guessing one', () {
-      expect(() => PreviewsCore.parseKnobs('dense'), throwsArgumentError);
-      expect(() => PreviewsCore.parseKnobs('=x'), throwsArgumentError);
-      expect(() => PreviewsCore.parseKnobs(''), throwsArgumentError);
-      expect(() => PreviewsCore.parseKnobs('{"a": 1'), throwsFormatException);
+      expect(() => PreviewsCore.parsePairs('dense'), throwsArgumentError);
+      expect(() => PreviewsCore.parsePairs('=x'), throwsArgumentError);
+      expect(() => PreviewsCore.parsePairs(''), throwsArgumentError);
+      expect(() => PreviewsCore.parsePairs('{"a": 1'), throwsFormatException);
     });
   });
 

@@ -12,10 +12,10 @@ export 'app.dart' show UICatalog;
 /// for the second one to disambiguate.
 ///
 /// App-wide switches — a flavour, a locale, a theme — are **not** knobs. They
-/// are declared by the project's `PreviewShell` through `TopBarState`, and they
+/// are declared by the project's `PreviewShell` through `PreviewAxes`, and they
 /// persist across entries because they belong to the shell rather than to
 /// whatever it is wrapping. That they are not reachable from a context is
-/// deliberate; see `TopBarState`.
+/// deliberate; see `PreviewAxes`.
 extension KnobsExtension on BuildContext {
   Knobs get knobs => KnobsProvider.maybeOf(this)?.knobs ?? Knobs.unanswered;
 }

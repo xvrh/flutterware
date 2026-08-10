@@ -51,7 +51,7 @@ Future<RunHandle> launchApp({
   String? entrypointName,
   String? deviceName,
   String? flavor,
-  Map<String, String> knobs = const {},
+  Map<String, String> defines = const {},
 }) async {
   if (Platform.isWindows) {
     // `ProcessStartMode.detached` gives no stdio to redirect, and the POSIX
@@ -95,9 +95,9 @@ Future<RunHandle> launchApp({
     // Before the defines, because a flavor decides which variant is built and
     // the defines only decide what goes into it.
     if (flavor != null) ...['--flavor', flavor],
-    for (var knob in knobs.entries) ...[
+    for (var define in defines.entries) ...[
       '--dart-define',
-      '${knob.key}=${knob.value}',
+      '${define.key}=${define.value}',
     ],
   ];
 
@@ -124,7 +124,7 @@ Future<RunHandle> launchApp({
     package: package,
     flavor: flavor,
     launcherPid: process.pid,
-    knobs: knobs,
+    defines: defines,
     logPath: logPath,
     startedAt: DateTime.now(),
   );

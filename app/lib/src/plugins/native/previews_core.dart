@@ -1989,9 +1989,9 @@ class PreviewsCore extends PluginCore {
 
     var (deviceId, viewport) = _framing(arguments);
 
-    var knobs = parseKnobs(arguments['knobs']);
-    var axes = parseKnobs(arguments['axes']);
-    var debug = parseKnobs(arguments['debug']);
+    var knobs = parsePairs(arguments['knobs']);
+    var axes = parsePairs(arguments['axes']);
+    var debug = parsePairs(arguments['debug']);
     var node = arguments['node'];
     if (node != null && node is! String) {
       throw ArgumentError.value(node, 'node', 'must be a node id');
@@ -2062,7 +2062,7 @@ class PreviewsCore extends PluginCore {
   /// Values stay strings here: only the guest knows what kind each knob is,
   /// and guessing at this end would make `count=5` an int for one demo and a
   /// string for another.
-  static Map<String, String> parseKnobs(Object? value) {
+  static Map<String, String> parsePairs(Object? value) {
     if (value == null) return const {};
     if (value is Map) {
       return {
@@ -2078,7 +2078,7 @@ class PreviewsCore extends PluginCore {
       if (decoded is! Map) {
         throw ArgumentError.value(value, 'knobs', 'expected a JSON object');
       }
-      return parseKnobs(decoded);
+      return parsePairs(decoded);
     }
 
     // Names are trimmed, values never: `label= x ` sets a string knob to a
@@ -2253,9 +2253,9 @@ class _InspectRequest {
     if (entryId is! String || entryId.isEmpty) {
       throw ArgumentError.value(entryId, 'entry', 'required');
     }
-    var knobs = PreviewsCore.parseKnobs(arguments['knobs']);
-    var axes = PreviewsCore.parseKnobs(arguments['axes']);
-    var debug = PreviewsCore.parseKnobs(arguments['debug']);
+    var knobs = PreviewsCore.parsePairs(arguments['knobs']);
+    var axes = PreviewsCore.parsePairs(arguments['axes']);
+    var debug = PreviewsCore.parsePairs(arguments['debug']);
     var (deviceId, viewport) = PreviewsCore._framing(arguments);
     var picture = arguments['screenshot'] == true;
 
