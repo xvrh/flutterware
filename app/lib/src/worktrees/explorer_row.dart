@@ -371,14 +371,36 @@ class _ChangesCell extends StatelessWidget {
     var git = fact.value!;
     var shape = git.changes;
 
+    // A branch that has committed nothing, in a worktree full of edits. Real
+    // and common — the first repo this ran against had one with 45 changed
+    // files and no commits of its own. "in sync" is true of the branch and a
+    // lie about the worktree, so the dirt is the headline when there is any.
     if (shape == null || shape.isEmpty) {
       return _Lines(
         dim: fact.isDim,
-        top: Text(
-          'in sync',
-          style: context.type.bodySmall.copyWith(color: colors.mut2),
-        ),
-        bottom: git.dirty > 0 ? _Dirty(git.dirty) : null,
+        top: git.dirty > 0
+            ? Row(
+                children: [
+                  _Dirty(git.dirty),
+                  const Gap(FwSpacing.sm),
+                  Text(
+                    'uncommitted',
+                    style: context.type.bodySmall.copyWith(color: colors.mut2),
+                  ),
+                ],
+              )
+            : Text(
+                'in sync',
+                style: context.type.bodySmall.copyWith(color: colors.mut2),
+              ),
+        bottom: git.behind > 0 || git.ahead > 0
+            ? Text(
+                '${git.ahead > 0 ? '↑${git.ahead} ' : ''}'
+                        '${git.behind > 0 ? '↓${git.behind}' : ''}'
+                    .trim(),
+                style: context.type.micro.copyWith(color: colors.mut3),
+              )
+            : null,
       );
     }
 
