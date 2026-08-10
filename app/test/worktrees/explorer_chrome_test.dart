@@ -178,6 +178,27 @@ void main() {
     expect(find.byKey(sidebarKey), findsOneWidget);
   });
 
+  testWidgets('a row expands rather than opening the worktree', (tester) async {
+    var shell = await _pump(tester);
+    await tester.tap(find.byKey(explorerTabKey));
+    await tester.pumpAndSettle();
+
+    var closed = shell.worktrees.last;
+    expect(shell.isOpen(closed), isFalse);
+
+    await tester.tap(find.text('feature/explorer').first);
+    await tester.pumpAndSettle();
+
+    // The detail appeared and no config subprocess was spawned. Opening costs a
+    // tab and a subprocess; this screen exists so the decision comes first.
+    expect(find.text('PATH'), findsOneWidget);
+    expect(shell.isOpen(closed), isFalse);
+
+    await tester.tap(find.text('feature/explorer').first);
+    await tester.pumpAndSettle();
+    expect(find.text('PATH'), findsNothing);
+  });
+
   testWidgets('the badge counts only what will not progress without you', (
     tester,
   ) async {

@@ -70,7 +70,7 @@ enum ExplorerSort {
 ///
 /// A View: entries and callbacks in, no probing, no git, no clock of its own.
 /// See `docs/superpowers/specs/2026-08-10-worktree-explorer-view-design.md`.
-class WorktreeExplorerView extends StatelessWidget {
+class WorktreeExplorerView extends StatefulWidget {
   const WorktreeExplorerView({
     super.key,
     required this.entries,
@@ -84,7 +84,6 @@ class WorktreeExplorerView extends StatelessWidget {
     this.onSortChanged,
     this.onRefresh,
     this.onOpen,
-    this.onSelect,
   });
 
   final List<ExplorerEntry> entries;
@@ -99,7 +98,23 @@ class WorktreeExplorerView extends StatelessWidget {
   final ValueChanged<ExplorerSort>? onSortChanged;
   final VoidCallback? onRefresh;
   final ValueChanged<ExplorerEntry>? onOpen;
-  final ValueChanged<ExplorerEntry>? onSelect;
+
+  @override
+  State<WorktreeExplorerView> createState() => _WorktreeExplorerViewState();
+}
+
+class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
+  /// Which rows are showing their detail.
+  ///
+  /// **A set, not one at a time.** Comparing two checkouts is the reason this
+  /// screen exists, and a detail that closed the moment you opened another one
+  /// would turn the comparison into a memory test.
+  final _expanded = <String>{};
+
+  void _toggle(String path) => setState(
+    () =>
+        _expanded.contains(path) ? _expanded.remove(path) : _expanded.add(path),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -122,16 +137,16 @@ class WorktreeExplorerView extends StatelessWidget {
       child: Column(
         children: [
           _Header(
-            total: entries.length,
+            total: widget.entries.length,
             shown: rows.length,
-            query: query,
-            sort: sort,
-            refreshedAt: refreshedAt,
-            isRefreshing: isRefreshing,
-            now: now,
-            onQueryChanged: onQueryChanged,
-            onSortChanged: onSortChanged,
-            onRefresh: onRefresh,
+            query: widget.query,
+            sort: widget.sort,
+            refreshedAt: widget.refreshedAt,
+            isRefreshing: widget.isRefreshing,
+            now: widget.now,
+            onQueryChanged: widget.onQueryChanged,
+            onSortChanged: widget.onSortChanged,
+            onRefresh: widget.onRefresh,
           ),
           Expanded(
             child: rows.isEmpty
@@ -146,15 +161,17 @@ class WorktreeExplorerView extends StatelessWidget {
                         branch: worktree.branch,
                         isMain: worktree.isMain,
                         isOpen: entry.isOpen,
-                        isCurrent: worktree.path == currentWorktreePath,
+                        isCurrent: worktree.path == widget.currentWorktreePath,
                         facts: entry.facts,
-                        now: now,
+                        now: widget.now,
                         match: match,
                         scale: busiest == 0 ? 0 : entry.branchLines / busiest,
                         showAgent: showAgent,
                         showForge: showForge,
-                        onTap: () => onSelect?.call(entry),
-                        onOpen: () => onOpen?.call(entry),
+                        expanded: _expanded.contains(worktree.path),
+                        path: worktree.path,
+                        onToggleExpand: () => _toggle(worktree.path),
+                        onOpen: () => widget.onOpen?.call(entry),
                       );
                     },
                   ),
@@ -166,12 +183,12 @@ class WorktreeExplorerView extends StatelessWidget {
 
   List<(ExplorerEntry, FilterMatch?)> _filtered() {
     var rows = <(ExplorerEntry, FilterMatch?)>[];
-    for (var entry in entries) {
-      if (query.trim().isEmpty) {
+    for (var entry in widget.entries) {
+      if (widget.query.trim().isEmpty) {
         rows.add((entry, null));
         continue;
       }
-      var match = matchWorktreeFilter(query, [
+      var match = matchWorktreeFilter(widget.query, [
         entry.label,
         entry.worktree.branch,
         entry.worktree.name,
@@ -182,7 +199,7 @@ class WorktreeExplorerView extends StatelessWidget {
     return rows;
   }
 
-  int _compare(ExplorerEntry a, ExplorerEntry b) => switch (sort) {
+  int _compare(ExplorerEntry a, ExplorerEntry b) => switch (widget.sort) {
     ExplorerSort.activity => _activityOf(b).compareTo(_activityOf(a)),
     ExplorerSort.needsYou => _needs(b).compareTo(_needs(a)),
     ExplorerSort.name => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
@@ -226,10 +243,12 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     return Container(
+      // Matched to the rows below, so the title sits over the column of names
+      // and the refresh button over the column of row controls.
       padding: const EdgeInsets.fromLTRB(
-        FwSpacing.xl,
+        explorerInsetLeft,
         FwSpacing.lg,
-        FwSpacing.lg,
+        explorerInsetRight,
         FwSpacing.lg,
       ),
       decoration: BoxDecoration(

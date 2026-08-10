@@ -206,40 +206,62 @@ class _Band extends StatelessWidget {
     var colors = context.colors;
     return Container(
       height: _bandHeight,
-      decoration: BoxDecoration(
-        color: colors.panel,
-        border: Border(bottom: BorderSide(color: colors.line)),
-      ),
-      padding: const EdgeInsets.only(left: _trafficLightInset),
-      child: Row(
+      color: colors.panel,
+      child: Stack(
         children: [
-          // Where a desktop app puts it: in the chrome, always in the same
-          // place, so the rail can go to nothing at all rather than leaving a
-          // strip behind — a panel that hides its own list would otherwise
-          // leave two empty strips side by side.
-          _SidebarButton(shell),
-          const Gap(FwSpacing.xs),
-          _ExplorerTab(shell),
-          Expanded(
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                for (var worktree in shell.openWorktrees)
-                  _WorktreeTab(shell, worktree),
-                _SwitcherButton(shell),
-              ],
+          // **The seam, drawn behind the tabs rather than under them.**
+          //
+          // It used to be the band's own bottom border, which painted across
+          // the full width — including beneath the selected tab, so the tab
+          // that is *showing* the panel below had a line cutting it off from
+          // it. Here a selected tab's opaque background covers the segment it
+          // sits on, and the two read as one surface; an unselected tab is
+          // transparent and lets the seam through, which is what makes the
+          // selected one legible.
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(height: 1, color: colors.line),
+          ),
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.only(left: _trafficLightInset),
+              child: _bandContent(context),
             ),
           ),
-          SearchTrigger(
-            onTap: () => unawaited(showShellSearch(context, shell)),
-          ),
-          const Gap(FwSpacing.md),
-          _ConfigLoadLine(shell),
-          _ConfigButton(shell),
-          const _HotReloadButtons(),
-          const Gap(FwSpacing.md),
         ],
       ),
+    );
+  }
+
+  Widget _bandContent(BuildContext context) {
+    return Row(
+      children: [
+        // Where a desktop app puts it: in the chrome, always in the same
+        // place, so the rail can go to nothing at all rather than leaving a
+        // strip behind — a panel that hides its own list would otherwise
+        // leave two empty strips side by side.
+        _SidebarButton(shell),
+        const Gap(FwSpacing.xs),
+        _ExplorerTab(shell),
+        Expanded(
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              for (var worktree in shell.openWorktrees)
+                _WorktreeTab(shell, worktree),
+              _SwitcherButton(shell),
+            ],
+          ),
+        ),
+        SearchTrigger(onTap: () => unawaited(showShellSearch(context, shell))),
+        const Gap(FwSpacing.md),
+        _ConfigLoadLine(shell),
+        _ConfigButton(shell),
+        const _HotReloadButtons(),
+        const Gap(FwSpacing.md),
+      ],
     );
   }
 }
@@ -1479,10 +1501,10 @@ class _ExplorerState extends State<_Explorer> {
       onQueryChanged: (value) => setState(() => _query = value),
       onSortChanged: (value) => setState(() => _sort = value),
       onRefresh: () => unawaited(shell.refreshWorktreeFacts()),
-      // Opening is the deliberate act the whole screen exists to inform, so it
-      // is also the one that takes you there.
+      // **Only the Open button opens.** Tapping a row expands it instead —
+      // opening costs a config subprocess and a tab, and this screen exists so
+      // you can decide before spending that.
       onOpen: (entry) => unawaited(shell.open(entry.worktree)),
-      onSelect: (entry) => unawaited(shell.open(entry.worktree)),
     );
   }
 }

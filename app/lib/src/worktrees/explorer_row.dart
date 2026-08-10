@@ -30,9 +30,25 @@ class WorktreeRow extends StatefulWidget {
     this.scale = 1,
     this.showAgent = true,
     this.showForge = true,
-    this.onTap,
+    this.expanded = false,
+    this.path,
+    this.onToggleExpand,
     this.onOpen,
   });
+
+  /// Whether the detail is showing below the row.
+  final bool expanded;
+
+  /// The checkout's directory, for the detail. Null in a demo that has none.
+  final String? path;
+
+  /// **Tapping the row expands it; it does not open the worktree.**
+  ///
+  /// Opening costs a config subprocess and a tab, and the whole premise of this
+  /// screen is that you can decide *before* spending that. A row that opened on
+  /// a stray click would make the cheap surface expensive. Opening is the
+  /// deliberate act and has its own button.
+  final VoidCallback? onToggleExpand;
 
   /// Whether these columns are drawn at all.
   ///
@@ -69,7 +85,6 @@ class WorktreeRow extends StatefulWidget {
   /// bars comparable down the column instead of fourteen unrelated widths.
   final double scale;
 
-  final VoidCallback? onTap;
   final VoidCallback? onOpen;
 
   @override
@@ -77,7 +92,20 @@ class WorktreeRow extends StatefulWidget {
 }
 
 const _rowHeight = 52.0;
-const _gutterWidth = 18.0;
+
+/// Left breathing room, past the 2px "open" edge which stays at x=0 so it reads
+/// as an edge rather than as a stripe. The header pads to the same figure, so
+/// its title sits over the column of names.
+const explorerInsetLeft = 26.0;
+
+/// Kept clear on the right so the overlay scrollbar — which appears only while
+/// the pointer is over the list, exactly when you are reaching for a row
+/// control — does not land on top of the one button it would cover.
+const explorerInsetRight = 16.0;
+
+const _gutterWidth = explorerInsetLeft;
+const _scrollGutter = explorerInsetRight;
+
 const _changesWidth = 220.0;
 const _agentWidth = 190.0;
 const _prWidth = 150.0;
@@ -98,54 +126,73 @@ class _WorktreeRowState extends State<WorktreeRow> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: widget.onToggleExpand,
         child: Container(
-          height: _rowHeight,
           decoration: BoxDecoration(
             color: _hovered ? colors.hoverOverlay : Colors.transparent,
             border: Border(bottom: BorderSide(color: colors.line)),
           ),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _Gutter(isOpen: widget.isOpen, tone: facts.tone),
-              Expanded(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: _nameMinWidth),
-                  child: _NameCell(
-                    label: widget.label,
-                    branch: widget.branch,
-                    isMain: widget.isMain,
-                    isCurrent: widget.isCurrent,
-                    match: widget.match,
-                  ),
-                ),
-              ),
               SizedBox(
-                width: _changesWidth,
-                child: _ChangesCell(fact: facts.git, scale: widget.scale),
-              ),
-              if (widget.showAgent)
-                SizedBox(
-                  width: _agentWidth,
-                  child: _AgentCell(fact: facts.agent, now: widget.now),
+                height: _rowHeight,
+                child: Row(
+                  children: [
+                    _Gutter(isOpen: widget.isOpen, tone: facts.tone),
+                    Expanded(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minWidth: _nameMinWidth,
+                        ),
+                        child: _NameCell(
+                          label: widget.label,
+                          branch: widget.branch,
+                          isMain: widget.isMain,
+                          isCurrent: widget.isCurrent,
+                          match: widget.match,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: _changesWidth,
+                      child: _ChangesCell(fact: facts.git, scale: widget.scale),
+                    ),
+                    if (widget.showAgent)
+                      SizedBox(
+                        width: _agentWidth,
+                        child: _AgentCell(fact: facts.agent, now: widget.now),
+                      ),
+                    if (widget.showForge)
+                      SizedBox(
+                        width: _prWidth,
+                        child: _PrCell(fact: facts.forge),
+                      ),
+                    SizedBox(
+                      width: _whenWidth,
+                      child: _WhenCell(fact: facts.activity, now: widget.now),
+                    ),
+                    SizedBox(
+                      width: _actionsWidth,
+                      child: _Actions(
+                        hovered: _hovered,
+                        isOpen: widget.isOpen,
+                        expanded: widget.expanded,
+                        onOpen: widget.onOpen,
+                        onToggleExpand: widget.onToggleExpand,
+                      ),
+                    ),
+                    const Gap(_scrollGutter),
+                  ],
                 ),
-              if (widget.showForge)
-                SizedBox(
-                  width: _prWidth,
-                  child: _PrCell(fact: facts.forge),
-                ),
-              SizedBox(
-                width: _whenWidth,
-                child: _WhenCell(fact: facts.activity, now: widget.now),
               ),
-              SizedBox(
-                width: _actionsWidth,
-                child: _Actions(
-                  hovered: _hovered,
-                  isOpen: widget.isOpen,
-                  onOpen: widget.onOpen,
+              if (widget.expanded)
+                _Detail(
+                  facts: facts,
+                  path: widget.path,
+                  branch: widget.branch,
+                  now: widget.now,
                 ),
-              ),
             ],
           ),
         ),
@@ -419,47 +466,63 @@ class _ChangesCell extends StatelessWidget {
     }
 
     var ranked = shape.ranked;
-    return _Lines(
-      dim: fact.isDim,
-      top: Row(
-        children: [
-          _Fingerprint(shape: shape, scale: scale),
-          const Gap(FwSpacing.md),
-          Flexible(
-            child: Text(
-              [for (var b in ranked.take(2)) b.name].join('·'),
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
-              style: context.type.micro.copyWith(color: colors.mut2),
-            ),
-          ),
-        ],
-      ),
-      bottom: Row(
-        children: [
-          Text(
-            '${shape.files}f',
-            style: context.type.micro.copyWith(color: colors.mut),
-          ),
-          const Gap(FwSpacing.sm),
-          Text(
-            '+${_short(shape.added)}',
-            style: context.type.micro.copyWith(color: colors.grn),
-          ),
-          const Gap(FwSpacing.xs),
-          Text(
-            '−${_short(shape.removed)}',
-            style: context.type.micro.copyWith(color: colors.red),
-          ),
-          if (git.dirty > 0) ...[const Gap(FwSpacing.md), _Dirty(git.dirty)],
-          if (git.ahead > 0 || git.behind > 0) ...[
+    return Tooltip(
+      // **The row is terse on purpose and terse is unreadable without this.**
+      // `20f` is twenty files; nothing on screen says so, and a legend would be
+      // a permanent explanation of something you learn once.
+      message: [
+        '${shape.files} file${shape.files == 1 ? '' : 's'} changed against '
+            '${git.base ?? 'the base branch'}',
+        '+${shape.added} added, −${shape.removed} removed',
+        if (git.dirty > 0)
+          '${git.dirty} uncommitted file${git.dirty == 1 ? '' : 's'} (●)',
+        if (git.ahead > 0) '${git.ahead} commit(s) ahead (↑)',
+        if (git.behind > 0) '${git.behind} commit(s) behind (↓)',
+        '',
+        for (var b in ranked) '${b.name}  +${b.added} −${b.removed}',
+      ].join('\n'),
+      child: _Lines(
+        dim: fact.isDim,
+        top: Row(
+          children: [
+            _Fingerprint(shape: shape, scale: scale),
             const Gap(FwSpacing.md),
-            Text(
-              '↑${git.ahead}${git.behind > 0 ? ' ↓${git.behind}' : ''}',
-              style: context.type.micro.copyWith(color: colors.mut3),
+            Flexible(
+              child: Text(
+                [for (var b in ranked.take(2)) b.name].join('·'),
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: context.type.micro.copyWith(color: colors.mut2),
+              ),
             ),
           ],
-        ],
+        ),
+        bottom: Row(
+          children: [
+            Text(
+              '${shape.files}f',
+              style: context.type.micro.copyWith(color: colors.mut),
+            ),
+            const Gap(FwSpacing.sm),
+            Text(
+              '+${_short(shape.added)}',
+              style: context.type.micro.copyWith(color: colors.grn),
+            ),
+            const Gap(FwSpacing.xs),
+            Text(
+              '−${_short(shape.removed)}',
+              style: context.type.micro.copyWith(color: colors.red),
+            ),
+            if (git.dirty > 0) ...[const Gap(FwSpacing.md), _Dirty(git.dirty)],
+            if (git.ahead > 0 || git.behind > 0) ...[
+              const Gap(FwSpacing.md),
+              Text(
+                '↑${git.ahead}${git.behind > 0 ? ' ↓${git.behind}' : ''}',
+                style: context.type.micro.copyWith(color: colors.mut3),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -744,43 +807,46 @@ class _Actions extends StatelessWidget {
   const _Actions({
     required this.hovered,
     required this.isOpen,
+    required this.expanded,
     required this.onOpen,
+    required this.onToggleExpand,
   });
 
   final bool hovered;
   final bool isOpen;
+  final bool expanded;
   final VoidCallback? onOpen;
+  final VoidCallback? onToggleExpand;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    if (!hovered) {
+    // The chevron persists while expanded, so an open row still says how it
+    // got that way and how to close it. Otherwise controls are hover-only: a
+    // button beside every row is a wall rather than a list.
+    if (!hovered && !expanded) {
       return isOpen
           ? Align(
               alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: FwSpacing.lg),
-                child: Text(
-                  'open',
-                  style: context.type.micro.copyWith(color: colors.mut3),
-                ),
+              child: Text(
+                'open',
+                style: context.type.micro.copyWith(color: colors.mut3),
               ),
             )
           : const SizedBox.shrink();
     }
     return Align(
       alignment: Alignment.centerRight,
-      child: Padding(
-        padding: const EdgeInsets.only(right: FwSpacing.md),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (hovered)
             TextButton(
               onPressed: onOpen,
               style: TextButton.styleFrom(
                 minimumSize: Size.zero,
                 padding: const EdgeInsets.symmetric(
-                  horizontal: FwSpacing.md,
+                  horizontal: FwSpacing.sm,
                   vertical: FwSpacing.xxs,
                 ),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -790,9 +856,136 @@ class _Actions extends StatelessWidget {
                 style: context.type.micro.copyWith(color: colors.accent),
               ),
             ),
-            Icon(Icons.more_horiz, size: 15, color: colors.mut2),
+          Tooltip(
+            message: expanded ? 'Hide the detail' : 'Show the detail',
+            child: Icon(
+              expanded ? Icons.expand_less : Icons.expand_more,
+              size: 16,
+              color: colors.mut2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What a row says when you ask it to say more.
+///
+/// **Detail in place, not a destination.** Everything here is already in the
+/// facts — expanding costs nothing and navigates nowhere, which is what lets you
+/// interrogate a checkout you have not opened.
+class _Detail extends StatelessWidget {
+  const _Detail({
+    required this.facts,
+    required this.path,
+    required this.branch,
+    required this.now,
+  });
+
+  final WorktreeFacts facts;
+  final String? path;
+  final String? branch;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var git = facts.git.value;
+    var agent = facts.agent.value;
+    var pr = facts.forge.value;
+    var shape = git?.changes;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(
+        _gutterWidth,
+        0,
+        _scrollGutter,
+        FwSpacing.lg,
+      ),
+      child: Wrap(
+        spacing: FwSpacing.xxxl,
+        runSpacing: FwSpacing.lg,
+        children: [
+          if (path case var it?) _Field('Path', it, selectable: true),
+          if (branch case var it?) _Field('Branch', it),
+          if (git?.base case var base?)
+            _Field(
+              'Against',
+              '$base'
+                  '${git!.ahead > 0 ? ' · ${git.ahead} ahead' : ''}'
+                  '${git.behind > 0 ? ' · ${git.behind} behind' : ''}',
+            ),
+          if (git != null && git.dirty > 0)
+            _Field(
+              'Uncommitted',
+              '${git.dirty} file${git.dirty == 1 ? '' : 's'}',
+            ),
+          if (shape != null && !shape.isEmpty)
+            _Field(
+              'Changed',
+              [
+                for (var b in shape.ranked)
+                  '${b.name}  +${b.added} −${b.removed}',
+              ].join('\n'),
+            ),
+          if (agent != null && agent.state != AgentState.none) ...[
+            _Field(
+              'Agent',
+              [
+                agent.state.name,
+                if (agent.model case var m?) m,
+                if (agent.at case var at?) _ago(at, now),
+              ].join(' · '),
+            ),
+            if (agent.title case var it?) _Field('Session', it),
+            if (agent.lastPrompt case var it?) _Field('Last asked', it),
           ],
-        ),
+          if (pr != null) ...[
+            _Field('Pull request', '#${pr.number} · ${pr.state.name}'),
+            _Field('Title', pr.title),
+          ],
+          if (facts.activity.value case var activity?)
+            _Field(
+              'Last activity',
+              '${_ago(activity.at, now)} ago · ${activity.sourceLabel}',
+            ),
+          if (facts.git.failure case var why?)
+            _Field('Git said', why, tone: colors.red),
+        ],
+      ),
+    );
+  }
+}
+
+class _Field extends StatelessWidget {
+  const _Field(this.label, this.value, {this.selectable = false, this.tone});
+
+  final String label;
+  final String value;
+  final bool selectable;
+  final Color? tone;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var style = context.type.bodySmall.copyWith(color: tone ?? colors.ink);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 460),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: context.type.micro.copyWith(color: colors.mut3),
+          ),
+          const Gap(FwSpacing.xxs),
+          selectable
+              ? SelectableText(value, style: style)
+              : Text(value, style: style),
+        ],
       ),
     );
   }
