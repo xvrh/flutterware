@@ -33,6 +33,7 @@ void main() {
     InspectSource? source,
     bool local = true,
     bool offstage = false,
+    Map<String, String> properties = const {},
   }) => InspectNode(
     id: id,
     type: type,
@@ -40,6 +41,7 @@ void main() {
     source: source,
     createdByLocalProject: local,
     offstage: offstage,
+    properties: properties,
     layout: layout,
     children: children,
   );
@@ -69,6 +71,7 @@ void main() {
           '0',
           'Padding',
           layout: const InspectLayout(x: 8, y: 8, width: 304, height: 48),
+          properties: const {'padding': 'EdgeInsets.all(8.0)'},
           source: const InspectSource(
             file: 'file:///project/demo/b.dart',
             line: 12,
@@ -284,6 +287,25 @@ void main() {
       expect(find.text('"Add to cart"'), findsOneWidget);
       expect(find.text('button'), findsOneWidget);
       expect(find.text('tap'), findsOneWidget);
+      expect(find.text('Select a node'), findsOneWidget);
+    });
+
+    testWidgets('a click fills the detail with the full reading', (
+      tester,
+    ) async {
+      var session = sessionOf(withTree: tree)
+        ..inspectTab = InspectTab.semantics
+        ..semantics = InspectSemantics(entryId: beta.id, root: aTree());
+      await pump(tester, session);
+
+      await tester.tap(find.text('"Add to cart"'));
+      await tester.pump();
+
+      // The row elides; the detail states everything — flags by name, the
+      // rect, the words again selectable.
+      expect(find.text('isButton'), findsOneWidget);
+      expect(find.text('8, 8 — 100 × 40'), findsOneWidget);
+      expect(find.text('Add to cart'), findsOneWidget);
     });
 
     testWidgets('says it is reading until the guest reports', (tester) async {
@@ -333,6 +355,11 @@ void main() {
         reason: 'the file:line is what an agent or a person goes and edits',
       );
       expect(find.textContaining('304 × 48'), findsAtLeastNWidgets(1));
+      expect(
+        find.text('EdgeInsets.all(8.0)'),
+        findsOneWidget,
+        reason: 'what the widget says about itself, under the layout block',
+      );
     });
 
     testWidgets('a node that lays nothing out says so, rather than zeroes', (

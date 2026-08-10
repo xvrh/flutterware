@@ -65,6 +65,23 @@ class InspectPanel extends StatefulWidget {
 class _InspectPanelState extends State<InspectPanel> {
   var _collapsed = false;
 
+  /// The last semantics read, parsed once and held by identity.
+  ///
+  /// Parsed in the build it would hand [SemanticsView] a *fresh* root on
+  /// every rebuild — and the view keeps its selection by identity, so any
+  /// session notify would silently clear what you had selected.
+  Map<String, Object?>? _semanticsRaw;
+  SemanticsSnapshotNode? _semanticsParsed;
+
+  SemanticsSnapshotNode? _parsedSemantics(Map<String, Object?>? raw) {
+    if (raw == null) return null;
+    if (!identical(raw, _semanticsRaw)) {
+      _semanticsRaw = raw;
+      _semanticsParsed = SemanticsSnapshotNode.fromJson(raw);
+    }
+    return _semanticsParsed;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -171,22 +188,13 @@ class _InspectPanelState extends State<InspectPanel> {
         InspectDockTab(
           id: InspectTab.semantics.name,
           label: InspectTab.semantics.label,
-          body: (context) {
-            var read = session.semanticsForSelection;
-            return SemanticsView(
-              // Parsed per build rather than cached: the tree is a couple of
-              // dozen nodes, and the cache would need the same
-              // entry-and-read invalidation the getter already does.
-              root: switch (read?.root) {
-                var root? => SemanticsSnapshotNode.fromJson(root),
-                null => null,
-              },
-              placeholder: session.selected == null
-                  ? 'No entry selected'
-                  : 'Reading what a screen reader gets…',
-              highlight: widget.semanticsHighlight,
-            );
-          },
+          body: (context) => SemanticsView(
+            root: _parsedSemantics(session.semanticsForSelection?.root),
+            placeholder: session.selected == null
+                ? 'No entry selected'
+                : 'Reading what a screen reader gets…',
+            highlight: widget.semanticsHighlight,
+          ),
         ),
         InspectDockTab(
           id: InspectTab.problems.name,

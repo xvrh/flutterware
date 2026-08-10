@@ -342,6 +342,7 @@ class GuestInspector {
       description: _preview(json) ?? (description == type ? null : description),
       createdByLocalProject: json['createdByLocalProject'] as bool? ?? false,
       offstage: offstage,
+      properties: _propertiesOf(_elementOf(json)?.widget),
       source: switch (json['creationLocation']) {
         Map location => InspectSource.fromJson(
           location.cast<String, Object?>(),
@@ -389,6 +390,39 @@ class GuestInspector {
       node = parent;
     }
     return true;
+  }
+
+  /// What [widget] says about itself, filtered to what a reader would keep.
+  ///
+  /// The framework's diagnostics are written for dumps and are mostly noise
+  /// at a detail pane's distance, so three cuts: only `DiagnosticLevel.info`
+  /// and up (`fine` is `dependencies: [MediaQuery]` and friends), values over
+  /// 96 characters elided mid-value (a `TextStyle` describes itself in a
+  /// paragraph), and at most twelve per node. The walk pays this on every
+  /// node of every read — measured before keeping, like the semantics capture
+  /// before it: +168µs on the shop tree's 1.5ms read, +6KB on its 37KB JSON
+  /// (see the consolidation spec).
+  static Map<String, String> _propertiesOf(Widget? widget) {
+    if (widget == null) return const {};
+    var properties = <String, String>{};
+    for (var property in widget.toDiagnosticsNode().getProperties()) {
+      if (property.isFiltered(DiagnosticLevel.info)) continue;
+      var name = property.name;
+      if (name == null) continue;
+      // The one named exception: every `Text` inlines its style's
+      // diagnostics, and `inherit: true` is the resting state of every style
+      // — a property that appears on every text node distinguishes none.
+      if (name == 'inherit') continue;
+      var value = property.toDescription();
+      if (value.isEmpty || value == 'null') continue;
+      if (value.length > 96) {
+        value =
+            '${value.substring(0, 47)} … ${value.substring(value.length - 46)}';
+      }
+      properties[name] = value;
+      if (properties.length >= 12) break;
+    }
+    return properties;
   }
 
   static bool _visitsForSemantics(RenderObject parent, RenderObject child) {

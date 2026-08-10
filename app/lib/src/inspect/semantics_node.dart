@@ -12,6 +12,8 @@ class SemanticsSnapshotNode {
     required this.value,
     required this.hint,
     required this.tooltip,
+    this.identifier = '',
+    this.textDirection = '',
     required this.flags,
     required this.actions,
     required this.children,
@@ -30,6 +32,8 @@ class SemanticsSnapshotNode {
       value: json['value'] as String? ?? '',
       hint: json['hint'] as String? ?? '',
       tooltip: json['tooltip'] as String? ?? '',
+      identifier: json['identifier'] as String? ?? '',
+      textDirection: json['textDirection'] as String? ?? '',
       flags: (json['flags'] as List?)?.cast<String>() ?? const [],
       actions: (json['actions'] as List?)?.cast<String>() ?? const [],
       children: [
@@ -46,6 +50,13 @@ class SemanticsSnapshotNode {
   final String value;
   final String hint;
   final String tooltip;
+
+  /// The `Semantics(identifier: …)` handle — a test id, not spoken words.
+  final String identifier;
+
+  /// `ltr`/`rtl` when the node declares one.
+  final String textDirection;
+
   final List<String> flags;
   final List<String> actions;
   final List<SemanticsSnapshotNode> children;

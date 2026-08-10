@@ -227,6 +227,7 @@ class InspectNode {
     this.source,
     this.createdByLocalProject = false,
     this.offstage = false,
+    this.properties = const {},
     this.layout,
     this.children = const [],
   });
@@ -237,6 +238,10 @@ class InspectNode {
     description: json['description'] as String?,
     createdByLocalProject: json['local'] as bool? ?? false,
     offstage: json['offstage'] as bool? ?? false,
+    properties: switch (json['properties']) {
+      Map properties => properties.cast<String, String>(),
+      _ => const {},
+    },
     layout: switch (json['layout']) {
       Map layout => InspectLayout.fromJson(layout.cast<String, Object?>()),
       _ => null,
@@ -299,6 +304,17 @@ class InspectNode {
   /// way with tracking off, and 51 with it on.
   final bool createdByLocalProject;
 
+  /// What the widget says about itself — its own diagnostics, filtered.
+  ///
+  /// `Padding` reports `padding: EdgeInsets.all(8.0)`; `Text` reports its
+  /// alignment and overflow. In declaration order, values as the framework
+  /// describes them, filtered to `DiagnosticLevel.info` and capped in the
+  /// walk (see `guest_inspect.dart`) — the JSON is read by agents as well as
+  /// the detail pane, and a `TextStyle` dump nobody asked for is most of a
+  /// node's bytes. Empty for the VM-service path (`run`), which cannot read
+  /// widgets — the same gap as [layout].
+  final Map<String, String> properties;
+
   /// Where it ended up, when it has a box.
   ///
   /// Null for a widget with no [RenderObject] of its own — a provider, a
@@ -336,6 +352,7 @@ class InspectNode {
     // Sparse: nearly every node is on stage, and the flag is only news when
     // it is true.
     if (offstage) 'offstage': true,
+    if (properties.isNotEmpty) 'properties': properties,
     if (layout != null) 'layout': layout!.toJson(),
     if (children.isNotEmpty)
       'children': [for (var child in children) child.toJson()],

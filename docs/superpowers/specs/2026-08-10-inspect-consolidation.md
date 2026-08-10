@@ -20,9 +20,14 @@ the catalog grew a live Semantics tab over `ext.flutterware.semantics` — with
 one discovery the plan missed: a **live app has semantics off** (unlike
 `testWidgets`), so the extension holds a `SemanticsHandle` only while the tab
 is open, and withholds the entry id until the enabling frame has built a tree
-so the client's settling poll rides it out. Part 4 remains a plan. Originally
-written to answer "the inspect reports are duplicated at three places; should
-we consolidate, and can we hide offstage content everywhere at once?"
+so the client's settling poll rides it out. Part 4 **built**: the guest walk
+captures filtered widget diagnostics per node (`InspectNode.properties`,
+measured before keeping: +168µs on the shop tree's 1.5ms read, +6KB on its
+37KB JSON), the shared detail pane renders them on all three surfaces, and
+`SemanticsView` gained the tree-beside-detail split with local selection.
+**All four parts built.** Originally written to answer "the inspect reports
+are duplicated at three places; should we consolidate, and can we hide
+offstage content everywhere at once?"
 **Lineage:** `2026-07-31-sl3-inspect-surface-findings.md` (what the VM service
 can and cannot give the run cockpit), `2026-08-10-scenarios-semantics-tab.md`
 (the semantics leg, currently scenarios-only).
@@ -165,21 +170,30 @@ One flag in the shared model, so every host and every consumer inherits it:
 - **Run cannot follow yet** — the framework exposes no semantics over the VM
   service. Another entry on the guest-runtime ledger, beside global rects.
 
-## Part 4 — the node detail pane, one pane growing richer
+## Part 4 — the node detail pane, one pane growing richer (built)
 
-- The pane is already shared (`_Detail` in `elements_view.dart`); there is no
-  uniformisation to do, only enrichment that lands on all three surfaces.
-- Worth adding, in likely order of value: the widget's own diagnostics
-  properties (filtered — `getProperties` is noisy), and for a selected node
-  on a *live* host, fetched on selection (run: `getDetailsSubtree`; previews:
-  a guest call) so snapshots pay nothing. If snapshot steps should carry
-  properties too, **measure `.tree.json` growth first** — same posture as the
-  semantics capture: measure, then promise.
-- Give `SemanticsView` the same tree-beside-detail split, with *local*
-  selection (the address stays elements-only, per the semantics-tab spec).
-  Today's rows elide flags and actions; a detail pane is where a node's full
-  reading — every flag, every action, text direction, the rect — fits without
-  crowding the row.
+- The pane was already shared (`_Detail` in `elements_view.dart`); the work
+  was enrichment, landing on all three surfaces at once.
+- **Properties ride the node, not a fetch-on-selection.** The plan leaned
+  toward lazy fetching (run: `getDetailsSubtree`; previews: a guest call) so
+  snapshots pay nothing — but that is two mechanisms and an async detail
+  pane, and the measurement dissolved the reason for either: capturing
+  filtered widget diagnostics for *every* node of the shop tree costs
+  **+168µs on a 1.5ms read and +6KB on 37KB of JSON**. So the guest walk
+  fills `InspectNode.properties` (level ≥ `info`, values elided past 96
+  chars, twelve per node, `inherit` dropped by name — it is the resting
+  state of every `TextStyle` and distinguishes nothing) and one mechanism
+  serves the live tree, the `.tree.json`, the detail pane, and agents
+  reading either. The yield is real: `padding: EdgeInsets.all(14.0)`,
+  `maxLines: 1`, `data: "Cappuccino"`, colors. Run's trees stay without —
+  the VM path cannot read widgets; noted beside `layout` on the
+  guest-runtime ledger.
+- `SemanticsView` has the same tree-beside-detail split as `ElementsView`,
+  with **local** selection (the address stays elements-only, per the
+  semantics-tab spec; the previews panel memoizes its JSON parse by identity
+  so a session notify does not silently clear the selection). The detail is
+  the node's full reading — label/value/hint/tooltip, identifier, text
+  direction, every flag, every action, the rect — everything the row elides.
 
 ## Order of work
 

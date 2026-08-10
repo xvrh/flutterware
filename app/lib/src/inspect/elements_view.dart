@@ -560,6 +560,16 @@ class _Detail extends StatelessWidget {
               style: context.type.caption.copyWith(color: colors.mut),
             ),
           ],
+          // What the widget says about itself — its diagnostics, already
+          // filtered at capture. Absent for the run cockpit's trees, which
+          // cannot read widgets, so the section says nothing rather than
+          // "none": no properties and unknowable properties look the same
+          // here, and only one of them deserves a statement.
+          if (it.properties.isNotEmpty) ...[
+            const SizedBox(height: FwSpacing.md),
+            for (var MapEntry(key: name, value: value) in it.properties.entries)
+              _Pair(label: name, value: value),
+          ],
         ],
       ),
     );
