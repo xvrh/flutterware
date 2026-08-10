@@ -206,11 +206,11 @@ class CaptureRequest {
   /// **Currently unreachable, and kept deliberately.** The architecture spec
   /// says addresses are session-relative by default and spells the example
   /// `fw:///ui_catalog/…`. The grammar `Address` actually implements has a
-  /// *project* authority ahead of the worktree, so that spelling parses as
-  /// worktree `ui_catalog` with no plugin at all — and since the worktree slot
-  /// is positional, no valid address names a plugin while omitting it. So a
-  /// parsed address reaching here always has a worktree and this returns it
-  /// unchanged.
+  /// *project* authority and a *space* ahead of the worktree, so that spelling
+  /// parses as a space named `ui_catalog` and no plugin at all — and since the
+  /// worktree slot is positional, no valid address names a plugin while
+  /// omitting it. So a parsed address reaching here always has a worktree and
+  /// this returns it unchanged.
   ///
   /// The gap is real: a documentation script should not have to write this
   /// machine's branch name. Closing it is either a relative form on the CLI

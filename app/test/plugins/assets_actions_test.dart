@@ -95,7 +95,7 @@ flutter:
       expect(logo.densities, [2.0]);
       expect(
         logo.address,
-        'fw:///${p.basename(root.path)}/flutterware.assets/./assets/images/logo.png',
+        'fw:///worktrees/${p.basename(root.path)}/flutterware.assets/./assets/images/logo.png',
         reason: 'An entry a caller can act on without a second lookup.',
       );
     });

@@ -264,7 +264,7 @@ class ShellController extends ChangeNotifier {
   /// shell itself owns.
   bool get isConfigScreen => address.plugin == Address.shellConfig;
 
-  /// Moves to `fw://<worktree>/config`.
+  /// Moves to `fw:///worktrees/<worktree>/config`.
   void selectConfig() {
     if (address.worktree case var name?) {
       go(Address(worktree: name, plugin: Address.shellConfig));

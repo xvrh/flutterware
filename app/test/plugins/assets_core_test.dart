@@ -130,7 +130,7 @@ flutter:
     expect(hits, isNotEmpty);
     expect(
       '${hits.first.address}',
-      'fw:///${p.basename(root.path)}/flutterware.assets/./assets/logo.png',
+      'fw:///worktrees/${p.basename(root.path)}/flutterware.assets/./assets/logo.png',
     );
   });
 

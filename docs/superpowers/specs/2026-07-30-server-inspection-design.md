@@ -320,8 +320,8 @@ declaration, `server_core.dart`, `server_plugin.dart`, `server_address.dart`,
 registered in both registries). Multiple servers are address segments:
 
 ```
-fw://<project>/<worktree>/server/<name>/req/<requestId>
-fw://<project>/<worktree>/server/<name>/sql
+fw://<project>/worktrees/<worktree>/server/<name>/req/<requestId>
+fw://<project>/worktrees/<worktree>/server/<name>/sql
 ```
 
 - `report`: "2 servers live" — from the run-dir scan cache, no connecting

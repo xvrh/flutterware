@@ -61,7 +61,7 @@ window, and the two must therefore be different verbs (decision 5).
 ### 1. `Address` — one URI for everything
 
 ```
-fw://<worktree>/<plugin>/<plugin-specific path…>?<axes>
+fw:///worktrees/<worktree>/<plugin>/<plugin-specific path…>?<axes>
 ```
 
 > **The framework parses up to and including `<plugin>`. Everything after is
@@ -80,6 +80,10 @@ symbol) without the framework knowing.
   connected to, current worktree". The worktree segment, when present, is the
   worktree **directory name**, which git guarantees is distinct within a repo. A
   cross-repo absolute form is not specified until something needs one.
+  *(Superseded: the relative form was never built and is deleted — see
+  `2026-07-29-address-router-merge.md` §3 — and the worktree is now reached
+  through a space segment, `2026-08-10-address-spaces-brief.md`. That spelling
+  parses today as a space named `ui_catalog`.)*
 
 One value class, a parser and a `toString`, in `package:flutterware` beside the
 other pure-data plugin types. Consumed by: GUI routing (`router_outlet`), search
@@ -697,7 +701,7 @@ path, which was exactly the retrofit this document said to avoid. Closed.
 `Artifact` carrying it:
 
 ```
-fw://<worktree>/flutterware.ui_catalog/app/tool/catalog/demos/counter.dart%23counter?height=320&width=420
+fw:///worktrees/<worktree>/flutterware.ui_catalog/app/tool/catalog/demos/counter.dart%23counter?height=320&width=420
 ```
 
 - **The entry id is split on `/`**, not carried as one opaque segment, so the

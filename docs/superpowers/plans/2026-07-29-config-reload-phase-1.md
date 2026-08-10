@@ -476,9 +476,9 @@ problem. It clears on the next successful load.
 
 > **Changed in review.** A section on the home screen is not somewhere you can
 > navigate to, and the reload button was in the chrome while its consequences
-> were on another screen. The log became `fw://<worktree>/config` — a real
-> address, with Reload on it — and the band button now opens that screen instead
-> of reloading. See `config_screen.dart`.
+> were on another screen. The log became `fw:///worktrees/<worktree>/config` —
+> a real address, with Reload on it — and the band button now opens that screen
+> instead of reloading. See `config_screen.dart`.
 
 A section under the existing error box listing `shell.loadLog(worktree)`: time,
 duration, outcome, and *which config key differed* for each rebuilt plugin. This

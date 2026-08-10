@@ -126,7 +126,7 @@ class FlutterwareConfig {
         'Duplicate plugin id "${plugin.id}". Give one of them a distinct id.',
       );
     }
-    // Refused rather than merely discouraged: `fw://<worktree>/config` is the
+    // Refused rather than merely discouraged: `fw:///worktrees/<x>/config` is the
     // shell's own screen for this file, and a plugin able to take that address
     // could hide the one place that explains why the file did not load.
     if (plugin.id == Address.shellConfig) {

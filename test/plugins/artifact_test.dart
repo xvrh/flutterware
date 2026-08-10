@@ -3,7 +3,7 @@ import 'package:test/test.dart';
 
 void main() {
   var address = Address.parse(
-    'fw:///main/flutterware.ui_catalog/admin/Team?theme=dark',
+    'fw:///worktrees/main/flutterware.ui_catalog/admin/Team?theme=dark',
   );
 
   test('needs somewhere to live', () {

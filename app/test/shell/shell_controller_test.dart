@@ -612,22 +612,25 @@ void main() {
 
       expect(
         shell.address.toString(),
-        'fw:///~',
+        'fw:///worktrees/~',
         reason: 'the main checkout is ~, and names no plugin at home',
       );
 
       shell.selectPlugin('a.two');
-      expect(shell.address.toString(), 'fw:///~/a.two');
+      expect(shell.address.toString(), 'fw:///worktrees/~/a.two');
 
       shell.selectChild('a.two', 'packages/app');
-      expect(shell.address.toString(), 'fw:///~/a.two/packages%2Fapp');
+      expect(
+        shell.address.toString(),
+        'fw:///worktrees/~/a.two/packages%2Fapp',
+      );
     });
 
     test('go is the write every select goes through', () async {
       var shell = _controller();
       await shell.start('/repo');
 
-      shell.go(Address.parse('fw:///~/a.one'));
+      shell.go(Address.parse('fw:///worktrees/~/a.one'));
 
       expect(shell.selectedPluginId, 'a.one');
       expect(shell.isHome, isFalse);
@@ -653,7 +656,9 @@ void main() {
 
       // What a catalog entry looks like: the shell reads the package and
       // leaves the rest for whoever owns it.
-      shell.go(Address.parse('fw:///~/a.two/packages%2Fapp/demo.dart%23x'));
+      shell.go(
+        Address.parse('fw:///worktrees/~/a.two/packages%2Fapp/demo.dart%23x'),
+      );
 
       expect(shell.selectedPluginId, 'a.two');
       expect(shell.selectedChildId, 'packages/app');
@@ -664,11 +669,14 @@ void main() {
       var shell = _controller();
       await shell.start('/repo');
 
-      expect(shell.go(Address.parse('fw:///repo-explorer/a.one')), GoResult.ok);
+      expect(
+        shell.go(Address.parse('fw:///worktrees/repo-explorer/a.one')),
+        GoResult.ok,
+      );
 
       // Opening is the navigation. Landing on the home screen instead would be
       // the same silent not-where-you-said the refusal used to be.
-      expect(shell.address.toString(), 'fw:///repo-explorer/a.one');
+      expect(shell.address.toString(), 'fw:///worktrees/repo-explorer/a.one');
       expect(shell.openWorktrees.map((w) => w.name), ['~', 'repo-explorer']);
     });
 
@@ -741,7 +749,10 @@ void main() {
       await shell.open(shell.closedWorktrees.first);
       shell.select(main);
 
-      expect(shell.address.toString(), 'fw:///~/a.two/packages%2Fapp');
+      expect(
+        shell.address.toString(),
+        'fw:///worktrees/~/a.two/packages%2Fapp',
+      );
     });
   });
 
@@ -751,7 +762,7 @@ void main() {
       await shell.start('/repo');
       shell.go(
         Address.parse(
-          'fw:///~/a.two/packages%2Fapp/demo.dart%23x?axis.theme=dark',
+          'fw:///worktrees/~/a.two/packages%2Fapp/demo.dart%23x?axis.theme=dark',
         ),
       );
 
@@ -761,7 +772,7 @@ void main() {
       // rather than a navigation.
       expect(
         shell.address.toString(),
-        'fw:///repo-explorer/a.two/packages%2Fapp/demo.dart%23x?axis.theme=dark',
+        'fw:///worktrees/repo-explorer/a.two/packages%2Fapp/demo.dart%23x?axis.theme=dark',
       );
     });
 
@@ -830,7 +841,7 @@ void main() {
       // with `git checkout` into the remembered address and into every artifact
       // minted from where the shell is.
       expect(shell.address.worktree, 'repo-explorer');
-      expect(shell.address.toString(), 'fw:///repo-explorer/a.one');
+      expect(shell.address.toString(), 'fw:///worktrees/repo-explorer/a.one');
     });
 
     test('identity wins over another worktree that has it as a branch', () async {

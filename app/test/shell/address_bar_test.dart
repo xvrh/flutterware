@@ -109,6 +109,7 @@ void main() {
     ) async {
       var shell = await _pumpShell(tester);
       expect(find.text('fw:///'), findsOneWidget);
+      expect(find.text(Address.worktreesSpace), findsOneWidget);
       expect(find.text('~'), findsOneWidget);
 
       shell.go(
@@ -164,7 +165,7 @@ void main() {
 
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
-        'fw:///~/a.deps/packages%2Fapp',
+        'fw:///worktrees/~/a.deps/packages%2Fapp',
       );
     });
   });
@@ -174,7 +175,7 @@ void main() {
       await _pumpShell(tester);
       await _expand(tester);
 
-      await _type(tester, 'fw:///~/a.deps/packages%2Fapp');
+      await _type(tester, 'fw:///worktrees/~/a.deps/packages%2Fapp');
 
       expect(find.text('panel:a.deps/packages/app'), findsOneWidget);
       expect(find.text('packages/app'), findsOneWidget);
@@ -198,11 +199,11 @@ void main() {
       var shell = await _pumpShell(tester);
       await _expand(tester);
 
-      await _type(tester, 'fw:///repo-explorer/a.deps');
+      await _type(tester, 'fw:///worktrees/repo-explorer/a.deps');
 
       // Typing an address is naming a destination, and opening the worktree is
       // how you get there. Explaining a refusal was the second-best answer.
-      expect(shell.address.toString(), 'fw:///repo-explorer/a.deps');
+      expect(shell.address.toString(), 'fw:///worktrees/repo-explorer/a.deps');
       expect(shell.openWorktrees.map((w) => w.name), ['~', 'repo-explorer']);
       expect(find.textContaining('is not open'), findsNothing);
     });
@@ -211,7 +212,7 @@ void main() {
       await _pumpShell(tester);
       await _expand(tester);
 
-      await _type(tester, 'fw:///nowhere/a.deps');
+      await _type(tester, 'fw:///worktrees/nowhere/a.deps');
 
       expect(find.textContaining('No worktree named'), findsOneWidget);
     });
@@ -243,7 +244,11 @@ void main() {
 
     testWidgets('picking one keeps the place and the axes', (tester) async {
       var shell = await _pumpShell(tester);
-      shell.go(Address.parse('fw:///~/a.deps/packages%2Fapp?axis.theme=dark'));
+      shell.go(
+        Address.parse(
+          'fw:///worktrees/~/a.deps/packages%2Fapp?axis.theme=dark',
+        ),
+      );
       await tester.pumpAndSettle();
 
       await _openSwitcher(tester);
@@ -253,7 +258,7 @@ void main() {
       // The whole point: same package, same theme, other checkout.
       expect(
         shell.address.toString(),
-        'fw:///repo-explorer/a.deps/packages%2Fapp?axis.theme=dark',
+        'fw:///worktrees/repo-explorer/a.deps/packages%2Fapp?axis.theme=dark',
       );
     });
 
@@ -336,14 +341,16 @@ void main() {
     testWidgets('the plugin segment jumps to the plugin root', (tester) async {
       var shell = await _pumpShell(tester);
       shell.go(
-        Address.parse('fw:///~/a.deps/packages%2Fapp/lib?axis.theme=dark'),
+        Address.parse(
+          'fw:///worktrees/~/a.deps/packages%2Fapp/lib?axis.theme=dark',
+        ),
       );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('a.deps'));
       await tester.pumpAndSettle();
 
-      expect(shell.address.toString(), 'fw:///~/a.deps');
+      expect(shell.address.toString(), 'fw:///worktrees/~/a.deps');
     });
 
     testWidgets('a middle segment truncates the address there', (tester) async {
@@ -363,24 +370,34 @@ void main() {
 
       // The path up to the clicked segment; the leaf's axes do not describe
       // its parents, so they go too.
-      expect(shell.address.toString(), 'fw:///~/a.deps/app/tool%2Fdemos');
+      expect(
+        shell.address.toString(),
+        'fw:///worktrees/~/a.deps/app/tool%2Fdemos',
+      );
     });
 
     testWidgets('an axis chip removes its axis', (tester) async {
       var shell = await _pumpShell(tester);
-      shell.go(Address.parse('fw:///~/a.deps/packages%2Fapp?axis.theme=dark'));
+      shell.go(
+        Address.parse(
+          'fw:///worktrees/~/a.deps/packages%2Fapp?axis.theme=dark',
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('theme dark'));
       await tester.pumpAndSettle();
 
-      expect(shell.address.toString(), 'fw:///~/a.deps/packages%2Fapp');
+      expect(
+        shell.address.toString(),
+        'fw:///worktrees/~/a.deps/packages%2Fapp',
+      );
     });
 
     testWidgets('blank space still opens the editor', (tester) async {
       await _pumpShell(tester);
 
-      // The middle of a bar showing only `fw:///~` is empty strip.
+      // The middle of a bar showing only `fw:///worktrees/~` is empty strip.
       await tester.tap(find.byType(AddressBar));
       await tester.pumpAndSettle();
 

@@ -188,7 +188,7 @@ package's own assets and *count* the rest, via `ViewItems.truncated`.
 ## The address
 
 ```
-fw:///<worktree>/flutterware.assets/<package>/<asset key…>?density=3.0x&frame=42&bg=checker
+fw:///worktrees/<worktree>/flutterware.assets/<package>/<asset key…>?density=3.0x&frame=42&bg=checker
 ```
 
 Identity is the segments; **density, Lottie frame and preview background are
