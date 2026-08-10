@@ -120,7 +120,9 @@ class SplashProblemEntry {
   final String? theme;
 
   /// The screen this is about, for the rules that sweep the device table —
-  /// `iphone-se`. Append it to the address as `?device=` to see it.
+  /// `iphone-se`. The panel's own axis is a size class rather than a device, so
+  /// a link into it lands on the nearest one; the exact device stays here
+  /// because "clipped on an iPhone 13 mini" is the actionable sentence.
   final String? device;
 
   /// `create` will exit rather than write anything.

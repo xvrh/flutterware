@@ -27,7 +27,7 @@ class SplashPlace {
     this.flavor,
     this.surface,
     this.theme,
-    this.device,
+    this.size,
   });
 
   /// The workspace-relative package path — `.`, `examples/example`.
@@ -42,18 +42,20 @@ class SplashPlace {
   final SplashSurface? surface;
   final SplashTheme? theme;
 
-  /// The screen to draw the cell on — `?device=iphone-se`.
+  /// How big a screen to draw at — `?size=large-phone`. Null is each surface's
+  /// own default.
   ///
-  /// **The catalog's vocabulary, not a second one.** `Devices.all` is already
-  /// what `?device=` means everywhere else in the app, and a splash previewer
-  /// inventing its own list of phones would be two tables to keep in step for
-  /// no gain. Null means the surface's own default.
+  /// **A size class, not a device id, and not `?device=`.** This axis moves all
+  /// eight cells at once, and a device id cannot: naming an iPhone names a
+  /// platform with it, so it can only ever apply to two tiles. Every surface
+  /// resolves the class to its own hardware — see [splashDeviceIdFor] — which is
+  /// what lets one control be honest about all four platforms.
   ///
-  /// Kept as the raw string rather than a resolved `Device` so an id this build
-  /// has never heard of survives the round trip and can be reported, instead of
-  /// silently becoming "the default" — a picture that is wrong without looking
-  /// wrong.
-  final String? device;
+  /// Kept as the raw string rather than a resolved [SplashScreenSize] so a value
+  /// this build has never heard of survives the round trip and can be reported,
+  /// instead of silently becoming "the default" — a picture that is wrong
+  /// without looking wrong.
+  final String? size;
 
   @override
   bool operator ==(Object other) =>
@@ -62,17 +64,17 @@ class SplashPlace {
       other.flavor == flavor &&
       other.surface == surface &&
       other.theme == theme &&
-      other.device == device;
+      other.size == size;
 
   @override
-  int get hashCode => Object.hash(package, flavor, surface, theme, device);
+  int get hashCode => Object.hash(package, flavor, surface, theme, size);
 
   @override
   String toString() =>
       'SplashPlace($package${flavor == null ? '' : '/$flavor'}'
       '${surface == null ? '' : ' ${surface!.name}'}'
       '${theme == null ? '' : ' ${theme!.name}'}'
-      '${device == null ? '' : ' on $device'})';
+      '${size == null ? '' : ' at $size'})';
 }
 
 /// The address segments naming [package] and, if given, [flavor].
@@ -90,11 +92,11 @@ List<String> splashSegments(String package, [String? flavor]) => [
 Map<String, String> splashAxes({
   SplashSurface? surface,
   SplashTheme? theme,
-  String? device,
+  String? size,
 }) => {
   if (surface != null) 'surface': surface.name,
   if (theme != null) 'theme': theme.name,
-  if (device != null && device.isNotEmpty) 'device': device,
+  if (size != null && size.isNotEmpty) 'size': size,
 };
 
 /// The inverse of [splashSegments] and [splashAxes].
@@ -108,7 +110,7 @@ SplashPlace? splashPlace(
 ]) {
   if (segments.isEmpty) return null;
   var flavor = segments.length > 1 ? segments[1] : null;
-  var device = axes['device'];
+  var size = axes['size'];
   return SplashPlace(
     segments.first,
     flavor: flavor == null || flavor.isEmpty ? null : flavor,
@@ -116,6 +118,6 @@ SplashPlace? splashPlace(
         ? null
         : SplashSurface.byName(axes['surface']!),
     theme: axes['theme'] == null ? null : SplashTheme.byName(axes['theme']!),
-    device: device == null || device.isEmpty ? null : device,
+    size: size == null || size.isEmpty ? null : size,
   );
 }

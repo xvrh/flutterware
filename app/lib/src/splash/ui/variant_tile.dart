@@ -52,8 +52,9 @@ class SplashVariantTile extends StatelessWidget {
 
   SplashComposition get composition => picture.composition;
 
-  /// The screen to draw as. Null falls back to the surface's own canvas, which
-  /// is what a matrix with no `?device=` shows.
+  /// The screen to draw as, already resolved from the size axis. Null falls
+  /// back to the surface's own canvas, which is what a matrix with no `?size=`
+  /// shows.
   final Device? device;
 
   final bool selected;
@@ -311,7 +312,14 @@ class _Screen extends StatelessWidget {
                       child: SplashRender(
                         composition,
                         device: device,
-                        showSafeAreas: device != null,
+                        // **Never on web.** The web cell borrows a phone's
+                        // dimensions so the size axis can move it — a browser
+                        // on a phone is a real place a splash is seen — but a
+                        // browser has no notch and no home indicator, and
+                        // drawing that hardware would be inventing it.
+                        showSafeAreas:
+                            device != null &&
+                            composition.surface != SplashSurface.web,
                       ),
                     ),
                   ),

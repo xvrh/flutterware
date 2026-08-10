@@ -3,7 +3,6 @@ import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
 import '../../ui/field_row.dart';
-import '../../ui/menu.dart';
 import '../../ui/theme.dart';
 import '../model/color.dart';
 import '../model/config.dart';
@@ -32,7 +31,6 @@ class SplashCellInspector extends StatelessWidget {
     required this.problems,
     required this.artifacts,
     this.device,
-    this.onDevice,
     this.onClose,
   });
 
@@ -49,10 +47,6 @@ class SplashCellInspector extends StatelessWidget {
   /// The screen this cell is drawn as. Null falls back to the surface's own
   /// default.
   final Device? device;
-
-  /// Writes `?device=`. Only the screens this surface can be are offered — see
-  /// [splashPreviewDevicesFor].
-  final ValueChanged<String?>? onDevice;
 
   final VoidCallback? onClose;
 
@@ -78,9 +72,12 @@ class SplashCellInspector extends StatelessWidget {
         children: [
           _Header(
             title: '${_surface.label} · ${_theme.label}',
-            surface: _surface,
-            device: device,
-            onDevice: onDevice,
+            // Stated, not set: the size axis moves all eight cells at once, so
+            // its control belongs over the matrix rather than on one pane.
+            subtitle: device == null
+                ? null
+                : '${device!.label}  ·  '
+                      '${device!.width.round()}×${device!.height.round()}',
             onClose: onClose,
           ),
           Expanded(
@@ -194,18 +191,10 @@ bool _isColour(String label) =>
 /// An × on the pane, not a back arrow on the page: nothing was navigated to, so
 /// there is nowhere to go back to. Escape closes it too — see the panel.
 class _Header extends StatelessWidget {
-  const _Header({
-    required this.title,
-    required this.surface,
-    this.device,
-    this.onDevice,
-    this.onClose,
-  });
+  const _Header({required this.title, this.subtitle, this.onClose});
 
   final String title;
-  final SplashSurface surface;
-  final Device? device;
-  final ValueChanged<String?>? onDevice;
+  final String? subtitle;
   final VoidCallback? onClose;
 
   @override
@@ -228,12 +217,13 @@ class _Header extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: context.type.heading),
-                const Gap(FwSpacing.xs),
-                _DevicePicker(
-                  surface: surface,
-                  device: device,
-                  onSelect: onDevice,
-                ),
+                if (subtitle != null) ...[
+                  const Gap(FwSpacing.xxs),
+                  Text(
+                    subtitle!,
+                    style: context.type.caption.copyWith(color: colors.mut2),
+                  ),
+                ],
               ],
             ),
           ),
@@ -250,71 +240,6 @@ class _Header extends StatelessWidget {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-/// Which screen this cell is drawn as.
-///
-/// **Only the screens this surface can be.** A device belongs to a platform and
-/// so does a splash: an Android splash inside an iPhone SE — 375×667, with a
-/// notch and a home indicator — is a picture of a phone that does not exist. So
-/// the offer is filtered rather than the effect, which is the fix for a picker
-/// that sat over the whole matrix listing nineteen devices and quietly changed
-/// two tiles out of eight.
-///
-/// Web is offered the desktop sizes: its canvas is a browser viewport, and a
-/// laptop against a wide monitor is the same question the phones answer.
-class _DevicePicker extends StatelessWidget {
-  const _DevicePicker({required this.surface, this.device, this.onSelect});
-
-  final SplashSurface surface;
-  final Device? device;
-  final ValueChanged<String?>? onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var label = device == null
-        ? 'Default screen'
-        : '${device!.label}  ·  '
-              '${device!.width.round()}×${device!.height.round()}';
-    var style = context.type.caption.copyWith(color: colors.mut2);
-
-    if (onSelect == null) return Text(label, style: style);
-
-    return Menu(
-      entries: [
-        MenuItem(
-          // Named rather than "None": every cell is drawn as *some* screen, and
-          // the default is per surface.
-          surface == SplashSurface.web
-              ? 'A browser viewport'
-              : 'This platform’s default',
-          onSelected: () => onSelect!(null),
-        ),
-        const MenuDivider(),
-        for (var candidate in splashPreviewDevicesFor(surface))
-          MenuItem(
-            '${candidate.label}  ·  '
-            '${candidate.width.round()}×${candidate.height.round()}',
-            onSelected: () => onSelect!(candidate.id),
-          ),
-      ],
-      builder: (context, controller) => InkWell(
-        onTap: controller.toggle,
-        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 1),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label, style: style),
-              Icon(Icons.arrow_drop_down, size: 16, color: colors.mut3),
-            ],
-          ),
-        ),
       ),
     );
   }

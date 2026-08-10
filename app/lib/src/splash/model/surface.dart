@@ -275,39 +275,80 @@ String? defaultSplashDeviceId(SplashSurface surface) => switch (surface) {
   SplashSurface.web => null,
 };
 
-/// The screens a surface can honestly be *drawn* as — what the picker offers.
+/// How big a screen to draw every cell at — the matrix's one size axis.
 ///
-/// **A device belongs to a platform, and so does a splash.** Redrawing the
-/// Android row at an iPhone SE's 375×667, with an iPhone's notch and home
-/// indicator, would be a picture of a phone that does not exist — so a chosen
-/// device only ever applies to the surfaces of its own platform.
+/// **A class, not a device, and that is the whole point.** Naming a device names
+/// a platform with it: an iPhone SE cannot be a canvas for the Android row, so a
+/// picker offering nineteen devices over eight tiles moved two of them and
+/// silently ignored the rest. A size class belongs to no platform, so one
+/// control can honestly move all eight — each surface resolves the class to its
+/// own hardware through [splashDeviceIdFor], and gets its own insets with it.
 ///
-/// That rule was right and the control on top of it was not: a single picker
-/// over the whole matrix, listing all nineteen devices, quietly changing two
-/// tiles out of eight. The picker sits on the inspector now and asks this, so
-/// everything it offers applies to the cell it is attached to.
+/// Every platform here has the same four sizes on sale, which is why this works
+/// rather than merely reads well: a small phone, a typical one, a large one and
+/// a tablet exist on iOS and on Android alike.
+enum SplashScreenSize {
+  smallPhone('small-phone', 'Small phone'),
+  phone('phone', 'Phone'),
+  largePhone('large-phone', 'Large phone'),
+  tablet('tablet', 'Tablet');
+
+  const SplashScreenSize(this.id, this.label);
+
+  /// What goes in an address — `?size=large-phone`.
+  final String id;
+  final String label;
+
+  static SplashScreenSize? byId(String id) {
+    for (var value in values) {
+      if (value.id == id) return value;
+    }
+    return null;
+  }
+}
+
+/// The screen [size] means on [surface] — a real device, with real insets.
 ///
-/// **Not the same list as `splashDevicesFor` in `fit_check.dart`**, and the
-/// difference is the job. That one is the *sweep*: which screens a warning
-/// should be computed against, where desktop is noise and web has no device at
-/// all. This one is what a reader may choose to look at, so web gets the
-/// desktop sizes — its canvas is a browser viewport, and a laptop against a
-/// wide monitor is the same question the phones answer.
-List<Device> splashPreviewDevicesFor(SplashSurface surface) {
-  var platforms = switch (surface) {
-    SplashSurface.android ||
-    SplashSurface.android12 => [DevicePlatform.android],
-    SplashSurface.ios => [DevicePlatform.ios],
-    SplashSurface.web => [
-      DevicePlatform.macos,
-      DevicePlatform.windows,
-      DevicePlatform.linux,
-    ],
+/// Null [size] is each surface's own default, which is what the matrix shows
+/// until somebody picks something.
+///
+/// **Web borrows the iOS dimensions and none of its hardware.** A browser on a
+/// phone is a real place a web splash is seen, and the viewport is the only
+/// thing that matters there — so the tile takes the size and draws no safe
+/// areas, because a browser has no notch.
+String? splashDeviceIdFor(SplashSurface surface, SplashScreenSize? size) {
+  if (size == null) return defaultSplashDeviceId(surface);
+  return switch (surface) {
+    SplashSurface.android || SplashSurface.android12 => switch (size) {
+      SplashScreenSize.smallPhone => 'android-small',
+      SplashScreenSize.phone => 'android-tall',
+      SplashScreenSize.largePhone => 'android-big',
+      SplashScreenSize.tablet => 'android-medium-tablet',
+    },
+    SplashSurface.ios || SplashSurface.web => switch (size) {
+      SplashScreenSize.smallPhone => 'iphone-se',
+      SplashScreenSize.phone => 'iphone-16',
+      SplashScreenSize.largePhone => 'iphone-16-pro-max',
+      SplashScreenSize.tablet => 'ipad-pro-13',
+    },
   };
-  return [
-    for (var device in Devices.all)
-      if (platforms.contains(device.platform)) device,
-  ];
+}
+
+/// Which class a concrete device falls into — the inverse of
+/// [splashDeviceIdFor], for the devices it does not name.
+///
+/// The fit sweep reports against every phone and tablet in the table, not just
+/// the four this axis can select, so a finding about an iPhone 13 mini has to
+/// land somewhere. Classifying by size rather than by a lookup means it always
+/// does, and it is also what pins down what the four class names mean: under
+/// 380dp is small, 430 and over is large, a tablet is a tablet.
+SplashScreenSize? splashSizeForDevice(String deviceId) {
+  var device = deviceById(deviceId);
+  if (device == null) return null;
+  if (device.kind == DeviceKind.tablet) return SplashScreenSize.tablet;
+  if (device.width < 380) return SplashScreenSize.smallPhone;
+  if (device.width >= 430) return SplashScreenSize.largePhone;
+  return SplashScreenSize.phone;
 }
 
 /// The logical canvas a surface is previewed at, in the order (width, height).

@@ -73,7 +73,7 @@ class _SplashPanelState extends State<_SplashPanel> {
         AddressScope.param(context, 'surface') ?? '',
       ),
       theme: SplashTheme.byName(AddressScope.param(context, 'theme') ?? ''),
-      device: AddressScope.param(context, 'device'),
+      size: AddressScope.param(context, 'size'),
     );
   }
 
@@ -122,7 +122,7 @@ class _SplashPanelState extends State<_SplashPanel> {
         flavor: place.flavor,
         surface: place.surface,
         theme: place.theme,
-        device: place.device,
+        size: SplashScreenSize.byId(place.size ?? ''),
         // The address is written from here rather than from the screen: this is
         // the half that lives inside an `AddressScope`, and keeping the screen
         // free of it is what lets a test mount it with no address at all.
@@ -132,8 +132,8 @@ class _SplashPanelState extends State<_SplashPanel> {
         onShowAll: () => AddressScope.write(
           context,
         ).setParams({'surface': null, 'theme': null}),
-        onSelectDevice: (id) =>
-            AddressScope.write(context).setParams({'device': id}),
+        onSelectSize: (size) =>
+            AddressScope.write(context).setParams({'size': size?.id}),
         // The flavor is a segment, not an axis: it selects a different config
         // file, and everything below it — every cell, every problem, every
         // generated file — belongs to that file rather than to this one.

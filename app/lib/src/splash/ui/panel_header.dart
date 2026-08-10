@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../capture/capture_mode.dart';
+import '../../ui/menu.dart';
 import '../../ui/theme.dart';
+import '../model/surface.dart';
 
 /// Whether anything on disk was made from the config, said in one phrase.
 ///
@@ -46,6 +48,8 @@ class SplashPanelHeader extends StatelessWidget {
     this.flavors = const [],
     this.selectedFlavor,
     this.onFlavor,
+    this.size,
+    this.onSize,
     this.onReload,
     this.onGenerate,
   });
@@ -65,6 +69,11 @@ class SplashPanelHeader extends StatelessWidget {
   final List<String> flavors;
   final String? selectedFlavor;
   final ValueChanged<String?>? onFlavor;
+
+  /// How big a screen every cell is drawn at. Null is each surface's own
+  /// default.
+  final SplashScreenSize? size;
+  final ValueChanged<SplashScreenSize?>? onSize;
 
   final VoidCallback? onReload;
 
@@ -126,6 +135,8 @@ class SplashPanelHeader extends StatelessWidget {
           ),
         ),
         _Toolbar(
+          size: size,
+          onSize: onSize,
           onReload: onReload,
           onGenerate: onGenerate,
           generated: state != SplashGeneratedState.never,
@@ -183,15 +194,23 @@ class _StatusPill extends StatelessWidget {
 /// buttons, rather than the accent-coloured text links this panel used to call
 /// controls.
 ///
-/// **The device picker is not here.** It was, briefly, and it was a control that
-/// looked global and applied to two tiles out of eight — a device belongs to a
-/// platform, so an iOS phone can only ever redraw the iOS row. It lives on the
-/// inspector now, where it is attached to one cell and offers only the screens
-/// that cell can be.
+/// **The size switcher is here rather than on the inspector**, because it moves
+/// all eight cells and belongs over all eight. It could not, while the axis was
+/// a device id: a device names a platform with it, so a chosen iPhone redrew two
+/// tiles and quietly ignored six. A size class names none — see
+/// [SplashScreenSize].
 class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.generated, this.onReload, this.onGenerate});
+  const _Toolbar({
+    required this.generated,
+    this.size,
+    this.onSize,
+    this.onReload,
+    this.onGenerate,
+  });
 
   final bool generated;
+  final SplashScreenSize? size;
+  final ValueChanged<SplashScreenSize?>? onSize;
   final VoidCallback? onReload;
   final VoidCallback? onGenerate;
 
@@ -211,6 +230,7 @@ class _Toolbar extends StatelessWidget {
       ),
       child: Row(
         children: [
+          if (onSize != null) _SizePicker(size: size, onSelect: onSize!),
           const Spacer(),
           if (onReload != null)
             SplashToolbarButton(
@@ -279,6 +299,73 @@ class SplashToolbarButton extends StatelessWidget {
       ),
     );
     return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
+  }
+}
+
+/// How big a screen every cell is drawn at.
+///
+/// Four classes and a default, rather than nineteen devices: this control has to
+/// mean something on all four surfaces at once, and only a class does. Each
+/// surface resolves it to its own hardware, so picking "Small phone" gives the
+/// Android row a 360×640 with a gesture bar and the iOS row a 375×667 with a
+/// notch — which is the comparison somebody asking for a small phone wants.
+class _SizePicker extends StatelessWidget {
+  const _SizePicker({required this.size, required this.onSelect});
+
+  final SplashScreenSize? size;
+  final ValueChanged<SplashScreenSize?> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Screen', style: context.type.micro),
+        const Gap(FwSpacing.md),
+        Menu(
+          entries: [
+            MenuItem(
+              // Not "None": every cell is drawn at *some* size, and what the
+              // default means is per surface — a tall Android phone, an
+              // iPhone 16, a browser viewport.
+              'Each platform’s default',
+              onSelected: () => onSelect(null),
+            ),
+            const MenuDivider(),
+            for (var candidate in SplashScreenSize.values)
+              MenuItem(candidate.label, onSelected: () => onSelect(candidate)),
+          ],
+          builder: (context, controller) => InkWell(
+            onTap: controller.toggle,
+            borderRadius: BorderRadius.circular(context.radii.radius),
+            child: Container(
+              padding: const EdgeInsets.only(
+                left: FwSpacing.lg,
+                right: FwSpacing.md,
+                top: FwSpacing.xs,
+                bottom: FwSpacing.xs,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(context.radii.radius),
+                border: Border.all(color: colors.line),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    size?.label ?? 'Default',
+                    style: context.type.caption.copyWith(color: colors.ink),
+                  ),
+                  const Gap(FwSpacing.xs),
+                  Icon(Icons.keyboard_arrow_down, size: 14, color: colors.mut2),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

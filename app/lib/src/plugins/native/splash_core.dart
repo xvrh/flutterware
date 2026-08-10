@@ -88,12 +88,12 @@ class SplashCore extends PluginCore {
     String? flavor,
     SplashSurface? surface,
     SplashTheme? theme,
-    String? device,
+    String? size,
   }) => Address(
     worktree: host.worktree.name,
     plugin: host.id,
     segments: splashSegments(packagePath, flavor),
-    axes: splashAxes(surface: surface, theme: theme, device: device),
+    axes: splashAxes(surface: surface, theme: theme, size: size),
   );
 
   /// Scans [path], unless it already has been. Idempotent.
@@ -381,8 +381,13 @@ class SplashCore extends PluginCore {
                           surface: problem.surface,
                           theme: problem.theme,
                           // A fit problem that cannot take you to the screen it
-                          // is about is just a sentence.
-                          device: problem.device,
+                          // is about is just a sentence. The sweep names a
+                          // concrete device and the axis takes a class, so the
+                          // link lands on the nearest one — see
+                          // `splashSizeForDevice`.
+                          size: problem.device == null
+                              ? null
+                              : splashSizeForDevice(problem.device!)?.id,
                         ),
                 ),
             ]),

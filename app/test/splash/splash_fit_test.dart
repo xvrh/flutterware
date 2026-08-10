@@ -206,49 +206,63 @@ void main() {
     });
   });
 
-  group('the screens a cell may be drawn as', () {
-    // Not the same list as the sweep above, and the difference is the job: the
-    // sweep decides what to warn about, this decides what a reader may choose
-    // to look at.
-    test('are its own platform, never another', () {
-      for (var s in [SplashSurface.android, SplashSurface.android12]) {
-        var offered = surface.splashPreviewDevicesFor(s);
-        expect(offered, isNotEmpty);
-        expect(
-          offered.every((d) => d.platform == DevicePlatform.android),
-          isTrue,
-        );
+  group('the size axis', () {
+    // The axis names a class, not a device, because it moves all eight cells at
+    // once and a device id cannot: naming an iPhone names a platform with it.
+    test('resolves to each platform’s own hardware', () {
+      for (var size in SplashScreenSize.values) {
+        var android = surface.splashDeviceIdFor(SplashSurface.android, size);
+        var ios = surface.splashDeviceIdFor(SplashSurface.ios, size);
+        expect(deviceById(android!)!.platform, DevicePlatform.android);
+        expect(deviceById(ios!)!.platform, DevicePlatform.ios);
       }
-      expect(
-        surface
-            .splashPreviewDevicesFor(SplashSurface.ios)
-            .every((d) => d.platform == DevicePlatform.ios),
-        isTrue,
-      );
     });
 
-    test('are the desktop sizes for web, which the sweep excludes', () {
-      // A browser viewport is not a phone, but "does it survive a laptop as
-      // well as a wide monitor" is the same question the phones answer. The
-      // sweep returns nothing here because warning about it would be noise.
-      var offered = surface.splashPreviewDevicesFor(SplashSurface.web);
-      expect(offered, isNotEmpty);
-      expect(offered.every((d) => d.group == 'Desktop'), isTrue);
-      expect(splashDevicesFor(SplashSurface.web), isEmpty);
-    });
-
-    test('never offer a screen that would not apply', () {
-      // The bug this replaced: one picker over the whole matrix listing all
-      // nineteen devices, of which a chosen phone changed two tiles.
+    test('every surface answers every size', () {
+      // The bug this replaced: a chosen device applied to two tiles out of
+      // eight and the other six silently kept their defaults.
       for (var s in SplashSurface.values) {
-        for (var device in surface.splashPreviewDevicesFor(s)) {
+        for (var size in SplashScreenSize.values) {
           expect(
-            surface.splashPreviewDevicesFor(s).contains(device),
-            isTrue,
-            reason: '${device.id} is offered for ${s.name}',
+            surface.splashDeviceIdFor(s, size),
+            isNotNull,
+            reason: '${s.name} has no screen for ${size.id}',
           );
         }
       }
+    });
+
+    test('null is each surface’s own default, web included', () {
+      expect(
+        surface.splashDeviceIdFor(SplashSurface.android, null),
+        'android-tall',
+      );
+      expect(surface.splashDeviceIdFor(SplashSurface.ios, null), 'iphone-16');
+      // Web's default is its own browser canvas rather than a device.
+      expect(surface.splashDeviceIdFor(SplashSurface.web, null), isNull);
+    });
+
+    test('classifying a device round-trips the four it names', () {
+      for (var size in SplashScreenSize.values) {
+        for (var s in [SplashSurface.android, SplashSurface.ios]) {
+          var id = surface.splashDeviceIdFor(s, size)!;
+          expect(surface.splashSizeForDevice(id), size, reason: id);
+        }
+      }
+    });
+
+    test('classifies the devices the sweep names but the axis does not', () {
+      // A fit warning is reported against every phone and tablet in the table,
+      // so its link into the panel has to land on *some* class.
+      for (var device in splashDevicesFor(SplashSurface.ios)) {
+        expect(surface.splashSizeForDevice(device.id), isNotNull);
+      }
+      expect(
+        surface.splashSizeForDevice('iphone-13-mini'),
+        SplashScreenSize.smallPhone,
+      );
+      expect(surface.splashSizeForDevice('ipad'), SplashScreenSize.tablet);
+      expect(surface.splashSizeForDevice('nokia-3310'), isNull);
     });
   });
 }

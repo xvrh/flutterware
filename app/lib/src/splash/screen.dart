@@ -34,10 +34,10 @@ class SplashScreen extends StatelessWidget {
     this.flavor,
     this.surface,
     this.theme,
-    this.device,
+    this.size,
     this.onSelectCell,
     this.onShowAll,
-    this.onSelectDevice,
+    this.onSelectSize,
     this.onSelectFlavor,
   });
 
@@ -53,8 +53,8 @@ class SplashScreen extends StatelessWidget {
   final SplashSurface? surface;
   final SplashTheme? theme;
 
-  /// `?device=`, or null for each surface's own default.
-  final String? device;
+  /// `?size=`, or null for each surface's own default.
+  final SplashScreenSize? size;
 
   /// Writes the two axes. Supplied by the plugin, which is the half that sits
   /// inside an `AddressScope`; null in a test that mounts this screen on its
@@ -64,10 +64,8 @@ class SplashScreen extends StatelessWidget {
   /// Clears them again — closes the inspector.
   final VoidCallback? onShowAll;
 
-  /// Writes `?device=`. The picker is on the inspector rather than over the
-  /// matrix, because a device only ever applies to the surfaces of its own
-  /// platform — see [splashPreviewDevicesFor].
-  final ValueChanged<String?>? onSelectDevice;
+  /// Writes `?size=`.
+  final ValueChanged<SplashScreenSize?>? onSelectSize;
 
   /// Writes the flavor segment.
   final ValueChanged<String?>? onSelectFlavor;
@@ -158,6 +156,8 @@ class SplashScreen extends StatelessWidget {
           flavors: scan.flavors,
           selectedFlavor: config.config.flavor,
           onFlavor: onSelectFlavor,
+          size: size,
+          onSize: onSelectSize,
           onReload: () =>
               unawaited(core.invoke('reload', arguments: {'package': package})),
           onGenerate: config.blocksGeneration ? null : runCreate,
@@ -174,7 +174,7 @@ class SplashScreen extends StatelessWidget {
                       config: config,
                       surface: surface,
                       theme: theme,
-                      device: device,
+                      size: size,
                       onSelect: onSelectCell,
                     ),
                     // Config-wide only. Anything that belongs to one cell is in
@@ -217,8 +217,7 @@ class SplashScreen extends StatelessWidget {
                               artifact.theme == theme)
                             artifact,
                       ],
-                      device: _deviceFor(surface!, device),
-                      onDevice: onSelectDevice,
+                      device: _deviceFor(surface!, size),
                       onClose: onShowAll,
                     ),
                   ),
@@ -244,26 +243,16 @@ List<SplashProblem> _configWide(SplashConfigScan config) => [
     if (problem.surface == null) problem,
 ];
 
-/// The screen a surface draws as.
+/// The screen a surface draws at a given size.
 ///
-/// **Resolved per surface, not once for the matrix.** The picker writes one
-/// `?device=`, but an iPhone is not a canvas for the Android tiles — asking for
-/// an iPhone SE and getting the Android row redrawn at 375×667 would be a
-/// picture of a phone that does not exist. So a chosen device applies to the
-/// surfaces of its own platform and the rest keep their defaults.
-Device? _deviceFor(SplashSurface surface, String? device) {
-  var chosen = device == null ? null : deviceById(device);
-  if (chosen != null) {
-    var platform = switch (surface) {
-      SplashSurface.android ||
-      SplashSurface.android12 => DevicePlatform.android,
-      SplashSurface.ios => DevicePlatform.ios,
-      SplashSurface.web => null,
-    };
-    if (chosen.platform == platform) return chosen;
-  }
-  var fallback = defaultSplashDeviceId(surface);
-  return fallback == null ? null : deviceById(fallback);
+/// **One axis, eight honest cells.** The axis used to be a device id, which
+/// names a platform with it — so a chosen iPhone redrew the two iOS tiles and
+/// left the other six alone, which is a control that lies about what it does. A
+/// size class names no platform, and each surface resolves it to its own
+/// hardware and its own insets. See [splashDeviceIdFor].
+Device? _deviceFor(SplashSurface surface, SplashScreenSize? size) {
+  var id = splashDeviceIdFor(surface, size);
+  return id == null ? null : deviceById(id);
 }
 
 /// Surfaces across, themes down.
@@ -277,14 +266,14 @@ class _Matrix extends StatelessWidget {
     required this.config,
     this.surface,
     this.theme,
-    this.device,
+    this.size,
     this.onSelect,
   });
 
   final SplashConfigScan config;
   final SplashSurface? surface;
   final SplashTheme? theme;
-  final String? device;
+  final SplashScreenSize? size;
   final void Function(SplashSurface, SplashTheme)? onSelect;
 
   @override
@@ -303,7 +292,7 @@ class _Matrix extends StatelessWidget {
                   .problemsFor(s, t)
                   .where((p) => p.surface != null)
                   .toList(),
-              device: _deviceFor(s, device),
+              device: _deviceFor(s, size),
               selected: s == surface && t == theme,
               onTap: onSelect == null ? null : () => onSelect!(s, t),
             ),
