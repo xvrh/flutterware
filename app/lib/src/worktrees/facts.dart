@@ -85,6 +85,15 @@ class Fact<T> {
 
   /// Whether the row should dim this cell rather than trust it.
   bool get isDim => state == FactState.stale;
+
+  /// [encode] rather than a `toJson` on `T`, so a fact can wrap a type that has
+  /// no opinion about JSON — which is most of them.
+  Map<String, Object?> toJson(Object? Function(T value) encode) => {
+    'state': state.name,
+    if (value case var v?) 'value': encode(v),
+    'computedAt': ?computedAt?.toIso8601String(),
+    'failure': ?failure,
+  };
 }
 
 /// Where a branch's lines landed, bucketed by top-level directory.
@@ -102,6 +111,25 @@ class ChangeShape {
   int get lines => added + removed;
 
   bool get isEmpty => buckets.isEmpty;
+
+  Map<String, Object?> toJson() => {
+    'files': files,
+    'buckets': [
+      for (var b in buckets) [b.name, b.added, b.removed],
+    ],
+  };
+
+  static ChangeShape fromJson(Map<String, Object?> json) => ChangeShape(
+    files: json['files']! as int,
+    buckets: [
+      for (var entry in json['buckets']! as List)
+        ChangeBucket(
+          (entry as List)[0]! as String,
+          added: entry[1]! as int,
+          removed: entry[2]! as int,
+        ),
+    ],
+  );
 
   /// Largest first — the row names the top two and the bar draws in this order.
   List<ChangeBucket> get ranked =>
@@ -143,6 +171,14 @@ class GitFacts {
   final String? base;
 
   bool get isInSync => (changes?.isEmpty ?? true) && ahead == 0 && behind == 0;
+
+  Map<String, Object?> toJson() => {
+    'ahead': ahead,
+    'behind': behind,
+    'dirty': dirty,
+    'base': ?base,
+    'changes': ?changes?.toJson(),
+  };
 }
 
 enum AgentState {
@@ -184,6 +220,14 @@ class AgentFacts {
 
   final DateTime? at;
   final String? model;
+
+  Map<String, Object?> toJson() => {
+    'state': state.name,
+    'title': ?title,
+    'lastPrompt': ?lastPrompt,
+    'at': ?at?.toIso8601String(),
+    'model': ?model,
+  };
 }
 
 enum PrState { open, draft, merged, closed }
@@ -212,6 +256,17 @@ class ForgeFacts {
   /// A review is requested *from you*. Part of "needs you".
   final bool reviewRequested;
   final String? url;
+
+  Map<String, Object?> toJson() => {
+    'number': number,
+    'title': title,
+    'state': state.name,
+    'checks': checks.name,
+    if (failingChecks > 0) 'failingChecks': failingChecks,
+    if (approvals > 0) 'approvals': approvals,
+    if (reviewRequested) 'reviewRequested': true,
+    'url': ?url,
+  };
 }
 
 /// Which clock won.
@@ -238,6 +293,11 @@ class ActivityFacts {
     ActivitySource.commit => 'commit',
     ActivitySource.agent => 'agent',
     ActivitySource.opened => 'opened',
+  };
+
+  Map<String, Object?> toJson() => {
+    'at': at.toIso8601String(),
+    'source': source.name,
   };
 }
 
@@ -275,4 +335,13 @@ class WorktreeFacts {
     if (agent.value?.state == AgentState.working) return Tone.good;
     return Tone.neutral;
   }
+
+  Map<String, Object?> toJson() => {
+    'needsYou': needsYou,
+    'tone': tone.name,
+    'git': git.toJson((v) => v.toJson()),
+    'agent': agent.toJson((v) => v.toJson()),
+    'forge': forge.toJson((v) => v.toJson()),
+    'activity': activity.toJson((v) => v.toJson()),
+  };
 }

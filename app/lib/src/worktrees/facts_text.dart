@@ -1,0 +1,144 @@
+/// The explorer, rendered as text.
+///
+/// The third renderer of one model — the GUI's row, this, and `--json` — which
+/// is the master plan's "no renderer is privileged" applied to a shell surface.
+/// It lives here rather than in `cli.dart` so it can be tested without a CLI,
+/// and so the columns stay next to the facts they render.
+library;
+
+import 'package:flutterware/plugins.dart';
+
+import '../shell/worktree.dart';
+import 'facts.dart';
+
+/// One column of the table.
+class _Column {
+  const _Column(this.render);
+
+  final String Function(WorktreeFacts facts, DateTime now) render;
+}
+
+/// The whole list, as lines.
+///
+/// **One line per worktree, unlike the GUI's two.** The row's second line is
+/// evidence for its first; a terminal has no vertical pairing to make that
+/// legible, so what survives is the answer. Dropped: the agent's last prompt and
+/// the bucket split — texture, and neither decides anything.
+///
+/// **A column every row leaves empty is not printed.** A repo with no agents, a
+/// machine with no `gh`, and an agent format that stopped parsing all produce
+/// the same thing — a column of nothing — and the fix for all three is the same.
+/// It is also what keeps this readable before the agent and forge providers
+/// exist at all.
+///
+/// **Widths come from the content.** A branch name is what you would copy out of
+/// this list and hand to `git`, so it is never truncated; sizing to the longest
+/// one is what keeps the columns lined up anyway.
+List<String> worktreeTable(
+  List<(Worktree, WorktreeFacts)> rows, {
+  required DateTime now,
+}) {
+  var columns = <_Column>[
+    _Column((facts, _) => _dot(facts)),
+    const _Column(_changesOf),
+    _Column(_agentOf),
+    const _Column(_forgeOf),
+    _Column(_whenOf),
+  ];
+
+  var names = [for (var (worktree, _) in rows) _name(worktree)];
+  var cells = [
+    for (var (index, (_, facts)) in rows.indexed)
+      [names[index], for (var column in columns) column.render(facts, now)],
+  ];
+
+  var count = columns.length + 1;
+  var used = [
+    for (var i = 0; i < count; i++)
+      cells.any((row) => row[i].trim().isNotEmpty),
+  ];
+  var widths = [
+    for (var i = 0; i < count; i++)
+      cells.fold(0, (max, row) => row[i].length > max ? row[i].length : max),
+  ];
+
+  return [
+    for (var row in cells)
+      [
+        for (var i = 0; i < count; i++)
+          if (used[i]) row[i].padRight(widths[i]),
+      ].join('  ').trimRight(),
+  ];
+}
+
+String _name(Worktree worktree) => worktree.branch ?? worktree.directoryName;
+
+/// The aggregate, as the one character a terminal can spare for it.
+String _dot(WorktreeFacts facts) => switch (facts.tone) {
+  Tone.error => '✗',
+  Tone.warn => '!',
+  Tone.info => '●',
+  Tone.good => '·',
+  Tone.neutral => '',
+};
+
+String _changesOf(WorktreeFacts facts, DateTime now) {
+  var fact = facts.git;
+  if (fact.state == FactState.failed) return 'unreadable';
+  var git = fact.value;
+  if (git == null) return '';
+
+  var shape = git.changes;
+  var out = StringBuffer();
+  if (shape == null || shape.isEmpty) {
+    // A branch with no commits of its own, in a worktree full of edits, is
+    // real and common — "in sync" would be true of the branch and a lie about
+    // the worktree.
+    out.write(git.dirty > 0 ? 'uncommitted' : 'in sync');
+  } else {
+    out.write('${shape.files}f +${shape.added} -${shape.removed}');
+    if (git.dirty > 0) out.write(' ~${git.dirty}');
+  }
+  if (git.ahead > 0) out.write(' ^${git.ahead}');
+  if (git.behind > 0) out.write(' v${git.behind}');
+  return out.toString();
+}
+
+String _agentOf(WorktreeFacts facts, DateTime now) {
+  var agent = facts.agent.value;
+  if (agent == null || agent.state == AgentState.none) return '';
+  return switch (agent.state) {
+    AgentState.waiting => 'waiting',
+    AgentState.working => 'working',
+    AgentState.idle => 'idle ${agent.at == null ? '' : ago(agent.at!, now)}',
+    AgentState.none => '',
+  }.trim();
+}
+
+String _forgeOf(WorktreeFacts facts, DateTime now) {
+  var pr = facts.forge.value;
+  if (pr == null) return '';
+  var mark = switch (pr.checks) {
+    ChecksState.failing => ' ✗',
+    ChecksState.passing => ' ✓',
+    ChecksState.pending => ' …',
+    ChecksState.none => '',
+  };
+  return '#${pr.number}$mark${pr.reviewRequested ? ' review' : ''}';
+}
+
+String _whenOf(WorktreeFacts facts, DateTime now) {
+  var activity = facts.activity.value;
+  if (activity == null) return '';
+  return '${ago(activity.at, now)} ${activity.sourceLabel}';
+}
+
+/// Coarse, and shared with the GUI's `when` column so the two never disagree
+/// about what "4m" means.
+String ago(DateTime then, DateTime now) {
+  var d = now.difference(then);
+  if (d.inMinutes < 1) return 'now';
+  if (d.inMinutes < 60) return '${d.inMinutes}m';
+  if (d.inHours < 24) return '${d.inHours}h';
+  return '${d.inDays}d';
+}
