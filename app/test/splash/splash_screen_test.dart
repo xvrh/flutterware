@@ -13,7 +13,7 @@ import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/splash/model/surface.dart';
 import 'package:flutterware_app/src/splash/screen.dart';
 import 'package:flutterware_app/src/splash/ui/cell_inspector.dart';
-import 'package:flutterware_app/src/splash/ui/panel_header.dart';
+import 'package:flutterware_app/src/ui/action_button.dart';
 import 'package:flutterware_app/src/splash/ui/splash_render.dart';
 import 'package:flutterware_app/src/splash/ui/variant_tile.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
@@ -380,7 +380,7 @@ flutter_native_splash:
       // generator's own output — rather than through a button that discarded
       // both. Reload is the only control, and it only re-reads.
       expect(find.textContaining('flutter_native_splash:create'), findsWidgets);
-      expect(find.byType(SplashToolbarButton), findsOneWidget);
+      expect(find.byType(FwActionButton), findsOneWidget);
       expect(find.text('Reload'), findsOneWidget);
     });
   });

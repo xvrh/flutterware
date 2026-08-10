@@ -1,4 +1,8 @@
-# The splash plugin: from previewer to authoring tool
+# The splash plugin: from previewer to a viewer you can trust
+
+> **Title corrected 2026-08-10.** It read *"to authoring tool"* until the
+> authoring tool was built and deleted — see § Phases 2 and 3 are deleted. What
+> shipped is a viewer that reads the generated files back and never writes.
 
 **Date:** 2026-07-31
 **Status:** Design. Supersedes nothing — the splash plugin shipped without a
@@ -777,6 +781,77 @@ notice the file changed.
 1c-b is placed where it is deliberately. It verifies `config.dart`, which
 everything after it trusts — finding out that the cascade transcription is wrong
 is much cheaper before phase 2 starts writing keys based on it than after.
+
+### The review pass after the rebase (2026-08-10)
+
+A read of the whole plugin against master, once the shape had stopped moving.
+Nothing found was a crash; all of it was the same kind of thing — an idea that
+had moved and left a copy behind.
+
+**Two surfaces still answered the old way.** The inversion changed `describe`
+and the panel to read the generated files, and missed the two places that reach
+the same scan by another route:
+
+- `fw status`'s matrix table was still built from `compositionFor`, the config
+  prediction. On a generated project it printed `assets/logo.png` where
+  `describe`, over the same scan in the same process, printed what the drawables
+  say. It now uses `pictureFor` like everything else, and carries a `From`
+  column — a picture and its provenance are one fact, and a table that showed
+  one without the other was how this drifted in the first place.
+- The `artifacts` action read `scan.main` and had no `flavor` parameter, so a
+  flavored project always got whichever config sorted first — while the panel,
+  which follows the address, was showing a different flavor's files at that same
+  moment. It takes `flavor` now, and reports which one it answered for.
+
+**`pictureFor` was doing disk I/O from `build()`.** Recomposition parses
+`web/index.html` and a stack of drawable XML; the panel calls it nine times per
+build. Measured against `examples/example`: **5.8ms of synchronous I/O per
+rebuild**, on the UI isolate. Everything else on `SplashConfigScan` is computed
+once by `_scanConfig` and kept — this was the single exception, and it was the
+expensive one. It is now a map built at scan time, which also makes
+`packageRoot` unnecessary on the scan.
+
+**Deleted:** `SplashArtifactsView` (197 lines) — the inspector already lists each
+cell's files beside the picture they belong to, and the header's pill and every
+cell's origin line already say when nothing has been generated. `blocksGeneration`
+on `SplashConfigScan`, uncalled. `SplashToolbarButton`, and its `primary` flag
+that no caller ever set — a leftover from the generate button. `SplashScreenBox`
+was a pass-through to a private widget, justified by a side-by-side view that had
+been deleted with `compareSplash`; the wrapper is gone and the widget is public.
+The problem row, written twice identically, is now `SplashProblemRow`.
+
+### Feedback is a shared control, not a splash problem (2026-08-10)
+
+Xavier on the Reload button: *"no push feedback... I have very little confidence
+in that."* Correct, and it was worse than it looked — the button also called
+`core.invoke('reload')`, which `NativePlugin` explicitly forbids (*"a panel calls
+its core directly, and no panel invokes an action"*), and threw the result away.
+
+The instinct is a spinner. A spinner is wrong here: the reload takes about 40ms,
+so a spinner shown for its natural duration is one dropped frame. **What is
+missing is an acknowledgement, and an acknowledgement has to outlast the work.**
+
+`app/lib/src/ui/action_button.dart` — `FwActionButton` — holds each state for a
+minimum rather than for its natural length: running for at least 320ms even if
+the future is already complete, a tick for 1.4s, and a failure that stays up
+until the next press carrying the error's own words. The floor is started
+alongside the work and both are awaited, so work that takes longer is not
+delayed by it.
+
+It is in `ui/` and not in `splash/` because the defect was never splash's. The
+dependencies panel had the same Reload behind a one-item popup menu; it uses the
+button now, and `refreshOrThrow` rather than `refresh`, because `refresh`
+resolves to a `Snapshot` carrying its own error and would have shown a tick for a
+failed resolve.
+
+The splash panel's Reload now calls `SplashCore.reload`, a real method that
+returns whether anything moved and throws when the re-read fails. The `reload`
+*action* wraps it and reports a failure as a result instead, because finding out
+that a config is broken is exactly what somebody calls `reload` to do.
+
+The states are transient and timing-dependent, so no screenshot and no widget
+test shows them — they are a preview (`tool/catalog/demos/action_button.dart`),
+where they can be pressed.
 
 ## Tests
 

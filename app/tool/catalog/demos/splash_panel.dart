@@ -57,7 +57,7 @@ class _Headers extends StatelessWidget {
             fileCount: 66,
             scannedAt: DateTime(2026, 8, 10, 11, 27, 2),
             onSize: (_) {},
-            onReload: () {},
+            onReload: () async {},
           ),
         ),
         _Case(
@@ -71,7 +71,7 @@ class _Headers extends StatelessWidget {
             scannedAt: DateTime(2026, 8, 10, 11, 27, 2),
             size: SplashScreenSize.smallPhone,
             onSize: (_) {},
-            onReload: () {},
+            onReload: () async {},
           ),
         ),
         _Case(
@@ -84,7 +84,7 @@ class _Headers extends StatelessWidget {
             scannedAt: DateTime(2026, 8, 10, 11, 27, 2),
             size: SplashScreenSize.tablet,
             onSize: (_) {},
-            onReload: () {},
+            onReload: () async {},
           ),
         ),
         _Case(
@@ -98,7 +98,7 @@ class _Headers extends StatelessWidget {
             selectedFlavor: 'staging',
             onFlavor: (_) {},
             onSize: (_) {},
-            onReload: () {},
+            onReload: () async {},
           ),
         ),
       ],

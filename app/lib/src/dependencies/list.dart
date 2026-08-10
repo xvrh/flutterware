@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../address/address_scope.dart';
 import '../plugins/native/dependencies_address.dart';
 import 'package:pub_scores/pub_scores.dart';
+import '../ui/action_button.dart';
 import '../ui/column_layout.dart';
 import '../ui/empty_state.dart';
 import '../ui/table.dart';
@@ -185,14 +186,13 @@ class _DependencyListScreenState extends State<_DependencyListScreen> {
     return Row(
       children: [
         Expanded(child: Text('Dependencies', style: context.type.pageTitle)),
-        PopupMenuButton(
-          elevation: 2,
-          itemBuilder: (context) => [
-            PopupMenuItem(
-              onTap: dependencies.dependencies.refresh,
-              child: Text('Reload'),
-            ),
-          ],
+        // `refreshOrThrow`, not `refresh`: the button reports what it is handed,
+        // and `refresh` resolves to a Snapshot carrying its own error rather
+        // than throwing — which would show a tick for a resolve that failed.
+        FwActionButton(
+          label: 'Reload',
+          tooltip: 'Resolve the package graph again',
+          onPressed: dependencies.dependencies.refreshOrThrow,
         ),
       ],
     );

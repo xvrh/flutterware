@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../capture/capture_mode.dart';
+import '../../ui/action_button.dart';
 import '../../ui/menu.dart';
 import '../../ui/theme.dart';
 import '../model/surface.dart';
@@ -74,7 +75,9 @@ class SplashPanelHeader extends StatelessWidget {
   final SplashScreenSize? size;
   final ValueChanged<SplashScreenSize?>? onSize;
 
-  final VoidCallback? onReload;
+  /// Awaited, so the button can hold a running state and then say whether the
+  /// re-read worked — see [FwActionButton].
+  final Future<void> Function()? onReload;
 
   @override
   Widget build(BuildContext context) {
@@ -204,7 +207,7 @@ class _Toolbar extends StatelessWidget {
 
   final SplashScreenSize? size;
   final ValueChanged<SplashScreenSize?>? onSize;
-  final VoidCallback? onReload;
+  final Future<void> Function()? onReload;
 
   @override
   Widget build(BuildContext context) {
@@ -225,61 +228,14 @@ class _Toolbar extends StatelessWidget {
           if (onSize != null) _SizePicker(size: size, onSelect: onSize!),
           const Spacer(),
           if (onReload != null)
-            SplashToolbarButton(
+            FwActionButton(
               label: 'Reload',
               tooltip: 'Read the config and its images again',
-              onPressed: onReload!,
+              onPressed: onReload,
             ),
         ],
       ),
     );
-  }
-}
-
-/// A bordered control, which is what this app means by a button.
-///
-/// Public because the inspector uses it too, and two panels drawing their own
-/// idea of a button is how the splash panel ended up with accent-coloured text
-/// where every sibling has a bordered pill.
-class SplashToolbarButton extends StatelessWidget {
-  const SplashToolbarButton({
-    super.key,
-    required this.label,
-    required this.onPressed,
-    this.tooltip,
-    this.primary = false,
-  });
-
-  final String label;
-  final String? tooltip;
-  final bool primary;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var button = InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(context.radii.radius),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.lg,
-          vertical: FwSpacing.xs,
-        ),
-        decoration: BoxDecoration(
-          color: primary ? colors.accentSoft : null,
-          borderRadius: BorderRadius.circular(context.radii.radius),
-          border: Border.all(color: primary ? colors.accent : colors.line),
-        ),
-        child: Text(
-          label,
-          style: context.type.caption.copyWith(
-            color: primary ? colors.accent : colors.ink,
-          ),
-        ),
-      ),
-    );
-    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
   }
 }
 
