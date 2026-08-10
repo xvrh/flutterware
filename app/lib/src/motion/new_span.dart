@@ -136,6 +136,69 @@ MotionSpan? spanAt({
   );
 }
 
+/// Where `+` actually puts a span on a lane that already has one.
+///
+/// **Prefers the playhead**, because that is where you are looking and the span
+/// can open at the value the property already has there. Falls back to the
+/// widest stretch of free time when the playhead will not do — and that is not
+/// an edge case: a motion that has just finished playing leaves the playhead at
+/// the very end, where by definition nothing fits, so a `+` that only ever
+/// tried the playhead refused most of the times anybody pressed it.
+///
+/// The fallback does not claim continuity. Away from the playhead nothing here
+/// knows what the property is worth, so the span opens at the debut's own value
+/// rather than at a number borrowed from a different instant.
+MotionSpan? spanFor({
+  required String property,
+  required int atMs,
+  required int durationMs,
+  required List<(int, int)> existing,
+  MotionLiteral? current,
+}) {
+  var atPlayhead = spanAt(
+    property: property,
+    atMs: atMs,
+    durationMs: durationMs,
+    existing: existing,
+    current: current,
+  );
+  if (atPlayhead != null) return atPlayhead;
+
+  var gap = widestGap(existing, durationMs);
+  if (gap == null) return null;
+  return spanAt(
+    property: property,
+    atMs: gap,
+    durationMs: durationMs,
+    existing: existing,
+  );
+}
+
+/// The start of the widest stretch of time no span covers, or null when the
+/// lane is covered end to end.
+///
+/// Sorted and swept rather than trusting the order: the spans come from a file
+/// somebody may have hand-edited, and an unsorted list would report a gap that
+/// is really an overlap.
+int? widestGap(List<(int, int)> existing, int durationMs) {
+  var sorted = [...existing]..sort((a, b) => a.$1.compareTo(b.$1));
+  int? best;
+  var widest = 0;
+  var cursor = 0;
+  for (var (start, end) in sorted) {
+    if (start - cursor > widest) {
+      widest = start - cursor;
+      best = cursor;
+    }
+    if (end > cursor) cursor = end;
+  }
+  if (durationMs - cursor > widest) {
+    widest = durationMs - cursor;
+    best = cursor;
+  }
+  return widest > 0 ? best : null;
+}
+
 /// Whichever end of the debut is further from where the property already is.
 ///
 /// A second span that opens at the current value and closes at the resting one

@@ -278,6 +278,10 @@ class _MotionStageState extends State<_MotionStage> {
   /// reference — the poll replaces the model underneath it every second.
   MotionSelection? _selection;
 
+  /// Whether the inspector is up, once somebody has said. Null means "whatever
+  /// there is room for".
+  bool? _showRail;
+
   @override
   void initState() {
     super.initState();
@@ -476,32 +480,24 @@ class _MotionStageState extends State<_MotionStage> {
     }
 
     var atMs = ((_dragging ?? scope!.progress) * scope!.durationMs).round();
-    var bounds = [
-      for (var segment in existing.segments) (segment.startMs, segment.endMs),
-    ];
-    // Refused rather than nudged. A span dropped into the middle of another
-    // would overlap, which `evaluateSegments` explicitly does not resolve —
-    // and the editor's job is to be unable to produce that file.
-    if (bounds.any((span) => atMs >= span.$1 && atMs < span.$2)) {
-      setState(
-        () => _writeProblems = [
-          MotionFileProblem('a span already covers ${atMs}ms on $property'),
-        ],
-      );
-      return;
-    }
-
-    var span = spanAt(
+    var span = spanFor(
       property: property,
       atMs: atMs,
       durationMs: scope.durationMs,
-      existing: bounds,
+      existing: [
+        for (var segment in existing.segments) (segment.startMs, segment.endMs),
+      ],
       current: _literalOf(existing.value),
     );
+    // Only reachable when the lane is covered end to end, which is a thing to
+    // say plainly rather than a millisecond to report back.
     if (span == null) {
       setState(
         () => _writeProblems = [
-          MotionFileProblem('no room for a span at ${atMs}ms'),
+          MotionFileProblem(
+            '$target.$property is tuned end to end; shorten or delete a '
+            'span to make room for another.',
+          ),
         ],
       );
       return;
@@ -578,10 +574,16 @@ class _MotionStageState extends State<_MotionStage> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // The inspector is the first thing to go when the panel is narrow: it
-        // says what a span is worth, and a sequencer with no room for its lanes
-        // has nothing to say it about.
-        var showRail = constraints.maxWidth >= 900;
+        // Auto-hidden only when there is genuinely no room — the sequencer's
+        // gutter plus a track worth dragging in, beside the rail itself.
+        //
+        // The first cut gated this at 900px of *stage*, which is a different
+        // box from the one the concept's media query meant: the motion list
+        // takes 280 before this builder runs, and the shell takes its own
+        // chrome before that, so the rail needed a window around 1400px and
+        // simply never appeared. A number I have to guess is the wrong
+        // mechanism, hence the toggle.
+        var showRail = _showRail ?? (constraints.maxWidth >= 560);
 
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -601,6 +603,8 @@ class _MotionStageState extends State<_MotionStage> {
                     scope: _scope,
                     value: _dragging,
                     onTransport: _transport,
+                    railOpen: showRail,
+                    onToggleRail: () => setState(() => _showRail = !showRail),
                   ),
                   Divider(height: 1, color: context.colors.line),
                   SizedBox(
@@ -692,11 +696,15 @@ class _Transport extends StatelessWidget {
     required this.scope,
     required this.value,
     required this.onTransport,
+    required this.railOpen,
+    required this.onToggleRail,
   });
 
   final Map<String, dynamic>? scope;
   final double? value;
   final ValueChanged<String> onTransport;
+  final bool railOpen;
+  final VoidCallback onToggleRail;
 
   @override
   Widget build(BuildContext context) {
@@ -737,6 +745,14 @@ class _Transport extends StatelessWidget {
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
+          ),
+          IconButton(
+            onPressed: onToggleRail,
+            icon: Icon(
+              railOpen ? Icons.view_sidebar : Icons.view_sidebar_outlined,
+            ),
+            color: railOpen ? context.colors.accent : null,
+            tooltip: railOpen ? 'Hide the inspector' : 'Show the inspector',
           ),
         ],
       ),

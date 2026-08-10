@@ -382,4 +382,86 @@ const demoMotion = MotionValues(
       expect(next, isEmpty);
     });
   });
+
+  group('where `+` actually lands', () {
+    test('the playhead, when the playhead will do', () {
+      var span = spanFor(
+        property: 'opacity',
+        atMs: 300,
+        durationMs: 600,
+        existing: const [(0, 200)],
+        current: const MotionNumber(0.5),
+      )!;
+      expect(span.startMs, 300);
+      expect((span.from as MotionNumber).value, 0.5);
+    });
+
+    test('a gap, when the motion has just finished playing', () {
+      // The case that made `+` useless in the panel: play to the end and the
+      // playhead sits at the duration, where by definition nothing fits.
+      var span = spanFor(
+        property: 'opacity',
+        atMs: 600,
+        durationMs: 600,
+        existing: const [(0, 200)],
+        current: const MotionNumber(1),
+      )!;
+      expect(span.startMs, 200);
+      expect(span.endMs, 600);
+      // No continuity claimed away from the playhead: the value at 200ms is
+      // not the one the guest reported at 600ms.
+      expect((span.from as MotionNumber).value, 0);
+    });
+
+    test('a gap, when the playhead is inside a span', () {
+      var span = spanFor(
+        property: 'opacity',
+        atMs: 100,
+        durationMs: 600,
+        existing: const [(0, 200)],
+      )!;
+      expect(span.startMs, 200);
+    });
+
+    test('the widest gap, not the first', () {
+      var span = spanFor(
+        property: 'opacity',
+        atMs: 50,
+        durationMs: 1000,
+        existing: const [(0, 100), (200, 300), (900, 1000)],
+      )!;
+      expect(span.startMs, 300);
+      expect(span.endMs, 900);
+    });
+
+    test('nothing at all when the lane is covered end to end', () {
+      expect(
+        spanFor(
+          property: 'opacity',
+          atMs: 300,
+          durationMs: 600,
+          existing: const [(0, 300), (300, 600)],
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('the widest gap', () {
+    test('finds the room before, between and after', () {
+      expect(widestGap(const [(200, 300)], 600), 300);
+      expect(widestGap(const [(0, 100), (150, 600)], 600), 100);
+      expect(widestGap(const [], 600), 0);
+    });
+
+    test('is null when there is none', () {
+      expect(widestGap(const [(0, 600)], 600), isNull);
+    });
+
+    test('sorts first, so a hand-edited file cannot fake a gap', () {
+      // Out of order, and overlapping once sorted: 0..400 and 100..600 cover
+      // the whole motion between them.
+      expect(widestGap(const [(100, 600), (0, 400)], 600), isNull);
+    });
+  });
 }
