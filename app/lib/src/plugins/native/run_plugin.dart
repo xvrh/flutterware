@@ -1133,18 +1133,21 @@ class _NewRunPageState extends State<_NewRunPage> {
         '${[for (var platform in platforms) platform.name].join(', ')}';
   }
 
+  /// Seeds each field with what the *last launch chose*, and nothing else.
+  ///
+  /// A default is shown as a hint, not as text. The field's content is what
+  /// gets sent, and `launch` fills in the defaults itself — so pre-filling one
+  /// here would send it back as an explicit choice, which is how the panel and
+  /// the action used to disagree about the same launch. An empty field now
+  /// means "whatever the default is", which is also what it looks like.
   void _rebuildKnobs(Map<String, String> values) {
     for (var field in _defines.values) {
       field.dispose();
     }
     _defines.clear();
-    for (var (:define, :read) in _offered) {
+    for (var (:define, read: _) in _offered) {
       _defines[define.name] = TextEditingController(
-        text:
-            values[define.name] ??
-            define.defaultValue ??
-            read?.defaultValue ??
-            '',
+        text: values[define.name] ?? '',
       );
     }
   }
@@ -1250,6 +1253,12 @@ class _NewRunPageState extends State<_NewRunPage> {
                         define: define,
                         read: read,
                         options: _core.optionsFor(define),
+                        interfaceOf: _core.hostInterfaceOf,
+                        hint:
+                            _core.scriptValueFor(define) ??
+                            define.defaultValue ??
+                            read?.defaultValue,
+                        problem: _core.scriptProblemFor(define),
                         controller: _defines[define.name]!,
                       ),
                       const Gap(FwSpacing.md),
@@ -1879,15 +1888,18 @@ class _Action extends StatelessWidget {
 /// What to bake in before building.
 ///
 /// Every define is a text field, because a `--dart-define` is a string; the
-/// difference the tool makes is the list under it. `from: DefineSource.servers`
-/// fills that list with the base URLs of the servers running right now, and
-/// `hostAddresses` with this machine's LAN addresses — so "point the app at my
-/// dev server" is a click rather than a trip to `ifconfig`.
+/// difference the tool makes is the list under it. `from:
+/// DefineSource.hostAddresses` fills that list with this machine's LAN
+/// addresses — so "point the app at my dev machine" is a click rather than a
+/// trip to `ifconfig`.
 class _KnobField extends StatelessWidget {
   const _KnobField({
     required this.define,
     required this.read,
     required this.options,
+    required this.interfaceOf,
+    required this.hint,
+    required this.problem,
     required this.controller,
   });
 
@@ -1899,6 +1911,20 @@ class _KnobField extends StatelessWidget {
   final DefineRef? read;
 
   final List<String> options;
+
+  /// The interface an offered value was found on, when it is one of this
+  /// machine's addresses. Five bare IPv4s say nothing about which one the phone
+  /// can reach; `en0` next to one of them does.
+  final String? Function(String) interfaceOf;
+
+  /// What this define will be if the field is left alone — a script's computed
+  /// answer, or a declared default. Shown rather than typed in, so that leaving
+  /// the field empty and leaving it at its default are the same thing.
+  final String? hint;
+
+  /// Why there is no computed value, when a script source could not answer.
+  final String? problem;
+
   final TextEditingController controller;
 
   @override
@@ -1936,7 +1962,17 @@ class _KnobField extends StatelessWidget {
         if (define.description != null)
           Text(define.description!, style: context.type.caption),
         const Gap(FwSpacing.xxs),
-        TextField(controller: controller),
+        TextField(
+          controller: controller,
+          decoration: InputDecoration(hintText: hint),
+        ),
+        if (problem case var failure?) ...[
+          const Gap(FwSpacing.xxs),
+          Text(
+            failure,
+            style: context.type.caption.copyWith(color: context.colors.amber),
+          ),
+        ],
         if (options.isNotEmpty) ...[
           const Gap(FwSpacing.xs),
           Wrap(
@@ -1945,7 +1981,21 @@ class _KnobField extends StatelessWidget {
             children: [
               for (var option in options)
                 ActionChip(
-                  label: Text(option, style: context.type.micro),
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(option, style: context.type.micro),
+                      if (interfaceOf(option) case var interface?) ...[
+                        const Gap(FwSpacing.xxs),
+                        Text(
+                          interface,
+                          style: context.type.micro.copyWith(
+                            color: context.colors.mut3,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                   onPressed: () => controller.text = option,
                   visualDensity: VisualDensity.compact,
                 ),

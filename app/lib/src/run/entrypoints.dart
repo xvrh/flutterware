@@ -139,10 +139,7 @@ List<DartDefine> _definesOf(Object? raw) => [
             for (var option in (entry['options'] as List? ?? const []))
               if (option is String) option,
           ],
-          from: switch (entry['from']) {
-            String name => DefineSource.byName(name),
-            _ => null,
-          },
+          from: DefineSource.fromJson(entry['from']),
         ),
 ];
 

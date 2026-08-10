@@ -335,7 +335,7 @@ packages: List<RunEntrypointPackage>
       label: String?
       description: String?
       default: String?
-      options: List<String>   # Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now: the base URLs of the servers currently running, or this machine's addresses on the local network.
+      options: List<String>   # Everything worth offering — what the config listed, plus whatever its `from:` resolved to right now, such as this machine's addresses on the local network or a list a script in the project printed.
       kind: String?   # `String`, `int`, `bool` or `double` — how the app's own source reads this define.
       readAt: String?   # The package-relative file the read is in.
       problem: String?   # What is wrong with this define, when something is.

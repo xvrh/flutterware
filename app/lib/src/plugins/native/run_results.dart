@@ -280,8 +280,8 @@ class DartDefineEntry {
   final String? defaultValue;
 
   /// Everything worth offering — what the config listed, plus whatever its
-  /// `from:` resolved to right now: the base URLs of the servers currently
-  /// running, or this machine's addresses on the local network.
+  /// `from:` resolved to right now, such as this machine's addresses on the
+  /// local network or a list a script in the project printed.
   final List<String> options;
 
   /// `String`, `int`, `bool` or `double` — how the app's own source reads this
@@ -297,10 +297,16 @@ class DartDefineEntry {
 
   /// What is wrong with this define, when something is.
   ///
-  /// There is exactly one such thing worth saying and it is the expensive one:
-  /// **a declared define that the app never reads**. It compiles, it launches,
-  /// the control appears in the cockpit, and turning it does nothing at all —
-  /// which is indistinguishable from a feature that does not work.
+  /// Two things are worth saying, and they are both the expensive kind — the
+  /// kind that compiles, launches, and looks exactly like working:
+  ///
+  /// - **A script source that could not answer.** The value it was supposed to
+  ///   compute is baked into the build, so falling back would produce an app
+  ///   that is wrong in a way nothing on screen shows. A launch that does not
+  ///   set the define explicitly is refused while this says something.
+  /// - **A declared define the app never reads.** The control appears in the
+  ///   cockpit and turning it does nothing at all, which is indistinguishable
+  ///   from a feature that does not work.
   final String? problem;
 
   Map<String, Object?> toJson() => _$DartDefineEntryToJson(this);

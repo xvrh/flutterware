@@ -22,6 +22,8 @@ import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:path/path.dart' as p;
 
+import '../support/dart_executable.dart';
+
 /// The devices-and-occupancy half of the run cockpit, against a temp run dir.
 ///
 /// No `flutter daemon` is started anywhere here: the cache is a file, and this
@@ -451,7 +453,10 @@ void main() {
                   'path': 'lib/main.dart',
                   'name': 'Staging',
                   'defines': [
-                    {'define': 'API_BASE_URL', 'from': 'hostAddresses'},
+                    {
+                      'define': 'API_BASE_URL',
+                      'from': {'source': 'hostAddresses'},
+                    },
                   ],
                 },
               ],
@@ -470,42 +475,175 @@ void main() {
       expect(package.entrypoints.single.defines.single.name, 'API_BASE_URL');
     });
 
-    test('a define offers the servers that are running right now', () async {
-      _writePackage(worktree, 'app', {'lib/main.dart': 'void main() {}'});
-      File(p.join(runDir.path, 'srv-abc-api-42.json')).writeAsStringSync(
-        jsonEncode({
-          'projectRoot': worktree.path,
-          'name': 'api',
-          'socketPath': p.join(runDir.path, 'srv-abc-api-42.sock'),
-          'pid': 42,
-          'startedAt': DateTime.now().toUtc().toIso8601String(),
-          'baseUrl': 'http://192.168.1.20:8080',
-        }),
-      );
+    test(
+      'a source this build has no member for leaves the define usable',
+      () async {
+        _writePackage(worktree, 'app', {'lib/main.dart': 'void main() {}'});
+        core = _coreFor(
+          worktree,
+          config: {
+            'packages': [
+              {
+                'path': 'app',
+                'entrypoints': [
+                  {
+                    'path': 'lib/main.dart',
+                    'defines': [
+                      // The config imports the flutterware the *project* pins,
+                      // which can run ahead of the GUI reading its manifest. A
+                      // source we cannot resolve has to mean a define with
+                      // fewer suggestions, never a define that disappears.
+                      {
+                        'define': 'API',
+                        'from': {'source': 'somethingLater'},
+                        'default': 'x',
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        );
+
+        var result =
+            (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+
+        var define = result.packages.single.entrypoints.single.defines.single;
+        expect(define.name, 'API');
+        expect(define.defaultValue, 'x');
+      },
+    );
+
+    test('a script source computes the value the launch will use', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': '''
+void main() {
+  const port = int.fromEnvironment('PORT', defaultValue: 8086);
+}
+''',
+      });
+      _writeScript(worktree, 'void main() { print(8186); }');
       core = _coreFor(
         worktree,
-        config: {
-          'packages': [
-            {
-              'path': 'app',
-              'entrypoints': [
-                {
-                  'path': 'lib/main.dart',
-                  'defines': [
-                    {'define': 'API', 'from': 'servers', 'default': 'x'},
-                  ],
-                },
-              ],
-            },
-          ],
-        },
+        sdk: _sdkWithRealDart(worktree),
+        config: _configWithScript(),
       );
 
       var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
 
       var define = result.packages.single.entrypoints.single.defines.single;
-      expect(define.options, contains('http://192.168.1.20:8080'));
-      expect(define.defaultValue, 'x');
+      // Not 8086. The scanned fallback is what the app does when nobody says
+      // anything, and the whole point of the script is that somebody does —
+      // this worktree's stack came up on a port only the project can work out.
+      expect(define.defaultValue, '8186');
+      expect(define.problem, isNull);
+    });
+
+    test('a launch resolves its own defines, not the core’s scan', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': '''
+void main() {
+  const port = int.fromEnvironment('PORT', defaultValue: 8086);
+}
+''',
+      });
+      _writeScript(worktree, 'void main() { print(8186); }');
+      core = _coreFor(
+        worktree,
+        sdk: _sdkWithRealDart(worktree),
+        config: _configWithScript(),
+      );
+
+      // No computeAll. A sweep that gathered its sources from the core's
+      // entry-point scan would find none here, ask nothing, and then refuse the
+      // launch for a value it never looked up — so `launch` resolves exactly
+      // the defines it was handed.
+      var handle = await core.launch(
+        device: 'phone',
+        package: 'app',
+        entry: EntrypointRef(
+          path: 'lib/main.dart',
+          name: 'main',
+          declared: true,
+          defines: [
+            DartDefine('PORT', from: DefineSource.script('tool/env.dart')),
+          ],
+        ),
+      );
+
+      expect(handle.defines, {'PORT': '8186'});
+    });
+
+    test('a script that cannot answer refuses the launch', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': '''
+void main() {
+  const port = int.fromEnvironment('PORT', defaultValue: 8086);
+}
+''',
+      });
+      _writeScript(worktree, '''
+import 'dart:io';
+
+void main() {
+  stderr.writeln('no .env — run local_env up first');
+  exit(1);
+}
+''');
+      core = _coreFor(
+        worktree,
+        sdk: _sdkWithRealDart(worktree),
+        config: _configWithScript(),
+      );
+
+      // Falling back to 8086 would compile, install and run, and would be
+      // indistinguishable from a correct build until the app was talking to
+      // another worktree's database. This is the one thing here that may not
+      // degrade quietly.
+      await expectLater(
+        core.invoke('launch', arguments: {'device': 'phone'}),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('PORT'), contains('run local_env up first')),
+          ),
+        ),
+      );
+    });
+
+    test('a value the caller gave launches past a script that failed', () async {
+      _writePackage(worktree, 'app', {
+        'lib/main.dart': '''
+void main() {
+  const port = int.fromEnvironment('PORT', defaultValue: 8086);
+}
+''',
+      });
+      _writeScript(worktree, 'void main() { exit(1); }');
+      core = _coreFor(
+        worktree,
+        sdk: _sdkWithRealDart(worktree),
+        config: _configWithScript(),
+      );
+
+      // The refusal is about not *guessing* a value nobody chose. Somebody who
+      // typed one has chosen, and a broken dev stack should not stop them.
+      //
+      // Through `launch` rather than the action, because that is the method the
+      // panel's Start button calls: the defaults are filled in there precisely
+      // so both surfaces bake in the same set, and a test that only went
+      // through `invoke` would not say so.
+      await core.computeAll();
+      var handle = await core.launch(
+        device: 'phone',
+        package: 'app',
+        entry: core.entrypointsFor('app').single,
+        defines: {'PORT': '9000'},
+      );
+
+      expect(handle.defines, {'PORT': '9000'});
     });
 
     test('launching refuses a define the entry point does not declare', () async {
@@ -1307,7 +1445,11 @@ void main() {
   });
 }
 
-RunCore _coreFor(Directory worktree, {Map<String, Object?> config = const {}}) {
+RunCore _coreFor(
+  Directory worktree, {
+  Map<String, Object?> config = const {},
+  FlutterSdkPath? sdk,
+}) {
   var tree = Worktree(path: worktree.path, isMain: true);
   return RunCore(
     PluginHost(
@@ -1320,11 +1462,50 @@ RunCore _coreFor(Directory worktree, {Map<String, Object?> config = const {}}) {
         declared: [],
         discovered: [],
         appContext: AppContext(logger: LogClient.print()),
-        flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        flutterSdk: sdk ?? FlutterSdkPath('/tmp/flutter'),
       ),
     ),
   );
 }
+
+/// An SDK root whose `bin/dart` is the real one running this test.
+///
+/// A script source is run with the SDK the *project* resolved against, never a
+/// `dart` looked up on PATH — so exercising it means giving the workspace an
+/// SDK root that has a working `dart` under it, rather than pointing the runner
+/// somewhere else for the test.
+FlutterSdkPath _sdkWithRealDart(Directory worktree) {
+  var root = Directory(p.join(worktree.path, '.sdk'))
+    ..createSync(recursive: true);
+  Directory(p.join(root.path, 'bin')).createSync();
+  Link(p.join(root.path, 'bin', 'dart')).createSync(resolveDartExecutable());
+  return FlutterSdkPath(root.path);
+}
+
+void _writeScript(Directory worktree, String source) {
+  File(p.join(worktree.path, 'tool', 'env.dart'))
+    ..parent.createSync(recursive: true)
+    ..writeAsStringSync(source);
+}
+
+Map<String, Object?> _configWithScript() => {
+  'packages': [
+    {
+      'path': 'app',
+      'entrypoints': [
+        {
+          'path': 'lib/main.dart',
+          'defines': [
+            {
+              'define': 'PORT',
+              'from': {'script': 'tool/env.dart'},
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
 
 /// A package directory with [files] in it, keyed by package-relative path.
 void _writePackage(Directory worktree, String path, Map<String, String> files) {

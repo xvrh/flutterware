@@ -41,6 +41,12 @@ One column, in that order.
 - **Knobs carry their offered values.** `from: KnobSource.servers` fills the
   list with the base URLs of servers announcing themselves right now,
   `hostAddresses` with this machine's LAN addresses.
+  <br>**Superseded 2026-08-10.** Shipped as `DartDefine`/`DefineSource` (the
+  rename's rationale is on `DartDefine` itself), and `servers` has been deleted:
+  offered values are a `List<String>`, so two servers arrived as two bare URLs
+  with no way to tell them apart, and the scan was never scoped to the worktree.
+  `hostAddresses` remains, and each address now carries the interface it was
+  found on.
 - **Warn before the click on a wireless device.** Every wireless launch in S-L1
   stalled on an OS dialog while the tool said only `Installing and launching…`.
 
