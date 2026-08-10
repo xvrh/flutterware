@@ -28,14 +28,21 @@
 /// cell shows this when it exists, and falls back to the prediction only where
 /// there is nothing to read.
 ///
-/// **Android only.** iOS is `LaunchScreen.storyboard`, which is constraints —
-/// a layout engine, not a recipe — and recomposing it would mean implementing
-/// one. Web is next; its `style.css` is the easiest of the three. Those two
-/// surfaces are predicted permanently, and the panel says so on the tile.
+/// Web works the same way, in one file: 2.4.x inlines the stylesheet into
+/// `web/index.html` as `<style id="splash-screen-style">` and puts the images in
+/// two `<picture>` elements, so the colour, the dark media query, both srcsets
+/// and the placement classes are all in one place.
+///
+/// **iOS is the exception, and permanently.** `LaunchScreen.storyboard` is
+/// constraints — a layout engine, not a recipe — and recomposing it would mean
+/// implementing one. That surface stays predicted, and the panel says so on the
+/// tile rather than leaving it to be inferred.
 library;
 
 import 'dart:io';
 
+import 'package:html/dom.dart' as html;
+import 'package:html/parser.dart' as html show parse;
 import 'package:path/path.dart' as p;
 import 'package:xml/xml.dart';
 
@@ -62,6 +69,9 @@ SplashComposition? recomposeSplash({
   required List<SplashArtifact> artifacts,
   String? flavor,
 }) {
+  if (surface == SplashSurface.web) {
+    return _recomposeWeb(packageRoot, theme, artifacts);
+  }
   if (surface != SplashSurface.android && surface != SplashSurface.android12) {
     return null;
   }
@@ -281,6 +291,241 @@ SplashComposition? _recomposeAndroid12(
 }
 
 String? _stripHash(String? value) => value?.replaceFirst('#', '').trim();
+
+// ---- Web ------------------------------------------------------------------
+
+/// The whole web splash, read out of `web/index.html`.
+///
+/// **There is no `style.css`.** Older versions of the generator wrote one and
+/// linked it; 2.4.x inlines everything — a `<style id="splash-screen-style">`
+/// and a `<script id="splash-screen-script">` appended to `<head>`, and up to
+/// two `<picture>` elements inserted at the top of `<body>` — and `_updateHtml`
+/// removes the old `<link href="splash/style.css">` on sight. So one file holds
+/// the colour, the media query, both `<source>` sets and the placement classes,
+/// and `web/splash/img/` holds the pixels.
+///
+/// That makes web the *second* surface with a real readback, and the cheaper of
+/// the two remaining: the CSS is four declarations we care about and the
+/// placement is a class name. iOS stays predicted — a storyboard is constraints,
+/// which is a layout engine rather than a recipe.
+SplashComposition? _recomposeWeb(
+  String packageRoot,
+  SplashTheme theme,
+  List<SplashArtifact> artifacts,
+) {
+  var index = File(p.join(packageRoot, 'web', 'index.html'));
+  if (!index.existsSync()) return null;
+
+  html.Document document;
+  try {
+    document = html.parse(index.readAsStringSync());
+  } on FileSystemException {
+    return null;
+  }
+
+  // The marker, and it is as unconditional here as `background.png` is on
+  // Android: `_createSplashCss` always appends this element, and the only other
+  // thing that touches it is the branch that removes the splash entirely. A
+  // stock `web/index.html` has no `<style>` in its head at all, so — unlike
+  // `launch_background.xml` — there is nothing here to mistake for output.
+  var style = document.querySelector('style#splash-screen-style');
+  if (style == null) return null;
+
+  var css = style.text;
+  var light = _cssBodyRule(css);
+  var declarations = <String, String>{...light};
+  if (theme == SplashTheme.dark) {
+    // The `@media (prefers-color-scheme: dark)` block, layered on top rather
+    // than read alone — it only ever sets `background-color` and
+    // `background-image`, and everything it does not set keeps the light value,
+    // which is the cascade doing what a cascade does.
+    var dark = _cssDarkBlock(css);
+    if (dark != null) declarations.addAll(_cssBodyRule(dark));
+  }
+
+  SplashLayer? layerFor(SplashArtifactRole role, String className) {
+    var artifact = _bestWebArtifact(artifacts, theme, role);
+    if (artifact == null) return null;
+    var (fit, alignment) = _webClassPlacement(className);
+    // The 1x file is the source quartered and the 4x file is the source, so
+    // every density lands on the same CSS size — which is the number the
+    // `<img>` is drawn at when nothing sizes it.
+    var scale = _webDensityScale(artifact.density) ?? 1;
+    return SplashLayer(
+      path: artifact.path,
+      absolutePath: p.join(packageRoot, artifact.path),
+      fit: fit,
+      alignment: alignment,
+      naturalWidth: artifact.pixelWidth == null
+          ? null
+          : artifact.pixelWidth! / scale,
+      naturalHeight: artifact.pixelHeight == null
+          ? null
+          : artifact.pixelHeight! / scale,
+    );
+  }
+
+  var splash = document.querySelector('picture#splash');
+  var brandingPicture = document.querySelector('picture#splash-branding');
+
+  return SplashComposition(
+    surface: SplashSurface.web,
+    theme: theme,
+    enabled: true,
+    backgroundColor: parseSplashColor(
+      _stripHash(declarations['background-color']),
+    ),
+    // `background-size: 100% 100%` in the template, on the element the image is
+    // set on — so a web background image stretches to the viewport, whatever
+    // its aspect.
+    backgroundImage: declarations.containsKey('background-image')
+        ? _webBackgroundLayer(packageRoot, artifacts, theme)
+        : null,
+    image: splash == null
+        ? null
+        : layerFor(
+            SplashArtifactRole.image,
+            splash.querySelector('img')?.className ?? '',
+          ),
+    branding: brandingPicture == null
+        ? null
+        : layerFor(
+            SplashArtifactRole.branding,
+            brandingPicture.querySelector('img')?.className ?? '',
+          ),
+    brandingAlignment: parseBrandingMode(
+      brandingPicture?.querySelector('img')?.className,
+    ),
+    // The template has no offset on either branding class — `bottom: 0` — so
+    // there is no number to read, and `branding_bottom_padding` never reaches
+    // web in the first place.
+    brandingBottomPadding: 0,
+  );
+}
+
+SplashLayer? _webBackgroundLayer(
+  String packageRoot,
+  List<SplashArtifact> artifacts,
+  SplashTheme theme,
+) {
+  var artifact = _bestWebArtifact(
+    artifacts,
+    theme,
+    SplashArtifactRole.background,
+  );
+  if (artifact == null) return null;
+  return SplashLayer(
+    path: artifact.path,
+    absolutePath: p.join(packageRoot, artifact.path),
+    fit: SplashFit.fill,
+    alignment: SplashAlignment.center,
+  );
+}
+
+/// The `<img class="…">` the generator wrote, back to a placement.
+///
+/// The four image classes and the three branding ones share this: they are
+/// disjoint, so one lookup serves both. Anything unrecognised is a hand-edit,
+/// and drawing it at natural size in the centre is the least wrong guess.
+Placement _webClassPlacement(String className) =>
+    switch (className.trim().split(RegExp(r'\s+')).first) {
+      'contain' => (SplashFit.contain, SplashAlignment.center),
+      'stretch' => (SplashFit.fill, SplashAlignment.center),
+      'cover' => (SplashFit.cover, SplashAlignment.center),
+      'bottom' => (SplashFit.none, SplashAlignment.bottomCenter),
+      'bottomLeft' => (SplashFit.none, SplashAlignment.bottomLeft),
+      'bottomRight' => (SplashFit.none, SplashAlignment.bottomRight),
+      _ => (SplashFit.none, SplashAlignment.center),
+    };
+
+/// `4x` → 4. The web equivalent of a density bucket, and the reason
+/// [SplashArtifact.logicalWidth] refuses to answer for this surface: the
+/// generator writes `source * density ~/ 4`, so the CSS size is the file's
+/// pixels over its own multiplier.
+double? _webDensityScale(String? density) {
+  if (density == null) return null;
+  var digits = density.replaceAll('x', '');
+  return double.tryParse(digits);
+}
+
+/// The densest generated file for a role, falling back to light.
+///
+/// The fallback should never fire — `_createWebSplash` says
+/// `darkImagePath ??= imagePath` and `brandingDarkImagePath ??=
+/// brandingImagePath`, so both themes are always written together. It is here
+/// because a browser given a `<source>` whose files are missing shows the
+/// `<img src="splash/img/light-1x.png">` default, and a readback that returned
+/// nothing would be describing a blank page nobody sees.
+SplashArtifact? _bestWebArtifact(
+  List<SplashArtifact> artifacts,
+  SplashTheme theme,
+  SplashArtifactRole role,
+) {
+  SplashArtifact? pick(SplashTheme wanted) {
+    SplashArtifact? best;
+    for (var artifact in artifacts) {
+      if (artifact.surface != SplashSurface.web ||
+          artifact.theme != wanted ||
+          artifact.role != role) {
+        continue;
+      }
+      var scale = _webDensityScale(artifact.density) ?? 1;
+      var bestScale = best == null
+          ? -1.0
+          : (_webDensityScale(best.density) ?? 1);
+      if (best == null || scale > bestScale) best = artifact;
+    }
+    return best;
+  }
+
+  return pick(theme) ??
+      (theme == SplashTheme.dark ? pick(SplashTheme.light) : null);
+}
+
+/// The declarations of the first `body { … }` rule in [css].
+///
+/// A three-line scanner rather than a CSS parser, and that is a judgement about
+/// the input: this stylesheet is one template with two substitutions in it, and
+/// the rules that matter — `body` and the `body` inside the dark media query —
+/// contain nothing but flat declarations. A parser would be more code for the
+/// same four strings.
+Map<String, String> _cssBodyRule(String css) {
+  var match = RegExp(r'(^|[},])\s*body\s*\{').firstMatch(css);
+  if (match == null) return const {};
+  var open = css.indexOf('{', match.start);
+  var close = css.indexOf('}', open);
+  if (close < 0) return const {};
+
+  var declarations = <String, String>{};
+  for (var part in css.substring(open + 1, close).split(';')) {
+    var colon = part.indexOf(':');
+    if (colon < 0) continue;
+    declarations[part.substring(0, colon).trim()] = part
+        .substring(colon + 1)
+        .trim();
+  }
+  return declarations;
+}
+
+/// The body of the `@media (prefers-color-scheme: dark)` rule, or null when the
+/// generator wrote no dark block at all — which is itself the answer, and the
+/// same fact `-night` folders carry on Android.
+String? _cssDarkBlock(String css) {
+  var match = RegExp(
+    r'@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)\s*\{',
+  ).firstMatch(css);
+  if (match == null) return null;
+
+  var depth = 0;
+  for (var i = match.end - 1; i < css.length; i++) {
+    if (css[i] == '{') depth++;
+    if (css[i] == '}') {
+      depth--;
+      if (depth == 0) return css.substring(match.end, i);
+    }
+  }
+  return null;
+}
 
 // ---- Shared ---------------------------------------------------------------
 

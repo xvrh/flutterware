@@ -557,7 +557,7 @@ flutter_native_splash:
 
       // Never "nothing generated" for iOS — there may be plenty on disk, we
       // simply cannot read a storyboard back.
-      expect(find.textContaining('Only Android can be read back'), findsOne);
+      expect(find.textContaining('cannot be read back'), findsOne);
     });
 
     testWidgets('a project that has never run create is told so, not shown a '

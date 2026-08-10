@@ -53,6 +53,9 @@ dependencies:
     path: ../
   github:
   glob:
+  # The generator's own parser, so the splash panel reads `web/index.html` back
+  # the way `flutter_native_splash` wrote it.
+  html:
   http:
   image:
   intl:

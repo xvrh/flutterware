@@ -157,9 +157,10 @@ class SplashConfigScan {
 
   /// What one cell looks like, and whether that is a fact or a guess.
   ///
-  /// The generated files win wherever they exist. They cannot exist for iOS or
-  /// web — one is a storyboard and the other is CSS — so those two surfaces are
-  /// predicted permanently, which the [SplashPicture.reason] says out loud.
+  /// The generated files win wherever they exist. iOS is the one surface where
+  /// they never can — `LaunchScreen.storyboard` is constraints, which is a
+  /// layout engine rather than a recipe — so it is predicted permanently, and
+  /// the [SplashPicture.reason] says so rather than leaving it to be inferred.
   SplashPicture pictureFor(SplashSurface surface, SplashTheme theme) {
     var generated = recomposedFor(surface, theme);
     if (generated != null) return SplashPicture.generated(generated);
@@ -169,11 +170,12 @@ class SplashConfigScan {
           ? 'Nothing has been generated yet, so this is what the config *will* '
                 'produce — not what any device shows. Run '
                 '`flutter_native_splash:create` to make it real.'
-          : surface == SplashSurface.ios || surface == SplashSurface.web
-          // Not "nothing was generated": there is plenty on disk for both, we
-          // simply cannot read a storyboard or a stylesheet back into a picture.
-          ? 'Predicted from the config. Only Android can be read back from its '
-                'generated files — iOS is a storyboard and web is CSS.'
+          : surface == SplashSurface.ios
+          // Not "nothing was generated": there is plenty on disk, we simply
+          // cannot read a storyboard back into a picture.
+          ? 'Predicted from the config. iOS is the one surface that cannot be '
+                'read back — LaunchScreen.storyboard is constraints, not a '
+                'recipe.'
           : 'Predicted from the config. Nothing was generated for this surface.',
     );
   }

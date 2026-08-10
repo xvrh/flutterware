@@ -347,6 +347,181 @@ ${iconBackground == null ? '' : '        <item name="android:windowSplashScreenI
     });
   });
 
+  group('the web splash, out of index.html', () {
+    /// What `_createSplashCss`, `_createSplashJs` and `_updateHtml` leave
+    /// behind — one file, since 2.4.x inlines the stylesheet rather than
+    /// linking `splash/style.css`.
+    void writeIndexHtml({
+      String color = '#FFFF00',
+      String? darkColor,
+      String? backgroundImage,
+      String imageMode = 'center',
+      bool image = true,
+      String? brandingMode,
+    }) {
+      write('web/index.html', '''
+<!DOCTYPE html>
+<html>
+<head>
+  <style id="splash-screen-style">
+    html { height: 100% }
+
+    body {
+      margin: 0;
+      min-height: 100%;
+      background-color: $color;
+${backgroundImage == null ? '' : '      background-image: url("splash/img/$backgroundImage");'}
+      background-size: 100% 100%;
+    }
+
+    .center { position: absolute; top: 50%; left: 50%; }
+    .contain { object-fit: contain; }
+${darkColor == null ? '' : '''
+    @media (prefers-color-scheme: dark) {
+      body {
+        background-color: $darkColor;
+      }
+    }'''}
+  </style>
+</head>
+<body>
+${image ? '''  <picture id="splash">
+      <source srcset="splash/img/light-1x.png 1x, splash/img/light-4x.png 4x" media="(prefers-color-scheme: light)">
+      <source srcset="splash/img/dark-1x.png 1x, splash/img/dark-4x.png 4x" media="(prefers-color-scheme: dark)">
+      <img class="$imageMode" aria-hidden="true" src="splash/img/light-1x.png" alt=""/>
+  </picture>''' : ''}
+${brandingMode == null ? '' : '''  <picture id="splash-branding">
+    <source srcset="splash/img/branding-4x.png 4x" media="(prefers-color-scheme: light)">
+    <source srcset="splash/img/branding-dark-4x.png 4x" media="(prefers-color-scheme: dark)">
+    <img class="$brandingMode" aria-hidden="true" src="splash/img/branding-1x.png" alt=""/>
+  </picture>'''}
+</body>
+</html>
+''');
+    }
+
+    /// The generator writes each density at `source * n ~/ 4`, both themes
+    /// always — `darkImagePath ??= imagePath`.
+    void writeWebImages({
+      int source = 1024,
+      bool branding = false,
+      String? background,
+    }) {
+      for (var name in ['light', 'dark']) {
+        for (var n in [1, 2, 3, 4]) {
+          writePng(
+            'web/splash/img/$name-${n}x.png',
+            source * n ~/ 4,
+            source * n ~/ 4,
+          );
+        }
+      }
+      if (branding) {
+        for (var name in ['branding', 'branding-dark']) {
+          for (var n in [1, 2, 3, 4]) {
+            writePng(
+              'web/splash/img/$name-${n}x.png',
+              400 * n ~/ 4,
+              100 * n ~/ 4,
+            );
+          }
+        }
+      }
+      if (background != null) writePng('web/splash/img/$background', 8, 8);
+    }
+
+    SplashComposition? web(SplashTheme theme) => recomposeSplash(
+      packageRoot: root.path,
+      surface: SplashSurface.web,
+      theme: theme,
+      artifacts: artifacts(),
+    );
+
+    test('a stock index.html is not generator output', () {
+      // `flutter create`'s own file. No `<style id="splash-screen-style">` in
+      // it — unlike Android's `launch_background.xml`, there is nothing here to
+      // mistake for a generated splash, which is why the marker can be the
+      // element itself.
+      write(
+        'web/index.html',
+        '<!DOCTYPE html><html><head></head><body></body></html>',
+      );
+      expect(web(SplashTheme.light), isNull);
+    });
+
+    test('no web/index.html at all is null, not a throw', () {
+      expect(web(SplashTheme.light), isNull);
+    });
+
+    test('reads the colour out of the inline stylesheet', () {
+      writeIndexHtml(color: '#FFFF00', darkColor: '#101418');
+      writeWebImages();
+
+      expect(web(SplashTheme.light)!.backgroundColor, 0xFFFFFF00);
+      expect(web(SplashTheme.dark)!.backgroundColor, 0xFF101418);
+    });
+
+    test('a missing dark media query means dark is the light colour', () {
+      // The CSS cascade's own answer, and the same fact `drawable-night`'s
+      // absence carries on Android.
+      writeIndexHtml(color: '#FFFF00');
+      writeWebImages();
+
+      expect(web(SplashTheme.dark)!.backgroundColor, 0xFFFFFF00);
+    });
+
+    test('the densest file wins, and its CSS size is its own multiplier', () {
+      // `light-4x.png` is 1024 wide and carries a `4x` descriptor, so the
+      // browser draws it at 256 CSS px — the same 256 every other density lands
+      // on, which is the whole point of the ~/ 4.
+      writeIndexHtml();
+      writeWebImages(source: 1024);
+
+      var image = web(SplashTheme.light)!.image!;
+      expect(image.path, 'web/splash/img/light-4x.png');
+      expect(image.naturalWidth, 256);
+    });
+
+    test('the img class is the placement', () {
+      writeIndexHtml(imageMode: 'contain');
+      writeWebImages();
+      expect(web(SplashTheme.light)!.image!.fit, SplashFit.contain);
+
+      writeIndexHtml(imageMode: 'center');
+      expect(web(SplashTheme.light)!.image!.fit, SplashFit.none);
+    });
+
+    test('no picture#splash means no image, whatever is on disk', () {
+      // The files stay behind a config that stopped setting `image`, so the
+      // directory listing says one thing and the page says another. The page is
+      // the one the browser reads.
+      writeIndexHtml(image: false);
+      writeWebImages();
+
+      expect(web(SplashTheme.light)!.image, isNull);
+    });
+
+    test('branding comes back with its own dark file and its mode', () {
+      writeIndexHtml(brandingMode: 'bottomRight');
+      writeWebImages(branding: true);
+
+      var light = web(SplashTheme.light)!.branding!;
+      var dark = web(SplashTheme.dark)!.branding!;
+      expect(light.path, 'web/splash/img/branding-4x.png');
+      expect(dark.path, 'web/splash/img/branding-dark-4x.png');
+      expect(light.alignment, SplashAlignment.bottomRight);
+    });
+
+    test('a background image stretches, because the template says so', () {
+      writeIndexHtml(backgroundImage: 'light-background.png');
+      writeWebImages(background: 'light-background.png');
+
+      var background = web(SplashTheme.light)!.backgroundImage!;
+      expect(background.path, 'web/splash/img/light-background.png');
+      expect(background.fit, SplashFit.fill);
+    });
+  });
+
   group('the picture one cell shows', () {
     void writeConfig([String extra = '']) {
       write('pubspec.yaml', 'name: sample\n');
@@ -429,16 +604,15 @@ $extra''');
       expect(shown.composition.image, isNotNull);
     });
 
-    test('is a prediction on iOS and web, permanently, and says why', () {
+    test('is a prediction on iOS, permanently, and says why', () {
       writeConfig();
       writeLaunchBackground();
 
-      for (var surface in [SplashSurface.ios, SplashSurface.web]) {
-        var shown = picture(surface, SplashTheme.light);
-        expect(shown.isGenerated, isFalse);
-        expect(shown.label, 'Prediction');
-        expect(shown.reason, contains('Only Android can be read back'));
-      }
+      var shown = picture(SplashSurface.ios, SplashTheme.light);
+      expect(shown.isGenerated, isFalse);
+      expect(shown.label, 'Prediction');
+      expect(shown.reason, contains('cannot be read back'));
+      expect(shown.reason, contains('storyboard'));
     });
 
     test('is a prediction that names the next step before create has run', () {

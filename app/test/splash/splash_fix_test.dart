@@ -188,37 +188,30 @@ void main() {
       );
     });
 
-    test('web branding is the one case that really does break', () {
-      // And the old rule hid it: the image branch fired first and talked about
-      // images. `index.html` gets a dark `<source>` pointing at
-      // `branding-dark-*` whenever the light branding is set, and
-      // `_createWebImages(imagePath: null)` deletes exactly those files.
+    test('web branding is not the exception it was reported as', () {
+      // Written a week after the rule above, from the same source, and wrong in
+      // the same direction: it read the `imagePath == null` delete branch of
+      // `_createWebImages` and not the `brandingDarkImagePath ??=
+      // brandingImagePath` one line above the call. `branding-dark-*.png` are
+      // the light branding, resized — they are on disk in examples/example
+      // right now, which is how recomposing web caught it.
       var withBranding = {
         'color': 'FFFFFF',
         'color_dark': '101418',
         'branding': 'assets/brand.png',
       };
-      var fix = fixFor(withBranding, 'web-branding-dark')!;
-      expect(fix.writes.single.key, 'branding_dark');
-      expect(fix.writes.single.value, 'assets/brand.png');
-
-      var problem = check(
-        withBranding,
-      ).firstWhere((p) => p.key == 'branding_dark');
-      expect(problem.tone, Tone.warn);
-      expect(problem.surface, SplashSurface.web);
-
-      // Android and iOS resolve the missing dark drawable to the light one, so
-      // they get no such warning.
+      expect(fixFor(withBranding, 'web-branding-dark'), isNull);
       expect(
-        check(withBranding).where(
-          (p) => p.key == 'branding_dark' && p.surface != SplashSurface.web,
-        ),
+        check(withBranding).where((p) => p.key == 'branding_dark'),
         isEmpty,
       );
-
-      var after = applied(withBranding, fix);
-      expect(check(after).where((p) => p.key == 'branding_dark'), isEmpty);
+      // And nothing else offers to write the key. The safe-area rules still
+      // fire on both themes — they are about a real screen rather than about
+      // the cascade — so the assertion is on what a fix would write.
+      expect([
+        for (var problem in check(withBranding))
+          ...?problem.fix?.writes.map((w) => w.key),
+      ], isNot(contains('branding_dark')));
     });
   });
 

@@ -212,8 +212,9 @@ On Android the recipe is a layer-list, `drawable/launch_background.xml`:
 cheap — **even the background colour is a PNG**: `_createBackground` renders the
 colour to `background.png` rather than emitting a `<color>` drawable. So the
 legacy Android splash is three bitmaps, one gravity attribute each, and one
-padding number. Web is `web/splash/style.css` with a literal `background-color`,
-`background-size`, and a `<picture>` srcset. iOS is the awkward one:
+padding number. Web is a literal `background-color`, a `background-size` and a
+`<picture>` srcset — in `web/index.html`, not in the `web/splash/style.css` this
+paragraph claimed until 2026-08-10; 2.4.x inlines it. iOS is the awkward one:
 `LaunchScreen.storyboard` XML with constraints, plus `Contents.json`.
 
 That gives us two pictures with genuinely different provenance:
@@ -471,8 +472,9 @@ Amendments made while building, each recorded at the code:
   meant the browser showed a splash with no background in it.
 - **1c-b ships Android only, and web moved out of it.** Legacy Android and
   Android 12 are recomposed from `launch_background.xml` and `values-v31/styles.xml`.
-  Web's `style.css` is still worth doing and is now its own small piece of work;
-  iOS stays out for the reason already given.
+  Web was its own small piece of work and **landed 2026-08-10** — out of
+  `web/index.html`, not `style.css`, which does not exist; iOS stays out for the
+  reason already given.
 - **Open question 4 is answered: a drift note is `Tone.info` and carries no
   device or key.** It indicts our reading of `cli_commands.dart`, not the
   project — a config that is perfect must not grow an amber dot because our
@@ -669,9 +671,44 @@ first — it rewrites 44 files) wherever the panel is showing a guess, because a
 reader who has just been told the picture is a prediction wants the one action
 that makes it real.
 
-iOS and web are predicted permanently and say so on the tile. Recomposing web
-from `style.css` would move two of the eight cells across; the storyboard would
-not.
+### Web recomposition, and the rule it caught (2026-08-10)
+
+Done the same day, and it moves two more of the eight cells onto ground truth —
+six of eight now.
+
+**There is no `style.css`.** The spec above says there is, and so did the code
+comment, and so did the `describe` text. 2.4.x inlines everything into
+`web/index.html`: a `<style id="splash-screen-style">` and a
+`<script id="splash-screen-script">` appended to `<head>`, up to two `<picture>`
+elements at the top of `<body>`, and `_updateHtml` removes the old
+`<link href="splash/style.css">` on sight. One file holds the colour, the dark
+media query, both srcsets and the placement classes; `web/splash/img/` holds the
+pixels. Parsed with `package:html` — the generator's own parser, so a hand-edit
+reads back as a hand-edit.
+
+The readback covers: background colour from the `body` rule and the
+`@media (prefers-color-scheme: dark)` block layered on top (no block means dark
+is the light colour, the same fact `drawable-night`'s absence carries); the
+background image, which the template always stretches; the image and branding
+from the densest `Nx` file, at `pixels ÷ multiplier` CSS px; and the placement
+from the `<img class>`.
+
+**And it immediately found a rule that was wrong.** The `web-branding-dark`
+warning — "the generator deletes `branding-dark-*` when `branding_dark` is
+unset" — was written in this same overhaul, a week after the flagship warning it
+replaced, from the same source, and is wrong in the same direction:
+`_createWebSplash` says `brandingDarkImagePath ??= brandingImagePath` one line
+above the call that writes those files, and has in every version back to 2.4.2.
+The files are on disk in `examples/example` right now. Web branding falls back
+exactly like the image; the rule, its fix, and the special case it had grown in
+`resolveSplash` are all deleted.
+
+That is two transcription rules written from the same file, one week apart, both
+confidently wrong, both about the same fallback. It is not an argument for
+reading more carefully next time. It is the argument for § The inversion.
+
+**iOS is the one surface left**, and permanently: a storyboard is constraints,
+which is a layout engine rather than a recipe. The tile says so.
 
 **All of it is committed**, phase 3 included. The order matters more than the
 dates: phase 1 is the "seeing" half and is what the plugin already claims to be;

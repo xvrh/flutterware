@@ -429,17 +429,15 @@ SplashResolution resolveSplash(
       // reads `image_dark` then `image` — so the section needs nothing here.
       ? config.android12Image(theme)
       : resource('image');
+  // Web used to be special-cased here, on the claim that a missing
+  // `branding_dark` left `index.html` pointing at files the generator had
+  // deleted. `web.dart` says `brandingDarkImagePath ??= brandingImagePath`
+  // one line above the call that writes them, and has in every version back to
+  // 2.4.2 — so `branding-dark-*.png` are the light branding, resized. Written
+  // while correcting the previous version of this same rule, and caught by
+  // recomposing web from disk, where the files are simply there.
   var branding = isAndroid12
       ? config.android12Branding(theme)
-      // **Web is the exception, and it is a bug in the generator rather than a
-      // choice.** `index.html` gets a `<source media="(prefers-color-scheme:
-      // dark)" srcset="splash/img/branding-dark-…">` whenever the *light*
-      // branding is set, and `_createWebImages(imagePath: null)` **deletes**
-      // the files it points at. The browser matches that source and finds
-      // nothing, so the branding is simply missing in dark mode — there is no
-      // fallback to model and `validateSplash` reports it.
-      : surface == SplashSurface.web
-      ? config.resolve('branding', surface, theme)
       : resource('branding');
 
   // Android 12 draws a window background and an icon. A background image is not

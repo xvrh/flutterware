@@ -483,6 +483,15 @@ List<SplashProblem> validateSplash(
       // *sometimes* unreadable on a dark one. Nothing here can tell which, and
       // there is no fix — writing `image_dark` to the same file it already
       // falls back to changes nothing at all.
+      //
+      // The web-branding exception this rule grew alongside it is gone too, and
+      // for the same reason at one remove: it claimed `branding-dark-*` were
+      // deleted when `branding_dark` was unset, having read the delete branch of
+      // `_createWebImages` without reading the `brandingDarkImagePath ??=
+      // brandingImagePath` one line above the call. Two rules written from the
+      // same source, one week apart, both wrong in the same direction — which is
+      // the argument for recomposing rather than transcribing, not an argument
+      // for reading more carefully next time.
       if (light.image.isPresent &&
           !config.resolve('image', surface, SplashTheme.dark).isPresent) {
         problems.add(
@@ -495,39 +504,6 @@ List<SplashProblem> validateSplash(
             'dark variant only if the artwork needs one.',
             surface: surface,
             theme: SplashTheme.dark,
-          ),
-        );
-      }
-
-      // Web is the one place the fallback does not happen, and it is a bug in
-      // the generator rather than a choice: `index.html` gets a
-      // `<source media="(prefers-color-scheme: dark)">` pointing at
-      // `branding-dark-*` whenever the **light** branding is set, and
-      // `_createWebImages(imagePath: null)` deletes exactly those files. The
-      // browser matches the source and finds nothing.
-      //
-      // This one is a real warning with a real fix, and the old rule hid it:
-      // the `else if` above fired first and talked about images.
-      if (surface == SplashSurface.web &&
-          light.branding.isPresent &&
-          !config.resolve('branding', surface, SplashTheme.dark).isPresent) {
-        problems.add(
-          SplashProblem(
-            Tone.warn,
-            'The web branding disappears in dark mode. index.html gets a '
-            '<source media="(prefers-color-scheme: dark)"> pointing at '
-            'splash/img/branding-dark-*, and the generator deletes those files '
-            'when "branding_dark" is unset — so the browser matches that '
-            'source and finds nothing. Unlike the image, web branding does not '
-            'fall back to the light file.',
-            key: 'branding_dark',
-            surface: surface,
-            theme: SplashTheme.dark,
-            fix: SplashFix(
-              id: 'web-branding-dark',
-              label: 'Set "branding_dark" to ${light.branding.value}',
-              writes: [SplashWrite('branding_dark', light.branding.value)],
-            ),
           ),
         );
       }
