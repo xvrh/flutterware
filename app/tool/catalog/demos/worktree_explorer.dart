@@ -367,6 +367,16 @@ Widget explorerRowStates() => _Sheet(
       ),
     ),
     _Labelled(
+      'expanded — columns for what has structure, full width for prose',
+      _Row(
+        label: 'The UI catalog becomes Previews',
+        branch: 'claude/ui-catalog-design-38b6c0',
+        isOpen: true,
+        expanded: true,
+        facts: _repo[1].facts,
+      ),
+    ),
+    _Labelled(
       'a title and a branch both too long for their cells',
       _Row(
         label:
@@ -456,6 +466,7 @@ class _Row extends StatelessWidget {
     this.isMain = false,
     this.isOpen = false,
     this.isCurrent = false,
+    this.expanded = false,
   });
 
   final String label;
@@ -464,6 +475,7 @@ class _Row extends StatelessWidget {
   final bool isMain;
   final bool isOpen;
   final bool isCurrent;
+  final bool expanded;
 
   @override
   Widget build(BuildContext context) => WorktreeRow(
@@ -472,6 +484,8 @@ class _Row extends StatelessWidget {
     isMain: isMain,
     isOpen: isOpen,
     isCurrent: isCurrent,
+    expanded: expanded,
+    path: '/Users/x/claude_worktrees/flutterware/${branch?.split('/').last}',
     facts: facts,
     now: _now,
     scale: (facts.git.value?.changes?.lines ?? 0) / 2600,

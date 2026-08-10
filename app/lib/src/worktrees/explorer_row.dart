@@ -5,6 +5,7 @@ import 'package:flutterware/plugins.dart';
 
 import '../shell/worktree_filter.dart';
 import '../ui/theme.dart';
+import 'explorer_detail.dart';
 import 'facts.dart';
 
 /// One worktree in the explorer.
@@ -187,11 +188,13 @@ class _WorktreeRowState extends State<WorktreeRow> {
                 ),
               ),
               if (widget.expanded)
-                _Detail(
+                WorktreeDetail(
                   facts: facts,
                   path: widget.path,
                   branch: widget.branch,
                   now: widget.now,
+                  insetLeft: explorerInsetLeft,
+                  insetRight: explorerInsetRight,
                 ),
             ],
           ),
@@ -864,127 +867,6 @@ class _Actions extends StatelessWidget {
               color: colors.mut2,
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// What a row says when you ask it to say more.
-///
-/// **Detail in place, not a destination.** Everything here is already in the
-/// facts — expanding costs nothing and navigates nowhere, which is what lets you
-/// interrogate a checkout you have not opened.
-class _Detail extends StatelessWidget {
-  const _Detail({
-    required this.facts,
-    required this.path,
-    required this.branch,
-    required this.now,
-  });
-
-  final WorktreeFacts facts;
-  final String? path;
-  final String? branch;
-  final DateTime now;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var git = facts.git.value;
-    var agent = facts.agent.value;
-    var pr = facts.forge.value;
-    var shape = git?.changes;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(
-        _gutterWidth,
-        0,
-        _scrollGutter,
-        FwSpacing.lg,
-      ),
-      child: Wrap(
-        spacing: FwSpacing.xxxl,
-        runSpacing: FwSpacing.lg,
-        children: [
-          if (path case var it?) _Field('Path', it, selectable: true),
-          if (branch case var it?) _Field('Branch', it),
-          if (git?.base case var base?)
-            _Field(
-              'Against',
-              '$base'
-                  '${git!.ahead > 0 ? ' · ${git.ahead} ahead' : ''}'
-                  '${git.behind > 0 ? ' · ${git.behind} behind' : ''}',
-            ),
-          if (git != null && git.dirty > 0)
-            _Field(
-              'Uncommitted',
-              '${git.dirty} file${git.dirty == 1 ? '' : 's'}',
-            ),
-          if (shape != null && !shape.isEmpty)
-            _Field(
-              'Changed',
-              [
-                for (var b in shape.ranked)
-                  '${b.name}  +${b.added} −${b.removed}',
-              ].join('\n'),
-            ),
-          if (agent != null && agent.state != AgentState.none) ...[
-            _Field(
-              'Agent',
-              [
-                agent.state.name,
-                if (agent.model case var m?) m,
-                if (agent.at case var at?) _ago(at, now),
-              ].join(' · '),
-            ),
-            if (agent.title case var it?) _Field('Session', it),
-            if (agent.lastPrompt case var it?) _Field('Last asked', it),
-          ],
-          if (pr != null) ...[
-            _Field('Pull request', '#${pr.number} · ${pr.state.name}'),
-            _Field('Title', pr.title),
-          ],
-          if (facts.activity.value case var activity?)
-            _Field(
-              'Last activity',
-              '${_ago(activity.at, now)} ago · ${activity.sourceLabel}',
-            ),
-          if (facts.git.failure case var why?)
-            _Field('Git said', why, tone: colors.red),
-        ],
-      ),
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field(this.label, this.value, {this.selectable = false, this.tone});
-
-  final String label;
-  final String value;
-  final bool selectable;
-  final Color? tone;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var style = context.type.bodySmall.copyWith(color: tone ?? colors.ink);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 460),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: context.type.micro.copyWith(color: colors.mut3),
-          ),
-          const Gap(FwSpacing.xxs),
-          selectable
-              ? SelectableText(value, style: style)
-              : Text(value, style: style),
         ],
       ),
     );

@@ -403,11 +403,41 @@ section. Modes: `activity` (default) · `needs you` · `name` · `branch`.
 | stale cell | value at 60 % opacity, **no spinner**; one "Refreshing…" in the header is the only progress |
 | failed probe | small `!` with the error in a tooltip — never a red row; a probe failing is our problem, not the worktree's |
 
-**Expansion is in place, not navigation.** Click the row background (or `→`) and
-it grows: changed files with per-file +/−, the PR's check list, the agent's last
-exchange, the full path, the label stack. This follows the screen's governing
-principle — **nothing on a row costs an open**, so you can decide before you
-spend.
+**Expansion is in place, not navigation.** Click the row and it grows. This
+follows the screen's governing principle — **nothing on a row costs an open**, so
+you can decide before you spend. Expanded rows are a *set*: comparing two
+checkouts is what the screen is for, and a detail that closed when you opened
+another would make the comparison a memory test.
+
+### The detail's layout — decided by building three (2026-08-10)
+
+**Columns for what has structure, full width for prose.**
+
+The change breakdown is a **table**: one line per bucket, aligned names, a bar
+scaled against the busiest bucket *in this worktree* (a different question from
+the row's bar, which compares worktrees to each other), and `+`/`−` in
+right-aligned boxes so the digits form columns. Beside it, two narrower columns:
+the agent (state · model · session title) and the branch (branch, ahead/behind,
+PR — one subject, kept together). Underneath, full-width lines with a shared
+label gutter for the only two genuinely long strings: the last prompt and the
+path.
+
+Rejected, with the reason each was built and looked at:
+
+- **A `Wrap` of label/value fields** — what shipped first. Fields reflow by
+  window width, so the same worktree looks different at different sizes and two
+  expanded rows never line up. It gave `UNCOMMITTED · 5 files` a full column for
+  seven characters while squeezing the change breakdown — the one thing with
+  real structure — into a multi-line string in the narrowest slot left over, and
+  it stranded the PR at the far end of a second run from the branch facts it
+  belongs with.
+- **Full-width stacked bands** — fixed the prose (a long prompt on one line, a
+  path that does not break mid-word) and read well, but overflowed a 250px frame
+  by 87px. An expanded row that tall pushes the rest of the list off screen, and
+  it spent 900 pixels on a bar whose number is written beside it.
+
+The bucket list caps at six with `and N more`, so a repo with fifteen top-level
+directories does not turn one expansion into a page.
 
 ### Actions
 
