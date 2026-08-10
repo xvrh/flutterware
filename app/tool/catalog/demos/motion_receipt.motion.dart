@@ -63,7 +63,7 @@ const receiptMotion = MotionValues(
           start: Duration(milliseconds: 120),
           end: Duration(milliseconds: 480),
           from: Color(0xFFBFC6C4),
-          to: Color(0xFF12695A),
+          to: Color(0xFFFF695A),
           curve: Curves.easeInOutCubic,
         ),
       ],
@@ -87,8 +87,8 @@ const receiptMotion = MotionValues(
     'title': {
       'opacity': [
         Seg<double>(
-          start: Duration(milliseconds: 280),
-          end: Duration(milliseconds: 520),
+          start: Duration(milliseconds: 285),
+          end: Duration(milliseconds: 525),
           from: 0,
           to: 1,
           curve: Curves.easeOut,
@@ -130,7 +130,7 @@ const receiptMotion = MotionValues(
         Seg<double>(
           start: Duration(milliseconds: 360),
           end: Duration(milliseconds: 720),
-          from: 40,
+          from: 200,
           to: 0,
           curve: Curves.easeOutCubic,
         ),

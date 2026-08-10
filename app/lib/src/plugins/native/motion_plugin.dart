@@ -22,8 +22,8 @@ import 'motion_sequencer.dart';
 
 export 'motion_core.dart' show MotionCore, motionPluginId;
 
-/// The GUI half of the motion plugin: the motions a package declares on the
-/// left, and the selected one running in a live guest with a playhead under it.
+/// The GUI half of the motion plugin: a band naming which motion you are on,
+/// that motion running in a live guest, and a sequencer under it.
 ///
 /// **The panel owns no truth.** The list comes from the core's syntactic scan,
 /// and everything under the preview — targets, properties, states, current
@@ -91,37 +91,66 @@ class _MotionPanelState extends State<_MotionPanel> {
     var result = _core.resultFor(place.package);
     var selected = _selectedMotion(result, place);
 
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          width: 280,
-          child: _MotionList(
-            core: _core,
-            place: place,
-            result: result,
-            selected: selected,
+        _MotionBand(
+          core: _core,
+          place: place,
+          result: result,
+          selected: selected,
+        ),
+        Divider(height: 1, color: context.colors.line),
+        Expanded(child: _body(context, place, result, selected)),
+      ],
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    MotionPlace place,
+    MotionScanResult? result,
+    MotionRef? selected,
+  ) {
+    if (_core.errorFor(place.package) case var error?) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(FwSpacing.lg),
+          child: Text(
+            '$error',
+            style: context.type.body.copyWith(color: context.colors.red),
           ),
         ),
-        VerticalDivider(width: 1, color: context.colors.line),
-        Expanded(
-          child: selected == null
-              ? Center(
-                  child: Text(
-                    result == null
-                        ? 'Scanning…'
-                        : 'Select a motion to scrub it.',
-                    style: context.type.bodyMuted,
-                  ),
-                )
-              : _MotionStage(
-                  key: ValueKey('${place.package}/${selected.file}'),
-                  core: _core,
-                  place: place,
-                  motion: selected,
-                ),
+      );
+    }
+    if (result == null) {
+      return Center(child: Text('Scanning…', style: context.type.bodyMuted));
+    }
+    if (result.motions.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(FwSpacing.lg),
+          child: Text(
+            'No MotionScope found in ${_core.directoryFor(place.package)}.',
+            textAlign: TextAlign.center,
+            style: context.type.bodyMuted,
+          ),
         ),
-      ],
+      );
+    }
+    if (selected == null) {
+      return Center(
+        child: Text(
+          'Select a motion to scrub it.',
+          style: context.type.bodyMuted,
+        ),
+      );
+    }
+    return _MotionStage(
+      key: ValueKey('${place.package}/${selected.file}'),
+      core: _core,
+      place: place,
+      motion: selected,
     );
   }
 
@@ -138,8 +167,16 @@ class _MotionPanelState extends State<_MotionPanel> {
   }
 }
 
-class _MotionList extends StatelessWidget {
-  const _MotionList({
+/// The header: which motion, what the scan could not read, and which file the
+/// editor writes.
+///
+/// **This replaces a 280px list down the left side.** The shell's address bar
+/// already names the motion you are on, so a permanent list was the same
+/// identity twice — the argument that killed the separate target rail, one
+/// level up. The room goes to the stage and the inspector, which are the two
+/// things you actually look at.
+class _MotionBand extends StatelessWidget {
+  const _MotionBand({
     required this.core,
     required this.place,
     required this.result,
@@ -153,35 +190,61 @@ class _MotionList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (core.errorFor(place.package) case var error?) {
-      return Padding(
-        padding: const EdgeInsets.all(FwSpacing.md),
-        child: Text(
-          '$error',
-          style: context.type.body.copyWith(color: context.colors.red),
-        ),
-      );
-    }
-    var result = this.result;
-    if (result == null) {
-      return Center(child: Text('Scanning…', style: context.type.bodyMuted));
-    }
+    var motions = result?.motions ?? const <MotionRef>[];
+    var diagnostics = result?.diagnostics ?? const <String>[];
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: FwSpacing.sm),
-      children: [
-        if (result.motions.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(FwSpacing.md),
-            child: Text(
-              'No MotionScope found in '
-              '${core.directoryFor(place.package)}.',
-              style: context.type.bodyMuted,
+    return Container(
+      height: 42,
+      color: context.colors.panel,
+      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
+      child: Row(
+        spacing: FwSpacing.md,
+        children: [
+          if (motions.isEmpty)
+            Text('Motion', style: context.type.bodyMuted)
+          else
+            _MotionPicker(
+              core: core,
+              place: place,
+              motions: motions,
+              selected: selected,
             ),
-          ),
-        for (var motion in result.motions)
-          Tappable(
-            onTap: () => AddressScope.of(context).go(
+          // Never an aside, and never behind anything: a target named by an
+          // expression is invisible to the scan and perfectly real at run time,
+          // so a picker that listed only what it could parse would read as
+          // complete and be wrong.
+          if (diagnostics.isNotEmpty) _ScanGaps(diagnostics),
+          const Spacer(),
+          if (selected case var motion?)
+            _ValuesFileBadge(
+              p.basename(core.valuesPathFor(place.package, motion.file)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MotionPicker extends StatelessWidget {
+  const _MotionPicker({
+    required this.core,
+    required this.place,
+    required this.motions,
+    required this.selected,
+  });
+
+  final MotionCore core;
+  final MotionPlace place;
+  final List<MotionRef> motions;
+  final MotionRef? selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      menuChildren: [
+        for (var motion in motions)
+          MenuItemButton(
+            onPressed: () => AddressScope.of(context).go(
               core.addressFor(
                 place.package,
                 file: motion.file,
@@ -189,48 +252,126 @@ class _MotionList extends StatelessWidget {
                 t: place.t,
               ),
             ),
-            child: Container(
-              color: identical(motion, selected)
-                  ? context.colors.accentSoft
-                  : null,
-              padding: const EdgeInsets.symmetric(
-                horizontal: FwSpacing.md,
-                vertical: FwSpacing.sm,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    motion.values ?? '<expression>',
-                    style: context.type.body,
-                  ),
-                  Text(
-                    '${p.basename(motion.file)}:${motion.line} · '
-                    '${motion.targets.length} target'
-                    '${motion.targets.length == 1 ? '' : 's'}',
-                    style: context.type.caption.copyWith(
-                      color: context.colors.mut,
-                    ),
-                  ),
-                ],
-              ),
+            leadingIcon: Icon(
+              identical(motion, selected) ? Icons.check : null,
+              size: 14,
+              color: context.colors.accent,
             ),
-          ),
-        // Never presented as an aside: a target named by an expression is
-        // invisible to the scan and perfectly real at run time, so a list that
-        // showed only what it could parse would read as complete and be wrong.
-        for (var diagnostic in result.diagnostics)
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: FwSpacing.md,
-              vertical: FwSpacing.xs,
-            ),
-            child: Text(
-              diagnostic,
-              style: context.type.caption.copyWith(color: context.colors.amber),
+            child: Row(
+              spacing: FwSpacing.lg,
+              children: [
+                Text(motion.values ?? '<expression>', style: context.type.body),
+                Text(
+                  '${p.basename(motion.file)}:${motion.line} · '
+                  '${motion.targets.length} target'
+                  '${motion.targets.length == 1 ? '' : 's'}',
+                  style: context.type.caption.copyWith(
+                    color: context.colors.mut,
+                  ),
+                ),
+              ],
             ),
           ),
       ],
+      builder: (context, controller, _) => Tappable(
+        onTap: () => controller.isOpen ? controller.close() : controller.open(),
+        child: Row(
+          spacing: FwSpacing.xs,
+          children: [
+            Text(
+              selected?.values ?? 'Select a motion',
+              style: context.type.body.copyWith(fontWeight: FontWeight.w600),
+            ),
+            Icon(
+              Icons.keyboard_arrow_down,
+              size: 16,
+              color: context.colors.mut2,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// What the scan could not read, one click from the name it sits beside.
+class _ScanGaps extends StatelessWidget {
+  const _ScanGaps(this.diagnostics);
+
+  final List<String> diagnostics;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      menuChildren: [
+        for (var diagnostic in diagnostics)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: FwSpacing.lg,
+              vertical: FwSpacing.xs,
+            ),
+            child: SizedBox(
+              width: 420,
+              child: Text(
+                diagnostic,
+                style: context.type.caption.copyWith(
+                  color: context.colors.amber,
+                ),
+              ),
+            ),
+          ),
+      ],
+      builder: (context, controller, _) => Tooltip(
+        message:
+            'Read the code, could not resolve it. These targets are real '
+            'at run time and absent from every list here.',
+        child: Tappable(
+          onTap: () =>
+              controller.isOpen ? controller.close() : controller.open(),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: context.colors.amber.withValues(alpha: 0.5),
+              ),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              '${diagnostics.length} not scanned',
+              style: context.type.caption.copyWith(color: context.colors.amber),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The one file the editor writes, named where you can see it.
+///
+/// Blast radius zero is the promise the whole design rests on, and a promise
+/// nobody can see is one nobody can check.
+class _ValuesFileBadge extends StatelessWidget {
+  const _ValuesFileBadge(this.name);
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'The only file this editor writes.',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+        decoration: BoxDecoration(
+          color: context.colors.accentSoft,
+          border: Border.all(color: context.colors.accent),
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(
+          name,
+          style: context.type.caption.copyWith(color: context.colors.accent),
+        ),
+      ),
     );
   }
 }
