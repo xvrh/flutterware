@@ -7,10 +7,20 @@ import 'package:flutter/widgets.dart';
 import 'axis.dart';
 import 'knob.dart';
 
-/// The app-wide switches a project's shell offers, drawn in the catalog's top
-/// bar.
+/// The app-wide switches a project's shell offers — a theme, a locale, a
+/// flavour — drawn in the catalog's top bar.
 ///
-/// Handed to [CatalogShell]'s builder rather than read off a [BuildContext],
+/// **Axes, not knobs, and the word is the one the rest of the tool uses**:
+/// `--axes=theme=dark`, `describe --axes=true`, `axes:` on an artifact's
+/// address. This was called `TopBarState`, which named where the control is
+/// drawn rather than what it is, leaving nothing in the API to connect it to
+/// any of those. What makes an axis a different thing from a knob is that it
+/// belongs to the shell rather than to the entry: it persists as you move
+/// between entries, its values are a named set, and a matrix can be taken over
+/// it — the same sense in which a scenario run is crossed over devices and
+/// languages.
+///
+/// Handed to [PreviewShell]'s builder rather than read off a [BuildContext],
 /// and that confinement is the design rather than an accident of it. An axis
 /// outlives the entry on screen because it belongs to the shell, so a stray
 /// declaration from somewhere deep inside a demo would go on being offered
@@ -22,7 +32,7 @@ import 'knob.dart';
 /// Every method answers with `defaultValue` when nothing is driving it, so the
 /// same shell behaves identically in the real app and in Flutter's own
 /// previewer as it does here.
-abstract class TopBarState {
+abstract class PreviewAxes {
   /// A choice between named options, label to value.
   ///
   /// Only the labels cross the wire — see [KnobDescriptor.options] — so the
@@ -37,11 +47,11 @@ abstract class TopBarState {
 /// The guest's side of the top bar: what the shell on screen declared, and the
 /// two extensions the host reads and writes them through.
 ///
-/// Deliberately the mirror image of `CatalogParameters`. Both learn what there
+/// Deliberately the mirror image of `CatalogKnobs`. Both learn what there
 /// is by *running* the thing that declares it; what separates them is scope.
 /// A knob is filed under the entry that asked for it and goes away with it, an
 /// axis is filed under its shell and does not.
-class CatalogAxes implements TopBarState {
+class CatalogAxes implements PreviewAxes {
   CatalogAxes._();
 
   static final instance = CatalogAxes._();
@@ -79,11 +89,11 @@ class CatalogAxes implements TopBarState {
   }
 
   /// Opens a shell's declaration pass and answers the object it declares
-  /// through. Called by [CatalogShell] and nothing else.
+  /// through. Called by [PreviewShell] and nothing else.
   ///
-  /// Shells do not nest: the pass is singular, so a [CatalogShell] built inside
+  /// Shells do not nest: the pass is singular, so a [PreviewShell] built inside
   /// another one replaces rather than extends what the outer one declared.
-  TopBarState beginShell(String shellId) {
+  PreviewAxes beginShell(String shellId) {
     _shellId = shellId;
     _declared.clear();
     return this;
@@ -207,10 +217,10 @@ class CatalogAxes implements TopBarState {
 ///
 /// ```dart
 /// // demo/shell.dart
-/// Widget wrapInApp(Widget child) => CatalogShell(
+/// Widget wrapInApp(Widget child) => PreviewShell(
 ///   'app',
-///   builder: (context, topBar) => MyApp(
-///     flavor: topBar.picker('flavor', {
+///   builder: (context, axes) => MyApp(
+///     flavor: axes.picker('flavor', {
 ///       'Dev': Flavor.dev,
 ///       'Production': Flavor.prod,
 ///     }, Flavor.dev),
@@ -219,23 +229,23 @@ class CatalogAxes implements TopBarState {
 /// );
 /// ```
 ///
-/// A demo names it the way it always did, with `@Demo(wrapper: wrapInApp)`.
+/// A preview names it the way it always did, with `@Preview(wrapper: wrapInApp)`.
 /// Nothing about the shell is discovered: it is an ordinary
 /// `Widget Function(Widget)`, so Flutter's own previewer and the real app call
-/// it unchanged and [TopBarState] answers them with the defaults.
+/// it unchanged and [PreviewAxes] answers them with the defaults.
 ///
 /// [id] is what the host files selections under, so leaving a shell and coming
 /// back finds the flavour you had chosen. Write it once and leave it alone —
 /// it is a name, not a path, so moving or renaming the file does not lose what
 /// was set.
-class CatalogShell extends StatelessWidget {
-  const CatalogShell(this.id, {super.key, required this.builder});
+class PreviewShell extends StatelessWidget {
+  const PreviewShell(this.id, {super.key, required this.builder});
 
   /// This shell's name, unique within the project.
   final String id;
 
   /// Where the axes are declared. Called on every selection change.
-  final Widget Function(BuildContext context, TopBarState topBar) builder;
+  final Widget Function(BuildContext context, PreviewAxes axes) builder;
 
   @override
   Widget build(BuildContext context) {

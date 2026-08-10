@@ -164,7 +164,7 @@ class _DefineVisitor extends RecursiveAstVisitor<void> {
     if (name == null || name.isEmpty) return;
     // `dart.vm.product`, `dart.library.io` and the rest are the VM's own,
     // answered by the compiler rather than passed on a command line. Offering
-    // one as a knob would offer a control that cannot be set. Found for real:
+    // one would offer a control that cannot be set. Found for real:
     // this repo reads `dart.vm.product` in two packages.
     if (name.startsWith('dart.')) return;
     found.putIfAbsent(

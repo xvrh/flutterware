@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutterware/previews.dart';
 
 /// Stands in for a project's own catalog shell.
 ///
 /// The axes are declared inside it, by asking for them, which is how the
 /// catalog learns they exist — there is no list of axes anywhere, only the
 /// calls the shell makes. That leaves `wrapInApp` an ordinary
-/// `Widget Function(Widget)`: `@Demo(wrapper: wrapInApp)` takes it, Flutter's
+/// `Widget Function(Widget)`: `@Preview(wrapper: wrapInApp)` takes it, Flutter's
 /// own previewer calls it with one argument, and the real app calls it like any
 /// other function. In all three the axes answer with their defaults.
 enum Flavor { dev, staging, prod }
@@ -15,17 +15,17 @@ enum Flavor { dev, staging, prod }
 /// Small and grey: the probe is for reading, not for looking at.
 const _probeStyle = TextStyle(fontSize: 10, color: Color(0x8a000000));
 
-Widget wrapInApp(Widget child) => CatalogShell(
+Widget wrapInApp(Widget child) => PreviewShell(
   'app',
-  builder: (context, topBar) {
+  builder: (context, axes) {
     // Labels, not identifiers: only the labels cross the wire, so the top bar
     // shows what is written here rather than `Flavor.prod.name`.
-    var flavor = topBar.picker('flavor', {
+    var flavor = axes.picker('flavor', {
       'Dev': Flavor.dev,
       'Staging': Flavor.staging,
       'Production': Flavor.prod,
     }, Flavor.dev);
-    var compact = topBar.flag('compact', false);
+    var compact = axes.flag('compact', false);
     return _Shell(flavor: flavor, compact: compact, child: child);
   },
 );

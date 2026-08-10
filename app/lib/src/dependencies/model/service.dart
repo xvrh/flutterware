@@ -131,9 +131,14 @@ class DependenciesService {
     return Isolate.run(() {
       return PackageImports.gather(
         path,
+        // Its own ignore root: a dependency is a self-contained package, and
+        // whichever repository it happens to sit under — the pub cache below a
+        // home directory kept in git is the ordinary case — has no say in what
+        // it contains. Its own `.gitignore` still applies.
         listFilesInDirectory(
           path,
-        ).whereType<File>().where((f) => f.path.endsWith('.dart')),
+          ignoreRoot: path,
+        ).where((f) => f.path.endsWith('.dart')),
         flutterSection: _readPubspecOrNull(path)?.flutter,
       );
     });
@@ -409,14 +414,17 @@ class Dependency implements Disposable {
   Future<ClocReport> _loadCloc() async {
     var path = rootPath;
     if (path == null) return ClocReport(ClocResult.zero, const {});
-    return Isolate.run(() => countLinesOfCode(listFilesInDirectory(path)));
+    // Its own ignore root — see `_loadPackageImports`.
+    return Isolate.run(
+      () => countLinesOfCode(listFilesInDirectory(path, ignoreRoot: path)),
+    );
   }
 
   Future<SizeReport> _loadSize() async {
     var path = rootPath;
     if (path == null) return SizeReport(fileCount: 0, totalBytes: 0);
     return Isolate.run(() {
-      var files = listFilesInDirectory(path);
+      var files = listFilesInDirectory(path, ignoreRoot: path);
       var count = 0;
       var size = 0;
       for (var file in files) {

@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware/src/ui_catalog/parameters.dart';
+import 'package:flutterware/src/ui_catalog/knobs.dart';
 
 enum _Theme { light, dark }
 
 void main() {
-  test('picker carries swatch/icon onto the PickerParameter', () {
-    final params = EditableParameters(onRefresh: () {}, onAdded: () {});
+  test('picker carries swatch/icon onto the PickerKnob', () {
+    final knobs = EditableKnobs(onRefresh: () {}, onAdded: () {});
 
-    final picked = params.picker<_Theme>(
+    final picked = knobs.picker<_Theme>(
       'Theme',
       {'Light': _Theme.light, 'Dark': _Theme.dark},
       _Theme.light,
@@ -17,7 +17,7 @@ void main() {
     );
 
     expect(picked, _Theme.light);
-    final p = params.parameters['Theme']! as PickerParameter<_Theme>;
+    final p = knobs.knobs['Theme']! as PickerKnob<_Theme>;
     expect(p.swatch, isNotNull);
     expect(p.icon, isNotNull);
     expect(p.swatch!(_Theme.dark), Colors.black);
@@ -26,7 +26,7 @@ void main() {
   testWidgets('pickerOptionWidget draws a swatch dot before the label', (
     tester,
   ) async {
-    final p = PickerParameter<_Theme>(
+    final p = PickerKnob<_Theme>(
       options: {'Light': _Theme.light, 'Dark': _Theme.dark},
       swatch: (t) => t == _Theme.light ? Colors.white : Colors.black,
     );

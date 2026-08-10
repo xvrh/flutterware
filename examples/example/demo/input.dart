@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
 import 'shell.dart';
 
@@ -7,7 +7,7 @@ import 'shell.dart';
 /// guest's own text input (there is no platform IME on the other side), and
 /// scrolling needs wheel and trackpad events on the wire.
 
-@Demo(name: 'Text fields', wrapper: wrapInApp)
+@Preview(name: 'Text fields', wrapper: wrapInApp)
 Widget textFields() => Scaffold(
   appBar: AppBar(title: const Text('Text fields')),
   body: Padding(
@@ -83,7 +83,7 @@ class _EchoFieldState extends State<_EchoField> {
   );
 }
 
-@Demo(name: 'Scrolling', wrapper: wrapInApp)
+@Preview(name: 'Scrolling', wrapper: wrapInApp)
 Widget scrolling() => Scaffold(
   appBar: AppBar(title: const Text('Scrolling')),
   body: ListView.builder(

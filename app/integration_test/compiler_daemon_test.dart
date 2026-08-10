@@ -6,9 +6,9 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:collection/collection.dart';
-import 'package:flutterware_app/src/catalog/catalog_entry.dart';
-import 'package:flutterware_app/src/catalog/compiler_daemon_client.dart';
-import 'package:flutterware_app/src/catalog/protocol.dart';
+import 'package:flutterware_app/src/previews/catalog_entry.dart';
+import 'package:flutterware_app/src/previews/compiler_daemon_client.dart';
+import 'package:flutterware_app/src/previews/protocol.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -20,7 +20,7 @@ import 'package:test/test.dart';
 /// dying, that a second client attaches to the first one's warm compiler and
 /// stays isolated from it, that an edit on disk is noticed, and that the set of
 /// servable entries is announced to clients that did not ask. The unit tests in
-/// `test/catalog/` cover the wire format, the address, the depfile and the
+/// `test/previews/` cover the wire format, the address, the depfile and the
 /// client's own bookkeeping against a fake; none of them can see any of the
 /// above, because in all of them there is no daemon.
 ///
@@ -69,6 +69,16 @@ void main() {
       flutterSdkRoot: flutterRoot,
       roots: const ['tool/catalog'],
     );
+
+    // A fixture left over from a run that was killed before its teardown is
+    // worse than clutter: `addPreview` waits for the daemon to *announce* the
+    // demo, and rewriting a file that is already an entry announces no change,
+    // so every test that adds one waits out its timeout.
+    for (var entity in Directory(demosDir).listSync()) {
+      if (entity is File && p.basename(entity.path).startsWith('fixture_')) {
+        entity.deleteSync();
+      }
+    }
 
     // A daemon left over from an earlier run carries that run's state — which
     // entries it quarantined above all, and these tests quarantine on purpose.
@@ -120,11 +130,16 @@ void main() {
   /// and takes it away again when the test ends.
   ///
   /// Fixtures are written rather than checked in, and every one of them is
-  /// named `fixture_*`, which `.gitignore` covers: a run killed halfway leaves
-  /// an untracked file behind rather than a modified tracked one, so it cannot
-  /// fail the "no uncommitted changes" step for a reason that has nothing to do
-  /// with the test. Nothing here rewrites a file that is under version control.
-  Future<(File, CatalogEntry)> addDemo(
+  /// named `fixture_*` so a run killed halfway leaves an untracked file behind
+  /// rather than a modified tracked one. Nothing here rewrites a file that is
+  /// under version control.
+  ///
+  /// They used to be *gitignored* as well, which discovery has made impossible:
+  /// the scan honours `.gitignore`, so an ignored demo is one it correctly
+  /// refuses to see, and every test below waited out its timeout for an entry
+  /// that was never going to be announced. Worth knowing as a rule rather than
+  /// as a test detail — a preview in an ignored file does not exist.
+  Future<(File, CatalogEntry)> addPreview(
     String name,
     String source, {
     CompilerDaemonClient? via,
@@ -171,6 +186,24 @@ void main() {
     test('discovers the demos, and groups a file that declares several', () {
       expect(ready.entries.length, greaterThanOrEqualTo(5));
       expect(ready.entries.map((e) => e.group), contains('Avatar tile'));
+    });
+
+    test("compiles a demo carrying Flutter's own @Preview", () {
+      // `plain_preview.dart` imports nothing of ours: Flutter's annotation, and
+      // no `package:flutterware`. The scanner has always accepted `@Preview`,
+      // and the generated wrapper used to declare `Demo get fwPreview`, so every
+      // such entry assigned a supertype to a subtype and failed to compile.
+      //
+      // Asserted here rather than left to the suite passing, because the
+      // daemon's answer to a demo that does not compile is to quarantine it and
+      // carry on — the failure this covers is one every other test is designed
+      // to survive.
+      expect(
+        ready.quarantined.map((q) => q.entry.symbol),
+        isNot(contains('plainPreview')),
+        reason: 'the whole point is that it compiles',
+      );
+      expect(ready.entries.map((e) => e.symbol), contains('plainPreview'));
     });
 
     test('quarantines a demo that does not compile instead of failing', () {
@@ -228,9 +261,9 @@ void main() {
     // exactly the files a `recompile` request names and nothing else. Without
     // the stat sweep this compiles, reports success in milliseconds, and hands
     // back a kernel of the file as it was when the daemon started.
-    var (file, added) = await addDemo(
+    var (file, added) = await addPreview(
       'edited',
-      _demo('fixtureEdited', 'first'),
+      _preview('fixtureEdited', 'first'),
     );
     expect((await daemon.select(added.id)).ok, isTrue);
 
@@ -242,7 +275,7 @@ void main() {
     expect(quiet.unchanged, isTrue, reason: 'ifChanged skips an idle poll');
     expect(quiet.dill, isNull, reason: 'and hands back no kernel to reload');
 
-    file.writeAsStringSync(_demo('fixtureEdited', 'second'));
+    file.writeAsStringSync(_preview('fixtureEdited', 'second'));
     var noisy = await daemon.select(added.id, ifChanged: true);
     expect(noisy.unchanged, isFalse, reason: 'and does not skip a real edit');
     expect(noisy.ok, isTrue, reason: noisy.error ?? '');
@@ -255,7 +288,10 @@ void main() {
 
   test('a demo that stops compiling is dropped, and comes back when '
       'fixed', () async {
-    var (file, added) = await addDemo('broken', _demo('fixtureBroken', 'fine'));
+    var (file, added) = await addPreview(
+      'broken',
+      _preview('fixtureBroken', 'fine'),
+    );
     expect((await daemon.select(added.id)).ok, isTrue);
     // The sweep that puts the new file into the invalidator's baseline. A file
     // seen for the first time is recorded and deliberately *not* reported —
@@ -269,7 +305,7 @@ void main() {
       (c) => c.quarantined.any((q) => q.entry.id == added.id),
       'the entry that stopped compiling',
     );
-    file.writeAsStringSync(_brokenDemo('fixtureBroken'));
+    file.writeAsStringSync(_brokenPreview('fixtureBroken'));
     var afterBreak = await daemon.select(entry('counter').id);
     expect(
       afterBreak.ok,
@@ -289,7 +325,7 @@ void main() {
       (c) => c.entries.any((e) => e.id == added.id),
       'the repaired entry',
     );
-    file.writeAsStringSync(_demo('fixtureBroken', 'fixed'));
+    file.writeAsStringSync(_preview('fixtureBroken', 'fixed'));
     expect((await daemon.select(entry('counter').id)).ok, isTrue);
     expect(
       (await back).quarantined.map((q) => q.entry.id),
@@ -394,14 +430,14 @@ void main() {
       // per-session change generation, the first client's reflex would eat the
       // edit and the second's would see a clean world — and keep rendering the
       // stale build.
-      var (file, added) = await addDemo(
+      var (file, added) = await addPreview(
         'interleaved',
-        _demo('fixtureInterleaved', 'first'),
+        _preview('fixtureInterleaved', 'first'),
       );
       expect((await daemon.select(added.id, full: true)).ok, isTrue);
       expect((await second.select(added.id, full: true)).ok, isTrue);
 
-      file.writeAsStringSync(_demo('fixtureInterleaved', 'second'));
+      file.writeAsStringSync(_preview('fixtureInterleaved', 'second'));
       var one = await daemon.select(added.id, ifChanged: true);
       expect(one.ok, isTrue, reason: one.error ?? '');
       expect(one.unchanged, isFalse, reason: 'the sweeping client recompiles');
@@ -423,9 +459,9 @@ void main() {
       // runs once at startup, so a file added while the catalog is open is a
       // file it would otherwise never mention — and the daemon outlives the
       // panel, so "restart it" means closing the worktree.
-      var (_, added) = await addDemo(
+      var (_, added) = await addPreview(
         'announced',
-        _demo('fixtureAnnounced', 'late'),
+        _preview('fixtureAnnounced', 'late'),
         via: second,
       );
       expect(
@@ -515,9 +551,9 @@ void main() {
     await restart();
     broken.writeAsStringSync('''
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
-@Demo(name: 'Broken')
+@Preview(name: 'Broken')
 Widget fixtureBroken() => NoSuchWidgetExistsHere();
 ''');
 
@@ -552,9 +588,9 @@ Widget fixtureBroken() => NoSuchWidgetExistsHere();
     // note — which is the one way this optimisation could do real harm.
     broken.writeAsStringSync('''
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 
-@Demo(name: 'Broken')
+@Preview(name: 'Broken')
 Widget fixtureBroken() => const Placeholder();
 ''');
 
@@ -706,24 +742,22 @@ Future<String> _appPackageRoot() async {
   return p.dirname(p.dirname(p.fromUri(lib!)));
 }
 
-String _demo(String symbol, String text) =>
+String _preview(String symbol, String text) =>
     '''
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 
-import 'package:flutterware/ui_catalog.dart';
-
-@Demo(name: 'Fixture')
+@Preview(name: 'Fixture')
 Widget $symbol() => const Center(child: Text('$text'));
 ''';
 
 /// The same demo with a type that does not exist, which is what makes the
 /// compiler blame this file — and so what makes the entry quarantinable.
-String _brokenDemo(String symbol) =>
+String _brokenPreview(String symbol) =>
     '''
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 
-import 'package:flutterware/ui_catalog.dart';
-
-@Demo(name: 'Fixture')
+@Preview(name: 'Fixture')
 Widget $symbol() => ThisTypeDoesNotExist(missing: 1);
 ''';

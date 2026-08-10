@@ -67,7 +67,7 @@ class SearchHit {
 /// How much each kind is worth before its fuzzy score is added.
 ///
 /// A plugin outranks a stray field that happens to contain the same letters,
-/// because "ui" should find the UI catalog rather than a table cell. The
+/// because "pre" should find Previews rather than a table cell. The
 /// weights are small on purpose: a genuinely better match still wins, so
 /// typing `dash` finds the Dashboard entry rather than the plugin above it.
 const _weights = {SearchReason.plugin: 30, SearchReason.package: 20};

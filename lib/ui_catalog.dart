@@ -1,15 +1,19 @@
-/// What a project writes: demo declarations, a shell, and the standalone
-/// catalog app.
+/// The in-app catalog: a browsable page of your previews, shipped inside your
+/// own app.
 ///
-/// Deliberately small — this is the published surface, and every name here is
-/// a semver commitment. The machinery the flutterware GUI drives inside the
-/// guest lives in `ui_catalog_guest.dart`, imported only by generated code.
+/// **Not the Previews tool.** That is `previews.dart` and the `Previews` plugin
+/// — a panel, a CLI and an MCP surface driving a guest engine. This is a widget
+/// you mount in your own `main.dart`, and the two keep separate names on
+/// purpose: Previews is where you work, a catalog is what you ship.
+///
+/// It hosts the same previews. `UICatalog` renders whatever the scan found,
+/// knobs and all, which is why [Knobs] is re-exported here — `context.knobs`
+/// reads the same on a ui_book page as in a preview, because it is the same
+/// thing being read.
 library;
 
-export 'src/ui_catalog/demo.dart' show Demo, FormFactor;
+export 'src/ui_catalog/form_factor.dart' show FormFactor;
 export 'src/ui_catalog/figma.dart' show Figma;
+export 'src/ui_catalog/knobs.dart' show Knobs;
 export 'src/ui_catalog/ui_catalog.dart'
-    show UICatalog, UICatalogState, UICatalogStateProvider, UIBookExtension;
-// What a project's own shell is written with: `CatalogShell` declares axes by
-// asking `TopBarState` for them while it builds.
-export 'src/ui_catalog/axes.dart' show CatalogShell, TopBarState;
+    show UICatalog, KnobsProvider, KnobsExtension;

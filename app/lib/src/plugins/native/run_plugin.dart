@@ -85,7 +85,7 @@ class RunPlugin extends NativePlugin<RunCore> {
 /// and a pane — which is this problem already solved once in this codebase.
 ///
 /// Starting a run is its own page rather than a button per entry point: four to
-/// ten entry points as a row of buttons is a wall, and the knobs have nowhere
+/// ten entry points as a row of buttons is a wall, and the defines have nowhere
 /// to go. See `docs/superpowers/specs/2026-07-31-run-cockpit-panel-design.md`.
 class _RunPanel extends StatefulWidget {
   const _RunPanel(this.plugin);
@@ -401,7 +401,8 @@ class _RunHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var meta = [
-      for (var knob in handle.knobs.entries) '${knob.key}=${knob.value}',
+      for (var define in handle.defines.entries)
+        '${define.key}=${define.value}',
       'started ${describeAge(DateTime.now().difference(handle.startedAt))}',
     ].join(' · ');
 
@@ -1001,7 +1002,7 @@ class _LogRow extends StatelessWidget {
   }
 }
 
-/// Pick an entry point, pick a device it can run on, fill its knobs, start.
+/// Pick an entry point, pick a device it can run on, fill its defines, start.
 ///
 /// One column, in that order, and it opens filled in with whatever ran last —
 /// so running the same thing again is opening the page and pressing Start.
@@ -1012,7 +1013,7 @@ class _LogRow extends StatelessWidget {
 /// second, under the device, which had the dependency backwards: an entry point
 /// declaring `platforms: [mobile]` decides which devices are offerable and
 /// what flavor is pre-filled, so choosing it after them meant choosing them
-/// twice. Flavor and knobs were already downstream of it; the device list is
+/// twice. Flavor and defines were already downstream of it; the device list is
 /// the third thing that was pretending not to be.
 class _NewRunPage extends StatefulWidget {
   const _NewRunPage({required this.core, required this.onLaunched});
@@ -1027,7 +1028,7 @@ class _NewRunPage extends StatefulWidget {
 class _NewRunPageState extends State<_NewRunPage> {
   String? _device;
   ({String package, EntrypointRef entry})? _entry;
-  final _knobs = <String, TextEditingController>{};
+  final _defines = <String, TextEditingController>{};
   final _flavor = TextEditingController();
 
   /// True once the user has taken the flavor off what the project declares.
@@ -1050,7 +1051,7 @@ class _NewRunPageState extends State<_NewRunPage> {
 
   @override
   void dispose() {
-    for (var field in _knobs.values) {
+    for (var field in _defines.values) {
       field.dispose();
     }
     _flavor.dispose();
@@ -1071,11 +1072,11 @@ class _NewRunPageState extends State<_NewRunPage> {
           )
           .firstOrNull;
       _entry = restored ?? entries.first;
-      // Only when it really is last time's entry point. The knobs and the
+      // Only when it really is last time's entry point. The defines and the
       // flavor of a run belong to the `main()` they were typed for, and
       // restoring them onto whatever entry point happened to sort first put a
       // stale flavor on an unrelated build.
-      _rebuildKnobs(restored != null ? last?.knobs ?? const {} : const {});
+      _rebuildKnobs(restored != null ? last?.defines ?? const {} : const {});
       _resetFlavor(used: restored != null ? last?.flavor : null);
     }
     _device ??= _pickDevice(preferred: last?.device);
@@ -1126,32 +1127,32 @@ class _NewRunPageState extends State<_NewRunPage> {
   }
 
   void _rebuildKnobs(Map<String, String> values) {
-    for (var field in _knobs.values) {
+    for (var field in _defines.values) {
       field.dispose();
     }
-    _knobs.clear();
-    for (var (:knob, :read) in _offered) {
-      _knobs[knob.define] = TextEditingController(
+    _defines.clear();
+    for (var (:define, :read) in _offered) {
+      _defines[define.name] = TextEditingController(
         text:
-            values[knob.define] ??
-            knob.defaultValue ??
+            values[define.name] ??
+            define.defaultValue ??
             read?.defaultValue ??
             '',
       );
     }
   }
 
-  /// The knobs this entry point offers — what the config declared, or what a
+  /// The defines this entry point offers — what the config declared, or what a
   /// scan of the package's `lib/` found it reads.
   ///
-  /// Through the core rather than off `entry.knobs`, so the form and the
+  /// Through the core rather than off `entry.defines`, so the form and the
   /// `entrypoints` action offer the same list. One that only the panel had
   /// would be a control an agent could not see.
-  List<({LaunchKnob knob, DefineRef? read})> get _offered {
+  List<({DartDefine define, DefineRef? read})> get _offered {
     var choice = _entry;
     return choice == null
         ? const []
-        : _core.knobsFor(choice.package, choice.entry);
+        : _core.definesFor(choice.package, choice.entry);
   }
 
   @override
@@ -1229,20 +1230,20 @@ class _NewRunPageState extends State<_NewRunPage> {
                 onRevert: () => setState(_resetFlavor),
               ),
             ),
-            if (_knobs.isNotEmpty) ...[
+            if (_defines.isNotEmpty) ...[
               const Gap(FwSpacing.lg),
               _Field(
-                label: 'Knobs',
+                label: 'Defines',
                 hint: 'compiled in — changing one is a rebuild',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (var (:knob, :read) in _offered) ...[
+                    for (var (:define, :read) in _offered) ...[
                       _KnobField(
-                        knob: knob,
+                        define: define,
                         read: read,
-                        options: _core.optionsFor(knob),
-                        controller: _knobs[knob.define]!,
+                        options: _core.optionsFor(define),
+                        controller: _defines[define.name]!,
                       ),
                       const Gap(FwSpacing.md),
                     ],
@@ -1298,8 +1299,8 @@ class _NewRunPageState extends State<_NewRunPage> {
     var choice = _entry;
     var device = _device;
     if (choice == null || device == null) return;
-    var knobs = {
-      for (var entry in _knobs.entries)
+    var defines = {
+      for (var entry in _defines.entries)
         if (entry.value.text.isNotEmpty) entry.key: entry.value.text,
     };
     var flavor = _flavor.text.trim();
@@ -1313,14 +1314,14 @@ class _NewRunPageState extends State<_NewRunPage> {
         package: choice.package,
         entry: choice.entry,
         flavor: flavor.isEmpty ? null : flavor,
-        knobs: knobs,
+        defines: defines,
       );
       _core.lastLaunch = (
         device: device,
         package: choice.package,
         entrypoint: choice.entry.path,
         flavor: flavor.isEmpty ? null : flavor,
-        knobs: knobs,
+        defines: defines,
       );
       widget.onLaunched(handle);
     } on Object catch (e) {
@@ -1870,23 +1871,23 @@ class _Action extends StatelessWidget {
 
 /// What to bake in before building.
 ///
-/// Every knob is a text field, because a `--dart-define` is a string; the
-/// difference the tool makes is the list under it. `from: KnobSource.servers`
+/// Every define is a text field, because a `--dart-define` is a string; the
+/// difference the tool makes is the list under it. `from: DefineSource.servers`
 /// fills that list with the base URLs of the servers running right now, and
 /// `hostAddresses` with this machine's LAN addresses — so "point the app at my
 /// dev server" is a click rather than a trip to `ifconfig`.
 class _KnobField extends StatelessWidget {
   const _KnobField({
-    required this.knob,
+    required this.define,
     required this.read,
     required this.options,
     required this.controller,
   });
 
-  final LaunchKnob knob;
+  final DartDefine define;
 
   /// Where the app reads this define, when it does. Null is the case worth
-  /// saying out loud: a knob nothing reads is a control that does nothing, and
+  /// saying out loud: a define nothing reads is a control that does nothing, and
   /// it looks exactly like one that does.
   final DefineRef? read;
 
@@ -1900,7 +1901,7 @@ class _KnobField extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(knob.label ?? knob.define, style: context.type.fieldLabel),
+            Text(define.label ?? define.name, style: context.type.fieldLabel),
             if (read case var found?) ...[
               const Gap(FwSpacing.sm),
               Flexible(
@@ -1925,8 +1926,8 @@ class _KnobField extends StatelessWidget {
             ],
           ],
         ),
-        if (knob.description != null)
-          Text(knob.description!, style: context.type.caption),
+        if (define.description != null)
+          Text(define.description!, style: context.type.caption),
         const Gap(FwSpacing.xxs),
         TextField(controller: controller),
         if (options.isNotEmpty) ...[

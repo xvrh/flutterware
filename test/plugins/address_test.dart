@@ -5,12 +5,12 @@ void main() {
   group('parse', () {
     test('space, worktree, plugin and segments', () {
       var address = Address.parse(
-        'fw:///worktrees/main/flutterware.ui_catalog/packages/admin/Team',
+        'fw:///worktrees/main/flutterware.previews/packages/admin/Team',
       );
       expect(address.project, isNull);
       expect(address.space, Address.worktreesSpace);
       expect(address.worktree, 'main');
-      expect(address.plugin, 'flutterware.ui_catalog');
+      expect(address.plugin, 'flutterware.previews');
       expect(address.segments, ['packages', 'admin', 'Team']);
       expect(address.path, 'packages/admin/Team');
     });
@@ -69,7 +69,7 @@ void main() {
       // Deliberate: there is no compatibility branch, because telling a space
       // from a worktree name would need the registry of known spaces this
       // change exists to avoid.
-      expect(Address.tryParse('fw:///main/flutterware.ui_catalog'), isNull);
+      expect(Address.tryParse('fw:///main/flutterware.previews'), isNull);
       expect(Address.parse('fw:///main').worktree, isNull);
     });
 
@@ -97,7 +97,7 @@ void main() {
 
     test('a segment may carry encoded structural characters', () {
       var address = Address.parse(
-        'fw:///worktrees/main/flutterware.ui_catalog/'
+        'fw:///worktrees/main/flutterware.previews/'
         'lib%2Fdemo%2Fteam.dart%23TeamList',
       );
       expect(address.segments, ['lib/demo/team.dart#TeamList']);
@@ -126,13 +126,13 @@ void main() {
   group('toString', () {
     test('round-trips every shape', () {
       var encoded =
-          'fw:///worktrees/main/flutterware.ui_catalog/'
+          'fw:///worktrees/main/flutterware.previews/'
           'lib%2Fdemo%2Fteam.dart%23TeamList';
       for (var source in [
         'fw:///',
         'fw:///worktrees',
         'fw:///worktrees/main',
-        'fw:///worktrees/main/flutterware.ui_catalog/packages/admin/Team',
+        'fw:///worktrees/main/flutterware.previews/packages/admin/Team',
         'fw:///worktrees/main/p/e?device=iPhone%2015&theme=dark',
         encoded,
         'fw://acme/worktrees/main/p',
@@ -259,7 +259,7 @@ void main() {
 
   group('derivation', () {
     var base = Address.parse(
-      'fw:///worktrees/main/flutterware.ui_catalog/admin?theme=dark',
+      'fw:///worktrees/main/flutterware.previews/admin?theme=dark',
     );
 
     test('child appends a segment', () {

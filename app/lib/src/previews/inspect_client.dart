@@ -1,0 +1,283 @@
+import 'dart:async';
+
+// The plain-Dart halves rather than the umbrella `ui_catalog.dart`, for the
+// reason `headless_catalog.dart` gives at its own imports: this file is reached
+// from `fw`, and the umbrella exports the demo annotations, which reach
+// `package:flutter/widgets.dart` and would make `fw` unlinkable.
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/error.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/node.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/log.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/watch.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/ui_catalog/axis.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/ui_catalog/knob.dart';
+
+import '../embedder/guest_vm_service.dart';
+
+/// How patiently a read waits for the guest to be describing the entry it was
+/// asked about.
+///
+/// A property of the guest rather than of the call, which is why it is set once
+/// on the [InspectClient] and never passed to a method: how long to wait depends
+/// entirely on whether the caller drove the build itself.
+class InspectPatience {
+  const InspectPatience({required this.attempts, required this.delay});
+
+  /// The live panel. Short, because the session drove the reload and is waiting
+  /// only on the frame after it.
+  static const live = InspectPatience(
+    attempts: 10,
+    delay: Duration(milliseconds: 30),
+  );
+
+  /// A headless guest that has just been handed a kernel and still has to
+  /// build, lay out and paint before it can answer about the new entry.
+  static const headless = InspectPatience(
+    attempts: 20,
+    delay: Duration(milliseconds: 50),
+  );
+
+  /// Ask once and take the answer.
+  ///
+  /// For reading a guest **nobody asked to change** — the attach path, where
+  /// the question is "is this session already showing the entry I want" and a
+  /// no is an answer. Retrying there would be waiting for a person to click.
+  static const glance = InspectPatience(attempts: 1, delay: Duration.zero);
+
+  final int attempts;
+  final Duration delay;
+}
+
+/// Reads a guest's `ext.flutterware.*` inspection extensions.
+///
+/// **One reader, two mounts.** [HeadlessCatalog] brings up its own guest to
+/// answer a `fw` or MCP call; [CatalogSession] holds a live one behind the
+/// panel. Both ask the same guest the same questions, and before this existed
+/// they asked it in two files — `settledAxes` beside `_readAxes`,
+/// `settledKnobs` beside `_readKnobs`, with nothing keeping the pair honest and
+/// three more reads about to be duplicated the same way.
+///
+/// The rule this encodes, from
+/// `docs/superpowers/specs/2026-07-29-ui-catalog-inspection-panel.md`: **the
+/// shared unit is the guest extension and its model, not the `PluginAction`.**
+/// The panel cannot call an action — it must inspect the guest that is on
+/// screen, not a re-render of it — so parity has to live below the action
+/// layer, and this is where.
+///
+/// Pure Dart, like everything it reads. `fw` links it.
+class InspectClient {
+  InspectClient(this.vmService, {required this.patience, this.abandoned});
+
+  final GuestVmService vmService;
+
+  final InspectPatience patience;
+
+  /// Whether the caller has gone away mid-poll — a disposed session, a closed
+  /// panel. Checked around every await, because the alternative is a reader
+  /// that keeps talking to a guest on behalf of something that no longer
+  /// exists.
+  final bool Function()? abandoned;
+
+  /// The widget tree [entryId] built, scoped to the demo.
+  Future<InspectTree?> tree(String entryId) => _settle(
+    'ext.flutterware.tree',
+    InspectTree.fromJson,
+    (tree) => tree.entryId,
+    entryId,
+  );
+
+  /// The knobs [entryId] declared while it built.
+  Future<KnobReport?> knobs(String entryId) => _settle(
+    'ext.flutterware.knobs',
+    KnobReport.fromJson,
+    (report) => report.entryId,
+    entryId,
+  );
+
+  /// The axes the shell around [entryId] declared while it built.
+  ///
+  /// Settles on the *entry* rather than on a shell ever appearing: an entry
+  /// whose wrapper is not a shell reports no shell and no axes, and that is an
+  /// answer rather than something to keep waiting for.
+  Future<AxisReport?> axes(String entryId) => _settle(
+    'ext.flutterware.axes',
+    AxisReport.fromJson,
+    (report) => report.entryId,
+    entryId,
+  );
+
+  /// What [entryId] reported while building and painting — build throws, layout
+  /// overflows.
+  Future<InspectErrors?> errors(String entryId) => _settle(
+    'ext.flutterware.errors',
+    InspectErrors.fromJson,
+    (report) => report.entryId,
+    entryId,
+  );
+
+  /// What [entryId] printed.
+  ///
+  /// Settles on the entry like everything else here: a buffer naming another
+  /// demo is a read from before the switch.
+  Future<InspectLogs?> logs(String entryId) => _settle(
+    'ext.flutterware.logs',
+    InspectLogs.fromJson,
+    (report) => report.entryId,
+    entryId,
+  );
+
+  /// Each line as the demo prints it, without waiting for a poll.
+  ///
+  /// The buffer and the stream are both needed and neither replaces the other:
+  /// [logs] says what has already been printed, this says what is being
+  /// printed now. A reader takes both and drops the overlap by
+  /// [InspectLogLine.sequence] — matching on text and time instead would still
+  /// be wrong about a demo printing the same word twice in a frame.
+  Stream<InspectLogLine> get logLines =>
+      vmService.extensionEvents('flutterware.log').map(InspectLogLine.fromJson);
+
+  /// Empties the guest's buffer — the console's clear button.
+  ///
+  /// Tolerant, like [clearErrors]: the cost of it failing is a stale list.
+  Future<void> clearLogs() =>
+      vmService.callExtension('ext.flutterware.clearLogs');
+
+  /// Forgets what the entry has reported so far.
+  ///
+  /// Tolerant rather than required, unlike the other writes: this is the one
+  /// call whose failure costs nothing but a stale list, and a guest from before
+  /// the extension existed should still be readable.
+  Future<void> clearErrors() =>
+      vmService.callExtension('ext.flutterware.clearErrors');
+
+  /// The node ids under a point, outermost first.
+  ///
+  /// Does no settling of its own on purpose. A hit is only meaningful against a
+  /// particular tree, so the caller reads the tree first and this answers about
+  /// the same build; settling here would resolve the point against a second
+  /// reading the caller was never shown.
+  Future<List<String>> hitTest(double x, double y) async {
+    var json = await vmService.callExtension(
+      'ext.flutterware.hitTest',
+      args: {'x': '$x', 'y': '$y'},
+    );
+    return [for (var id in json?['ids'] as List? ?? const []) '$id'];
+  }
+
+  /// Turns the knobs, and reports whether the demo took them.
+  ///
+  /// [payload] is the *whole* declared set, JSON-encoded — a name absent from it
+  /// is what says "leave this at its default". Both callers build it with
+  /// `paramPayloadFor`.
+  ///
+  /// **A write, so it uses [GuestVmService.requireExtension]**, and routing both
+  /// callers through here is most of why this class earns its keep. The tolerant
+  /// form swallows JSON-RPC 32601, which is right for "does this old guest have
+  /// the extension" and wrong for "call the extension I know exists" — and that
+  /// exact confusion is how `setParameter` survived a week after being renamed
+  /// to `setParameters`, applying nothing and reporting success. S0b fixed the
+  /// headless caller; the panel's two writes were still tolerant.
+  Future<bool> setKnobs(String payload) async {
+    var json = await vmService.requireExtension(
+      'ext.flutterware.setKnobs',
+      args: {'payload': payload},
+    );
+    return json?['applied'] == true;
+  }
+
+  /// Turns the shell's axes, and reports what it says afterwards.
+  ///
+  /// Required rather than tolerant for the same reason [setKnobs] is.
+  Future<AxisReport?> setAxes(String payload) async {
+    var json = await vmService.requireExtension(
+      'ext.flutterware.setAxes',
+      args: {'payload': payload},
+    );
+    return json == null ? null : AxisReport.fromJson(json);
+  }
+
+  /// Asks the guest to say when what is on screen has moved.
+  ///
+  /// [nodeId] is the node whose box should be reported; null watches structure
+  /// only. [minInterval] is the debounce — zero means every frame, and which of
+  /// those is right is the host's call, because only the host knows whether it
+  /// is driving an overlay that has to track an animation or a tree view that
+  /// is happy a second late.
+  ///
+  /// **Required rather than tolerant**, like the other writes: a watch that
+  /// silently failed to start looks exactly like a demo that is not moving.
+  Future<WatchStats?> watch({
+    String? nodeId,
+    Duration minInterval = Duration.zero,
+  }) async {
+    var json = await vmService.requireExtension(
+      'ext.flutterware.watch',
+      args: {
+        'on': 'true',
+        // `-` rather than the empty string, which the guest reads as "leave the
+        // node alone" — a caller clearing the selection means it.
+        'node': nodeId ?? '-',
+        'minIntervalMillis': '${minInterval.inMilliseconds}',
+      },
+    );
+    return json == null ? null : WatchStats.fromJson(json);
+  }
+
+  /// Stops the watch, so a guest nobody is inspecting pays nothing.
+  ///
+  /// Tolerant, unlike [watch], and for the reason [clearErrors] is: this runs
+  /// from a dispose, where the guest may already be going away and there is
+  /// nothing useful to do about it.
+  Future<void> unwatch() =>
+      vmService.callExtension('ext.flutterware.watch', args: {'on': 'false'});
+
+  /// What the watch has cost, without subscribing to it.
+  Future<WatchStats?> watchStats() async {
+    var json = await vmService.callExtension('ext.flutterware.watch');
+    return json == null ? null : WatchStats.fromJson(json);
+  }
+
+  /// The pushes themselves.
+  ///
+  /// Not filtered by entry here. A push naming another entry is the *evidence*
+  /// that a switch has happened and this reader is behind, so dropping it
+  /// silently would throw away the one signal that says so.
+  Stream<WatchPush> get watches =>
+      vmService.extensionEvents('flutterware.watch').map(WatchPush.fromJson);
+
+  /// Polls [method] until what it decodes names [entryId].
+  ///
+  /// **Null covers both "the guest does not register this" and "it never named
+  /// the entry".** They are one outcome at every call site — the headless side
+  /// answers empty for both, the panel leaves what it is holding alone for both
+  /// — so collapsing them keeps that decision visible where it is made rather
+  /// than baked in here.
+  ///
+  /// Retrying at all is not politeness. The reports are recorded by the demo's
+  /// *build*, so a read that lands between the reload and the frame describes
+  /// the entry that was on screen before, and answering with it would be a
+  /// confident description of the wrong thing.
+  Future<T?> _settle<T>(
+    String method,
+    T Function(Map<String, Object?>) decode,
+    String? Function(T) entryOf,
+    String entryId,
+  ) async {
+    for (var attempt = 0; attempt < patience.attempts; attempt++) {
+      var json = await vmService.callExtension(method);
+      if (abandoned?.call() ?? false) return null;
+      // A guest from before the extension existed.
+      if (json == null) return null;
+      var report = decode(json);
+      if (entryOf(report) == entryId) return report;
+      await Future<void>.delayed(patience.delay);
+      if (abandoned?.call() ?? false) return null;
+    }
+    return null;
+  }
+}

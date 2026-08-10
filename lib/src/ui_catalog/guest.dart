@@ -8,7 +8,7 @@ import '../inspect/guest_logs.dart';
 import '../inspect/guest_scrolls.dart';
 import 'axes.dart';
 import 'knob.dart';
-import 'parameters.dart';
+import 'knobs.dart';
 import 'ui_catalog.dart';
 
 /// The catalog's side of a guest: the knobs a demo declares while it builds,
@@ -24,10 +24,10 @@ import 'ui_catalog.dart';
 /// place, which is the difference between turning a knob and recompiling: the
 /// demo keeps its state, and the answer is on screen in a frame rather than in
 /// a hundred milliseconds.
-class CatalogParameters {
-  CatalogParameters._();
+class CatalogKnobs {
+  CatalogKnobs._();
 
-  static final instance = CatalogParameters._();
+  static final instance = CatalogKnobs._();
 
   /// Bumped when a *value* changes, so the widget providing these to the demo
   /// has something to rebuild on.
@@ -40,7 +40,7 @@ class CatalogParameters {
   int get declared => _declared;
   var _declared = 0;
 
-  late final EditableParameters editable = EditableParameters(
+  late final EditableKnobs editable = EditableKnobs(
     onRefresh: _bump,
     onAdded: () => _declared++,
   );
@@ -89,7 +89,7 @@ class CatalogParameters {
     if (_entryId == entryId) return;
     _entryId = entryId;
     editable.dispose();
-    editable.parameters.clear();
+    editable.knobs.clear();
     _declared++;
     // No bump: this runs from the widget's own init or update, and the demo
     // below is about to build anyway.
@@ -97,15 +97,12 @@ class CatalogParameters {
 
   /// Registers the extensions. Call once, before `runApp`.
   void registerExtensions() {
-    developer.registerExtension('ext.flutterware.parameters', (_, _) async {
+    developer.registerExtension('ext.flutterware.knobs', (_, _) async {
       return developer.ServiceExtensionResponse.result(
         jsonEncode(describe().toJson()),
       );
     });
-    developer.registerExtension('ext.flutterware.setParameters', (
-      _,
-      args,
-    ) async {
+    developer.registerExtension('ext.flutterware.setKnobs', (_, args) async {
       // A service extension's arguments are strings, so the payload is JSON in
       // one of them rather than a map of typed values.
       var payload = jsonDecode(args['payload'] ?? '{}') as Map<String, dynamic>;
@@ -136,45 +133,44 @@ class CatalogParameters {
     declared: _declared,
     revision: revision.value,
     knobs: [
-      for (var entry in editable.parameters.entries)
+      for (var entry in editable.knobs.entries)
         ?_describe(entry.key, entry.value),
     ],
   );
 
-  static KnobDescriptor? _describe(String name, Parameter<Object?> p) =>
-      switch (p) {
-        StringParameter() => KnobDescriptor(
-          name: name,
-          kind: KnobKind.string,
-          value: p.requiredValue,
-          defaultValue: p.defaultValue,
-        ),
-        BoolParameter() => KnobDescriptor(
-          name: name,
-          kind: KnobKind.boolean,
-          value: p.requiredValue,
-          defaultValue: p.defaultValue,
-        ),
-        NumParameter() => KnobDescriptor(
-          name: name,
-          kind: p.isInt ? KnobKind.integer : KnobKind.number,
-          value: p.requiredValue,
-          defaultValue: p.defaultValue,
-          min: p.min,
-          max: p.max,
-        ),
-        PickerParameter() => KnobDescriptor(
-          name: name,
-          kind: KnobKind.picker,
-          options: p.options.keys.toList(),
-          value: _labelOf(p, p.requiredValue),
-          defaultValue: _labelOf(p, p.defaultValue),
-        ),
-        // Dates and buttons are left out rather than described wrong.
-        _ => null,
-      };
+  static KnobDescriptor? _describe(String name, Knob<Object?> p) => switch (p) {
+    StringKnob() => KnobDescriptor(
+      name: name,
+      kind: KnobKind.string,
+      value: p.requiredValue,
+      defaultValue: p.defaultValue,
+    ),
+    BoolKnob() => KnobDescriptor(
+      name: name,
+      kind: KnobKind.boolean,
+      value: p.requiredValue,
+      defaultValue: p.defaultValue,
+    ),
+    NumKnob() => KnobDescriptor(
+      name: name,
+      kind: p.isInt ? KnobKind.integer : KnobKind.number,
+      value: p.requiredValue,
+      defaultValue: p.defaultValue,
+      min: p.min,
+      max: p.max,
+    ),
+    PickerKnob() => KnobDescriptor(
+      name: name,
+      kind: KnobKind.picker,
+      options: p.options.keys.toList(),
+      value: _labelOf(p, p.requiredValue),
+      defaultValue: _labelOf(p, p.defaultValue),
+    ),
+    // Dates and buttons are left out rather than described wrong.
+    _ => null,
+  };
 
-  static String? _labelOf(PickerParameter<Object?> p, Object? value) {
+  static String? _labelOf(PickerKnob<Object?> p, Object? value) {
     for (var entry in p.options.entries) {
       if (entry.value == value) return entry.key;
     }
@@ -199,24 +195,24 @@ class CatalogParameters {
   /// simply replaces whatever it caught up with.
   bool applyAll(Map<String, Object?> values) {
     var applied = false;
-    for (var name in editable.parameters.keys.toList()) {
+    for (var name in editable.knobs.keys.toList()) {
       if (apply(name, values[name])) applied = true;
     }
     return applied;
   }
 
   bool apply(String name, Object? value) {
-    var parameter = editable.parameters[name];
+    var parameter = editable.knobs[name];
     switch (parameter) {
-      case StringParameter():
+      case StringKnob():
         parameter.value = value as String?;
-      case BoolParameter():
+      case BoolKnob():
         parameter.value = value as bool?;
-      case NumParameter<int>():
+      case NumKnob<int>():
         parameter.value = (value as num?)?.round();
-      case NumParameter():
+      case NumKnob():
         parameter.value = (value as num?)?.toDouble();
-      case PickerParameter():
+      case PickerKnob():
         parameter.value = value == null ? null : parameter.options[value];
       case _:
         return false;
@@ -228,7 +224,7 @@ class CatalogParameters {
 /// Provides the catalog's state to the entry below it, and rebuilds it when a
 /// knob moves.
 ///
-/// The [UICatalogState] a demo reads through `context.uiCatalog` is otherwise
+/// The [PreviewState] a demo reads through `context.uiCatalog` is otherwise
 /// the empty one, which answers every call with the default — which is exactly
 /// what should happen when the same widget is built inside the real app.
 class CatalogGuest extends StatefulWidget {
@@ -254,14 +250,14 @@ class CatalogGuest extends StatefulWidget {
 }
 
 class _CatalogGuestState extends State<CatalogGuest> {
-  CatalogParameters get _parameters => CatalogParameters.instance;
+  CatalogKnobs get _knobs => CatalogKnobs.instance;
 
   /// The axes are reset from here as well as the knobs, and it has to be from
   /// here: the shell is *below* this widget, so an entry whose wrapper is not a
   /// shell declares nothing at all, and without this the previous shell's axes
   /// would stay on the bar with no build ever coming to replace them.
   void _reset() {
-    _parameters.resetFor(widget.entryId);
+    _knobs.resetFor(widget.entryId);
     CatalogAxes.instance.resetFor(widget.entryId);
     // The same boundary, for the same reason: carrying one entry's failures
     // into the next reports a demo as broken because the one before it was.
@@ -291,29 +287,22 @@ class _CatalogGuestState extends State<CatalogGuest> {
     // for why the watch cannot see a scroll any other way.
     return GuestScrolls.instance.watching(
       child: ValueListenableBuilder<int>(
-        valueListenable: _parameters.revision,
+        valueListenable: _knobs.revision,
         builder: (context, revision, _) {
           // Everything below is about to re-declare what it reads, which is the
           // only chance there is to notice a knob nobody reads any more.
-          _parameters._beginPass();
-          return UICatalogStateProvider(
-            // A new state per revision on purpose: the provider notifies its
-            // dependents by identity, and the demo *is* a dependent — reading a
-            // knob is what subscribed it.
-            state: _GuestCatalogState(_parameters.editable, revision),
+          _knobs._beginPass();
+          return KnobsProvider(
+            knobs: _knobs.editable,
+            // One editable set for the life of the guest, so the revision is
+            // what tells the provider anything happened: dependents are notified
+            // by comparison, and the demo *is* a dependent — reading a knob is
+            // what subscribed it.
+            revision: revision,
             child: KeyedSubtree(key: CatalogGuest.demoKey, child: widget.child),
           );
         },
       ),
     );
   }
-}
-
-class _GuestCatalogState implements UICatalogState {
-  _GuestCatalogState(this.parameters, this.revision);
-
-  @override
-  final Parameters parameters;
-
-  final int revision;
 }

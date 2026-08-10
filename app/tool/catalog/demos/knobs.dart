@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutterware/previews.dart';
 
 import 'shell.dart';
 
 /// Declares its controls by reading them while it builds, which is how the
 /// catalog learns they exist — there is no list of knobs anywhere, only the
 /// calls a demo makes.
-@Demo(name: 'Knobs', wrapper: wrapInApp)
+@Preview(name: 'Knobs', wrapper: wrapInApp)
 Widget knobs() => const _Knobs();
 
 class _Knobs extends StatelessWidget {
@@ -15,7 +16,7 @@ class _Knobs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var parameters = context.uiCatalog.parameters;
+    var parameters = context.knobs;
     var label = parameters.string('label', 'Hello');
     var count = parameters.int('count', 2, min: 0, max: 9);
     var dense = parameters.bool('dense', false);

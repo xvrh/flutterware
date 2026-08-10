@@ -6,7 +6,7 @@ import 'run_plugin.dart';
 import 'server_plugin.dart';
 import 'scenarios_plugin.dart';
 import 'splash_plugin.dart';
-import 'ui_catalog_plugin.dart';
+import 'previews_plugin.dart';
 
 /// The panels compiled into this GUI binary.
 ///
@@ -25,5 +25,5 @@ PluginRegistry buildNativeRegistry() => PluginRegistry({
   serverPluginId: panelFor<ServerCore>(ServerPlugin.new),
   scenariosPluginId: panelFor<ScenariosCore>(ScenariosPlugin.new),
   splashPluginId: panelFor<SplashCore>(SplashPlugin.new),
-  uiCatalogPluginId: panelFor<UiCatalogCore>(UiCatalogPlugin.new),
+  uiCatalogPluginId: panelFor<PreviewsCore>(PreviewsPlugin.new),
 });

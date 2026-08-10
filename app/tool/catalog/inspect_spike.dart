@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutterware_app/src/catalog/compiler_daemon_client.dart';
-import 'package:flutterware_app/src/catalog/devices.dart';
-import 'package:flutterware_app/src/catalog/package_config_locator.dart';
-import 'package:flutterware_app/src/catalog/protocol.dart';
+import 'package:flutterware_app/src/previews/compiler_daemon_client.dart';
+import 'package:flutterware_app/src/previews/devices.dart';
+import 'package:flutterware_app/src/previews/package_config_locator.dart';
+import 'package:flutterware_app/src/previews/protocol.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
 import 'package:flutterware_app/src/embedder/protocol.dart' as ipc;
@@ -156,7 +156,7 @@ Future<void> _reportExtensions(_Guest guest) async {
     'ext.flutter.inspector.widgetLocationIdMap',
     'ext.flutter.accessibilityEvaluations',
     'ext.flutter.debugPaint',
-    'ext.flutterware.parameters',
+    'ext.flutterware.knobs',
   ]) {
     stdout.writeln('${rpcs.contains(wanted) ? 'YES' : 'no '}  $wanted');
   }

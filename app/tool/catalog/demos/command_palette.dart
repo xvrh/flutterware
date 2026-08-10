@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/plugins.dart';
-import 'package:flutterware/ui_catalog.dart';
 import 'package:flutterware_app/src/ui/command_palette.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
@@ -36,7 +36,7 @@ SearchHit _hit(
   String? subtitle,
   List<int> matched = const [],
   List<String> segments = const [],
-  String plugin = 'flutterware.ui_catalog',
+  String plugin = 'flutterware.previews',
 }) => SearchHit(
   address: _address(plugin, segments),
   title: title,
@@ -50,10 +50,10 @@ SearchHit _hit(
 /// What typing "dash" really returns: an entry that carries its own address,
 /// then the coarser things that also matched.
 List<PaletteSection> get _populated => [
-  PaletteSection('UI catalog', [
+  PaletteSection('Previews', [
     _hit(
       'Dashboard',
-      group: 'UI catalog',
+      group: 'Previews',
       reason: SearchReason.item,
       subtitle: 'tool/catalog/demos/dashboard.dart#dashboard',
       matched: const [0, 1, 2, 3],
@@ -61,12 +61,12 @@ List<PaletteSection> get _populated => [
     ),
     _hit(
       'Avatar tile / Empty',
-      group: 'UI catalog',
+      group: 'Previews',
       reason: SearchReason.item,
       subtitle: 'tool/catalog/demos/avatar_tile.dart#avatarTileEmpty',
       segments: const ['app', 'tool/catalog/demos/avatar_tile.dart#empty'],
     ),
-    _hit('app', group: 'UI catalog', reason: SearchReason.package),
+    _hit('app', group: 'Previews', reason: SearchReason.package),
   ]),
   PaletteSection('Dependencies', [
     _hit(
@@ -85,10 +85,10 @@ List<PaletteSection> get _populated => [
   ]),
 ];
 
-@Demo(name: 'Results', group: 'Command palette', wrapper: wrapInAppTheme)
+@Preview(name: 'Results', group: 'Command palette', wrapper: wrapInAppTheme)
 Widget paletteResults() => _Case(query: 'dash', sections: _populated);
 
-@Demo(
+@Preview(
   name: 'Third row selected',
   group: 'Command palette',
   wrapper: wrapInAppTheme,
@@ -96,13 +96,17 @@ Widget paletteResults() => _Case(query: 'dash', sections: _populated);
 Widget paletteSelected() =>
     _Case(query: 'dash', sections: _populated, selected: 2);
 
-@Demo(name: 'Nothing typed', group: 'Command palette', wrapper: wrapInAppTheme)
+@Preview(
+  name: 'Nothing typed',
+  group: 'Command palette',
+  wrapper: wrapInAppTheme,
+)
 Widget paletteIdle() => const _Case(sections: []);
 
-@Demo(name: 'No match', group: 'Command palette', wrapper: wrapInAppTheme)
+@Preview(name: 'No match', group: 'Command palette', wrapper: wrapInAppTheme)
 Widget paletteNoMatch() => const _Case(query: 'zzzz', sections: []);
 
-@Demo(
+@Preview(
   name: 'Loading, nothing yet',
   group: 'Command palette',
   wrapper: wrapInAppTheme,
@@ -110,7 +114,7 @@ Widget paletteNoMatch() => const _Case(query: 'zzzz', sections: []);
 Widget paletteLoadingEmpty() =>
     const _Case(query: 'dash', sections: [], loading: true);
 
-@Demo(
+@Preview(
   name: 'Loading over results',
   group: 'Command palette',
   wrapper: wrapInAppTheme,
@@ -118,16 +122,16 @@ Widget paletteLoadingEmpty() =>
 Widget paletteLoadingResults() =>
     _Case(query: 'dash', sections: _populated, loading: true);
 
-@Demo(name: 'One result', group: 'Command palette', wrapper: wrapInAppTheme)
+@Preview(name: 'One result', group: 'Command palette', wrapper: wrapInAppTheme)
 Widget paletteSingle() => _Case(
   query: 'dashboard',
   sections: [
-    PaletteSection('UI catalog', [_populated.first.hits.first]),
+    PaletteSection('Previews', [_populated.first.hits.first]),
   ],
 );
 
 /// Every provenance chip, so none of them is first seen in production.
-@Demo(
+@Preview(
   name: 'Every kind of hit',
   group: 'Command palette',
   wrapper: wrapInAppTheme,
@@ -149,7 +153,7 @@ Widget paletteKinds() => _Case(
 
 /// The shapes that break a row: no subtitle, a title past the edge, a subtitle
 /// past the edge, RTL, and a title that is short but tall.
-@Demo(
+@Preview(
   name: 'Awkward content',
   group: 'Command palette',
   wrapper: wrapInAppTheme,
@@ -187,7 +191,7 @@ Widget paletteAwkward() => _Case(
 
 /// Enough rows to scroll, which proves the list scrolls inside the panel rather
 /// than growing it.
-@Demo(
+@Preview(
   name: 'Long enough to scroll',
   group: 'Command palette',
   wrapper: wrapInAppTheme,

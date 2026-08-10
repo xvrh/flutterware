@@ -85,7 +85,7 @@ class Address {
   /// the first one opens.
   final String? worktree;
 
-  /// The declared plugin id — `flutterware.ui_catalog`. Null addresses the
+  /// The declared plugin id — `flutterware.previews`. Null addresses the
   /// worktree itself, which is what "open this worktree" needs.
   final String? plugin;
 

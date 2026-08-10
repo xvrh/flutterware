@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/plugins.dart';
-import 'package:flutterware/ui_catalog.dart';
 import 'package:flutterware_app/src/shell/address_bar.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
@@ -47,15 +47,15 @@ const _worktrees = [
 
 Address get _deep => Address(
   worktree: '~',
-  plugin: 'flutterware.ui_catalog',
+  plugin: 'flutterware.previews',
   segments: ['app', 'tool/demos', 'avatar.dart#members'],
   axes: {'axis.theme': 'dark'},
 );
 
-@Demo(name: 'Live', group: 'Address bar', wrapper: wrapInAppTheme)
+@Preview(name: 'Live', group: 'Address bar', wrapper: wrapInAppTheme)
 Widget addressBarLive() => const _Live();
 
-@Demo(name: 'States', group: 'Address bar', wrapper: wrapInAppTheme)
+@Preview(name: 'States', group: 'Address bar', wrapper: wrapInAppTheme)
 Widget addressBarStates() => ListView(
   padding: const EdgeInsets.symmetric(vertical: FwSpacing.xl),
   children: [

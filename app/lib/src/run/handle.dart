@@ -39,7 +39,7 @@ class RunHandle {
     this.vmService,
     this.appId,
     this.logPath,
-    this.knobs = const {},
+    this.defines = const {},
     this.protocol = runHandleProtocol,
     this.handlePath,
   });
@@ -92,10 +92,10 @@ class RunHandle {
   /// own protocol.
   final String? appId;
 
-  /// The launch knobs this run was built with — the dart-defines. Recorded
+  /// The launch defines this run was built with — the dart-defines. Recorded
   /// because changing one costs a rebuild, so "what is running there" is not
   /// answered by the entry point alone.
-  final Map<String, String> knobs;
+  final Map<String, String> defines;
 
   /// Where the launcher's `--machine` stream is being written.
   final String? logPath;
@@ -119,7 +119,7 @@ class RunHandle {
     'launcherPid': launcherPid,
     if (vmService != null) 'vmService': vmService,
     if (appId != null) 'appId': appId,
-    if (knobs.isNotEmpty) 'knobs': knobs,
+    if (defines.isNotEmpty) 'defines': defines,
     if (logPath != null) 'logPath': logPath,
     'startedAt': startedAt.toUtc().toIso8601String(),
     'protocol': protocol,
@@ -146,8 +146,8 @@ class RunHandle {
         vmService: map['vmService'] as String?,
         appId: map['appId'] as String?,
         logPath: map['logPath'] as String?,
-        knobs: {
-          for (var entry in (map['knobs'] as Map? ?? const {}).entries)
+        defines: {
+          for (var entry in (map['defines'] as Map? ?? const {}).entries)
             if (entry.value is String) '${entry.key}': entry.value! as String,
         },
         protocol: map['protocol'] as int? ?? runHandleProtocol,
@@ -192,7 +192,7 @@ class RunHandle {
     launcherPid: launcherPid,
     vmService: vmService ?? this.vmService,
     appId: appId ?? this.appId,
-    knobs: knobs,
+    defines: defines,
     logPath: logPath,
     startedAt: startedAt,
     protocol: protocol,
@@ -226,7 +226,7 @@ class RunHandle {
       launcherPid: launcherPid,
       vmService: vmService,
       appId: appId,
-      knobs: knobs,
+      defines: defines,
       logPath: logPath,
       startedAt: startedAt,
       protocol: protocol,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutterware/previews.dart';
 
 /// A second shell, with axes of its own.
 ///
@@ -13,14 +14,14 @@ enum Loudness { quiet, loud }
 
 enum Flavour { plain, fancy }
 
-Widget wrapInPlainApp(Widget child) => CatalogShell(
+Widget wrapInPlainApp(Widget child) => PreviewShell(
   'plain',
-  builder: (context, topBar) {
-    var loudness = topBar.picker('loudness', {
+  builder: (context, axes) {
+    var loudness = axes.picker('loudness', {
       'Quiet': Loudness.quiet,
       'Loud': Loudness.loud,
     }, Loudness.quiet);
-    var flavor = topBar.picker('flavor', {
+    var flavor = axes.picker('flavor', {
       'Plain': Flavour.plain,
       'Fancy': Flavour.fancy,
     }, Flavour.plain);
@@ -50,5 +51,5 @@ Widget wrapInPlainApp(Widget child) => CatalogShell(
 
 /// A `Scaffold`, for the `Material` it brings: a bare `Center` leaves its text
 /// with the style `MaterialApp` installs to flag a missing one.
-@Demo(name: 'Elsewhere', wrapper: wrapInPlainApp)
+@Preview(name: 'Elsewhere', wrapper: wrapInPlainApp)
 Widget elsewhere() => const Scaffold(body: Center(child: Text('ELSEWHERE')));

@@ -75,7 +75,7 @@ The GUI texture path is verified manually via the harness.
 
 Two guest-side replacements for platform plumbing this embedder does not have,
 both installed by the generated catalog entrypoint and both in
-`package:flutterware/ui_catalog_guest.dart`:
+`package:flutterware/previews_guest.dart`:
 
 - **`GuestKeyboard`** — delivery. `FlutterEngineSendKeyEvent` alone reaches
   nothing: `KeyEventManager` infers a `keyDataThenRawKeyData` embedder from the

@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:flutterware_app/src/address/address_scope.dart';
 
-/// The shape the UI catalog will nest into: a package, then an entry that owns
+/// The shape Previews nests into: a package, then an entry that owns
 /// the knobs. Written out here so the granularity tests are about a real tree
 /// rather than an arrangement invented to pass.
 Address _catalog({
@@ -11,7 +11,7 @@ Address _catalog({
   Map<String, String> axes = const {},
 }) => Address(
   worktree: 'main',
-  plugin: 'flutterware.ui_catalog',
+  plugin: 'flutterware.previews',
   segments: ['app', entry],
   axes: axes,
 );
@@ -103,7 +103,7 @@ void main() {
 
       expect(written!.segments, ['app', 'demo/team.dart#list']);
       expect(written!.worktree, 'main');
-      expect(written!.plugin, 'flutterware.ui_catalog');
+      expect(written!.plugin, 'flutterware.previews');
     });
 
     test('replacing a level truncates everything deeper', () {

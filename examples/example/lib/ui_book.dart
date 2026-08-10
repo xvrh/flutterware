@@ -33,26 +33,20 @@ class _DashboardBook extends StatelessWidget {
     return Figma(
       links: ['https://www.figma.com/design/aaa/bbb?node-id=93-2293'],
       child: DashboardTile(
-        title: context.uiCatalog.parameters.string('title', 'My title'),
-        count: context.uiCatalog.parameters.int('count', 1, min: 0, max: 100),
-        logoStyle: context.uiCatalog.parameters.picker('logoStyle', {
+        title: context.knobs.string('title', 'My title'),
+        count: context.knobs.int('count', 1, min: 0, max: 100),
+        logoStyle: context.knobs.picker('logoStyle', {
           for (var v in FlutterLogoStyle.values) v.toString(): v,
         }, FlutterLogoStyle.markOnly),
-        logoSize: context.uiCatalog.parameters.double('logoSize', 100),
-        redBackground: context.uiCatalog.parameters.bool(
-          'redBackground',
-          false,
-        ),
-        dateTime: context.uiCatalog.parameters.dateTime(
-          'dateTime',
-          DateTime(2024),
-        ),
-        dateOnly: context.uiCatalog.parameters.dateTime(
+        logoSize: context.knobs.double('logoSize', 100),
+        redBackground: context.knobs.bool('redBackground', false),
+        dateTime: context.knobs.dateTime('dateTime', DateTime(2024)),
+        dateOnly: context.knobs.dateTime(
           'dateOnly',
           DateTime(2024),
           dateOnly: true,
         ),
-        nullableDateTime: context.uiCatalog.parameters.nullableDateTime(
+        nullableDateTime: context.knobs.nullableDateTime(
           'nullableDateTime',
           null,
         ),
@@ -110,7 +104,7 @@ class WithTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var count = context.uiCatalog.parameters.int('counter', 0);
+    var count = context.knobs.int('counter', 0);
     return Scaffold(
       appBar: AppBar(title: Text('With text fields')),
       body: ListView(

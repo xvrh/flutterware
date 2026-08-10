@@ -1,11 +1,46 @@
 ## 0.5.2
 
-- New entry model: declare demos with `@Demo(...)` (extends Flutter's
-  `Preview`), and declare axes with `CatalogShell` / `TopBarState`.
-- `ui_catalog.dart` exports only what a project writes: `Demo`, `FormFactor`,
-  `Figma`, `UICatalog*`, `CatalogShell`, `TopBarState`. The guest-side
-  machinery the flutterware GUI drives lives in `ui_catalog_guest.dart`,
-  which only generated code imports.
+The UI catalog tool is now **Previews**, and entries are declared with
+Flutter's own annotation. Breaking, with no deprecation path.
+
+- **`@Demo` is gone.** Annotate with `@Preview` from
+  `package:flutter/widget_previews.dart`; a preview written for Flutter's own
+  previewer is an entry here with nothing to change. `formFactor:` went with
+  it — pin a canvas from the panel instead.
+- **The whole package is scanned**, not `demo/` only, so a preview beside the
+  widget it shows is found. Files `git` ignores are skipped, and symlinks are
+  not followed. `Previews(directory: …)` narrows the scan, and moves where
+  `new` writes.
+- **New library `previews.dart`** — what `@Preview` does not carry:
+  `PreviewShell` and `PreviewAxes` for the top bar's axes, and `context.knobs.*`
+  for knobs. It is imported only when you want one of those; declaring a preview
+  imports nothing of flutterware's.
+- **`TopBarState` is `PreviewAxes`**, and a shell's builder is handed `axes`
+  rather than `topBar`. It named the furniture the switches are drawn on, which
+  left nothing in the API to connect it to `--axes=`, `describe --axes=true` or
+  the `axes:` on an artifact's address.
+- **Knobs are called knobs in Dart too.** `context.previews.parameters.*` and
+  `context.uiCatalog.parameters.*` are both now **`context.knobs.*`**, the type
+  is `Knobs` (exported, so knob-setting can be factored out), and the devbar's
+  `DevbarKnobs` typedef — which existed only to give the class the right name —
+  is gone. The CLI's `--knobs=`, `KnobDescriptor` and the panel already said
+  knob; only the Dart API disagreed, and "parameters" means the *non*-interactive
+  tier in Storybook and the arguments of a function in Dart.
+- **`ui_catalog.dart` is now only the in-app catalog** — `UICatalog`,
+  `FormFactor`, `Figma`, plus `Knobs` — the browsable page you ship inside your
+  own app. `CatalogShell` moved to `previews.dart` as `PreviewShell`;
+  `UICatalogState` is gone, and `UICatalogStateProvider` is `KnobsProvider`.
+- `ui_catalog_guest.dart`, which only generated code imports, is
+  `previews_guest.dart`.
+- The plugin is `Previews(...)` (was `UiCatalog(...)`) and its id is
+  `flutterware.previews`, so the CLI reads `fw run previews …`.
+- **A `Run` entry point declares `defines`, not `knobs`.** `LaunchKnob` is
+  `DartDefine` (its `define:` field is now `name:`), `KnobSource` is
+  `DefineSource`, `Entrypoint(knobs: …)` is `Entrypoint(defines: …)`, and
+  `fw run run launch --knobs=` is `--defines=`. Both plugins spelled `--knobs=`
+  for opposite costs: a preview knob is read while a widget builds and changing
+  one costs a frame, while these are compiled in and changing one costs a full
+  rebuild and reinstall. The manifest key and the `launch` result field follow.
 
 ## 0.5.1
 

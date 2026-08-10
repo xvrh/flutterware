@@ -206,7 +206,7 @@ class RunEntrypointEntry {
     this.flavorSource,
     this.platforms = const [],
     this.devices = const [],
-    this.knobs = const [],
+    this.defines = const [],
   });
 
   /// Package-relative — what `launch` takes as its `entrypoint`.
@@ -245,7 +245,7 @@ class RunEntrypointEntry {
   /// that `desktop` means three platforms, nor which of them is plugged in.
   final List<String> devices;
 
-  final List<RunKnobEntry> knobs;
+  final List<DartDefineEntry> defines;
 
   Map<String, Object?> toJson() => _$RunEntrypointEntryToJson(this);
 }
@@ -257,9 +257,9 @@ class RunEntrypointEntry {
   includeIfNull: false,
   createFactory: false,
 )
-class RunKnobEntry {
-  RunKnobEntry({
-    required this.define,
+class DartDefineEntry {
+  DartDefineEntry({
+    required this.name,
     this.label,
     this.description,
     this.defaultValue,
@@ -269,8 +269,9 @@ class RunKnobEntry {
     this.problem,
   });
 
-  /// The define's name, as `String.fromEnvironment` reads it.
-  final String define;
+  /// The name `String.fromEnvironment` reads.
+  @JsonKey(name: 'define')
+  final String name;
 
   final String? label;
   final String? description;
@@ -294,7 +295,7 @@ class RunKnobEntry {
   /// The package-relative file the read is in. Absent when nothing reads it.
   final String? readAt;
 
-  /// What is wrong with this knob, when something is.
+  /// What is wrong with this define, when something is.
   ///
   /// There is exactly one such thing worth saying and it is the expensive one:
   /// **a declared define that the app never reads**. It compiles, it launches,
@@ -302,7 +303,7 @@ class RunKnobEntry {
   /// which is indistinguishable from a feature that does not work.
   final String? problem;
 
-  Map<String, Object?> toJson() => _$RunKnobEntryToJson(this);
+  Map<String, Object?> toJson() => _$DartDefineEntryToJson(this);
 }
 
 /// `launch` — one run started, and how far it got.
@@ -438,7 +439,7 @@ class RunAppEntry {
     this.deviceName,
     this.package,
     this.entrypointName,
-    this.knobs = const {},
+    this.defines = const {},
     this.vmService,
     this.log,
     this.error,
@@ -462,8 +463,8 @@ class RunAppEntry {
 
   /// The dart-defines it was built with. Part of the identity of what is
   /// running: changing one costs a rebuild, so two runs of the same entry
-  /// point with different knobs are not the same thing.
-  final Map<String, String> knobs;
+  /// point with different defines are not the same thing.
+  final Map<String, String> defines;
 
   /// When it started, ISO-8601.
   final String since;

@@ -435,7 +435,7 @@ void main() {
       expect(found.every((e) => !e.declared), isTrue);
     });
 
-    test('a declaration wins over the scan, and carries the knobs', () async {
+    test('a declaration wins over the scan, and carries the defines', () async {
       _writePackage(worktree, 'app', {
         'lib/main.dart': 'void main() {}',
         'lib/other.dart': 'void main() {}',
@@ -450,7 +450,7 @@ void main() {
                 {
                   'path': 'lib/main.dart',
                   'name': 'Staging',
-                  'knobs': [
+                  'defines': [
                     {'define': 'API_BASE_URL', 'from': 'hostAddresses'},
                   ],
                 },
@@ -467,10 +467,10 @@ void main() {
       // `lib/other.dart` has a main() and is not offered: naming two entry
       // points meant those two.
       expect(package.entrypoints.single.name, 'Staging');
-      expect(package.entrypoints.single.knobs.single.define, 'API_BASE_URL');
+      expect(package.entrypoints.single.defines.single.name, 'API_BASE_URL');
     });
 
-    test('a knob offers the servers that are running right now', () async {
+    test('a define offers the servers that are running right now', () async {
       _writePackage(worktree, 'app', {'lib/main.dart': 'void main() {}'});
       File(p.join(runDir.path, 'srv-abc-api-42.json')).writeAsStringSync(
         jsonEncode({
@@ -491,7 +491,7 @@ void main() {
               'entrypoints': [
                 {
                   'path': 'lib/main.dart',
-                  'knobs': [
+                  'defines': [
                     {'define': 'API', 'from': 'servers', 'default': 'x'},
                   ],
                 },
@@ -503,12 +503,12 @@ void main() {
 
       var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
 
-      var knob = result.packages.single.entrypoints.single.knobs.single;
-      expect(knob.options, contains('http://192.168.1.20:8080'));
-      expect(knob.defaultValue, 'x');
+      var define = result.packages.single.entrypoints.single.defines.single;
+      expect(define.options, contains('http://192.168.1.20:8080'));
+      expect(define.defaultValue, 'x');
     });
 
-    test('launching refuses a knob the entry point does not declare', () async {
+    test('launching refuses a define the entry point does not declare', () async {
       _writePackage(worktree, 'app', {'lib/main.dart': 'void main() {}'});
       core = _coreFor(
         worktree,
@@ -519,7 +519,7 @@ void main() {
               'entrypoints': [
                 {
                   'path': 'lib/main.dart',
-                  'knobs': [
+                  'defines': [
                     {'define': 'API'},
                   ],
                 },
@@ -534,15 +534,15 @@ void main() {
       await expectLater(
         core.invoke(
           'launch',
-          arguments: {'device': 'phone', 'knobs': 'APII=x'},
+          arguments: {'device': 'phone', 'defines': 'APII=x'},
         ),
         throwsA(
           isA<ArgumentError>().having(
             (e) => '$e',
             'message',
-            // "has", not "declares": since the scan, a knob can come from the
+            // "has", not "declares": since the scan, a define can come from the
             // source as well as from the config, and the refusal covers both.
-            contains('has no such knob'),
+            contains('has no such define'),
           ),
         ),
       );
@@ -738,36 +738,40 @@ void main() {
       expect(scanDefines(p.join(worktree.path, 'app')), contains('B'));
     });
 
-    test('a package that declares no knobs offers the ones it reads', () async {
-      _writePackage(worktree, 'app', {
-        'lib/main.dart': 'void main() {}',
-        'lib/src/config.dart':
-            "const api = String.fromEnvironment('API', defaultValue: 'x');",
-      });
-      core = _coreFor(
-        worktree,
-        config: {
-          'packages': [
-            {
-              'path': 'app',
-              'entrypoints': [
-                {'path': 'lib/main.dart', 'name': 'App'},
-              ],
-            },
-          ],
-        },
-      );
+    test(
+      'a package that declares no defines offers the ones it reads',
+      () async {
+        _writePackage(worktree, 'app', {
+          'lib/main.dart': 'void main() {}',
+          'lib/src/config.dart':
+              "const api = String.fromEnvironment('API', defaultValue: 'x');",
+        });
+        core = _coreFor(
+          worktree,
+          config: {
+            'packages': [
+              {
+                'path': 'app',
+                'entrypoints': [
+                  {'path': 'lib/main.dart', 'name': 'App'},
+                ],
+              },
+            ],
+          },
+        );
 
-      var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
-      var knob = result.packages.single.entrypoints.single.knobs.single;
-      expect(knob.define, 'API');
-      expect(knob.kind, 'String');
-      expect(knob.readAt, 'lib/src/config.dart');
-      expect(knob.defaultValue, 'x');
-      expect(knob.problem, isNull);
-    });
+        var result =
+            (await core.invoke('entrypoints'))! as RunEntrypointsResult;
+        var define = result.packages.single.entrypoints.single.defines.single;
+        expect(define.name, 'API');
+        expect(define.kind, 'String');
+        expect(define.readAt, 'lib/src/config.dart');
+        expect(define.defaultValue, 'x');
+        expect(define.problem, isNull);
+      },
+    );
 
-    test('a declared knob nothing reads is reported as such', () async {
+    test('a declared define nothing reads is reported as such', () async {
       _writePackage(worktree, 'app', {
         'lib/main.dart': 'void main() {}',
         'lib/src/config.dart':
@@ -783,7 +787,7 @@ void main() {
                 {
                   'path': 'lib/main.dart',
                   'name': 'App',
-                  'knobs': [
+                  'defines': [
                     {'define': 'API_BASE_URI'},
                   ],
                 },
@@ -794,15 +798,15 @@ void main() {
       );
 
       var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
-      var knob = result.packages.single.entrypoints.single.knobs.single;
+      var define = result.packages.single.entrypoints.single.defines.single;
       // One letter out. It compiles, it launches, the control appears, and
       // turning it does nothing — which looks exactly like a broken feature.
-      expect(knob.define, 'API_BASE_URI');
-      expect(knob.problem, contains('nothing in this package reads'));
-      expect(knob.readAt, isNull);
+      expect(define.name, 'API_BASE_URI');
+      expect(define.problem, contains('nothing in this package reads'));
+      expect(define.readAt, isNull);
     });
 
-    test('launching refuses a knob no config and no source knows', () async {
+    test('launching refuses a define no config and no source knows', () async {
       _writePackage(worktree, 'app', {
         'lib/main.dart': 'void main() {}',
         'lib/src/config.dart': "const api = String.fromEnvironment('API');",
@@ -821,18 +825,18 @@ void main() {
         },
       );
 
-      // Before the scan there were no knobs to check against, so a package
+      // Before the scan there were no defines to check against, so a package
       // that declared none had to accept anything.
       await expectLater(
         core.invoke(
           'launch',
-          arguments: {'device': 'phone', 'knobs': 'APII=x'},
+          arguments: {'device': 'phone', 'defines': 'APII=x'},
         ),
         throwsA(
           isA<ArgumentError>().having(
             (e) => '$e',
             'message',
-            allOf(contains('no such knob'), contains('API')),
+            allOf(contains('no such define'), contains('API')),
           ),
         ),
       );

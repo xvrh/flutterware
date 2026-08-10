@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutterware_app/src/catalog/asset_bundle.dart';
-import 'package:flutterware_app/src/catalog/catalog_entry.dart';
-import 'package:flutterware_app/src/catalog/compile_blame.dart';
-import 'package:flutterware_app/src/catalog/daemon_address.dart';
-import 'package:flutterware_app/src/catalog/discovery.dart';
-import 'package:flutterware_app/src/catalog/protocol.dart';
-import 'package:flutterware_app/src/catalog/entrypoint_generator.dart';
+import 'package:flutterware_app/src/previews/asset_bundle.dart';
+import 'package:flutterware_app/src/previews/catalog_entry.dart';
+import 'package:flutterware_app/src/previews/compile_blame.dart';
+import 'package:flutterware_app/src/previews/daemon_address.dart';
+import 'package:flutterware_app/src/previews/discovery.dart';
+import 'package:flutterware_app/src/previews/protocol.dart';
+import 'package:flutterware_app/src/previews/entrypoint_generator.dart';
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/resident_compiler.dart';
@@ -132,9 +132,6 @@ class _Daemon {
   late final EntrypointGenerator _generator;
   late final CatalogScanner _scanner;
 
-  /// What the roots looked like when [_discovered] was produced.
-  var _scanned = '';
-
   /// Bumped whenever the compiler *accepts* anything — a fresh library from a
   /// rescan, an edit, or the entrypoint rewrite a select is.
   ///
@@ -232,8 +229,11 @@ class _Daemon {
   /// Re-runs discovery when the files under the roots have moved, so an entry
   /// added, renamed or deleted while the catalog is open shows up.
   ///
-  /// Guarded by a fingerprint rather than run every time: discovery reads and
-  /// parses, and this sits on the reload loop.
+  /// Runs the scan every time and lets it answer "nothing moved" — it keeps
+  /// each file's result and re-reads only what changed, so a scan that finds
+  /// nothing costs what asking whether to scan used to. Asking first was a
+  /// second walk of the whole package on exactly the reloads that had work to
+  /// do; see [ScanResult.changed].
   ///
   /// A scan that comes back with errors is *reported and dropped* — the entry
   /// set stays as it was. Refusing to serve is right at startup, where nothing
@@ -248,12 +248,9 @@ class _Daemon {
   final _pending = <Uri>{};
 
   void _rescanIfNeeded() {
-    var fingerprint = _scanner.fingerprint();
-    if (fingerprint == _scanned) return;
-    _scanned = fingerprint;
-
     var watch = Stopwatch()..start();
     var scan = _scanner.scan();
+    if (!scan.changed) return;
     if (!scan.ok) {
       stderr.writeln(
         '[catalog] rescan found errors, keeping the previous entries:\n'
@@ -325,8 +322,7 @@ class _Daemon {
       before.annotation != after.annotation ||
       before.name != after.name ||
       before.group != after.group ||
-      before.symbol != after.symbol ||
-      before.formFactor != after.formFactor;
+      before.symbol != after.symbol;
 
   /// Looked up among everything discovered, not only what is servable: an entry
   /// that does not compile has to stay selectable, because selecting it is how
@@ -443,7 +439,6 @@ class _Daemon {
       roots: config.roots,
       previewAnnotations: config.previewAnnotations,
     );
-    _scanned = _scanner.fingerprint();
     var scan = _scanner.scan();
     if (!scan.ok) {
       // A duplicate id or an uncallable target means an entry would be missing
@@ -478,9 +473,9 @@ class _Daemon {
         'no catalog entries found. Looked for '
         '${config.previewAnnotations.map((a) => '@$a').join(' and ')} in every '
         '.dart file under:\n$looked\n'
-        'Demos live in `demo/` unless the project says otherwise — set '
-        r"`UiCatalog(packages: [.new(app, directory: '...')])` in "
-        'tool/flutterware.dart, or run `fw run ui_catalog new '
+        'Previews live in `demo/` unless the project says otherwise — set '
+        r"`Previews(packages: [.new(app, directory: '...')])` in "
+        'tool/flutterware.dart, or run `fw run previews new '
         r"--name='Buttons'` to write the first one.",
       );
     }
@@ -1072,7 +1067,7 @@ class _Daemon {
   ///
   /// Runs wherever a rescan runs — the refresh request and every select —
   /// because they answer the same question about different halves of the
-  /// project: a rescan notices the demos moved, this notices the assets did.
+  /// project: a rescan notices the previews moved, this notices the assets did.
   /// ~30ms measured when nothing changed, against a picture that is wrong.
   Future<void> _refreshAssets() async {
     if (!_prepared.isCompleted) return;

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart' show fuzzyMatch;
 
 import '../../address/address_scope.dart';
-import '../../catalog/devices.dart';
+import '../../previews/devices.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/flow_view.dart';

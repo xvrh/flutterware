@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import '../../ui_catalog/parameters.dart';
-import '../../ui_catalog/parameters_editor.dart';
+import '../../ui_catalog/knobs.dart';
+import '../../ui_catalog/knobs_editor.dart';
 import '../devbar.dart';
 import '../ui/button.dart';
 import '../ui/service.dart';
 
-typedef DevbarKnobs = Parameters;
-
 class AddDevbarKnobs extends StatefulWidget {
-  final Widget Function(BuildContext, DevbarKnobs) builder;
+  final Widget Function(BuildContext, Knobs) builder;
   final BuildContext? context;
 
   const AddDevbarKnobs({super.key, required this.builder, this.context});
@@ -18,10 +16,7 @@ class AddDevbarKnobs extends StatefulWidget {
 }
 
 class _AddDevbarKnobsState extends State<AddDevbarKnobs> {
-  late final _knobs = EditableParameters(
-    onRefresh: _refresh,
-    onAdded: _refresh,
-  );
+  late final _knobs = EditableKnobs(onRefresh: _refresh, onAdded: _refresh);
 
   void _refresh() {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
@@ -60,7 +55,7 @@ class _AddDevbarKnobsState extends State<AddDevbarKnobs> {
 }
 
 class _BottomSheet extends StatelessWidget {
-  final EditableParameters parameters;
+  final EditableKnobs parameters;
 
   const _BottomSheet({required this.parameters});
 
@@ -85,7 +80,7 @@ class _BottomSheet extends StatelessWidget {
               ),
             ],
           ),
-          Expanded(child: ParametersEditor(parameters)),
+          Expanded(child: KnobsEditor(parameters)),
         ],
       ),
     );

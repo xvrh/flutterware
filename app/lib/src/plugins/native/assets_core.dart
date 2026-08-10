@@ -9,7 +9,8 @@ import 'package:path/path.dart' as p;
 import '../../assets/model/asset_catalog.dart';
 import '../../assets/model/asset_facts.dart';
 import '../../assets/model/asset_scan.dart';
-import '../../catalog/package_config_locator.dart';
+import '../../previews/package_config_locator.dart';
+import '../../utils/list_files.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
 import 'assets_address.dart';
@@ -685,15 +686,16 @@ class AssetsCore extends PluginCore {
     for (var declaration in scan.catalog.declarations) {
       // Own declarations only: a dependency's stray file is not actionable here.
       if (declaration.package != null || !declaration.isDirectory) continue;
-      var directory = Directory(
-        p.join(declaration.packageRoot, declaration.path),
-      );
-      if (!directory.existsSync()) continue;
+      var directory = p.join(declaration.packageRoot, declaration.path);
+      if (!Directory(directory).existsSync()) continue;
 
-      for (var entity in directory.listSync(recursive: true)) {
-        if (entity is! File) continue;
-        if (resolved.contains(entity.path)) continue;
-        var relative = p.relative(entity.path, from: declaration.packageRoot);
+      // Listed the way git lists — see `list_files.dart`. Both halves matter
+      // here: an ignored file under an asset directory is not "on disk and out
+      // of the app", it is generated output nobody meant to ship, and a
+      // recursive `listSync` follows symlinks by default.
+      for (var file in listFilesInDirectory(directory)) {
+        if (resolved.contains(file.path)) continue;
+        var relative = p.relative(file.path, from: declaration.packageRoot);
         findings.add(
           AssetFinding(
             kind: 'unreachable-file',

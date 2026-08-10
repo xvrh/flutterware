@@ -16,7 +16,7 @@ class EntrypointRef {
     this.description,
     this.flavor,
     this.platforms = const [],
-    this.knobs = const [],
+    this.defines = const [],
   });
 
   /// Package-relative, `/`-separated — `lib/main_staging.dart`.
@@ -33,7 +33,7 @@ class EntrypointRef {
 
   /// True when `tool/flutterware.dart` named it. A discovered entry point is
   /// still launchable; the difference is that nobody vouched for it, and it
-  /// carries no knobs.
+  /// carries no defines.
   final bool declared;
 
   /// The `--flavor` this entry point is built with, when the project has them.
@@ -44,7 +44,7 @@ class EntrypointRef {
   /// unexpanded. Empty means anything.
   final List<RunPlatform> platforms;
 
-  final List<LaunchKnob> knobs;
+  final List<DartDefine> defines;
 
   /// Every concrete platform this allows. Empty means no restriction.
   Set<RunPlatform> get allowedPlatforms => RunPlatform.expandAll(platforms);
@@ -109,7 +109,7 @@ List<EntrypointRef> declaredEntrypoints(Map<String, Object?> config) => [
           flavor: entry['flavor'] as String?,
           platforms: _platformsOf(entry['platforms']),
           declared: true,
-          knobs: _knobsOf(entry['knobs']),
+          defines: _definesOf(entry['defines']),
         ),
 ];
 
@@ -126,21 +126,21 @@ List<RunPlatform> _platformsOf(Object? raw) => [
     if (name is String) ?RunPlatform.byName(name),
 ];
 
-List<LaunchKnob> _knobsOf(Object? raw) => [
-  for (var knob in (raw as List? ?? const []))
-    if (knob is Map)
-      if (knob['define'] case String define)
-        LaunchKnob(
-          define,
-          label: knob['label'] as String?,
-          description: knob['description'] as String?,
-          defaultValue: knob['default'] as String?,
+List<DartDefine> _definesOf(Object? raw) => [
+  for (var entry in (raw as List? ?? const []))
+    if (entry is Map)
+      if (entry['define'] case String name)
+        DartDefine(
+          name,
+          label: entry['label'] as String?,
+          description: entry['description'] as String?,
+          defaultValue: entry['default'] as String?,
           options: [
-            for (var option in (knob['options'] as List? ?? const []))
+            for (var option in (entry['options'] as List? ?? const []))
               if (option is String) option,
           ],
-          from: switch (knob['from']) {
-            String name => KnobSource.byName(name),
+          from: switch (entry['from']) {
+            String name => DefineSource.byName(name),
             _ => null,
           },
         ),
@@ -150,7 +150,7 @@ List<LaunchKnob> _knobsOf(Object? raw) => [
 ///
 /// **Parsed, never resolved or compiled** — the posture the catalog and the
 /// scenario scanner already take. A `void main()` is as syntactically visible
-/// as a `@Demo` annotation, and finding one costs a parse rather than a build.
+/// as a `@Preview` annotation, and finding one costs a parse rather than a build.
 ///
 /// Deliberately not recursive. A `main()` under `lib/src/` is somebody's
 /// helper or a generated harness, not a thing to offer in a launch menu, and a

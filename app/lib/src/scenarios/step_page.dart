@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutterware/ui_catalog_guest.dart';
+import 'package:flutterware/previews_guest.dart';
 
 import '../address/address_scope.dart';
-import '../catalog/devices.dart';
+import '../previews/devices.dart';
 import '../inspect/elements_view.dart';
 import '../inspect/inspect_dock.dart';
 import '../inspect/node_highlight.dart';
@@ -17,7 +17,7 @@ import 'framed_shot.dart';
 import 'step_status.dart';
 
 /// One step, pushed over the flow: the frame big, the inspect dock under it —
-/// the same Chrome-shaped panel the UI catalog docks under its preview, with
+/// the same Chrome-shaped panel Previews docks under its preview, with
 /// the tabs a snapshot can honestly serve. The back arrow returns to the
 /// flow; previous/next walk the run's graph without going back.
 ///

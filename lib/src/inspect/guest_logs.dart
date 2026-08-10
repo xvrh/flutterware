@@ -4,7 +4,7 @@ import 'dart:developer' as developer;
 
 import 'log.dart';
 
-/// Keeps what the demo printed, where it can be asked for.
+/// Keeps what the preview printed, where it can be asked for.
 ///
 /// **The gap this closes.** The guest's `print` reached the *host's* console and
 /// nowhere else — the GUI could not show it, `fw` could not return it, and an
