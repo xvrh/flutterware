@@ -276,9 +276,12 @@ class _BranchSummary extends StatelessWidget {
         Text(
           pr == null
               ? 'no pull request'
-              : '#${pr.number}  ${pr.state.name}'
-                    '${pr.failingChecks > 0 ? '  ·  ${pr.failingChecks} failing' : ''}'
-                    '${pr.approvals > 0 ? '  ·  ${pr.approvals} approval' : ''}',
+              : [
+                  '#${pr.number}',
+                  pr.state.name,
+                  if (pr.failingChecks > 0) '${pr.failingChecks} failing',
+                  if (pr.review != ReviewState.none) pr.review.label,
+                ].join('  ·  '),
           style: context.type.bodySmall.copyWith(color: colors.mut2),
         ),
       ],

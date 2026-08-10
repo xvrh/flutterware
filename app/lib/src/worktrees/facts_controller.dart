@@ -57,19 +57,24 @@ class WorktreeFactsController extends ChangeNotifier {
   /// **Coalesced, not queued.** A second call while one is in flight returns the
   /// same future rather than starting a second sweep: the triggers are a screen
   /// appearing and a button, and both can fire twice in a frame.
-  Future<void> refresh(List<Worktree> worktrees) {
-    return _inFlight ??= _refresh(worktrees).whenComplete(() {
+  ///
+  /// [force] is what the button means and arriving does not: it re-asks the
+  /// forge instead of believing the last answer for five minutes. Git is
+  /// re-read either way — it is cheap and local, and a refresh that skipped it
+  /// would be lying about what it did.
+  Future<void> refresh(List<Worktree> worktrees, {bool force = false}) {
+    return _inFlight ??= _refresh(worktrees, force: force).whenComplete(() {
       _inFlight = null;
     });
   }
 
   Future<void>? _inFlight;
 
-  Future<void> _refresh(List<Worktree> worktrees) async {
+  Future<void> _refresh(List<Worktree> worktrees, {required bool force}) async {
     _refreshing = true;
     _notify();
     try {
-      _facts = await _probe.probe(worktrees);
+      _facts = await _probe.probe(worktrees, refreshForge: force);
       _refreshedAt = DateTime.now();
     } catch (e) {
       // A probe that throws must not take the window down. Individual facts

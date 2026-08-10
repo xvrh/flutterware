@@ -286,8 +286,14 @@ class ShellController extends ChangeNotifier {
 
   /// Re-probes every worktree. What the explorer calls when it appears and when
   /// its refresh button is pressed.
-  Future<void> refreshWorktreeFacts() async {
-    if (_worktreeFacts case var facts?) await facts.refresh(_worktrees);
+  ///
+  /// [force] is the button. Arriving on the screen settles for the last pull
+  /// request answer if it is minutes old; pressing refresh means you want to
+  /// know now, and pays the round trip for it.
+  Future<void> refreshWorktreeFacts({bool force = false}) async {
+    if (_worktreeFacts case var facts?) {
+      await facts.refresh(_worktrees, force: force);
+    }
   }
 
   /// True while the address names the shell's own config screen.

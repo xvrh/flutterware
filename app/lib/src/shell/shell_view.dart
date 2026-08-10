@@ -1500,7 +1500,7 @@ class _ExplorerState extends State<_Explorer> {
       currentWorktreePath: shell.selected?.path,
       onQueryChanged: (value) => setState(() => _query = value),
       onSortChanged: (value) => setState(() => _sort = value),
-      onRefresh: () => unawaited(shell.refreshWorktreeFacts()),
+      onRefresh: () => unawaited(shell.refreshWorktreeFacts(force: true)),
       // **Only the Open button opens.** Tapping a row expands it instead —
       // opening costs a config subprocess and a tab, and this screen exists so
       // you can decide before spending that.

@@ -78,7 +78,7 @@ List<ExplorerEntry> get _repo => [
           title: 'An entry point says what it runs on',
           state: PrState.open,
           checks: ChecksState.passing,
-          approvals: 1,
+          review: ReviewState.approved,
         ),
       ),
       activity: Fact.fresh(
@@ -151,7 +151,7 @@ List<ExplorerEntry> get _repo => [
           title: 'Run plugin entry restrictions',
           state: PrState.open,
           checks: ChecksState.passing,
-          reviewRequested: true,
+          review: ReviewState.changesRequested,
         ),
       ),
       activity: Fact.fresh(
@@ -333,7 +333,7 @@ Widget explorerRowStates() => _Sheet(
       ),
     ),
     _Labelled(
-      'a review is requested from you',
+      'someone asked for changes',
       _Row(
         label: 'Run plugin entry restrictions',
         branch: 'claude/run-plugin-entry-8e5682',

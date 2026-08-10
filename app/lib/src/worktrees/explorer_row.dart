@@ -726,6 +726,7 @@ class _PrCell extends StatelessWidget {
       ChecksState.pending => (Icons.schedule, colors.amber, 'checks running'),
       ChecksState.none => (null, colors.mut3, ''),
     };
+    var reviewText = pr.review.label;
 
     return _Lines(
       dim: fact.isDim,
@@ -755,17 +756,26 @@ class _PrCell extends StatelessWidget {
         ],
       ),
       bottom: Text(
-        [
-          if (checksText.isNotEmpty) checksText,
-          if (pr.reviewRequested)
-            'review you'
-          else if (pr.approvals > 0)
-            '${pr.approvals} approval${pr.approvals > 1 ? 's' : ''}',
-        ].join(' · '),
+        // **Worst wins, and then stops** — the same rule as the row's dot.
+        // "checks pass · changes asked" is 27 characters in a 150-pixel cell
+        // and ellipsized away the half that was a job; the half that was a
+        // reassurance survived. So when somebody has asked for changes, that
+        // is the whole line.
+        (pr.review == ReviewState.changesRequested
+                ? [reviewText]
+                : [
+                    if (checksText.isNotEmpty) checksText,
+                    if (reviewText.isNotEmpty) reviewText,
+                  ])
+            .join(' · '),
         overflow: TextOverflow.ellipsis,
         softWrap: false,
         style: context.type.micro.copyWith(
-          color: pr.reviewRequested ? colors.amber : colors.mut3,
+          // Amber only for the one review state that is waiting on you. The
+          // others are information; this one is a job.
+          color: pr.review == ReviewState.changesRequested
+              ? colors.amber
+              : colors.mut3,
         ),
       ),
     );

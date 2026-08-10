@@ -124,7 +124,15 @@ String _forgeOf(WorktreeFacts facts, DateTime now) {
     ChecksState.pending => ' …',
     ChecksState.none => '',
   };
-  return '#${pr.number}$mark${pr.reviewRequested ? ' review' : ''}';
+  var review = switch (pr.review) {
+    ReviewState.changesRequested ||
+    ReviewState.approved => ' ${pr.review.label}',
+    // "A review is out with someone else" is not something you can act on, and
+    // a terminal column is the place with the least room for what you cannot.
+    ReviewState.awaiting || ReviewState.none => '',
+  };
+  var state = pr.state == PrState.open ? '' : ' ${pr.state.name}';
+  return '#${pr.number}$mark$state$review';
 }
 
 String _whenOf(WorktreeFacts facts, DateTime now) {

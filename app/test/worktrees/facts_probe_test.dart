@@ -6,6 +6,7 @@ import 'package:flutterware_app/src/worktrees/facts.dart';
 import 'package:flutterware_app/src/worktrees/facts_probe.dart';
 import 'package:flutterware_app/src/worktrees/facts_store.dart';
 import 'package:flutterware_app/src/worktrees/facts_text.dart';
+import 'package:flutterware_app/src/worktrees/providers/forge.dart';
 import 'package:flutterware_app/src/worktrees/providers/git.dart';
 
 /// Faked at the process boundary rather than at [GitProbe], so these exercise
@@ -30,6 +31,28 @@ import 'package:flutterware_app/src/worktrees/providers/git.dart';
     ),
   );
 }
+
+/// Counts what it was asked, so a test can prove the TTL saved a round trip.
+class _Forge implements ForgeProbe {
+  _Forge([this.report = const ForgeReport.ready({})]);
+
+  final ForgeReport report;
+  var calls = 0;
+
+  @override
+  Future<ForgeReport> probe(String repoRoot) async {
+    calls++;
+    return report;
+  }
+}
+
+const _pr = ForgeFacts(
+  number: 79,
+  title: 'An entry point says what it runs on',
+  state: PrState.open,
+  checks: ChecksState.failing,
+  failingChecks: 1,
+);
 
 Worktree _wt(String name, {String? branch, bool isMain = false}) => Worktree(
   path: '/repo/$name',
@@ -129,6 +152,7 @@ void main() {
           repoRoot: '/repo',
           store: store(),
           git: git.probe,
+          forge: _Forge(),
         ).probe([
           _wt('main', branch: 'main', isMain: true),
           _wt('one', branch: 'feature'),
@@ -162,6 +186,7 @@ void main() {
         repoRoot: '/repo',
         store: warmed,
         git: git.probe,
+        forge: _Forge(),
       ).probe([_wt('one', branch: 'feature')]);
 
       expect(git.calls.any((c) => c.contains('numstat')), isFalse);
@@ -181,6 +206,7 @@ void main() {
         repoRoot: '/repo',
         store: store(),
         git: git.probe,
+        forge: _Forge(),
       ).probe([_wt('main', branch: 'main', isMain: true)]);
 
       expect(git.calls.any((c) => c.contains('rev-list')), isFalse);
@@ -200,6 +226,7 @@ void main() {
           repoRoot: '/repo',
           store: store(),
           git: probe,
+          forge: _Forge(),
         ).probe([_wt('gone', branch: 'feature')]);
 
         expect(facts['/repo/gone']!.git.state, FactState.failed);
@@ -225,11 +252,184 @@ void main() {
         repoRoot: '/repo',
         store: warmed,
         git: git.probe,
+        forge: _Forge(),
       ).probe([_wt('one', branch: 'feature')]);
 
       var activity = facts['/repo/one']!.activity.value!;
       expect(activity.source, ActivitySource.opened);
       expect(activity.at, opened);
+    });
+  });
+
+  group('pull requests', () {
+    ({GitProbe probe, List<List<String>> calls}) branches() => _git(
+      responses: {
+        'for-each-ref': 'feature\t1786000100\theadsha\n',
+        'status': '# branch.oid headsha\n# branch.head feature\n',
+      },
+    );
+
+    test('are joined to worktrees by branch, and cost one call', () async {
+      var forge = _Forge(const ForgeReport.ready({'feature': _pr}));
+
+      // Each checkout is on its own branch, which is the whole point of the
+      // join — so unlike the other tests here, `status` answers per directory.
+      var git = GitProbe(
+        runProcess: (executable, arguments, {workingDirectory}) async =>
+            ProcessResult(
+              0,
+              0,
+              arguments.contains('status')
+                  ? '# branch.oid headsha\n'
+                        '# branch.head '
+                        '${workingDirectory == '/repo/three' ? 'unpublished' : 'feature'}\n'
+                  : '',
+              '',
+            ),
+      );
+
+      var facts =
+          await WorktreeFactsProbe(
+            repoRoot: '/repo',
+            store: store(),
+            git: git,
+            forge: forge,
+          ).probe([
+            _wt('one', branch: 'feature'),
+            _wt('two', branch: 'feature'),
+            _wt('three', branch: 'unpublished'),
+          ]);
+
+      expect(forge.calls, 1, reason: 'one sweep covers the repository');
+      expect(facts['/repo/one']!.forge.value!.number, 79);
+      expect(facts['/repo/two']!.forge.value!.number, 79);
+
+      // A branch with no pull request has nothing to know, which is not the
+      // same as a probe that broke.
+      expect(facts['/repo/three']!.forge.state, FactState.unavailable);
+      expect(facts['/repo/three']!.forge.failure, contains('no pull request'));
+    });
+
+    test('a failing check is what makes a worktree need you', () async {
+      var facts = await WorktreeFactsProbe(
+        repoRoot: '/repo',
+        store: store(),
+        git: branches().probe,
+        forge: _Forge(const ForgeReport.ready({'feature': _pr})),
+      ).probe([_wt('one', branch: 'feature')]);
+
+      expect(facts['/repo/one']!.needsYou, isTrue);
+    });
+
+    test('no forge is a quiet dash on every row, never a failure', () async {
+      var facts = await WorktreeFactsProbe(
+        repoRoot: '/repo',
+        store: store(),
+        git: branches().probe,
+        forge: _Forge(const ForgeReport.unavailable('gh is not installed')),
+      ).probe([_wt('one', branch: 'feature')]);
+
+      var fact = facts['/repo/one']!.forge;
+      expect(fact.state, FactState.unavailable);
+      expect(fact.state, isNot(FactState.failed));
+      expect(fact.failure, 'gh is not installed');
+      expect(facts['/repo/one']!.needsYou, isFalse);
+    });
+
+    test('a probe that throws anyway does not take the sweep down', () async {
+      var facts = await WorktreeFactsProbe(
+        repoRoot: '/repo',
+        store: store(),
+        git: branches().probe,
+        forge: _ThrowingForge(),
+      ).probe([_wt('one', branch: 'feature')]);
+
+      expect(facts['/repo/one']!.forge.state, FactState.unavailable);
+      expect(facts['/repo/one']!.git.hasValue, isTrue);
+    });
+
+    test('are believed for the TTL, and asked again past it', () async {
+      var warmed = store();
+      var forge = _Forge(const ForgeReport.ready({'feature': _pr}));
+      var clock = DateTime(2026, 8, 10, 14, 30);
+
+      Future<Map<String, WorktreeFacts>> sweep({bool refresh = false}) =>
+          WorktreeFactsProbe(
+            repoRoot: '/repo',
+            store: warmed,
+            git: branches().probe,
+            forge: forge,
+            forgeTtl: const Duration(minutes: 5),
+            now: () => clock,
+          ).probe([_wt('one', branch: 'feature')], refreshForge: refresh);
+
+      await sweep();
+      expect(forge.calls, 1);
+
+      // Glancing at the screen again a minute later.
+      clock = clock.add(const Duration(minutes: 1));
+      var second = await sweep();
+      expect(forge.calls, 1, reason: 'still inside the TTL');
+      expect(second['/repo/one']!.forge.value!.number, 79);
+      expect(
+        second['/repo/one']!.forge.computedAt,
+        DateTime(2026, 8, 10, 14, 30),
+        reason: 'the row shows when it was answered, not when it was read',
+      );
+
+      // The button, which means now.
+      var third = await sweep(refresh: true);
+      expect(forge.calls, 2);
+      expect(
+        third['/repo/one']!.forge.computedAt,
+        clock,
+        reason: 'a forced answer is stamped now',
+      );
+
+      clock = clock.add(const Duration(minutes: 6));
+      await sweep();
+      expect(forge.calls, 3, reason: 'past the TTL, ask again');
+    });
+
+    test('survive a relaunch inside the TTL', () async {
+      var forge = _Forge(const ForgeReport.ready({'feature': _pr}));
+      var clock = DateTime(2026, 8, 10, 14, 30);
+
+      await WorktreeFactsProbe(
+        repoRoot: '/repo',
+        store: store(),
+        git: branches().probe,
+        forge: forge,
+        now: () => clock,
+      ).probe([_wt('one', branch: 'feature')]);
+
+      // A second process, reading the file the first one wrote.
+      var facts = await WorktreeFactsProbe(
+        repoRoot: '/repo',
+        store: store(),
+        git: branches().probe,
+        forge: forge,
+        now: () => clock.add(const Duration(minutes: 1)),
+      ).probe([_wt('one', branch: 'feature')]);
+
+      expect(forge.calls, 1, reason: 'the cache outlives the process');
+      expect(facts['/repo/one']!.forge.value!.number, 79);
+      expect(facts['/repo/one']!.forge.value!.failingChecks, 1);
+    });
+
+    test('an undated cache is not believed', () async {
+      var warmed = store();
+      warmed.putPullRequests({'feature': _pr}, DateTime(2026, 8, 10));
+      warmed.save();
+      // A file written by something that lost the stamp — the one shape that
+      // would otherwise read as current forever.
+      var text = cacheFile.readAsStringSync().replaceAll(
+        RegExp('"at":"[^"]*"'),
+        '"at":"not a date"',
+      );
+      cacheFile.writeAsStringSync(text);
+
+      expect(store().pullRequests(), isNull);
     });
   });
 
@@ -287,6 +487,12 @@ void main() {
       expect(lines.single, contains('unreadable'));
     });
   });
+}
+
+class _ThrowingForge implements ForgeProbe {
+  @override
+  Future<ForgeReport> probe(String repoRoot) async =>
+      throw StateError('the forge exploded');
 }
 
 final _emptyDiff = CachedDiff(

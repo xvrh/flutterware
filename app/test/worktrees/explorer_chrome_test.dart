@@ -18,6 +18,7 @@ import 'package:flutterware_app/src/worktrees/facts_controller.dart';
 import 'package:flutterware_app/src/worktrees/facts_probe.dart';
 import 'package:flutterware_app/src/worktrees/facts_store.dart';
 import 'package:flutterware_app/src/worktrees/providers/agent.dart';
+import 'package:flutterware_app/src/worktrees/providers/forge.dart';
 import 'package:flutterware_app/src/worktrees/providers/git.dart';
 
 const _listing =
@@ -44,6 +45,27 @@ class _StubAgent implements AgentProbe {
   );
 }
 
+/// A forge that never leaves the process, and counts what it was asked.
+class _StubForge implements ForgeProbe {
+  var calls = 0;
+
+  @override
+  Future<ForgeReport> probe(String repoRoot) async {
+    calls++;
+    // Green on purpose: a failing check is a `needsYou`, and the badge test
+    // next door is about the agent. What makes the badge light up is pinned in
+    // facts_probe_test, where it costs no widgets.
+    return const ForgeReport.ready({
+      'feature/explorer': ForgeFacts(
+        number: 79,
+        title: 'The explorer is a place in the shell',
+        state: PrState.open,
+        checks: ChecksState.passing,
+      ),
+    });
+  }
+}
+
 /// A config that declares no plugins. The explorer is shell chrome and does not
 /// go through one, which is the point — a closed worktree has no session at all.
 class _StubLoader implements ManifestLoader {
@@ -63,6 +85,7 @@ class _StubLoader implements ManifestLoader {
 }
 
 late Directory _temp;
+late _StubForge _forge;
 
 ShellController _controller({bool agentWaiting = false}) => ShellController(
   appContext: AppContext(logger: LogClient.print()),
@@ -83,6 +106,7 @@ ShellController _controller({bool agentWaiting = false}) => ShellController(
         at: File('${_temp.path}/worktrees.json'),
       ),
       agent: _StubAgent(agentWaiting),
+      forge: _forge,
       git: GitProbe(
         runProcess: (_, arguments, {workingDirectory}) async => ProcessResult(
           0,
@@ -109,7 +133,10 @@ Future<ShellController> _pump(
 }
 
 void main() {
-  setUp(() => _temp = Directory.systemTemp.createTempSync('fw-explorer-test'));
+  setUp(() {
+    _temp = Directory.systemTemp.createTempSync('fw-explorer-test');
+    _forge = _StubForge();
+  });
   tearDown(() => _temp.deleteSync(recursive: true));
 
   testWidgets('the explorer tab is pinned and cannot be closed', (
@@ -197,6 +224,31 @@ void main() {
     await tester.tap(find.text('feature/explorer').first);
     await tester.pumpAndSettle();
     expect(find.text('PATH'), findsNothing);
+  });
+
+  testWidgets('arriving trusts the last pull requests; the button does not', (
+    tester,
+  ) async {
+    var shell = await _pump(tester);
+    await tester.tap(find.byKey(explorerTabKey));
+    await tester.pumpAndSettle();
+
+    expect(_forge.calls, 1);
+    // Both stub checkouts report the same branch, so both rows join it — which
+    // is the join working, not a duplicate.
+    expect(find.text('#79'), findsWidgets, reason: 'joined by branch');
+
+    // Leaving and coming back is a glance, and a glance must not cost a round
+    // trip to a server.
+    await tester.tap(find.byKey(worktreeTabKey(shell.worktrees.first)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(explorerTabKey));
+    await tester.pumpAndSettle();
+    expect(_forge.calls, 1, reason: 'still inside the TTL');
+
+    await tester.tap(find.byIcon(Icons.refresh));
+    await tester.pumpAndSettle();
+    expect(_forge.calls, 2, reason: 'the button means now');
   });
 
   testWidgets('the badge counts only what will not progress without you', (

@@ -15,7 +15,12 @@ import '../shell/worktree.dart';
 import 'facts.dart';
 import 'facts_store.dart';
 import 'providers/agent.dart';
+import 'providers/forge.dart';
 import 'providers/git.dart';
+
+/// A forge answer plus the clock it was answered on — which is *not* now when
+/// it came from the cache, and the row shows the difference.
+typedef _ForgeAnswer = ({ForgeReport report, DateTime at});
 
 class WorktreeFactsProbe {
   WorktreeFactsProbe({
@@ -23,10 +28,13 @@ class WorktreeFactsProbe {
     required this.store,
     GitProbe? git,
     AgentProbe? agent,
+    ForgeProbe? forge,
     this.concurrency = 4,
+    this.forgeTtl = const Duration(minutes: 5),
     DateTime Function()? now,
   }) : git = git ?? GitProbe(),
        agent = agent ?? ClaudeAgentProbe(),
+       forge = forge ?? RemoteForgeProbe(),
        _now = now ?? DateTime.now;
 
   /// The main checkout — where the batched calls run, and where every
@@ -41,6 +49,21 @@ class WorktreeFactsProbe {
   /// which is the point.
   final AgentProbe agent;
 
+  /// Also nice to have: a machine with no `gh` is a repo with no PR column.
+  final ForgeProbe forge;
+
+  /// How long a pull request answer is believed.
+  ///
+  /// **The only fact here with a TTL**, because it is the only one whose truth
+  /// lives on someone else's computer. Everything git says is either instant to
+  /// recompute or keyed by a sha that cannot change; a check that turns red does
+  /// so without anything local moving, so this one is a clock.
+  ///
+  /// Five minutes is chosen against the measured 0.74 s cost: long enough that
+  /// glancing at the explorer repeatedly is free, short enough that a push and a
+  /// coffee come back to the truth.
+  final Duration forgeTtl;
+
   /// How many worktrees are probed at once.
   ///
   /// Four rather than all of them: fourteen concurrent `git status` calls on a
@@ -50,7 +73,17 @@ class WorktreeFactsProbe {
 
   final DateTime Function() _now;
 
-  Future<Map<String, WorktreeFacts>> probe(List<Worktree> worktrees) async {
+  /// [refreshForge] ignores [forgeTtl] and asks the forge again — what the
+  /// explorer's refresh button and `fw worktrees --refresh` mean by "now".
+  Future<Map<String, WorktreeFacts>> probe(
+    List<Worktree> worktrees, {
+    bool refreshForge = false,
+  }) async {
+    // **Started first, awaited last.** The forge is a network call an order of
+    // magnitude slower than everything else here (0.74 s against ~25 ms), so it
+    // runs underneath the whole git sweep rather than in front of it.
+    var forge = _pullRequests(refresh: refreshForge);
+
     // The two batched calls, before anything per-worktree. One process each,
     // for every branch in the repository.
     var tips = await git.branchTips(repoRoot);
@@ -64,6 +97,7 @@ class WorktreeFactsProbe {
         tips: tips,
         base: base,
         baseSha: baseSha,
+        forge: forge,
       );
     });
 
@@ -76,6 +110,7 @@ class WorktreeFactsProbe {
     required Map<String, BranchTip> tips,
     required String? base,
     required String? baseSha,
+    required Future<_ForgeAnswer> forge,
   }) async {
     var agentFacts = await agent.probe(worktree.path);
 
@@ -84,6 +119,7 @@ class WorktreeFactsProbe {
       return WorktreeFacts(
         git: const Fact.failed('git could not read this worktree'),
         agent: _agentFact(agentFacts),
+        forge: _forgeFact(worktree.branch, await forge),
         activity: _activity(worktree, null, agentFacts),
       );
     }
@@ -113,8 +149,45 @@ class WorktreeFactsProbe {
             : WorktreeFactsStore.diffKey(baseSha, headSha),
       ),
       agent: _agentFact(agentFacts),
+      forge: _forgeFact(branch, await forge),
       activity: _activity(worktree, tips[branch]?.committedAt, agentFacts),
     );
+  }
+
+  /// One sweep's worth of pull requests, from the cache or from the forge.
+  ///
+  /// Failure is [FactState.unavailable] rather than [FactState.failed], with the
+  /// tool's own first line as the reason. A forge is optional equipment: a
+  /// machine with no `gh` must show a repository with no PR column, not fourteen
+  /// red cells complaining about a program the user chose not to install.
+  Future<_ForgeAnswer> _pullRequests({required bool refresh}) async {
+    var now = _now();
+    if (!refresh) {
+      if (store.pullRequests() case var cached?
+          when now.difference(cached.at) < forgeTtl) {
+        return (report: ForgeReport.ready(cached.byBranch), at: cached.at);
+      }
+    }
+
+    ForgeReport report;
+    try {
+      report = await forge.probe(repoRoot);
+    } catch (e) {
+      // The probes promise not to throw; this is the backstop that keeps that
+      // promise true for the sweep even if one of them forgets.
+      report = ForgeReport.unavailable('$e');
+    }
+    if (report.isReady) store.putPullRequests(report.pullRequests, now);
+    return (report: report, at: now);
+  }
+
+  Fact<ForgeFacts> _forgeFact(String? branch, _ForgeAnswer answer) {
+    if (answer.report.unavailable case var why?) return Fact.unavailable(why);
+    var pr = branch == null ? null : answer.report.pullRequests[branch];
+    if (pr == null) {
+      return const Fact.unavailable('no pull request for this branch');
+    }
+    return Fact.fresh(pr, computedAt: answer.at);
   }
 
   /// `unavailable`, not `failed`, when there is no session.

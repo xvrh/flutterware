@@ -61,15 +61,20 @@ const fwCommands = [
   ),
   FwCommand(
     'worktrees',
-    usage: 'worktrees [--json]',
+    usage: 'worktrees [--refresh] [--json]',
     summary: 'every checkout of this repo, and what is going on in each',
     details:
-        'The CLI rendering of the explorer. Reads git only — it never runs '
-        'the\nconfig of any project, so a worktree you have never opened '
-        'reports as\nfully as one you are looking at.\n\n'
-        'Batched where git allows it: one `for-each-ref` covers every branch, '
-        'and\na branch diff is cached under ~/.flutterware by its two commits, '
-        'which\ncannot change once written.',
+        'The CLI rendering of the explorer. Runs no project code — it reads '
+        'git,\nagent session files and `gh`/`glab` — so a worktree you have '
+        'never\nopened reports as fully as one you are looking at.\n\n'
+        'Batched where the tools allow it: one `for-each-ref` covers every '
+        'branch,\none `pr list` covers every pull request, and a branch diff '
+        'is cached\nunder ~/.flutterware by its two commits, which cannot '
+        'change once written.\n\n'
+        'Pull requests are the one answer that lives on a server, so they are '
+        'kept\nfor five minutes. `--refresh` asks again.\n\n'
+        'A column every worktree leaves empty is not printed: no `gh`, no '
+        'agent,\nor a format that stopped parsing all read as one column less.',
   ),
   FwCommand(
     'actions',
@@ -305,7 +310,10 @@ class FwCli {
       return switch (command) {
         'init' => await _init(),
         'status' => await _status(json: json),
-        'worktrees' => await _worktrees(json: json),
+        'worktrees' => await _worktrees(
+          json: json,
+          refresh: rest.remove('--refresh'),
+        ),
         'actions' => await _actions(json: json),
         'run' => await _run(rest, json: json),
         'app' => await _app(
@@ -633,7 +641,7 @@ class FwCli {
   /// costs running that worktree's config; this command is about all of them,
   /// most of which are not open. The facts layer exists precisely so that a
   /// checkout nobody has opened still reports — see the explorer design, §1.
-  Future<int> _worktrees({required bool json}) async {
+  Future<int> _worktrees({required bool json, bool refresh = false}) async {
     var root = findRepoRoot(Directory.current.path);
     if (root == null) {
       return fail('not inside a project: ${Directory.current.path}');
@@ -651,7 +659,7 @@ class FwCli {
     var facts = await WorktreeFactsProbe(
       repoRoot: repoRoot,
       store: store,
-    ).probe(worktrees);
+    ).probe(worktrees, refreshForge: refresh);
 
     // Most recently touched first, which is the same order the explorer opens
     // on and for the same reason: it answers "which one was I in".

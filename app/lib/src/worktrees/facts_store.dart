@@ -55,7 +55,13 @@ class CachedDiff {
 }
 
 class WorktreeFactsStore {
-  WorktreeFactsStore._(this.file, this._diffs, this._opened);
+  WorktreeFactsStore._(
+    this.file,
+    this._diffs,
+    this._opened,
+    this._pullRequests,
+    this._pullRequestsAt,
+  );
 
   /// Opens the store for the repository rooted at [repoRoot].
   ///
@@ -70,6 +76,8 @@ class WorktreeFactsStore {
     var file = at ?? File(fileFor(repoRoot));
     var diffs = <String, CachedDiff>{};
     var opened = <String, DateTime>{};
+    var pullRequests = <String, ForgeFacts>{};
+    DateTime? pullRequestsAt;
     try {
       if (file.existsSync()) {
         var json = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
@@ -82,11 +90,28 @@ class WorktreeFactsStore {
           var at = DateTime.tryParse('${entry.value}');
           if (at != null) opened['${entry.key}'] = at;
         }
+        if (json['pullRequests'] case Map<Object?, Object?> prs) {
+          pullRequestsAt = DateTime.tryParse('${prs['at']}');
+          for (var entry in (prs['byBranch'] as Map? ?? {}).entries) {
+            pullRequests['${entry.key}'] = ForgeFacts.fromJson(
+              (entry.value as Map).cast<String, Object?>(),
+            );
+          }
+        }
       }
     } catch (_) {
       // Unreadable, half-written, or written by a future version.
     }
-    return WorktreeFactsStore._(file, diffs, opened);
+    return WorktreeFactsStore._(
+      file,
+      diffs,
+      opened,
+      // A stamp we could not read is a cache whose age we cannot judge, and an
+      // undated pull request is worse than none — it would show as current
+      // forever.
+      pullRequestsAt == null ? {} : pullRequests,
+      pullRequestsAt,
+    );
   }
 
   /// `~/.flutterware/<sha1 of the repo root>/worktrees.json`.
@@ -103,6 +128,8 @@ class WorktreeFactsStore {
   final File file;
   final Map<String, CachedDiff> _diffs;
   final Map<String, DateTime> _opened;
+  Map<String, ForgeFacts> _pullRequests;
+  DateTime? _pullRequestsAt;
 
   static String diffKey(String baseSha, String headSha) => '$baseSha..$headSha';
 
@@ -118,6 +145,21 @@ class WorktreeFactsStore {
 
   void markOpened(String worktreePath, DateTime at) =>
       _opened[worktreePath] = at;
+
+  /// The last answer the forge gave, and when — **stamped rather than keyed**.
+  ///
+  /// Unlike a branch diff there is no cheap key for "has this changed": a pull
+  /// request's checks move without a single sha moving. So this one is a
+  /// genuine TTL cache, and the caller decides how old is too old.
+  ({Map<String, ForgeFacts> byBranch, DateTime at})? pullRequests() =>
+      _pullRequestsAt == null
+      ? null
+      : (byBranch: _pullRequests, at: _pullRequestsAt!);
+
+  void putPullRequests(Map<String, ForgeFacts> byBranch, DateTime at) {
+    _pullRequests = byBranch;
+    _pullRequestsAt = at;
+  }
 
   /// Drops diffs beyond [keep], oldest-inserted first.
   ///
@@ -147,6 +189,14 @@ class WorktreeFactsStore {
             for (var entry in _opened.entries)
               entry.key: entry.value.toIso8601String(),
           },
+          if (_pullRequestsAt case var at?)
+            'pullRequests': {
+              'at': at.toIso8601String(),
+              'byBranch': {
+                for (var entry in _pullRequests.entries)
+                  entry.key: entry.value.toJson(),
+              },
+            },
         }),
       );
     } catch (_) {

@@ -234,6 +234,34 @@ enum PrState { open, draft, merged, closed }
 
 enum ChecksState { none, pending, passing, failing }
 
+/// Where the review stands — **for a pull request you opened**.
+///
+/// Which every pull request in this list is: a worktree is a branch you are
+/// working on. So the question is never "should I review this" but "is somebody
+/// waiting on me", and [changesRequested] is the only value that means yes.
+enum ReviewState {
+  /// Nobody has reviewed, and nothing is asking anybody to.
+  none,
+
+  /// A review is required or requested, and the ball is in someone else's
+  /// court.
+  awaiting,
+
+  /// Somebody asked for changes. Yours.
+  changesRequested,
+
+  approved;
+
+  /// One vocabulary for three renderers, so the row, the table and the detail
+  /// panel never call the same state by different names.
+  String get label => switch (this) {
+    ReviewState.none => '',
+    ReviewState.awaiting => 'in review',
+    ReviewState.changesRequested => 'changes asked',
+    ReviewState.approved => 'approved',
+  };
+}
+
 class ForgeFacts {
   const ForgeFacts({
     required this.number,
@@ -241,8 +269,7 @@ class ForgeFacts {
     required this.state,
     this.checks = ChecksState.none,
     this.failingChecks = 0,
-    this.approvals = 0,
-    this.reviewRequested = false,
+    this.review = ReviewState.none,
     this.url,
   });
 
@@ -251,10 +278,7 @@ class ForgeFacts {
   final PrState state;
   final ChecksState checks;
   final int failingChecks;
-  final int approvals;
-
-  /// A review is requested *from you*. Part of "needs you".
-  final bool reviewRequested;
+  final ReviewState review;
   final String? url;
 
   Map<String, Object?> toJson() => {
@@ -263,10 +287,32 @@ class ForgeFacts {
     'state': state.name,
     'checks': checks.name,
     if (failingChecks > 0) 'failingChecks': failingChecks,
-    if (approvals > 0) 'approvals': approvals,
-    if (reviewRequested) 'reviewRequested': true,
+    if (review != ReviewState.none) 'review': review.name,
     'url': ?url,
   };
+
+  /// Read back from the cache — the one fact worth persisting, because it is
+  /// the one that cost a network round trip. Tolerant of a file written by a
+  /// version that spelled things differently: anything unrecognised reads as
+  /// the quiet value.
+  static ForgeFacts fromJson(Map<String, Object?> json) => ForgeFacts(
+    number: json['number']! as int,
+    title: json['title'] as String? ?? '',
+    state: PrState.values.firstWhere(
+      (s) => s.name == json['state'],
+      orElse: () => PrState.open,
+    ),
+    checks: ChecksState.values.firstWhere(
+      (s) => s.name == json['checks'],
+      orElse: () => ChecksState.none,
+    ),
+    failingChecks: json['failingChecks'] as int? ?? 0,
+    review: ReviewState.values.firstWhere(
+      (s) => s.name == json['review'],
+      orElse: () => ReviewState.none,
+    ),
+    url: json['url'] as String?,
+  );
 }
 
 /// Which clock won.
@@ -324,14 +370,19 @@ class WorktreeFacts {
     if (agent.value?.state == AgentState.waiting) return true;
     var pr = forge.value;
     if (pr == null) return false;
-    return pr.checks == ChecksState.failing || pr.reviewRequested;
+    // Deliberately not [ReviewState.approved], however tempting. An approved
+    // pull request does want merging, but it is a badge that stays lit while
+    // you are busy elsewhere — and a permanent badge is a badge you stop
+    // reading, which would cost the states that mean something.
+    return pr.checks == ChecksState.failing ||
+        pr.review == ReviewState.changesRequested;
   }
 
   /// The row's one dot: worst wins.
   Tone get tone {
     if (forge.value?.checks == ChecksState.failing) return Tone.error;
     if (agent.value?.state == AgentState.waiting) return Tone.info;
-    if (forge.value?.reviewRequested ?? false) return Tone.warn;
+    if (forge.value?.review == ReviewState.changesRequested) return Tone.warn;
     if (agent.value?.state == AgentState.working) return Tone.good;
     return Tone.neutral;
   }

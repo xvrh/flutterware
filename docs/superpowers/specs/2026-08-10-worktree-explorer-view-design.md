@@ -173,6 +173,33 @@ ourselves (§6).
 token. Fields: number, title, draft/open/merged, review decision, checks rollup.
 The PR title also feeds the label-priority stack (§7).
 
+> **Corrected 2026-08-10 by building it.** Three things this section had wrong
+> or unsaid, all of them measured on a repository with 78 pull requests:
+>
+> - **"One `gh pr list`" is two, and that is the cheap way round.** Cost tracks
+>   the *number of pull requests returned*, because the check rollup expands per
+>   request: `--state open --limit 100` with the rollup is **0.74 s**, but
+>   `--state all --limit 100` is **3.94 s** — five times the price, almost all of
+>   it history. So the probe asks twice, concurrently: open pull requests in
+>   full, and a bounded window of 30 closed ones *without* their checks
+>   (**0.53 s**, so it hides inside the first). Wall clock is unchanged and the
+>   merged state — "this branch has landed, delete this worktree" — comes free.
+>   On the day this shipped, three of seventeen worktrees were sitting on merged
+>   pull requests. It is the most actionable thing the column says.
+> - **Approval counts are gone; the review is one state.** `reviewDecision` is a
+>   single field on the same request, and for pull requests *you opened* — which
+>   every worktree's is — the only value that means anything is
+>   `CHANGES_REQUESTED`. Counting approvals would have meant asking for
+>   `latestReviews` to render a number nobody acts on. `ReviewState`
+>   (`none`/`awaiting`/`changesRequested`/`approved`) replaced `approvals` and
+>   `reviewRequested`, and **only `changesRequested` feeds `needsYou`**:
+>   `approved` also wants something from you, but a badge that stays lit while
+>   you are busy elsewhere is a badge you stop reading.
+> - **`glab` is written but unverified.** No GitLab checkout was available. The
+>   parser follows the documented merge-request payload, treats every field as
+>   optional, and reports no checks rather than guessing at a pipeline the list
+>   endpoint does not carry. This is recorded in the file itself, not just here.
+
 ### Agent
 
 Read from Claude Code's session files. **Verified on 2026-08-10**, not assumed:
@@ -232,7 +259,8 @@ every fetch.
 
 **One `gh pr list` covers every branch.** `--json number,title,headRefName,
 isDraft,reviewDecision,statusCheckRollup --limit 100` returns everything joinable
-on `headRefName`. The PR tier is one subprocess for the whole repo.
+on `headRefName`. The PR tier is two concurrent subprocesses for the whole repo,
+not one per worktree — see the correction in §4 for why the second one is free.
 
 | trigger | refreshes | cost |
 |---|---|---|
@@ -263,7 +291,7 @@ Measured, 14 worktrees, warm:
 | `git for-each-ref refs/heads/` | 15 ms | once, **all branches** |
 | `git status --porcelain=v2 --branch` | 20–30 ms | per worktree |
 | `git diff --numstat base...head` | 8 ms | per worktree |
-| `gh pr list --json …` | 890 ms | once, **all branches** |
+| `gh pr list --json …` | 740 ms | once, **all branches** |
 
 And the whole probe, once built (14 worktrees, git + agent):
 
@@ -274,6 +302,15 @@ And the whole probe, once built (14 worktrees, git + agent):
 The cache removes 54%. What remains is the per-worktree `git status` that cannot
 be batched — 14 × ~25 ms over 4 workers — which is the floor this design
 predicted and the number to watch if it ever moves.
+
+**With pull requests, measured on 17 worktrees the day the forge landed:** a
+sweep that has to ask the forge costs **+780 ms** over one that does not, and
+that is the whole difference — `--refresh` against a cached run, end to end,
+came out at 5.29 s vs 4.51 s with identical output. So the TTL is not an
+optimisation of a fast thing; it is the difference between the screen being
+instant and the screen being noticeably slow, every time you glance at it. The
+forge call is started before the git sweep and awaited after it, so on a cold
+cache the git work is free rather than additive.
 
 Four rules:
 
@@ -524,7 +561,10 @@ Each slice is independently useful and independently reviewable.
    open/open-in-background. This is the shape; everything after is a cell.
 3. **Agent provider** + the `~/.claude/projects/` watcher + the "needs you"
    badge. The feature people will actually keep the window open for.
-4. **Forge provider**, `gh`/`glab`, TTL and manual refresh.
+4. **Forge provider**, `gh`/`glab`, TTL and manual refresh. ✅ 2026-08-10 —
+   `providers/forge.dart`, a 5-minute TTL persisted in the store, `--refresh` on
+   the CLI and `force: true` behind the GUI's refresh button. See the correction
+   in §4.
 5. **Expansion, row actions, keyboard**, degenerate states.
 
 Slice 1 depends on the address rework only for slice 2 onwards; it can start in
@@ -545,7 +585,11 @@ parallel.
   buckets.
 - Agent detection is **file-only**; `AgentProbe` is the interface, Claude the
   first implementation.
-- Forge is **CLI-only** (`gh`, `glab`), one batched call per refresh.
+- Forge is **CLI-only** (`gh`, `glab`), batched per repository rather than per
+  worktree, and cached for five minutes — the only fact here with a TTL, because
+  it is the only one whose truth lives on someone else's computer.
+- The review is **one state, not a count**, and only `changesRequested` is a
+  `needsYou`.
 - **No polling timers.** Filesystem events, visibility, and a manual button.
 - `FactState.unavailable` is distinct from `failed`.
 - Sort is activity-descending and flat; open-ness is a marker, not a section.
