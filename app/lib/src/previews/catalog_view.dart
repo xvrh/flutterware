@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:device_frame/device_frame.dart' hide Devices;
 import 'package:file_selector/file_selector.dart';
@@ -12,6 +11,8 @@ import '../address/address_scope.dart';
 import '../capture/capture_mode.dart';
 import '../embedder/embedded_engine.dart';
 import '../embedder/input_region.dart';
+import '../inspect/node_highlight.dart';
+import '../inspect/pick_region.dart';
 import '../ui/design/design.dart';
 import '../utils/image_clipboard.dart';
 import 'app_chords.dart';
@@ -488,13 +489,9 @@ class _CatalogViewState extends State<CatalogView> {
     if (!mounted) return;
     // Nothing under the point is a miss, not a selection to clear: you clicked
     // the margin, and losing what you had chosen for that would be a punishment
-    // for a slip.
+    // for a slip. (Disarming is [InspectPickRegion]'s, already done by the
+    // time this answer lands.)
     if (id != null) handle.setParam('node', id);
-    // One pick per arming, as Chrome does. Staying armed means the next click
-    // anywhere is also a pick, which is how you end up fighting the tool to
-    // press a button in your own demo.
-    _picking.value = false;
-    _highlight.value = null;
   }
 
   /// Everything the guest needs to be driven — see [EmbedderInputRegion] — in
@@ -521,34 +518,17 @@ class _CatalogViewState extends State<CatalogView> {
   }
 
   Widget _pickerInput(BuildContext context, Widget picture) {
-    // Its own focus, because the demo's is not mounted while picking — and a
-    // mode you can only leave by finding the button again is a trap.
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey != LogicalKeyboardKey.escape) {
-          return KeyEventResult.ignored;
-        }
-        _picking.value = false;
-        _highlight.value = null;
-        return KeyEventResult.handled;
-      },
-      child: MouseRegion(
-        cursor: SystemMouseCursors.precise,
-        // Local coordinates are the guest's own: the box is sized to the guest's
-        // logical size in both staging modes, so a point here needs no transform
-        // — and neither does the rect that comes back.
-        onHover: (e) => _highlight.value = _session.treeForSelection
-            ?.nodeAtPoint(e.localPosition.dx, e.localPosition.dy)
-            ?.id,
-        onExit: (_) => _highlight.value = null,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (e) => unawaited(_pick(context, e.localPosition)),
-          child: _withOverlay(picture),
-        ),
-      ),
+    return InspectPickRegion(
+      // Local coordinates are the guest's own: the box is sized to the guest's
+      // logical size in both staging modes, so a point here needs no transform
+      // — and neither does the rect that comes back.
+      onSweep: (point) => _highlight.value = _session.treeForSelection
+          ?.nodeAtPoint(point.dx, point.dy)
+          ?.id,
+      onClear: () => _highlight.value = null,
+      onPick: (point) => unawaited(_pick(context, point)),
+      onDisarm: () => _picking.value = false,
+      child: _withOverlay(picture),
     );
   }
 
@@ -598,18 +578,31 @@ class _CatalogViewState extends State<CatalogView> {
                 if (node?.offstage ?? false) node = null;
                 return ValueListenableBuilder(
                   valueListenable: _session.watchedBox,
-                  builder: (context, live, _) => CustomPaint(
-                    painter: _HighlightPainter(
-                      node: node,
-                      // The guest's own last frame, when it is about this node.
-                      // The tree's rect is of the build it was read from, which
-                      // on anything animating is already wrong — and a
-                      // rectangle in the wrong place does not read as slightly
-                      // stale, it reads as broken.
-                      live: live?.id == hovered ? live : null,
-                      color: context.colors.accent,
-                    ),
-                  ),
+                  builder: (context, live, _) {
+                    // The guest's own last frame, when it is about this node.
+                    // The tree's rect is of the build it was read from, which
+                    // on anything animating is already wrong — and a
+                    // rectangle in the wrong place does not read as slightly
+                    // stale, it reads as broken. The node is still what names
+                    // the box: a live rect with no node behind it would be a
+                    // rectangle labelled nothing.
+                    var box = live?.id == hovered ? live : null;
+                    var rect = switch ((node, box)) {
+                      (null, _) => null,
+                      (_, var b?) => Rect.fromLTWH(b.x, b.y, b.width, b.height),
+                      (var n?, null) => switch (n.layout) {
+                        var l? => Rect.fromLTWH(l.x, l.y, l.width, l.height),
+                        null => null,
+                      },
+                    };
+                    return CustomPaint(
+                      painter: NodeHighlightPainter(
+                        rect: rect,
+                        label: node?.type,
+                        color: context.colors.accent,
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -618,75 +611,6 @@ class _CatalogViewState extends State<CatalogView> {
       ],
     );
   }
-}
-
-/// Draws a box around one node, and its type above it.
-class _HighlightPainter extends CustomPainter {
-  _HighlightPainter({required this.node, required this.color, this.live});
-
-  final InspectNode? node;
-
-  /// The same node's box as of the guest's last frame, when the watch is
-  /// reporting it. Wins over the tree's, which is of the build it was read
-  /// from — correct the instant it arrives and wrong for as long as anything
-  /// on screen is moving.
-  final WatchBox? live;
-
-  final Color color;
-
-  /// Where to draw: the live box if there is one, else what the tree said.
-  Rect? get _rect {
-    if (live case var box?) {
-      return Rect.fromLTWH(box.x, box.y, box.width, box.height);
-    }
-    if (node?.layout case var layout?) {
-      return Rect.fromLTWH(layout.x, layout.y, layout.width, layout.height);
-    }
-    return null;
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // The node is still what names the box — a live rect with no node behind
-    // it would draw a rectangle labelled nothing.
-    if (node == null) return;
-    var rect = _rect;
-    if (rect == null) return;
-    canvas
-      ..drawRect(rect, Paint()..color = color.withValues(alpha: 0.18))
-      ..drawRect(
-        rect,
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
-      );
-
-    // The type, because a rectangle alone does not say which of the four boxes
-    // stacked at this corner you have got.
-    var label = TextPainter(
-      text: TextSpan(
-        text: ' ${node!.type} ',
-        style: const TextStyle(color: Colors.white, fontSize: 10),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    // Above the box, or inside it when there is no room above — a label off
-    // the top of the picture names nothing.
-    var top = rect.top >= label.height ? rect.top - label.height : rect.top;
-    var left = rect.left
-        .clamp(0.0, math.max(0.0, size.width - label.width))
-        .toDouble();
-    canvas.drawRect(
-      Rect.fromLTWH(left, top, label.width, label.height),
-      Paint()..color = color,
-    );
-    label.paint(canvas, Offset(left, top));
-  }
-
-  @override
-  bool shouldRepaint(_HighlightPainter old) =>
-      old.node?.id != node?.id || old._rect != _rect || old.color != color;
 }
 
 /// The controls the entry declared while it built.

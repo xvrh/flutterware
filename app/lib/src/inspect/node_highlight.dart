@@ -7,14 +7,12 @@ import 'package:flutter/material.dart';
 /// are in the guest's own coordinates, so in that box the painter needs no
 /// transform and inherits whatever `FittedBox` or device frame sits above it.
 ///
-/// It takes a plain rect and label rather than a tree node because two trees
-/// feed it: the widget tree's layout boxes and the semantics tree's node
-/// rects, both captured in the same logical space as the screenshot.
-///
-/// The catalog's live preview keeps its own painter (it prefers the guest's
-/// last-frame box over the tree's, which only means something with a live
-/// guest); this is the snapshot half, for surfaces where the captured
-/// geometry *is* the picture's — a scenario step.
+/// It takes a plain rect and label rather than a tree node because three
+/// sources feed it: the widget tree's layout boxes, the semantics tree's node
+/// rects, and — on the catalog's live preview — the guest's own last-frame
+/// box, which wins over the tree's because the tree is of the build it was
+/// read from and anything animating has already moved. Deciding *which* rect
+/// is the host's knowledge; drawing it is this painter's, once.
 class NodeHighlightPainter extends CustomPainter {
   NodeHighlightPainter({
     required this.rect,

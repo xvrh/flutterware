@@ -7,10 +7,15 @@ the guest walk, skipped by `nodeAtPoint`, folded by `ElementsView` and by the
 The route-oracle spike resolved *with* part 1: `visitChildrenForSemantics`
 held on every probe case first try (`test/inspect/guest_inspect_offstage_test.dart`),
 so candidate 1's fragile theater-recognition was never needed — the edge test
-plus the four-type exemption list is the whole detector. Parts 2–4 remain a
-plan. Originally written to answer "the inspect reports are duplicated at
-three places; should we consolidate, and can we hide offstage content
-everywhere at once?"
+plus the four-type exemption list is the whole detector. Part 2 **built**: the
+catalog's `_HighlightPainter` is deleted (the host now picks live-box-over-
+tree-rect and hands `NodeHighlightPainter` a plain rect + label), and the
+picker grammar lives once in `InspectPickRegion`
+(`app/lib/src/inspect/pick_region.dart`) — the catalog and the step page pass
+resolvers, and disarm-after-pick moved into the region so an async commit
+cannot leave the mode armed. Parts 3–4 remain a plan. Originally written to
+answer "the inspect reports are duplicated at three places; should we
+consolidate, and can we hide offstage content everywhere at once?"
 **Lineage:** `2026-07-31-sl3-inspect-surface-findings.md` (what the VM service
 can and cannot give the run cockpit), `2026-08-10-scenarios-semantics-tab.md`
 (the semantics leg, currently scenarios-only).
@@ -112,18 +117,21 @@ One flag in the shared model, so every host and every consumer inherits it:
   to interrogate, so its trees keep showing previous routes unmarked until
   the guest/devbar runtime lands. Say so in the view rather than pretending.
 
-## Part 2 — one highlight, one picker
+## Part 2 — one highlight, one picker (built)
 
-- Fold the catalog's `_HighlightPainter` into `NodeHighlightPainter`: the
-  catalog computes the rect (live `WatchBox` wins over the tree's, as now)
-  and the label, and passes both. Deletes a near-copy that was written before
-  the shared painter existed.
-- Extract the picker interaction into one overlay widget — the esc-focus, the
-  sweep-hover, the one-pick-per-arming — parameterized by two resolvers:
-  hover (sync, rect-walk on both hosts) and commit (async guest `hitTest` for
-  the catalog, the same rect-walk for a snapshot). `_ScreenOverlay` and
-  `_pickerInput` become thin wrappers. Run gets a picker for free the day it
-  has rects, and not before.
+- The catalog's `_HighlightPainter` folded into `NodeHighlightPainter`: the
+  catalog computes the rect (live `WatchBox` wins over the tree's, as before)
+  and the label, and passes both. The near-copy predating the shared painter
+  is deleted.
+- The picker interaction lives once, in `InspectPickRegion`
+  (`app/lib/src/inspect/pick_region.dart`) — the esc-focus, the sweep-hover,
+  the one-pick-per-arming — parameterized by resolvers: sweep (rect-walk on
+  both hosts) and pick (async guest `hitTest` for the catalog, the same
+  rect-walk for a snapshot). `_ScreenOverlay` and `_pickerInput` are thin
+  wrappers; disarm-after-pick moved from the catalog's async commit into the
+  region, so the mode cannot hang armed while a guest answers. Run gets a
+  picker for free the day it has rects, and not before. Grammar tested once
+  in `app/test/inspect/pick_region_test.dart`.
 
 ## Part 3 — semantics grows legs
 

@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutterware/previews_guest.dart';
 
 import '../address/address_scope.dart';
@@ -10,6 +9,7 @@ import '../previews/devices.dart';
 import '../inspect/elements_view.dart';
 import '../inspect/inspect_dock.dart';
 import '../inspect/node_highlight.dart';
+import '../inspect/pick_region.dart';
 import '../plugins/native/scenarios_results.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
@@ -368,44 +368,20 @@ class _ScreenOverlay extends StatelessWidget {
       valueListenable: picking,
       builder: (context, on, _) {
         if (!on) return IgnorePointer(child: box);
-        return Focus(
-          // Its own focus, so esc works without hunting for the button again
-          // — a mode you can only leave by finding the button is a trap.
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is! KeyDownEvent ||
-                event.logicalKey != LogicalKeyboardKey.escape) {
-              return KeyEventResult.ignored;
-            }
-            picking.value = false;
-            highlight.value = null;
-            return KeyEventResult.handled;
+        return InspectPickRegion(
+          onSweep: (point) =>
+              highlight.value = tree?.nodeAtPoint(point.dx, point.dy)?.id,
+          onClear: () => highlight.value = null,
+          onPick: (point) {
+            // On a snapshot the rectangles are all there is — no live guest
+            // to run the framework's own hit test, so the pointer's
+            // approximation is also the commit.
+            var hit = tree?.nodeAtPoint(point.dx, point.dy);
+            // A miss is a miss, not a selection to clear.
+            if (hit != null) onPick(hit.id);
           },
-          child: MouseRegion(
-            cursor: SystemMouseCursors.precise,
-            onHover: (e) => highlight.value = tree
-                ?.nodeAtPoint(e.localPosition.dx, e.localPosition.dy)
-                ?.id,
-            onExit: (_) => highlight.value = null,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (e) {
-                // On a snapshot the rectangles are all there is — no live
-                // guest to run the framework's own hit test, so the pointer's
-                // approximation is also the commit.
-                var hit = tree?.nodeAtPoint(
-                  e.localPosition.dx,
-                  e.localPosition.dy,
-                );
-                // A miss is a miss, not a selection to clear.
-                if (hit != null) onPick(hit.id);
-                // One pick per arming, as Chrome does.
-                picking.value = false;
-                highlight.value = null;
-              },
-              child: box,
-            ),
-          ),
+          onDisarm: () => picking.value = false,
+          child: box,
         );
       },
     );
