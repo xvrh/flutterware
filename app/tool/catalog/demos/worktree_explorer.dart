@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware/ui_catalog.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 import 'package:flutterware_app/src/worktrees/explorer_row.dart';
@@ -232,7 +232,7 @@ List<ExplorerEntry> get _repo => [
   ),
 ];
 
-@Demo(name: 'The list', group: 'Worktree explorer', wrapper: wrapInAppTheme)
+@Preview(name: 'The list', group: 'Worktree explorer', wrapper: wrapInAppTheme)
 Widget explorerList() => _LiveExplorer(entries: _repo);
 
 /// A repo that uses worktrees for release branches: no agents, no PRs, and two
@@ -240,7 +240,7 @@ Widget explorerList() => _LiveExplorer(entries: _repo);
 ///
 /// Here to keep open question 5 visible — whether that case wants a denser
 /// single-line mode, or whether the empty columns are an honest "nothing here".
-@Demo(
+@Preview(
   name: 'A repo without agents',
   group: 'Worktree explorer',
   wrapper: wrapInAppTheme,
@@ -274,7 +274,11 @@ Widget explorerNoAgents() => _LiveExplorer(
   ],
 );
 
-@Demo(name: 'One checkout', group: 'Worktree explorer', wrapper: wrapInAppTheme)
+@Preview(
+  name: 'One checkout',
+  group: 'Worktree explorer',
+  wrapper: wrapInAppTheme,
+)
 Widget explorerSingle() => _LiveExplorer(
   entries: [
     ExplorerEntry(
@@ -294,7 +298,11 @@ Widget explorerSingle() => _LiveExplorer(
 
 // ─── Row states ──────────────────────────────────────────────────────────────
 
-@Demo(name: 'Row states', group: 'Worktree explorer', wrapper: wrapInAppTheme)
+@Preview(
+  name: 'Row states',
+  group: 'Worktree explorer',
+  wrapper: wrapInAppTheme,
+)
 Widget explorerRowStates() => _Sheet(
   children: [
     _Labelled(
