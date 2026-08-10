@@ -47,6 +47,23 @@ Widget avatarTileEmpty() => const Placeholder();
   ).readAsStringSync();
   String entrypoint() => File(generator.entrypointPath).readAsStringSync();
 
+  test('the entrypoint pins the clock outside the binding', () {
+    generator.select(members);
+
+    var source = File(generator.entrypointPath).readAsStringSync();
+    // Outside `install`, which is itself outside `ensureInitialized`: the
+    // binding captures `Zone.current` when it sets `onBeginFrame`, so a clock
+    // entered any later would not reach the builds that read it.
+    expect(
+      source,
+      contains('void main() => withPreviewClock(() => GuestLogs.instance'),
+    );
+    expect(
+      source.indexOf('withPreviewClock('),
+      lessThan(source.indexOf('WidgetsFlutterBinding.ensureInitialized')),
+    );
+  });
+
   test('emits the annotation verbatim, never interpreted', () {
     generator.select(members);
     expect(

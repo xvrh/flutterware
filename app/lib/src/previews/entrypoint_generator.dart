@@ -159,7 +159,12 @@ String get _entryId => r'${active.id}';
 // every build, layout and paint callback running in the zone that came before
 // it — and a demo printing from `build`, which is the case this exists for,
 // would print into the root zone and be captured by nothing at all.
-void main() => GuestLogs.instance.install(() {
+//
+// The clock is pinned outside all of it for the same reason, one layer up: a
+// demo reads the clock from `build`, which runs in whatever zone the binding
+// captured. A preview showing today's date would otherwise differ from
+// yesterday's screenshot of itself.
+void main() => withPreviewClock(() => GuestLogs.instance.install(() {
   WidgetsFlutterBinding.ensureInitialized();
   // Before anything can be typed, keys have to arrive at all: the framework
   // parks every one of them waiting for a legacy platform message this guest
@@ -207,7 +212,7 @@ void main() => GuestLogs.instance.install(() {
   // driving a demo could not read the first thing a developer reaches for.
   GuestLogs.instance.registerExtensions();
   runApp(const _CatalogHost());
-${emitProbe ? _probe : ''}});
+${emitProbe ? _probe : ''}}));
 
 class _CatalogHost extends StatelessWidget {
   const _CatalogHost();
