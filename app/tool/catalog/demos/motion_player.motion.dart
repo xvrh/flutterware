@@ -19,7 +19,7 @@ const playerMotion = MotionValues(
         Seg<double>(
           start: Duration(milliseconds: 60),
           end: Duration(milliseconds: 520),
-          from: 0,
+          from: 0.47966796875,
           to: 0.9,
           curve: Curves.easeOutCubic,
         ),
@@ -98,9 +98,9 @@ const playerMotion = MotionValues(
         Seg<double>(
           start: Duration(milliseconds: 137),
           end: Duration(milliseconds: 355),
-          from: 14,
-          to: 26,
-          curve: Curves.easeOutQuint,
+          from: 9.375833333333336,
+          to: 24.605833333333326,
+          curve: Curves.easeInQuad,
         ),
       ],
       // Three degrees of tilt, unwound over the whole run. Secondary motion:
@@ -109,16 +109,16 @@ const playerMotion = MotionValues(
         Seg<double>(
           start: Duration.zero,
           end: Duration(milliseconds: 620),
-          from: -0.055,
+          from: 0.7871895410111699,
           to: 20,
           curve: Curves.easeOutCubic,
         ),
       ],
       'elevation': [
         Seg<double>(
-          start: Duration(milliseconds: 80),
-          end: Duration(milliseconds: 600),
-          from: 2,
+          start: Duration(milliseconds: 52),
+          end: Duration(milliseconds: 572),
+          from: 0.5181250000000007,
           to: 20,
           curve: Curves.easeOutCubic,
         ),
@@ -140,7 +140,7 @@ const playerMotion = MotionValues(
         Seg<double>(
           start: Duration(milliseconds: 200),
           end: Duration(milliseconds: 520),
-          from: 0.55,
+          from: 0.6009114583333334,
           to: 1,
           curve: Curves.easeOut,
         ),
@@ -176,7 +176,7 @@ const playerMotion = MotionValues(
         Seg<double>(
           start: Duration(milliseconds: 240),
           end: Duration(milliseconds: 560),
-          from: 0,
+          from: 0.2443359375,
           to: 1,
           curve: Curves.easeOut,
         ),
@@ -196,7 +196,7 @@ const playerMotion = MotionValues(
         Seg<double>(
           start: Duration(milliseconds: 360),
           end: Duration(milliseconds: 620),
-          from: 0.82,
+          from: 0.8010937499999997,
           to: 1,
           curve: Curves.easeOutBack,
         ),

@@ -16,7 +16,6 @@ import 'dart:math' as math;
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/motion.dart' show curveByName, motionCurveNames;
-import 'package:flutterware/motion_vocabulary.dart';
 
 import '../../motion/lane_model.dart';
 import '../../motion/property_editor.dart';
@@ -997,40 +996,36 @@ class MotionInspector extends StatelessWidget {
                 ),
                 const SizedBox(height: FwSpacing.lg),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: FwSpacing.md,
                   children: [
                     Expanded(
-                      child: _Field(
-                        'Start',
-                        '${segment.startMs}',
-                        suffix: 'ms',
+                      child: _NumberEditor(
+                        label: 'Start',
+                        value: segment.startMs.toDouble(),
+                        shape: MotionNumberShape.milliseconds,
                         // Moves the span rather than trimming it. Dragging the
                         // middle is already what the lane means by a new start,
                         // and two gestures spelling the same edit differently
                         // is one too many.
-                        onCommit: (text) => _int(
-                          text,
-                          (value) => _change(
-                            selection,
-                            (span) => span.copyWith(
-                              startMs: value,
-                              endMs: value + span.durationMs,
-                            ),
-                          ),
-                        ),
+                        onCommit: (value) => _change(selection, (span) {
+                          var start = value.round();
+                          return span.copyWith(
+                            startMs: start,
+                            endMs: start + span.durationMs,
+                          );
+                        }),
                       ),
                     ),
                     Expanded(
-                      child: _Field(
-                        'Duration',
-                        '${segment.durationMs}',
-                        suffix: 'ms',
-                        onCommit: (text) => _int(
-                          text,
-                          (value) => _change(
-                            selection,
-                            (span) =>
-                                span.copyWith(endMs: span.startMs + value),
+                      child: _NumberEditor(
+                        label: 'Duration',
+                        value: segment.durationMs.toDouble(),
+                        shape: MotionNumberShape.milliseconds,
+                        onCommit: (value) => _change(
+                          selection,
+                          (span) => span.copyWith(
+                            endMs: span.startMs + value.round(),
                           ),
                         ),
                       ),
@@ -1148,20 +1143,15 @@ class MotionInspector extends StatelessWidget {
     );
   }
 
-  void _change(
+  /// Returns the write, rather than firing and forgetting it.
+  ///
+  /// Whoever is holding a value under the finger has to know when the file and
+  /// the guest have caught up; releasing before they have is what made every
+  /// commit flash the old number for a frame.
+  Future<void> _change(
     MotionSelection selection,
     MotionSpan Function(MotionSpan) change,
-  ) => unawaited(
-    onEdit(selection.target, selection.property, selection.index, change),
-  );
-
-  /// Commits only what parses. A field that will not read as a number keeps its
-  /// text and writes nothing, which is the difference between "I mistyped" and
-  /// "the file now says zero".
-  static void _int(String text, void Function(int) then) {
-    var value = int.tryParse(text.trim());
-    if (value != null && value >= 0) then(value);
-  }
+  ) => onEdit(selection.target, selection.property, selection.index, change);
 }
 
 /// A value, with whatever control its property earns.
@@ -1169,6 +1159,7 @@ class MotionInspector extends StatelessWidget {
 /// One place decides colour-or-number, and `property_editor.dart` decides the
 /// rest off the vocabulary — so adding a property to the closed set gives it an
 /// editor without anybody touching this file.
+/// A tuned value, with whatever control its property earns.
 class _ValueEditor extends StatelessWidget {
   const _ValueEditor({
     required this.label,
@@ -1180,7 +1171,7 @@ class _ValueEditor extends StatelessWidget {
   final String label;
   final MotionValueView? value;
   final String property;
-  final ValueChanged<MotionLiteral> onCommit;
+  final Future<void> Function(MotionLiteral) onCommit;
 
   @override
   Widget build(BuildContext context) {
@@ -1200,36 +1191,103 @@ class _ValueEditor extends StatelessWidget {
       );
     }
 
-    var prop = propFor(property);
-    var stored = switch (value) {
-      MotionNumberView(:var value) => value,
-      _ => 0.0,
-    };
+    return _NumberEditor(
+      label: label,
+      value: switch (value) {
+        MotionNumberView(:var value) => value,
+        _ => 0.0,
+      },
+      shape: shapeFor(property),
+      onCommit: (next) => onCommit(MotionNumber(next)),
+    );
+  }
+}
 
+/// A number, its control, and the one copy of the value they are both showing.
+///
+/// **The in-flight value lives here, not in the controls.** A slider and the
+/// number above it are two views of one thing; holding the dragged value in
+/// each left them disagreeing for the length of every drag — the slider moved
+/// and the number sat still, because the number was still showing what the file
+/// said.
+///
+/// **And it is released only once the write has landed.** Clearing on pointer-up
+/// dropped back to the file's value for the frames between committing and the
+/// reload arriving, which is a flash of the old number on every single edit. It
+/// is the same rule the span drag already followed and the reason its comment
+/// says "cleared after the write".
+class _NumberEditor extends StatefulWidget {
+  const _NumberEditor({
+    required this.label,
+    required this.value,
+    required this.shape,
+    required this.onCommit,
+  });
+
+  final String label;
+
+  /// In stored units — radians for an angle, milliseconds for a duration.
+  final double value;
+
+  final MotionNumberShape shape;
+  final Future<void> Function(double value) onCommit;
+
+  @override
+  State<_NumberEditor> createState() => _NumberEditorState();
+}
+
+class _NumberEditorState extends State<_NumberEditor> {
+  double? _held;
+
+  double get _shown => _held ?? widget.value;
+
+  void _change(double next) =>
+      setState(() => _held = widget.shape.clampStored(next));
+
+  Future<void> _commit(double next) async {
+    var settled = widget.shape.clampStored(next);
+    // A press with no movement still ends a drag, and rewriting the file with
+    // the value it already holds is a diff nobody asked for and an undo entry
+    // that undoes nothing.
+    if (settled == widget.value) {
+      if (_held != null) setState(() => _held = null);
+      return;
+    }
+    setState(() => _held = settled);
+    await widget.onCommit(settled);
+    if (mounted) setState(() => _held = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          label,
+          widget.label,
           style: context.type.caption.copyWith(color: context.colors.mut),
         ),
         const SizedBox(height: 3),
         _ScrubNumber(
-          value: stored,
-          prop: prop,
-          onCommit: (next) => onCommit(MotionNumber(next)),
+          value: _shown,
+          shape: widget.shape,
+          held: _held != null,
+          onChanged: _change,
+          onCommit: _commit,
         ),
-        switch (editorShapeFor(prop)) {
+        switch (widget.shape.editor) {
           MotionEditorShape.scrub => const SizedBox.shrink(),
           MotionEditorShape.slider => _BoundedSlider(
-            value: stored,
-            prop: prop,
-            onCommit: (next) => onCommit(MotionNumber(next)),
+            value: _shown,
+            shape: widget.shape,
+            onChanged: _change,
+            onCommit: _commit,
           ),
           MotionEditorShape.dial => _AngleDial(
-            value: stored,
-            prop: prop,
-            onCommit: (next) => onCommit(MotionNumber(next)),
+            value: _shown,
+            shape: widget.shape,
+            onChanged: _change,
+            onCommit: _commit,
           ),
         },
       ],
@@ -1241,22 +1299,29 @@ class _ValueEditor extends StatelessWidget {
 ///
 /// Drag-to-scrub rather than a text field you must select and retype: the thing
 /// you want nine times out of ten is *a bit more*, and a field makes you spell
-/// out a whole number to say it. The pixel-to-value rate comes from the
-/// property's soft range, so the same gesture means a sensible amount whether
-/// it runs 0..1 or 0..64.
+/// out a whole number to say it. The pixel-to-value rate comes from the shape,
+/// so the same gesture means a sensible amount whether the value runs 0..1 or
+/// 0..620.
 ///
-/// **Held locally and written once**, like the span drag: a sample-by-sample
-/// write would be a file read, a write and a reload per pixel, and sixty undo
-/// entries for one gesture.
+/// Controlled — the value under the finger belongs to [_NumberEditor], which is
+/// also showing it on a slider or a dial.
 class _ScrubNumber extends StatefulWidget {
   const _ScrubNumber({
     required this.value,
-    required this.prop,
+    required this.shape,
+    required this.held,
+    required this.onChanged,
     required this.onCommit,
   });
 
   final double value;
-  final MotionProp? prop;
+  final MotionNumberShape shape;
+
+  /// Whether a drag is in flight anywhere in this editor, so the border says so
+  /// even when the drag is on the slider.
+  final bool held;
+
+  final ValueChanged<double> onChanged;
   final ValueChanged<double> onCommit;
 
   @override
@@ -1264,12 +1329,9 @@ class _ScrubNumber extends StatefulWidget {
 }
 
 class _ScrubNumberState extends State<_ScrubNumber> {
-  double? _held;
   var _typing = false;
   late final _controller = TextEditingController();
   late final _focus = FocusNode()..addListener(_onFocus);
-
-  double get _shown => _held ?? widget.value;
 
   void _onFocus() {
     if (!_focus.hasFocus && _typing) _commitTyped();
@@ -1278,7 +1340,7 @@ class _ScrubNumberState extends State<_ScrubNumber> {
   void _startTyping() {
     setState(() {
       _typing = true;
-      _controller.text = formatDisplay(widget.prop, widget.value);
+      _controller.text = widget.shape.format(widget.value);
       _controller.selection = TextSelection(
         baseOffset: 0,
         extentOffset: _controller.text.length,
@@ -1292,19 +1354,13 @@ class _ScrubNumberState extends State<_ScrubNumber> {
     setState(() => _typing = false);
     // Refuses rather than writing a zero for what somebody meant.
     if (shown == null) return;
-    widget.onCommit(fromDisplay(widget.prop, shown));
+    widget.onCommit(widget.shape.fromDisplay(shown));
   }
 
   void _drag(double dx) {
     var shown =
-        toDisplay(widget.prop, _shown) + dx * scrubPerPixel(widget.prop);
-    setState(() => _held = fromDisplay(widget.prop, shown));
-  }
-
-  void _release() {
-    var held = _held;
-    setState(() => _held = null);
-    if (held != null) widget.onCommit(held);
+        widget.shape.toDisplay(widget.value) + dx * widget.shape.perPixel;
+    widget.onChanged(widget.shape.fromDisplay(shown));
   }
 
   @override
@@ -1317,14 +1373,14 @@ class _ScrubNumberState extends State<_ScrubNumber> {
 
   @override
   Widget build(BuildContext context) {
-    var unit = unitOf(widget.prop);
+    var unit = widget.shape.unit;
     return Container(
       height: 27,
       padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
       decoration: BoxDecoration(
         color: context.colors.bg,
         border: Border.all(
-          color: _held != null ? context.colors.accent : context.colors.line,
+          color: widget.held ? context.colors.accent : context.colors.line,
         ),
         borderRadius: BorderRadius.circular(7),
       ),
@@ -1361,13 +1417,13 @@ class _ScrubNumberState extends State<_ScrubNumber> {
                 behavior: HitTestBehavior.opaque,
                 onTap: _startTyping,
                 onHorizontalDragUpdate: (d) => _drag(d.delta.dx),
-                onHorizontalDragEnd: (_) => _release(),
-                onHorizontalDragCancel: _release,
+                onHorizontalDragEnd: (_) => widget.onCommit(widget.value),
+                onHorizontalDragCancel: () => widget.onCommit(widget.value),
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
-                        formatDisplay(widget.prop, _shown),
+                        widget.shape.format(widget.value),
                         style: context.type.caption.copyWith(
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
@@ -1388,30 +1444,25 @@ class _ScrubNumberState extends State<_ScrubNumber> {
   }
 }
 
-/// For a property whose soft range *is* its meaning — an opacity of 0.5 is
-/// half, and where it sits between 0 and 1 is the whole of what you want to see.
-class _BoundedSlider extends StatefulWidget {
+/// For a value whose soft range *is* its meaning — an opacity of 0.5 is half,
+/// and where it sits between 0 and 1 is the whole of what you want to see.
+class _BoundedSlider extends StatelessWidget {
   const _BoundedSlider({
     required this.value,
-    required this.prop,
+    required this.shape,
+    required this.onChanged,
     required this.onCommit,
   });
 
   final double value;
-  final MotionProp? prop;
+  final MotionNumberShape shape;
+  final ValueChanged<double> onChanged;
   final ValueChanged<double> onCommit;
 
   @override
-  State<_BoundedSlider> createState() => _BoundedSliderState();
-}
-
-class _BoundedSliderState extends State<_BoundedSlider> {
-  double? _held;
-
-  @override
   Widget build(BuildContext context) {
-    var (min, max) = displayRange(widget.prop);
-    var shown = toDisplay(widget.prop, _held ?? widget.value);
+    var (min, max) = shape.displayRange;
+    var shown = shape.toDisplay(value);
     return SizedBox(
       height: 22,
       child: SliderTheme(
@@ -1427,12 +1478,8 @@ class _BoundedSliderState extends State<_BoundedSlider> {
           min: math.min(min, shown),
           max: math.max(max, shown),
           value: shown,
-          onChanged: (next) =>
-              setState(() => _held = fromDisplay(widget.prop, next)),
-          onChangeEnd: (next) {
-            setState(() => _held = null);
-            widget.onCommit(fromDisplay(widget.prop, next));
-          },
+          onChanged: (next) => onChanged(shape.fromDisplay(next)),
+          onChangeEnd: (next) => onCommit(shape.fromDisplay(next)),
         ),
       ),
     );
@@ -1452,12 +1499,14 @@ class _BoundedSliderState extends State<_BoundedSlider> {
 class _AngleDial extends StatefulWidget {
   const _AngleDial({
     required this.value,
-    required this.prop,
+    required this.shape,
+    required this.onChanged,
     required this.onCommit,
   });
 
   final double value;
-  final MotionProp? prop;
+  final MotionNumberShape shape;
+  final ValueChanged<double> onChanged;
   final ValueChanged<double> onCommit;
 
   @override
@@ -1467,10 +1516,7 @@ class _AngleDial extends StatefulWidget {
 class _AngleDialState extends State<_AngleDial> {
   static const _size = 34.0;
 
-  double? _held;
   double? _lastPointer;
-
-  double get _shown => _held ?? widget.value;
 
   double _pointerAngle(Offset local) {
     var centre = const Offset(_size / 2, _size / 2);
@@ -1488,16 +1534,12 @@ class _AngleDialState extends State<_AngleDial> {
     // The short way round, so crossing twelve o'clock does not jump a turn.
     if (delta > math.pi) delta -= 2 * math.pi;
     if (delta < -math.pi) delta += 2 * math.pi;
-    setState(() => _held = _shown + delta);
+    widget.onChanged(widget.value + delta);
   }
 
   void _release() {
-    var held = _held;
-    setState(() {
-      _held = null;
-      _lastPointer = null;
-    });
-    if (held != null) widget.onCommit(held);
+    _lastPointer = null;
+    widget.onCommit(widget.value);
   }
 
   @override
@@ -1515,7 +1557,7 @@ class _AngleDialState extends State<_AngleDial> {
           child: CustomPaint(
             size: const Size(_size, _size),
             painter: _DialPainter(
-              radians: _shown,
+              radians: widget.value,
               tone: context.colors.accent,
               rim: context.colors.line,
               face: context.colors.bg,
@@ -1633,17 +1675,10 @@ class _Heading extends StatelessWidget {
 /// focused: a poll lands every second, and re-seeding under the cursor would
 /// take the text out from under whoever is typing it.
 class _Field extends StatefulWidget {
-  const _Field(
-    this.label,
-    this.text, {
-    required this.onCommit,
-    this.suffix,
-    this.swatch,
-  });
+  const _Field(this.label, this.text, {required this.onCommit, this.swatch});
 
   final String label;
   final String text;
-  final String? suffix;
   final Color? swatch;
   final ValueChanged<String> onCommit;
 
@@ -1728,13 +1763,6 @@ class _FieldState extends State<_Field> {
                   ),
                 ),
               ),
-              if (widget.suffix case var suffix?)
-                Text(
-                  suffix,
-                  style: context.type.caption.copyWith(
-                    color: context.colors.mut2,
-                  ),
-                ),
             ],
           ),
         ),
