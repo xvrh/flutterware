@@ -445,6 +445,18 @@ class _MotionStageState extends State<_MotionStage> {
     _start();
   }
 
+  @override
+  void didUpdateWidget(_MotionStage old) {
+    super.didUpdateWidget(old);
+    // The address carries the playhead, so navigating to the same motion at a
+    // different `t` has to move it. Parking covers the first scope only, and
+    // the stage's key is the package and file — a `t` that changed under an
+    // unchanged key reached nothing at all before this.
+    if (widget.place.t case var t? when t != old.place.t) {
+      unawaited(_seek(t));
+    }
+  }
+
   void _start() {
     var core = widget.core;
     var package = widget.place.package;

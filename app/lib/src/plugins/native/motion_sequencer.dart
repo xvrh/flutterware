@@ -175,7 +175,7 @@ class _MotionSequencerState extends State<MotionSequencer> {
         onSeek: widget.onSeek,
       ),
       if (!collapsed) ...[
-        for (var (index, property) in target.properties.indexed)
+        for (var property in target.properties)
           _LaneRow(
             key: ValueKey('${target.name}.${property.name}'),
             target: target.name,
@@ -185,7 +185,6 @@ class _MotionSequencerState extends State<MotionSequencer> {
             onSelect: widget.onSelect,
             onEdit: widget.onEdit,
             onCreate: () => widget.onCreate(target.name, property.name),
-            zebra: index.isOdd,
           ),
         if (target.addable.isNotEmpty)
           _AddRow(
@@ -498,7 +497,6 @@ class _LaneRow extends StatelessWidget {
     required this.selection,
     required this.onSelect,
     required this.onEdit,
-    required this.zebra,
     required this.onCreate,
   });
 
@@ -508,7 +506,6 @@ class _LaneRow extends StatelessWidget {
   final MotionSelection? selection;
   final ValueChanged<MotionSelection?> onSelect;
   final MotionEdit onEdit;
-  final bool zebra;
 
   /// Give this lane another tween. On a dashed lane that means the property
   /// starts existing; on a tuned one, a span at the playhead.
