@@ -2,6 +2,7 @@ import '../native_plugin.dart';
 import '../registry.dart';
 import 'assets_plugin.dart';
 import 'dependencies_plugin.dart';
+import 'icon_plugin.dart';
 import 'run_plugin.dart';
 import 'server_plugin.dart';
 import 'scenarios_plugin.dart';
@@ -24,6 +25,7 @@ PluginRegistry buildNativeRegistry() => PluginRegistry({
   runPluginId: panelFor<RunCore>(RunPlugin.new),
   serverPluginId: panelFor<ServerCore>(ServerPlugin.new),
   scenariosPluginId: panelFor<ScenariosCore>(ScenariosPlugin.new),
+  launcherIconPluginId: panelFor<LauncherIconCore>(LauncherIconPlugin.new),
   splashPluginId: panelFor<SplashCore>(SplashPlugin.new),
   uiCatalogPluginId: panelFor<PreviewsCore>(PreviewsPlugin.new),
 });

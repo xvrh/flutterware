@@ -348,6 +348,16 @@ class AddressScope extends StatelessWidget {
     return model!.handle;
   }
 
+  /// [write], or null when there is no scope above.
+  ///
+  /// For a panel whose selection is *also* meaningful without one — mounted
+  /// bare in a widget test, or from a dev entry point. Writing the address is
+  /// then an enhancement (the view becomes linkable) rather than a
+  /// precondition, and the panel does not have to choose between working
+  /// standalone and being addressable.
+  static AddressHandle? maybeWrite(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_AddressModel>()?.handle;
+
   static String? segment(BuildContext context, int index) =>
       _model(context, AddressAspect.segment(index)).handle.segment(index);
 

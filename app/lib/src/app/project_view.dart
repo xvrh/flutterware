@@ -3,9 +3,6 @@ import 'package:flutterware/devbar.dart';
 import '../about/screen.dart';
 import '../drawing/menu.dart';
 import '../drawing/screen.dart';
-import '../icon/image_provider.dart';
-import '../icon/model/service.dart';
-import '../icon/screen.dart';
 import '../overview/screen.dart';
 import '../project.dart';
 import '../ui/side_menu.dart';
@@ -23,7 +20,6 @@ class ProjectView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const iconWidth = 25.0;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -33,34 +29,11 @@ class ProjectView extends StatelessWidget {
             SingleLineGroup(
               child: MenuLink(
                 url: paths.home,
-                title: Row(
-                  children: [
-                    ValueStreamBuilder<Snapshot<SampleIcon>>(
-                      stream: project.icons.sample.snapshots,
-                      builder: (context, snapshot, child) {
-                        var data = snapshot.data?.file;
-
-                        if (data != null) {
-                          return Image(
-                            image: AppIconImageProvider(data),
-                            width: iconWidth,
-                            height: iconWidth,
-                          );
-                        } else {
-                          return const SizedBox(width: iconWidth);
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ValueStreamBuilder<Snapshot<Pubspec>>(
-                        stream: project.pubspec,
-                        builder: (context, snapshot, child) {
-                          return Text(snapshot.data?.name ?? '');
-                        },
-                      ),
-                    ),
-                  ],
+                title: ValueStreamBuilder<Snapshot<Pubspec>>(
+                  stream: project.pubspec,
+                  builder: (context, snapshot, child) {
+                    return Text(snapshot.data?.name ?? '');
+                  },
                 ),
               ),
             ),
@@ -71,7 +44,6 @@ class ProjectView extends StatelessWidget {
                   url: paths.dependencies,
                   title: Text('Pub dependencies'),
                 ),
-                MenuLink(url: paths.icon, title: Text('Launcher icon')),
               ],
             ),
             if (enableDrawingPath.dependsOnValue(context)) DrawingMenu(project),
@@ -83,8 +55,9 @@ class ProjectView extends StatelessWidget {
             // No dependencies route. That screen reads the shell's address for
             // which package it is on and where inside itself it is, and this
             // pre-shell view has no address to give it. It lives in the
-            // `flutterware.dependencies` plugin now.
-            paths.icon: (route) => IconScreen(project),
+            // `flutterware.dependencies` plugin now. Neither is there a
+            // launcher-icon route: that screen is the `flutterware.launcher_icon`
+            // plugin now.
             paths.drawing: (route) => DrawingScreen(project),
           }, onNotFound: (_) => paths.home),
         ),

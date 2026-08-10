@@ -1,0 +1,491 @@
+import 'dart:async';
+
+import 'package:flutterware/plugins.dart';
+import 'package:path/path.dart' as p;
+
+import '../../launcher_icon/model/role.dart';
+import '../../launcher_icon/model/scan.dart';
+import '../plugin_core.dart';
+import '../plugin_host.dart';
+import 'icon_address.dart';
+import 'icon_results.dart';
+
+/// The registered id — also what `tool/flutterware.dart` declares.
+const launcherIconPluginId = 'flutterware.launcher_icon';
+
+/// Every launcher icon a package has, and what each operating system does with
+/// it.
+///
+/// The subject is **what the OS shows, not what a generator wrote**. Nothing
+/// here opens `icons_launcher.yaml` or `flutter_launcher_icons.yaml`, and
+/// nothing here can run a generator: a config is one project's way of
+/// producing these files, and an agent reads it better than a transcription
+/// that goes stale every release. What is left is the part with no coupling at
+/// all — the files, the project's own wiring, and the platform rules that
+/// decide which of them a user ever sees.
+///
+/// That independence is the feature. This reads the same on a project that
+/// generated its icons, one that drew them by hand, and one that let Xcode do
+/// it.
+///
+/// Holds to the two rules every core holds to: the constructor allocates
+/// nothing, and [report] only formats what somebody already caused to load.
+/// Loading is listing directories and reading image headers.
+class LauncherIconCore extends PluginCore {
+  LauncherIconCore(super.host);
+
+  /// Declared packages, filtered to those the workspace knows about, so a typo
+  /// cannot make the plugin scan a directory that is not there.
+  late final List<String> packages = [
+    for (var path in host.packagePaths)
+      if (host.workspace.exists(path)) path,
+  ];
+
+  final _scans = <String, IconScan>{};
+  final _failures = <String, String>{};
+  final _scanning = <String>{};
+  final _pending = <String, Future<void>>{};
+
+  /// The scan for one package and source set, or null when nothing has looked
+  /// at it yet.
+  IconScan? scanFor(String path, {String? flavor}) =>
+      _scans[_key(path, flavor)];
+
+  String? failureFor(String path, {String? flavor}) =>
+      _failures[_key(path, flavor)];
+
+  bool isScanning(String path, {String? flavor}) =>
+      _scanning.contains(_key(path, flavor));
+
+  /// Where a cell *is*.
+  ///
+  /// Built here rather than left to a reader to reassemble, which is how two
+  /// surfaces come to disagree about what a thing is called.
+  Address addressFor(
+    String packagePath, {
+    String? flavor,
+    IconRole? role,
+    AdaptiveMask? mask,
+  }) => Address(
+    worktree: host.worktree.name,
+    plugin: host.id,
+    segments: iconSegments(packagePath, flavor),
+    axes: iconAxes(role: role, mask: mask),
+  );
+
+  /// The key a scan caches under. A flavour is a different set of files in the
+  /// same package, so it cannot share one.
+  ///
+  /// Joined with an escaped NUL, which cannot occur in a path or a directory
+  /// name — so no pair can collide with another. Written as `\u0000` rather
+  /// than pasted: a raw NUL in the source makes git call the file binary and
+  /// stop showing its diff.
+  String _key(String path, String? flavor) =>
+      flavor == null ? path : '$path\u0000$flavor';
+
+  /// Scans [path], unless it already has been. Idempotent.
+  void track(String path, {String? flavor}) =>
+      unawaited(_load(path, flavor: flavor));
+
+  /// Drops the cached scan so the next [track] re-reads.
+  void invalidate(String path, {String? flavor}) {
+    _scans.remove(_key(path, flavor));
+    _failures.remove(_key(path, flavor));
+    notifyChanged();
+  }
+
+  /// Reads the tree again, and **completes when the new scan is in**.
+  ///
+  /// [track] is fire-and-forget, which is right for mounting — nobody is
+  /// waiting — and wrong for a button, where the thing that pressed it wants to
+  /// show the result. Returning the future lets the caller await rather than
+  /// depend on some ancestor happening to listen for the change.
+  Future<void> reload(String path, {String? flavor}) {
+    invalidate(path, flavor: flavor);
+    return _load(path, flavor: flavor);
+  }
+
+  @override
+  Future<void> computeAll() async {
+    await Future.wait([for (var path in packages) _load(path)]);
+  }
+
+  Future<void> _load(String path, {String? flavor}) {
+    var key = _key(path, flavor);
+    if (_scans.containsKey(key) || _failures.containsKey(key)) {
+      return Future.value();
+    }
+
+    var pending = _pending[key];
+    if (pending != null) return pending;
+
+    // Deliberately not `putIfAbsent`. Scanning is `async` but never awaits, so
+    // it runs to completion *synchronously* inside the callback — its cleanup
+    // would try to remove a key `putIfAbsent` has not inserted yet, leaving a
+    // completed future cached under it forever. The next load after an
+    // `invalidate` would then return that stale future and never re-read.
+    // Clearing through `whenComplete` cannot run before the insertion below.
+    //
+    // The clean-up is a block on purpose: `Map.remove` returns the value it
+    // removed — the very future being completed — and `whenComplete` waits on
+    // any future its callback returns. `SplashCore._load` carries the same
+    // warning.
+    var future = _scan(path, flavor);
+    _pending[key] = future;
+    unawaited(
+      future.whenComplete(() {
+        _pending.remove(key);
+      }),
+    );
+    return future;
+  }
+
+  Future<void> _scan(String path, String? flavor) async {
+    var key = _key(path, flavor);
+    _scanning.add(key);
+    notifyChanged();
+    try {
+      var root = host.workspace.packageFor(path).absolutePath;
+      _scans[key] = scanIcons(
+        packageRoot: root,
+        packagePath: path,
+        flavor: flavor,
+      );
+    } catch (e) {
+      _failures[key] = '$e';
+    } finally {
+      _scanning.remove(key);
+      notifyChanged();
+    }
+  }
+
+  // ---- Report ------------------------------------------------------------
+
+  @override
+  PluginReport get report => PluginReport(
+    id: host.id,
+    label: host.label,
+    status: _status,
+    badge: _badge,
+    children: [
+      for (var path in packages)
+        PluginChild(
+          id: path,
+          label: path == '.' ? 'root' : path,
+          status: _childStatus(path),
+        ),
+    ],
+    actions: _actions,
+    view: _view,
+  );
+
+  /// The plugin's own row, which stays **quiet**.
+  ///
+  /// A viewer has nothing to announce most of the time, and "not computed" is
+  /// the resting state every plugin is in until you click it — saying so on
+  /// every sidebar paint draws the eye to nothing. So this speaks only for
+  /// things that are the plugin's rather than a package's, and the counts live
+  /// on the package rows where they belong.
+  Status get _status {
+    if (packages.isEmpty) return const Status.warn('No packages configured');
+    return Status.none;
+  }
+
+  /// The worst thing any package has to say, as a mark rather than a sentence.
+  StatusBadge get _badge {
+    var worst = Tone.neutral;
+    for (var path in packages) {
+      if (_failures.containsKey(_key(path, null))) {
+        return const StatusBadge.dot(Tone.error);
+      }
+      var scan = _scans[_key(path, null)];
+      if (scan == null) continue;
+      for (var finding in scan.findings) {
+        if (finding.tone == Tone.error) {
+          return const StatusBadge.dot(Tone.error);
+        }
+        if (finding.tone == Tone.warn) worst = Tone.warn;
+      }
+    }
+    return worst == Tone.warn
+        ? const StatusBadge.dot(Tone.warn)
+        : StatusBadge.none;
+  }
+
+  Status _childStatus(String path) {
+    var failure = _failures[_key(path, null)];
+    if (failure != null) return Status.error(failure);
+
+    var scan = _scans[_key(path, null)];
+    if (scan == null) {
+      // Silent until it has been looked at: the resting state is not news.
+      return _scanning.contains(_key(path, null))
+          ? const Status.info('Reading…')
+          : Status.none;
+    }
+
+    if (scan.isEmpty) return const Status.neutral('No icons found');
+
+    var errors = scan.findings.where((f) => f.tone == Tone.error).length;
+    if (errors > 0) {
+      return Status.error('$errors problem${errors == 1 ? '' : 's'}');
+    }
+    var warnings = scan.findings.where((f) => f.tone == Tone.warn).length;
+    if (warnings > 0) {
+      return Status.warn('$warnings warning${warnings == 1 ? '' : 's'}');
+    }
+    return Status.good('${scan.fileCount} files');
+  }
+
+  PluginView get _view {
+    var nodes = <ViewNode>[];
+    for (var path in packages) {
+      var scan = _scans[_key(path, null)];
+      if (scan == null) continue;
+      nodes.add(
+        ViewSection(path == '.' ? 'root' : path, [
+          if (scan.isEmpty)
+            const ViewText('No launcher icons found in this package.')
+          else ...[
+            for (var platform in scan.platforms)
+              ..._platformNodes(path, scan, platform),
+            ..._contextNodes(scan),
+            if (scan.findings.isNotEmpty)
+              ViewSection('Findings', [
+                ViewItems([
+                  for (var finding in scan.findings)
+                    ViewItem(
+                      finding.role?.label ?? 'project',
+                      detail: finding.message,
+                      tone: finding.tone,
+                      address: finding.role == null
+                          ? null
+                          : addressFor(
+                              path,
+                              flavor: scan.flavor,
+                              role: finding.role,
+                            ),
+                    ),
+                ]),
+              ]),
+          ],
+        ]),
+      );
+    }
+    return PluginView(nodes);
+  }
+
+  List<ViewNode> _platformNodes(
+    String packagePath,
+    IconScan scan,
+    IconPlatform platform,
+  ) {
+    var roles = [
+      for (var role in scan.forPlatform(platform))
+        if (role.isNotEmpty) role,
+    ];
+    if (roles.isEmpty) return const [];
+
+    return [
+      ViewSection(platform.label, [
+        ViewTable(
+          const ['Role', 'Files', 'Largest', 'Shown'],
+          [
+            for (var role in roles)
+              [
+                role.role.label,
+                role.color != null && role.files.isEmpty
+                    ? role.color!
+                    : '${role.files.length}',
+                _largest(role),
+                _shown(role),
+              ],
+          ],
+        ),
+      ]),
+    ];
+  }
+
+  static String _largest(IconRoleScan role) {
+    var largest = role.largest;
+    if (largest == null) return '—';
+    if (largest.icoFrames.isNotEmpty) {
+      return '${largest.icoFrames.length} frames to ${largest.icoFrames.last}px';
+    }
+    if (largest.width == null) return '—';
+    return '${largest.width}×${largest.height}';
+  }
+
+  /// Whether the OS reaches this, in a word.
+  static String _shown(IconRoleScan role) => switch (role.referenced) {
+    false => 'never — unreferenced',
+    true => role.role.since ?? 'yes',
+    null => role.role.since ?? 'yes',
+  };
+
+  /// The facts that decide what the tables above actually mean.
+  List<ViewNode> _contextNodes(IconScan scan) => [
+    ViewSection('Project', [
+      if (scan.android != null)
+        ViewField(
+          'minSdk',
+          scan.android!.minSdk == null
+              ? 'unknown — not a literal in ${scan.android!.minSdkSource ?? 'build.gradle'}'
+              : '${scan.android!.minSdk}'
+                    '${scan.android!.minSdkSource == null ? '' : ' (${scan.android!.minSdkSource})'}',
+          tone: scan.android!.minSdk == null ? Tone.warn : Tone.neutral,
+        ),
+      if (scan.ios != IosCatalog.none)
+        ViewField('iOS icons', switch (scan.ios) {
+          IosCatalog.appIconSet => 'AppIcon.appiconset',
+          IosCatalog.iconComposer =>
+            'Icon Composer — ${scan.iconBundles.join(', ')}',
+          IosCatalog.both =>
+            'both an Icon Composer bundle and AppIcon.appiconset',
+          IosCatalog.none => 'none',
+        }, tone: scan.ios == IosCatalog.both ? Tone.warn : Tone.neutral),
+      if (scan.flavors.isNotEmpty)
+        ViewField('Android source sets', scan.flavors.join(', ')),
+    ]),
+  ];
+
+  // ---- Actions -----------------------------------------------------------
+
+  ActionParameter get _packageParameter => ActionParameter(
+    'package',
+    'Package',
+    kind: ActionParameterKind.choice,
+    required: false,
+    description: 'Which declared package; the first when omitted',
+    options: [
+      for (var path in packages)
+        ActionOption(path, label: path == '.' ? 'root' : path),
+    ],
+  );
+
+  static const _flavorParameter = ActionParameter(
+    'flavor',
+    'Flavor',
+    required: false,
+    description:
+        'Which Android source set under android/app/src/; main when omitted',
+  );
+
+  List<PluginAction> get _actions => [
+    PluginAction(
+      'inventory',
+      'Inventory',
+      returns: IconInventoryResult,
+      description:
+          'Every launcher icon on disk, what the OS does with each, and which '
+          'of them the project never actually references',
+      parameters: [_packageParameter, _flavorParameter],
+    ),
+  ];
+
+  @override
+  Future<Object?> invoke(
+    String actionId, {
+    Map<String, Object?> arguments = const {},
+  }) async {
+    var path = _packageArgument(arguments);
+    var flavor = arguments['flavor'];
+    var wanted = flavor is String && flavor.isNotEmpty ? flavor : null;
+
+    await _load(path, flavor: wanted);
+    var failure = _failures[_key(path, wanted)];
+    if (failure != null) throw StateError(failure);
+
+    return switch (actionId) {
+      'inventory' => _inventory(path, wanted),
+      _ => throw ArgumentError.value(
+        actionId,
+        'actionId',
+        'unknown action on $id',
+      ),
+    };
+  }
+
+  String _packageArgument(Map<String, Object?> arguments) {
+    var given = arguments['package'];
+    if (given is String && given.isNotEmpty) {
+      if (!packages.contains(given)) {
+        throw ArgumentError.value(
+          given,
+          'package',
+          'not declared for this plugin; try one of ${packages.join(', ')}',
+        );
+      }
+      return given;
+    }
+    if (packages.isEmpty) {
+      throw StateError('No packages are configured for $id.');
+    }
+    return packages.first;
+  }
+
+  IconInventoryResult _inventory(String path, String? flavor) {
+    var scan = _scans[_key(path, flavor)]!;
+    var packageRoot = host.workspace.packageFor(path).absolutePath;
+
+    if (flavor != null && !scan.flavors.contains(flavor)) {
+      throw StateError(
+        'No android/app/src/$flavor/ in "$path". '
+        'Found: ${scan.flavors.isEmpty ? 'none' : scan.flavors.join(', ')}',
+      );
+    }
+
+    return IconInventoryResult(
+      package: path,
+      address: '${addressFor(path, flavor: flavor)}',
+      flavor: flavor,
+      flavors: scan.flavors,
+      iosCatalog: scan.ios.name,
+      iconBundles: scan.iconBundles,
+      minSdk: scan.android?.minSdk,
+      minSdkSource: scan.android?.minSdkSource,
+      roles: [
+        for (var role in scan.roles)
+          if (role.isNotEmpty)
+            IconRoleEntry(
+              role: role.role.id,
+              label: role.role.label,
+              platform: role.role.platform.name,
+              treatment: role.role.treatment.name,
+              mask: role.role.mask.name,
+              since: role.role.since,
+              referenced: role.referenced,
+              color: role.color,
+              files: [
+                for (var file in role.files)
+                  IconFileEntry(
+                    // Worktree-relative: an agent's tools are scoped to the
+                    // repo, not to one package inside it.
+                    path: p.relative(
+                      p.join(packageRoot, file.path),
+                      from: host.worktree.path,
+                    ),
+                    modified: file.modified.toIso8601String(),
+                    width: file.width,
+                    height: file.height,
+                    hasAlpha: file.hasAlpha,
+                    density: file.density,
+                    icoFrames: file.icoFrames,
+                    declaredSize: file.sizeMismatch ? file.declaredSize : null,
+                  ),
+              ],
+            ),
+      ],
+      findings: [
+        for (var finding in scan.findings)
+          IconFindingEntry(
+            tone: finding.tone.name,
+            message: finding.message,
+            role: finding.role?.id,
+          ),
+      ],
+    );
+  }
+}
+
+PluginCore launcherIconCoreFactory(PluginHost host) => LauncherIconCore(host);
