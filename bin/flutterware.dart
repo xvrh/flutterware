@@ -302,8 +302,12 @@ bool _inPubCache(String packageRoot) {
 String _workingCopyPath(String packageRoot) =>
     p.join(_userHomePath(), '.flutterware', _hash(packageRoot));
 
+/// [packageRoot] is its own ignore root, here and in [_sourceStamp] and
+/// [_isFresh]: this package sits in the pub cache, and a rule from some
+/// unrelated repository above it — `$HOME` kept as a dotfiles repo is the way
+/// that happens — would drop files the copy has to carry.
 void _copyInto(String packageRoot, String destination, String stamp) {
-  for (var file in listFilesInDirectory(packageRoot)) {
+  for (var file in listFilesInDirectory(packageRoot, ignoreRoot: packageRoot)) {
     var target = p.join(destination, p.relative(file.path, from: packageRoot));
     File(target).createSync(recursive: true);
     file.copySync(target);
@@ -329,7 +333,7 @@ bool _isFresh(String executable, String appPath) {
     p.join(packageRoot, 'lib'),
   ]) {
     if (!Directory(directory).existsSync()) continue;
-    for (var file in listFilesInDirectory(directory)) {
+    for (var file in listFilesInDirectory(directory, ignoreRoot: packageRoot)) {
       if (!file.path.endsWith('.dart')) continue;
       if (file.lastModifiedSync().isAfter(builtAt)) return false;
     }
@@ -344,7 +348,7 @@ bool _isFresh(String executable, String appPath) {
 /// copied — a file the copy would skip must not be able to invalidate it.
 String _sourceStamp(String root) {
   var digest = <String>[];
-  for (var file in listFilesInDirectory(root)) {
+  for (var file in listFilesInDirectory(root, ignoreRoot: root)) {
     var stat = file.statSync();
     digest.add(
       '${p.relative(file.path, from: root)}'

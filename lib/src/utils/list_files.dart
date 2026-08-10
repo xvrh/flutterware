@@ -29,6 +29,14 @@ const _hardFloor = '''
 /// Two departures from `git ls-files`, both deliberate: a file that has never
 /// been added is listed (it is a source file that exists, which is what every
 /// caller here means), and symlinks are dropped rather than followed.
+///
+/// **Pass `ignoreRoot: directory` for a self-contained package that merely
+/// happens to sit under a repository** — anything in the pub cache, or a copy
+/// being made of one. Inheritance is right for a directory inside the tree
+/// somebody is working on and wrong for one that is not: a home directory kept
+/// as a dotfiles repository ignoring `bin/` would otherwise silently drop
+/// `bin/` from every package below it, which the empty-result guard below
+/// cannot catch because the walk is not empty, only wrong.
 Iterable<File> listFilesInDirectory(String directory, {String? ignoreRoot}) {
   var beneath = p.normalize(p.absolute(directory));
   var root = p.normalize(

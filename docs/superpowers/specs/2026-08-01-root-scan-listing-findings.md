@@ -204,23 +204,71 @@ difference**; it was deleted rather than kept as plausible-looking insurance.
 
 Two changes came out of it:
 
-- **`fingerprint()` returns a hash**, not a listing. Naming every file made a
-  151KB string, allocated, sorted and discarded every three seconds.
+- **`fingerprint()` stopped naming every file**, hashing instead — 151KB of
+  string allocated, sorted and discarded every three seconds. It was deleted
+  outright a pass later; see the review section below.
 - **`CatalogScanner` is incremental.** It holds each file's contribution keyed by
   mtime and re-reads only what moved. Grouping is per file by definition and
   moved inside that cache; duplicate-id and `MultiPreview` checks are cross-file
   and stayed outside it, recomputed on every assembly.
 
-| rescan | before | after, one file saved |
-|---|---|---|
-| `examples/example` | 9ms | 8ms |
-| `app/` | 57ms | **17ms** |
-| repo root | 134ms | **47ms** |
+| rescan | before | incremental | gate removed |
+|---|---|---|---|
+| `examples/example` | 9ms | 8ms | 8ms |
+| `app/` | 57ms | 17ms | **17ms** |
+| repo root | 134ms | 47ms | **45ms** |
+
+(The middle column is what the scan itself costs; the last is what the daemon
+actually pays per changed reload, which was twice that until the gate went.)
 
 What is left is the listing, which is now the floor. Beating it means a
 filesystem watcher rather than a poll — worth it if a project makes 47ms felt,
 and not before: Dart's recursive `Directory.watch` is unsupported on Linux, so it
 is a per-platform answer rather than a swap.
+
+### The review pass, and the four things it caught
+
+Run over the landed change looking for what the measurements had hidden rather
+than shown.
+
+**1. The gate had become the cost it was guarding against.** `fingerprint()`
+listed and statted the whole package to decide whether a scan was worth it — a
+good trade while a scan meant reading and parsing everything, and not one once a
+scan re-reads only what moved. Measured, they were the same work: 45ms against
+47ms at the repo root. So every reload that *had* something to do paid for the
+walk twice — 90ms where 45ms was the floor. `fingerprint()` is gone; `scan()`
+answers with [`ScanResult.changed`](../../../app/lib/src/previews/discovery.dart)
+and returns the previous entries untouched when nothing moved.
+
+**2. The scan crossed package boundaries.** A plugin's `example/`, a workspace's
+`packages/*` — the widened walk read them as part of the package above. Verified
+before fixing: a `@Preview` in a nested package was discovered, and the wrapper
+imported it *by relative path*, which is both the two-libraries bug again and an
+import resolved against a package config that need not contain what that file
+imports. A package boundary is where the scan stops now, re-read each scan so a
+package created mid-session takes its previews with it.
+
+**3. Inheriting ignores is wrong for a package you are not working in.** The
+empty-result guard catches an ancestor rule that blacks a directory out
+entirely. It cannot catch a *partial* one: `$HOME` kept as a dotfiles repository
+ignoring `bin/` would silently drop `bin/` from every package under
+`~/.pub-cache` — including, in the hosted install, the `bin/fw.dart` the copy
+exists to carry. The launcher's three walks and the dependencies plugin's three
+now pass `ignoreRoot: <the package itself>`; a dependency's own `.gitignore`
+still applies, and nothing above it does.
+
+**4. A rescan on the reload path must not throw.** A file listed by the walk and
+deleted a moment later — a checkout, a build landing — would take a
+`FileSystemException` straight out of `select`. It is treated as gone instead,
+and picked up again if it comes back.
+
+Checked and found sound: mtime resolution is microseconds here, not the second
+that would make same-tick edits invisible; `Ignore.listFiles` prunes to `beneath`
+rather than filtering a full-repo walk, so an ancestor ignore root costs a few
+`ignoreForDir` calls and nothing else; the daemon's generated wrappers live in
+the *GUI's* `build/`, outside any scanned project, so they cannot feed a rescan
+loop; and overlapping `roots` now dedupe through the per-file map instead of
+yielding an entry twice.
 
 ### One thing the investigation missed
 
@@ -235,6 +283,10 @@ the package's `lib/`, for the demo itself and for its carried relative imports.
 
 - **Which root.** Per declared package. `rootFor(path)` is per package config,
   as it already was.
+- **Nested packages.** Excluded — a package boundary is where "the package"
+  ends. `test/` is included and `example/` is not, which sounds inconsistent
+  until you note that one is this package's own directory and the other is a
+  different package that happens to live inside it.
 - **`test/`.** Included — the scan is the package. A preview there pulling
   `flutter_test` into the compile closure is a cost somebody opted into by
   writing one, not a reason to make the default surprising.

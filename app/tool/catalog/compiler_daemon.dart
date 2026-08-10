@@ -132,9 +132,6 @@ class _Daemon {
   late final EntrypointGenerator _generator;
   late final CatalogScanner _scanner;
 
-  /// What the roots looked like when [_discovered] was produced.
-  var _scanned = '';
-
   /// Bumped whenever the compiler *accepts* anything — a fresh library from a
   /// rescan, an edit, or the entrypoint rewrite a select is.
   ///
@@ -232,8 +229,11 @@ class _Daemon {
   /// Re-runs discovery when the files under the roots have moved, so an entry
   /// added, renamed or deleted while the catalog is open shows up.
   ///
-  /// Guarded by a fingerprint rather than run every time: discovery reads and
-  /// parses, and this sits on the reload loop.
+  /// Runs the scan every time and lets it answer "nothing moved" — it keeps
+  /// each file's result and re-reads only what changed, so a scan that finds
+  /// nothing costs what asking whether to scan used to. Asking first was a
+  /// second walk of the whole package on exactly the reloads that had work to
+  /// do; see [ScanResult.changed].
   ///
   /// A scan that comes back with errors is *reported and dropped* — the entry
   /// set stays as it was. Refusing to serve is right at startup, where nothing
@@ -248,12 +248,9 @@ class _Daemon {
   final _pending = <Uri>{};
 
   void _rescanIfNeeded() {
-    var fingerprint = _scanner.fingerprint();
-    if (fingerprint == _scanned) return;
-    _scanned = fingerprint;
-
     var watch = Stopwatch()..start();
     var scan = _scanner.scan();
+    if (!scan.changed) return;
     if (!scan.ok) {
       stderr.writeln(
         '[catalog] rescan found errors, keeping the previous entries:\n'
@@ -442,7 +439,6 @@ class _Daemon {
       roots: config.roots,
       previewAnnotations: config.previewAnnotations,
     );
-    _scanned = _scanner.fingerprint();
     var scan = _scanner.scan();
     if (!scan.ok) {
       // A duplicate id or an uncallable target means an entry would be missing

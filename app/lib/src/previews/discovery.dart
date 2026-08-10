@@ -25,11 +25,27 @@ class _FileScan {
 
 /// How a scan went: what it found, and what it noticed but did not act on.
 class ScanResult {
-  ScanResult({required this.entries, required this.diagnostics});
+  ScanResult({
+    required this.entries,
+    required this.diagnostics,
+    this.changed = true,
+  });
 
   final List<CatalogEntry> entries;
 
   final List<ScanDiagnostic> diagnostics;
+
+  /// Whether any file was read this time.
+  ///
+  /// False means this is what the previous [CatalogScanner.scan] returned, file
+  /// for file, and a caller holding that result has nothing to do — **the whole
+  /// of what the fingerprint this replaced was for**. Fingerprinting listed and
+  /// statted the roots to decide whether a scan was worth it, which was a good
+  /// trade while a scan meant reading and parsing everything. It is not one now
+  /// that a scan re-reads only what moved: the two cost the same (45ms against
+  /// 47ms at this repository's root), so asking first and then scanning paid
+  /// for the walk twice on exactly the reloads that had work to do.
+  final bool changed;
 
   /// A scan with an error is not a usable catalog: an entry would be missing or
   /// unreachable, which is worse than refusing.
@@ -81,28 +97,51 @@ class CatalogScanner {
   /// What each file yielded last time it was read, keyed by absolute path.
   ///
   /// **What makes a rescan proportional to the edit rather than to the
-  /// package.** The scan root is the whole package now, so the fingerprint moves
-  /// when any `.dart` file is touched — `lib/main.dart` included, which you edit
+  /// package.** The scan root is the whole package now, so any `.dart` file
+  /// being touched brings us here — `lib/main.dart` included, which you edit
   /// constantly — and a rescan sits at the head of `select`, on the hot-reload
   /// path. Re-reading and re-parsing everything there cost 57ms for this app
   /// package and 134ms for the repository root, to answer a question that the
   /// edited file alone decides.
   final _scanned = <String, _FileScan>{};
 
+  /// Which directories below [projectRoot] belong to a package of their own.
+  ///
+  /// Rebuilt each scan rather than kept: a nested package can be created while
+  /// the catalog is open, and a memo that never expires would go on serving its
+  /// previews as this package's.
+  final _nested = <String, bool>{};
+
   ScanResult scan() {
+    _nested.clear();
+    var changed = false;
     var live = <String>{};
     for (var file in _dartFiles()) {
+      var read = _read(file);
+      // Listed a moment ago and unreadable now — a checkout or a build landing
+      // mid-scan. Left out of [live], so it is treated as gone and picked up
+      // again whenever it comes back.
+      if (read == null) continue;
       live.add(file.path);
-      var modified = file.statSync().modified.microsecondsSinceEpoch;
-      if (_scanned[file.path] case var cached?
-          when cached.modified == modified) {
-        continue;
-      }
-      _scanned[file.path] = _scanOne(file, modified);
+      if (identical(_scanned[file.path], read)) continue;
+      _scanned[file.path] = read;
+      changed = true;
     }
     // A file that is gone takes its entries with it — including one that became
-    // gitignored, which is the same thing from here.
+    // gitignored, or that a new nested pubspec just handed to another package,
+    // which are the same thing from here.
+    var held = _scanned.length;
     _scanned.removeWhere((path, _) => !live.contains(path));
+    changed |= _scanned.length != held;
+    // Assembly below is a pure function of [_scanned], so when nothing moved
+    // there is nothing to redo — only the flag differs.
+    if (_last case var last? when !changed) {
+      return ScanResult(
+        entries: last.entries,
+        diagnostics: last.diagnostics,
+        changed: false,
+      );
+    }
 
     var entries = <CatalogEntry>[];
     var diagnostics = <ScanDiagnostic>[];
@@ -121,11 +160,34 @@ class CatalogScanner {
     _rejectDuplicateIds(entries, diagnostics);
     _reportMultiPreviews(multiPreviews, diagnostics);
     entries.sort((a, b) => a.id.compareTo(b.id));
-    return ScanResult(entries: entries, diagnostics: diagnostics);
+    return _last = ScanResult(entries: entries, diagnostics: diagnostics);
   }
 
-  _FileScan _scanOne(File file, int modified) {
-    var source = file.readAsStringSync();
+  /// The last assembled result, to answer an unchanged scan with.
+  ScanResult? _last;
+
+  /// What [file] contributes, re-read only when it has moved since last time —
+  /// otherwise the very object the last scan returned, which is how the caller
+  /// tells that nothing happened.
+  ///
+  /// Null when it cannot be read at all. A rescan sits at the head of every
+  /// `select`, so a file the walk listed and something deleted a moment later
+  /// has to be a file this stops caring about, not an exception on the reload
+  /// path.
+  _FileScan? _read(File file) {
+    int modified;
+    String source;
+    try {
+      modified = file.statSync().modified.microsecondsSinceEpoch;
+      if (_scanned[file.path] case var cached?
+          when cached.modified == modified) {
+        return cached;
+      }
+      source = file.readAsStringSync();
+    } on FileSystemException {
+      return null;
+    }
+
     // A substring prefilter before parsing: 20ms across 180 files, against
     // 478ms to parse them. `MultiPreview` joins the annotations rather than
     // riding along with them, because the class that extends it is routinely
@@ -152,28 +214,6 @@ class CatalogScanner {
     return result;
   }
 
-  /// What the roots look like from outside, without reading or parsing
-  /// anything: every `.dart` file and when it was last written.
-  ///
-  /// A stand-in for "is a rescan worth it". Listing and statting a whole
-  /// package is a few milliseconds against the reads and parsing behind it, and
-  /// a daemon that rescanned on every request just in case somebody added a
-  /// demo would put *that* on the reload loop, which is the one thing that has
-  /// to stay quick.
-  ///
-  /// Hashed rather than spelled out. The result is only ever compared to the
-  /// previous one, and naming every file in it made a 151KB string for this
-  /// repository — allocated, sorted and thrown away every three seconds while
-  /// the panel is open. Sorting the hashes keeps it independent of the order
-  /// the walk happened to return.
-  String fingerprint() {
-    var files = [
-      for (var file in _dartFiles())
-        Object.hash(file.path, file.statSync().modified.microsecondsSinceEpoch),
-    ]..sort();
-    return '${files.length}:${Object.hashAll(files)}';
-  }
-
   /// Listed the way git lists, because the default root is now the package
   /// itself and a raw recursive walk from there is a trap.
   ///
@@ -188,9 +228,34 @@ class CatalogScanner {
       var directory = p.join(projectRoot, root);
       if (!Directory(directory).existsSync()) continue;
       for (var file in listFilesInDirectory(directory)) {
-        if (file.path.endsWith('.dart')) yield file;
+        if (!file.path.endsWith('.dart')) continue;
+        if (_inNestedPackage(p.dirname(file.path))) continue;
+        yield file;
       }
     }
+  }
+
+  /// Whether [directory] belongs to a package nested inside this one — a
+  /// plugin's `example/`, a `packages/*` member of a workspace.
+  ///
+  /// **A package boundary is where this scan stops**, which the widening to the
+  /// whole package made a question worth asking: a nested package is a project
+  /// in its own right, with its own configuration and its own previews, and a
+  /// wrapper generated here would import its file by a path — a second copy of
+  /// a library the other package reaches as `package:…`, resolved against a
+  /// package config that need not even contain what it imports.
+  bool _inNestedPackage(String directory) {
+    if (_nested[directory] case var known?) return known;
+    bool result;
+    if (p.equals(directory, projectRoot) ||
+        !p.isWithin(projectRoot, directory)) {
+      result = false;
+    } else if (File(p.join(directory, 'pubspec.yaml')).existsSync()) {
+      result = true;
+    } else {
+      result = _inNestedPackage(p.dirname(directory));
+    }
+    return _nested[directory] = result;
   }
 
   void _scanFile(

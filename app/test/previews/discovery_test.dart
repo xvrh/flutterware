@@ -361,6 +361,48 @@ Widget b() => const Placeholder();
     });
   });
 
+  group('a nested package is not this one', () {
+    // The whole-package default put a plugin's `example/`, and every
+    // `packages/*` member of a workspace, inside the walk. Each is a project in
+    // its own right: it has its own configuration, its own previews and its own
+    // package config, and a wrapper generated here would import its file by
+    // path — a second copy of a library that package reaches as `package:`.
+    void writeAt(String relative, String content) {
+      var file = File(p.join(root.path, relative));
+      file.parent.createSync(recursive: true);
+      file.writeAsStringSync(content);
+    }
+
+    const preview = "@Preview(name: 'X')\nWidget x() => const Placeholder();\n";
+
+    test('its previews belong to it, not to us', () {
+      writeAt('pubspec.yaml', 'name: outer\n');
+      writeAt('lib/ours.dart', preview);
+      writeAt('example/pubspec.yaml', 'name: inner\n');
+      writeAt('example/lib/theirs.dart', preview);
+      writeAt('packages/widgets/pubspec.yaml', 'name: widgets\n');
+      writeAt('packages/widgets/lib/theirs.dart', preview);
+
+      expect(scan().entries.map((e) => e.path), ['lib/ours.dart']);
+    });
+
+    test('a package created mid-session takes its previews with it', () {
+      // The boundary is re-read every scan rather than memoised for the life of
+      // the daemon, which is the difference between noticing this and serving a
+      // stale answer until a restart.
+      writeAt('pubspec.yaml', 'name: outer\n');
+      writeAt('example/lib/theirs.dart', preview);
+
+      var scanner = CatalogScanner(projectRoot: root.path);
+      expect(scanner.scan().entries, hasLength(1));
+
+      writeAt('example/pubspec.yaml', 'name: inner\n');
+      var result = scanner.scan();
+      expect(result.changed, isTrue);
+      expect(result.entries, isEmpty);
+    });
+  });
+
   group('rescanning the same scanner', () {
     // The scan root is the whole package, so the daemon rescans whenever any
     // `.dart` file is touched — and that rescan sits on the hot-reload path.
@@ -381,6 +423,24 @@ Widget counter() => const Placeholder();
     void touch(String relative) => File(
       p.join(root.path, 'demo', relative),
     ).setLastModifiedSync(DateTime.now().add(const Duration(seconds: 1)));
+
+    test('reports whether anything moved, which is what gates a rescan', () {
+      // The daemon runs this on every `select` and on the panel's poll. It used
+      // to ask a separate fingerprint first, which walked and statted the whole
+      // package — the same work the scan now does, so a changed rescan paid for
+      // the walk twice.
+      expect(scanner.scan().changed, isTrue);
+      expect(scanner.scan().changed, isFalse);
+      expect(scanner.scan().entries.map((e) => e.name), ['Counter']);
+
+      write('tile.dart', "@Preview(name: 'Tile')\nWidget tile() => x;\n");
+      expect(scanner.scan().changed, isTrue);
+      expect(scanner.scan().changed, isFalse);
+
+      File(p.join(root.path, 'demo', 'tile.dart')).deleteSync();
+      expect(scanner.scan().changed, isTrue);
+      expect(scanner.scan().changed, isFalse);
+    });
 
     test('an edit to an existing file is picked up', () {
       expect(scanner.scan().entries.map((e) => e.name), ['Counter']);
