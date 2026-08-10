@@ -66,6 +66,7 @@ Map<String, dynamic> _$SplashArtifactsResultToJson(
   SplashArtifactsResult instance,
 ) => <String, dynamic>{
   'package': instance.package,
+  'flavor': ?instance.flavor,
   'generated': instance.generated,
   'stale': instance.stale,
   'artifacts': instance.artifacts.map((e) => e.toJson()).toList(),

@@ -3,6 +3,8 @@ import 'package:flutterware/previews_guest.dart';
 
 import '../inspect/elements_view.dart';
 import '../inspect/inspect_dock.dart';
+import '../inspect/semantics_node.dart';
+import '../inspect/semantics_view.dart';
 import '../ui/design/design.dart';
 import 'catalog_session.dart';
 
@@ -22,6 +24,7 @@ class InspectPanel extends StatefulWidget {
     required this.session,
     required this.available,
     required this.highlight,
+    required this.semanticsHighlight,
     required this.picking,
     required this.controls,
   });
@@ -32,6 +35,10 @@ class InspectPanel extends StatefulWidget {
   /// here when you run down the tree, set there when you sweep the picker over
   /// the demo. One rectangle, pointed at from either end.
   final ValueNotifier<String?> highlight;
+
+  /// The Semantics tab's hover, its own notifier as on the step page: the id
+  /// spaces differ, and only the elements one round-trips through the picker.
+  final ValueNotifier<SemanticsSnapshotNode?> semanticsHighlight;
 
   /// Whether the preview is in picking mode.
   final ValueNotifier<bool> picking;
@@ -58,6 +65,23 @@ class InspectPanel extends StatefulWidget {
 class _InspectPanelState extends State<InspectPanel> {
   var _collapsed = false;
 
+  /// The last semantics read, parsed once and held by identity.
+  ///
+  /// Parsed in the build it would hand [SemanticsView] a *fresh* root on
+  /// every rebuild — and the view keeps its selection by identity, so any
+  /// session notify would silently clear what you had selected.
+  Map<String, Object?>? _semanticsRaw;
+  SemanticsSnapshotNode? _semanticsParsed;
+
+  SemanticsSnapshotNode? _parsedSemantics(Map<String, Object?>? raw) {
+    if (raw == null) return null;
+    if (!identical(raw, _semanticsRaw)) {
+      _semanticsRaw = raw;
+      _semanticsParsed = SemanticsSnapshotNode.fromJson(raw);
+    }
+    return _semanticsParsed;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -78,18 +102,24 @@ class _InspectPanelState extends State<InspectPanel> {
     // Safe here only because the setters deliberately do not notify.
     widget.session
       ..inspecting = false
+      ..inspectingSemantics = false
       ..panelOpen = false;
     super.dispose();
   }
 
-  /// Tells the session whether the tree is actually being looked at.
+  /// Tells the session which projections are actually being looked at.
   ///
   /// Called after anything that could change the answer — a tab, the collapse
   /// — rather than once at mount, because the panel now opens on Controls and
-  /// a mount is no longer the moment the tree becomes visible.
+  /// a mount is no longer the moment either becomes visible. The semantics
+  /// flag matters more than the tree's: it is what turns the *guest's*
+  /// semantics building on and off.
   void _syncInspecting() {
-    widget.session.inspecting =
-        !_collapsed && widget.session.inspectTab == InspectTab.elements;
+    widget.session
+      ..inspecting =
+          !_collapsed && widget.session.inspectTab == InspectTab.elements
+      ..inspectingSemantics =
+          !_collapsed && widget.session.inspectTab == InspectTab.semantics;
   }
 
   @override
@@ -128,12 +158,14 @@ class _InspectPanelState extends State<InspectPanel> {
           },
         ),
       ),
-      // Both, whichever tab is open. The tree is read again, and the problems
-      // are *forgotten* and collected again — the record only grows on its
-      // own, so a problem that has stopped needs somebody to say so.
+      // All of it, whichever tab is open. The tree is read again, the
+      // problems are *forgotten* and collected again — the record only grows
+      // on its own, so a problem that has stopped needs somebody to say so —
+      // and the semantics, when the guest is building any.
       onRefresh: () async {
         await session.forgetErrors();
         await session.readTree();
+        if (session.inspectingSemantics) await session.readSemantics();
       },
       tabs: [
         InspectDockTab(
@@ -151,6 +183,17 @@ class _InspectPanelState extends State<InspectPanel> {
                 : 'Reading the tree…',
             highlight: widget.highlight,
             displayRoot: session.displayRoot,
+          ),
+        ),
+        InspectDockTab(
+          id: InspectTab.semantics.name,
+          label: InspectTab.semantics.label,
+          body: (context) => SemanticsView(
+            root: _parsedSemantics(session.semanticsForSelection?.root),
+            placeholder: session.selected == null
+                ? 'No entry selected'
+                : 'Reading what a screen reader gets…',
+            highlight: widget.semanticsHighlight,
           ),
         ),
         InspectDockTab(

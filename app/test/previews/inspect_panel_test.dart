@@ -32,12 +32,16 @@ void main() {
     String? description,
     InspectSource? source,
     bool local = true,
+    bool offstage = false,
+    Map<String, String> properties = const {},
   }) => InspectNode(
     id: id,
     type: type,
     description: description,
     source: source,
     createdByLocalProject: local,
+    offstage: offstage,
+    properties: properties,
     layout: layout,
     children: children,
   );
@@ -67,6 +71,7 @@ void main() {
           '0',
           'Padding',
           layout: const InspectLayout(x: 8, y: 8, width: 304, height: 48),
+          properties: const {'padding': 'EdgeInsets.all(8.0)'},
           source: const InspectSource(
             file: 'file:///project/demo/b.dart',
             line: 12,
@@ -180,6 +185,151 @@ void main() {
     });
   });
 
+  group('offstage', () {
+    // The shape a push leaves behind: the covered route beside the current
+    // one, its whole subtree flagged by the walk.
+    var pushed = InspectTree(
+      entryId: beta.id,
+      root: node(
+        '',
+        'App',
+        children: [
+          node(
+            '0',
+            'MenuScreen',
+            offstage: true,
+            layout: const InspectLayout(x: 0, y: 0, width: 320, height: 200),
+            children: [node('0/0', 'Card', offstage: true)],
+          ),
+          node('1', 'DrinkScreen'),
+        ],
+      ),
+    );
+
+    testWidgets('a hidden subtree starts folded, and says why', (tester) async {
+      await pump(tester, sessionOf(withTree: pushed));
+
+      expect(find.text('MenuScreen'), findsOneWidget);
+      expect(find.text('offstage'), findsOneWidget);
+      expect(find.text('Card'), findsNothing, reason: 'folded by default');
+      expect(find.text('DrinkScreen'), findsOneWidget);
+    });
+
+    testWidgets('one click unfolds the whole of it', (tester) async {
+      await pump(tester, sessionOf(withTree: pushed));
+
+      // Chevrons in row order: App's, then MenuScreen's closed one.
+      await tester.tap(find.byIcon(Icons.arrow_right).first);
+      await tester.pump();
+
+      expect(
+        find.text('Card'),
+        findsOneWidget,
+        reason:
+            'inside the subtree the default flips back to open — '
+            'expanding the top must not reveal a pile of still-folded rows',
+      );
+    });
+
+    testWidgets('a selection inside it is revealed, not answered into a fold', (
+      tester,
+    ) async {
+      await pump(tester, sessionOf(withTree: pushed));
+      expect(find.text('Card'), findsNothing);
+
+      address.value = Address(
+        worktree: address.value.worktree,
+        plugin: address.value.plugin,
+        axes: {...address.value.axes, 'inspect.node': '0/0'},
+      );
+      await tester.pump();
+
+      // Twice: the unfolded row, and the detail pane's headline for it.
+      expect(find.text('Card'), findsAtLeastNWidgets(1));
+    });
+
+    testWidgets('the detail pane states it over the stale rect', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        sessionOf(withTree: pushed),
+        params: const {'inspect.node': '0'},
+      );
+      expect(
+        find.textContaining('offstage — in the tree, not on the screen'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('the semantics tab', () {
+    Map<String, Object?> aTree() => {
+      'rect': {'x': 0, 'y': 0, 'width': 320, 'height': 200},
+      'children': [
+        {
+          'rect': {'x': 8, 'y': 8, 'width': 100, 'height': 40},
+          'label': 'Add to cart',
+          'flags': ['isButton'],
+          'actions': ['tap'],
+        },
+      ],
+    };
+
+    testWidgets('shows what a screen reader gets, roles badged', (
+      tester,
+    ) async {
+      var session = sessionOf(withTree: tree)
+        ..inspectTab = InspectTab.semantics
+        ..semantics = InspectSemantics(entryId: beta.id, root: aTree());
+      await pump(tester, session);
+
+      expect(find.text('"Add to cart"'), findsOneWidget);
+      expect(find.text('button'), findsOneWidget);
+      expect(find.text('tap'), findsOneWidget);
+      expect(find.text('Select a node'), findsOneWidget);
+    });
+
+    testWidgets('a click fills the detail with the full reading', (
+      tester,
+    ) async {
+      var session = sessionOf(withTree: tree)
+        ..inspectTab = InspectTab.semantics
+        ..semantics = InspectSemantics(entryId: beta.id, root: aTree());
+      await pump(tester, session);
+
+      await tester.tap(find.text('"Add to cart"'));
+      await tester.pump();
+
+      // The row elides; the detail states everything — flags by name, the
+      // rect, the words again selectable.
+      expect(find.text('isButton'), findsOneWidget);
+      expect(find.text('8, 8 — 100 × 40'), findsOneWidget);
+      expect(find.text('Add to cart'), findsOneWidget);
+    });
+
+    testWidgets('says it is reading until the guest reports', (tester) async {
+      var session = sessionOf(withTree: tree)
+        ..inspectTab = InspectTab.semantics;
+      await pump(tester, session);
+      expect(find.text('Reading what a screen reader gets…'), findsOneWidget);
+    });
+
+    testWidgets('refuses a read that names another entry', (tester) async {
+      // A read from before the switch, exactly as the tree tab treats it.
+      var session = sessionOf(withTree: tree)
+        ..inspectTab = InspectTab.semantics
+        ..semantics = InspectSemantics(
+          entryId: 'demo/other.dart#other',
+          root: aTree(),
+        );
+      await pump(tester, session);
+
+      expect(find.text('"Add to cart"'), findsNothing);
+      expect(find.text('Reading what a screen reader gets…'), findsOneWidget);
+    });
+  });
+
   group('selection', () {
     testWidgets('a click writes the node onto the address', (tester) async {
       await pump(tester, sessionOf(withTree: tree));
@@ -205,6 +355,11 @@ void main() {
         reason: 'the file:line is what an agent or a person goes and edits',
       );
       expect(find.textContaining('304 × 48'), findsAtLeastNWidgets(1));
+      expect(
+        find.text('EdgeInsets.all(8.0)'),
+        findsOneWidget,
+        reason: 'what the widget says about itself, under the layout block',
+      );
     });
 
     testWidgets('a node that lays nothing out says so, rather than zeroes', (
@@ -266,6 +421,7 @@ void main() {
                   session: session,
                   available: 600,
                   highlight: highlight,
+                  semanticsHighlight: ValueNotifier(null),
                   picking: ValueNotifier(false),
                   controls: (_) => const SizedBox(),
                 ),
@@ -413,6 +569,7 @@ void main() {
                   session: session,
                   available: 600,
                   highlight: ValueNotifier(null),
+                  semanticsHighlight: ValueNotifier(null),
                   picking: ValueNotifier(false),
                   controls: (_) => const SizedBox(),
                 ),
@@ -573,6 +730,7 @@ void main() {
                       session: session,
                       available: 500,
                       highlight: ValueNotifier(null),
+                      semanticsHighlight: ValueNotifier(null),
                       picking: ValueNotifier(false),
                       controls: (_) => const SizedBox(),
                     ),

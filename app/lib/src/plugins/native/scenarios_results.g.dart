@@ -70,6 +70,7 @@ Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
       'width': instance.width,
       'height': instance.height,
       'tree': instance.tree,
+      'semantics': ?instance.semantics,
       'texts': instance.texts,
       'address': instance.address,
       'statusBrightness': ?instance.statusBrightness,

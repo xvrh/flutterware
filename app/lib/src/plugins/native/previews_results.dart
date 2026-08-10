@@ -315,6 +315,7 @@ class CatalogTreeNode {
     this.description,
     this.source,
     this.local = false,
+    this.offstage,
     this.rect,
     this.constraints,
     this.flex,
@@ -348,6 +349,15 @@ class CatalogTreeNode {
   /// Whether the framework counts this as the user's code rather than
   /// `package:flutter`'s.
   final bool local;
+
+  /// Present and true when this widget is in the tree but not on the screen —
+  /// a route kept alive under the current one, `Offstage`, a hidden
+  /// `IndexedStack` child.
+  ///
+  /// In `tree` it is the top of a subtree that was folded away (pass its id
+  /// to `--node` to read inside); in `matches` it is a warning that the found
+  /// widget is not on any screenshot, and its [rect] is where it *was*.
+  final bool? offstage;
 
   /// Where it ended up: `x,y w×h`.
   ///

@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutterware/previews_guest.dart';
 
 import '../address/address_scope.dart';
@@ -10,10 +9,13 @@ import '../previews/devices.dart';
 import '../inspect/elements_view.dart';
 import '../inspect/inspect_dock.dart';
 import '../inspect/node_highlight.dart';
+import '../inspect/pick_region.dart';
 import '../plugins/native/scenarios_results.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import 'framed_shot.dart';
+import '../inspect/semantics_node.dart';
+import '../inspect/semantics_view.dart';
 import 'step_status.dart';
 
 /// One step, pushed over the flow: the frame big, the inspect dock under it —
@@ -60,6 +62,10 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
   /// picker's sweep, drawn once over the screenshot. One rectangle, pointed
   /// at from either end, as the catalog does it.
   final _highlight = ValueNotifier<String?>(null);
+
+  /// The semantics tab's hover, its own notifier: the id spaces differ, and
+  /// only the elements one round-trips through the picker.
+  final _semanticsHighlight = ValueNotifier<SemanticsSnapshotNode?>(null);
   final _picking = ValueNotifier<bool>(false);
 
   var _tab = 'elements';
@@ -70,6 +76,11 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
   InspectTree? _tree;
   String? _treeError;
   String? _loadedPath;
+
+  /// The step's semantics tree, read from its `.semantics.json` when the
+  /// step has one; [_semanticsError] says why when it does not.
+  SemanticsSnapshotNode? _semantics;
+  String? _semanticsError;
 
   @override
   void initState() {
@@ -86,18 +97,20 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
   @override
   void dispose() {
     _highlight.dispose();
+    _semanticsHighlight.dispose();
     _picking.dispose();
     super.dispose();
   }
 
-  /// Reads the step's tree once per step. The file is already on disk — the
-  /// harness wrote it beside the pixels — and small, so this is a plain
+  /// Reads the step's trees once per step. The files are already on disk —
+  /// the harness wrote them beside the pixels — and small, so this is a plain
   /// synchronous read from `initState`/`didUpdateWidget`, never a spinner.
   void _loadTree() {
     var path = widget.step.tree;
     if (path == _loadedPath) return;
     _loadedPath = path;
     _highlight.value = null;
+    _semanticsHighlight.value = null;
     try {
       _tree = InspectTree.fromJson(
         (jsonDecode(widget.step.treeFile.readAsStringSync()) as Map)
@@ -107,6 +120,22 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
     } catch (error) {
       _tree = null;
       _treeError = 'The tree could not be read:\n$error';
+    }
+    _semantics = null;
+    if (widget.step.semanticsFile case var file?) {
+      try {
+        _semantics = SemanticsSnapshotNode.fromJson(
+          (jsonDecode(file.readAsStringSync()) as Map).cast<String, Object?>(),
+        );
+        _semanticsError = null;
+      } catch (error) {
+        _semanticsError = 'The semantics tree could not be read:\n$error';
+      }
+    } else {
+      // Absence has two honest readings and only one file to tell them by.
+      _semanticsError =
+          'No semantics captured for this step — the run predates the '
+          'capture, or the app disabled semantics.';
     }
   }
 
@@ -167,6 +196,7 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
                         screenOverlay: _ScreenOverlay(
                           tree: _tree,
                           highlight: _highlight,
+                          semanticsHighlight: _semanticsHighlight,
                           picking: _picking,
                           onPick: _select,
                         ),
@@ -236,6 +266,15 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
                 ),
               ),
               InspectDockTab(
+                id: 'semantics',
+                label: 'Semantics',
+                body: (context) => SemanticsView(
+                  root: _semantics,
+                  placeholder: _semanticsError ?? 'No semantics captured.',
+                  highlight: _semanticsHighlight,
+                ),
+              ),
+              InspectDockTab(
                 id: 'texts',
                 label: 'Texts',
                 body: (context) => _TextsTab(step: widget.step),
@@ -271,18 +310,20 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
 /// The inspector's presence on the screenshot: the highlight rectangle, and —
 /// while the picker is armed — the sweep and the click. Sits in the screen's
 /// own logical coordinates (see [FramedShot.screenOverlay]), which are the
-/// coordinates every node's box is in, so a pointer position *is* a tree
-/// query.
+/// coordinates every node's box is in — the widget tree's and the semantics
+/// tree's alike — so a pointer position *is* a tree query.
 class _ScreenOverlay extends StatelessWidget {
   const _ScreenOverlay({
     required this.tree,
     required this.highlight,
+    required this.semanticsHighlight,
     required this.picking,
     required this.onPick,
   });
 
   final InspectTree? tree;
   final ValueNotifier<String?> highlight;
+  final ValueNotifier<SemanticsSnapshotNode?> semanticsHighlight;
   final ValueNotifier<bool> picking;
   final ValueChanged<String> onPick;
 
@@ -290,11 +331,37 @@ class _ScreenOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     var box = ValueListenableBuilder(
       valueListenable: highlight,
-      builder: (context, lit, _) => CustomPaint(
-        painter: NodeHighlightPainter(
-          node: lit == null ? null : tree?.nodeAt(lit),
-          color: context.colors.accent,
-        ),
+      builder: (context, lit, _) => ValueListenableBuilder(
+        valueListenable: semanticsHighlight,
+        builder: (context, semanticsLit, _) {
+          // The elements highlight wins when both are set — it is the one the
+          // picker writes, and the two tabs cannot be hovered at once.
+          var node = lit == null ? null : tree?.nodeAt(lit);
+          // An offstage node's rect is where it was, not where anything is:
+          // drawing it over the screenshot would box a different widget. The
+          // row still lights up; the picture stays quiet.
+          if (node?.offstage ?? false) node = null;
+          var (rect, label) = switch ((node, semanticsLit)) {
+            (var n?, _) when n.layout != null => (
+              Rect.fromLTWH(
+                n.layout!.x,
+                n.layout!.y,
+                n.layout!.width,
+                n.layout!.height,
+              ),
+              n.type,
+            ),
+            (_, var s?) => (s.rect, s.headline),
+            _ => (null, null),
+          };
+          return CustomPaint(
+            painter: NodeHighlightPainter(
+              rect: rect,
+              label: label,
+              color: context.colors.accent,
+            ),
+          );
+        },
       ),
     );
 
@@ -302,44 +369,20 @@ class _ScreenOverlay extends StatelessWidget {
       valueListenable: picking,
       builder: (context, on, _) {
         if (!on) return IgnorePointer(child: box);
-        return Focus(
-          // Its own focus, so esc works without hunting for the button again
-          // — a mode you can only leave by finding the button is a trap.
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is! KeyDownEvent ||
-                event.logicalKey != LogicalKeyboardKey.escape) {
-              return KeyEventResult.ignored;
-            }
-            picking.value = false;
-            highlight.value = null;
-            return KeyEventResult.handled;
+        return InspectPickRegion(
+          onSweep: (point) =>
+              highlight.value = tree?.nodeAtPoint(point.dx, point.dy)?.id,
+          onClear: () => highlight.value = null,
+          onPick: (point) {
+            // On a snapshot the rectangles are all there is — no live guest
+            // to run the framework's own hit test, so the pointer's
+            // approximation is also the commit.
+            var hit = tree?.nodeAtPoint(point.dx, point.dy);
+            // A miss is a miss, not a selection to clear.
+            if (hit != null) onPick(hit.id);
           },
-          child: MouseRegion(
-            cursor: SystemMouseCursors.precise,
-            onHover: (e) => highlight.value = tree
-                ?.nodeAtPoint(e.localPosition.dx, e.localPosition.dy)
-                ?.id,
-            onExit: (_) => highlight.value = null,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (e) {
-                // On a snapshot the rectangles are all there is — no live
-                // guest to run the framework's own hit test, so the pointer's
-                // approximation is also the commit.
-                var hit = tree?.nodeAtPoint(
-                  e.localPosition.dx,
-                  e.localPosition.dy,
-                );
-                // A miss is a miss, not a selection to clear.
-                if (hit != null) onPick(hit.id);
-                // One pick per arming, as Chrome does.
-                picking.value = false;
-                highlight.value = null;
-              },
-              child: box,
-            ),
-          ),
+          onDisarm: () => picking.value = false,
+          child: box,
         );
       },
     );

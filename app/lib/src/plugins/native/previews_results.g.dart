@@ -94,6 +94,7 @@ Map<String, dynamic> _$CatalogTreeNodeToJson(CatalogTreeNode instance) =>
       'description': ?instance.description,
       'source': ?instance.source,
       'local': instance.local,
+      'offstage': ?instance.offstage,
       'rect': ?instance.rect,
       'constraints': ?instance.constraints,
       'flex': ?instance.flex,

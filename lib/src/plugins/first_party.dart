@@ -141,8 +141,10 @@ class ScenariosPackage extends PluginPackage {
     this.captureScale,
   });
 
-  /// Where this package keeps its scenarios, relative to the package;
-  /// `test/scenarios` when null.
+  /// Where this package keeps its scenarios, relative to the package. When
+  /// null, discovery walks all of `test/` — a scenario is an ordinary widget
+  /// test and may sit next to the rest of them — and `new` writes to
+  /// `test/scenarios`. Declaring a directory narrows both to it.
   final String? directory;
 
   /// The locale tags this app supports — `['en', 'fr']` — offered by the

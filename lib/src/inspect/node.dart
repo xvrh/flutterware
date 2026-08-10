@@ -226,6 +226,8 @@ class InspectNode {
     this.description,
     this.source,
     this.createdByLocalProject = false,
+    this.offstage = false,
+    this.properties = const {},
     this.layout,
     this.children = const [],
   });
@@ -235,6 +237,11 @@ class InspectNode {
     type: json['type'] as String? ?? '',
     description: json['description'] as String?,
     createdByLocalProject: json['local'] as bool? ?? false,
+    offstage: json['offstage'] as bool? ?? false,
+    properties: switch (json['properties']) {
+      Map properties => properties.cast<String, String>(),
+      _ => const {},
+    },
     layout: switch (json['layout']) {
       Map layout => InspectLayout.fromJson(layout.cast<String, Object?>()),
       _ => null,
@@ -276,6 +283,18 @@ class InspectNode {
 
   final InspectSource? source;
 
+  /// Whether this widget is in the tree but not on the screen.
+  ///
+  /// True for content nobody can see or touch: a route kept alive under the
+  /// one that covers it, an `Offstage`/`Visibility(visible: false)` subtree,
+  /// the hidden children of an `IndexedStack`. Such nodes keep their
+  /// last-laid-out [layout] — **stale rects that overlap the visible screen**
+  /// — which is why [InspectTree.nodeAtPoint] skips them and the tree view
+  /// folds them away by default. See `guest_inspect.dart` for how it is
+  /// detected; the VM-service path (`run`) cannot detect it and leaves this
+  /// false.
+  final bool offstage;
+
   /// Whether the framework considers this the user's code rather than
   /// `package:flutter`'s.
   ///
@@ -284,6 +303,17 @@ class InspectNode {
   /// is byte-for-byte the full one. Measured: `dashboard` is 695 nodes either
   /// way with tracking off, and 51 with it on.
   final bool createdByLocalProject;
+
+  /// What the widget says about itself — its own diagnostics, filtered.
+  ///
+  /// `Padding` reports `padding: EdgeInsets.all(8.0)`; `Text` reports its
+  /// alignment and overflow. In declaration order, values as the framework
+  /// describes them, filtered to `DiagnosticLevel.info` and capped in the
+  /// walk (see `guest_inspect.dart`) — the JSON is read by agents as well as
+  /// the detail pane, and a `TextStyle` dump nobody asked for is most of a
+  /// node's bytes. Empty for the VM-service path (`run`), which cannot read
+  /// widgets — the same gap as [layout].
+  final Map<String, String> properties;
 
   /// Where it ended up, when it has a box.
   ///
@@ -295,12 +325,34 @@ class InspectNode {
 
   final List<InspectNode> children;
 
+  /// This node and everything under it, depth-first, with offstage subtrees
+  /// folded to their flagged top node — reported, so a reader knows the
+  /// content exists, and cut there, because a covered route is most of a
+  /// tree's bulk and none of its picture.
+  ///
+  /// The fold does not apply when this node is itself offstage: whoever
+  /// starts a walk *at* hidden content has asked about it.
+  Iterable<InspectNode> get nodesFoldingOffstage =>
+      _foldingOffstage(parentOffstage: offstage);
+
+  Iterable<InspectNode> _foldingOffstage({required bool parentOffstage}) sync* {
+    yield this;
+    if (offstage && !parentOffstage) return;
+    for (var child in children) {
+      yield* child._foldingOffstage(parentOffstage: offstage);
+    }
+  }
+
   Map<String, Object?> toJson() => {
     'id': id,
     'type': type,
     if (description != null) 'description': description,
     if (source != null) 'source': source!.toJson(),
     'local': createdByLocalProject,
+    // Sparse: nearly every node is on stage, and the flag is only news when
+    // it is true.
+    if (offstage) 'offstage': true,
+    if (properties.isNotEmpty) 'properties': properties,
     if (layout != null) 'layout': layout!.toJson(),
     if (children.isNotEmpty)
       'children': [for (var child in children) child.toJson()],
@@ -344,6 +396,20 @@ class InspectTree {
     if (root case var root?) yield* walk(root);
   }
 
+  /// [nodes], minus offstage subtrees — pruned at the flagged node rather than
+  /// filtered per node, because a subtree's descendants do not repeat the flag.
+  Iterable<InspectNode> get _onstage sync* {
+    Iterable<InspectNode> walk(InspectNode node) sync* {
+      if (node.offstage) return;
+      yield node;
+      for (var child in node.children) {
+        yield* walk(child);
+      }
+    }
+
+    if (root case var root?) yield* walk(root);
+  }
+
   int get length => nodes.length;
 
   /// The deepest node whose box contains ([x], [y]), in the guest's own
@@ -366,10 +432,16 @@ class InspectTree {
   /// contains the point, because a child can be laid out beyond its parent —
   /// which is what an overflow *is*, and overflowing widgets are exactly the
   /// ones somebody is pointing at.
+  ///
+  /// Offstage nodes are skipped too, subtree and all: a route kept alive under
+  /// the current one holds its old rects, which overlap the screen — and being
+  /// deeper, they *won* here, so picking on a screenshot could select a widget
+  /// from the previous screen. What is not on the picture cannot be what the
+  /// pointer means.
   InspectNode? nodeAtPoint(double x, double y) {
     InspectNode? best;
     var bestDepth = -1;
-    for (var node in nodes) {
+    for (var node in _onstage) {
       var layout = node.layout;
       if (layout == null) continue;
       if (x < layout.x || y < layout.y) continue;

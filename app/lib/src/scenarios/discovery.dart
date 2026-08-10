@@ -7,7 +7,15 @@ import 'package:path/path.dart' as p;
 
 import '../utils/list_files.dart';
 
-/// Where a package keeps its scenarios when the config does not say otherwise.
+/// Where discovery looks when the config does not say otherwise: all of
+/// `test/`. A scenario is an ordinary widget test, and `flutter test` does not
+/// care which folder a test sits in — so neither does the scan. The substring
+/// prefilter is what keeps the wider walk cheap.
+const defaultScenariosScanRoot = 'test';
+
+/// Where `new` writes when the config does not say otherwise — the convention,
+/// not a fence. Discovery looks at all of [defaultScenariosScanRoot]; this is
+/// only the answer to "where should the next file go".
 const defaultScenariosDirectory = 'test/scenarios';
 
 /// One `scenario('name', …)` call, located.
@@ -47,12 +55,12 @@ class ScenarioScanResult {
 class ScenarioScanner {
   ScenarioScanner({
     required this.packageRoot,
-    this.directory = defaultScenariosDirectory,
+    this.directory = defaultScenariosScanRoot,
   });
 
   final String packageRoot;
 
-  /// Scenario directory relative to [packageRoot].
+  /// The directory the scan walks, relative to [packageRoot].
   final String directory;
 
   ScenarioScanResult scan() {
@@ -124,6 +132,34 @@ class ScenarioScanner {
       );
     }
   }
+}
+
+/// The deepest directory every file in [files] sits under, `/`-separated like
+/// the paths themselves, or `''` when they share none (or there are none).
+///
+/// What the list pane drops from its labels: a prefix every row shares says
+/// nothing. Computed from the files found rather than read off the
+/// configuration, so a suite kept conventionally under `test/scenarios/`
+/// displays exactly as it did when that was the fence, and one spread across
+/// `test/` shows the part that differs.
+String commonScenarioDirectory(Iterable<String> files) {
+  List<String>? common;
+  for (var file in files) {
+    var directory = p.url.dirname(file);
+    var segments = directory == '.' ? <String>[] : p.url.split(directory);
+    if (common == null) {
+      common = segments;
+      continue;
+    }
+    var length = 0;
+    while (length < common.length &&
+        length < segments.length &&
+        common[length] == segments[length]) {
+      length++;
+    }
+    common = common.sublist(0, length);
+  }
+  return common == null || common.isEmpty ? '' : p.url.joinAll(common);
 }
 
 class _ScenarioCall {

@@ -18,13 +18,18 @@ void main() {
 ```
 
 `flutter test` runs it like any other test. The flutterware runner runs the
-same file and keeps what happened: a picture, a widget tree and the visible
-texts for **every step**, in a flow you can walk in the GUI, from the CLI, or
-from an agent.
+same file and keeps what happened: a picture, a widget tree, the visible
+texts and the semantics tree — what a screen reader gets — for **every
+step**, in a flow you can walk in the GUI, from the CLI, or from an agent.
 
 `package:flutterware/flutter_test.dart` re-exports `package:flutter_test` 1:1,
 so a file that imports it keeps `expect`, `find`, `testWidgets` and everything
 else. Changing the import is the whole migration.
+
+Scenarios are discovered anywhere under `test/` — next to ordinary tests, in a
+file that mixes both, wherever. `test/scenarios/` is only the convention `new`
+writes to, and a `directory:` in `tool/flutterware.dart` narrows discovery to
+one folder if you want the fence back.
 
 ## The verbs
 
@@ -63,6 +68,15 @@ They compose, because the scope and the index take targets of their own:
 
 When a target matches nothing or matches several things, the error says which
 targets *were* on screen and what to reach for instead.
+
+A target that exists but sits below the fold is **scrolled into view first**,
+the way the user the verb stands in for would — so one scenario runs unchanged
+on a small phone and a tablet, whichever side of the fold the button lands on.
+What scrolling cannot fix is refused loudly: a covered widget, or one off
+screen with nothing scrolling to it. (`flutter_test` alone prints a console
+warning on a missed tap and carries on; a flow that silently diverges is the
+one failure a screenshot-per-step tool must not have.) A widget a lazy list
+has not built yet matches nothing — that is what `scrollTo` is for.
 
 `s.tester` is the real `WidgetTester` if you need something the verbs do not
 have. Frames it draws are counted and reported on the next step, so a flow with
@@ -193,9 +207,20 @@ fw run scenarios run --tag=smoke
 
 A matrix writes one directory per point — `<output>/<device>-<language>/` —
 with an `index.json` beside them mapping each assignment to its directory and
-result. Each step leaves a PNG, a `.tree.json` and its texts; a failing
-scenario reports the error **with the frame captured at the failure**, not the
-one before it.
+result. Each step leaves a PNG, a `.tree.json`, a `.semantics.json` — the
+merged semantics tree in reading order, labels and flags and actions by name —
+and its texts; a failing scenario reports the error **with the frame captured
+at the failure**, not the one before it.
+
+Content that is in the tree but not on the screen — the route you navigated
+away from, an `Offstage` — is marked `offstage` in the `.tree.json`, and the
+Elements tab folds it away so what you read is what the screenshot shows.
+
+In the GUI, the step page's **Semantics** tab shows that tree: the words
+bright and the structure dim, roles badged, each row lighting its rectangle
+up on the screenshot. It is the projection a screenshot cannot show — an icon
+button with no label is invisible pixels and an obvious gap in this list —
+and it is where the strings for `Target.label(…)` come from.
 
 `--tag` filters scenarios by `scenario(tags: [...])`, the same tag
 `flutter test --tags` uses.

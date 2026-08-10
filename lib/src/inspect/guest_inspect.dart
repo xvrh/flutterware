@@ -7,9 +7,12 @@ import 'dart:developer' as developer;
 // lives. Still no `material` — a guest should not have to link Material to be
 // inspectable.
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'node.dart';
+import 'semantics.dart';
+import 'semantics_capture.dart';
 
 /// Reads the live widget tree out of a running guest.
 ///
@@ -46,6 +49,17 @@ class GuestInspector {
         jsonEncode(read().toJson()),
       );
     });
+    developer.registerExtension('ext.flutterware.semantics', (_, args) async {
+      switch (args['on']) {
+        case 'true':
+          enableSemantics(true);
+        case 'false':
+          enableSemantics(false);
+      }
+      return developer.ServiceExtensionResponse.result(
+        jsonEncode(readSemantics().toJson()),
+      );
+    });
     developer.registerExtension('ext.flutterware.hitTest', (_, args) async {
       var x = double.tryParse(args['x'] ?? '');
       var y = double.tryParse(args['y'] ?? '');
@@ -77,6 +91,44 @@ class GuestInspector {
   /// 44 nodes either way, zero of them non-local. If the whole tree is ever
   /// wanted it is a host-side call and its own decision.
   InspectTree read() => _build().tree;
+
+  /// The handle that keeps semantics on while somebody is looking.
+  ///
+  /// A live app has semantics **off** — unlike `testWidgets`, which holds a
+  /// handle by default — and building the tree costs every frame, so it runs
+  /// only between the panel opening the Semantics tab and closing it. Held
+  /// here rather than in the extension closure so [enableSemantics] is
+  /// callable in-process too.
+  SemanticsHandle? _semantics;
+
+  /// Turns the semantics tree on or off.
+  ///
+  /// Idempotent both ways. Turning on schedules a frame, because the tree is
+  /// built *by* a frame and an idle guest would otherwise never produce one —
+  /// the read polls until it appears.
+  void enableSemantics(bool on) {
+    if (on) {
+      if (_semantics != null) return;
+      _semantics = SemanticsBinding.instance.ensureSemantics();
+      SchedulerBinding.instance.ensureVisualUpdate();
+    } else {
+      _semantics?.dispose();
+      _semantics = null;
+    }
+  }
+
+  /// The semantics tree, as `semantics_capture.dart` shapes it.
+  ///
+  /// The entry id is withheld until there is a tree, so a poll settling on
+  /// the id keeps waiting through the frame that builds it rather than
+  /// accepting "nothing yet" as this entry's answer.
+  InspectSemantics readSemantics() {
+    var root = captureSemanticsTree();
+    return InspectSemantics(
+      entryId: root == null ? null : entryIdOf(),
+      root: root,
+    );
+  }
 
   /// The nodes under a point, outermost first.
   ///
@@ -160,7 +212,7 @@ class GuestInspector {
       return (
         tree: InspectTree(
           entryId: entryId,
-          root: _convert(demo, '', byRenderObject),
+          root: _convert(demo, '', byRenderObject, null, false),
         ),
         byRenderObject: byRenderObject,
       );
@@ -239,7 +291,7 @@ class GuestInspector {
   /// [Text] only, deliberately. `Tooltip` and the rest of the labelled widgets
   /// live in `package:flutter/material.dart`, and this file imports `widgets`
   /// so that a guest is not made to link Material to be inspected.
-  String? _preview(Map<String, Object?> json) => switch (_elementOf(json)) {
+  static String? _preview(Element? element) => switch (element) {
     Element(widget: Text(:var data?)) => 'Text("$data")',
     _ => null,
   };
@@ -257,28 +309,44 @@ class GuestInspector {
   }
 
   /// One inspector node and its children, in our shape, with [path] as the id.
+  ///
+  /// [ancestorRender] and [ancestorOffstage] carry the nearest converted
+  /// ancestor's render object and verdict, so each render edge is judged once
+  /// on the way down rather than re-climbed per node — and a subtree under an
+  /// offstage ancestor is marked without climbing at all.
   InspectNode _convert(
     Map<String, Object?> json,
     String path,
     Map<RenderObject, String> byRenderObject,
+    RenderObject? ancestorRender,
+    bool ancestorOffstage,
   ) {
     var children = json['children'] as List? ?? const [];
     var description = json['description'] as String?;
     var type = json['widgetRuntimeType'] as String? ?? description ?? '';
-    var render = _elementOf(json)?.renderObject;
+    // Resolved once for the three readers below: the id round-trips through
+    // the inspector's object registry, which is not free per node.
+    var element = _elementOf(json);
+    var render = element?.renderObject;
     if (render != null) {
       // First writer wins. Several widgets in a summary tree can share one
       // render object — a `Padding` under a `Semantics` under a builder all
       // report the same box — and the outermost is the one a click means.
       byRenderObject.putIfAbsent(render, () => path);
     }
+    var offstage =
+        ancestorOffstage ||
+        (render != null && !_shown(render, upTo: ancestorRender));
     return InspectNode(
       id: path,
       type: type,
       // Only when it says more than the type does. `Text("Save")` earns its
       // place; a `Padding` described as "Padding" is the type twice.
-      description: _preview(json) ?? (description == type ? null : description),
+      description:
+          _preview(element) ?? (description == type ? null : description),
       createdByLocalProject: json['createdByLocalProject'] as bool? ?? false,
+      offstage: offstage,
+      properties: _propertiesOf(element?.widget),
       source: switch (json['creationLocation']) {
         Map location => InspectSource.fromJson(
           location.cast<String, Object?>(),
@@ -293,9 +361,89 @@ class GuestInspector {
               child.cast<String, Object?>(),
               path.isEmpty ? '$index' : '$path/$index',
               byRenderObject,
+              render ?? ancestorRender,
+              offstage,
             ),
       ],
     );
+  }
+
+  /// Whether [render] is actually shown, judged over the render chain up to
+  /// (and excluding) [upTo] — the nearest converted ancestor's render object.
+  ///
+  /// **The oracle is `visitChildrenForSemantics`.** The summary tree keeps the
+  /// user's widgets and drops the framework's, and the framework's is where
+  /// all the hiding happens — `_RenderTheater` skipping the routes a pushed
+  /// screen covers, `RenderOffstage`, `RenderIndexedStack` showing one child
+  /// of several. So the marker never survives into the tree, only the hidden
+  /// content does, wearing rects from the last time it was laid out. What
+  /// every one of those hiders has in common is that it also keeps the hidden
+  /// child out of the semantics walk, by overriding this exact method — it is
+  /// the same mechanism that keeps a covered route out of a screen reader.
+  ///
+  /// The known exceptions — the classes that skip the semantics walk while
+  /// still painting the child — are exempted by type. All four are public,
+  /// and the list was taken from the SDK's overrides, not guessed (see
+  /// `2026-08-10-inspect-consolidation.md`).
+  static bool _shown(RenderObject render, {required RenderObject? upTo}) {
+    var node = render;
+    while (!identical(node, upTo)) {
+      var parent = node.parent;
+      if (parent == null) break;
+      if (!_visitsForSemantics(parent, node)) return false;
+      node = parent;
+    }
+    return true;
+  }
+
+  /// What [widget] says about itself, filtered to what a reader would keep.
+  ///
+  /// The framework's diagnostics are written for dumps and are mostly noise
+  /// at a detail pane's distance, so three cuts: only `DiagnosticLevel.info`
+  /// and up (`fine` is `dependencies: [MediaQuery]` and friends), values over
+  /// 96 characters elided mid-value (a `TextStyle` describes itself in a
+  /// paragraph), and at most twelve per node. The walk pays this on every
+  /// node of every read — measured before keeping, like the semantics capture
+  /// before it: +168µs on the shop tree's 1.5ms read, +6KB on its 37KB JSON
+  /// (see the consolidation spec).
+  static Map<String, String> _propertiesOf(Widget? widget) {
+    if (widget == null) return const {};
+    var properties = <String, String>{};
+    for (var property in widget.toDiagnosticsNode().getProperties()) {
+      if (property.isFiltered(DiagnosticLevel.info)) continue;
+      var name = property.name;
+      if (name == null) continue;
+      // The one named exception: every `Text` inlines its style's
+      // diagnostics, and `inherit: true` is the resting state of every style
+      // — a property that appears on every text node distinguishes none.
+      if (name == 'inherit') continue;
+      var value = property.toDescription();
+      if (value.isEmpty || value == 'null') continue;
+      if (value.length > 96) {
+        value =
+            '${value.substring(0, 47)} … ${value.substring(value.length - 46)}';
+      }
+      properties[name] = value;
+      if (properties.length >= 12) break;
+    }
+    return properties;
+  }
+
+  static bool _visitsForSemantics(RenderObject parent, RenderObject child) {
+    // Semantics-excluded but painted: skipping the semantics walk is these
+    // classes' entire job, and their child is on screen all the same.
+    if (parent is RenderExcludeSemantics ||
+        parent is RenderIgnorePointer ||
+        parent is RenderAbsorbPointer ||
+        parent is RenderSliverIgnorePointer ||
+        parent is SemanticsAnnotationsMixin) {
+      return true;
+    }
+    var found = false;
+    parent.visitChildrenForSemantics((visited) {
+      if (identical(visited, child)) found = true;
+    });
+    return found;
   }
 }
 

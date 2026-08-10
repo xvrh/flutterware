@@ -37,8 +37,10 @@ void main() {
   scenario('Pay by card', (s) async {});
 }
 ''');
-    // Not in the scenario directory — invisible to the scan.
-    write('test/unit_test.dart', "void main() { scenario('Nope', (s) {}); }");
+    // Anywhere under test/ counts — a scenario is an ordinary widget test.
+    write('test/unit_test.dart', "void main() { scenario('Beside', (s) {}); }");
+    // Outside test/ does not.
+    write('tool/gen.dart', "void main() { scenario('Nope', (s) {}); }");
 
     var result = ScenarioScanner(packageRoot: root.path).scan();
     expect(result.diagnostics, isEmpty);
@@ -48,6 +50,7 @@ void main() {
         'test/scenarios/onboarding_test.dart Onboarding',
         'test/scenarios/onboarding_test.dart Sign up',
         'test/scenarios/checkout/pay_test.dart Pay by card',
+        'test/unit_test.dart Beside',
       ]),
     );
   });
@@ -95,5 +98,42 @@ void main() {
     var result = ScenarioScanner(packageRoot: root.path).scan();
     expect(result.scenarios, isEmpty);
     expect(result.diagnostics, isEmpty);
+  });
+
+  group('commonScenarioDirectory', () {
+    test('is the directory a conventional suite sits under', () {
+      expect(
+        commonScenarioDirectory([
+          'test/scenarios/a_test.dart',
+          'test/scenarios/checkout/b_test.dart',
+        ]),
+        'test/scenarios',
+      );
+    });
+
+    test('is the shared part of a spread suite', () {
+      expect(
+        commonScenarioDirectory([
+          'test/scenarios/a_test.dart',
+          'test/widgets/b_test.dart',
+        ]),
+        'test',
+      );
+    });
+
+    test("is a single file's own directory", () {
+      expect(
+        commonScenarioDirectory(['test/scenarios/deep/a_test.dart']),
+        'test/scenarios/deep',
+      );
+    });
+
+    test('is empty with no files, or none shared', () {
+      expect(commonScenarioDirectory([]), '');
+      expect(
+        commonScenarioDirectory(['test/a_test.dart', 'spec/b_test.dart']),
+        '',
+      );
+    });
   });
 }

@@ -636,7 +636,10 @@ class PreviewsCore extends PluginCore {
             description:
                 'Report the widget tree, scoped to the preview rather than the '
                 'catalog around it. Off by default because a real preview is '
-                'thousands of tokens of tree — try `find` first.',
+                'thousands of tokens of tree — try `find` first. Offstage '
+                'content (a route kept alive under the current one, an '
+                '`Offstage`) is folded to one node marked `offstage: true`; '
+                'pass its id to `node` to read inside it.',
           ),
           ActionParameter(
             'find',
@@ -1776,13 +1779,18 @@ class PreviewsCore extends PluginCore {
   /// The depth is counted from the *reported* root rather than from the demo's,
   /// so `--node=0/1 --depth=1` means one level below that node — which is what
   /// anybody asking for both would mean by it.
+  ///
+  /// Offstage subtrees are folded to their top node, which is reported with
+  /// `offstage: true` and nothing under it — a covered route is most of a
+  /// tree's tokens and none of its picture. Naming that node with `--node` is
+  /// the way in: a caller pointing *at* hidden content has asked for it.
   List<InspectNode> _scoped(
     InspectTree tree,
     String? node,
     Object? depth,
     String entryId,
   ) {
-    var nodes = tree.nodes;
+    var root = tree.root;
     var offset = 0;
     if (node != null) {
       var subtree = tree.nodeAt(node);
@@ -1795,11 +1803,12 @@ class PreviewsCore extends PluginCore {
               'read the tree again.',
         );
       }
-      nodes = InspectTree(entryId: tree.entryId, root: subtree).nodes;
+      root = subtree;
       offset = _depthOf(subtree.id);
     }
+    if (root == null) return const [];
     return [
-      for (var found in nodes)
+      for (var found in root.nodesFoldingOffstage)
         if (switch (depth) {
           int max => _depthOf(found.id) - offset <= max,
           _ => true,
@@ -1847,6 +1856,10 @@ class PreviewsCore extends PluginCore {
           description: node.description,
           source: node.source?.describe(relativeTo: worktree),
           local: node.createdByLocalProject,
+          // Sparse: nearly every node is on stage. In `tree` this is the top
+          // of a folded subtree; in `matches` it warns that the found widget
+          // is not on the picture.
+          offstage: node.offstage ? true : null,
           // Formatted here rather than carried as four numbers: the consumer
           // is a terminal or a model, and `12.0,40.0 200.0×48.0` is one
           // glance where four fields are four.

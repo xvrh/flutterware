@@ -402,7 +402,7 @@ void main() => Flutterware.configure((fw) {
   // `fw run previews new --name="Buttons"` writes your first one.
   fw.use(Previews(packages: [.new(app)]));
 
-  // Widget tests that screenshot every step, from `test/scenarios/`.
+  // Widget tests that screenshot every step, found anywhere under `test/`.
   // `fw run scenarios new --name="Onboarding"` writes your first one.
   fw.use(Scenarios(packages: [.new(app)]));
 });
