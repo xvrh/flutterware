@@ -83,7 +83,7 @@ class SplashVariantTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _Screen(
+          SplashScreenBox(
             composition: composition,
             device: device,
             enabled: resolution.enabled,
@@ -211,45 +211,16 @@ class _Origin extends StatelessWidget {
 
 /// One splash drawn at device size and scaled to fit its slot.
 ///
-/// Public because a stale project's single-cell view draws a *second* one of
-/// these — what `create` would produce now, beside what it produced last time —
-/// and the two must be the same widget or the difference on screen is between
-/// two renderers rather than between two compositions.
+/// Public because the inspector draws the selected cell at its own size, and the
+/// tile and the pane must be the same widget — otherwise a difference on screen
+/// is between two renderers rather than between two compositions.
 class SplashScreenBox extends StatelessWidget {
   const SplashScreenBox({
     super.key,
     required this.composition,
     required this.enabled,
     required this.selected,
-    this.device,
     this.slotHeight = SplashVariantTile.defaultSlotHeight,
-    this.onTap,
-  });
-
-  final SplashComposition composition;
-  final Device? device;
-  final bool enabled;
-  final bool selected;
-  final double slotHeight;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) => _Screen(
-    composition: composition,
-    enabled: enabled,
-    selected: selected,
-    device: device,
-    slotHeight: slotHeight,
-    onTap: onTap,
-  );
-}
-
-class _Screen extends StatelessWidget {
-  const _Screen({
-    required this.composition,
-    required this.enabled,
-    required this.selected,
-    required this.slotHeight,
     this.device,
     this.onTap,
   });

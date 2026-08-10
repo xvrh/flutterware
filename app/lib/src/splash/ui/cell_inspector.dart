@@ -10,6 +10,7 @@ import '../model/generated.dart';
 import '../model/scan.dart';
 import '../model/surface.dart';
 import '../model/validation.dart';
+import 'problem_list.dart';
 import 'variant_tile.dart';
 
 /// One cell, said in full, beside the matrix rather than instead of it.
@@ -101,7 +102,7 @@ class SplashCellInspector extends StatelessWidget {
                   const Gap(FwSpacing.xxl),
                   Text('Problems', style: context.type.sectionLabel),
                   const Gap(FwSpacing.md),
-                  for (var problem in problems) _Problem(problem),
+                  for (var problem in problems) SplashProblemRow(problem),
                 ],
                 if (artifacts.isNotEmpty) ...[
                   const Gap(FwSpacing.xxl),
@@ -283,58 +284,6 @@ class _Origin extends StatelessWidget {
           Text(reason, style: context.type.caption),
         ],
       ],
-    );
-  }
-}
-
-class _Problem extends StatelessWidget {
-  const _Problem(this.problem);
-
-  final SplashProblem problem;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var tone = switch (problem.tone) {
-      Tone.error => colors.red,
-      Tone.warn => colors.amber,
-      _ => colors.mut2,
-    };
-    return Padding(
-      padding: const EdgeInsets.only(bottom: FwSpacing.lg),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 5, right: FwSpacing.md),
-            child: Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: tone),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(problem.message, style: context.type.body),
-                if (problem.key != null || problem.blocksGeneration)
-                  Padding(
-                    padding: const EdgeInsets.only(top: FwSpacing.xxs),
-                    child: Text(
-                      [
-                        if (problem.key != null) problem.key!,
-                        if (problem.blocksGeneration)
-                          'stops `create` from running',
-                      ].join('  ·  '),
-                      style: context.type.micro.copyWith(color: colors.mut3),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

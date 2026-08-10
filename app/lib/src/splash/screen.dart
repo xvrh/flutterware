@@ -1,9 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutterware/plugins.dart';
-
 import 'package:flutter/services.dart';
+import 'package:flutterware/plugins.dart';
 
 import '../plugins/native/splash_core.dart';
 import '../ui/empty_state.dart';
@@ -11,10 +8,9 @@ import '../ui/theme.dart';
 import 'model/config.dart';
 import 'model/scan.dart';
 import 'model/surface.dart';
-import 'model/validation.dart';
-import 'ui/artifacts_view.dart';
 import 'ui/cell_inspector.dart';
 import 'ui/panel_header.dart';
+import 'ui/problem_list.dart';
 import 'ui/variant_tile.dart';
 
 /// The whole matrix at once: four surfaces, two themes, side by side — and,
@@ -107,6 +103,10 @@ class SplashScreen extends StatelessWidget {
     var config = scan.forFlavor(flavor) ?? scan.main!;
 
     var open = surface != null && theme != null;
+    var configWide = [
+      for (var problem in config.problems)
+        if (problem.surface == null) problem,
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -123,8 +123,12 @@ class SplashScreen extends StatelessWidget {
           onFlavor: onSelectFlavor,
           size: size,
           onSize: onSelectSize,
-          onReload: () =>
-              unawaited(core.invoke('reload', arguments: {'package': package})),
+          // The core's own method, not `invoke('reload')`. A panel calls its
+          // core directly — see `NativePlugin` — and the action exists for `fw`
+          // and MCP, which need a result on the wire. Here the result is the
+          // panel redrawing, and awaiting the method is what lets the button
+          // say the read finished.
+          onReload: () => core.reload(package),
         ),
         Expanded(
           child: Row(
@@ -144,16 +148,12 @@ class SplashScreen extends StatelessWidget {
                     // Config-wide only. Anything that belongs to one cell is in
                     // the inspector, beside the picture it is about — which is
                     // where somebody reading it can see what it means.
-                    if (_configWide(config).isNotEmpty) ...[
+                    if (configWide.isNotEmpty) ...[
                       const Gap(FwSpacing.xxxl),
-                      _Problems(_configWide(config)),
+                      Text('Problems', style: context.type.sectionLabel),
+                      const Gap(FwSpacing.md),
+                      for (var problem in configWide) SplashProblemRow(problem),
                     ],
-                    const Gap(FwSpacing.xxxl),
-                    SplashArtifactsView(
-                      artifacts: config.artifacts,
-                      packageRoot: core.packageRootFor(package),
-                      stale: config.stale,
-                    ),
                   ],
                 ),
               ),
@@ -200,12 +200,6 @@ SplashGeneratedState _stateOf(SplashConfigScan config) => !config.isGenerated
     : config.stale
     ? SplashGeneratedState.stale
     : SplashGeneratedState.current;
-
-/// The problems that belong to the config rather than to one cell.
-List<SplashProblem> _configWide(SplashConfigScan config) => [
-  for (var problem in config.problems)
-    if (problem.surface == null) problem,
-];
 
 /// The screen a surface draws at a given size.
 ///
@@ -260,73 +254,6 @@ class _Matrix extends StatelessWidget {
               selected: s == surface && t == theme,
               onTap: onSelect == null ? null : () => onSelect!(s, t),
             ),
-      ],
-    );
-  }
-}
-
-/// The problems that are about the config as a whole.
-class _Problems extends StatelessWidget {
-  const _Problems(this.problems);
-
-  final List<SplashProblem> problems;
-
-  @override
-  Widget build(BuildContext context) {
-    var type = context.type;
-    var colors = context.colors;
-
-    Color colorFor(Tone tone) => switch (tone) {
-      Tone.error => colors.red,
-      Tone.warn => colors.amber,
-      _ => colors.mut,
-    };
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Problems', style: type.sectionLabel),
-        const Gap(FwSpacing.md),
-        for (var problem in problems)
-          Padding(
-            padding: const EdgeInsets.only(bottom: FwSpacing.lg),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 5, right: FwSpacing.md),
-                  child: Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: colorFor(problem.tone),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(problem.message, style: type.body),
-                      if (problem.key != null || problem.blocksGeneration)
-                        Padding(
-                          padding: const EdgeInsets.only(top: FwSpacing.xxs),
-                          child: Text(
-                            [
-                              if (problem.key != null) problem.key!,
-                              if (problem.blocksGeneration)
-                                'stops `create` from running',
-                            ].join('  ·  '),
-                            style: type.micro.copyWith(color: colors.mut3),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
       ],
     );
   }
