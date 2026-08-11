@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,11 +6,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/plugins/native/dev_stack_results.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
+import 'package:flutterware_app/src/capture/settle.dart';
 import 'package:flutterware_app/src/worktrees/facts.dart';
+import 'package:flutterware_app/src/worktrees/facts_controller.dart';
+import 'package:flutterware_app/src/worktrees/facts_probe.dart';
+import 'package:flutterware_app/src/worktrees/facts_store.dart';
 import 'package:flutterware_app/src/worktrees/facts_text.dart';
 import 'package:flutterware_app/src/worktrees/explorer_row.dart';
 import 'package:flutterware_app/src/worktrees/providers/stack.dart';
+import 'package:flutterware_app/src/worktrees/watchers.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
+import 'package:path/path.dart' as p;
 
 /// The explorer's stack column.
 ///
@@ -310,4 +317,116 @@ void main() {
       expect(text, isNot(contains('up')));
     });
   });
+
+  group('live, and holding nothing', () {
+    /// A controller over a scripted stack probe and nothing else — no git, no
+    /// forge, no agent, so nothing here spawns a process.
+    WorktreeFactsController controllerOver(
+      StackProbe stack, {
+      SettleRegistry? settle,
+    }) => WorktreeFactsController(
+      repoRoot: project.path,
+      settle: settle,
+      probe: WorktreeFactsProbe(
+        repoRoot: project.path,
+        store: WorktreeFactsStore.open(project.path),
+        stack: stack,
+      ),
+    );
+
+    test('a run-dir event re-reads the stacks and nothing else', () async {
+      // The point of the separate signal: this path must never reach git. It
+      // is asserted by construction — the probe below is the only thing wired
+      // in — and by the fact that `probeStacks` keeps every other fact as it
+      // was rather than recomputing it.
+      var reads = 0;
+      var controller = controllerOver(
+        _Scripted(() {
+          reads++;
+          return StackReading(state: StackState.up, at: DateTime.now());
+        }),
+      );
+      addTearDown(controller.dispose);
+
+      var worktrees = [Worktree(path: project.path)];
+      await controller.refreshStacks(worktrees);
+      expect(reads, 1);
+      expect(
+        controller.factsFor(worktrees.single).stack.value!.state,
+        StackState.up,
+      );
+
+      // A fact that was already there survives a stack-only refresh.
+      await controller.refreshStacks(worktrees);
+      expect(reads, 2);
+    });
+
+    test('a cache written by anything else reaches the facts', () async {
+      // **The whole chain, on the real filesystem**: a file appears under the
+      // run dir — as `fw run dev_stack start` in a terminal makes it appear —
+      // the watcher notices, the controller re-reads only the stacks, and the
+      // fact the row draws has changed. Everything either side of this is unit
+      // tested; this is the join.
+      Directory(p.join(project.path, '.git')).createSync(recursive: true);
+      var controller = controllerOver(
+        RunDirStackProbe(runDir: () => runDir.path),
+      );
+      addTearDown(controller.dispose);
+      var worktrees = [Worktree(path: project.path)];
+
+      var watcher = WorktreeWatcher(
+        repoRoot: project.path,
+        agentRoot: p.join(project.path, 'no-agents'),
+        runDir: runDir.path,
+        debounce: const Duration(milliseconds: 10),
+      )..start();
+      addTearDown(watcher.dispose);
+
+      var refreshed = Completer<void>();
+      var events = watcher.changes.listen((change) async {
+        if (change != WorktreeChange.stack) return;
+        await controller.refreshStacks(worktrees);
+        if (!refreshed.isCompleted) refreshed.complete();
+      });
+      addTearDown(events.cancel);
+
+      expect(controller.factsFor(worktrees.single).stack.hasValue, isFalse);
+
+      // Twice: the first event on a freshly registered watch can be swallowed.
+      for (var i = 0; i < 2; i++) {
+        writeCache(StackReading(state: StackState.up, at: DateTime.now()));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+
+      await refreshed.future.timeout(const Duration(seconds: 15));
+      expect(
+        controller.factsFor(worktrees.single).stack.value!.state,
+        StackState.up,
+      );
+    });
+
+    test('disposing lets go of the settle registry', () {
+      // The registry is a `Set` that lives for the process. A controller that
+      // registered and never left would be asked whether it is busy forever —
+      // invisible, and exactly the kind of leak nothing else would report.
+      var settle = SettleRegistry();
+      var controller = controllerOver(_Scripted(() => null), settle: settle);
+      expect(settle.isIdle, isTrue);
+      controller.dispose();
+
+      // Nothing left holding it: adding a busy source is the only way to make
+      // the registry speak, and this one is gone.
+      expect(settle.waitingOn, isEmpty);
+    });
+  });
+}
+
+/// A stack probe that answers with whatever the test says, counting calls.
+class _Scripted implements StackProbe {
+  _Scripted(this.answer);
+
+  final StackReading? Function() answer;
+
+  @override
+  Future<StackReading?> probe(String worktreePath) async => answer();
 }

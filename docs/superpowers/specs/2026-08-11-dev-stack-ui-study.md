@@ -248,9 +248,47 @@ bug as the one the stack panel's `busyWith` fixed a day earlier, on a different
 screen: **a picture of a screen that has not finished thinking is worse than no
 picture, because nothing in it says so.**
 
-### Still not built
+### The run-dir watch (2026-08-11)
 
-A run-dir watch. Bringing a stack up in worktree A does not refresh the explorer
-until something else does — the facts refresh on git events and on the refresh
-button. `watchers.dart` is where that would go, and it is worth doing only if
-the staleness turns out to be annoying in practice rather than in theory.
+Built, on the condition that it cost nothing and hold nothing.
+
+`WorktreeChange.stack` is the third kind the watcher emits, from a flat watch on
+`~/.flutterware/run`. A stack event refreshes **only** the stacks —
+`probeStacks`, one small file read per worktree, no git and no subprocesses —
+the same separation the agent path already makes and for the same reason.
+
+**It is the only watch with a filter, and the filter is load-bearing.** The run
+dir is shared scratch: a measured directory held 123 files, 88 of them daemon
+logs and locks. Sampled over thirty seconds with a server logging and a stack
+being probed:
+
+| | events in 30 s |
+|---|---|
+| everything the run dir emitted | 679 |
+| `.log` writes from one running server | 676 |
+| `stack-*` caches | 3 |
+
+Unfiltered that is a server's every log line arriving as a worktree change.
+Filtered it is three, which the coalescer turns into at most one refresh every
+two seconds.
+
+**What the platform does that is easy to miss:** macOS emits an event naming the
+watched *directory itself*, both when the watch registers and alongside the
+per-file events. Observed while writing the test, not guessed — the first signal
+out of a freshly started watcher belongs to whichever directory registered
+first. The basename filter drops those too.
+
+**What it actually buys, which is less than it sounds.** A stack is only probed
+while one of its surfaces is mounted, so sitting on the explorer produces no
+writes at all — the column was never going to go stale from watching it. What
+this catches is the case nothing else can: `fw run dev_stack start` in a
+terminal, or an agent doing the same, while you are looking at the list.
+
+**Holding nothing:** the subscription lives in the watcher's list and is
+cancelled on dispose; the coalescer is built from `WorktreeChange.values`, so
+the new kind gets one and dispose cancels it; `refreshStacks` owns no resources
+and guards `_disposed` either side of its await. One leak *was* found while
+checking — `ShellController.start` replaced `_worktreeFacts` without disposing
+the old one, which since the settle-registry change meant an abandoned
+controller sitting in a process-lifetime `Set` being asked forever whether it
+was busy. It now disposes what it replaces, and a test pins it.

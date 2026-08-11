@@ -127,6 +127,23 @@ class WorktreeFactsController extends ChangeNotifier implements SettleSource {
     }
   }
 
+  /// Re-reads the stacks and nothing else. What a run-dir event triggers.
+  ///
+  /// Same rules as [refreshAgents], and the same reason: it is file IO with no
+  /// subprocesses behind it, so making it queue behind a git sweep would give
+  /// the column the latency of the slowest thing on the screen.
+  Future<void> refreshStacks(List<Worktree> worktrees) async {
+    if (_inFlight != null || _disposed) return;
+    try {
+      var updated = await _probe.probeStacks(worktrees, _facts);
+      if (_disposed) return;
+      _facts = updated;
+      _notify();
+    } catch (e) {
+      debugPrint('worktree stack refresh failed: $e');
+    }
+  }
+
   /// Notifies on a microtask rather than now.
   ///
   /// **Because a refresh starts from `initState`.** Becoming visible is one of

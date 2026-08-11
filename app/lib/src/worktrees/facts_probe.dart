@@ -147,6 +147,27 @@ class WorktreeFactsProbe {
     return facts;
   }
 
+  /// Re-reads **only** the stacks, keeping every other fact as it was.
+  ///
+  /// The cheapest refresh here by a wide margin: one `stat` and one small JSON
+  /// read per worktree, no subprocesses and no git. That is what lets a cache
+  /// file changing under `~/.flutterware/run` drive a live column without
+  /// dragging fourteen `git status` calls behind it — the same separation the
+  /// agent path already makes, and for the same reason.
+  Future<Map<String, WorktreeFacts>> probeStacks(
+    List<Worktree> worktrees,
+    Map<String, WorktreeFacts> previous,
+  ) async {
+    var facts = <String, WorktreeFacts>{};
+    await _pooled(worktrees, (worktree) async {
+      var was = previous[worktree.path] ?? const WorktreeFacts();
+      facts[worktree.path] = was.copyWith(
+        stack: _stackFact(await stack.probe(worktree.path)),
+      );
+    });
+    return facts;
+  }
+
   Fact<ActivityFacts> _laterActivity(
     Fact<ActivityFacts> previous,
     AgentFacts? agent,

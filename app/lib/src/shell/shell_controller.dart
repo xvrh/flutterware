@@ -298,8 +298,10 @@ class ShellController extends ChangeNotifier {
   /// is 10 ms, which is noise beside the sweep that follows it, and it is what
   /// makes a checkout you just created show up without touching anything.
   ///
-  /// An agent event refreshes agents only — no subprocesses. See
-  /// [WorktreeWatcher] for why the two kinds are not one signal.
+  /// An agent event refreshes agents only — no subprocesses. A stack event
+  /// refreshes stacks only, and is cheaper still: one small file read per
+  /// worktree. See [WorktreeWatcher] for why the three kinds are not one
+  /// signal.
   void _startWatchingRepo(String repoRoot) {
     // One per shell. A second `start` would otherwise leave the first watcher
     // holding its streams with nothing to cancel it.
@@ -321,6 +323,8 @@ class ShellController extends ChangeNotifier {
           await refreshWorktreeFacts();
         case WorktreeChange.agent:
           await _worktreeFacts?.refreshAgents(_worktrees);
+        case WorktreeChange.stack:
+          await _worktreeFacts?.refreshStacks(_worktrees);
       }
     });
     watcher.start();
@@ -426,6 +430,13 @@ class ShellController extends ChangeNotifier {
     // (a diff between two commits) is repository-wide, and keying it by the
     // current checkout would give every worktree its own permanently cold copy.
     if (_worktrees.firstOrNull case var main?) {
+      // Replaced, so the one it replaces goes with it. A facts controller
+      // registers itself with the window's settle registry, which holds a
+      // reference until it is disposed — so an abandoned one would sit in
+      // there for the life of the process, invisible, being asked whether it
+      // is busy. `_startWatchingRepo` guards itself for the same reason.
+      _worktreeFacts?.removeListener(notifyListeners);
+      _worktreeFacts?.dispose();
       _worktreeFacts =
           (_buildWorktreeFacts ??
                 (root) => WorktreeFactsController(
