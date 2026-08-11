@@ -1,18 +1,25 @@
 # Comparison — what a worktree did to the pictures
 
 **Date:** 2026-08-11
-**Status:** design, brainstormed with the owner. **Steps 1–5 of §12 are built**
-(2026-08-11), previews and scenarios both; §12 records which commit did what.
-Rebased onto master's transition-events work, which shipped `verb`/`target` on
-the step capture while this branch was adding the same thing — §7a records what
-survived. The space, the static viewer and the MCP surface are not built. Every
-decision below was taken in that conversation and **all of them are settled** —
-§13 lists them, and §14 is the short list of constants deliberately left for
-measurement. Every number is cited to the findings doc that measured it; nothing
-here was measured for this design.
+**Status:** **built and landing** (2026-08-11) — steps 1–6 of §12, previews and
+scenarios both, driven from `fw compare` and from three tabs on the changes
+screen. §12 records which commit did what. The static viewer and the MCP surface
+are not built; §12 lists what else is left.
+
+Rebased twice onto master, which shipped work this branch was independently
+duplicating each time: `verb`/`target` on the step capture (§7a), then the
+changes screen itself (§9), `position` on the capture, and the `fw capture`
+landing fix. Every one of those collisions is recorded where it landed, because
+the pattern is the interesting part: **two people solving the same problem from
+the same codebase converge**, and the merge is then a choice of wording rather
+than of design.
+
+Every decision below was taken in the founding conversation and **all of them
+are settled** — §13 lists them, including the two this build reversed and why.
+§14 is the short list of constants deliberately left for measurement.
 **Leans on:** `2026-08-10-worktree-changes-design.md` (the base definition, the
-"delta is the unit" rule, the isolate discipline — **not merged into this
-worktree yet**, this doc rebases onto it), `2026-08-10-address-spaces-brief.md`
+"delta is the unit" rule, the isolate discipline — **merged**, and §9 records
+how the two screens became one), `2026-08-10-address-spaces-brief.md`
 (the space grammar this consumes), `2026-07-30-scenarios-design.md` (the
 artifact triple, FakeAsync determinism), `2026-07-27-compile-pipeline-performance-findings.md`
 (every compile/reload number below).
@@ -580,12 +587,40 @@ handles SDK management.
    entry alone on both sides. Scenarios run per-scenario on a warm runner,
    skipped by the same closure rule. MCP is not wired. Corrections these forced
    are in their commit messages; the structural ones are in §8a and §11a.
-6. **The space** (§9) — overview, preview modes, merged split tree, two live
-   revisions.
+6. ✅ **The screen** (§9) — three tabs on the worktree's changes panel rather
+   than a space of its own; the reversal and its reasoning are in §9. The
+   previews tab is master/detail with the five-mode stage; the scenarios tab is
+   the merged tree on the scenarios panel's own graph, with a step **pushed over
+   the flow** rather than banded under it — a phone frame is portrait and a band
+   is landscape, so two of them side by side came out postage-stamp sized.
+   Estimates ride the tabs; a half runs when its tab is opened.
 7. **The static viewer** — in v1, and dumb: it reads `index.json` and renders,
    with no diffing logic of its own. "Improve later" means richer modes, never
    moving computation into the page.
-8. Later: `events` channel, arbitrary A/B.
+8. Later: `events` channel, arbitrary A/B, and the four below.
+
+### What is left, in the order it would bite
+
+1. **A refresh control.** `ComparisonController.refresh` exists and nothing
+   calls it, so a panel visit is one run.
+2. **A base selector.** §9's `checkout-redesign..master` grammar assumes one;
+   today the base is the project's `fw.changes(base:)` or an inference, with no
+   way to override from the screen. It is also what would let somebody
+   photograph the stage on a repository whose base does not build.
+3. **The MCP surface.** An agent can read `index.json`; it cannot ask for one.
+4. **Two live revisions** (§8's *previous · running*), which nothing needs until
+   a comparison is slow enough to browse the old one during.
+
+### What a comparison of *this* repository still reports, and why
+
+Four teardown-dialog previews come back `changed` with the note *on base: this
+side cannot tell whether anything was still animating*. That is §11a at full
+strength and it is **self-resolving**: the base's `package:flutterware` predates
+the animation-settling fix, so its guest settles for images alone while head's
+waits for tickers, and the two sides are photographed by different rules. It
+disappears the moment this lands. Proof the fix itself is sound: two
+`fw run previews screenshot` renders of one entry are byte-identical, where
+before they were not.
 
 ## 13. Decided — do not relitigate
 
