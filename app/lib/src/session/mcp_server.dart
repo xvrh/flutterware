@@ -314,6 +314,12 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         'entrypoint': Schema.string(
           description: 'Which entry point, when a device runs more than one.',
         ),
+        'worktree': Schema.string(
+          description:
+              'Worktree name or path, to drive a run another checkout '
+              'launched. Only runs from this worktree match when omitted — '
+              'the refusals name the worktrees that have one.',
+        ),
       },
       required: ['verb'],
     ),
@@ -335,6 +341,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
             'maxSide',
             'device',
             'entrypoint',
+            'worktree',
           ])
             key: ?request.arguments?[key],
         };

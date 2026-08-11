@@ -81,6 +81,31 @@ void main() {
 
   // The marker is written after `resolve`, so a run killed between the two
   // leaves a directory the next run throws away rather than trusts.
+  test('two concurrent ensures share one checkout and one resolve', () async {
+    // The race this guards: the second arrival used to see a directory with
+    // no marker — the first's `pub get` still running — call it a corpse and
+    // force-remove it out from under the first. Serialized, the loser waits,
+    // finds the marker, and reuses.
+    var sha = await git(['rev-parse', 'HEAD']);
+    var resolves = 0;
+
+    Future<BaseCheckout> ensure() => BaseCheckout.ensure(
+      repoRoot: repo,
+      sha: sha,
+      cacheRoot: cache,
+      resolve: (_) async {
+        resolves++;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      },
+    );
+
+    var results = await Future.wait([ensure(), ensure()]);
+
+    expect(resolves, 1);
+    expect(results.map((base) => base.created), containsAll([true, false]));
+    expect(results.first.path, results.last.path);
+  });
+
   test('a checkout that never finished resolving is not reused', () async {
     var sha = await git(['rev-parse', 'HEAD']);
 

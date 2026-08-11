@@ -1,4 +1,121 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
+
 import 'closure.dart';
+
+/// The pixel inputs no compile ever names, for the package at [packagePath].
+///
+/// The Dart closure knows every import; it knows nothing about the bytes of
+/// an asset, the resolution in a lockfile or an `.arb` bundle, and all three
+/// decide pixels. Until these were passed, a worktree that changed only an
+/// asset computed the same shot key as its base and the comparison served the
+/// base's picture back as "same" — a regression reported as clean, which is
+/// the outcome the cache's own doc calls worse than no comparison.
+///
+/// Returned as root-relative paths whose *content* is hashed per side; a path
+/// absent on one side hashes as [SourceClosure.missing], so a deleted asset
+/// reads as a change the same way an edited one does. Directory assets and
+/// bundle directories are listed in **every** root and unioned, because a
+/// file only one side has is by definition missing from the other side's
+/// listing — a single-side listing would let an added or deleted file slip
+/// through unhashed.
+///
+/// `package_config.json` is deliberately *not* here even though resolution
+/// lives in it: pub stamps it with a generation time, so its bytes differ
+/// between two checkouts whose resolution is identical, and hashing it would
+/// turn every skip into a render. The lockfiles carry the same information
+/// with stable bytes.
+List<String> pixelInputsOf({
+  required String packagePath,
+  required List<String> roots,
+}) {
+  var paths = <String>{
+    p.join(packagePath, 'pubspec.yaml'),
+    p.join(packagePath, 'pubspec.lock'),
+    p.join(packagePath, 'l10n.yaml'),
+    // A workspace member resolves at the workspace root, so the lock that
+    // records its resolution can be at the top rather than beside it.
+    'pubspec.lock',
+  };
+  for (var root in roots) {
+    paths.addAll(_declaredAssets(root, packagePath));
+    paths.addAll(_l10nBundles(root, packagePath));
+  }
+  return paths.toList()..sort();
+}
+
+Iterable<String> _declaredAssets(String root, String packagePath) sync* {
+  var flutter = _yamlMap(p.join(root, packagePath, 'pubspec.yaml'))?['flutter'];
+  if (flutter is! Map) return;
+  if (flutter['assets'] case List assets) {
+    for (var entry in assets) {
+      // An entry is a path, or since flavors a map carrying one.
+      var asset = entry is Map ? entry['path'] : entry;
+      if (asset is! String) continue;
+      if (!asset.endsWith('/')) {
+        yield p.join(packagePath, asset);
+        continue;
+      }
+      // A directory asset bundles its direct files.
+      yield* _filesIn(root, p.join(packagePath, asset), (_) => true);
+    }
+  }
+  if (flutter['fonts'] case List families) {
+    for (var family in families) {
+      if (family is! Map) continue;
+      if (family['fonts'] case List fonts) {
+        for (var font in fonts) {
+          if (font is Map && font['asset'] is String) {
+            yield p.join(packagePath, font['asset'] as String);
+          }
+        }
+      }
+    }
+  }
+}
+
+Iterable<String> _l10nBundles(String root, String packagePath) sync* {
+  var arbDir = _yamlMap(p.join(root, packagePath, 'l10n.yaml'))?['arb-dir'];
+  if (arbDir is! String) return;
+  yield* _filesIn(
+    root,
+    p.join(packagePath, arbDir),
+    (name) => name.endsWith('.arb'),
+  );
+}
+
+/// The root-relative paths of [relativeDir]'s direct files, or nothing when
+/// the directory is not there in this root.
+Iterable<String> _filesIn(
+  String root,
+  String relativeDir,
+  bool Function(String name) wanted,
+) sync* {
+  List<FileSystemEntity> entries;
+  try {
+    entries = Directory(p.join(root, relativeDir)).listSync();
+  } on FileSystemException {
+    return;
+  }
+  for (var entity in entries) {
+    var name = p.basename(entity.path);
+    if (entity is File && wanted(name)) {
+      yield p.join(relativeDir, name);
+    }
+  }
+}
+
+Map<Object?, Object?>? _yamlMap(String path) {
+  try {
+    var doc = loadYaml(File(path).readAsStringSync());
+    return doc is Map ? doc : null;
+  } on Object {
+    // Absent, unreadable, or not yaml — nothing to declare assets from.
+    return null;
+  }
+}
 
 /// Whether an entry has to be rendered at all.
 ///

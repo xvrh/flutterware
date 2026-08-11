@@ -114,6 +114,7 @@ class ScenariosRunner {
     required this.baseRoot,
     required this.source,
     required this.cache,
+    this.extraPaths = const [],
     this.only,
     this.onScenario,
   });
@@ -122,6 +123,11 @@ class ScenariosRunner {
   final String baseRoot;
   final ScenarioSource source;
   final ShotCache cache;
+
+  /// The pixel inputs the closure does not name — see [pixelInputsOf]. A
+  /// parameter rather than derived here because [source] deliberately hides
+  /// where the package lives.
+  final List<String> extraPaths;
 
   /// Compare only these scenario ids.
   final List<String>? only;
@@ -166,6 +172,7 @@ class ScenariosRunner {
         memo: cache.memo,
         baseRoot: baseRoot,
         headRoot: headRoot,
+        extraPaths: extraPaths,
       ).skip) {
         settled.add(
           ScenarioComparison.notRun(scenario: id, state: ComparedState.skipped),

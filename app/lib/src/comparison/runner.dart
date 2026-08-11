@@ -25,6 +25,11 @@ abstract interface class ComparisonSide {
   /// Every entry id this checkout declares.
   Future<List<String>> entries(String checkout);
 
+  /// The package the entries live in, relative to a checkout root — where the
+  /// pubspec declaring the assets and the lockfile recording the resolution
+  /// sit, which is what [pixelInputsOf] reads.
+  String get packagePath;
+
   /// Where [entryId]'s source lives, **relative to a checkout root**.
   ///
   /// Asked of the side rather than derived from the id, because an id is
@@ -264,6 +269,15 @@ class ComparisonRunner {
     var headGraph = _graphFor(headRoot);
     var baseGraph = _graphFor(baseRoot);
 
+    // Computed once for the whole plan: the same lockfiles and assets decide
+    // every entry's pixels, and they go into the skip rule and the shot key
+    // together — a key that ignored what the skip rule watches would serve a
+    // stale picture for exactly the change the skip rule re-rendered for.
+    var pixelInputs = pixelInputsOf(
+      packagePath: side.packagePath,
+      roots: [headRoot, baseRoot],
+    );
+
     var toRender = <String>[];
     var keys = <String, ({String base, String head})>{};
     for (var id in common) {
@@ -276,10 +290,11 @@ class ComparisonRunner {
         memo: cache.memo,
         baseRoot: baseRoot,
         headRoot: headRoot,
+        extraPaths: pixelInputs,
       );
       keys[id] = (
-        base: _keyFor(id, baseGraph, baseRoot, file, sdkKey),
-        head: _keyFor(id, headGraph, headRoot, file, sdkKey),
+        base: _keyFor(id, baseGraph, baseRoot, file, sdkKey, pixelInputs),
+        head: _keyFor(id, headGraph, headRoot, file, sdkKey, pixelInputs),
       );
 
       if (decision.skip) {
@@ -477,10 +492,14 @@ class ComparisonRunner {
     String root,
     String file,
     String sdkKey,
+    List<String> pixelInputs,
   ) => ShotKey.of(
     kind: 'preview',
     entryId: id,
-    closure: SourceClosure.of(graph.closureOf(file), root: root).fingerprint,
+    closure: SourceClosure.of([
+      ...graph.closureOf(file),
+      ...pixelInputs,
+    ], root: root).fingerprint,
     sdk: sdkKey,
   );
 }

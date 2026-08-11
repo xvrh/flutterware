@@ -22,6 +22,7 @@ import '../../run/inventory.dart';
 import '../../run/journal.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
+import '../../shell/worktree_discovery.dart';
 import '../../utils/daemon/device.dart';
 import '../../utils/run_dir.dart';
 import '../plugin_core.dart';
@@ -1229,6 +1230,14 @@ class RunCore extends PluginCore {
       description:
           'Package-relative path, when one device is running more than one',
     ),
+    const ActionParameter(
+      'worktree',
+      'Worktree',
+      required: false,
+      description:
+          'Worktree name or path, to reach a run another checkout launched; '
+          'only runs from this worktree match when omitted',
+    ),
   ];
 
   /// What every drive transaction lets you tune about its observation.
@@ -1778,6 +1787,8 @@ class RunCore extends PluginCore {
     var handle = _selectApp(
       arguments['device'] as String?,
       arguments['entrypoint'] as String?,
+      arguments['worktree'] as String?,
+      await _repoWorktrees,
     );
     var started = DateTime.now();
     try {
@@ -1846,7 +1857,10 @@ class RunCore extends PluginCore {
           // which is the worst of both.
           unawaited(_driveSessions.remove(_driveKey(handle))?.close());
           await connection?.exitApp();
-          if (isProcessAlive(handle.launcherPid)) {
+          // Current, not merely alive: this pid came out of a file that can
+          // be a day old, and SIGTERM to a recycled number is SIGTERM to
+          // whatever unrelated process holds it now.
+          if (isProcessCurrent(handle.launcherPid, handle.startedAt)) {
             Process.killPid(handle.launcherPid, ProcessSignal.sigterm);
           }
           handle.delete();
@@ -1949,6 +1963,8 @@ class RunCore extends PluginCore {
     return _selectApp(
       arguments['device'] as String?,
       arguments['entrypoint'] as String?,
+      arguments['worktree'] as String?,
+      await _repoWorktrees,
     );
   }
 
@@ -2425,13 +2441,59 @@ class RunCore extends PluginCore {
         : 'The app is not answering yet.';
   }
 
-  RunHandle _selectApp(String? device, String? entrypoint) {
-    // Own runs only, like the rail: the owner's Studio in another worktree
-    // is the same device/entrypoint pair as this one's, and no argument
-    // could tell them apart — while driving a sibling checkout's app is
-    // never what a session means.
+  /// The canonical paths of this repository's worktrees, from git.
+  ///
+  /// What bounds the `worktree` argument: a worktree's *name* is unique only
+  /// within its repository — every repository's main checkout is `~` — so a
+  /// name matched against the machine-wide ledger could silently pick an
+  /// unrelated project's run. Cached for the core's lifetime; a worktree
+  /// added since shows up on the next session, and selection itself goes by
+  /// the paths the handles carry.
+  late final Future<Set<String>> _repoWorktreePaths = () async {
+    var own = p.canonicalize(host.worktree.path);
+    try {
+      var worktrees = await WorktreeDiscovery().discover(host.worktree.path);
+      return {own, for (var w in worktrees) p.canonicalize(w.path)};
+    } on Object {
+      // No git, or not a repository. Own runs remain reachable.
+      return {own};
+    }
+  }();
+
+  /// Test seam: the repository's worktrees without a git call, the same seam
+  /// [debugAct] and [debugRead] are.
+  @visibleForTesting
+  Future<Set<String>>? debugRepoWorktrees;
+
+  Future<Set<String>> get _repoWorktrees =>
+      debugRepoWorktrees ?? _repoWorktreePaths;
+
+  RunHandle _selectApp(
+    String? device,
+    String? entrypoint,
+    String? worktree,
+    Set<String> repoWorktrees,
+  ) {
+    // Own runs by default, like the rail: the owner's Studio in another
+    // worktree is the same device/entrypoint pair as this one's, and neither
+    // argument could tell them apart. Naming a worktree is the explicit
+    // opt-in — it widens the pool to this *repository's* runs, never the
+    // machine's: a sibling checkout is something a session can mean, another
+    // project's app is not.
+    var repoHandles = [
+      for (var handle in _handles)
+        if (repoWorktrees.contains(p.canonicalize(handle.worktree))) handle,
+    ];
+    var pool = worktree == null
+        ? ownHandles
+        : [
+            for (var handle in repoHandles)
+              if (handle.worktreeName == worktree ||
+                  p.canonicalize(handle.worktree) == p.canonicalize(worktree))
+                handle,
+          ];
     var matches = [
-      for (var handle in ownHandles)
+      for (var handle in pool)
         if (device == null || handle.device == device)
           if (entrypoint == null ||
               handle.entrypoint == entrypoint ||
@@ -2441,16 +2503,31 @@ class RunCore extends PluginCore {
     if (matches.isEmpty) {
       // The next move rides in the refusal: this is an agent's first contact
       // with a cold machine, and "what now" should not cost a discovery call.
+      var others = [
+        for (var handle in repoHandles)
+          if (!isMine(handle)) handle,
+      ];
+      var nothing = worktree != null
+          ? 'Nothing is running from worktree "$worktree".'
+          : device != null
+          ? 'Nothing is running on "$device".'
+          : 'Nothing is running${others.isEmpty ? '' : ' from this worktree'}.';
+      var elsewhere = others.isEmpty
+          ? ''
+          : ' Other worktrees are: '
+                '${others.map((h) => '${h.worktreeName} (${h.device}/${h.entrypoint})').join(', ')}'
+                ' — pass `worktree` to drive one.';
       throw StateError(
-        '${device == null ? 'Nothing is running.' : 'Nothing is running on "$device".'} '
+        '$nothing$elsewhere '
         '`launch` starts an app; `status` lists devices and declared entry '
         'points.',
       );
     }
     if (matches.length > 1) {
       throw StateError(
-        'More than one app matches. Name a device and an entry point: '
-        '${matches.map((h) => '${h.device}/${h.entrypoint}').join(', ')}',
+        'More than one app matches. Name a worktree, a device and an entry '
+        'point: '
+        '${matches.map((h) => '${h.worktreeName}: ${h.device}/${h.entrypoint}').join(', ')}',
       );
     }
     return matches.single;
@@ -2468,7 +2545,12 @@ class RunCore extends PluginCore {
     since: handle.startedAt.toUtc().toIso8601String(),
     app: probe?.app ?? false,
     launcher: probe?.launcher ?? false,
-    vmService: handle.vmService,
+    // Own runs only. The URI carries the VM service's auth token — the whole
+    // of what gates connecting — and handing it out for another worktree's
+    // run is handing out reload/restart/exit on an app this session does not
+    // own, past every check `_selectApp` makes. Occupancy needs the row, not
+    // the connect string.
+    vmService: isMine(handle) ? handle.vmService : null,
     log: handle.logPath,
     error: probe?.error,
   );

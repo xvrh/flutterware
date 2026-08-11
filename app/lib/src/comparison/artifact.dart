@@ -1,9 +1,30 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
+
+import '../shell/worktree.dart';
 import 'channels.dart';
 import 'runner.dart';
 import 'scenario_comparison.dart';
+
+/// One worktree's corner of the shared comparisons cache: `index.json` and
+/// the `scenarios/` frames it references, together.
+///
+/// Keyed by the canonical *path*, because the worktree's name is unique only
+/// within its repository — every repository's main checkout is named `~` —
+/// and this directory is shared by every project on the machine. Two agents
+/// comparing in two worktrees used to write the same
+/// `comparisons/scenarios/<file>/<scenario>` frames and read back each
+/// other's pixels. The directory name keeps the checkout's directory name in
+/// front so a human browsing the cache can still tell which is which.
+String comparisonDirFor(String cacheRoot, Worktree worktree) => p.join(
+  cacheRoot,
+  'comparisons',
+  '${worktree.directoryName}-'
+      '${sha1.convert(utf8.encode(p.canonicalize(worktree.path))).toString().substring(0, 12)}',
+);
 
 /// The scenario half of a comparison, as the artifact records it.
 ///

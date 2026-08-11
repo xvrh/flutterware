@@ -19,6 +19,7 @@ import 'scenarios_estimate.dart';
 import 'scenarios_runner.dart';
 import 'scenarios_side.dart';
 import 'shot_cache.dart';
+import 'skip.dart';
 
 /// A comparison's world, built from an open worktree.
 ///
@@ -191,8 +192,17 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
         baseRoot: baseRoot,
         source: source,
         cache: _cache,
+        extraPaths: pixelInputsOf(
+          packagePath: side.packagePath,
+          roots: [topLevel, baseRoot],
+        ),
         onScenario: onScenario,
-      ).run(outDir: p.join(cacheRoot, 'comparisons', 'scenarios'));
+      ).run(
+        outDir: p.join(
+          comparisonDirFor(cacheRoot, session.worktree),
+          'scenarios',
+        ),
+      );
     } finally {
       // Two `flutter_tester` processes and a build directory each. A panel
       // that navigated away mid-run would leak both without this.
@@ -238,6 +248,6 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
   /// Writes the artifact where `fw compare` writes it, so the GUI and the CLI
   /// leave one file rather than two.
   File writeIndex(ComparisonArtifact artifact) => artifact.writeTo(
-    p.join(cacheRoot, 'comparisons', session.worktree.name, 'index.json'),
+    p.join(comparisonDirFor(cacheRoot, session.worktree), 'index.json'),
   );
 }

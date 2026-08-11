@@ -55,6 +55,12 @@ class ScenariosEstimate {
           packageConfig: p.join(headRoot, '.dart_tool', 'package_config.json'),
         );
 
+    // The same inputs the run passes, or the estimate drifts from the thing
+    // it estimates the moment only an asset changed.
+    var pixelInputs = pixelInputsOf(
+      packagePath: side.packagePath,
+      roots: [headRoot, baseRoot],
+    );
     var toRun = 0;
     for (var id in head) {
       // A scenario head alone has is settled without replaying it, exactly as
@@ -66,6 +72,7 @@ class ScenariosEstimate {
         memo: memo,
         baseRoot: baseRoot,
         headRoot: headRoot,
+        extraPaths: pixelInputs,
       ).skip) {
         toRun++;
       }
