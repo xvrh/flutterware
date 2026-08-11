@@ -161,8 +161,26 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('uncommitted'), findsWidgets);
+    // Scoped to the index, because the header's summary says "1 uncommitted"
+    // too — an unscoped finder here passes without testing its own claim.
+    expect(
+      find.descendant(
+        of: find.byKey(changesListKey),
+        matching: find.textContaining('uncommitted'),
+      ),
+      findsOneWidget,
+    );
     expect(find.textContaining('from lib/old.dart'), findsOneWidget);
+
+    // …and the directory is on its own line, not trailing the flags, which is
+    // what made *where a file lives* the first thing to be truncated.
+    expect(
+      find.descendant(
+        of: find.byKey(changesListKey),
+        matching: find.text('lib'),
+      ),
+      findsNWidgets(2),
+    );
   });
 
   testWidgets('the base and where it came from are always shown', (

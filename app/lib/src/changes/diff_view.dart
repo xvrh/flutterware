@@ -15,9 +15,16 @@ import 'patch_index.dart';
 /// A file's row **in the index**: what happened to it, and how much.
 ///
 /// Sized for a 320 px column, not a window: name on the first line where the
-/// eye scans, directory dimmed under it, counts hard right. The full-width
-/// version this replaces put the whole path on one line with a ruler and two
-/// 46 px count columns, which is a row that only reads at 1200 px.
+/// eye scans, **the directory on its own line under it**, counts hard right.
+/// The full-width version this replaces put the whole path on one line with a
+/// ruler and two 46 px count columns, which is a row that only reads at 1200 px.
+///
+/// **The directory is not a note.** It was, briefly, and it was the last of
+/// them — after `uncommitted`, after `binary` — in one `·`-joined line, which
+/// made *where a file lives* the first thing ellipsised away. Three lines of a
+/// list like that and you cannot tell `app/lib/src/changes/ranking.dart` from
+/// `test/changes/ranking.dart`. It gets its own line; the flags get theirs, and
+/// only when there are any.
 class IndexFileRow extends StatelessWidget {
   const IndexFileRow({
     required this.file,
@@ -43,6 +50,7 @@ class IndexFileRow extends StatelessWidget {
     var colors = context.colors;
     var slash = file.path.lastIndexOf('/');
     var name = slash < 0 ? file.path : file.path.substring(slash + 1);
+    var directory = slash < 0 ? '' : file.path.substring(0, slash);
 
     return InkWell(
       onTap: onTap,
@@ -75,10 +83,17 @@ class IndexFileRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     softWrap: false,
                   ),
+                  if (directory.isNotEmpty)
+                    Text(
+                      directory,
+                      style: context.type.micro.copyWith(color: colors.mut2),
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                    ),
                   if (_notes.isNotEmpty)
                     Text(
                       _notes.join(' · '),
-                      style: context.type.micro.copyWith(color: colors.mut2),
+                      style: context.type.micro.copyWith(color: colors.mut3),
                       overflow: TextOverflow.ellipsis,
                       softWrap: false,
                     ),
@@ -106,6 +121,10 @@ class IndexFileRow extends StatelessWidget {
     );
   }
 
+  /// A third line, and only when there is something to put on it. The
+  /// directory is deliberately **not** among these — that is what put it last
+  /// in a `·`-joined string behind `uncommitted`, where it was the first thing
+  /// to be ellipsised away.
   List<String> get _notes => [
     // **The rule first.** A row that was pinned has to say what pinned it or
     // the pin is magic, and magic is what people learn to ignore.
@@ -115,15 +134,7 @@ class IndexFileRow extends StatelessWidget {
     if (file.oldPath case var it?) 'from $it',
     if (uncommitted) 'uncommitted',
     if (file.isBinary) 'binary',
-    // The directory last, because it is the part you read only once you have
-    // found the name — and the part most often ellipsised away.
-    if (_directoryOf(file.path) case var it? when it.isNotEmpty) it,
   ];
-
-  static String? _directoryOf(String path) {
-    var slash = path.lastIndexOf('/');
-    return slash < 0 ? null : path.substring(0, slash);
-  }
 
   Color _tone(FwPalette colors) => switch (file.status) {
     ChangeStatus.added => colors.grn,
