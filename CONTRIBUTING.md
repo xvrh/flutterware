@@ -2,17 +2,20 @@
 
 ## Development setup
 
-The Flutter SDK is pinned in `.fvmrc` and managed with [fvm](https://fvm.app).
-The `flutter`/`dart` on PATH are usually older than the pin and fail the
-workspace's SDK constraints — always go through `fvm flutter ...` /
-`fvm dart ...` (equivalently `.fvm/flutter_sdk/bin/...`).
+The Flutter SDK is pinned in `flutter_version` and fetched by the committed
+`./fw` wrapper — no version manager to install. The `flutter`/`dart` on PATH
+are usually older than the pin and fail the workspace's SDK constraints —
+always go through `./fw flutter ...` / `./fw dart ...` (from a subdirectory,
+`../fw` and so on). The first run downloads the pinned SDK to
+`~/.flutterware/sdks/<version>/`; after that the wrapper adds ~0.1s.
 
 ```sh
-fvm install                      # once per machine: installs the .fvmrc-pinned SDK
-fvm use --skip-pub-get           # once per clone/worktree: creates .fvm/flutter_sdk
-fvm flutter pub get
+./fw flutter pub get             # first run also downloads the pinned SDK
 git config core.hooksPath hooks  # once per clone; worktrees inherit it
 ```
+
+`.fvmrc` pins the same version for contributors who prefer
+[fvm](https://fvm.app); the two pins must agree, and CI checks that they do.
 
 `core.hooksPath hooks` points git at the version-controlled `hooks/` directory.
 The value is relative, so it resolves against each worktree's own root — added
@@ -31,4 +34,4 @@ lints) is still enforced by CI, not the hook.
 
 If dependencies aren't resolved yet, or the pinned SDK isn't installed, the
 hook skips itself gracefully and lets the commit through — run
-`fvm flutter pub get` (and `fvm install` + `fvm use` if needed) to enable it.
+`./fw flutter pub get` to enable it.

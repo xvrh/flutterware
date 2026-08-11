@@ -12,16 +12,17 @@ This is a pub workspace (`workspace:` in root `pubspec.yaml`) with two member pa
 
 Versions in `pubspec.yaml` (`flutterware`) and `app/pubspec.yaml` (`flutterware_app`) must stay in sync — see the comment in the root pubspec.
 
-## Toolchain: fvm-pinned Flutter SDK
+## Toolchain: the committed `./fw` wrapper
 
-The SDK is pinned in `.fvmrc` and managed by [fvm](https://fvm.app). The `flutter`/`dart` on PATH are typically older than the pin (the workspace requires a recent beta) and **fail the SDK constraint check** — always use `fvm flutter ...` / `fvm dart ...`, or equivalently `.fvm/flutter_sdk/bin/flutter` / `.fvm/flutter_sdk/bin/dart`.
+The SDK is pinned in `flutter_version` and fetched by the committed `./fw` wrapper script (macOS-only for now) — no fvm, no global tool. The `flutter`/`dart` on PATH are typically older than the pin (the workspace requires a recent beta) and **fail the SDK constraint check** — always go through the wrapper: `./fw flutter ...` / `./fw dart ...` (from a subdirectory, `../fw` and so on). The first run downloads the pinned SDK to `~/.flutterware/sdks/<version>/` (checksummed, ~4 min cold); after that the wrapper adds ~0.1s. `FW_FLUTTER_SDK=<path>` bypasses the pin.
 
-One-time setup in a fresh clone or worktree (`.fvm/` is gitignored, so it starts absent):
+One-time setup in a fresh clone or worktree:
 
 ```sh
-fvm use --skip-pub-get   # reads .fvmrc, no prompt; creates .fvm/flutter_sdk (fvm install first if the SDK isn't cached)
-fvm flutter pub get
+./fw flutter pub get     # first run also downloads the pinned SDK
 ```
+
+`.fvmrc` still pins the same version for fvm users and `FlutterSdkPath.findSdks` — it must agree with `flutter_version`, and CI fails when the two diverge. `./fw flutter upgrade`/`downgrade`/`channel <x>` are refused: bump the pin by editing `flutter_version` (and `.fvmrc` to match).
 
 Note: `.gitignore` starts with `.*`, so dot-directories like `.claude/` are silently unaddable — `git add` no-ops on them.
 
@@ -50,8 +51,8 @@ Use `app/lib/main_dev.dart` as the entry point in your IDE. It bypasses the env-
 
 For GUI work, the fastest loop is not restart-and-look — it is *drive*: launch the GUI through the run plugin (which wraps the entry point in the run guest), then alternate code edits with `act`/`observe` transactions against the live window. Design: `docs/superpowers/specs/2026-08-11-run-drive-design.md`.
 
-- **The MCP server.** `.mcp.json` runs `tool/mcp_server.sh`, which self-heals a fresh worktree (fvm install/use + pub get, ~8s when the SDK is cached) and then serves from this checkout's source — the globally installed `fw` binary can be weeks stale. Tools: `flutterware_status`, `flutterware_actions`, `flutterware_invoke`, `flutterware_act`. Everything they can do is documented in `docs/capabilities.md` (generated).
-- **If the flutterware MCP tools are unavailable, STOP. Do not start the task.** Report it loudly in your first message — not as an aside, not in the final summary — then diagnose and fix the cause: run `printf '' | sh tool/mcp_server.sh` and read its stderr; usually the fix is the one-time setup above. The client cannot reconnect mid-session, so once the cause is fixed, tell the user the MCP will be back on the next session and ask them to restart. **Never silently work around a dead MCP.** The one sanctioned fallback — `cd app && fvm dart run tool/drive_spike/step.dart <action> '<json>'`, one run-plugin action per process — may be used only after the user has explicitly agreed to continue without the MCP.
+- **The MCP server.** `.mcp.json` runs `tool/mcp_server.sh`, which self-heals a fresh worktree (`./fw` SDK install + pub get, ~8s when the SDK is already in `~/.flutterware/sdks`) and then serves from this checkout's source — the globally installed `fw` binary can be weeks stale. Tools: `flutterware_status`, `flutterware_actions`, `flutterware_invoke`, `flutterware_act`. Everything they can do is documented in `docs/capabilities.md` (generated).
+- **If the flutterware MCP tools are unavailable, STOP. Do not start the task.** Report it loudly in your first message — not as an aside, not in the final summary — then diagnose and fix the cause: run `printf '' | sh tool/mcp_server.sh` and read its stderr; usually the fix is the one-time setup above. The client cannot reconnect mid-session, so once the cause is fixed, tell the user the MCP will be back on the next session and ask them to restart. **Never silently work around a dead MCP.** The one sanctioned fallback — `cd app && ../fw dart run tool/drive_spike/step.dart <action> '<json>'`, one run-plugin action per process — may be used only after the user has explicitly agreed to continue without the MCP.
 - **The loop.** Open with `flutterware_act {verb: observe}` — the human may already have the window running, and launching again spawns a second instance that steals the run's handle. Only if the reply says nothing is running: `flutterware_invoke run/launch {package: app, entrypoint: lib/main_dev.dart, device: macos, wait: true}` — the "Studio (dev)" entry point declared in `tool/flutterware.dart`. Then per iteration: edit → `flutterware_invoke run/reload` → `flutterware_act {verb: observe}`. Measured: **~2s per edit-reload-observe round trip**, screenshot plus visible texts in every reply. A hidden window is fully drivable (the settle loop forces frames), so the human minimizing the app changes nothing.
 - **Refusals are instructions.** `multiple` → retry with `{"nth": {"target": …, "index": 0}}`; `notFound` reports the texts of the screen it searched. A wrong-target tap cannot succeed silently. `tree: true` costs thousands of tokens on the real GUI — the texts ride along free; ask for the tree only when you need structure.
 - **`navigate` jumps.** The shell registers the drive navigate handler (`app/lib/src/shell/drive_navigator.dart`), so one call — `flutterware_act {verb: navigate, route: "fw:///worktrees/<worktree>/<plugin>/<segments…>"}` — replaces a tap path through the rail. The grammar is the address bar's own `fw://`; refusals teach it and list the worktrees git knows, and every act reply carries `worktree`, so the route builds from what the last reply already told you.
@@ -68,41 +69,41 @@ The pre-overhaul "test visualizer" still exists in-tree but is unreachable from 
 
 ## Common commands
 
-All commands run from the repo root unless noted. Always via fvm — see the toolchain section above.
+All commands run from the repo root unless noted. Always via the `./fw` wrapper — see the toolchain section above.
 
 ```sh
-# Static analysis (workspace-wide; CI uses the beta channel)
-fvm flutter analyze
+# Static analysis (workspace-wide; CI runs the same pinned SDK via ./fw)
+./fw flutter analyze
 
 # Tests for the GUI app
-cd app && fvm flutter test
+cd app && ../fw flutter test
 # Run a single test file
-cd app && fvm flutter test test/dependencies_test.dart
+cd app && ../fw flutter test test/dependencies_test.dart
 
 # Pure-Dart tests for the root package
-fvm dart test test/router_outlet/path_test.dart
+./fw dart test test/router_outlet/path_test.dart
 
 # Format the whole workspace (this is what CI checks)
-fvm dart tool/prepare_submit.dart
+./fw dart tool/prepare_submit.dart
 
 # Refresh pubspecs across all workspace members (workspace resolves from the root)
-fvm flutter pub get
+./fw flutter pub get
 
 # Regenerate built_value / json_serializable code
-cd app && fvm dart run build_runner build --delete-conflicting-outputs
+cd app && ../fw dart run build_runner build --delete-conflicting-outputs
 # (run from the package whose .g.dart files you're regenerating)
 
 # Run the CLI end-to-end against examples/example, forcing a fresh compile
-cd examples/example && fvm dart run flutterware --force-compile -v
+cd examples/example && ../../fw dart run flutterware --force-compile -v
 ```
 
 ## Formatting
 
-The only sanctioned formatter is `fvm dart tool/prepare_submit.dart` (or letting the pre-commit hook format staged files). **Never run bare `dart format`** — it uses whatever dart_style ships with the invoking SDK and infers language versions per file, both of which diverge from what CI checks and produce spurious diffs.
+The only sanctioned formatter is `./fw dart tool/prepare_submit.dart` (or letting the pre-commit hook format staged files). **Never run bare `dart format`** — it uses whatever dart_style ships with the invoking SDK and infers language versions per file, both of which diverge from what CI checks and produce spurious diffs.
 
 ## CI expectations
 
-`.github/workflows/analyze-and-test.yaml` runs on the Flutter `beta` channel and will fail if `tool/prepare_submit.dart` produces any diff (excluding `pubspec.lock`). Always run that formatter before committing.
+`.github/workflows/analyze-and-test.yaml` runs on the pinned SDK via `./fw` (it also fails when `flutter_version` and `.fvmrc` disagree) and will fail if `tool/prepare_submit.dart` produces any diff (excluding `pubspec.lock`). Always run that formatter before committing.
 
 ## Lint rules worth knowing
 

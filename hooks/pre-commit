@@ -19,15 +19,21 @@ relevant_lockhash() {
   ' pubspec.lock | cksum | awk '{print $1"-"$2}'
 }
 
-# Dart from the SDK pinned in .fvmrc, not whatever is on PATH. The package's
+# Dart from the pinned SDK, not whatever is on PATH. The package's
 # resolved language version (from the pinned beta SDK) can be higher than a
 # globally-installed stable dart, which fails AOT compilation with "language
-# version too high". Trusts the fvm-managed .fvm/flutter_sdk symlink only
-# when it still points at the pinned version — it may predate a pin bump —
-# and otherwise reads fvm's cache directly so a worktree works before
-# `fvm use` has run. Never invokes the fvm CLI: it can prompt, and a hook
-# must not.
+# version too high". Reads `flutter_version` and the `./fw` wrapper's cache
+# first, then falls back to fvm's pin and cache for a checkout still on fvm.
+# Never invokes `./fw` or the fvm CLI: fw may start a multi-minute SDK
+# download and fvm can prompt, and a hook must do neither — resolution here
+# is passive, and absence skips the hook gracefully below.
 pinned_dart() {
+  if [ -f flutter_version ]; then
+    local fw_version fw_dart
+    fw_version="$(tr -d ' \t\r\n' < flutter_version)"
+    fw_dart="${FW_SDK_CACHE:-$HOME/.flutterware/sdks}/$fw_version/bin/dart"
+    [ -n "$fw_version" ] && [ -x "$fw_dart" ] && { echo "$fw_dart"; return 0; }
+  fi
   local version=""
   if [ -f .fvmrc ]; then
     version="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc | head -n1)"
@@ -67,11 +73,11 @@ if [ "$needs_build" = 1 ]; then
   # skip the hook gracefully rather than block the commit — CI still catches
   # formatting.
   if [ ! -f .dart_tool/package_config.json ]; then
-    echo "pre-commit: deps not resolved — run 'fvm flutter pub get' to enable the format hook"
+    echo "pre-commit: deps not resolved — run './fw flutter pub get' to enable the format hook"
     exit 0
   fi
   if ! DART="$(pinned_dart)"; then
-    echo "pre-commit: pinned Flutter SDK not found — run 'fvm install' then 'fvm use' to enable the format hook"
+    echo "pre-commit: pinned Flutter SDK not found — run './fw flutter --version' to install it and enable the format hook"
     exit 0
   fi
   echo "pre-commit: building $BIN..."

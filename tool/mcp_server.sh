@@ -5,36 +5,29 @@
 # worktree on its own. This checkout runs the server from source instead
 # (a stale global `fw` cannot represent the branch being worked on), and a
 # source run cannot even resolve itself until the one-time setup has run:
-# `.fvm/` is gitignored and the workspace starts unresolved. An MCP client
+# the SDK cache starts cold and the workspace starts unresolved. An MCP client
 # that fails to connect at session start never retries, so without this the
 # whole session runs toolless over a setup race. Pay the setup on first
 # connect instead: slow once, connected always.
 #
 # stdio discipline: stdout belongs to the MCP protocol, so every word said
 # here goes to stderr — and stdin *is* the protocol stream, so no bootstrap
-# command may inherit it. fvm can prompt (the pre-commit hook says the same),
-# and a prompt here would eat protocol bytes: everything runs </dev/null,
-# where a would-be prompt fails fast instead.
+# command may inherit it. A would-be prompt under </dev/null fails fast
+# instead of eating protocol bytes.
 set -e
 cd "$(dirname "$0")/.."
 
 say() { echo "[mcp bootstrap] $*" >&2; }
 
-if ! command -v fvm >/dev/null 2>&1; then
-  say 'fvm is not on PATH — install it (https://fvm.app) and reconnect.'
-  exit 1
-fi
+# The version pinned in flutter_version, empty when unreadable. The ./fw
+# wrapper owns installing it; this only asks whether that already happened —
+# a per-version cache dir means a pin bump on this branch reads as "not
+# installed" all by itself.
+pin="$(tr -d ' \t\r\n' < flutter_version 2>/dev/null || true)"
 
-# The version pinned in .fvmrc, empty when unreadable — the hook's own sed.
-pin="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc 2>/dev/null | head -n1)"
-
-# The symlink satisfies only if it still points at the pin: it may predate a
-# pin bump on this branch, and serving under the old SDK fails the workspace
-# constraint with an error that says nothing about why.
 sdk_current() {
-  [ -d .fvm/flutter_sdk ] || return 1
-  [ -n "$pin" ] || return 0
-  [ "$(basename "$(readlink .fvm/flutter_sdk || true)")" = "$pin" ]
+  [ -n "$pin" ] || return 1
+  [ -x "${FW_SDK_CACHE:-$HOME/.flutterware/sdks}/$pin/bin/dart" ]
 }
 
 # Resolved is not enough: it has to be *current*. `dart run` re-resolves when a
@@ -57,9 +50,9 @@ resolution_current() {
 
 if ! sdk_current || ! resolution_current; then
   # Parallel sessions on one worktree each spawn this script; two concurrent
-  # `fvm use`/`pub get` runs on one workspace race each other. One bootstraps
-  # and writes its pid into the lock; the rest wait while that pid is alive.
-  # Liveness, not age: a cold `fvm install` can legitimately outlast any
+  # SDK-install/`pub get` runs on one workspace race each other. One
+  # bootstraps and writes its pid into the lock; the rest wait while that pid
+  # is alive. Liveness, not age: a cold SDK download can legitimately outlast any
   # timer, and deleting a *live* lock starts the concurrent install the lock
   # exists to prevent. A lock whose owner is gone is taken over, and so is
   # one that never gains an owner — a holder killed between its mkdir and
@@ -97,17 +90,11 @@ if ! sdk_current || ! resolution_current; then
 
   # Re-check under the lock: whoever held it probably did the work.
   if ! sdk_current; then
-    say "installing the pinned Flutter SDK (fast when cached)…"
-    fvm install </dev/null >&2
-    fvm use --skip-pub-get </dev/null >&2
-    # A download killed partway (a client's startup timeout) can leave fvm's
-    # cache holding a directory that is not an SDK. Refuse loudly here — the
-    # downstream failure says "kernel binary" things that name no cause.
-    if [ ! -x .fvm/flutter_sdk/bin/dart ]; then
-      say "the SDK cache at $(readlink .fvm/flutter_sdk) has no bin/dart —"
-      say "likely a half-finished download. Run: fvm remove $pin && fvm install"
-      exit 1
-    fi
+    # The wrapper verifies the checksum and moves the SDK into place
+    # atomically, so a download killed partway leaves no broken SDK — and its
+    # own lock has owner-liveness, so it leaves no wedge either.
+    say 'installing the pinned Flutter SDK (a cold download takes minutes)…'
+    ./fw dart --version </dev/null >&2
   fi
   if ! resolution_current; then
     # Offline first, and usually last: a rebase moves a pubspec's mtime far
@@ -115,8 +102,8 @@ if ! sdk_current || ! resolution_current; then
     # lockfile pins. Only a genuinely new dependency needs the network, and
     # then the failure is about that package rather than about a socket.
     say 'resolution is stale — running pub get (offline first)…'
-    fvm flutter pub get --offline </dev/null >&2 ||
-      fvm flutter pub get </dev/null >&2
+    ./fw flutter pub get --offline </dev/null >&2 ||
+      ./fw flutter pub get </dev/null >&2
   fi
 
   rm -rf "$lock" 2>/dev/null || true
@@ -130,4 +117,4 @@ fi
 # it was found: the server ran for weeks resolving null, and every previews
 # screenshot refused with a message about `appPackageRoot` that named the
 # symptom rather than the invocation.
-exec env APP_TOOL_PATH="$PWD/app" fvm dart run flutterware_app:mcp
+exec env APP_TOOL_PATH="$PWD/app" ./fw dart run flutterware_app:mcp
