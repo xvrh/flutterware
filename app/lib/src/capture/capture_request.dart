@@ -145,7 +145,12 @@ class CaptureRequest {
         }
       }
 
-      var outcome = await waitForSettle(settleRegistry, timeout: settleTimeout);
+      var waitedOn = <String>{};
+      var outcome = await waitForSettle(
+        settleRegistry,
+        timeout: settleTimeout,
+        onWaiting: waitedOn.addAll,
+      );
 
       if (_landingError(shell) case var complaint?) return _fail(complaint);
 
@@ -167,6 +172,10 @@ class CaptureRequest {
         'width': image.width,
         'height': image.height,
         'settled': outcome.settled,
+        // Reported on a *settled* capture too, not only a timed-out one: a
+        // picture that came back half-drawn is answered by knowing what the
+        // window was — or was not — waiting on, and by then the run is over.
+        'waitedOn': waitedOn.toList()..sort(),
         if (!outcome.settled) 'waitingOn': outcome.waitingOn,
       });
       return 0;

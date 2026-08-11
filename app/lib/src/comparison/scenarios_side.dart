@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutterware/src/inspect/node.dart';
 
 import '../scenarios/runner.dart';
+import 'frame_ref.dart';
 import 'scenario_alignment.dart';
 import 'scenario_comparison.dart';
 
@@ -124,6 +125,13 @@ class ScenariosSide {
       texts: (step['texts'] as List?)?.cast<String>() ?? const [],
       events: _events(step['events'] as String?),
       failure: step['failure'] as String?,
+      frame: step['format'] == 'raw' && image != null
+          ? FrameRef(
+              path: image,
+              width: step['width'] as int? ?? 0,
+              height: step['height'] as int? ?? 0,
+            )
+          : null,
     );
   }
 

@@ -7,24 +7,28 @@ import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../channels.dart';
 import '../comparison_controller.dart';
+import '../scenario_comparison.dart';
 import '../shot_cache.dart';
 import 'channel_lines.dart';
+import 'merged_tree.dart';
 import 'shot_image.dart';
 import 'stage.dart';
 import 'state_chip.dart';
 
-const previewsTabKey = Key('comparison.previews');
+const scenariosTabKey = Key('comparison.scenarios');
 
-Key previewRowKey(String id) => ValueKey('comparison.preview.$id');
+Key scenarioRowKey(String id) => ValueKey('comparison.scenario.$id');
 
-/// The previews half: every entry on the left, two frames on the right.
+/// The scenario half: every flow on the left, one flow's merged tree beside it,
+/// and a picked step's two frames under that.
 ///
-/// **Master and detail rather than a wall of thumbnails.** A catalog is
-/// hundreds of entries and a comparison is interested in the handful that
-/// moved; a grid spends its whole area on the ones that did not, and gives the
-/// two frames you actually care about a hundred pixels each.
-class PreviewsTab extends StatefulWidget {
-  const PreviewsTab({
+/// **Three panes rather than two**, which is the one place this half is shaped
+/// differently from the previews half — and the reason is that a preview is one
+/// picture and a scenario is a tree of them. The middle pane is the navigation
+/// *within* a flow; without it, picking a step means a list of paths with `›` in
+/// them, which is the shape the tree exists to replace.
+class ScenariosTab extends StatefulWidget {
+  const ScenariosTab({
     super.key,
     required this.half,
     required this.cache,
@@ -35,19 +39,17 @@ class PreviewsTab extends StatefulWidget {
 
   final ComparisonHalf half;
   final ShotCache cache;
-
-  /// Where the frame decode declares itself, so a capture waits for it.
   final SettleRegistry settle;
 
-  /// The entry id the address names, or null.
+  /// `<file>#<scenario>/<step path>` as the address names it, or null.
   final String? selected;
   final ValueChanged<String> onSelect;
 
   @override
-  State<PreviewsTab> createState() => _PreviewsTabState();
+  State<ScenariosTab> createState() => _ScenariosTabState();
 }
 
-class _PreviewsTabState extends State<PreviewsTab> {
+class _ScenariosTabState extends State<ScenariosTab> {
   late final _shots = ShotPair(widget.cache);
   var _mode = StageMode.sideBySide;
 
@@ -55,86 +57,136 @@ class _PreviewsTabState extends State<PreviewsTab> {
   void initState() {
     super.initState();
     _shots.addListener(_onShots);
-    // **Listened to, not diffed.** `ComparisonHalf.rows` is mutated in place,
-    // so `didUpdateWidget` compares a list against itself and can never see a
-    // row arrive: the first load ran against an empty list, found nothing, and
-    // nothing ever asked again — a stage that said "neither side rendered"
-    // over two frames sitting in the cache.
+    // Listened to rather than diffed: the half's list is mutated in place, so
+    // a widget comparison can never see a row arrive.
     widget.half.addListener(_onRows);
     widget.settle.add(_shots);
-    _loadSelected();
+    _load();
   }
 
   @override
-  void didUpdateWidget(PreviewsTab old) {
+  void didUpdateWidget(ScenariosTab old) {
     super.didUpdateWidget(old);
     if (!identical(old.half, widget.half)) {
       old.half.removeListener(_onRows);
       widget.half.addListener(_onRows);
     }
-    if (old.selected != widget.selected) _loadSelected();
-  }
-
-  void _onRows() {
-    if (mounted) _loadSelected();
+    if (old.selected != widget.selected) _load();
   }
 
   void _onShots() {
     if (mounted) setState(() {});
   }
 
-  ComparedItem? get _current {
-    var rows = widget.half.rows;
-    if (rows.isEmpty) return null;
-    // **The first finding, not the first row.** A list ranked worst-first opens
-    // on the thing most likely to be a mistake, which is the whole reason it is
-    // ranked.
-    return rows.firstWhere(
-      (row) => row.id == widget.selected,
-      orElse: () => rows.firstWhere(
-        (row) => row.state.isFinding,
-        orElse: () => rows.first,
+  void _onRows() {
+    if (mounted) _load();
+  }
+
+  /// The address is `<scenario id>/<step path>`; a scenario id has a `#` in it
+  /// and a step path does not, so the split is at the first `/` after it.
+  (String? scenario, String? step) get _address {
+    var selected = widget.selected;
+    if (selected == null) return (null, null);
+    var hash = selected.indexOf('#');
+    var slash = selected.indexOf('/', hash < 0 ? 0 : hash);
+    return slash < 0
+        ? (selected, null)
+        : (selected.substring(0, slash), selected.substring(slash + 1));
+  }
+
+  ScenarioComparison? get _scenario {
+    var scenarios = widget.half.scenarios;
+    if (scenarios.isEmpty) return null;
+    var named = _address.$1;
+    return scenarios.firstWhere(
+      (s) => s.scenario == named,
+      // Worst first, so this opens on the flow most likely to be a mistake.
+      orElse: () => scenarios.firstWhere(
+        (s) => s.state.isFinding,
+        orElse: () => scenarios.first,
       ),
     );
   }
 
-  void _loadSelected() {
-    var shots = _current?.shots;
-    unawaited(_shots.load(baseKey: shots?.base, headKey: shots?.head));
+  ComparedItem? get _step {
+    var scenario = _scenario;
+    if (scenario == null || scenario.items.isEmpty) return null;
+    var named = _address.$2;
+    return scenario.items.firstWhere(
+      (item) => item.id == named,
+      orElse: () => scenario.items.firstWhere(
+        (item) => item.state.isFinding,
+        orElse: () => scenario.items.first,
+      ),
+    );
+  }
+
+  void _load() {
+    var frames = _scenario?.frames[_step?.id];
+    unawaited(_shots.loadFrames(base: frames?.base, head: frames?.head));
+  }
+
+  void _select({String? scenario, String? step}) {
+    var id = scenario ?? _scenario?.scenario;
+    if (id == null) return;
+    widget.onSelect(step == null ? id : '$id/$step');
   }
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var current = _current;
+    var scenario = _scenario;
+    var step = _step;
 
     return Row(
-      key: previewsTabKey,
+      key: scenariosTabKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          width: 300,
+          width: 280,
           child: DecoratedBox(
             decoration: BoxDecoration(
               border: Border(right: BorderSide(color: colors.line)),
             ),
             child: _Index(
               half: widget.half,
-              selected: current?.id,
-              onSelect: widget.onSelect,
+              selected: scenario?.scenario,
+              onSelect: (id) => _select(scenario: id),
             ),
           ),
         ),
-        Expanded(
-          child: current == null
-              ? const SizedBox.shrink()
-              : _Detail(
-                  item: current,
-                  shots: _shots,
-                  mode: _mode,
-                  onMode: (mode) => setState(() => _mode = mode),
+        if (scenario != null)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Header(scenario),
+                Expanded(
+                  flex: 3,
+                  child: MergedTree(
+                    scenario: scenario,
+                    selected: step?.id,
+                    onSelect: (id) => _select(step: id),
+                  ),
                 ),
-        ),
+                if (step != null)
+                  Expanded(
+                    flex: 4,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border(top: BorderSide(color: colors.line)),
+                      ),
+                      child: _StepDetail(
+                        item: step,
+                        shots: _shots,
+                        mode: _mode,
+                        onMode: (mode) => setState(() => _mode = mode),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -150,11 +202,6 @@ class _PreviewsTabState extends State<PreviewsTab> {
   }
 }
 
-/// Every entry, worst first.
-///
-/// **Findings first, then the rest under a divider.** A list that hides what it
-/// looked at cannot be told from a list that did not look — and the entries
-/// that came out identical are still the answer to "did you check this one".
 class _Index extends StatelessWidget {
   const _Index({
     required this.half,
@@ -169,22 +216,22 @@ class _Index extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var findings = [
-      for (var row in half.rows)
-        if (row.state.isFinding) row,
+      for (var s in half.scenarios)
+        if (s.state.isFinding) s,
     ];
     var quiet = [
-      for (var row in half.rows)
-        if (!row.state.isFinding) row,
+      for (var s in half.scenarios)
+        if (!s.state.isFinding) s,
     ];
 
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: FwSpacing.sm),
       children: [
-        for (var row in findings)
+        for (var s in findings)
           _IndexRow(
-            item: row,
-            selected: row.id == selected,
-            onTap: () => onSelect(row.id),
+            scenario: s,
+            selected: s.scenario == selected,
+            onTap: () => onSelect(s.scenario),
           ),
         if (findings.isEmpty && !half.isRunning)
           Padding(
@@ -207,11 +254,11 @@ class _Index extends StatelessWidget {
               style: context.type.micro.copyWith(color: context.colors.mut),
             ),
           ),
-          for (var row in quiet)
+          for (var s in quiet)
             _IndexRow(
-              item: row,
-              selected: row.id == selected,
-              onTap: () => onSelect(row.id),
+              scenario: s,
+              selected: s.scenario == selected,
+              onTap: () => onSelect(s.scenario),
             ),
         ],
       ],
@@ -221,24 +268,26 @@ class _Index extends StatelessWidget {
 
 class _IndexRow extends StatelessWidget {
   const _IndexRow({
-    required this.item,
+    required this.scenario,
     required this.selected,
     required this.onTap,
   });
 
-  final ComparedItem item;
+  final ScenarioComparison scenario;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var hash = item.id.indexOf('#');
-    var name = hash < 0 ? item.id : item.id.substring(hash + 1);
-    var file = hash < 0 ? '' : item.id.substring(0, hash);
+    var hash = scenario.scenario.indexOf('#');
+    var name = hash < 0
+        ? scenario.scenario
+        : scenario.scenario.substring(hash + 1);
+    var file = hash < 0 ? '' : scenario.scenario.substring(0, hash);
 
     return Tappable.builder(
-      key: previewRowKey(item.id),
+      key: scenarioRowKey(scenario.scenario),
       onTap: onTap,
       builder: (context, hovered) => Container(
         padding: const EdgeInsets.symmetric(
@@ -272,7 +321,7 @@ class _IndexRow extends StatelessWidget {
               ),
             ),
             const Gap(FwSpacing.sm),
-            if (item.state.isFinding) StateChip(item.state),
+            if (scenario.state.isFinding) StateChip(scenario.state),
           ],
         ),
       ),
@@ -280,9 +329,33 @@ class _IndexRow extends StatelessWidget {
   }
 }
 
-/// One entry: the stage, and what the other channels found under it.
-class _Detail extends StatelessWidget {
-  const _Detail({
+class _Header extends StatelessWidget {
+  const _Header(this.scenario);
+
+  final ScenarioComparison scenario;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(
+      FwSpacing.xl,
+      FwSpacing.lg,
+      FwSpacing.xl,
+      0,
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(scenario.scenario, style: context.type.bodyStrong),
+        ),
+        StateChip(scenario.state),
+      ],
+    ),
+  );
+}
+
+/// One step: the two frames, and what the other channels found.
+class _StepDetail extends StatelessWidget {
+  const _StepDetail({
     required this.item,
     required this.shots,
     required this.mode,
@@ -297,15 +370,20 @@ class _Detail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    var hasChannels =
+        (item.tree?.changed ?? false) ||
+        item.texts != null ||
+        item.events != null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(
             FwSpacing.xl,
-            FwSpacing.lg,
+            FwSpacing.md,
             FwSpacing.xl,
-            FwSpacing.sm,
+            0,
           ),
           child: Row(
             children: [
@@ -318,9 +396,9 @@ class _Detail extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(
               FwSpacing.xl,
-              0,
+              FwSpacing.xs,
               FwSpacing.xl,
-              FwSpacing.sm,
+              0,
             ),
             child: Text(
               note,
@@ -329,9 +407,6 @@ class _Detail extends StatelessWidget {
           ),
         Expanded(
           flex: 3,
-          // The stage draws whatever there is, including nothing: it says
-          // "neither side rendered", which is a verdict. "Loading…" belongs
-          // only to the moment before a decode has answered.
           child: shots.settled
               ? ComparisonStage(
                   shots: shots,
@@ -346,13 +421,8 @@ class _Detail extends StatelessWidget {
                   ),
                 ),
         ),
-        if (_hasChannels) Expanded(flex: 2, child: ChannelLines(item)),
+        if (hasChannels) Expanded(flex: 2, child: ChannelLines(item)),
       ],
     );
   }
-
-  bool get _hasChannels =>
-      (item.tree?.changed ?? false) ||
-      item.texts != null ||
-      item.events != null;
 }

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutterware/src/inspect/node.dart';
 
 import 'channels.dart';
+import 'frame_ref.dart';
 import 'pixel_diff.dart';
 import 'scenario_alignment.dart';
 import 'tree_diff.dart';
@@ -22,6 +23,7 @@ class ScenarioStepShot {
     this.texts = const [],
     this.events = const [],
     this.failure,
+    this.frame,
   });
 
   final AlignableStep step;
@@ -35,6 +37,15 @@ class ScenarioStepShot {
 
   /// What the scenario broke on at this step, when it did.
   final String? failure;
+
+  /// Where the harness left this step's frame.
+  ///
+  /// A [FrameRef] rather than a `ShotCache` key, because a scenario's frames
+  /// are written by the replay rather than filed by a renderer — one run
+  /// produces a whole tree of them, which is the granularity the design gives
+  /// scenarios and the reason their key covers the scenario rather than the
+  /// step.
+  final FrameRef? frame;
 }
 
 /// One scenario's two runs, compared.
@@ -44,6 +55,7 @@ class ScenarioComparison {
     required this.items,
     required this.branches,
     required this.state,
+    this.frames = const {},
   });
 
   /// A scenario that was never replayed — one that exists on a single side,
@@ -54,7 +66,8 @@ class ScenarioComparison {
   /// "skipped" tells them the tool looked and found no reason to.
   const ScenarioComparison.notRun({required this.scenario, required this.state})
     : items = const [],
-      branches = const [];
+      branches = const [],
+      frames = const {};
 
   /// `<file>#<name>`.
   final String scenario;
@@ -69,6 +82,13 @@ class ScenarioComparison {
 
   /// The scenario's own verdict, worst of what its steps said.
   final ComparedState state;
+
+  /// Each step's two frames, by the id its [ComparedItem] carries.
+  ///
+  /// Beside the items rather than on them: a preview's `shots` are cache keys
+  /// and these are paths, and one field meaning two different kinds of thing is
+  /// how a reader ends up opening the wrong one.
+  final Map<String, ({FrameRef? base, FrameRef? head})> frames;
 
   Map<String, Object?> toJson() => {
     // `id` rather than `scenario`, and `steps` alongside a preview's
@@ -86,7 +106,18 @@ class ScenarioComparison {
             if (branch.path.isNotEmpty) 'path': branch.path,
           },
       ],
-    'steps': [for (var item in items) item.toJson()],
+    'steps': [
+      for (var item in items)
+        {
+          ...item.toJson(),
+          'frames': ?(frames[item.id] == null
+              ? null
+              : {
+                  'base': ?frames[item.id]!.base?.toJson(),
+                  'head': ?frames[item.id]!.head?.toJson(),
+                }),
+        },
+    ],
   };
 
   /// Compares two runs of one scenario.
@@ -108,7 +139,12 @@ class ScenarioComparison {
     var headByIndex = {for (var shot in head) shot.step.index: shot};
 
     var items = <ComparedItem>[];
+    var frames = <String, ({FrameRef? base, FrameRef? head})>{};
     for (var pair in alignment.pairs) {
+      frames[pair.path] = (
+        base: pair.base == null ? null : baseByIndex[pair.base!.index]?.frame,
+        head: pair.head == null ? null : headByIndex[pair.head!.index]?.frame,
+      );
       items.add(switch (pair.delta) {
         StepDelta.added => ComparedItem(
           id: pair.path,
@@ -133,6 +169,7 @@ class ScenarioComparison {
       items: items,
       branches: alignment.branches,
       state: _verdict(items, alignment),
+      frames: frames,
     );
   }
 

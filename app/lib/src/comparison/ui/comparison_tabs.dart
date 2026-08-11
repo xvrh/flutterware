@@ -12,6 +12,7 @@ import '../channels.dart';
 import '../comparison_controller.dart';
 import '../session_environment.dart';
 import 'previews_tab.dart';
+import 'scenarios_tab.dart';
 import 'state_chip.dart';
 
 /// The tab strip's root, so a test can scope to it.
@@ -86,7 +87,18 @@ class _ComparisonTabsState extends State<ComparisonTabs>
     // photographing — which is how the first capture of this screen came back
     // `settled: true` over the words "Preparing the base checkout…".
     widget.shell.appContext.settle.add(this);
+    // **A session arrives late, and this screen mounts before it.** The file
+    // diff needs none, so the tabs are shown for a checkout that is still
+    // opening — and deciding "no session, no comparison" on the first frame
+    // pinned that answer forever, on the very worktree the window was
+    // launched in.
+    widget.shell.addListener(_onShell);
     unawaited(_open());
+  }
+
+  void _onShell() {
+    if (!mounted || _controller != null) return;
+    if (widget.shell.sessionFor(widget.worktree) != null) unawaited(_open());
   }
 
   /// What a capture must not photograph through.
@@ -99,6 +111,13 @@ class _ComparisonTabsState extends State<ComparisonTabs>
   @override
   String? get busyWith {
     if (_loading) return 'opening the comparison';
+    // Open but not resolved yet: the comparison is still coming, and a capture
+    // that settled here would photograph the file diff alone.
+    if (_controller == null) {
+      return widget.shell.isOpen(widget.worktree)
+          ? 'opening the worktree'
+          : null;
+    }
     var controller = _controller;
     if (controller == null || controller.refusal != null) return null;
     if (controller.baseRoot == null) return 'preparing the base checkout';
@@ -113,6 +132,7 @@ class _ComparisonTabsState extends State<ComparisonTabs>
     // **The addressed worktree's session, not the selected one.** This screen
     // renders for a checkout that has no tab, which is precisely a checkout
     // `selectedSession` knows nothing about.
+    if (_controller != null) return;
     var session = widget.shell.sessionFor(widget.worktree);
     if (session == null) {
       // Not open, so there are no cores and no comparison — only the file
@@ -121,7 +141,9 @@ class _ComparisonTabsState extends State<ComparisonTabs>
       if (mounted) {
         setState(() {
           _loading = false;
-          _unavailable = 'Open this worktree to compare its previews.';
+          _unavailable = widget.shell.isOpen(widget.worktree)
+              ? null
+              : 'Open this worktree to compare its previews.';
         });
       }
       return;
@@ -249,6 +271,7 @@ class _ComparisonTabsState extends State<ComparisonTabs>
 
   @override
   void dispose() {
+    widget.shell.removeListener(_onShell);
     widget.shell.appContext.settle.remove(this);
     _controller
       ?..removeListener(_onChange)
@@ -441,111 +464,15 @@ class _HalfView extends StatelessWidget {
             selected: selected,
             onSelect: onSelect,
           ),
-          ComparisonHalfKind.scenarios => _Rows(controller, half),
+          ComparisonHalfKind.scenarios => ScenariosTab(
+            half: half,
+            cache: controller.environment.shots,
+            settle: settle,
+            selected: selected,
+            onSelect: onSelect,
+          ),
         };
     }
-  }
-}
-
-/// The list, filling as rows are decided.
-///
-/// **Findings first and everything else after**, rather than findings only: a
-/// list that hides what it looked at cannot be told apart from a list that
-/// did not look. The count at the bottom is what says the difference.
-class _Rows extends StatelessWidget {
-  const _Rows(this.controller, this.half);
-
-  final ComparisonController controller;
-  final ComparisonHalf half;
-
-  @override
-  Widget build(BuildContext context) {
-    var rows = <(String id, ComparedState state, String? note)>[
-      for (var row in half.rows) (row.label ?? row.id, row.state, row.note),
-      for (var scenario in half.scenarios)
-        (scenario.scenario, scenario.state, null),
-    ];
-    var findings = rows.where((row) => row.$2.isFinding).toList();
-    var quiet = rows.length - findings.length;
-
-    if (rows.isEmpty) {
-      return half.isRunning
-          ? const _Working('Comparing…')
-          : const _Working('Nothing to compare yet.');
-    }
-
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: FwSpacing.md),
-      children: [
-        for (var row in findings) _Row(id: row.$1, state: row.$2, note: row.$3),
-        // Only once it has stopped looking. "Nothing changed" over a run still
-        // in flight is a verdict the tool has not reached, and it is the one
-        // sentence a reader would act on without checking.
-        if (findings.isEmpty && !half.isRunning)
-          Padding(
-            padding: const EdgeInsets.all(FwSpacing.xxxl),
-            child: Text(
-              'Nothing changed.',
-              style: context.type.body.copyWith(color: context.colors.mut),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            FwSpacing.xxxl,
-            FwSpacing.xl,
-            FwSpacing.xxxl,
-            0,
-          ),
-          child: Text(
-            half.isRunning
-                ? 'Comparing… ${findings.length} so far'
-                : '${rows.length} looked at, $quiet unchanged',
-            style: context.type.micro.copyWith(color: context.colors.mut),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Row extends StatelessWidget {
-  const _Row({required this.id, required this.state, this.note});
-
-  final String id;
-  final ComparedState state;
-  final String? note;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: FwSpacing.xxxl,
-        vertical: FwSpacing.xs,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 84, child: StateChip(state)),
-          const Gap(FwSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(id, style: context.type.body),
-                if (note case var note?) ...[
-                  const Gap(2),
-                  Text(
-                    note,
-                    style: context.type.caption.copyWith(color: colors.mut),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
