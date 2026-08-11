@@ -5,7 +5,6 @@
 /// `GitProbe` and `WorktreeDiscovery` already have.
 library;
 
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -40,17 +39,9 @@ class GitOutput {
       const Utf8Decoder(allowMalformed: true).convert(stdout).trim();
 }
 
-/// Runs `git <arguments>` in `<directory>`, optionally writing [stdin] to it.
-///
-/// [stdin] is here for `check-attr --stdin`, which is the one call that feeds
-/// git a list rather than naming it on the command line — and it has to, since
-/// a branch's file list is unbounded and a command line is not.
+/// Runs `git <arguments>` in `<directory>`.
 typedef GitRunner =
-    Future<GitOutput> Function(
-      String directory,
-      List<String> arguments, {
-      List<int>? stdin,
-    });
+    Future<GitOutput> Function(String directory, List<String> arguments);
 
 /// Reads one worktree's delta.
 class ChangesProbe {
@@ -89,15 +80,10 @@ class ChangesProbe {
   /// **`--no-optional-locks` on everything.** It exists for tools that poll.
   /// Without it a refresh rewrites the worktree's index and flutterware fights
   /// the user's own git for the lock.
-  Future<GitOutput> _git(
-    String directory,
-    List<String> arguments, {
-    List<int>? stdin,
-  }) => _run(directory, [
-    '--no-optional-locks',
-    ..._configHardening,
-    ...arguments,
-  ], stdin: stdin);
+  Future<GitOutput> _git(String directory, List<String> arguments) => _run(
+    directory,
+    ['--no-optional-locks', ..._configHardening, ...arguments],
+  );
 
   /// The checkout [directory] is in, or null when it is not in one.
   ///
@@ -128,13 +114,17 @@ class ChangesProbe {
   }) async {
     var head = await _git(worktreePath, ['rev-parse', '--verify', 'HEAD']);
     var headSha = head.ok && head.text.isNotEmpty ? head.text : null;
+    // Read once for the four `ChangeSet`s below, which differ in what they
+    // could answer and not in what the project declared.
+    var pinsDeclared = config?.attention.isNotEmpty ?? false;
 
     // Pinned here rather than in `rankChanges`: an untracked entry has no
     // diff, so it is not a `RankedFile` — but a new file an agent has not
     // staged yet is exactly what an attention rule is for.
+    var pins = attentionGlobs(config);
     var untracked = [
       for (var entry in await _untracked(worktreePath))
-        entry.withReason(attentionForUntracked(entry.path, config: config)),
+        entry.withReason(attentionForUntracked(entry.path, pins)),
     ];
 
     // The caller's own override first, then the project's `base:`, then
@@ -147,14 +137,6 @@ class ChangesProbe {
         : resolved != null
         ? BaseSource.inferred
         : BaseSource.none;
-
-    Future<Ranking> rank(List<FileChange> files, PatchIndex? patch) async =>
-        rankChanges(
-          files,
-          config: config,
-          attributes: await _attributes(worktreePath, files),
-          patch: patch,
-        );
 
     // **No base is a state, not an error to paper over.** Nothing is diffed
     // against a guess. What is still answerable is the uncommitted work, and
@@ -176,7 +158,7 @@ class ChangesProbe {
         baseSource: source,
         untracked: untracked,
         configState: configState,
-        attentionConfigured: config?.attention.isNotEmpty ?? false,
+        attentionConfigured: pinsDeclared,
       );
     }
 
@@ -199,7 +181,7 @@ class ChangesProbe {
         uncommitted: uncommitted,
         untracked: untracked,
         configState: configState,
-        attentionConfigured: config?.attention.isNotEmpty ?? false,
+        attentionConfigured: pinsDeclared,
       );
     }
 
@@ -216,12 +198,11 @@ class ChangesProbe {
         uncommitted: uncommitted,
         untracked: untracked,
         refusal: ChangesRefusal(patchBytes: patch.stdout.length),
-        // Globs and attributes still rank a refused patch — they need the file
-        // list and nothing else. Only the derived rules go quiet, which is why
-        // they are the ones that pass a patch.
-        ranking: await rank(files, null),
+        // A refused patch is still ranked: the globs need the file list and
+        // nothing else.
+        ranking: rankChanges(files, config: config),
         configState: configState,
-        attentionConfigured: config?.attention.isNotEmpty ?? false,
+        attentionConfigured: pinsDeclared,
       );
     }
 
@@ -235,36 +216,10 @@ class ChangesProbe {
       head: headSha,
       uncommitted: uncommitted,
       untracked: untracked,
-      ranking: await rank(index.files, index),
+      ranking: rankChanges(index.files, config: config),
       configState: configState,
-      attentionConfigured: config?.attention.isNotEmpty ?? false,
+      attentionConfigured: pinsDeclared,
     );
-  }
-
-  /// What `.gitattributes` says about each changed path.
-  ///
-  /// **One batched call, and never one per file.** `check-attr --stdin` takes
-  /// the whole list; measured on a 400-path batch in this repository it costs
-  /// 11 ms, which is inside the noise of the diff that produced the list.
-  ///
-  /// A repository with no `.gitattributes` — most of them — gets an empty
-  /// answer for the same 11 ms, so there is nothing to detect and skip.
-  Future<Map<String, Set<String>>> _attributes(
-    String worktreePath,
-    List<FileChange> files,
-  ) async {
-    if (files.isEmpty) return const {};
-    // NUL-separated, matching `-z` — which is the whole reason for `-z`.
-    // A newline-separated list would lose a path with a newline in it, and
-    // git will happily track one.
-    var paths = utf8.encode(files.map((f) => '${f.path}\u0000').join());
-    var result = await _git(worktreePath, [
-      'check-attr',
-      '--stdin',
-      '-a',
-      '-z',
-    ], stdin: paths);
-    return result.ok ? attributesFrom(_splitNul(result.stdout)) : const {};
   }
 
   /// One file's patch, for `fw changes --file` and for MCP.
@@ -383,54 +338,24 @@ class ChangesProbe {
 
   static Future<GitOutput> _defaultRunner(
     String directory,
-    List<String> arguments, {
-    List<int>? stdin,
-  }) async {
+    List<String> arguments,
+  ) async {
     try {
-      if (stdin == null) {
-        var result = await Process.run(
-          'git',
-          arguments,
-          workingDirectory: directory,
-          stdoutEncoding: null,
-          stderrEncoding: systemEncoding,
-        );
-        return GitOutput(
-          exitCode: result.exitCode,
-          stdout: Uint8List.fromList(result.stdout as List<int>),
-          stderr: '${result.stderr}',
-        );
-      }
-      // `Process.run` cannot write to a child's stdin, so a call that feeds git
-      // a list has to start the process itself. Draining both pipes *before*
-      // awaiting the exit code, because a child that fills its stdout buffer
-      // while nobody reads it never exits.
-      var process = await Process.start(
+      var result = await Process.run(
         'git',
         arguments,
         workingDirectory: directory,
+        stdoutEncoding: null,
+        stderrEncoding: systemEncoding,
       );
-      var out = _collect(process.stdout);
-      var err = process.stderr.transform(systemEncoding.decoder).join();
-      process.stdin.add(stdin);
-      unawaited(process.stdin.close());
-      var exitCode = await process.exitCode;
       return GitOutput(
-        exitCode: exitCode,
-        stdout: await out,
-        stderr: await err,
+        exitCode: result.exitCode,
+        stdout: Uint8List.fromList(result.stdout as List<int>),
+        stderr: '${result.stderr}',
       );
     } on ProcessException catch (e) {
       return GitOutput(exitCode: 127, stdout: Uint8List(0), stderr: e.message);
     }
-  }
-
-  static Future<Uint8List> _collect(Stream<List<int>> stream) async {
-    var builder = BytesBuilder(copy: false);
-    await for (var chunk in stream) {
-      builder.add(chunk);
-    }
-    return builder.takeBytes();
   }
 }
 

@@ -170,7 +170,7 @@ List<ChangeRow> buildUntrackedRows(
   ];
 }
 
-/// The files the **tree** holds: everything, plus the noise once its lens is on.
+/// The files the **tree** holds: every one of them.
 ///
 /// **Pinned files are in here too**, which they were not at first. Leaving them
 /// out to avoid "listing a file twice" made the tree an *incomplete map*: its
@@ -181,16 +181,12 @@ List<ChangeRow> buildUntrackedRows(
 /// The Important tab is a **view onto** this tree, not a removal from it — the
 /// way a problems panel lists files that are also in the file explorer. The
 /// tree marks a pinned file where it lives.
-List<FileChange> treeFiles(
-  ChangeSet set, {
-  Set<String>? visible,
-  bool noiseOpen = false,
-}) => [
-  for (var tier in [
-    RankTier.attention,
-    RankTier.ordinary,
-    if (noiseOpen) RankTier.noise,
-  ])
+/// **Every tier, in tier order** — `RankTier.values` rather than a list spelled
+/// out here, which is what it used to be when one of the three was held back.
+/// A hand-written enumeration is how a tier added later goes missing from the
+/// tree, and a tree that can lose a file is what this whole file argues against.
+List<FileChange> treeFiles(ChangeSet set, {Set<String>? visible}) => [
+  for (var tier in RankTier.values)
     for (var ranked in set.ordered(tier))
       if (visible == null || visible.contains(ranked.file.path)) ranked.file,
 ];

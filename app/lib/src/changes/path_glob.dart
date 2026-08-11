@@ -89,7 +89,7 @@ class PathGlob {
   /// A `ChangesConfig` is user code and this runs inside the probe: a stray
   /// `[` in one pattern must cost that pattern, not the whole screen. The
   /// alternative — an exception from an isolate mid-refresh — loses the file
-  /// list to a typo in a noise rule.
+  /// list to a typo in an attention rule.
   static Glob? _tryCompile(String pattern) {
     try {
       return Glob(pattern, recursive: false);

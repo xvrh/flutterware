@@ -52,40 +52,22 @@ diff --git a/lib/b.dart b/lib/b.dart
     ranking: ranking,
   );
 
-  group('tiers and the noise drawer', () {
-    /// Puts each named path in a tier, leaving the rest ordinary.
-    Ranking rankingOf(
-      PatchIndex patch, {
-      Set<String> attention = const {},
-      Set<String> noise = const {},
-    }) => Ranking([
-      for (var file in patch.files)
-        RankedFile(
-          file: file,
-          tier: attention.contains(file.path)
-              ? RankTier.attention
-              : noise.contains(file.path)
-              ? RankTier.noise
-              : RankTier.ordinary,
-          rule: attention.contains(file.path) || noise.contains(file.path)
-              ? 'a rule'
-              : null,
-          source: RankSource.project,
-        ),
-    ]);
+  group('tiers', () {
+    /// Pins each named path, leaving the rest ordinary.
+    Ranking rankingOf(PatchIndex patch, {Set<String> attention = const {}}) =>
+        Ranking([
+          for (var file in patch.files)
+            RankedFile(
+              file: file,
+              tier: attention.contains(file.path)
+                  ? RankTier.attention
+                  : RankTier.ordinary,
+              rule: attention.contains(file.path) ? 'a rule' : null,
+            ),
+        ]);
 
     test('nothing ranked leaves the Important tab empty', () {
       expect(buildImportantRows(setOf(index(twoFiles))), isEmpty);
-    });
-
-    test('noise is not important, and draws no heading anywhere', () {
-      // Found by photographing a 25-file branch: a lone `Changes` heading sat
-      // at the top with the thing it distinguished from below the fold. The
-      // drawer that used to be that thing is a lens at the top of the pane now.
-      var patch = index(twoFiles);
-      var set = setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'}));
-      expect(buildImportantRows(set), isEmpty);
-      expect(buildUntrackedRows(set).whereType<SectionRow>(), isEmpty);
     });
 
     test('the Important tab is the pinned files and nothing else', () {
@@ -132,49 +114,6 @@ diff --git a/lib/b.dart b/lib/b.dart
       expect(pinned.reason, 'matches a rule');
       // The ordinary one is the tree's, and never important.
       expect(rows.whereType<FileRow>(), hasLength(1));
-    });
-
-    test('noise is out of the index until its lens is on', () {
-      var patch = index(twoFiles);
-      var set = setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'}));
-
-      // Nowhere: not in either tab, not in the tree.
-      expect(buildImportantRows(set), isEmpty);
-      expect(treeFiles(set).map((f) => f.path), ['lib/a.dart']);
-      // The count the lens draws is still the truth about the branch.
-      expect(set.ordered(RankTier.noise), hasLength(1));
-    });
-
-    test('opening the drawer lists them, and never loses one', () {
-      var patch = index(twoFiles);
-      var set = setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'}));
-
-      expect(treeFiles(set, noiseOpen: true).map((f) => f.path), [
-        'lib/a.dart',
-        'lib/b.dart',
-      ]);
-      // The header's total is the true one either way — a ranking that can
-      // lose a file is a ranking nobody can trust.
-      expect(set.changed, hasLength(2));
-    });
-
-    test('a noise file in the open drawer joins the tree, and has a body', () {
-      var patch = index(twoFiles);
-      var set = setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'}));
-      expect(
-        treeFiles(set, noiseOpen: true).map((f) => f.path),
-        contains('lib/b.dart'),
-      );
-      expect(
-        treeFiles(set).map((f) => f.path),
-        isNot(contains('lib/b.dart')),
-        reason: 'and stays out of it while the drawer is shut',
-      );
-      var body = buildFileRows(
-        patch.files.firstWhere((f) => f.path == 'lib/b.dart'),
-      );
-      expect(body.whereType<HunkRow>(), hasLength(1));
-      expect(body.whereType<DiffLineRow>(), isNotEmpty);
     });
 
     test('ordering is per tier, not across the list', () {

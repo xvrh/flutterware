@@ -35,9 +35,8 @@ void main() => Flutterware.configure((fw) {
         // An agent quietly rewriting its own brief is the single thing most
         // worth seeing.
         'CLAUDE.md',
-        // The published package's public surface. Slice 4 found this the hard
-        // way: `lib/plugins.dart` gaining one `export` was demoted as "only
-        // imports changed", and that export *is* the API.
+        // The published package's public surface. One added `export` in
+        // `lib/plugins.dart` reads as a one-line change and *is* the API.
         'lib/*.dart',
         // The two versions CLAUDE.md says must stay in sync, and the SDK pin
         // that decides whether anything builds at all.

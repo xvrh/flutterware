@@ -19,7 +19,7 @@
 /// | open, or `fw` ran here | [ChangesConfigState.fresh] | the executed config |
 /// | closed, config file unchanged | [ChangesConfigState.fresh] | the same value |
 /// | closed, config file has moved | [ChangesConfigState.stale] | it, and says so |
-/// | never opened, or no config file | [ChangesConfigState.none] | built-in defaults |
+/// | never opened, or no config file | [ChangesConfigState.none] | nothing — no rules exist |
 ///
 /// **Not written into the checkout**, tempting as `.dart_tool/flutterware/` is
 /// — the kernel cache is already there. A worktree's `.gitignore` is
@@ -58,7 +58,8 @@ class ResolvedChangesConfig {
 
   static const defaults = ResolvedChangesConfig(null, ChangesConfigState.none);
 
-  /// Null when there is nothing but built-in defaults to rank by.
+  /// Null when there is nothing to rank by — and there are no built-in rules
+  /// to fall back on, so null means every file comes out ordinary.
   final ChangesConfig? config;
   final ChangesConfigState state;
 

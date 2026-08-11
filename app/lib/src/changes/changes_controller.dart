@@ -40,10 +40,10 @@ class ChangesController extends ChangeNotifier {
   /// The main checkout, which is what the facts cache — and so the remembered
   /// `ChangesConfig` — is keyed by.
   ///
-  /// Null when the shell has not worked one out, in which case the ranking
-  /// falls back to built-in defaults. That is the same degradation as a
-  /// worktree nobody has ever opened, and it is honest: without the key there
-  /// is nothing to read.
+  /// Null when the shell has not worked one out, in which case **nothing is
+  /// ranked at all** — not "ranked by defaults". There are no built-in rules
+  /// in either direction any more, so a missing key means an empty *Important*
+  /// tab, which is the same thing a worktree nobody has opened shows.
   final String? repoRoot;
 
   final Future<ChangeSet> Function(String path)? _load;

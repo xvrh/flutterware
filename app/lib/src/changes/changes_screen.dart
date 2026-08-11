@@ -39,6 +39,15 @@ enum IndexTab {
   important,
 }
 
+/// Whether the *just changed* lens is drawn over — and so narrows — [tab].
+///
+/// **One declaration, read by both halves.** It was two: the widget-tree
+/// condition that draws the chip, and a conjunct in the filter. They agreed,
+/// until they did not — a lens left on under *All* went on narrowing the
+/// *Important* tab, which does not draw it, so the pinned list emptied from a
+/// control that was nowhere on screen. Drawn and filtering are now one fact.
+bool lensApplies(IndexTab tab) => tab == IndexTab.all;
+
 /// **`fw:///worktrees/<worktree>/changes`** — what this checkout has changed
 /// against its base branch, committed and uncommitted together.
 ///
@@ -74,7 +83,8 @@ class ChangesScreen extends StatefulWidget {
   final Worktree worktree;
 
   /// The main checkout, which the repository-wide cache holding this project's
-  /// ranking rules is keyed by. Null ranks by built-in defaults.
+  /// ranking rules is keyed by. Null means nothing is pinned: there are no
+  /// built-in rules to fall back on.
   final String? repoRoot;
 
   /// Whether the checkout has a tab. Only affects what the empty state says.
@@ -130,7 +140,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   var _query = '';
 
-  /// **The lenses.** Two toggles over the index, each with a count.
+  /// **The lens.** One toggle over the index, with a count.
   ///
   /// *Just changed* is what has moved while this screen has been open — an
   /// agent's current sentence, not its paragraph. It replaced an *uncommitted*
@@ -139,17 +149,10 @@ class _ChangesScreenState extends State<ChangesScreen> {
   /// for watching something that commits on its own schedule. "What is it doing
   /// **now**" is the question that was actually being asked.
   ///
-  /// *Low-signal* is what the ranking demoted.
-  ///
-  /// Between them and the Important tab, the three questions a fifty-file
-  /// branch raises: what a **rule** says matters, what is **moving**, and what
-  /// is **skippable**.
+  /// With the Important tab, the two questions a fifty-file branch raises: what
+  /// a **rule** says matters, and what is **moving**. A *low-signal* lens sat
+  /// beside this one and is gone with the ranking tier behind it.
   var _justChangedOnly = false;
-
-  /// Whether the noise drawer is open. **Off by default and remembered for the
-  /// session**, not persisted: the whole value of the drawer is that the
-  /// screen opens on the signal.
-  var _noiseOpen = false;
 
   /// Null until you pick one, which is what lets the default depend on what the
   /// checkout turned out to contain — see [_tabFor]. Set the moment a tab is
@@ -181,6 +184,11 @@ class _ChangesScreenState extends State<ChangesScreen> {
     if (old.worktree.path != widget.worktree.path) {
       _changes.dispose();
       _selected = widget.initialPath;
+      // **The tab goes back to being derived**, like the selection. Holding a
+      // click made about the last checkout would open the next one on an
+      // *Important* tab that has nothing in it — see [_tabFor], whose whole
+      // point is that the empty half is the half a tab may not open on.
+      _tab = null;
       _start();
       return;
     }
@@ -228,10 +236,17 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// Null when nothing is narrowing the index at all.
   ///
-  /// The typed query and the lenses compose by intersection, so `motion` plus
+  /// The typed query and the lens compose by intersection, so `motion` plus
   /// *just changed* means both, which is what anybody would expect of two
   /// controls sitting next to each other.
-  Set<String>? _visible(ChangeSet set) {
+  ///
+  /// **The lens narrows the tab that draws it, and only that one.** It applied
+  /// to both, and the *Important* tab does not draw it — so a lens left on
+  /// under *All* emptied the pinned list from a control that was not on screen,
+  /// under a tab label still counting the files it had just hidden, and the
+  /// empty state said `No file matched an attention rule` about files that
+  /// had. The filter box is drawn under both tabs and so narrows both.
+  Set<String>? _visible(ChangeSet set, IndexTab tab) {
     Set<String>? visible;
     if (_query.trim().isNotEmpty) {
       visible = pathsMatching([
@@ -239,7 +254,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
         ...set.untracked.map((e) => e.path),
       ], _query);
     }
-    if (_justChangedOnly) {
+    if (_justChangedOnly && lensApplies(tab)) {
       var moved = _changes.moved;
       visible = visible == null ? {...moved} : visible.intersection(moved);
     }
@@ -282,6 +297,10 @@ class _ChangesScreenState extends State<ChangesScreen> {
   @override
   Widget build(BuildContext context) {
     var set = _changes.value;
+    // Derived once: the tab the index draws and the tab the filter is computed
+    // against are the same tab, and reading it twice is two chances to disagree
+    // about the value this screen's narrowing now turns on.
+    var tab = set == null ? IndexTab.all : _tabFor(set);
 
     return Column(
       key: changesScreenKey,
@@ -308,19 +327,16 @@ class _ChangesScreenState extends State<ChangesScreen> {
                       width: _indexWidth,
                       child: _IndexPane(
                         set: set,
-                        tab: _tabFor(set),
+                        tab: tab,
                         controller: _index,
                         query: _query,
                         selected: _selected,
-                        visible: _visible(set),
-                        noiseOpen: _noiseOpen,
+                        visible: _visible(set, tab),
                         justChanged: _changes.moved,
                         justChangedOnly: _justChangedOnly,
                         onTab: (tab) => setState(() => _tab = tab),
                         onQuery: (q) => setState(() => _query = q),
                         onSelect: _show,
-                        onToggleNoise: () =>
-                            setState(() => _noiseOpen = !_noiseOpen),
                         onToggleJustChanged: () => setState(
                           () => _justChangedOnly = !_justChangedOnly,
                         ),
@@ -591,9 +607,7 @@ class _IndexPane extends StatelessWidget {
     required this.onTab,
     required this.onQuery,
     required this.onSelect,
-    required this.onToggleNoise,
     required this.onToggleJustChanged,
-    required this.noiseOpen,
     required this.justChanged,
     required this.justChangedOnly,
     required this.visible,
@@ -608,9 +622,7 @@ class _IndexPane extends StatelessWidget {
   final ValueChanged<IndexTab> onTab;
   final ValueChanged<String> onQuery;
   final ValueChanged<String> onSelect;
-  final VoidCallback onToggleNoise;
   final VoidCallback onToggleJustChanged;
-  final bool noiseOpen;
   final Set<String> justChanged;
   final bool justChangedOnly;
   final Set<String>? visible;
@@ -651,17 +663,12 @@ class _IndexPane extends StatelessWidget {
           important: pinned,
           onTab: onTab,
         ),
-        // Only under *All*. Nothing a lens does applies to the other tab:
-        // attention outranks noise, so nothing pinned is ever demoted, and
-        // narrowing four files to the two that moved is not a question anyone
-        // has.
-        if (tab == IndexTab.all)
+        // Drawn and filtering are one fact — see [lensApplies]. Narrowing four
+        // pinned files to the two that moved is not a question anyone has.
+        if (lensApplies(tab))
           _LensRow(
-            set: set,
-            noiseOpen: noiseOpen,
-            justChanged: justChanged,
+            justChanged: justChanged.length,
             justChangedOnly: justChangedOnly,
-            onToggleNoise: onToggleNoise,
             onToggleJustChanged: onToggleJustChanged,
           ),
         Expanded(
@@ -676,9 +683,7 @@ class _IndexPane extends StatelessWidget {
 
   /// Everything in the delta: the tree, then the untracked paths under it.
   Widget _all(BuildContext context) {
-    var tree = buildTree(
-      treeFiles(set, visible: visible, noiseOpen: noiseOpen),
-    );
+    var tree = buildTree(treeFiles(set, visible: visible));
     var untracked = buildUntrackedRows(
       set,
       selected: selected,
@@ -940,36 +945,30 @@ class _NoRulesYet extends StatelessWidget {
   }
 }
 
-/// The lenses, drawn only when they would say something.
+/// The lens, drawn only when it would say something.
 ///
-/// A `0 uncommitted` chip on a branch with nothing uncommitted is a control
+/// **It appears when it becomes true, which is exactly when it is useful.**
+/// Nothing has moved on arrival, so there is no chip; the first time the agent
+/// writes something, one shows up saying so. A chip reading `0` is a control
 /// that does nothing, which is worse than no control — the same rule the
 /// section headings follow.
 class _LensRow extends StatelessWidget {
   const _LensRow({
-    required this.set,
-    required this.noiseOpen,
     required this.justChanged,
     required this.justChangedOnly,
-    required this.onToggleNoise,
     required this.onToggleJustChanged,
   });
 
-  final ChangeSet set;
-  final bool noiseOpen;
-  final Set<String> justChanged;
+  /// How many paths have moved since the screen opened. A count, not the set:
+  /// the count is all this draws, and taking the set invited reading it.
+  final int justChanged;
+
   final bool justChangedOnly;
-  final VoidCallback onToggleNoise;
   final VoidCallback onToggleJustChanged;
 
   @override
   Widget build(BuildContext context) {
-    // **It appears when it becomes true, which is exactly when it is useful.**
-    // Nothing has moved on arrival, so there is no chip; the first time the
-    // agent writes something, one shows up saying so.
-    var fresh = justChanged.length;
-    var noise = set.ordered(RankTier.noise).length;
-    if (fresh == 0 && noise == 0) return const SizedBox.shrink();
+    if (justChanged == 0) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -978,25 +977,16 @@ class _LensRow extends StatelessWidget {
         FwSpacing.md,
         FwSpacing.sm,
       ),
-      child: Wrap(
-        spacing: FwSpacing.xs,
-        runSpacing: FwSpacing.xs,
-        children: [
-          if (fresh > 0)
-            IndexLens(
-              label: 'just changed',
-              count: fresh,
-              on: justChangedOnly,
-              onTap: onToggleJustChanged,
-            ),
-          if (noise > 0)
-            IndexLens(
-              label: 'low-signal',
-              count: noise,
-              on: noiseOpen,
-              onTap: onToggleNoise,
-            ),
-        ],
+      // The index stretches its children; a chip that fills 320 px is a button
+      // pretending to be a banner.
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: IndexLens(
+          label: 'just changed',
+          count: justChanged,
+          on: justChangedOnly,
+          onTap: onToggleJustChanged,
+        ),
       ),
     );
   }
@@ -1095,28 +1085,27 @@ class _TreeNodeViewState extends State<_TreeNodeView> {
               openDepth: widget.openDepth,
             ),
           for (var file in node.sortedFiles)
-            Padding(
-              padding: EdgeInsets.only(
-                left: isRoot ? 0 : widget.depth * FwSpacing.lg,
+            if (widget.ranking.forPath(file.path) case var ranked)
+              Padding(
+                padding: EdgeInsets.only(
+                  left: isRoot ? 0 : widget.depth * FwSpacing.lg,
+                ),
+                child: IndexFileRow(
+                  file: file,
+                  selected: file.path == widget.selected,
+                  uncommitted: widget.uncommitted.contains(file.path),
+                  // The second place attention is surfaced: a pinned file says
+                  // what pinned it here too, where you are browsing, not only
+                  // in the tab you may not have opened.
+                  reason: ranked?.reason,
+                  pinned: ranked?.tier == RankTier.attention,
+                  // **No directory line under a file in the tree.** Its
+                  // position already says where it is, and repeating the path
+                  // is what the tree exists to remove.
+                  showDirectory: false,
+                  onTap: () => widget.onSelect(file.path),
+                ),
               ),
-              child: IndexFileRow(
-                file: file,
-                selected: file.path == widget.selected,
-                uncommitted: widget.uncommitted.contains(file.path),
-                // The second place attention is surfaced: a pinned file says
-                // what pinned it here too, where you are browsing, not only in
-                // the band you may have scrolled past.
-                reason: widget.ranking.forPath(file.path)?.reason,
-                pinned:
-                    widget.ranking.forPath(file.path)?.tier ==
-                    RankTier.attention,
-                // **No directory line under a file in the tree.** Its position
-                // already says where it is, and repeating the path is the noise
-                // the tree exists to remove.
-                showDirectory: false,
-                onTap: () => widget.onSelect(file.path),
-              ),
-            ),
         ],
       ],
     );

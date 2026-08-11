@@ -166,7 +166,7 @@ class _ChangesSummaryCardState extends State<ChangesSummaryCard> {
               child: _Body(set: set, failure: _changes.failure),
             ),
           ),
-          if (set case var it?) _Tallies(it),
+          if (set case var it?) _UntrackedTally(it),
           Divider(height: 1, color: colors.line),
           _Footer(onOpen: widget.onOpen),
         ],
@@ -329,36 +329,23 @@ class _Body extends StatelessWidget {
 
 /// What the two lists left out, **pinned below them rather than after them**.
 ///
-/// These are summary lines, not list content: they are true of the whole
-/// delta, like the header. Inside the scrolling body they were the first thing
-/// a long branch pushed out of sight — found by capping the card's height and
-/// looking at it, on a checkout with eleven low-signal files.
-class _Tallies extends StatelessWidget {
-  const _Tallies(this.set);
+/// A summary line, not list content: it is true of the whole delta, like the
+/// header. Inside the scrolling body it was the first thing a long branch
+/// pushed out of sight — found by capping the card's height and looking at it.
+///
+/// One line now that the low-signal tally is gone. Still its own widget, and
+/// still outside the scroll view, because *where* it sits is the finding.
+class _UntrackedTally extends StatelessWidget {
+  const _UntrackedTally(this.set);
 
   final ChangeSet set;
 
   @override
   Widget build(BuildContext context) {
-    var noise = set.ordered(RankTier.noise);
     var untracked = set.untracked.length - _pinnedOf(set).untracked.length;
-    if (noise.isEmpty && untracked <= 0) return const SizedBox.shrink();
+    if (untracked <= 0) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (noise.isNotEmpty)
-          _Quiet(
-            '${noise.length} low-signal '
-            '${noise.length == 1 ? 'file' : 'files'} hidden, '
-            '+${noise.fold(0, (s, r) => s + r.file.added)} '
-            '-${noise.fold(0, (s, r) => s + r.file.removed)}',
-          ),
-        if (untracked > 0)
-          _Quiet('$untracked untracked', color: context.colors.mut3),
-      ],
-    );
+    return _Quiet('$untracked untracked', color: context.colors.mut3);
   }
 }
 

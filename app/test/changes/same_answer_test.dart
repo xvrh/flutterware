@@ -110,7 +110,7 @@ void main() {
     expect(
       setOf(
         ranking: ranking(RankTier.ordinary),
-      ).sameAnswerAs(setOf(ranking: ranking(RankTier.noise))),
+      ).sameAnswerAs(setOf(ranking: ranking(RankTier.attention))),
       isFalse,
     );
   });

@@ -37,7 +37,6 @@ void main() {
             file: f,
             tier: tiers[f.path] ?? RankTier.ordinary,
             rule: tiers.containsKey(f.path) ? '**/migrations/**' : null,
-            source: RankSource.project,
           ),
       ]);
 
@@ -190,55 +189,24 @@ void main() {
     expect(find.text('f0.dart'), findsNothing);
   });
 
-  testWidgets('noise is a tally, never a row', (tester) async {
-    var files = [
-      file('lib/real.dart'),
-      file('lib/a.g.dart', added: 100, removed: 90),
-      file('lib/b.g.dart', added: 110, removed: 88),
-    ];
-    await pump(
-      tester,
-      setOf(
-        files: files,
-        ranking: rankingOf(files, {
-          'lib/a.g.dart': RankTier.noise,
-          'lib/b.g.dart': RankTier.noise,
-        }),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('2 low-signal files hidden, +210 -178'), findsOneWidget);
-    expect(find.text('a.g.dart'), findsNothing);
-  });
-
-  testWidgets('the tallies survive a branch long enough to scroll', (
+  testWidgets('the tally survives a branch long enough to scroll', (
     tester,
   ) async {
-    // **Found by capping the card's height and looking at it.** The tallies are
-    // true of the whole delta, like the header — but they were the last thing
-    // in the scrolling body, so a checkout with eleven low-signal files pushed
-    // the line saying so straight out of sight.
+    // **Found by capping the card's height and looking at it.** The tally is
+    // true of the whole delta, like the header — but it was the last thing in
+    // the scrolling body, so a long enough branch pushed it out of sight.
     var files = [
-      for (var i = 0; i < 12; i++) file('lib/big$i.dart', added: 100 + i),
-      for (var i = 0; i < 11; i++) file('lib/gen$i.g.dart', added: 5),
+      for (var i = 0; i < 23; i++) file('lib/big$i.dart', added: 100 + i),
     ];
     await pump(
       tester,
-      setOf(
-        files: files,
-        untracked: const [UntrackedEntry('scratch.txt')],
-        ranking: rankingOf(files, {
-          for (var i = 0; i < 11; i++) 'lib/gen$i.g.dart': RankTier.noise,
-        }),
-      ),
+      setOf(files: files, untracked: const [UntrackedEntry('scratch.txt')]),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('11 low-signal files hidden, +55 -22'), findsOneWidget);
     expect(find.text('1 untracked'), findsOneWidget);
-    // …and the list itself did give way, which is what made room for them.
-    expect(find.text('… 6 more'), findsOneWidget);
+    // …and the list itself did give way, which is what made room for it.
+    expect(find.text('… 17 more'), findsOneWidget);
   });
 
   testWidgets('a pinned untracked file is in the pinned section', (

@@ -180,31 +180,31 @@ void main() {
     );
   });
 
-  testWidgets('the noise drawer stays open across a re-index', (tester) async {
-    var noisy = [
-      file('lib/real.dart'),
-      file('lib/a.g.dart', added: 200),
-      file('lib/b.g.dart', added: 190),
-    ];
-    Ranking ranked(List<FileChange> files) => Ranking([
-      for (var f in files)
-        RankedFile(
-          file: f,
-          tier: f.path.endsWith('.g.dart') ? RankTier.noise : RankTier.ordinary,
-          rule: f.path.endsWith('.g.dart') ? '**/*.g.dart' : null,
-          source: RankSource.builtIn,
-        ),
-    ]);
-
-    current = setOf(noisy, ranking: ranked(noisy));
+  testWidgets('the lens stays on across a re-index', (tester) async {
+    current = setOf([file('lib/quiet.dart'), file('lib/busy.dart')]);
     await pump(tester);
-    await tester.tap(find.textContaining('low-signal'));
-    await tester.pumpAndSettle();
-    expect(inIndex('a.g.dart'), findsOneWidget);
 
-    var next = [file('lib/second.dart'), ...noisy];
-    await reprobe(tester, setOf(next, ranking: ranked(next)));
-    expect(inIndex('a.g.dart'), findsOneWidget);
+    // One file moved, so the lens appears; turning it on narrows to that file.
+    await reprobe(
+      tester,
+      setOf([file('lib/quiet.dart'), file('lib/busy.dart', added: 90)]),
+    );
+    await tester.tap(find.textContaining('just changed'));
+    await tester.pumpAndSettle();
+    expect(inIndex('busy.dart'), findsOneWidget);
+    expect(inIndex('quiet.dart'), findsNothing);
+
+    // A probe that finds a new file must not put the whole list back.
+    await reprobe(
+      tester,
+      setOf([
+        file('lib/second.dart'),
+        file('lib/quiet.dart'),
+        file('lib/busy.dart', added: 90),
+      ]),
+    );
+    expect(inIndex('quiet.dart'), findsNothing);
+    expect(inIndex('busy.dart'), findsOneWidget);
   });
 
   testWidgets('a live screen says it is watching; a dead one says that', (

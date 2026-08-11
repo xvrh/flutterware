@@ -245,57 +245,33 @@ void main() {
       expect(set.baseSource, BaseSource.inferred);
     });
 
-    test(
-      '.gitattributes demotes what the repository says is generated',
-      () async {
-        // The claim this suite exists for: not that `attributesFrom` parses a
-        // string, but that real `git check-attr` answers what we ask it, in the
-        // spelling we decode — including the `-diff` inversion.
-        git(['init', '-q', '-b', 'main', '.']);
-        write(
-          '.gitattributes',
-          '*.pb.dart linguist-generated=true\nassets/* -diff\n',
-        );
-        write('lib/api.pb.dart', 'one\n');
-        write('lib/real.dart', 'one\n');
-        write('assets/blob.dat', 'one\n');
-        git(['add', '-A']);
-        git(['commit', '-qm', 'init']);
-
-        git(['checkout', '-q', '-b', 'feature']);
-        write('lib/api.pb.dart', 'one\ntwo\n');
-        write('lib/real.dart', 'one\ntwo\n');
-        write('assets/blob.dat', 'one\ntwo\n');
-
-        var set = await ChangesProbe().probe(root.path);
-        var byPath = {for (var it in set.ranking.files) it.file.path: it};
-        expect(byPath['lib/api.pb.dart']?.tier, RankTier.noise);
-        expect(
-          byPath['lib/api.pb.dart']?.reason,
-          'generated in .gitattributes',
-        );
-        expect(
-          byPath['assets/blob.dat']?.reason,
-          'not diffable in .gitattributes',
-        );
-        // The one file the repository says nothing about is left alone.
-        expect(byPath['lib/real.dart']?.tier, RankTier.ordinary);
-      },
-    );
-
-    test('a path with a space survives the check-attr batch', () async {
-      // `--stdin -z` exists for exactly this, and a newline- or space-separated
-      // batch would silently drop the attribute for this file.
+    test('a project glob pins a real file in a real repository', () async {
+      // The claim this suite exists for: not that `PathGlobSet` matches a
+      // string, but that the paths git reports are the ones the rules see —
+      // including one with a space in it, which every `-z` in the probe is for.
       git(['init', '-q', '-b', 'main', '.']);
-      write('.gitattributes', '*.gen linguist-generated=true\n');
-      write('my file.gen', 'one\n');
+      write('lib/api/client.dart', 'one\n');
+      write('lib/my file.dart', 'one\n');
+      write('lib/real.dart', 'one\n');
       git(['add', '-A']);
       git(['commit', '-qm', 'init']);
-      git(['checkout', '-q', '-b', 'feature']);
-      write('my file.gen', 'one\ntwo\n');
 
-      var set = await ChangesProbe().probe(root.path);
-      expect(set.ranking.forPath('my file.gen')?.tier, RankTier.noise);
+      git(['checkout', '-q', '-b', 'feature']);
+      write('lib/api/client.dart', 'one\ntwo\n');
+      write('lib/my file.dart', 'one\ntwo\n');
+      write('lib/real.dart', 'one\ntwo\n');
+
+      var set = await ChangesProbe().probe(
+        root.path,
+        config: const ChangesConfig(attention: ['lib/api/**', '*file.dart']),
+      );
+      var byPath = {for (var it in set.ranking.files) it.file.path: it};
+      expect(byPath['lib/api/client.dart']?.tier, RankTier.attention);
+      expect(byPath['lib/api/client.dart']?.reason, 'matches lib/api/**');
+      expect(byPath['lib/my file.dart']?.tier, RankTier.attention);
+      // The one file no rule names is left alone, with nothing to explain.
+      expect(byPath['lib/real.dart']?.tier, RankTier.ordinary);
+      expect(byPath['lib/real.dart']?.reason, isNull);
     });
 
     test('the configured base overrides inference, and is reported', () async {
