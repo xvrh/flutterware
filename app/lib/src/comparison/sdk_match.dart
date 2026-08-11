@@ -14,7 +14,8 @@ import '../utils/flutter_sdk.dart';
 /// separates that from a real change, so a comparison across a mismatch is
 /// refused rather than annotated.
 ///
-/// Revisited when `fw` manages the SDK itself; until then it is a real gap,
+/// `fw` now manages an SDK cache of its own, so a future comparison could
+/// install the base's pin instead of refusing; until then the gap is real,
 /// and a loud one is better than a quiet one.
 class SdkMatch {
   const SdkMatch({required this.base, required this.head, required this.same});
@@ -72,10 +73,11 @@ class SdkIdentity {
     this.engineHash,
   });
 
-  /// The version `.fvmrc` asks for, when the checkout pins one.
+  /// The version the checkout pins — `flutter_version` (the `fw` wrapper's
+  /// pin) or, failing that, `.fvmrc` — when the checkout carries one.
   ///
   /// **Versioned, unlike everything else here.** `.fvm/flutter_sdk` is a
-  /// symlink some tool created and `.gitignore` hides; `.fvmrc` is a file the
+  /// symlink some tool created and `.gitignore` hides; the pin is a file the
   /// commit itself carries. So it is the checkout's own claim about which SDK
   /// it needs, and it outranks a link that a comparison may well have made
   /// itself — which is exactly what a base checkout's link is.
@@ -155,8 +157,20 @@ class SdkIdentity {
     );
   }
 
-  /// The version in `<checkout>/.fvmrc`, or null where there is none.
+  /// The version the checkout's own commit pins, or null where nothing does.
+  ///
+  /// `flutter_version` first: a repo carrying both pins is one the `fw`
+  /// wrapper runs, and the wrapper reads only its own.
   static String? _pinned(String checkout) {
+    var fw = File(p.join(checkout, 'flutter_version'));
+    if (fw.existsSync()) {
+      try {
+        var version = fw.readAsStringSync().trim();
+        if (version.isNotEmpty) return version;
+      } on FileSystemException {
+        // Unreadable names nothing; .fvmrc below may still answer.
+      }
+    }
     var file = File(p.join(checkout, '.fvmrc'));
     if (!file.existsSync()) return null;
     try {
