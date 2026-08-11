@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -64,10 +65,11 @@ ${names.map((n) => "  scenario('$n', (s) async {});").join('\n')}
     ScenariosCore subject, {
     String? file,
     String? scenario,
+    String? steps,
   }) async =>
       (await subject.invoke(
             'run',
-            arguments: {'file': ?file, 'scenario': ?scenario},
+            arguments: {'file': ?file, 'scenario': ?scenario, 'steps': ?steps},
           ))!
           as ScenarioRunResult;
 
@@ -140,6 +142,76 @@ ${names.map((n) => "  scenario('$n', (s) async {});").join('\n')}
     expect(result.ok, isTrue);
   });
 
+  group('what the answer carries', () {
+    // A full suite across a 2×2 matrix is 160 steps and 60k tokens of paths,
+    // past what any client hands a model — and almost all of it describes
+    // scenarios that passed. So the steps go to a file and the answer says
+    // where, and what it keeps is the frame each failure was captured at.
+
+    test('a green run carries counts, not steps', () async {
+      var result = await run(core(_FakeRunner(steps: 5)));
+
+      var outcome = result.packages.single.scenarios.single;
+      expect(outcome.steps, isEmpty);
+      // Never silently: an empty list with no count reads as "captured
+      // nothing", which is a different and much worse answer.
+      expect(outcome.stepCount, 5);
+    });
+
+    test('a red one carries the frame it died on, and says so', () async {
+      var result = await run(core(_FakeRunner(ok: false, steps: 5)));
+
+      var outcome = result.packages.single.scenarios.single;
+      expect(outcome.steps.single.index, 5);
+      expect(outcome.stepCount, 5);
+    });
+
+    test('the whole run is on disk, and the package names the file', () async {
+      var result = await run(core(_FakeRunner(steps: 5)));
+
+      var report = result.packages.single.report!;
+      expect(File(report).existsSync(), isTrue);
+      // Readable back into the same shape — the property the web export
+      // already depends on, now the other half of a summarised answer.
+      var whole = ScenarioRunResult.fromJson(
+        jsonDecode(File(report).readAsStringSync()) as Map<String, dynamic>,
+      );
+      expect(whole.packages.single.scenarios.single.steps, hasLength(5));
+    });
+
+    test('steps: all hands back every one of them', () async {
+      var result = await run(core(_FakeRunner(steps: 5)), steps: 'all');
+
+      expect(result.packages.single.scenarios.single.steps, hasLength(5));
+    });
+
+    test('steps: none keeps even a failure to the summary', () async {
+      var result = await run(
+        core(_FakeRunner(ok: false, steps: 5)),
+        steps: 'none',
+      );
+
+      var outcome = result.packages.single.scenarios.single;
+      expect(outcome.steps, isEmpty);
+      expect(outcome.stepCount, 5);
+      // The reason still travels: it is one line, and it is the answer.
+      expect(outcome.errors.single.error, 'expected 2, found 1');
+    });
+
+    test('a word that is not one of the three is refused with them', () async {
+      expect(
+        () => run(core(_FakeRunner(steps: 1)), steps: 'some'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '${e.message}',
+            'message',
+            contains('failing, all, none'),
+          ),
+        ),
+      );
+    });
+  });
+
   group('ok', () {
     test('is false when a scenario came back red', () async {
       var result = await run(core(_FakeRunner(ok: false)));
@@ -165,11 +237,19 @@ ${names.map((n) => "  scenario('$n', (s) async {});").join('\n')}
 /// Returns whatever the test needs it to: nothing, a green scenario, a red
 /// one, or a failure to run at all.
 class _FakeRunner extends ScenarioRunner {
-  _FakeRunner({this.ok = true, this.failure, this.matches = true})
-    : super(packageRoot: '/none', directory: 'none', flutterSdkRoot: '/none');
+  _FakeRunner({
+    this.ok = true,
+    this.failure,
+    this.matches = true,
+    this.steps = 0,
+  }) : super(packageRoot: '/none', directory: 'none', flutterSdkRoot: '/none');
 
   final bool ok;
   final String? failure;
+
+  /// How many steps each scenario captured — the thing the answer decides
+  /// whether to carry.
+  final int steps;
 
   /// False stands for the harness running the suite and finding nothing the
   /// selector named — what a misspelling actually produces.
@@ -201,7 +281,20 @@ class _FakeRunner extends ScenarioRunner {
           'name': scenario ?? 'A',
           'ok': ok,
           'ms': 3,
-          'steps': <Object?>[],
+          'steps': <Object?>[
+            for (var i = 1; i <= steps; i++)
+              {
+                'index': i,
+                'position': '#$i',
+                'auto': true,
+                'image': p.join(outDir, 'step$i.png'),
+                'format': 'png',
+                'width': 390,
+                'height': 844,
+                'tree': p.join(outDir, 'step$i.tree.json'),
+                'texts': ['step $i'],
+              },
+          ],
           'errors': [
             if (!ok) {'error': 'expected 2, found 1'},
           ],

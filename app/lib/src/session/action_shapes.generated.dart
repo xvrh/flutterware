@@ -4148,6 +4148,12 @@ final resultShapes = <String, ResultShape>{
         },
       },
       <String, Object?>{
+        'name': 'stepCount',
+        'type': 'int',
+        'doc':
+            'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
+      },
+      <String, Object?>{
         'name': 'errors',
         'type': 'List<ScenarioRunError>',
         'doc': 'The failure, when [ok] is false.',
@@ -4173,6 +4179,13 @@ final resultShapes = <String, ResultShape>{
         'name': 'output',
         'type': 'String',
         'doc': 'Where this run\'s artifacts were written.',
+      },
+      <String, Object?>{
+        'name': 'report',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
       },
       <String, Object?>{
         'name': 'axes',
@@ -4423,6 +4436,12 @@ final resultShapes = <String, ResultShape>{
               },
             },
             <String, Object?>{
+              'name': 'stepCount',
+              'type': 'int',
+              'doc':
+                  'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
+            },
+            <String, Object?>{
               'name': 'errors',
               'type': 'List<ScenarioRunError>',
               'doc': 'The failure, when [ok] is false.',
@@ -4464,6 +4483,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'output',
               'type': 'String',
               'doc': 'Where this run\'s artifacts were written.',
+            },
+            <String, Object?>{
+              'name': 'report',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
             },
             <String, Object?>{
               'name': 'axes',
@@ -4719,6 +4745,12 @@ final resultShapes = <String, ResultShape>{
                         },
                       ],
                     },
+                  },
+                  <String, Object?>{
+                    'name': 'stepCount',
+                    'type': 'int',
+                    'doc':
+                        'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
                   },
                   <String, Object?>{
                     'name': 'errors',

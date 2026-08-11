@@ -1236,7 +1236,27 @@ class RunCore extends PluginCore {
     );
   }
 
+  /// The launcher's line for a launch this process is waiting out.
+  ///
+  /// **Because nothing else is watching.** The rail's row fills in from the
+  /// probe loop, which only runs where something subscribed — the GUI. A
+  /// headless `launch` waits ninety seconds with a live log in front of it and
+  /// used to publish none of it, so `fw` and an agent both watched a blank
+  /// space. Reading it into the report puts it where every renderer already
+  /// looks, and MCP forwards each change as progress.
+  final _launching = <String, Status>{};
+
+  void _setLaunching(String key, Status? status) {
+    if (status == null) {
+      _launching.remove(key);
+    } else {
+      _launching[key] = status;
+    }
+    notifyChanged();
+  }
+
   Status _status(List<DaemonDevice> devices, Set<String> busy) {
+    if (_launching.values.firstOrNull case var launching?) return launching;
     if (_daemonError != null) return Status.error('no device list');
     if (!_scanned) return Status.none;
     if (devices.isEmpty) {
@@ -1680,7 +1700,15 @@ class RunCore extends PluginCore {
     var log = LaunchLog.read(handle.logPath ?? '');
     if (wait) {
       var timeout = Duration(seconds: _intArgument(arguments['timeout'], 300));
-      (handle, log) = await awaitLaunch(handle, timeout);
+      try {
+        (handle, log) = await awaitLaunch(
+          handle,
+          timeout,
+          onProgress: (line) => _setLaunching(handle.key, Status.info(line)),
+        );
+      } finally {
+        _setLaunching(handle.key, null);
+      }
     }
     _handles = _scanHandles();
     await _probeAll();

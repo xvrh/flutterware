@@ -258,7 +258,10 @@ class HeadlessCatalog {
   /// Entries the compiler refused never get a guest — they are in the
   /// handshake, and an entry that does not build cannot be rendered to find out
   /// what it would have said.
-  Future<CatalogAudit> auditAll({List<String>? entryIds}) async {
+  Future<CatalogAudit> auditAll({
+    List<String>? entryIds,
+    void Function(int done, int total, String entryId)? onEntry,
+  }) async {
     var (daemon, ready) = await CompilerDaemonClient.connect(
       dartExecutable: dartExecutable,
       config: config,
@@ -278,7 +281,12 @@ class HeadlessCatalog {
       ];
 
       var rendered = <String, InspectErrors>{};
-      for (var entry in servable) {
+      for (var (index, entry) in servable.indexed) {
+        // Before the work rather than after it: a name that appears when an
+        // entry *finishes* is the name of something already done, and the one
+        // worth reading during a two-minute audit is the one being compiled
+        // right now.
+        onEntry?.call(index + 1, servable.length, entry.id);
         if (guest == null) {
           var compiled = await daemon.select(entry.id, full: true);
           if (!compiled.ok) continue;

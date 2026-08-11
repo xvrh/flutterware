@@ -9,6 +9,15 @@ _*
 # the project rather than the machine, so it is shared like the config above.
 !.mcp.json
 
+# And how a client should treat that server. Shared for the same reason — the
+# limits below are properties of what this server answers, not of a machine.
+# The directory has to be un-ignored before anything inside it can be, and
+# everything else in it (settings.local.json, whatever a client writes next)
+# stays out.
+!.claude/
+.claude/*
+!.claude/settings.json
+
 # Files and directories created by pub.
 .dart_tool/
 .packages

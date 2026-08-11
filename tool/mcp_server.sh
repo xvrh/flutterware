@@ -37,7 +37,25 @@ sdk_current() {
   [ "$(basename "$(readlink .fvm/flutter_sdk || true)")" = "$pin" ]
 }
 
-if ! sdk_current || [ ! -f .dart_tool/package_config.json ]; then
+# Resolved is not enough: it has to be *current*. `dart run` re-resolves when a
+# manifest is newer than the resolution, and that resolve reaches pub.dev —
+# inside the client's 30s connect budget, over a network nobody here controls.
+# Six sessions died in it on 2026-08-11 alone, each with a pub stack trace
+# ("Attempting to send request on closed client") that names no cause and no
+# fix. A rebase touching any pubspec is all it takes. So the wrapper resolves
+# first, from the cache, and `dart run` finds nothing left to do.
+resolution_current() {
+  [ -f .dart_tool/package_config.json ] || return 1
+  # -maxdepth 3 covers the workspace members and skips build output and the
+  # example app's own nested packages; the lockfile moves whenever they do.
+  [ -z "$(
+    find . -maxdepth 3 \( -name pubspec.yaml -o -name pubspec.lock \) \
+      -not -path './.*' -not -path '*/build/*' \
+      -newer .dart_tool/package_config.json 2>/dev/null | head -n1
+  )" ]
+}
+
+if ! sdk_current || ! resolution_current; then
   # Parallel sessions on one worktree each spawn this script; two concurrent
   # `fvm use`/`pub get` runs on one workspace race each other. One bootstraps
   # and writes its pid into the lock; the rest wait while that pid is alive.
@@ -91,9 +109,14 @@ if ! sdk_current || [ ! -f .dart_tool/package_config.json ]; then
       exit 1
     fi
   fi
-  if [ ! -f .dart_tool/package_config.json ]; then
-    say 'workspace not resolved — running pub get…'
-    fvm flutter pub get </dev/null >&2
+  if ! resolution_current; then
+    # Offline first, and usually last: a rebase moves a pubspec's mtime far
+    # more often than it moves a version, and the cache already holds what the
+    # lockfile pins. Only a genuinely new dependency needs the network, and
+    # then the failure is about that package rather than about a socket.
+    say 'resolution is stale — running pub get (offline first)…'
+    fvm flutter pub get --offline </dev/null >&2 ||
+      fvm flutter pub get </dev/null >&2
   fi
 
   rm -rf "$lock" 2>/dev/null || true

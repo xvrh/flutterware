@@ -60,6 +60,21 @@ jobs:
         run: dart run ../../app/bin/fw.dart run previews check
         working-directory: examples/example
 
+      - name: "and finds it when started by package name"
+        # The same resolution, from the other way this package is started: by
+        # name rather than by file. `.mcp.json` runs `dart run
+        # flutterware_app:mcp`, whose `Platform.script` is a snapshot under
+        # `.dart_tool/pub/bin/` — two directories above which is nothing, so the
+        # step above stayed green while every previews and motion action over
+        # MCP died on a daemon script at a path that never existed.
+        #
+        # `flutterware_app:fw` and not `:mcp` because the CLI takes the same
+        # session down the same daemon handshake and can say so with an exit
+        # code; talking MCP from a workflow step would test the transport, not
+        # the resolution.
+        run: dart run flutterware_app:fw run previews check
+        working-directory: examples/example
+
       - name: "the compiler daemon, as a process"
         # Everything in `app/integration_test/` that needs no GPU: the daemon
         # starting, quarantining a demo it cannot compile, noticing an edit on

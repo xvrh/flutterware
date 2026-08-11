@@ -60,6 +60,7 @@ ScenarioRunPackage _$ScenarioRunPackageFromJson(Map<String, dynamic> json) =>
               )
               .toList() ??
           const [],
+      report: json['report'] as String?,
       error: json['error'] as String?,
     );
 
@@ -67,6 +68,7 @@ Map<String, dynamic> _$ScenarioRunPackageToJson(ScenarioRunPackage instance) =>
     <String, dynamic>{
       'path': instance.path,
       'output': instance.output,
+      'report': ?instance.report,
       'axes': ?instance.axes,
       'ms': instance.ms,
       'scenarios': instance.scenarios.map((e) => e.toJson()).toList(),
@@ -85,6 +87,7 @@ ScenarioRunOutcome _$ScenarioRunOutcomeFromJson(Map<String, dynamic> json) =>
               ?.map((e) => ScenarioRunStep.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
+      stepCount: (json['stepCount'] as num?)?.toInt() ?? 0,
       errors:
           (json['errors'] as List<dynamic>?)
               ?.map((e) => ScenarioRunError.fromJson(e as Map<String, dynamic>))
@@ -100,6 +103,7 @@ Map<String, dynamic> _$ScenarioRunOutcomeToJson(ScenarioRunOutcome instance) =>
       'device': ?instance.device,
       'ms': instance.ms,
       'steps': instance.steps.map((e) => e.toJson()).toList(),
+      'stepCount': instance.stepCount,
       'errors': instance.errors.map((e) => e.toJson()).toList(),
     };
 

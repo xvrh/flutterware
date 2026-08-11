@@ -72,13 +72,15 @@ Takes no arguments.
 
 ### `flutterware_actions`
 
-Every action that can be invoked, per plugin, with the parameters each one takes and the shape of what it returns. Call this before flutterware_invoke when you do not already know an action id.
+Every action that can be invoked, per plugin. Call this before flutterware_invoke when you do not already know an action id. Without "plugin" it answers the index: every action of every plugin, with what it does and the names of the parameters it takes. Name a plugin to get that one in full — every parameter documented, and the shape of what comes back.
 
-Takes no arguments.
+| argument | required | |
+|---|---|---|
+| `plugin` | no | One plugin, in full: its id or the last dotted segment — "flutterware.previews" or just "previews". Omitted, the index. |
 
 ### `flutterware_invoke`
 
-Run one plugin action. Argument keys are the parameter ids reported by flutterware_actions. Returns whatever the action produced — often a path to an artifact.
+Run one plugin action. Argument keys are the parameter ids reported by flutterware_actions. Returns whatever the action produced — often a path to an artifact. A slow action narrates: ask for progress and what the panel is saying arrives as it changes — the entry being compiled, the point of a matrix, the launcher building an app.
 
 | argument | required | |
 |---|---|---|
@@ -1040,7 +1042,7 @@ packages: List<ScenarioListPackage>
 Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured **at** the failure, whatever the capture policy.
 
 ```sh
-fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--devices=…] [--languages=…] [--tag=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…]
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--devices=…] [--languages=…] [--tag=…] [--steps=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…]
 ```
 
 Returns `ScenarioRunResult`:
@@ -1049,6 +1051,7 @@ Returns `ScenarioRunResult`:
 packages: List<ScenarioRunPackage>
   path: String
   output: String   # Where this run's artifacts were written.
+  report: String?   # The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.
   axes: Map<String, String>?   # The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].
   ms: int   # Whole-run wall time inside the harness.
   scenarios: List<ScenarioRunOutcome>
@@ -1095,6 +1098,7 @@ packages: List<ScenarioRunPackage>
       settled: bool   # False when the verb's settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.
       strayFrames: int   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
       failure: String?   # The error, when this is the step a scenario broke on.
+    stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.
     errors: List<ScenarioRunError>   # The failure, when [ok] is false.
       error: String
       stack: String?
@@ -1114,6 +1118,7 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `devices` | string | no | — | A comma-separated matrix — `iphone-se,android-tall`. Runs everything once per device, each into its own `<output>/<device>-<language>/` directory with an `index.json` beside them. The same plural vocabulary as `flutter test --dart-define=fw.devices=`. Overrides `device`. |
 | `languages` | string | no | — | The other half of the matrix — `en,fr,de`. Crossed with `devices`, and overrides `language`. |
 | `tag` | string | no | — | Run only scenarios carrying this tag — the same tag `scenario(tags: [...])` declares and `flutter test --tags` filters on |
+| `steps` | choice | no | failing | How many steps ride back in the answer. Every run writes all of them to `run.json` in its output directory either way and each package names that file, so this is about what arrives without asking: `failing` (default) is the frame each red scenario died on, `all` is every step of every scenario — a matrix suite is hundreds — and `none` is the summary alone. Every scenario reports its `stepCount` whatever this says. |
 | `text-scale` | string | no | — | The platform text scale factor — `1.3` is a common accessibility setting |
 | `brightness` | choice | no | — | The platform brightness the app sees |
 | `bold-text` | choice | no | — | The bold-text accessibility switch |
