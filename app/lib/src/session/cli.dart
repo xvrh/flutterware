@@ -9,13 +9,18 @@ import '../changes/changes_probe.dart';
 import '../changes/changes_text.dart';
 import '../comparison/base_checkout.dart';
 import '../comparison/base_ref.dart';
+import '../comparison/import_graph.dart';
 import '../comparison/channels.dart';
 import '../comparison/previews_side.dart';
 import '../comparison/runner.dart';
+import '../comparison/scenario_comparison.dart';
+import '../comparison/scenarios_side.dart';
 import '../comparison/shot_cache.dart';
+import '../comparison/skip.dart';
 import '../comparison/tree_diff.dart';
 import '../constants.dart';
 import '../plugins/native/previews_core.dart';
+import '../plugins/native/scenarios_core.dart';
 import '../plugins/plugin_core.dart';
 import '../shell/repo_layout.dart';
 import '../shell/worktree_discovery.dart';
@@ -523,9 +528,138 @@ class FwCli {
         'in ${result.elapsed.inMilliseconds}ms',
       );
       out.writeln('  ${index.path}');
+
+      await _compareScenarios(
+        session: session,
+        top: top,
+        baseRoot: checkout.path,
+        sdkRoot: sdk.root,
+        only: only,
+      );
       return 0;
     } finally {
       session.dispose();
+    }
+  }
+
+  /// The scenario half of a comparison.
+  ///
+  /// Separate from the previews half rather than folded into the same runner,
+  /// and the design doc argues why at length: a preview is one picture and a
+  /// scenario is a *tree* of them. What they share is the kernel — the same
+  /// pixel, tree and text channels — and the skip rule, which asks the same
+  /// question of a scenario's closure that it asks of an entry's.
+  Future<void> _compareScenarios({
+    required Session session,
+    required String top,
+    required String baseRoot,
+    required String sdkRoot,
+    required List<String> only,
+  }) async {
+    ScenariosCore core;
+    try {
+      core = session.requireCore(scenariosPluginId) as ScenariosCore;
+    } on SessionException {
+      return;
+    }
+    var package = core.packages.firstOrNull;
+    if (package == null) return;
+
+    var side = ScenariosSide(
+      flutterSdkRoot: sdkRoot,
+      packagePath: p.relative(
+        p.normalize(p.join(session.worktree.path, package)),
+        from: top,
+      ),
+      directory: core.scanRootFor(package),
+    );
+    var head = side.runnerFor(top);
+    var base = side.runnerFor(baseRoot);
+    try {
+      List<String> headIds;
+      List<String> baseIds;
+      try {
+        headIds = await side.scenarios(head);
+        baseIds = await side.scenarios(base);
+      } on Object catch (error) {
+        // A side whose harness will not build is a side, not a crash — the
+        // same rule the previews half follows, and the same skew causes it.
+        out.writeln('scenarios: ${'$error'.split('\n').first}');
+        return;
+      }
+      if (only.isNotEmpty) {
+        headIds = [
+          for (var id in headIds)
+            if (only.contains(id)) id,
+        ];
+        baseIds = [
+          for (var id in baseIds)
+            if (only.contains(id)) id,
+        ];
+      }
+
+      var memo = ShotCache(p.join(flutterwareDir(), 'shots')).memo;
+      var graph = ImportGraph.read(
+        root: top,
+        packageConfig: p.join(top, '.dart_tool', 'package_config.json'),
+      );
+      var skipped = 0;
+      var compared = <ScenarioComparison>[];
+      var outDir = p.join(flutterwareDir(), 'comparisons', 'scenarios');
+
+      for (var id in headIds) {
+        if (!baseIds.contains(id)) {
+          out.writeln('  added      $id');
+          continue;
+        }
+        memo.remember(id, graph.closureOf(side.fileOf(id)));
+        if (SkipDecision.of(
+          entryId: id,
+          memo: memo,
+          baseRoot: baseRoot,
+          headRoot: top,
+        ).skip) {
+          skipped++;
+          continue;
+        }
+        compared.add(
+          ScenarioComparison.of(
+            scenario: id,
+            base: await side.run(base, id, outDir: p.join(outDir, 'base')),
+            head: await side.run(head, id, outDir: p.join(outDir, 'head')),
+          ),
+        );
+      }
+      for (var id in baseIds) {
+        if (!headIds.contains(id)) out.writeln('  removed    $id');
+      }
+
+      for (var scenario in compared) {
+        if (scenario.state == ComparedState.same) continue;
+        out.writeln(
+          '  ${scenario.state.name.padRight(10)} ${scenario.scenario}',
+        );
+        for (var branch in scenario.branches) {
+          out.writeln(
+            '             ${branch.added ? '+' : '-'} branch '
+            '"${branch.label}" (${branch.steps} steps)',
+          );
+        }
+        for (var step in scenario.items) {
+          if (step.state == ComparedState.same) continue;
+          out.writeln(
+            '             ${step.state.name.padRight(9)} ${step.id}'
+            '${step.note == null ? '' : '  — ${step.note}'}',
+          );
+        }
+      }
+      out.writeln(
+        '${headIds.length} scenarios, ${compared.length} run, '
+        '$skipped skipped',
+      );
+    } finally {
+      await head.dispose();
+      await base.dispose();
     }
   }
 
