@@ -196,14 +196,34 @@ void main() {
       responses['stack doctor'] = ProcessResult(0, 0, '''
         {"state":"up","detail":"slot 8200-8208",
          "services":[{"name":"postgres","port":8200,"state":"up"},
-                     {"name":"fusionauth","port":8201,"state":"starting"}]}
+                     {"name":"identity","port":8201,"state":"starting"}]}
       ''', '');
       var reading = await core.refresh();
       expect(reading.state, StackState.up);
       expect(reading.detail, 'slot 8200-8208');
-      expect(reading.services.map((s) => s.name), ['postgres', 'fusionauth']);
+      expect(reading.services.map((s) => s.name), ['postgres', 'identity']);
       expect(reading.services.first.port, 8200);
       expect(reading.services.last.state, StackState.starting);
+      core.dispose();
+    });
+
+    test('ignores whatever the command wrote to stderr', () async {
+      // Found by pointing the example project's declaration at a Dart script:
+      // `dart` announces `Running build hooks...` on stderr, and folding that
+      // in made every probe unparseable. Almost nothing that prints structured
+      // output has stderr to itself — docker writes deprecation warnings there,
+      // a wrapper's `set -x` writes every line it runs — so a probe that reads
+      // both is one that works until a tool starts mentioning something.
+      var core = coreWith(jsonConfig());
+      responses['stack doctor'] = ProcessResult(
+        0,
+        0,
+        '{"state":"up","detail":"4 containers"}',
+        'Running build hooks...\nnote: using cached layer',
+      );
+      var reading = await core.refresh();
+      expect(reading.state, StackState.up);
+      expect(reading.detail, '4 containers');
       core.dispose();
     });
 
@@ -326,9 +346,9 @@ void main() {
     test('invoke routes a declared command and appends its argument', () async {
       var core = coreWith(localEnvConfig());
       var result =
-          (await core.invoke('restart', arguments: {'service': 'powersync'}))!
+          (await core.invoke('restart', arguments: {'service': 'sync'}))!
               as DevStackRunResult;
-      expect(result.command, 'stack restart powersync');
+      expect(result.command, 'stack restart sync');
       core.dispose();
     });
 

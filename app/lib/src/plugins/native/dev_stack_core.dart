@@ -217,7 +217,14 @@ class DevStackCore extends PluginCore {
     if (probe.shape == ProbeShape.json) {
       Object? decoded;
       try {
-        decoded = jsonDecode(out.trim());
+        // **stdout alone**, which is what [Probe.json] asks the command for.
+        // Almost nothing that prints structured output has stderr to itself:
+        // `dart` announces `Running build hooks...` there, docker writes
+        // deprecation warnings, and a shell wrapper's `set -x` writes every
+        // line it runs. Folding those in makes a probe that works for a
+        // fortnight and then reports `unavailable` because a tool started
+        // mentioning something.
+        decoded = jsonDecode('${result.stdout}'.trim());
       } on FormatException catch (e) {
         // **The command's own words, when it left any.** A health check that
         // cannot reach the docker daemon says so on stderr and exits non-zero;

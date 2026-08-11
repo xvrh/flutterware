@@ -710,3 +710,84 @@ friction that teaches people the dialog is not worth opening — and a cleanup
 tool nobody opens protects nothing at all. What is left is a warning that names
 the count, a removal row that repeats it in red directly above the button, and a
 decision that belongs to the person looking at their own checkout.
+
+---
+
+## The example project declares one (2026-08-11)
+
+The stand-in was pulled out of `tool/flutterware.dart` when the plugin shipped,
+on the reasoning quoted above: *a fake stack in the real config would poll a
+pointless subprocess for every flutterware developer*. That was right about the
+fake and wrong about the config. It left the plugin as the only one here with no
+worked example — the catalog previews script a subprocess, the tests script a
+subprocess, and nothing anywhere showed what a project actually **writes**.
+
+So the example project now declares a real one, and the reasoning survives
+intact: the subprocess is no longer pointless, because the stack is real.
+
+### The subject: the toy server, in the background
+
+`examples/example/bin/example_server.dart` already existed for the
+server-inspection panel, and it is exactly the shape `DevStack.background`
+describes — a long-lived thing the app talks to locally, which somebody has to
+remember to start. `examples/example/tool/stack.dart` is the project's own CLI
+over it: `up`, `down`, `status --json`, `logs`, `hit <path>`. Nothing in it
+knows flutterware exists.
+
+That pairing is worth more than a demo of one plugin. Bring the stack up, press
+**Send a request**, and the traffic lands in the Server panel — two plugins on
+one subject, which is what the shell is for.
+
+**The port is the authority, not the state file.** `status` decides by asking
+`/health`, so a server started in a terminal and one started by the button read
+identically — the property §2 claims for the whole design, now demonstrated
+rather than asserted. The state file adds only what the port cannot say: which
+pid to signal, and whether a refused connection means *not running* or *not
+listening yet*.
+
+**A JSON probe, for the state an exit code cannot reach.** Port 8080 occupied by
+something that is not this server is `unavailable`, not `down` — the difference
+between an honest error and a Bring-up button guaranteed to fail. Verified by
+pointing `python3 -m http.server` at the port.
+
+**A clock, not a liveness check.** There is no platform-independent way to ask
+whether a pid is alive: Dart can send a signal but not the null signal, and
+`kill -0` is not a thing on Windows. So a launched-but-silent server is
+`starting` for 20 seconds and `down` after. `down` waits on the port instead,
+because it is the one caller that knows it just sent a signal.
+
+### Three things this found in the shipped code
+
+**A JSON probe was parsing stdout *and* stderr.** `dart` announces
+`Running build hooks...` on stderr, which made every probe unparseable — and
+this is not a Dart quirk: docker writes deprecation warnings there, a wrapper's
+`set -x` writes every line it runs. `Probe.json` asks the command for JSON *on
+stdout*, so that is now what it reads; the failure message still quotes the
+combined output, which is what keeps `Cannot connect to the Docker daemon.`
+arriving intact. A probe that reads both is one that works for a fortnight and
+then fails because a tool started mentioning something.
+
+**A command with an argument was reachable from `fw`, from an agent, and from
+nowhere in the GUI.** `DevStackBlock` leaves those out of its row of links on
+purpose — a link is one click and there is nothing to click *with* — and its
+comment sent them to "the panel that asks for it". The panel embeds the block
+and asked nothing. Declaring `hit <path>` in the example is what surfaced it;
+reading the code had not, because the comment described the intent and the
+intent sounded right. The panel now renders one row per argument-taking command,
+with the argument's declared name as the hint. The home screen still does not:
+a field to fill in is not an answer to *is my stack up*.
+
+**`dart` on PATH is not the project's `dart`.** The config emits
+`Platform.resolvedExecutable`, because a config already runs under the SDK the
+project is pinned to. The `dart` on this machine's PATH is two versions behind
+and refuses the file outright — an absolute path in the manifest is ugly in the
+panel and correct everywhere. Measured while there: `dart tool/stack.dart` is
+245ms against `dart run`'s 696ms, and `run` is what emits the stderr line above.
+
+### Declared twice, deliberately
+
+`examples/example/tool/flutterware.dart` declares it for someone who opens that
+directory as their project; the repo root declares the same stack with
+`workingDirectory: 'examples/example'`, which is what that field is for and what
+makes it visible in `main_dev` — the shell a flutterware developer actually
+runs. One script, two configs, neither aware of the other.

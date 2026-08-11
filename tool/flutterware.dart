@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutterware/plugins.dart';
 
 /// flutterware's own repo — a three-member pub workspace, and the monorepo
@@ -12,6 +14,9 @@ import 'package:flutterware/plugins.dart';
 const root = Pkg('.');
 const app = Pkg('app');
 const example = Pkg('examples/example');
+
+/// The dart this config is running under — see the [DevStack] note below.
+final dart = Platform.resolvedExecutable;
 
 void main() => Flutterware.configure((fw) {
   fw.use(
@@ -35,6 +40,38 @@ void main() => Flutterware.configure((fw) {
   // has launcher icons to look at.
   fw.use(LauncherIcon(packages: [.new(example)]));
   fw.use(ServerInspection());
+  // The same stack `examples/example/tool/flutterware.dart` declares, from the
+  // root of the monorepo it lives in — which is the whole job of
+  // `workingDirectory:`. The commands are written as that package writes them
+  // and run where it runs them, so one script serves both configs and neither
+  // has to know where the other opened.
+  //
+  // `Platform.resolvedExecutable` rather than the string `dart`: a config runs
+  // under the SDK the project is pinned to, and that is the one that can run
+  // the project's scripts. The `dart` on PATH is a different question with a
+  // frequently different answer — in this repo, a two-versions-old one.
+  fw.use(
+    DevStack.background(
+      label: 'Example server',
+      workingDirectory: 'examples/example',
+      probe: Probe.json([dart, 'tool/stack.dart', 'status', '--json']),
+      start: [dart, 'tool/stack.dart', 'up'],
+      stop: [dart, 'tool/stack.dart', 'down'],
+      poll: const Duration(seconds: 15),
+      commands: [
+        StackCommand('logs', 'Logs', [dart, 'tool/stack.dart', 'logs']),
+        StackCommand(
+          'hit',
+          'Send a request',
+          [dart, 'tool/stack.dart', 'hit'],
+          argument: 'path',
+          description:
+              'Requests a path — /users, /slow, /error — so the Server panel '
+              'has traffic to show. Defaults to /users.',
+        ),
+      ],
+    ),
+  );
   // `example` only: it is the one package here that is an app you would put on
   // a phone. `app` is this GUI and `root` is a library.
   //

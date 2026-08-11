@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutterware/plugins.dart';
 
 import '../../dev_stack/stack_block.dart';
+import '../../ui/action_button.dart';
 import '../../ui/empty_state.dart';
+import '../../ui/field_row.dart';
 import '../../ui/theme.dart';
 import '../native_plugin.dart';
 import 'dev_stack_core.dart';
@@ -33,11 +38,138 @@ class _DevStackPanel extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.all(FwSpacing.xxxl),
-            child: DevStackBlock(plugin),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DevStackBlock(plugin),
+                if (core.commands.any((c) => c.argument != null)) ...[
+                  const Gap(FwSpacing.xxl),
+                  _WithArgument(core),
+                ],
+              ],
+            ),
           ),
           Expanded(child: _Output(core)),
         ],
       ),
+    );
+  }
+}
+
+/// The commands that take an argument — `restart <service>`, `hit <path>`.
+///
+/// **This is where the block sends them, and for a while it sent them nowhere.**
+/// [DevStackBlock] leaves an argument-taking command out of its row of links,
+/// because a link is one click and guessing what to put in the blank is worse
+/// than not offering it — but the panel it deferred to did not ask either, so
+/// the command was declarable, callable from `fw` and from an agent, and
+/// unreachable from the GUI entirely. Found by declaring one in the example
+/// project rather than by reading the code.
+///
+/// Deliberately not on the worktree home, which is the compact form: a field to
+/// fill in is not an answer to "is my stack up".
+class _WithArgument extends StatefulWidget {
+  const _WithArgument(this.core);
+
+  final DevStackCore core;
+
+  @override
+  State<_WithArgument> createState() => _WithArgumentState();
+}
+
+class _WithArgumentState extends State<_WithArgument> {
+  final _controllers = <String, TextEditingController>{};
+
+  @override
+  void dispose() {
+    for (var controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  TextEditingController _controllerFor(String id) =>
+      _controllers.putIfAbsent(id, TextEditingController.new);
+
+  /// Runs it, and swallows nothing: the future goes back to [FwActionButton],
+  /// which is what turns a failure into a message rather than a green tick.
+  Future<void> _run(StackCommand command) => widget.core.runCommand(
+    command.id,
+    argument: _controllerFor(command.id).text.trim(),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    var type = context.type;
+    var busy = widget.core.busy != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var command in widget.core.commands)
+          if (command.argument case var argument?)
+            Padding(
+              padding: const EdgeInsets.only(bottom: FwSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: FieldRow.defaultLabelWidth,
+                        child: Text(command.label, style: type.bodyMuted),
+                      ),
+                      // Bounded rather than [Expanded]: a box for a service
+                      // name or a path is a short answer, and one stretched
+                      // across a wide window puts its Run button a screen away
+                      // from the thing it runs.
+                      SizedBox(
+                        width: 320,
+                        child: TextField(
+                          controller: _controllerFor(command.id),
+                          style: type.bodySmall,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            // The argument's declared name, which is the only
+                            // word anyone has for what goes in the blank.
+                            hintText: argument,
+                          ),
+                          onSubmitted: busy
+                              ? null
+                              : (_) => unawaited(_run(command)),
+                        ),
+                      ),
+                      const Gap(FwSpacing.lg),
+                      FwActionButton(
+                        label: 'Run',
+                        onPressed: busy ? null : () => _run(command),
+                      ),
+                    ],
+                  ),
+                  if (command.description case var description?)
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: FieldRow.defaultLabelWidth,
+                        top: FwSpacing.xs,
+                      ),
+                      child: Text(description, style: type.caption),
+                    ),
+                  if (command.danger)
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: FieldRow.defaultLabelWidth,
+                        top: FwSpacing.xs,
+                      ),
+                      child: Text(
+                        'this project marks it as destructive',
+                        style: type.caption.copyWith(
+                          color: context.colors.warningText,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+      ],
     );
   }
 }

@@ -256,7 +256,9 @@ class _DevStackBlockState extends State<DevStackBlock> {
 
   /// The declared commands, plus a manual re-probe. A command that takes an
   /// argument is not offered here — it cannot be one click, and guessing the
-  /// value is worse than sending you to the panel that asks for it.
+  /// value is worse than not offering it. The panel picks those up in a row
+  /// with a field in it; nothing else does, so this is the only place that
+  /// leaves them out.
   List<Widget> _secondary() => [
     for (var command in _core.commands)
       if (command.argument == null)
