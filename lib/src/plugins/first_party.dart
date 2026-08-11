@@ -597,9 +597,20 @@ class Probe {
   /// ```
   ///
   /// `state` is one of `down`, `starting`, `up`, `stopping`, `unavailable`;
-  /// everything else is optional. Output that does not parse is reported as
-  /// `unavailable` with the parse error, because a probe that cannot be read is
-  /// a probe that failed — not a stack that is down.
+  /// everything else is optional. `failure` is read too, and is where the
+  /// reason goes when the state is `unavailable` — though a `detail` is taken
+  /// as the reason there as well, because one sentence explaining what is wrong
+  /// is one sentence whichever key it arrives under.
+  ///
+  /// Read from **stdout only**. Almost nothing that prints structured output
+  /// has stderr to itself — `dart` announces `Running build hooks...` there,
+  /// docker writes deprecation warnings, a wrapper's `set -x` writes every line
+  /// it runs — so folding it in would make a probe that works for a fortnight
+  /// and then fails because a tool started mentioning something.
+  ///
+  /// Output that does not parse is reported as `unavailable` quoting whatever
+  /// the command did say, because a probe that cannot be read is a probe that
+  /// failed — not a stack that is down.
   const Probe.json(this.command) : shape = ProbeShape.json;
 
   final List<String> command;

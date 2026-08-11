@@ -27,9 +27,19 @@ import 'worktree.dart';
 /// background tab pays nothing, and a project with no stack declared sees
 /// exactly what it saw before.
 class WorktreeHome extends StatelessWidget {
-  const WorktreeHome(this.worktree, {super.key, this.session});
+  const WorktreeHome(
+    this.worktree, {
+    super.key,
+    this.session,
+    this.onOpenPlugin,
+  });
 
   final Worktree worktree;
+
+  /// Navigates to a plugin's panel. Null for a caller with no shell — the
+  /// block then draws without its way out, rather than with a link that does
+  /// nothing.
+  final void Function(String pluginId)? onOpenPlugin;
 
   /// The open session, when there is one. Null before the config resolves, and
   /// for any caller that has only the worktree — the screen degrades to what it
@@ -68,7 +78,13 @@ class WorktreeHome extends StatelessWidget {
 
         if (_stack case var stack?) ...[
           const Gap(FwSpacing.xxxl),
-          DevStackBlock(stack, compact: true),
+          DevStackBlock(
+            stack,
+            compact: true,
+            onOpenPanel: onOpenPlugin == null
+                ? null
+                : () => onOpenPlugin!(devStackPluginId),
+          ),
         ],
       ],
     );

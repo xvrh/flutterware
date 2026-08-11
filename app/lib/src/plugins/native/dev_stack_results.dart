@@ -100,6 +100,34 @@ class StackReading implements PluginResult {
 
   bool get isKnown => state != StackState.unknown;
 
+  /// How many services the probe reported as up, out of how many it named.
+  ///
+  /// Null when the probe named none — an exit-code probe, or a JSON one that
+  /// only reports the whole. `(3, 4)` is what turns `up` into `up 3/4`, and it
+  /// is the one number the block used to parse and then throw away.
+  (int up, int total)? get serviceCount {
+    if (services.isEmpty) return null;
+    // A service with no state of its own cannot be counted against the ones
+    // that have one, so a partial declaration reports nothing rather than
+    // reporting everything as down.
+    if (services.any((s) => s.state == null)) return null;
+    return (
+      services.where((s) => s.state == StackState.up).length,
+      services.length,
+    );
+  }
+
+  /// True when the probe called the stack up but not everything under it is.
+  ///
+  /// The summary is *derived* from the rows rather than written beside them,
+  /// which is the only way a green headline cannot end up sitting above an
+  /// amber service.
+  bool get isPartial {
+    if (state != StackState.up) return false;
+    var count = serviceCount;
+    return count != null && count.$1 < count.$2;
+  }
+
   @override
   Map<String, Object?> toJson() => {
     'state': state.name,

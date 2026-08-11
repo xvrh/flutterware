@@ -199,11 +199,14 @@ Future<({String state, String detail})> _read() async {
   var health = await _get('/health');
   if (health.status == 200 && health.body?.trim() == 'ok') {
     var state = _readState();
+    // The address, and nothing else. A pid is a debugging fact and this line is
+    // read on a dashboard — it goes to `logs` and to the state file, where it
+    // is wanted about once a month.
     return (
       state: 'up',
       detail: state == null
           ? 'localhost:$_port · not started here'
-          : 'localhost:$_port · pid ${state.pid}',
+          : 'localhost:$_port',
     );
   }
   if (health.status != null) {

@@ -91,6 +91,15 @@ class DevStackCore extends PluginCore {
   /// watching for `up`.
   String? _busy;
 
+  /// When [_busy] was set.
+  ///
+  /// Here rather than in the widget because a transition outlives any one
+  /// surface: navigating to the panel eight seconds into a bring-up must show
+  /// eight seconds, not start counting again. The elapsed number is the only
+  /// progress a delegated command can honestly report — nothing here knows what
+  /// the project's script is doing, only how long it has been doing it.
+  DateTime? _busySince;
+
   /// True while [refresh] has a probe out.
   ///
   /// Separate from [_busy], which is only for transitions the *user* started.
@@ -112,7 +121,31 @@ class DevStackCore extends PluginCore {
 
   bool get canControl => _start != null || _stop != null;
   bool get stopIsDestructive => _stopIsDestructive;
+  bool get canStart => _start != null;
+  bool get canStop => _stop != null;
   String? get busy => _busy;
+
+  /// How long the transition in flight has been running, or null.
+  Duration? get busyFor =>
+      _busySince == null ? null : DateTime.now().difference(_busySince!);
+
+  /// True while a probe is out. Read by the block, which draws a reading it has
+  /// not confirmed differently from one it has.
+  bool get isProbing => _probing;
+
+  /// True when the reading on hand is old enough that it should be presented as
+  /// history rather than as the state.
+  ///
+  /// Two poll intervals, which a mounted surface can never reach — it polls
+  /// every interval. So in practice this is the **cold open**: a cache written
+  /// hours ago, read before the first probe of this session comes back. That
+  /// case used to render as "not checked yet", which throws away a fact we are
+  /// holding; it should say what we last saw and how long ago.
+  bool get isStale {
+    var at = _reading.at;
+    if (at == null || !_reading.isKnown) return false;
+    return DateTime.now().difference(at) > _poll * 2;
+  }
 
   /// What this is still working on, or null. Read by the capture settler.
   String? get busyWith => switch ((_busy, _probing)) {
@@ -255,7 +288,15 @@ class DevStackCore extends PluginCore {
         at: at,
         detail: read.detail,
         services: read.services,
-        failure: read.failure,
+        // **`detail` is the reason when a probe reports `unavailable` without
+        // a `failure`.** Two fields for one sentence is a distinction a script
+        // author has no reason to make: they write one line explaining what is
+        // wrong and put it where they put every other line. Insisting on the
+        // other key here just loses the sentence and renders "the check could
+        // not be run" over a probe that said exactly what was wrong.
+        failure:
+            read.failure ??
+            (read.state == StackState.unavailable ? read.detail : null),
       );
     }
     // Exit code: zero is up, anything else is down. It cannot tell `down` from
@@ -328,6 +369,7 @@ class DevStackCore extends PluginCore {
       throw StateError('The stack is already $_busy. Wait for it to finish.');
     }
     _busy = busy;
+    _busySince = DateTime.now();
     _lastCommand = command.join(' ');
     _lastOutput = '';
     notifyChanged();
@@ -336,12 +378,14 @@ class DevStackCore extends PluginCore {
       result = await runProcess(command, workingDirectory: workingDirectory);
     } on Object catch (e) {
       _busy = null;
+      _busySince = null;
       _lastOutput = '$e';
       notifyChanged();
       rethrow;
     }
     _lastOutput = _tail(_combined(result));
     _busy = null;
+    _busySince = null;
     notifyChanged();
     // Probing *after* the flag clears, so [refresh] is not skipped by its own
     // transition guard.
@@ -423,26 +467,31 @@ class DevStackCore extends PluginCore {
     _ => _reading,
   };
 
+  /// **A word, not a sentence.** The sidebar clamps a status to 100 logical
+  /// pixels, so anything longer than about a dozen characters arrives
+  /// ellipsised — and an ellipsis always eats the *end*, which is where the
+  /// information was. `up · localhost:8080 · pid 493` rendered as
+  /// `up · local…`: eleven characters spent restating the one word that was
+  /// never in doubt. The address has a home on the panel, where there is room
+  /// for it.
+  ///
+  /// `up 3/4` is the one exception, and earns it by being shorter than `up`
+  /// plus a space and by saying the thing you would otherwise have to open the
+  /// panel to learn.
   Status _statusFor(StackReading reading) => switch (reading.state) {
+    // Not `checking`: a status is read by `fw` and by a cold sidebar, and
+    // neither of those has started a probe. The block says `checking` because
+    // the block is the surface that actually goes and looks.
     StackState.unknown => const Status.neutral('not checked'),
     StackState.down => const Status.neutral('down'),
-    StackState.starting => const Status.info('bringing up…'),
-    StackState.up => Status.good(_upMessage(reading)),
-    StackState.stopping => const Status.info('tearing down…'),
-    StackState.unavailable => Status.error(
-      _firstLine(reading.failure) ?? 'cannot tell',
+    StackState.starting => const Status.info('bringing up'),
+    StackState.up when reading.isPartial => Status.warn(
+      'up ${reading.serviceCount!.$1}/${reading.serviceCount!.$2}',
     ),
+    StackState.up => const Status.good('up'),
+    StackState.stopping => const Status.info('tearing down'),
+    StackState.unavailable => const Status.error("can't tell"),
   };
-
-  /// The sidebar's slot is narrow, so `up` carries at most one more fact — the
-  /// probe's own summary, cut to something that fits beside a label rather than
-  /// pushed through an ellipsis.
-  String _upMessage(StackReading reading) {
-    var detail = reading.detail?.trim();
-    if (detail == null || detail.isEmpty) return 'up';
-    if (detail.length > 28) return 'up';
-    return 'up · $detail';
-  }
 
   /// **A badge only when something needs you.**
   ///

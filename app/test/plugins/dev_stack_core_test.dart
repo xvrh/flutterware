@@ -207,6 +207,61 @@ void main() {
       core.dispose();
     });
 
+    test('a stack that is up but not all of it says so', () async {
+      // The summary is derived from the rows rather than written beside them,
+      // which is the only arrangement in which a green headline cannot end up
+      // sitting above an amber service. The probe here says `up`; three of its
+      // four services agree.
+      var core = coreWith(jsonConfig());
+      responses['stack doctor'] = ProcessResult(0, 0, '''
+        {"state":"up",
+         "services":[{"name":"postgres","port":8200,"state":"up"},
+                     {"name":"identity","port":8201,"state":"up"},
+                     {"name":"sync","port":8202,"state":"starting"},
+                     {"name":"mail","port":8203,"state":"up"}]}
+      ''', '');
+      var reading = await core.refresh();
+      expect(reading.state, StackState.up);
+      expect(reading.isPartial, isTrue);
+      expect(reading.serviceCount, (3, 4));
+      expect(core.report.status.message, 'up 3/4');
+      expect(core.report.status.tone, Tone.warn);
+      core.dispose();
+    });
+
+    test('an unavailable state takes its detail as the reason', () async {
+      // Caught on screen: the example project's script writes one explanatory
+      // line and puts it in `detail`, like every other line it writes, and the
+      // panel rendered "the check could not be run" over a probe that had said
+      // exactly what was wrong. Two keys for one sentence is a distinction a
+      // script author has no reason to make.
+      var core = coreWith(jsonConfig());
+      responses['stack doctor'] = ProcessResult(
+        0,
+        0,
+        '{"state":"unavailable","detail":"Something else is on :8080."}',
+        '',
+      );
+      var reading = await core.refresh();
+      expect(reading.state, StackState.unavailable);
+      expect(reading.failure, 'Something else is on :8080.');
+      core.dispose();
+    });
+
+    test('a probe that names no service state counts nothing', () async {
+      // A service list with no states is a list of names, and counting the ones
+      // that are not `up` against it would report every such stack as 0 of N.
+      var core = coreWith(jsonConfig());
+      responses['stack doctor'] = ProcessResult(0, 0, '''
+        {"state":"up","services":[{"name":"postgres"},{"name":"identity"}]}
+      ''', '');
+      var reading = await core.refresh();
+      expect(reading.serviceCount, isNull);
+      expect(reading.isPartial, isFalse);
+      expect(core.report.status.message, 'up');
+      core.dispose();
+    });
+
     test('ignores whatever the command wrote to stderr', () async {
       // Found by pointing the example project's declaration at a Dart script:
       // `dart` announces `Running build hooks...` on stderr, and folding that
@@ -307,12 +362,31 @@ void main() {
         var pending = core.start();
         // The probe cannot see a compose project that has not finished coming up,
         // so the status must not fall back to what it last said.
-        expect(core.report.status.message, 'bringing up…');
+        expect(core.report.status.message, 'bringing up');
         completer.complete(ProcessResult(0, 0, '', ''));
         await pending;
         core.dispose();
       },
     );
+
+    test('a transition is clocked, so a second surface agrees', () async {
+      // The elapsed number lives on the core rather than on the widget: opening
+      // the panel eight seconds into a bring-up has to show eight seconds, not
+      // start counting again. It is also the only progress a delegated command
+      // can honestly report — nothing here knows what the project's script is
+      // doing, only how long it has been doing it.
+      var core = coreWith(localEnvConfig());
+      var completer = Completer<ProcessResult>();
+      core.runProcess = (command, {workingDirectory}) => completer.future;
+      expect(core.busyFor, isNull);
+      var pending = core.start();
+      expect(core.busyFor, isNotNull);
+      expect(core.busyFor!.inSeconds, lessThan(2));
+      completer.complete(ProcessResult(0, 0, '', ''));
+      await pending;
+      expect(core.busyFor, isNull);
+      core.dispose();
+    });
 
     test(
       'a stack with no start declared says so rather than doing nothing',

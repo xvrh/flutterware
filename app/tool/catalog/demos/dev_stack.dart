@@ -37,12 +37,22 @@ Widget devStackDown() => _Panel(_plugin(state: _Scripted.down));
 /// The state a first draft leaves out. The probe itself failed, which is not
 /// the same fact as "down" — so the control still offers to try, and says why
 /// it might not work.
+///
+/// The reason takes the address's slot, which is the reason that slot exists:
+/// every state fills it, so the eye lands in the same place whether the news is
+/// good or bad.
 @Preview(
   name: 'Dev stack · unreachable',
   group: 'Dev stack',
   wrapper: wrapInApp,
 )
 Widget devStackUnreachable() => _Panel(_plugin(state: _Scripted.unreachable));
+
+/// Up, and not all of it. The headline is **derived from the services** rather
+/// than written beside them, which is the only arrangement where a green
+/// summary cannot end up sitting above an amber row.
+@Preview(name: 'Dev stack · partly up', group: 'Dev stack', wrapper: wrapInApp)
+Widget devStackPartial() => _Panel(_plugin(state: _Scripted.partial));
 
 /// What a project that only *watches* a stack gets: a status, and no controls.
 /// A complete declaration, not a degraded one.
@@ -76,7 +86,11 @@ Widget devStackCompact() => Builder(
             style: context.type.caption,
           ),
           const Gap(FwSpacing.xxxl),
-          DevStackBlock(_plugin(state: _Scripted.up), compact: true),
+          DevStackBlock(
+            _plugin(state: _Scripted.up),
+            compact: true,
+            onOpenPanel: () {},
+          ),
         ],
       ),
     ),
@@ -96,13 +110,13 @@ class _Panel extends StatelessWidget {
 }
 
 /// Which script the fake stack runs.
-enum _Scripted { up, down, unreachable }
+enum _Scripted { up, down, unreachable, partial }
 
 /// A core over a scripted subprocess, holding real state: `up` writes it, `down`
 /// clears it, and the probe reports what it finds. Nothing here touches docker,
 /// and nothing outlives the preview.
 DevStackPlugin _plugin({required _Scripted state, bool controls = true}) {
-  var up = state == _Scripted.up;
+  var up = state == _Scripted.up || state == _Scripted.partial;
   var core = DevStackCore(
     PluginHost(
       id: devStackPluginId,
@@ -178,7 +192,8 @@ DevStackPlugin _plugin({required _Scripted state, bool controls = true}) {
               ? '{"state":"up","detail":"slot 8200-8208 · 4 containers",'
                     '"services":[{"name":"postgres","port":8200,"state":"up"},'
                     '{"name":"identity","port":8201,"state":"up"},'
-                    '{"name":"sync","port":8202,"state":"up"},'
+                    '{"name":"sync","port":8202,"state":'
+                    '"${state == _Scripted.partial ? 'starting' : 'up'}"},'
                     '{"name":"mail","port":8203,"state":"up"}]}'
               : '{"state":"down","detail":"slot 8200-8208 reserved"}',
           '',

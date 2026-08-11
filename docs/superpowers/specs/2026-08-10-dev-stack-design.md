@@ -791,3 +791,21 @@ directory as their project; the repo root declares the same stack with
 `workingDirectory: 'examples/example'`, which is what that field is for and what
 makes it visible in `main_dev` — the shell a flutterware developer actually
 runs. One script, two configs, neither aware of the other.
+
+---
+
+## The interface was redrawn (2026-08-11)
+
+Everything above is about what the plugin *is*. How it reads on screen is
+`2026-08-11-dev-stack-ui-study.md`, written after looking at the shipped thing
+and not liking it: a run-on state line, a destructive button as the loudest
+control on the worktree overview, and a 100px sidebar slot being sent a
+sentence. Ten findings, six rules, three directions, and what landed.
+
+Two decisions there reach back into this document:
+
+- **The status message is now a word.** `_statusFor` no longer appends the
+  probe's detail — see §"P6" there. `up 3/4` is the only compound one, and it is
+  derived from the services rather than written beside them.
+- **A transition is clocked on the core** (`busySince`), not in the widget, so
+  two surfaces watching one bring-up agree about how long it has been.

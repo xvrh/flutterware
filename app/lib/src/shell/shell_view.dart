@@ -1437,7 +1437,11 @@ class _Panel extends StatelessWidget {
           ? null
           : session.pluginById(shell.selectedPluginId!);
       body = plugin == null
-          ? WorktreeHome(worktree, session: session)
+          ? WorktreeHome(
+              worktree,
+              session: session,
+              onOpenPlugin: shell.selectPlugin,
+            )
           : KeyedSubtree(
               // Rebuild the panel from scratch when the worktree or the plugin
               // changes; panels hold their own state and must not leak it
