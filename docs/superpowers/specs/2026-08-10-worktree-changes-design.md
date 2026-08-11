@@ -194,8 +194,6 @@ About 420 px wide, capped near 360 tall and scrollable past it:
 │ D  app/lib/src/motion/legacy_box.dart   +0  −88    │
 │ … 5 more                                           │
 ├────────────────────────────────────────────────────┤
-│ 6 low-signal files hidden, +210 −278               │
-├────────────────────────────────────────────────────┤
 │ Open changes  ⌘⇧D              Reveal · Editor     │
 └────────────────────────────────────────────────────┘
 ```
@@ -219,7 +217,6 @@ A popover that hitches on open gets disabled within a day. It renders from
 class ChangeHeadline {
   final List<RankedFile> pinned;    // cap 4
   final List<RankedFile> biggest;   // cap 6, deletions promoted
-  final int noiseFiles, noiseAdded, noiseRemoved;
   final int totalFiles;
 }
 
@@ -430,6 +427,15 @@ renderer simply never asks for a slice unless a path was named.
 
 This is the feature, not a garnish. Three tiers, cheapest first.
 
+> **Removed 2026-08-11: the noise tier and everything under it.** The
+> *low-signal* lens, the `noise:` config, the built-in noise list,
+> `.gitattributes` demotion and both derived rules are gone from the code and
+> from this section. Every one of them was machinery for hiding files on a
+> screen whose whole claim is that it hides nothing, and what it bought — a
+> shorter list nobody had asked to be shorter — did not pay for a lens, a
+> tally, a batched `check-attr` and a second pass over the patch bytes. What is
+> left is two tiers: what a project pinned, and everything else.
+
 ### Free from the file list, no patch content
 
 - **Deletions and renames.** Highest signal per byte on the screen, and `-M`
@@ -438,7 +444,6 @@ This is the feature, not a garnish. Three tiers, cheapest first.
   showing the rule that pinned it, so precedence is inspectable rather than
   magic. In the CLI, where there are no tabs, they are a *look here first*
   section.
-- **Noise** — demoted behind the *low-signal* lens, `N low-signal, +x −y`.
 - **Recency** — file mtime. On an agent's worktree this is *what it touched
   last*, and it is a `stat`.
 
@@ -449,7 +454,8 @@ This is the feature, not a garnish. Three tiers, cheapest first.
   sort key as well as a picture.
 - **Whitespace-only and import-only** files. Decidable from the `+`/`-` line
   spans without keeping the strings, and they are the bulk of what "noise"
-  should catch that no glob can express.
+  should catch that no glob can express. *Built, then removed with the tier it
+  fed — see the note above.*
 
 > **Built 2026-08-11, minus two.** Deletions and renames, attention globs, the
 > noise drawer and both derived rules shipped. Two did not, and both were
@@ -485,17 +491,9 @@ This is the feature, not a garnish. Three tiers, cheapest first.
 > migrations, and putting a file under a heading that says *look here first* is
 > a claim only the person reading it can make.
 >
-> The asymmetry with the built-in **noise** list is the whole argument, and it
-> holds in both directions:
->
-> - Noise defaults are facts about the **toolchain flutterware is for**:
->   `*.g.dart` is build_runner's output, `pubspec.lock` is pub's, `build/` is
->   Flutter's. They are not opinions about a domain.
-> - Getting noise wrong is **cheap and reversible** — a demoted file is still
->   listed, one lens away. Getting attention wrong is **loud**: it puts
->   something at the top of the screen and asserts that it matters.
->
-> So attention is the project's to declare and nowhere else. The cost is that a
+> Getting attention wrong is **loud**: it puts something at the top of the
+> screen and asserts that it matters. So attention is the project's to declare
+> and nowhere else. The cost is that a
 > project which has declared none gets an empty band and no explanation, which
 > reads as a feature that does not work — so the index says once, quietly, that
 > the rules exist. A project that *has* rules and matched none is told nothing,
@@ -517,7 +515,6 @@ every other config in flutterware.
 void main() => Flutterware.configure((fw) {
   fw.changes(const ChangesConfig(
     attention: ['**/migrations/**', 'openapi.yaml', '**/*.sql'],
-    noise: ['**/*.g.dart', '**/__snapshots__/**'],
     base: 'develop',                     // only when inference fails, §"The base"
   ));
   fw.use(Previews());
@@ -573,21 +570,14 @@ looks: `ManifestLoader` memoises the config's kernel on disk, so a warm run is
 not free, but it is not a reason to avoid executing a config we are executing
 anyway when the worktree is open.
 
-**`.gitattributes` still comes first** for noise. `linguist-generated=true` and
-`-diff` already mean "this is generated", GitHub already honours them, and many
-repositories already have them. One batched `git check-attr --stdin -a` over 177
-paths measured **9 ms**. Competing with a standard that already works would be
-indefensible, and it costs the user nothing to have configured.
+**No built-in list, in either direction.** Attention was never flutterware's to
+declare (see the correction above), and with the noise tier removed there is
+nothing left to demote: a project's `attention:` globs are the whole of the
+rules. `.gitattributes` was read first for noise and is no longer read at all.
 
-**Good defaults, zero config.** A built-in list ships and is what most repos will
-ever use — `**/migrations/**`, `openapi.yaml`, `pubspec.yaml`,
-`.github/workflows/**` as attention; lockfiles, `*.g.dart`, `*.freezed.dart`,
-`build/`, `**/__snapshots__/**` as noise. Config *adds* to it, and subtracts by
-naming a path in the other section.
-
-**Every rule is a hint, never a hide.** The drawer is one click from open, and
-the header's file count always reports the true total. A ranking that can lose a
-file is a ranking nobody can trust.
+**Every rule is a hint, never a hide.** Nothing on this screen subtracts a file
+from the delta, and the header's count always reports the true total. A ranking
+that can lose a file is a ranking nobody can trust.
 
 ### The base, and refusing to guess
 
@@ -662,11 +652,11 @@ split is the whole design, and everything below follows from it.
   search box that closes the document you are reading is a bug. It matches
   untracked paths too, which it did not at first — `pathsMatching` took
   `FileChange`s, so typing `scratch` hid the one file you were after.
-- **Two lenses under the filter box, each with a count**: *just changed* and
-  *low-signal*. They are the answer to "make this list smaller": the pinned
-  band says what a **rule** declared important, and these say what is
-  **moving** and what is **skippable** — the other two questions a fifty-file
-  branch raises. They compose with the typed filter by intersection.
+- **One lens under the filter box, with a count**: *just changed*. It is the
+  answer to "make this list smaller": the Important tab says what a **rule**
+  declared important, and this says what is **moving** — the other question a
+  fifty-file branch raises. It composes with the typed filter by intersection.
+  A *low-signal* lens sat beside it and went with the noise tier.
   - *Just changed* is every path that has read differently since the screen
     opened. **It replaced an *uncommitted* lens, which asked the wrong
     question**: committed-versus-not matters when a *person* is deciding what
@@ -684,17 +674,12 @@ split is the whole design, and everything below follows from it.
   - A lens whose count is zero is not drawn, so *just changed* appears the
     first time the agent writes something — which is exactly when it becomes
     useful.
-  - *Low-signal* is the **only** thing that hides a file, and it is what the
-    `noise:` config and the built-in noise list feed. Nothing else on the
-    screen subtracts anything: the tree holds every path in the delta.
-  - Both lenses are drawn **under `All` only**. Neither means anything on the
-    other tab: attention outranks noise, so nothing pinned is ever demoted.
-  - **This replaced the noise drawer**, and kept its argument: the count is the
-    information — `11 low-signal` says the branch is mostly generated code, and
-    hiding them silently would say it is a small branch. What changed is
-    *where*. The drawer was a row at the bottom of the list, which on the
-    branch where it mattered most sat below fifty others — the same mistake
-    slice 4 had already found with a lone `Changes` heading.
+  - It is drawn **under `All` only**, and so it narrows `All` only — corrected
+    2026-08-11 by use: it narrowed both, so a lens left on emptied the
+    *Important* tab from a control that tab does not draw, under a label still
+    counting the pins it had just hidden. A filter the reader cannot see is a
+    filter the reader will read as lost content. The filter box is on both
+    tabs, and narrows both.
 - **The hunk ruler moved into the pane header**, where there is width for it
   and where it sits directly above the hunks it describes.
 
@@ -819,8 +804,6 @@ fw changes [<worktree>]
   LOOK HERE FIRST
   A  db/migrations/0042_stream_log.sql          +8   −0   pin **/migrations/**
   …
-  6 low-signal files, +210 −278 (--all to list)
-
 fw changes --json
 fw changes <worktree> --file app/lib/src/motion/timeline.dart   # the patch
 ```
@@ -828,7 +811,8 @@ fw changes <worktree> --file app/lib/src/motion/timeline.dart   # the patch
 The `--file` form is what makes this useful to an agent: *what did I change in
 this file, against base, without reading the file twice.* That is the MCP
 surface too, and it is the one thing here that no `git` alias already gives an
-agent in a usable shape — because it arrives ranked, with the noise named.
+agent in a usable shape — because it arrives ranked, with what pinned each
+file named beside it.
 
 > **Corrected 2026-08-10 by building it, and caught by the round-trip test.**
 > `--file` cannot be one `git diff … -- <path>`. **git detects renames over the
@@ -847,7 +831,7 @@ agent in a usable shape — because it arrives ranked, with the noise named.
 app/lib/src/changes/
   patch_index.dart      the byte scanner and its model            pure Dart
   change_set.dart       ChangeSet, statuses, untracked            pure Dart
-  ranking.dart          globs, .gitattributes, noise              pure Dart
+  ranking.dart          attention globs, and what pinned a file    pure Dart
   changes_config.dart   defaults + the syntactic scan of the      pure Dart
                         config, when the manifest is unavailable
   changes_probe.dart    the git calls, injectable runner          pure Dart
@@ -1221,7 +1205,7 @@ detection**; **blast radius**.
   every other config. A closed worktree ranks by the **cached** `ChangesConfig`,
   keyed on the config file's mtime and size in the store that already holds the
   branch diffs — full fidelity, not an approximation. Never opened → built-in
-  defaults. `.gitattributes` is read first for noise.
+  defaults.
 - **The base is inferred, never guessed.** `origin/HEAD` → `main` → `master`,
   and when that fails the screen says so and names the fix rather than diffing
   against something nobody chose. The header always shows the base and its

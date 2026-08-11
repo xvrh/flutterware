@@ -1072,31 +1072,28 @@ void main() {
       );
     });
 
-    test(
-      'a config that failed to run leaves the last good value alone',
-      () async {
-        var shell = _controller(
-          manifest:
-              '{"version":1,"plugins":[],"changes":{"noise":["*.g.dart"]}}',
-          cores: const {},
-          factsStore: store(),
-        );
-        await shell.start(repo.path);
-        expect(resolveChangesConfig(repo.path, store()).config?.noise, [
-          '*.g.dart',
-        ]);
+    test('a config that failed to run leaves the last good value alone', () async {
+      var shell = _controller(
+        manifest:
+            '{"version":1,"plugins":[],"changes":{"attention":["lib/api/**"]}}',
+        cores: const {},
+        factsStore: store(),
+      );
+      await shell.start(repo.path);
+      expect(resolveChangesConfig(repo.path, store()).config?.attention, [
+        'lib/api/**',
+      ]);
 
-        // Now break it. Nothing is torn down on a failed load, and the rules the
-        // running plugins came from must survive it too.
-        _loader
-          ..manifest = ''
-          ..exitCode = 1;
-        await shell.reloadConfig();
+      // Now break it. Nothing is torn down on a failed load, and the rules the
+      // running plugins came from must survive it too.
+      _loader
+        ..manifest = ''
+        ..exitCode = 1;
+      await shell.reloadConfig();
 
-        expect(resolveChangesConfig(repo.path, store()).config?.noise, [
-          '*.g.dart',
-        ]);
-      },
-    );
+      expect(resolveChangesConfig(repo.path, store()).config?.attention, [
+        'lib/api/**',
+      ]);
+    });
   });
 }

@@ -193,7 +193,6 @@ void main() {
                   ? RankTier.attention
                   : RankTier.ordinary,
               rule: f.path.endsWith('.sql') ? '**/migrations/**' : null,
-              source: RankSource.project,
             ),
         ]),
       );

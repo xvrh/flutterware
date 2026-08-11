@@ -4,6 +4,7 @@ import 'package:flutterware_app/src/changes/change_set.dart';
 import 'package:flutterware_app/src/changes/changes_screen.dart';
 import 'package:flutterware_app/src/changes/diff_view.dart';
 import 'package:flutterware_app/src/changes/patch_index.dart';
+import 'package:flutterware_app/src/changes/ranking.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
@@ -50,6 +51,7 @@ void main() {
   ChangeSet setOf(
     List<FileChange> files, {
     List<UntrackedEntry> untracked = const [],
+    Set<String> pinned = const {},
   }) => ChangeSet(
     worktreePath: worktree.path,
     patch: PatchIndex.empty,
@@ -57,6 +59,17 @@ void main() {
     baseSource: BaseSource.inferred,
     files: files,
     untracked: untracked,
+    attentionConfigured: pinned.isNotEmpty,
+    ranking: Ranking([
+      for (var file in files)
+        RankedFile(
+          file: file,
+          tier: pinned.contains(file.path)
+              ? RankTier.attention
+              : RankTier.ordinary,
+          rule: pinned.contains(file.path) ? 'lib/api/**' : null,
+        ),
+    ]),
   );
 
   Future<void> pump(WidgetTester tester, {String? initialPath}) async {
@@ -254,6 +267,56 @@ void main() {
             .count,
         1,
       );
+    });
+
+    testWidgets('a lens left on under All does not empty the Important tab', (
+      tester,
+    ) async {
+      // **The bug this exists to stop coming back.** The lens is drawn under
+      // *All* and narrowed both tabs, so a pin that had not moved since the
+      // screen opened vanished from a tab whose own label still counted it,
+      // under an empty state claiming no file had matched a rule — with no
+      // control anywhere on that tab to explain where it went.
+      current = setOf(
+        [file('lib/api/client.dart'), file('lib/busy.dart')],
+        pinned: {'lib/api/client.dart'},
+      );
+      await pump(tester);
+
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
+
+      // A re-probe in which only the unpinned file moved.
+      current = setOf(
+        [file('lib/api/client.dart'), file('lib/busy.dart', added: 90)],
+        pinned: {'lib/api/client.dart'},
+      );
+      await tester.tap(find.byTooltip('Read this checkout again'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(IndexLens, 'just changed'));
+      await tester.pumpAndSettle();
+      expect(inIndex('client.dart'), findsNothing, reason: 'All is narrowed');
+
+      await tester.tap(find.text('Important'));
+      await tester.pumpAndSettle();
+      expect(inIndex('client.dart'), findsOneWidget);
+      expect(find.text('No file matched an attention rule.'), findsNothing);
+    });
+
+    testWidgets('the filter box narrows both tabs, because it is on both', (
+      tester,
+    ) async {
+      // The other half of the rule: a control you can see is a control that is
+      // allowed to be filtering what you are looking at.
+      current = setOf(
+        [file('lib/api/client.dart'), file('lib/busy.dart')],
+        pinned: {'lib/api/client.dart'},
+      );
+      await pump(tester);
+
+      await tester.enterText(find.byType(TextField), 'busy');
+      await tester.pumpAndSettle();
+      expect(inIndex('client.dart'), findsNothing);
     });
 
     testWidgets('a project with no rules is told how to write one', (

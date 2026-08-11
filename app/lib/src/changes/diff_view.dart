@@ -186,16 +186,13 @@ class IndexFileRow extends StatelessWidget {
 
 /// A lens over the index: one toggle, one count.
 ///
-/// **The count is the information**, which is the argument the noise drawer was
-/// built on and the reason this replaces rather than removes it. `11 low-signal`
-/// says the branch is mostly generated code; hiding them silently would say it
-/// is a small branch, which is a different claim and a false one.
+/// **The count is the information.** `3 just changed` says an agent is working
+/// in three files right now; a control that narrowed the list without saying
+/// how far would leave you unable to tell a quiet branch from a filtered one.
 ///
-/// What changed is *where*. The drawer was a row at the bottom of the list —
-/// below fifty others on the branch where it mattered most, which is the same
-/// mistake slice 4 already found with a lone `Changes` heading. A lens sits at
-/// the top, under the filter box, where you are already looking when the
-/// question "can I make this list smaller" occurs to you.
+/// It sits at the top, under the filter box, where you are already looking when
+/// the question "can I make this list smaller" occurs to you — not at the foot
+/// of the list, which on the branch where it matters most is below fifty rows.
 class IndexLens extends StatelessWidget {
   const IndexLens({
     required this.label,

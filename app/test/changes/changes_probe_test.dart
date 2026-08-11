@@ -132,7 +132,7 @@ void main() {
       Map<String, String> answers, {
       Set<String> fail = const {},
     }) {
-      return (directory, arguments, {stdin}) async {
+      return (directory, arguments) async {
         var line = arguments.join(' ');
         for (var entry in answers.entries) {
           if (line.contains(entry.key)) {
@@ -154,7 +154,7 @@ void main() {
     test('infers the base and diffs from the merge base', () async {
       var asked = <String>[];
       var probe = ChangesProbe(
-        runGit: (directory, arguments, {stdin}) async {
+        runGit: (directory, arguments) async {
           asked.add(arguments.join(' '));
           var inner = runner({
             'rev-parse --verify HEAD': 'headsha\n',
@@ -253,7 +253,7 @@ void main() {
     test("hardens the diff against the user's git config", () async {
       var diffCall = '';
       var probe = ChangesProbe(
-        runGit: (directory, arguments, {stdin}) async {
+        runGit: (directory, arguments) async {
           var line = arguments.join(' ');
           if (line.contains('diff --no-ext-diff')) diffCall = line;
           var inner = runner({
@@ -284,7 +284,7 @@ void main() {
     test('asks for untracked files in normal mode, never -uall', () async {
       var statusCall = '';
       var probe = ChangesProbe(
-        runGit: (directory, arguments, {stdin}) async {
+        runGit: (directory, arguments) async {
           var line = arguments.join(' ');
           if (line.contains('status')) statusCall = line;
           return GitOutput(exitCode: 1, stdout: Uint8List(0));

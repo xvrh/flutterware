@@ -289,43 +289,9 @@ void main() {
             RankedFile(
               file: file,
               tier: tiers[file.path] ?? RankTier.ordinary,
-              rule: tiers.containsKey(file.path) ? '**/*.g.dart' : null,
-              source: RankSource.project,
+              rule: tiers.containsKey(file.path) ? '**/migrations/**' : null,
             ),
         ]);
-
-    testWidgets('the lens stands in for the noise, and lets it in', (
-      tester,
-    ) async {
-      var files = [
-        file('lib/real.dart', added: 12, removed: 3),
-        file('lib/model.g.dart', added: 400, removed: 380),
-      ];
-      await pump(
-        tester,
-        setOf(
-          files: files,
-          ranking: rankingOf(files, {'lib/model.g.dart': RankTier.noise}),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // The count is the information — `1 low-signal` says the branch is
-      // mostly generated code, and hiding it silently would say it is a small
-      // branch. What moved is *where*: a lens at the top of the pane, not a row
-      // below fifty others.
-      var lens = tester.widget<IndexLens>(
-        find.widgetWithText(IndexLens, 'low-signal'),
-      );
-      expect(lens.count, 1);
-      expect(lens.on, isFalse);
-      expect(find.text('model.g.dart'), findsNothing);
-      expect(find.text('real.dart'), findsOneWidget);
-
-      await tester.tap(find.text('low-signal'));
-      await tester.pumpAndSettle();
-      expect(find.text('model.g.dart'), findsOneWidget);
-    });
 
     testWidgets('the screen opens on what a rule pinned', (tester) async {
       // **The alert is not something you navigate to.** A tab hides what it
@@ -347,7 +313,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('1.sql'), findsOneWidget);
-      expect(find.textContaining('matches **/*.g.dart'), findsOneWidget);
+      expect(find.textContaining('matches **/migrations/**'), findsOneWidget);
       // The 1800-line file is not on this tab at all, which is the whole claim:
       // every other ordering of these two puts it first.
       expect(find.text('huge.dart'), findsNothing);
@@ -391,9 +357,12 @@ void main() {
       expect(find.textContaining('changed since'), findsNothing);
     });
 
-    testWidgets('the header total counts the noise it is not showing', (
+    testWidgets('the header total is every file, whatever a tab shows', (
       tester,
     ) async {
+      // The tab is a view, never a subtraction. A header that agreed with the
+      // list it happens to be over would make the ranking something that can
+      // lose a file.
       var files = [
         file('lib/real.dart', added: 1),
         file('a.g.dart', added: 1),
@@ -403,20 +372,19 @@ void main() {
         tester,
         setOf(
           files: files,
-          ranking: rankingOf(files, {
-            'a.g.dart': RankTier.noise,
-            'b.g.dart': RankTier.noise,
-          }),
+          ranking: rankingOf(files, {'lib/real.dart': RankTier.attention}),
         ),
       );
       await tester.pumpAndSettle();
+
       expect(find.text('3 files'), findsOneWidget);
-      expect(
-        tester
-            .widget<IndexLens>(find.widgetWithText(IndexLens, 'low-signal'))
-            .count,
-        2,
-      );
+      // Opened on Important, which is one row of the three.
+      expect(find.text('real.dart'), findsOneWidget);
+      expect(find.text('a.g.dart'), findsNothing);
+
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
+      expect(find.text('a.g.dart'), findsOneWidget);
     });
   });
 }

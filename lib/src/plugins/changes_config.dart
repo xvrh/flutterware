@@ -1,5 +1,5 @@
-/// What a project says about its own changes — which files matter, which are
-/// noise, and what the delta is measured against.
+/// What a project says about its own changes — which files matter, and what
+/// the delta is measured against.
 ///
 /// Declared in `tool/flutterware.dart` like everything else:
 ///
@@ -7,7 +7,6 @@
 /// void main() => Flutterware.configure((fw) {
 ///   fw.changes(ChangesConfig(
 ///     attention: ['lib/api/**', 'tool/flutterware.dart'],
-///     noise: ['**/*.g.dart'],
 ///     base: 'develop',
 ///   ));
 ///   fw.use(Previews());
@@ -25,11 +24,7 @@ library;
 
 /// A project's ranking rules for the changes screen.
 class ChangesConfig {
-  const ChangesConfig({
-    this.attention = const [],
-    this.noise = const [],
-    this.base,
-  });
+  const ChangesConfig({this.attention = const [], this.base});
 
   /// Paths worth looking at first, as globs — the changes screen's *Important*
   /// tab. Each pinned row names the pattern that pinned it, so precedence is
@@ -44,17 +39,6 @@ class ChangesConfig {
   /// leading `**/` also matches at the repository root.
   final List<String> attention;
 
-  /// Paths that are almost never what you opened the screen for — generated
-  /// code, lockfiles, snapshots. Demoted out of the list, behind the
-  /// *low-signal* lens.
-  ///
-  /// **A hint, never a hide.** The lens is one click from on and the header
-  /// always reports the true file count. Unlike [attention] this one *does*
-  /// have built-in defaults, because `*.g.dart` and `pubspec.lock` are facts
-  /// about the toolchain rather than opinions about a domain — and getting a
-  /// demotion wrong is cheap, where getting a promotion wrong is loud.
-  final List<String> noise;
-
   /// The branch the delta is measured from.
   ///
   /// Only needed when inference fails: `origin/HEAD`, then `main`, then
@@ -62,11 +46,10 @@ class ChangesConfig {
   /// not need this. Nothing is ever diffed against a guess.
   final String? base;
 
-  bool get isEmpty => attention.isEmpty && noise.isEmpty && base == null;
+  bool get isEmpty => attention.isEmpty && base == null;
 
   Map<String, Object?> toJson() => {
     if (attention.isNotEmpty) 'attention': attention,
-    if (noise.isNotEmpty) 'noise': noise,
     'base': ?base,
   };
 
@@ -76,7 +59,6 @@ class ChangesConfig {
   /// screen that refuses to rank because one list had a number in it.
   static ChangesConfig fromJson(Map<String, Object?> json) => ChangesConfig(
     attention: _strings(json['attention']),
-    noise: _strings(json['noise']),
     base: json['base'] as String?,
   );
 
@@ -94,11 +76,10 @@ class ChangesConfig {
   bool operator ==(Object other) =>
       other is ChangesConfig &&
       other.base == base &&
-      _same(other.attention, attention) &&
-      _same(other.noise, noise);
+      _same(other.attention, attention);
 
   @override
-  int get hashCode => Object.hash(base, attention.length, noise.length);
+  int get hashCode => Object.hash(base, attention.length);
 
   static bool _same(List<String> a, List<String> b) {
     if (a.length != b.length) return false;

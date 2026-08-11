@@ -74,19 +74,12 @@ List<String> changesReport(ChangeSet set) {
     }
 
     var attention = set.ordered(RankTier.attention);
-    var noise = set.ordered(RankTier.noise);
     // Headings only when there is something to tell apart — one flat list is
     // what an unranked branch should read as.
-    var sectioned = attention.isNotEmpty || noise.isNotEmpty;
+    var sectioned = attention.isNotEmpty;
 
     section(sectioned ? 'look here first' : null, attention);
-    section(
-      sectioned && attention.isNotEmpty ? 'changes' : null,
-      set.ordered(RankTier.ordinary),
-    );
-    // **Listed, never summarised away.** `fw changes` is what an agent reads,
-    // and a drawer it cannot click is a drawer that hides things from it.
-    section('low signal', noise);
+    section(sectioned ? 'changes' : null, set.ordered(RankTier.ordinary));
   }
 
   // Pinned first, in their own section, exactly as the screen draws them: a

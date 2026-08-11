@@ -102,15 +102,10 @@ void main() {
     test('survives being printed and parsed back', () {
       var manifest = emitted(
         (fw) => fw.changes(
-          const ChangesConfig(
-            attention: ['**/migrations/**'],
-            noise: ['**/*.g.dart'],
-            base: 'develop',
-          ),
+          const ChangesConfig(attention: ['**/migrations/**'], base: 'develop'),
         ),
       );
       expect(manifest.changes?.attention, ['**/migrations/**']);
-      expect(manifest.changes?.noise, ['**/*.g.dart']);
       expect(manifest.changes?.base, 'develop');
     });
 
@@ -129,8 +124,8 @@ void main() {
       expect(
         () => Flutterware.configure((fw) {
           fw
-            ..changes(const ChangesConfig(noise: ['a']))
-            ..changes(const ChangesConfig(noise: ['b']));
+            ..changes(const ChangesConfig(attention: ['a']))
+            ..changes(const ChangesConfig(attention: ['b']));
         }, emit: (_) {}),
         throwsA(isA<StateError>()),
       );
@@ -145,13 +140,17 @@ void main() {
     test('a list with a non-string in it drops the entry, never throws', () {
       // Read back from a cache a future version wrote. Refusing to rank
       // because one list had a number in it would be strictly worse.
-      var config = ChangesConfig.fromJson(const {
-        'attention': ['a', 1, 'b'],
-        // Not a list at all, which is the same class of surprise.
-        'noise': 'everything',
-      });
-      expect(config.attention, ['a', 'b']);
-      expect(config.noise, isEmpty);
+      expect(
+        ChangesConfig.fromJson(const {
+          'attention': ['a', 1, 'b'],
+        }).attention,
+        ['a', 'b'],
+      );
+      // Not a list at all, which is the same class of surprise.
+      expect(
+        ChangesConfig.fromJson(const {'attention': 'everything'}).attention,
+        isEmpty,
+      );
     });
   });
 

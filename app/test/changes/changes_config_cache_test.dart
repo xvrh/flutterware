@@ -42,7 +42,7 @@ void main() {
     var store = openStore();
     rememberChangesConfig(
       worktree.path,
-      const ChangesConfig(noise: ['*.g.dart']),
+      const ChangesConfig(attention: ['lib/api/**']),
       store,
     );
     expect(store.changesConfig(worktree.path), isNull);
@@ -89,7 +89,7 @@ void main() {
     writeConfigFile('void main() {}');
     rememberChangesConfig(
       worktree.path,
-      const ChangesConfig(noise: ['**/*.sql']),
+      const ChangesConfig(attention: ['**/*.sql']),
       openStore(),
     );
     configFile().deleteSync();
@@ -111,7 +111,7 @@ void main() {
 
   test('writing an unchanged value does not rewrite the file', () {
     writeConfigFile('void main() {}');
-    const config = ChangesConfig(noise: ['*.g.dart']);
+    const config = ChangesConfig(attention: ['lib/api/**']);
     rememberChangesConfig(worktree.path, config, openStore());
     var first = cacheFile.lastModifiedSync();
 
@@ -141,7 +141,7 @@ void main() {
     var explorer = openStore(); // opened first, knows nothing
     rememberChangesConfig(
       worktree.path,
-      const ChangesConfig(noise: ['*.g.dart']),
+      const ChangesConfig(attention: ['lib/api/**']),
       openStore(),
     );
     expect(resolveChangesConfig(worktree.path, openStore()).config, isNotNull);
@@ -160,7 +160,7 @@ void main() {
     var shared = openStore();
     rememberChangesConfig(
       worktree.path,
-      const ChangesConfig(noise: ['*.g.dart']),
+      const ChangesConfig(attention: ['lib/api/**']),
       shared,
     );
     shared
@@ -168,7 +168,9 @@ void main() {
       ..save();
 
     var reopened = openStore();
-    expect(reopened.changesConfig(worktree.path)?.config.noise, ['*.g.dart']);
+    expect(reopened.changesConfig(worktree.path)?.config.attention, [
+      'lib/api/**',
+    ]);
     expect(reopened.openedAt(worktree.path), DateTime.utc(2026));
   });
 

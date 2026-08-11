@@ -145,11 +145,10 @@ class ChangeSet {
 
   final Ranking? _ranking;
 
-  /// Which files are worth looking at first, which are noise, and why.
+  /// Which files are worth looking at first, and why.
   ///
-  /// Computed by the probe, because it needs a git call (`check-attr`) and a
-  /// pass over the patch bytes — both of which belong on the isolate that
-  /// already did the reading, not on the one that has to paint at 60 Hz.
+  /// Computed by the probe, on the isolate that already did the reading rather
+  /// than on the one that has to paint at 60 Hz.
   ///
   /// **Every file is in here, in one tier or another.** A ranking that can lose
   /// a file is a ranking nobody can trust.
@@ -174,8 +173,8 @@ class ChangeSet {
   /// One tier's files, in the same order.
   ///
   /// Ordering is per tier rather than across the list, because the tiers are
-  /// drawn as separate sections — a 900-line generated file must not lead the
-  /// noise drawer *and* outrank the migration it was generated from.
+  /// drawn separately — the pinned files are their own tab, and a 900-line
+  /// file has no business leading it on size alone.
   List<RankedFile> ordered(RankTier tier) => [
     for (var it in ranking.files)
       if (it.tier == tier) it,
