@@ -891,6 +891,9 @@ class _ScenarioPageState extends State<_ScenarioPage> {
           _RunSplitButton(
             enabled: !running,
             onRun: _start,
+            recordMotion: widget.core.recordMotion,
+            onToggleRecordMotion: () =>
+                widget.core.setRecordMotion(!widget.core.recordMotion),
             // The escape hatch, for the changes no incremental lane can see:
             // drops the warm harness and cold-starts — fresh bundle, fresh
             // kernel, fresh process.
@@ -975,11 +978,18 @@ class _RunSplitButton extends StatelessWidget {
     required this.enabled,
     required this.onRun,
     required this.onFullRestart,
+    required this.recordMotion,
+    required this.onToggleRecordMotion,
   });
 
   final bool enabled;
   final VoidCallback onRun;
   final VoidCallback onFullRestart;
+
+  /// Whether the next run records every transition's frames — the switch for
+  /// the ~70ms a transition it costs, next to the other rare run choices.
+  final bool recordMotion;
+  final VoidCallback onToggleRecordMotion;
 
   @override
   Widget build(BuildContext context) {
@@ -1014,16 +1024,29 @@ class _RunSplitButton extends StatelessWidget {
             align: PopoverAlign.end,
             entries: [
               MenuItem(
+                'Record motion',
+                // The state is the icon: the menu has no checkable item, and
+                // a box that is ticked or not says it without one.
+                icon: recordMotion
+                    ? Icons.check_box_outlined
+                    : Icons.check_box_outline_blank,
+                onSelected: enabled ? onToggleRecordMotion : null,
+              ),
+              const MenuDivider(),
+              MenuItem(
                 'Full restart',
                 icon: Icons.restart_alt,
                 onSelected: enabled ? onFullRestart : null,
               ),
             ],
-            builder: (context, controller) => Tappable(
-              onTap: enabled ? controller.toggle : null,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: FwSpacing.xs),
-                child: Icon(Icons.arrow_drop_down, size: 18, color: fg),
+            builder: (context, controller) => Tooltip(
+              message: 'More run options',
+              child: Tappable(
+                onTap: enabled ? controller.toggle : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: FwSpacing.xs),
+                  child: Icon(Icons.arrow_drop_down, size: 18, color: fg),
+                ),
               ),
             ),
           ),

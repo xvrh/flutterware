@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,6 +9,7 @@ import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import '../utils/graphite.dart';
 import 'framed_shot.dart';
+import 'motion_player.dart';
 import 'step_status.dart';
 
 /// One run as a flow: every captured step a device-framed screenshot on a
@@ -181,6 +184,15 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
               var events = count == 0
                   ? ''
                   : '\n$count event${count == 1 ? '' : 's'}';
+              // How long the app took to get here, in its own milliseconds —
+              // only where the run recorded the motion, which makes it the
+              // cue that hovering the node will play it. Fake time, so it is
+              // the animation's declared duration and never a measurement of
+              // this machine.
+              var motion = step.hasMotion
+                  ? '${events.isEmpty ? '\n' : ' · '}'
+                        '${scenarioMotionDuration(step).inMilliseconds}ms'
+                  : '';
               if (step.branch == null && transition == null) return null;
               return EdgeTooltip(
                 step.branch,
@@ -191,7 +203,9 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
                   fontWeight: FontWeight.w600,
                   color: context.colors.accent,
                 ),
-                subtitle: transition == null ? null : '$transition$events',
+                subtitle: transition == null
+                    ? null
+                    : '$transition$events$motion',
                 subtitleStyle: context.type.body.copyWith(
                   fontSize: 18,
                   color: context.colors.mut,
@@ -214,7 +228,15 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
   }
 }
 
-class _StepNode extends StatelessWidget {
+/// One step on the canvas — and, when the run recorded it, the transition
+/// that arrived at it.
+///
+/// **Playing the arrow means playing the node.** The frames end on the very
+/// screenshot the node is already showing, so a pointer entering the node
+/// rewinds it and lets it run forward into the picture that was there all
+/// along: no popover, no player chrome, no layout moving on a canvas that is
+/// already a dense wall of phones. Leaving parks it back on the still.
+class _StepNode extends StatefulWidget {
   const _StepNode(
     this.step, {
     required this.device,
@@ -228,34 +250,95 @@ class _StepNode extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_StepNode> createState() => _StepNodeState();
+}
+
+class _StepNodeState extends State<_StepNode>
+    with SingleTickerProviderStateMixin {
+  ScenarioMotionController? _motion;
+
+  @override
+  void didUpdateWidget(_StepNode old) {
+    super.didUpdateWidget(old);
+    // A re-run replaces the step under this node; whatever was playing was
+    // the previous run's frames, and its files are already deleted — so the
+    // decoded pixels behind them are dead weight and go back now.
+    if (old.step.frames != widget.step.frames) {
+      _disposePlayer();
+      scenarioMotionResidency.forget(old.step);
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposePlayer();
+    super.dispose();
+  }
+
+  void _disposePlayer() {
+    _motion?.dispose();
+    _motion = null;
+  }
+
+  void _enter() {
+    if (!widget.step.hasMotion) return;
+    var motion = _motion ??= ScenarioMotionController.forStep(
+      widget.step,
+      this,
+    )!..addListener(_onFrame);
+    // Warmed rather than played-into: the first pass over a recording is the
+    // only one that decodes, and the pointer arriving is the earliest honest
+    // moment to pay for it.
+    unawaited(precacheScenarioMotion(context, widget.step));
+    motion.play();
+  }
+
+  void _exit() => _motion?.rest();
+
+  void _onFrame() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Tappable(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Text(
-            '${step.index} · ${scenarioStepLabel(step)}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            // Sized to survive the canvas's zoom-out: at half scale this
-            // reads like a caption.
-            style: context.type.body.copyWith(
-              fontSize: 22,
-              color: scenarioStepTone(context, step),
-            ),
-          ),
-          const Gap(FwSpacing.md),
-          Expanded(
-            child: FittedBox(
-              fit: BoxFit.contain,
-              child: FramedShot(
-                step: step,
-                device: device,
-                fallbackBrightness: statusFallback,
+    var step = widget.step;
+    var motion = _motion;
+    var frame = motion == null || !motion.playing
+        ? null
+        : scenarioFrameImage(step, motion.frames[motion.index]);
+
+    return MouseRegion(
+      onEnter: (_) => _enter(),
+      onExit: (_) => _exit(),
+      child: Tappable(
+        onTap: widget.onTap,
+        child: Column(
+          children: [
+            Text(
+              '${step.index} · ${scenarioStepLabel(step)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // Sized to survive the canvas's zoom-out: at half scale this
+              // reads like a caption.
+              style: context.type.body.copyWith(
+                fontSize: 22,
+                color: scenarioStepTone(context, step),
               ),
             ),
-          ),
-        ],
+            const Gap(FwSpacing.md),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: FramedShot(
+                  step: step,
+                  device: widget.device,
+                  fallbackBrightness: widget.statusFallback,
+                  image: frame,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

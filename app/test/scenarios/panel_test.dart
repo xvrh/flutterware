@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -12,6 +13,7 @@ import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/scenarios_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/scenarios/axes.dart';
+import 'package:flutterware_app/src/scenarios/framed_shot.dart';
 import 'package:flutterware_app/src/scenarios/runner.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
@@ -154,6 +156,120 @@ void main() {
     // Writing another one is reachable from a pane that is not empty — here
     // still scanning, which is a state the empty-state button never sees.
     expect(find.byTooltip('New scenario'), findsOneWidget);
+  });
+
+  testWidgets('records the motion of every transition, and can be told not '
+      'to', (tester) async {
+    var core = ScenariosCore(
+      PluginHost(
+        id: scenariosPluginId,
+        label: 'Scenarios',
+        worktree: Worktree(path: root.path),
+        workspace: Workspace(
+          root: root.path,
+          declared: [Pkg('.')],
+          discovered: ['.'],
+          appContext: AppContext(logger: LogClient.print()),
+          flutterSdk: FlutterSdkPath('/tmp/flutter'),
+        ),
+        config: {
+          'packages': [
+            {'path': '.'},
+          ],
+        },
+      ),
+    );
+    var runner = _FakeRunner();
+    core.debugInstallRunner('.', runner);
+    var plugin = ScenariosPlugin(core);
+
+    var address = ValueNotifier(
+      Address(
+        worktree: 'wt',
+        plugin: scenariosPluginId,
+        segments: ['.', 'test', 'scenarios', 'a_test.dart', 'A'],
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: AddressRoot(
+          address: address,
+          onChanged: (a) => address.value = a,
+          child: Builder(builder: plugin.buildPanel),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    // On by default: a recording you have to ask for is one nobody finds.
+    expect(
+      runner.seenRecordIntervals.single,
+      ScenariosCore.panelMotionInterval,
+    );
+
+    // Hovering the node plays the transition into it, in place: the shot is
+    // swapped for a frame, and the device body and its size do not move.
+    var shot = find.byType(FramedShot).first;
+    expect(tester.widget<FramedShot>(shot).image, isNull);
+    var pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await pointer.addPointer();
+    addTearDown(pointer.removePointer);
+    await pointer.moveTo(tester.getCenter(find.text('1 · end')));
+    await tester.pump();
+
+    var playing = find.byWidgetPredicate(
+      (w) => w is FramedShot && w.image != null,
+    );
+    expect(playing, findsOneWidget);
+
+    // And leaving parks it back on the still, so the canvas goes back to
+    // being a wall of screenshots.
+    await pointer.moveTo(Offset.zero);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(playing, findsNothing);
+
+    // The step page gets the transport under the frame: the recording is 4
+    // frames of 33ms, so three intervals of motion.
+    await tester.tap(find.text('1 · end'), warnIfMissed: false);
+    await tester.pump();
+    // Parked at the end, which is the step's own screenshot — so arriving on
+    // the page looks exactly as it did before any of this existed.
+    expect(find.text('99 / 99 ms'), findsOneWidget);
+    expect(find.text('4 frames'), findsOneWidget);
+
+    // Stepping back moves the clock, not just the picture.
+    await tester.tap(find.byTooltip('Previous frame'));
+    await tester.pump();
+    expect(find.text('66 / 99 ms'), findsOneWidget);
+
+    // The first step is a `pumpWidget` the fake recorded nothing for, so its
+    // page has no transport at all rather than an empty one.
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pump();
+    await tester.tap(find.text('0 · shot'), warnIfMissed: false);
+    await tester.pump();
+    expect(find.textContaining(' ms'), findsNothing);
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pump();
+
+    // Turned off in the run menu, the next run asks for nothing — and the
+    // step page goes back to being the still it was.
+    await tester.tap(find.byTooltip('More run options'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Record motion'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Run'));
+    await tester.pump();
+    await tester.pump();
+    expect(runner.seenRecordIntervals.last, isNull);
+    await tester.tap(find.text('1 · end'), warnIfMissed: false);
+    await tester.pump();
+    expect(find.textContaining(' ms'), findsNothing);
   });
 
   testWidgets('an unset device is left for the folder to answer, and the '
@@ -808,6 +924,7 @@ class _FakeRunner extends ScenarioRunner {
   var runs = 0;
   final seenAxes = <ScenarioAxes>[];
   final seenUnspecified = <String?>[];
+  final seenRecordIntervals = <Duration?>[];
 
   /// What the harness reports it resolved an unnamed device to. The real one
   /// asks the folder's profile first; this one just echoes the fallback.
@@ -824,11 +941,15 @@ class _FakeRunner extends ScenarioRunner {
     double? captureScale,
     bool captureRaw = false,
     bool captureNative = false,
+    Duration? recordInterval,
+    double? recordScale,
+    int recordMaxFrames = 90,
     DateTime? clock,
   }) async {
     runs++;
     seenAxes.add(axes);
     seenUnspecified.add(unspecifiedDevice);
+    seenRecordIntervals.add(recordInterval);
     resolvedDevice = axes.device ?? unspecifiedDevice;
     Directory(outDir).createSync(recursive: true);
     Map<String, Object?> step(int index, String name, String text) {
@@ -870,6 +991,20 @@ class _FakeRunner extends ScenarioRunner {
           ],
         }),
       );
+      // A recorded transition, when the run asked for one: a directory of
+      // numbered frames, as the harness writes them.
+      String? frames;
+      var intervalMs = recordInterval?.inMilliseconds;
+      if (intervalMs != null && index > 0) {
+        var directory = Directory('$outDir/$index-$name.frames')
+          ..createSync(recursive: true);
+        for (var frame = 0; frame < 4; frame++) {
+          File(
+            '${directory.path}/${frame.toString().padLeft(4, '0')}.png',
+          ).writeAsBytesSync(_transparentPng);
+        }
+        frames = directory.path;
+      }
       return {
         'index': index,
         if (index > 0) 'parent': index - 1,
@@ -882,6 +1017,16 @@ class _FakeRunner extends ScenarioRunner {
         'tree': tree,
         'semantics': semantics,
         'texts': [text],
+        // Every real step names the verb that produced it, and the arrow into
+        // it is drawn from that.
+        if (index > 0) ...{'verb': 'tap', 'target': '"Buy"'},
+        if (frames != null) ...{
+          'frames': frames,
+          'frameCount': 4,
+          'frameWidth': 1,
+          'frameHeight': 1,
+          'frameIntervalMs': intervalMs,
+        },
       };
     }
 

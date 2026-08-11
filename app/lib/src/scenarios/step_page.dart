@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
@@ -15,6 +16,7 @@ import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import 'events_view.dart';
 import 'framed_shot.dart';
+import 'motion_player.dart';
 import '../inspect/semantics_node.dart';
 import '../inspect/semantics_view.dart';
 import 'step_status.dart';
@@ -58,7 +60,8 @@ class ScenarioStepPage extends StatefulWidget {
   State<ScenarioStepPage> createState() => _ScenarioStepPageState();
 }
 
-class _ScenarioStepPageState extends State<ScenarioStepPage> {
+class _ScenarioStepPageState extends State<ScenarioStepPage>
+    with SingleTickerProviderStateMixin {
   /// The node the pointer is over — set from the tree's rows and from the
   /// picker's sweep, drawn once over the screenshot. One rectangle, pointed
   /// at from either end, as the catalog does it.
@@ -71,6 +74,10 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
 
   var _tab = 'elements';
   var _collapsed = false;
+
+  /// Playback over the transition that arrived at this step, or null when the
+  /// run recorded none.
+  ScenarioMotionController? _motion;
 
   /// The step's tree, read from its `.tree.json` — null while loading, with
   /// [_treeError] carrying the failure when there is one.
@@ -93,20 +100,49 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
   void initState() {
     super.initState();
     _loadTree();
+    _loadMotion();
   }
 
   @override
   void didUpdateWidget(ScenarioStepPage old) {
     super.didUpdateWidget(old);
     _loadTree();
+    if (old.step.frames != widget.step.frames) {
+      // Walking to the next step, or a re-run replacing this one: either way
+      // the recording just left behind is not what is on screen any more.
+      scenarioMotionResidency.forget(old.step);
+      _loadMotion();
+    }
   }
 
   @override
   void dispose() {
+    _motion?.dispose();
     _highlight.dispose();
     _semanticsHighlight.dispose();
     _picking.dispose();
     super.dispose();
+  }
+
+  /// Builds this step's player, resting on the last frame — which is the
+  /// screenshot, so arriving on the page looks exactly as it did before the
+  /// recording existed. Walking to the next step with the previous/next links
+  /// rebuilds it for the new transition.
+  void _loadMotion() {
+    _motion?.dispose();
+    _motion = ScenarioMotionController.forStep(widget.step, this)
+      ?..rest()
+      ..addListener(_onFrame);
+    if (_motion == null) return;
+    // After the frame, not from `initState`: precaching resolves against the
+    // element's image configuration, which does not exist yet here.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(precacheScenarioMotion(context, widget.step));
+    });
+  }
+
+  void _onFrame() {
+    if (mounted) setState(() {});
   }
 
   /// Reads the step's trees once per step. The files are already on disk —
@@ -168,6 +204,15 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
 
   void _select(String id) => AddressScope.write(context).setParam('node', id);
 
+  /// The recorded frame to draw instead of the shot, or null when playback is
+  /// parked at the end — where the shot itself is the frame, and the page is
+  /// exactly what it was before any of this existed.
+  ImageProvider? get _frame {
+    var motion = _motion;
+    if (motion == null || motion.index >= motion.frames.length - 1) return null;
+    return scenarioFrameImage(widget.step, motion.frames[motion.index]);
+  }
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
@@ -220,13 +265,21 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
                         step: widget.step,
                         device: widget.device,
                         fallbackBrightness: widget.statusFallback,
-                        screenOverlay: _ScreenOverlay(
-                          tree: _tree,
-                          highlight: _highlight,
-                          semanticsHighlight: _semanticsHighlight,
-                          picking: _picking,
-                          onPick: _select,
-                        ),
+                        image: _frame,
+                        // Dropped while the transition is anywhere but its
+                        // last frame: every rectangle in the tree was measured
+                        // on the frame the step settled at, and drawn over a
+                        // frame from the middle of a page push it would box a
+                        // widget that is not there yet.
+                        screenOverlay: _frame != null
+                            ? null
+                            : _ScreenOverlay(
+                                tree: _tree,
+                                highlight: _highlight,
+                                semanticsHighlight: _semanticsHighlight,
+                                picking: _picking,
+                                onPick: _select,
+                              ),
                       ),
                     ),
                   ),
@@ -254,6 +307,8 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
               ],
             ),
           ),
+          if (_motion case var motion?)
+            _MotionTransport(motion: motion, step: widget.step),
           InspectDock(
             available: constraints.maxHeight,
             current: _tab,
@@ -341,6 +396,159 @@ class _ScenarioStepPageState extends State<ScenarioStepPage> {
     return (
       position > 0 ? steps[position - 1] : null,
       position >= 0 && position + 1 < steps.length ? steps[position + 1] : null,
+    );
+  }
+}
+
+/// The transport for the transition into this step: play, scrub, step a frame
+/// at a time.
+///
+/// Under the pixels rather than in the inspect dock, because that is what it
+/// is about — the dock holds trees and lists, and a scrubber that lived in a
+/// tab would be a control for something you cannot see while you use it.
+///
+/// The scrubber is labelled in the app's **own** milliseconds. Under FakeAsync
+/// a frame is exactly one interval after the last, so `132ms` is where the
+/// animation was and not where this machine happened to draw it — which is
+/// also why this can never say anything about jank.
+class _MotionTransport extends StatelessWidget {
+  const _MotionTransport({required this.motion, required this.step});
+
+  final ScenarioMotionController motion;
+  final ScenarioRunStep step;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var last = motion.frames.length - 1;
+    var dropped = step.framesDropped ?? 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.panel,
+        border: Border(top: BorderSide(color: colors.line)),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FwSpacing.lg,
+        vertical: FwSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          Tappable(
+            onTap: motion.toggle,
+            child: Padding(
+              padding: const EdgeInsets.all(FwSpacing.xs),
+              child: Icon(
+                motion.playing ? Icons.pause : Icons.play_arrow,
+                size: 18,
+                color: colors.accent,
+              ),
+            ),
+          ),
+          _StepFrameButton(
+            icon: Icons.chevron_left,
+            tooltip: 'Previous frame',
+            onTap: motion.index > 0 ? () => motion.step(-1) : null,
+          ),
+          _StepFrameButton(
+            icon: Icons.chevron_right,
+            tooltip: 'Next frame',
+            onTap: motion.index < last ? () => motion.step(1) : null,
+          ),
+          const Gap(FwSpacing.md),
+          Expanded(
+            // `Slider` insists on a Material ancestor and the panel has none
+            // — the shell's surfaces are the design system's, not Material's.
+            child: Material(
+              type: MaterialType.transparency,
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 2,
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 6,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 12,
+                  ),
+                  activeTrackColor: colors.accent,
+                  inactiveTrackColor: colors.mut3,
+                  thumbColor: colors.accent,
+                ),
+                child: Slider(
+                  value: motion.index.toDouble(),
+                  max: last.toDouble(),
+                  divisions: last,
+                  onChanged: (value) => motion.seek(value.round()),
+                ),
+              ),
+            ),
+          ),
+          const Gap(FwSpacing.md),
+          Text(
+            '${motion.position.inMilliseconds} / '
+            '${motion.duration.inMilliseconds} ms',
+            style: context.type.caption,
+          ),
+          const Gap(FwSpacing.md),
+          Text(
+            '${motion.frames.length} frames',
+            style: context.type.caption.copyWith(color: colors.mut),
+          ),
+          if (dropped > 0) ...[
+            const Gap(FwSpacing.md),
+            Tooltip(
+              // The honest reading of a recording that hit its cap: the app
+              // was still moving when the recorder stopped, so the last frame
+              // is not where the animation ended.
+              message:
+                  'The recording stopped at its frame cap with $dropped more '
+                  'frames to go — the app was still animating.',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.content_cut, size: 12, color: colors.mut),
+                  const Gap(FwSpacing.xs),
+                  Text(
+                    'cut off',
+                    style: context.type.caption.copyWith(color: colors.mut),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StepFrameButton extends StatelessWidget {
+  const _StepFrameButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tooltip(
+      message: tooltip,
+      child: Tappable(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(FwSpacing.xs),
+          child: Icon(
+            icon,
+            size: 18,
+            color: onTap == null ? colors.mut3 : colors.mut,
+          ),
+        ),
+      ),
     );
   }
 }

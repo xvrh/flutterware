@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'motion.dart';
+
 /// The interval `pumpAndSettle` itself advances the clock by, kept the same so
 /// a scenario's frames land where a hand-written test's would.
 const _frameInterval = Duration(milliseconds: 100);
@@ -20,6 +22,11 @@ const _frameInterval = Duration(milliseconds: 100);
 /// it gives up quietly, captures the frame, and records `settled: false` on
 /// the step. Use [Settle.full] where a screen that never settles should be an
 /// error.
+///
+/// This is also the one place a run records **motion**: a policy that owns its
+/// pump loop hands every frame to the [ScenarioMotionRecorder] a run passes,
+/// and pumps at that recorder's finer interval while it does. One seam, and
+/// no verb had to learn anything.
 sealed class Settle {
   const Settle();
 
@@ -41,11 +48,19 @@ sealed class Settle {
   const factory Settle.frames(int count, {Duration interval}) = _Frames;
 
   /// `pumpAndSettle`'s own semantics, ten-minute timeout and throw included.
+  ///
+  /// The one policy that records no motion: `pumpAndSettle` is the SDK's loop
+  /// and offers no per-frame hook, and reimplementing it here to get one would
+  /// be trading the exact semantics this policy exists to provide for a
+  /// nicety.
   static const full = _Full();
 
   /// Applies the policy. False when the app was still scheduling frames when
   /// the policy gave up — the step is captured either way.
-  Future<bool> apply(WidgetTester tester);
+  ///
+  /// [record], when a run is recording, receives the frame after every pump —
+  /// and, where the policy chooses its own interval, dictates it.
+  Future<bool> apply(WidgetTester tester, {ScenarioMotionRecorder? record});
 }
 
 class _Budgeted extends Settle {
@@ -54,14 +69,24 @@ class _Budgeted extends Settle {
   final Duration budget;
 
   @override
-  Future<bool> apply(WidgetTester tester) async {
+  Future<bool> apply(
+    WidgetTester tester, {
+    ScenarioMotionRecorder? record,
+  }) async {
     // Our own loop rather than `pumpAndSettle(timeout:)`: the SDK's version
     // *throws* when the budget runs out, and the whole point here is to carry
     // on and capture what the screen looks like.
+    //
+    // A recording subdivides the step — 30fps instead of 10 — and the budget
+    // stays in fake *time*, so both cadences give up at the same instant and
+    // land on the same settled frame. Measured byte-identical; that is what
+    // lets a recorded run be diffed against one captured without recording.
+    var interval = record?.interval ?? _frameInterval;
     var elapsed = Duration.zero;
     do {
-      await tester.pump(_frameInterval);
-      elapsed += _frameInterval;
+      await tester.pump(interval);
+      elapsed += interval;
+      record?.capture(tester);
     } while (tester.binding.hasScheduledFrame && elapsed < budget);
     return !tester.binding.hasScheduledFrame;
   }
@@ -71,8 +96,12 @@ class _None extends Settle {
   const _None();
 
   @override
-  Future<bool> apply(WidgetTester tester) async {
+  Future<bool> apply(
+    WidgetTester tester, {
+    ScenarioMotionRecorder? record,
+  }) async {
     await tester.pump();
+    record?.capture(tester);
     return !tester.binding.hasScheduledFrame;
   }
 }
@@ -84,9 +113,15 @@ class _Frames extends Settle {
   final Duration interval;
 
   @override
-  Future<bool> apply(WidgetTester tester) async {
+  Future<bool> apply(
+    WidgetTester tester, {
+    ScenarioMotionRecorder? record,
+  }) async {
+    // [interval] is the author's, not the recorder's: `Settle.frames(3)` says
+    // where in the animation to land, and a recording may not move it.
     for (var i = 0; i < count; i++) {
       await tester.pump(interval);
+      record?.capture(tester);
     }
     return !tester.binding.hasScheduledFrame;
   }
@@ -96,7 +131,10 @@ class _Full extends Settle {
   const _Full();
 
   @override
-  Future<bool> apply(WidgetTester tester) async {
+  Future<bool> apply(
+    WidgetTester tester, {
+    ScenarioMotionRecorder? record,
+  }) async {
     await tester.pumpAndSettle();
     return true;
   }

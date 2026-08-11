@@ -3732,6 +3732,42 @@ final resultShapes = <String, ResultShape>{
                   'Events dropped to stay inside the per-step or per-run cap.',
             },
             <String, Object?>{
+              'name': 'frames',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
+            },
+            <String, Object?>{
+              'name': 'frameCount',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'frameWidth',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'frameHeight',
+              'type': 'int',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'frameIntervalMs',
+              'type': 'int',
+              'optional': true,
+              'doc':
+                  'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
+            },
+            <String, Object?>{
+              'name': 'framesDropped',
+              'type': 'int',
+              'optional': true,
+              'doc':
+                  'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
+            },
+            <String, Object?>{
               'name': 'address',
               'type': 'String',
               'doc': 'The step\'s `fw://` address.',
@@ -3940,6 +3976,42 @@ final resultShapes = <String, ResultShape>{
                     'optional': true,
                     'doc':
                         'Events dropped to stay inside the per-step or per-run cap.',
+                  },
+                  <String, Object?>{
+                    'name': 'frames',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
+                  },
+                  <String, Object?>{
+                    'name': 'frameCount',
+                    'type': 'int',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'frameWidth',
+                    'type': 'int',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'frameHeight',
+                    'type': 'int',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'frameIntervalMs',
+                    'type': 'int',
+                    'optional': true,
+                    'doc':
+                        'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
+                  },
+                  <String, Object?>{
+                    'name': 'framesDropped',
+                    'type': 'int',
+                    'optional': true,
+                    'doc':
+                        'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
                   },
                   <String, Object?>{
                     'name': 'address',
@@ -4173,6 +4245,42 @@ final resultShapes = <String, ResultShape>{
                               'Events dropped to stay inside the per-step or per-run cap.',
                         },
                         <String, Object?>{
+                          'name': 'frames',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
+                        },
+                        <String, Object?>{
+                          'name': 'frameCount',
+                          'type': 'int',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'frameWidth',
+                          'type': 'int',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'frameHeight',
+                          'type': 'int',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'frameIntervalMs',
+                          'type': 'int',
+                          'optional': true,
+                          'doc':
+                              'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
+                        },
+                        <String, Object?>{
+                          'name': 'framesDropped',
+                          'type': 'int',
+                          'optional': true,
+                          'doc':
+                              'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
+                        },
+                        <String, Object?>{
                           'name': 'address',
                           'type': 'String',
                           'doc': 'The step\'s `fw://` address.',
@@ -4356,6 +4464,30 @@ final resultShapes = <String, ResultShape>{
         'type': 'int',
         'optional': true,
         'doc': 'Events dropped to stay inside the per-step or per-run cap.',
+      },
+      <String, Object?>{
+        'name': 'frames',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.',
+      },
+      <String, Object?>{'name': 'frameCount', 'type': 'int', 'optional': true},
+      <String, Object?>{'name': 'frameWidth', 'type': 'int', 'optional': true},
+      <String, Object?>{'name': 'frameHeight', 'type': 'int', 'optional': true},
+      <String, Object?>{
+        'name': 'frameIntervalMs',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.',
+      },
+      <String, Object?>{
+        'name': 'framesDropped',
+        'type': 'int',
+        'optional': true,
+        'doc':
+            'Frames refused by the recorder\'s cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.',
       },
       <String, Object?>{
         'name': 'address',

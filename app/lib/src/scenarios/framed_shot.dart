@@ -39,9 +39,20 @@ class FramedShot extends StatelessWidget {
     required this.device,
     this.fallbackBrightness = Brightness.dark,
     this.screenOverlay,
+    this.image,
   });
 
   final ScenarioRunStep step;
+
+  /// What to draw on the screen instead of the step's own shot — a frame of
+  /// the recorded transition, while one is playing.
+  ///
+  /// Only the pixels change: the device body, the status chrome and the
+  /// screen's logical size all stay the step's, which is what lets a node on
+  /// the flow canvas play in place without a single pixel of layout moving.
+  /// A recording is captured at half scale and stretched back over the same
+  /// box — the frame is the motion, the shot is the evidence.
+  final ImageProvider? image;
 
   /// The device the run was framed as, or null for the bare surface.
   final Device? device;
@@ -80,13 +91,19 @@ class FramedShot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget image = Image(
-      image: step.format == 'raw'
-          ? RawImageProvider(
-              RawImageData(step.imageFile, step.width, step.height),
-            )
-          : FileImage(step.imageFile),
+      image:
+          this.image ??
+          (step.format == 'raw'
+              ? RawImageProvider(
+                  RawImageData(step.imageFile, step.width, step.height),
+                )
+              : FileImage(step.imageFile)),
       fit: BoxFit.fill,
       filterQuality: FilterQuality.medium,
+      // A frame that has not decoded yet holds the one before it rather than
+      // blinking the screen out — the only thing that makes playback survive
+      // a cold image cache.
+      gaplessPlayback: true,
     );
     var resolved = device;
     if (resolved == null) {

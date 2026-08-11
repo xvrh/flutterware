@@ -84,6 +84,42 @@ void main() {
       expect((streamed.first['step']! as Map)['index'], 1);
       runner.onStep = null;
 
+      // A run that did not ask records nothing — the CLI lane, and what keeps
+      // it costing what it always cost.
+      expect(steps.every((s) => s['frames'] == null), isTrue);
+
+      // Recording on: the sixth leg, a directory of numbered frames beside
+      // the pixels. The panel's settings, so this is the real cost too.
+      var recorded = await runner.run(
+        outDir: outDir,
+        file: 'test/scenarios/counter_test.dart',
+        scenario: 'Counter',
+        recordInterval: const Duration(milliseconds: 33),
+        recordScale: 0.5,
+      );
+      var recordedSteps =
+          ((recorded['scenarios']! as List).single
+                  as Map<String, dynamic>)['steps']!
+              as List;
+      var withMotion = [
+        for (var step in recordedSteps.cast<Map<String, dynamic>>())
+          if (step['frames'] != null) step,
+      ];
+      expect(withMotion, isNotEmpty);
+      for (var step in withMotion) {
+        expect(step['frameIntervalMs'], 33);
+        var count = step['frameCount']! as int;
+        expect(count, greaterThan(1));
+        // Half of the run's own capture scale, and every frame on disk.
+        expect(step['frameWidth'], lessThan(step['width']! as int));
+        var directory = Directory(step['frames']! as String);
+        expect(
+          directory.listSync().whereType<File>(),
+          hasLength(count),
+          reason: 'every frame written',
+        );
+      }
+
       // Warm re-run: the compiled harness and the live tester are reused, so
       // this is the instantaneous FakeAsync loop, not a second cold start.
       var watch = Stopwatch()..start();

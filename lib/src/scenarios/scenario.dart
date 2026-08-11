@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meta/meta.dart';
 
 import 'events.dart';
+import 'motion.dart';
 import 'profile.dart';
 import 'run_args.dart';
 import 'run_listener.dart';
@@ -422,6 +423,17 @@ class ScenarioTester {
   /// teardown pump, so tearing the tree down is never anybody's stray frame.
   var _framesAtLastStep = _frames;
 
+  /// Collects the frames of the transition being walked, when the run asked
+  /// for motion and there is a listener to hand them to.
+  ///
+  /// Not created for a standalone `flutter test` writing PNGs to a
+  /// destination: a folder of screenshots has nowhere to put a movie, and
+  /// nobody asked that lane to slow down.
+  late final ScenarioMotionRecorder? _recorder =
+      scenarioRunListener != null && scenarioRunArgs?.record != null
+      ? ScenarioMotionRecorder(scenarioRunArgs!.record!)
+      : null;
+
   Future<void> pumpWidget(Widget widget, {Shot? shot, Settle? settle}) => _step(
     shot,
     settle,
@@ -600,8 +612,12 @@ class ScenarioTester {
     var stray = _frames - _framesAtLastStep;
     bool settled;
     try {
+      // The frame the transition starts from, banked before the verb acts —
+      // otherwise a movie of a tap opens on the frame after the tap and the
+      // "before" is nowhere in it.
+      _recorder?.capture(tester);
       await action();
-      settled = await (settle ?? this.settle).apply(tester);
+      settled = await (settle ?? this.settle).apply(tester, record: _recorder);
     } catch (error) {
       // The verb that broke captures its own frame; `scenario`'s catch is the
       // backstop for everything else. Both go through the same once-per-error
@@ -829,6 +845,7 @@ class ScenarioTester {
       // was emitted on the first pass, with the events of *that* pass, and
       // appending these would multiply a shared prefix once per branch.
       scenarioEventBuffer?.discard();
+      _recorder?.discard();
       _lastPosition = position;
       _pendingBranch = null;
       return;
@@ -907,9 +924,7 @@ class ScenarioTester {
       // device ratio for a true screenshot) is the host's knob when
       // fidelity is worth the wait.
       var dpr = view.flutterView.devicePixelRatio;
-      var scale = (scenarioRunArgs?.captureNative ?? false)
-          ? dpr
-          : (scenarioRunArgs?.captureScale ?? 1.0);
+      var scale = scenarioCaptureScale(scenarioRunArgs, dpr);
       var image = await layer.toImage(
         Offset.zero & (view.size * dpr),
         pixelRatio: scale / dpr,
@@ -925,6 +940,12 @@ class ScenarioTester {
       var (width, height) = (image.width, image.height);
       image.dispose();
       var bytes = data.buffer.asUint8List();
+      // Drained in the same `runAsync` as the shot: this is where the
+      // rasterization `toImageSync` deferred is finally paid, and paying it
+      // once for the whole transition is the difference between a recording
+      // that costs 10ms and one that costs 250.
+      var motion =
+          await _recorder?.drain(raw: raw) ?? ScenarioMotionFrames.empty;
       if (listener != null) {
         // The overlay style the app last declared — what the GUI's fake
         // status bar tints itself with. Visible-for-testing is exactly what
@@ -949,6 +970,8 @@ class ScenarioTester {
             target: target,
             events: events,
             eventsDropped: dropped,
+            motion: motion,
+            motionInterval: _recorder?.interval,
             settled: settled,
             strayFrames: stray,
             failure: failure,

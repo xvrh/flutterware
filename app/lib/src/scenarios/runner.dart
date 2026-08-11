@@ -456,6 +456,13 @@ class ScenarioRunner {
     double? captureScale,
     bool captureRaw = false,
     bool captureNative = false,
+    Duration? recordInterval,
+
+    /// Null records at the same scale as the step's own screenshot, which is
+    /// the only setting where playback does not visibly change resolution
+    /// when it stops.
+    double? recordScale,
+    int recordMaxFrames = 90,
     DateTime? clock,
   }) => _exclusive(() async {
     var wasWarm = _starting != null;
@@ -472,6 +479,14 @@ class ScenarioRunner {
         if (captureScale != null) 'captureScale': '$captureScale',
         if (captureRaw) 'captureRaw': 'true',
         if (captureNative) 'captureNative': 'true',
+        // Present only when recording: the interval is what turns motion
+        // capture on, so its absence is the off switch and no run that did
+        // not ask pays for one.
+        if (recordInterval != null) ...{
+          'recordIntervalMs': '${recordInterval.inMilliseconds}',
+          if (recordScale != null) 'recordScale': '$recordScale',
+          'recordMaxFrames': '$recordMaxFrames',
+        },
         if (clock != null) 'clock': clock.toIso8601String(),
         ...axes.harnessArgs(unspecifiedDevice: unspecifiedDevice),
       },

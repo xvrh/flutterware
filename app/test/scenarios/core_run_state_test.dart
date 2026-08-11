@@ -579,6 +579,9 @@ class _FakeRunner extends ScenarioRunner {
     double? captureScale,
     bool captureRaw = false,
     bool captureNative = false,
+    Duration? recordInterval,
+    double? recordScale,
+    int recordMaxFrames = 90,
     DateTime? clock,
   }) async {
     runs++;
