@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
@@ -93,11 +91,12 @@ class ComparisonResult {
   int countOf(ComparedState state) =>
       items.where((item) => item.state == state).length;
 
+  /// This half alone. Which base it was against and where head sits belong to
+  /// the whole comparison rather than to one of its halves, so
+  /// `ComparisonArtifact` writes them once at the top.
   Map<String, Object?> toJson() => {
-    'base': baseSha,
-    'head': headRoot,
-    'ms': elapsed.inMilliseconds,
     'rendered': rendered,
+    'ms': elapsed.inMilliseconds,
     'counts': {
       for (var state in ComparedState.values)
         if (countOf(state) > 0) state.name: countOf(state),
@@ -290,17 +289,6 @@ class ComparisonRunner {
       elapsed: watch.elapsed,
       rendered: rendered,
     );
-  }
-
-  /// Writes the artifact: the whole verdict as one file, which the GUI, an
-  /// agent and a static page all read rather than each computing their own.
-  static File writeIndex(ComparisonResult result, String path) {
-    var file = File(path);
-    file.parent.createSync(recursive: true);
-    file.writeAsStringSync(
-      const JsonEncoder.withIndent('  ').convert(result.toJson()),
-    );
-    return file;
   }
 
   ComparedItem _compare(String id, ({String base, String head}) key) {

@@ -219,6 +219,59 @@ void main() {
       expect(alignment.branches, isEmpty);
     });
 
+    // Rename the step above a split and the LCS drops its pair, orphaning
+    // every branch under it on *both* sides — reported once as gone and once
+    // as new, over a flow whose shape did not change at all.
+    test('a rename above a split does not report every branch twice', () {
+      List<AlignableStep> tree(String trunk) => [
+        AlignableStep(index: 1, position: '#1', name: trunk),
+        AlignableStep(
+          index: 2,
+          position: '0#1',
+          parent: 1,
+          branch: 'guest',
+          name: 'Address',
+        ),
+        AlignableStep(
+          index: 3,
+          position: '1#1',
+          parent: 1,
+          branch: 'apple pay',
+          name: 'Sheet',
+        ),
+      ];
+
+      var alignment = align(tree('Cart'), tree('Basket'));
+
+      expect(alignment.branches, isEmpty);
+      expect(deltas(alignment, StepDelta.removed), ['Cart']);
+      expect(deltas(alignment, StepDelta.added), ['Basket']);
+      // And the bodies still line up, rather than going unmentioned.
+      expect(deltas(alignment, StepDelta.matched), [
+        'guest › Address',
+        'apple pay › Sheet',
+      ]);
+    });
+
+    test('a branch whose parent was inserted is still reported', () {
+      var head = [
+        AlignableStep(index: 1, position: '#1', name: 'Cart'),
+        AlignableStep(index: 2, position: '#2', parent: 1, name: 'Consent'),
+        AlignableStep(
+          index: 3,
+          position: '0#1',
+          parent: 2,
+          branch: 'apple pay',
+          name: 'Sheet',
+        ),
+      ];
+
+      var alignment = align([head.first], head);
+
+      expect(alignment.branches.single.label, 'apple pay');
+      expect(alignment.branches.single.added, isTrue);
+    });
+
     test('the path names the branch a step is in', () {
       var alignment = align(
         fork({'guest': 'Address'}),

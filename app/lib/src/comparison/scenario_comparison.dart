@@ -46,6 +46,16 @@ class ScenarioComparison {
     required this.state,
   });
 
+  /// A scenario that was never replayed — one that exists on a single side,
+  /// or one the skip rule answered without running anything.
+  ///
+  /// Present in the report rather than omitted, so the list of scenarios is
+  /// the list of scenarios: a row that is missing tells a reader nothing, and
+  /// "skipped" tells them the tool looked and found no reason to.
+  const ScenarioComparison.notRun({required this.scenario, required this.state})
+    : items = const [],
+      branches = const [];
+
   /// `<file>#<name>`.
   final String scenario;
 
@@ -61,7 +71,10 @@ class ScenarioComparison {
   final ComparedState state;
 
   Map<String, Object?> toJson() => {
-    'scenario': scenario,
+    // `id` rather than `scenario`, and `steps` alongside a preview's
+    // `channels`: a reader walking the whole artifact should not need to know
+    // which half a row came from to find out what it is called.
+    'id': scenario,
     'state': state.name,
     if (branches.isNotEmpty)
       'branches': [
@@ -190,6 +203,13 @@ class ScenarioComparison {
       // every step it shares with the other side is identical.
       return ComparedState.changed;
     }
-    return worst;
+    // A step that appeared is a scenario that *changed*. Carrying the step's
+    // own word up would say this flow is new when only a line inside it is —
+    // and `added` outranks `changed`, so a gained step sorted a scenario above
+    // one that genuinely broke nothing but looks different.
+    return switch (worst) {
+      ComparedState.added || ComparedState.removed => ComparedState.changed,
+      _ => worst,
+    };
   }
 }

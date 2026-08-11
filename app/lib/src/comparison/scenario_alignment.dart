@@ -240,6 +240,10 @@ class ScenarioAlignment {
     List<AlignedPair> pairs,
     List<BranchDelta> branches,
   ) {
+    // Splits hanging off a step that matched on neither side. Collected rather
+    // than reported on sight, because the two sides' orphans are very often
+    // the *same* splits — see [_resolveOrphans].
+    var orphans = <({String label, AlignableStep root, bool isBase})>[];
     for (var pair in _lcs(base, head)) {
       switch (pair) {
         case (var left?, var right?):
@@ -271,37 +275,78 @@ class ScenarioAlignment {
           pairs.add(
             AlignedPair(delta: StepDelta.removed, base: left, branch: path),
           );
-          _orphanedBranches(left, allBase, path, added: false, into: branches);
+          _collectOrphans(left, allBase, isBase: true, into: orphans);
         case (null, var right?):
           pairs.add(
             AlignedPair(delta: StepDelta.added, head: right, branch: path),
           );
-          _orphanedBranches(right, allHead, path, added: true, into: branches);
+          _collectOrphans(right, allHead, isBase: false, into: orphans);
         case _:
           break;
       }
     }
+    _resolveOrphans(orphans, allBase, allHead, path, pairs, branches);
     _retarget(pairs, path);
   }
 
-  /// Branches hanging off a step that exists on one side only.
-  ///
-  /// Rare — it takes a split whose *parent* was inserted — and silent without
-  /// this: the step is reported and everything forking below it vanishes.
-  static void _orphanedBranches(
+  static void _collectOrphans(
     AlignableStep step,
-    List<AlignableStep> steps,
-    List<String> path, {
-    required bool added,
-    required List<BranchDelta> into,
+    List<AlignableStep> steps, {
+    required bool isBase,
+    required List<({String label, AlignableStep root, bool isBase})> into,
   }) {
     for (var child in _childrenOf(steps, step.index)) {
-      if (child.branch == null) continue;
-      into.add(
+      if (child.branch case var label?) {
+        into.add((label: label, root: child, isBase: isBase));
+      }
+    }
+  }
+
+  /// Splits hanging off a step that exists on one side only.
+  ///
+  /// **A branch reported as both added and removed is a branch that never
+  /// moved.** Rename the step above a `split` and the LCS drops its pair, so
+  /// every branch under it is orphaned on *both* sides — reported once as gone
+  /// and once as new, over a flow whose shape did not change at all. Matching
+  /// the leftovers by label puts the two halves back together and aligns their
+  /// bodies, leaving the renamed step as the one thing that is reported.
+  ///
+  /// What is left after that is genuine: a branch with no counterpart, which
+  /// is the case this started out handling — a split whose parent was inserted
+  /// would otherwise vanish from the report entirely.
+  static void _resolveOrphans(
+    List<({String label, AlignableStep root, bool isBase})> orphans,
+    List<AlignableStep> allBase,
+    List<AlignableStep> allHead,
+    List<String> path,
+    List<AlignedPair> pairs,
+    List<BranchDelta> branches,
+  ) {
+    for (var label in {for (var orphan in orphans) orphan.label}) {
+      var mine = [
+        for (var orphan in orphans)
+          if (orphan.label == label) orphan,
+      ];
+      var left = mine.where((o) => o.isBase).firstOrNull;
+      var right = mine.where((o) => !o.isBase).firstOrNull;
+      if (left != null && right != null) {
+        _align(
+          _chainFrom(left.root, allBase),
+          _chainFrom(right.root, allHead),
+          allBase,
+          allHead,
+          [...path, label],
+          pairs,
+          branches,
+        );
+        continue;
+      }
+      var only = (left ?? right)!;
+      branches.add(
         BranchDelta(
-          label: child.branch!,
-          added: added,
-          steps: _subtreeSize(steps, child),
+          label: label,
+          added: !only.isBase,
+          steps: _subtreeSize(only.isBase ? allBase : allHead, only.root),
           path: path,
         ),
       );

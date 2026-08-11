@@ -350,28 +350,67 @@ now fails is the single most valuable output of the feature.
   <rev>/              per-revision deltas — diff PNGs, cluster rects
 ```
 
-One step or entry in `index.json`:
+As built (`ComparisonArtifact`):
 
 ```jsonc
 {
-  "path": ["signed in", "consent"],
-  "action": { "verb": "tap", "target": "accept", "kind": "key" },
-  "state": "changed",
-  "channels": {
-    "pixels":    { "base": "sha:…", "head": "sha:…", "changed": 0.38,
-                   "clusters": [[12, 40, 180, 64]] },
-    "tree":      { "deltas": 3 },
-    "semantics": { "deltas": 0 },
-    "texts":     { "added": ["We use cookies"], "removed": [] }
-  }
+  "base": "0c05335f…", "head": "/Users/…/worktree", "ms": 4575,
+  "counts": { "added": 1, "changed": 4, "skipped": 6 },   // both halves
+  "previews":  { "rendered": 0, "ms": 178, "counts": {…}, "items": [ … ] },
+  "scenarios": { "ran": 4, "skipped": 0, "ms": 4397, "counts": {…},
+                 "note": "…",                             // only if it refused
+                 "items": [ … ] }
 }
 ```
+
+A previews item, and a scenario's step, are the same row:
+
+```jsonc
+{ "id": "demo/card.dart#card", "state": "changed", "label": "tap \"Accept\"",
+  "channels": {
+    "pixels": { "changed": 0.0038, "sizeChanged": false, "width": 390,
+                "height": 844, "clusters": [{"x":12,"y":40,"w":180,"h":64}] },
+    "tree":   { "deltas": [ … ] },
+    "texts":  { "added": ["We use cookies"], "removed": [] },
+    "events": { "added": ["network GET /order/#"], "removed": [] }
+  } }
+```
+
+A scenario adds `branches` and holds its rows under `steps` instead of
+`channels`.
+
+**Two named halves, never one flat list.** `items` at the top of a file holding
+both means previews to whoever wrote it and everything to whoever reads it. The
+counts *are* merged, because "did this branch break anything" is a question
+about the branch: one preview that broke and one scenario that broke is two
+broken things, and which half they came from is the second question.
 
 **Everything is precomputed in Dart** — diff images, cluster rects, tree deltas,
 alignment. The GUI panel, the MCP tools and (later) a static HTML page are all
 dumb viewers over the same `index.json`. Three hosts, one artifact, which is the
 pattern the inspect kit already proved. The HTML page only gets expensive if it
 is made to do the comparing.
+
+### 8a. What folding the scenario half in corrected
+
+Both found by reading the file the CLI had been printing all along (`f7f8…`):
+
+- **A scenario that gained a step was reported as `added`.** The verdict took
+  the worst state among its steps, and `added` outranks `changed` — so a flow
+  that has existed for months read as new, and sorted above one that genuinely
+  came out different. A step's own word does not carry up: at scenario level,
+  `added`/`removed` mean the scenario exists on one side only.
+- **A rename above a `split` reported every branch under it twice.** The LCS
+  drops the renamed step's pair, orphaning each branch on *both* sides — once
+  as gone, once as new, over a flow whose shape did not change at all. Orphans
+  are now matched by label before being reported, which also aligns their
+  bodies; what has no counterpart is the case that handling was written for.
+
+Rows that were never run — skipped, or present on one side — are **in** the
+list. A missing row tells a reader nothing; "skipped" tells them the tool looked
+and found no reason to run it. Same reason a harness that would not build
+records a `note`: an empty list is also what a project with no scenarios leaves
+behind, and a reader who cannot tell those apart reads silence as a clean bill.
 
 ### Revisions
 
@@ -492,12 +531,12 @@ handles SDK management.
    severity ladder. Not yet run in an isolate: it has no caller to be off the
    UI thread of.
 5. ✅ **`fw compare` + `index.json`** (§8) — previews in `f554fced`
-   (prerequisites in `1445faf8`), **scenarios in `08db2c68`**. Measured on this
-   repo against `origin/master`: 6 entries, 0 rendered, 6 skipped, 142ms;
-   change one label and it renders that entry alone on both sides. Scenarios
-   run per-scenario on a warm runner, skipped by the same closure rule. MCP is
-   not wired. Corrections these forced are in their commit messages; one
-   structural finding is in §11a.
+   (prerequisites in `1445faf8`), scenarios in `08db2c68`, **both halves in one
+   artifact** after that. Measured on this repo against `origin/master`: 6
+   entries, 0 rendered, 6 skipped, 142ms; change one label and it renders that
+   entry alone on both sides. Scenarios run per-scenario on a warm runner,
+   skipped by the same closure rule. MCP is not wired. Corrections these forced
+   are in their commit messages; the structural ones are in §8a and §11a.
 6. **The space** (§9) — overview, preview modes, merged split tree, two live
    revisions.
 7. **The static viewer** — in v1, and dumb: it reads `index.json` and renders,

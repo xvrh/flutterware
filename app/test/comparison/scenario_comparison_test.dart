@@ -100,6 +100,19 @@ void main() {
     ]);
   });
 
+  // `added` outranks `changed`, so carrying a step's own word up sorted a flow
+  // that gained one line above a flow that genuinely came out different — and
+  // called a scenario that has existed for months new.
+  test('a scenario that gained a step changed, it was not added', () {
+    var result = compare(
+      [shot(1, name: 'Cart')],
+      [shot(1, name: 'Cart'), shot(2, name: 'Pay', parent: 1)],
+    );
+
+    expect(result.items.last.state, ComparedState.added);
+    expect(result.state, ComparedState.changed);
+  });
+
   // A new split branch is one decision in the source; listing its steps as N
   // additions describes that decision N times.
   test('a branch that appeared is a row of its own, not N rows', () {
@@ -256,7 +269,7 @@ void main() {
 
     var json = compare(base, head).toJson();
 
-    expect(json['scenario'], 'test/checkout.dart#Checkout');
+    expect(json['id'], 'test/checkout.dart#Checkout');
     expect(json['state'], 'changed');
     expect((json['branches']! as List).single, containsPair('label', 'new'));
     expect(json['steps']! as List, hasLength(1));

@@ -294,20 +294,16 @@ void main() {
     expect(side.renderedFor.map((r) => r.$2), everyElement(endsWith('head2')));
   });
 
-  test('the index is the whole verdict, in one file', () async {
+  test('the half reports what it did and did not do', () async {
     side.declared['*'] = ['demo/card.dart#card'];
     var result = await compare(
       base: checkout('base', {'demo/card.dart': '1'}),
       head: checkout('head', {'demo/card.dart': '1'}),
     );
 
-    var file = ComparisonRunner.writeIndex(
-      result,
-      p.join(root.path, 'out', 'index.json'),
-    );
-    var json = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+    var json = result.toJson();
 
-    expect(json['base'], 'abc123');
+    expect(json['rendered'], 0);
     expect((json['counts']! as Map)['skipped'], 1);
     expect((json['items']! as List).single, containsPair('state', 'skipped'));
   });
