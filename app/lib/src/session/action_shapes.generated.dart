@@ -3687,6 +3687,51 @@ final resultShapes = <String, ResultShape>{
                   'The visible texts — the projection an agent reads next to the pixels.',
             },
             <String, Object?>{
+              'name': 'verb',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
+            },
+            <String, Object?>{
+              'name': 'target',
+              'type': 'String',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'events',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordScenarioEvent`.',
+            },
+            <String, Object?>{
+              'name': 'eventCount',
+              'type': 'int',
+              'optional': true,
+              'doc':
+                  'How many, and on which channels — `{platform: 3, print: 1}`.',
+            },
+            <String, Object?>{
+              'name': 'eventChannels',
+              'type': 'Map<String, int>',
+              'optional': true,
+            },
+            <String, Object?>{
+              'name': 'eventTitles',
+              'type': 'List<String>',
+              'optional': true,
+              'doc':
+                  'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
+            },
+            <String, Object?>{
+              'name': 'eventsDropped',
+              'type': 'int',
+              'optional': true,
+              'doc':
+                  'Events dropped to stay inside the per-step or per-run cap.',
+            },
+            <String, Object?>{
               'name': 'address',
               'type': 'String',
               'doc': 'The step\'s `fw://` address.',
@@ -3850,6 +3895,51 @@ final resultShapes = <String, ResultShape>{
                     'type': 'List<String>',
                     'doc':
                         'The visible texts — the projection an agent reads next to the pixels.',
+                  },
+                  <String, Object?>{
+                    'name': 'verb',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
+                  },
+                  <String, Object?>{
+                    'name': 'target',
+                    'type': 'String',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'events',
+                    'type': 'String',
+                    'optional': true,
+                    'doc':
+                        'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordScenarioEvent`.',
+                  },
+                  <String, Object?>{
+                    'name': 'eventCount',
+                    'type': 'int',
+                    'optional': true,
+                    'doc':
+                        'How many, and on which channels — `{platform: 3, print: 1}`.',
+                  },
+                  <String, Object?>{
+                    'name': 'eventChannels',
+                    'type': 'Map<String, int>',
+                    'optional': true,
+                  },
+                  <String, Object?>{
+                    'name': 'eventTitles',
+                    'type': 'List<String>',
+                    'optional': true,
+                    'doc':
+                        'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
+                  },
+                  <String, Object?>{
+                    'name': 'eventsDropped',
+                    'type': 'int',
+                    'optional': true,
+                    'doc':
+                        'Events dropped to stay inside the per-step or per-run cap.',
                   },
                   <String, Object?>{
                     'name': 'address',
@@ -4038,6 +4128,51 @@ final resultShapes = <String, ResultShape>{
                               'The visible texts — the projection an agent reads next to the pixels.',
                         },
                         <String, Object?>{
+                          'name': 'verb',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
+                        },
+                        <String, Object?>{
+                          'name': 'target',
+                          'type': 'String',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'events',
+                          'type': 'String',
+                          'optional': true,
+                          'doc':
+                              'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordScenarioEvent`.',
+                        },
+                        <String, Object?>{
+                          'name': 'eventCount',
+                          'type': 'int',
+                          'optional': true,
+                          'doc':
+                              'How many, and on which channels — `{platform: 3, print: 1}`.',
+                        },
+                        <String, Object?>{
+                          'name': 'eventChannels',
+                          'type': 'Map<String, int>',
+                          'optional': true,
+                        },
+                        <String, Object?>{
+                          'name': 'eventTitles',
+                          'type': 'List<String>',
+                          'optional': true,
+                          'doc':
+                              'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
+                        },
+                        <String, Object?>{
+                          'name': 'eventsDropped',
+                          'type': 'int',
+                          'optional': true,
+                          'doc':
+                              'Events dropped to stay inside the per-step or per-run cap.',
+                        },
+                        <String, Object?>{
                           'name': 'address',
                           'type': 'String',
                           'doc': 'The step\'s `fw://` address.',
@@ -4182,6 +4317,45 @@ final resultShapes = <String, ResultShape>{
         'type': 'List<String>',
         'doc':
             'The visible texts — the projection an agent reads next to the pixels.',
+      },
+      <String, Object?>{
+        'name': 'verb',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The verb that produced this step and what it was aimed at — `tap`, `"Pay"`.',
+      },
+      <String, Object?>{'name': 'target', 'type': 'String', 'optional': true},
+      <String, Object?>{
+        'name': 'events',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'What the app did on the way here — logs, prints, platform channel messages, and whatever the project\'s fakes reported through `recordScenarioEvent`.',
+      },
+      <String, Object?>{
+        'name': 'eventCount',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How many, and on which channels — `{platform: 3, print: 1}`.',
+      },
+      <String, Object?>{
+        'name': 'eventChannels',
+        'type': 'Map<String, int>',
+        'optional': true,
+      },
+      <String, Object?>{
+        'name': 'eventTitles',
+        'type': 'List<String>',
+        'optional': true,
+        'doc':
+            'The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].',
+      },
+      <String, Object?>{
+        'name': 'eventsDropped',
+        'type': 'int',
+        'optional': true,
+        'doc': 'Events dropped to stay inside the per-step or per-run cap.',
       },
       <String, Object?>{
         'name': 'address',

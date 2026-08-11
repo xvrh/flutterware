@@ -2,10 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../ui/count_badge.dart';
 import '../ui/theme.dart';
 
-/// One tab of an [InspectDock]: a label, an optional badge, and a body built
-/// only while the tab is the open one.
+/// One tab of an [InspectDock]: a label, an optional count badge, and a body
+/// built only while the tab is the open one.
 class InspectDockTab {
   const InspectDockTab({
     required this.id,
@@ -339,20 +340,11 @@ class _Tab extends StatelessWidget {
             ),
             if (badge > 0) ...[
               const SizedBox(width: FwSpacing.sm),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: FwSpacing.xs,
-                  vertical: 1,
-                ),
-                decoration: BoxDecoration(
-                  color: context.colors.red,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$badge',
-                  style: context.type.micro.copyWith(color: Colors.white),
-                ),
-              ),
+              // Quiet, not alarming. This used to be a red pill, written for a
+              // Problems tab that never arrived; a count of captured events is
+              // a quantity, and painting every one of them red would make the
+              // strip shout about a healthy step.
+              CountBadge(badge, active: selected),
             ],
           ],
         ),

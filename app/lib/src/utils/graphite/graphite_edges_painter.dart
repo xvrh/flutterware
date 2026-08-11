@@ -287,8 +287,20 @@ class LinesPainter extends CustomPainter {
         var paragraphBuilder = ParagraphBuilder(
           ParagraphStyle(textAlign: TextAlign.center),
         );
-        paragraphBuilder.pushStyle(tooltip.style.getTextStyle());
-        paragraphBuilder.addText(tooltip.text);
+        if (tooltip.text case var text?) {
+          paragraphBuilder.pushStyle(tooltip.style.getTextStyle());
+          paragraphBuilder.addText(text);
+          paragraphBuilder.pop();
+        }
+        if (tooltip.subtitle case var subtitle?) {
+          paragraphBuilder.pushStyle(
+            (tooltip.subtitleStyle ?? tooltip.style).getTextStyle(),
+          );
+          paragraphBuilder.addText(
+            tooltip.text == null ? subtitle : '\n$subtitle',
+          );
+          paragraphBuilder.pop();
+        }
         var paragraph = paragraphBuilder.build();
         var rect = Rect.fromPoints(a, b);
         paragraph.layout(ParagraphConstraints(width: rect.width));

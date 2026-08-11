@@ -9,6 +9,19 @@ import '../ui/theme.dart';
 String scenarioStepLabel(ScenarioRunStep step) =>
     step.failure != null ? 'failed' : step.name ?? 'step';
 
+/// The transition *into* a step, as a sentence: `tap "Pay"`, `screen`,
+/// `pumpWidget MyApp`. Null on a run captured before the verb was recorded,
+/// and on the step a scenario broke at — a failure is not a verb that
+/// finished.
+///
+/// What it is for: an arrow in the flow graph and a tab full of events both
+/// need to name the thing that happened between two pictures, and "step 3"
+/// does not.
+String? scenarioStepTransition(ScenarioRunStep step) {
+  if (step.verb == null) return null;
+  return step.target == null ? step.verb : '${step.verb} ${step.target}';
+}
+
 /// The colour a step's label wears: the error tone for a failure, the warn
 /// tone for a screen that never stopped animating, and nothing special
 /// otherwise.

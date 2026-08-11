@@ -63,6 +63,14 @@ const scenarioAuthoringPoints = <(String, String)>[
     's.tester',
     'is the real WidgetTester — the whole flutter_test surface, no capture.',
   ),
+  (
+    'recordScenarioEvent(ScenarioEvent.request(…))',
+    'reports what a fake did onto the transition between two steps — '
+        '`.request`, `.query`, `.analytics`, `.log`, `.custom`. Import '
+        '`package:flutterware/scenarios.dart` from the fake itself; outside a '
+        'run it is a no-op. Prints, logging records and platform channel '
+        'messages are captured with no code at all.',
+  ),
 ];
 
 /// The command that writes a runnable scenario to edit.

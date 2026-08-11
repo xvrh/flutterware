@@ -1555,6 +1555,17 @@ class ScenariosCore extends PluginCore {
       texts: (step['texts']! as List).cast<String>(),
       statusBrightness: step['statusBrightness'] as String?,
       navBrightness: step['navBrightness'] as String?,
+      verb: step['verb'] as String?,
+      target: step['target'] as String?,
+      events: switch (step['events']) {
+        String path => _relative(path),
+        _ => null,
+      },
+      eventCount: step['eventCount'] as int? ?? 0,
+      eventChannels:
+          (step['eventChannels'] as Map?)?.cast<String, int>() ?? const {},
+      eventTitles: (step['eventTitles'] as List?)?.cast<String>() ?? const [],
+      eventsDropped: step['eventsDropped'] as int? ?? 0,
       // Absent means settled: the harness writes the field only when it is
       // not, so a healthy step's record stays the size it was.
       settled: step['settled'] as bool? ?? true,

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutterware/plugins.dart';
@@ -127,6 +128,13 @@ class ScenarioRunResult
                 'step': step.index,
                 'name': ?step.name,
                 'texts': step.texts,
+                // The failing transition in full, `system` and all — the
+                // digest every step carries is capped and filtered, and this
+                // is the one step where the thing that broke it may be the
+                // twentieth line. Same reasoning as the frame itself: the
+                // reader should not have to make a second call for the answer.
+                if (step.readEvents() case var events when events.isNotEmpty)
+                  'events': events,
                 if (scenario.errors.firstOrNull case var error?)
                   'error': error.error,
               },
@@ -241,6 +249,13 @@ class ScenarioRunStep {
     this.tags = const [],
     this.statusBrightness,
     this.navBrightness,
+    this.verb,
+    this.target,
+    this.events,
+    this.eventCount,
+    this.eventChannels,
+    this.eventTitles,
+    this.eventsDropped,
     this.settled = true,
     this.strayFrames = 0,
     this.failure,
@@ -310,6 +325,72 @@ class ScenarioRunStep {
 
   /// The visible texts — the projection an agent reads next to the pixels.
   final List<String> texts;
+
+  /// The verb that produced this step and what it was aimed at — `tap`,
+  /// `"Pay"`. Together they name the transition *into* this step, which is
+  /// what the events below happened during. Null on artifacts from before the
+  /// capture existed, and on a step captured at a failure.
+  final String? verb;
+  final String? target;
+
+  /// What the app did on the way here — logs, prints, platform channel
+  /// messages, and whatever the project's fakes reported through
+  /// `recordScenarioEvent`. Relative like [image]; null when this transition
+  /// was quiet, which is distinct from a run too old to have captured any.
+  final String? events;
+
+  @JsonKey(includeToJson: false)
+  File? get eventsFile => events == null ? null : File(p.join(root, events!));
+
+  /// The transition's events, read from [eventsFile] — empty when there were
+  /// none, and empty rather than throwing when the file cannot be read: a
+  /// missing artifact must not take a failure report down with it.
+  List<Map<String, Object?>> readEvents() {
+    var file = eventsFile;
+    if (file == null || !file.existsSync()) return const [];
+    try {
+      return [
+        for (var event in jsonDecode(file.readAsStringSync()) as List)
+          (event as Map).cast<String, Object?>(),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// How many, and on which channels — `{platform: 3, print: 1}`. The badge on
+  /// the flow's arrow, and the part of the digest that survives filtering.
+  ///
+  /// Null — not zero, not `{}` — on a transition where nothing happened, which
+  /// is most of them: four keys saying "none" on every step of a fifty-step
+  /// run is noise an agent pays for. [hasEvents] is the question worth asking.
+  final int? eventCount;
+  final Map<String, int>? eventChannels;
+
+  /// The one-line summaries, capped, `system` excluded — what a reader gets
+  /// without opening [events]. `POST /login → 401` is the part an agent
+  /// reasons about; the payloads are what it fetches when it cares.
+  final List<String>? eventTitles;
+
+  /// Events dropped to stay inside the per-step or per-run cap. Reported
+  /// rather than swallowed: a truncated transition that said nothing would
+  /// read as an app that did nothing.
+  final int? eventsDropped;
+
+  /// Whether anything happened on the way to this step.
+  @JsonKey(includeToJson: false)
+  bool get hasEvents => (eventCount ?? 0) > 0;
+
+  /// The events a reader will actually be shown — everything but `system`.
+  ///
+  /// What the flow's arrows and the tab's label count. The framework talks to
+  /// `flutter/textinput` on any step with a text field, so counting the whole
+  /// buffer would put "4 events" on every arrow of every flow and lead every
+  /// reader to a tab filtered down to nothing. The `system` chip still carries
+  /// its own count, for the reader who wants it.
+  @JsonKey(includeToJson: false)
+  int get notableEventCount =>
+      (eventCount ?? 0) - (eventChannels?['system'] ?? 0);
 
   /// The step's `fw://` address.
   final String address;

@@ -64,9 +64,23 @@ class _DirectGraphState extends State<DirectGraph> {
   }
 }
 
+/// A label drawn on an edge, above its last segment.
+///
+/// Two lines rather than one, because an edge in a scenario flow has two
+/// things to say and they are not equals: which branch of a `split` this is,
+/// and what the app did along the way. [subtitle] is the quieter second line;
+/// either may stand alone.
 class EdgeTooltip {
-  final String text;
+  final String? text;
   final TextStyle style;
 
-  EdgeTooltip(this.text, {required this.style});
+  final String? subtitle;
+  final TextStyle? subtitleStyle;
+
+  EdgeTooltip(
+    this.text, {
+    required this.style,
+    this.subtitle,
+    this.subtitleStyle,
+  });
 }
