@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../utils/image_clipboard.dart';
 import 'menu.dart';
+import 'split_button.dart';
 
 /// One picture a [CaptureButton] can take.
 ///
@@ -158,6 +159,7 @@ class CaptureButtonState extends State<CaptureButton> {
 
   List<MenuEntry> _entries() {
     var canCopy = ImageClipboard.isSupported;
+    var enabled = widget.enabled && !_busy;
     return [
       for (var (index, target) in [
         widget.primary,
@@ -169,13 +171,13 @@ class CaptureButtonState extends State<CaptureButton> {
             'Copy ${target.label}',
             icon: Icons.content_copy,
             shortcut: index == 0 ? widget.shortcutHint : null,
-            onSelected: () => unawaited(copy(target)),
+            onSelected: enabled ? () => unawaited(copy(target)) : null,
             onHover: target.onHover,
           ),
         MenuItem(
           'Save ${target.label} as PNG…',
           icon: Icons.save_alt,
-          onSelected: () => unawaited(_save(target)),
+          onSelected: enabled ? () => unawaited(_save(target)) : null,
           onHover: target.onHover,
         ),
       ],
@@ -189,45 +191,27 @@ class CaptureButtonState extends State<CaptureButton> {
     var justCopied = _copied?.isActive ?? false;
     var hint = widget.shortcutHint;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: Icon(
-            justCopied
-                ? Icons.check
-                : canCopy
-                ? Icons.content_copy
-                : Icons.save_alt,
-            size: 15,
-          ),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-          tooltip: canCopy
-              ? 'Copy ${widget.primary.label}${hint == null ? '' : ' ($hint)'}'
-              : 'Save ${widget.primary.label} as PNG',
-          onPressed: enabled
-              ? () => unawaited(canCopy ? copy() : _save(widget.primary))
-              : null,
-        ),
-        Menu(
-          entries: _entries(),
-          // Dismissal unmounts the rows under the pointer, so no exit event
-          // reaches whichever target was previewing its hover.
-          onClose: () {
-            for (var target in [widget.primary, ...widget.secondary]) {
-              target.onHover?.call(false);
-            }
-          },
-          builder: (context, controller) => IconButton(
-            icon: const Icon(Icons.expand_more, size: 14),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 16, height: 24),
-            tooltip: 'More ways to capture',
-            onPressed: enabled ? controller.toggle : null,
-          ),
-        ),
-      ],
+    return FwSplitButton.icon(
+      icon: justCopied
+          ? Icons.check
+          : canCopy
+          ? Icons.content_copy
+          : Icons.save_alt,
+      tooltip: canCopy
+          ? 'Copy ${widget.primary.label}${hint == null ? '' : ' ($hint)'}'
+          : 'Save ${widget.primary.label} as PNG',
+      menuTooltip: 'More ways to capture',
+      onPressed: enabled
+          ? () => unawaited(canCopy ? copy() : _save(widget.primary))
+          : null,
+      entries: _entries(),
+      // Dismissal unmounts the rows under the pointer, so no exit event
+      // reaches whichever target was previewing its hover.
+      onMenuClose: () {
+        for (var target in [widget.primary, ...widget.secondary]) {
+          target.onHover?.call(false);
+        }
+      },
     );
   }
 }

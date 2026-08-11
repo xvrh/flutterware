@@ -23,6 +23,8 @@ import '../../inspect/elements_view.dart';
 import '../../inspect/inspect_dock.dart';
 import '../../ui/capture_button.dart';
 import '../../ui/design/design.dart';
+import '../../ui/menu.dart';
+import '../../ui/split_button.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/popover.dart';
 import '../../ui/popover_menu.dart';
@@ -467,12 +469,14 @@ class _RunHeader extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Gap(FwSpacing.sm),
-                    // Capability, as a pill rather than a caption. It is the
-                    // one thing on this row that changes what the buttons
-                    // beside it can do, and a grey line of small text said it
-                    // as quietly as everything else.
-                    _CapabilityPill(state: state),
+                    // Capability, as a pill rather than a caption — but only
+                    // when it is news. "reloadable" is the normal state and
+                    // the enabled buttons already say it; the pill appears
+                    // when something is missing.
+                    if (state.tone != _Tone.good) ...[
+                      const Gap(FwSpacing.sm),
+                      _CapabilityPill(state: state),
+                    ],
                     if (!mine) ...[
                       const Gap(FwSpacing.sm),
                       _Tag(handle.worktreeName),
@@ -496,17 +500,21 @@ class _RunHeader extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _Action(
-                  'Hot reload',
-                  Icons.bolt_outlined,
-                  enabled: state.canReload,
-                  onPressed: () => onControl('reload', handle),
-                ),
-                _Action(
-                  'Hot restart',
-                  Icons.refresh_rounded,
-                  enabled: state.canReload,
-                  onPressed: () => onControl('restart', handle),
+                FwSplitButton(
+                  label: 'Hot reload',
+                  icon: Icons.local_fire_department_rounded,
+                  onPressed: state.canReload
+                      ? () => onControl('reload', handle)
+                      : null,
+                  entries: [
+                    MenuItem(
+                      'Hot restart',
+                      icon: Icons.restart_alt,
+                      onSelected: state.canReload
+                          ? () => onControl('restart', handle)
+                          : null,
+                    ),
+                  ],
                 ),
                 const Gap(FwSpacing.xs),
                 _Action(
@@ -1425,7 +1433,7 @@ IconData _verbIcon(String verb) => switch (verb) {
   'wait' => Icons.hourglass_empty,
   'observe' => Icons.visibility_outlined,
   'navigate' => Icons.route_outlined,
-  'reload' => Icons.bolt_outlined,
+  'reload' => Icons.local_fire_department_outlined,
   'restart' => Icons.restart_alt,
   'stop' => Icons.stop_outlined,
   'launch' => Icons.play_arrow_outlined,
@@ -2263,10 +2271,6 @@ class _Hint extends StatelessWidget {
 }
 
 /// A control on the run's header — icon and word, not a bare glyph.
-///
-/// Labelled because there is room and because `⚡` and `↻` beside each other
-/// are a guess: hot reload and hot restart differ by about a second and by
-/// whether your state survives, which is not something to leave to a tooltip.
 class _Action extends StatelessWidget {
   const _Action(
     this.label,
