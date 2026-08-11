@@ -24,6 +24,21 @@ const changesListKey = Key('changes-list');
 /// The selected file's diff, on the right.
 const changesFileKey = Key('changes-file');
 
+/// Which of the index's two tabs is showing.
+///
+/// **The ranking's answer and the directory structure are two orderings of one
+/// set of files, and they do not fit in one column.** Putting the pinned files
+/// in a band above the tree was tried and used, and it lost on both counts: the
+/// alert competed with the tree for the top of a 320 px column, and it was
+/// still occupying that column on the branches where it had nothing to say.
+enum IndexTab {
+  /// Everything, as a directory tree.
+  all,
+
+  /// What a rule pinned: flat, in rank order, nothing folded.
+  important,
+}
+
 /// **`fw:///worktrees/<worktree>/changes`** — what this checkout has changed
 /// against its base branch, committed and uncommitted together.
 ///
@@ -33,16 +48,16 @@ const changesFileKey = Key('changes-file');
 /// session; the checkout you most want to look at is the one an agent has been
 /// working in while you were elsewhere.
 ///
-/// **Master and detail.** Left: every path in the delta, ranked, and nothing
-/// else. Right: the one file you picked. They used to be a single list of file
-/// rows that expanded to inject their own diff, which made the surface you
-/// navigate with and the surface you read the same one — every complaint about
-/// this screen came out of that, from "clicking a file scrolls but does not
-/// open it" to a live update sliding the lines under your eyes.
+/// **Master and detail.** Left: every path in the delta, and nothing else.
+/// Right: the one file you picked. They used to be a single list of file rows
+/// that expanded to inject their own diff, which made the surface you navigate
+/// with and the surface you read the same one — every complaint about this
+/// screen came out of that, from "clicking a file scrolls but does not open it"
+/// to a live update sliding the lines under your eyes.
 ///
-/// A churn map and a directory tree were the other two ways in. Both are gone:
-/// three navigation surfaces for one list of files is two too many, and the
-/// ranked index says what they said, with names on it.
+/// The index is **two tabs**: *All*, a directory tree, and *Important*, the
+/// files a rule pinned. A churn map was a third way in and is gone — three
+/// navigation surfaces for one list of files is two too many.
 class ChangesScreen extends StatefulWidget {
   const ChangesScreen({
     required this.worktree,
@@ -126,7 +141,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
   ///
   /// *Low-signal* is what the ranking demoted.
   ///
-  /// Between them and the pinned band above, the three questions a fifty-file
+  /// Between them and the Important tab, the three questions a fifty-file
   /// branch raises: what a **rule** says matters, what is **moving**, and what
   /// is **skippable**.
   var _justChangedOnly = false;
@@ -135,6 +150,23 @@ class _ChangesScreenState extends State<ChangesScreen> {
   /// session**, not persisted: the whole value of the drawer is that the
   /// screen opens on the signal.
   var _noiseOpen = false;
+
+  /// Null until you pick one, which is what lets the default depend on what the
+  /// checkout turned out to contain — see [_tabFor]. Set the moment a tab is
+  /// clicked, and never re-derived after that: a screen that switches tabs
+  /// under you because a rule started matching is a screen that moved your
+  /// place while you were reading.
+  IndexTab? _tab;
+
+  /// **Important when there is something in it, All otherwise.**
+  ///
+  /// The one thing a tab costs is that the alert is hidden half the time, so
+  /// the half it is hidden in is the half where it is empty. On a branch where
+  /// a rule fired, the screen opens on the four files it fired for; on one
+  /// where none did, opening on an empty tab would be the worst of both.
+  IndexTab _tabFor(ChangeSet set) =>
+      _tab ??
+      (buildImportantRows(set).isEmpty ? IndexTab.all : IndexTab.important);
 
   @override
   void initState() {
@@ -250,14 +282,6 @@ class _ChangesScreenState extends State<ChangesScreen> {
   @override
   Widget build(BuildContext context) {
     var set = _changes.value;
-    var rows = set == null
-        ? const <ChangeRow>[]
-        : buildIndexRows(
-            set,
-            selected: _selected,
-            visible: _visible(set),
-            noiseOpen: _noiseOpen,
-          );
 
     return Column(
       key: changesScreenKey,
@@ -284,7 +308,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
                       width: _indexWidth,
                       child: _IndexPane(
                         set: set,
-                        rows: rows,
+                        tab: _tabFor(set),
                         controller: _index,
                         query: _query,
                         selected: _selected,
@@ -292,6 +316,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         noiseOpen: _noiseOpen,
                         justChanged: _changes.moved,
                         justChangedOnly: _justChangedOnly,
+                        onTab: (tab) => setState(() => _tab = tab),
                         onQuery: (q) => setState(() => _query = q),
                         onSelect: _show,
                         onToggleNoise: () =>
@@ -539,31 +564,31 @@ class _Summary extends StatelessWidget {
   }
 }
 
-/// The **index**: filter, then every path in the delta, ranked.
-///
-/// Navigation only. Nothing here is content, which is the whole point of the
-/// split — the list stays where you left it while you read, and a live re-probe
-/// that adds a file changes this column without moving a line of what is open.
-/// The **index**: filter, what to look at first, and the tree of everything
-/// else.
+/// The **index**: filter, two tabs, and the paths.
 ///
 /// Navigation only. Nothing here is content, which is the whole point of the
 /// split — the list stays where you left it while you read, and a live re-probe
 /// that adds a file changes this column without moving a line of what is open.
 ///
-/// **Two orderings, both kept.** *Look here first* is an alert: short, in rank
-/// order, and pinned to the top where it cannot be missed. Everything else is
-/// navigation, and navigation wants structure, so it is a directory tree —
-/// ordered by weight, so an agent's heaviest module is still the first thing
-/// under it. Tabs were the other way to reconcile the two, and a tab hides the
-/// alert half the time.
+/// **Two orderings, one column, so two tabs.** *All* is a directory tree, which
+/// is what navigation wants: structure, ordered by weight inside it, so an
+/// agent's heaviest module is the first thing under each folder. *Important* is
+/// the ranking's answer — flat, short, in rank order, nothing folded, because a
+/// list of four files has no shape to communicate and folding it would only
+/// hide it.
+///
+/// They were one column before this, the pinned files in a band above the tree,
+/// and using it settled the argument: two lists arguing for the top of a 320 px
+/// column, with the band still taking that space on branches where it had
+/// nothing to say.
 class _IndexPane extends StatelessWidget {
   const _IndexPane({
     required this.set,
-    required this.rows,
+    required this.tab,
     required this.controller,
     required this.query,
     required this.selected,
+    required this.onTab,
     required this.onQuery,
     required this.onSelect,
     required this.onToggleNoise,
@@ -575,13 +600,12 @@ class _IndexPane extends StatelessWidget {
   });
 
   final ChangeSet set;
-
-  /// The flat parts: pinned, the noise drawer, untracked.
-  final List<ChangeRow> rows;
+  final IndexTab tab;
 
   final ScrollController controller;
   final String query;
   final String? selected;
+  final ValueChanged<IndexTab> onTab;
   final ValueChanged<String> onQuery;
   final ValueChanged<String> onSelect;
   final VoidCallback onToggleNoise;
@@ -594,10 +618,10 @@ class _IndexPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var tree = buildTree(
-      treeFiles(set, visible: visible, noiseOpen: noiseOpen),
-    );
-    var nothing = rows.isEmpty && tree.totalFiles == 0;
+    // Unfiltered, because a tab label is a claim about the checkout and not
+    // about the box you are typing in. A count that drops to 0 as you type
+    // makes the other tab look like the place the file went.
+    var pinned = buildImportantRows(set).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -621,81 +645,107 @@ class _IndexPane extends StatelessWidget {
             ),
           ),
         ),
-        _LensRow(
-          set: set,
-          noiseOpen: noiseOpen,
-          justChanged: justChanged,
-          justChangedOnly: justChangedOnly,
-          onToggleNoise: onToggleNoise,
-          onToggleJustChanged: onToggleJustChanged,
+        _Tabs(
+          tab: tab,
+          all: set.changed.length + set.untracked.length,
+          important: pinned,
+          onTab: onTab,
         ),
+        // Only under *All*. Nothing a lens does applies to the other tab:
+        // attention outranks noise, so nothing pinned is ever demoted, and
+        // narrowing four files to the two that moved is not a question anyone
+        // has.
+        if (tab == IndexTab.all)
+          _LensRow(
+            set: set,
+            noiseOpen: noiseOpen,
+            justChanged: justChanged,
+            justChangedOnly: justChangedOnly,
+            onToggleNoise: onToggleNoise,
+            onToggleJustChanged: onToggleJustChanged,
+          ),
         Expanded(
-          child: nothing
-              ? Center(
-                  child: Text(
-                    set.changed.isEmpty
-                        ? 'Nothing to show.'
-                        : 'Nothing matches.',
-                    style: context.type.bodySmall.copyWith(color: colors.mut2),
-                  ),
-                )
-              // **Not virtualised, deliberately.** The index is the file count,
-              // not the line count — a 228-file branch is a few hundred rows,
-              // where the list it replaced could be four thousand. A tree that
-              // remembers which folders are open cannot be rebuilt by index
-              // anyway.
-              : ListView(
-                  key: changesListKey,
-                  controller: controller,
-                  children: [
-                    if (!set.attentionConfigured) const _NoRulesYet(),
-                    for (var row in rows) _flat(context, row),
-                    if (tree.totalFiles > 0)
-                      _TreeNodeView(
-                        node: tree,
-                        depth: 0,
-                        selected: selected,
-                        uncommitted: set.uncommitted,
-                        ranking: set.ranking,
-                        onSelect: onSelect,
-                        // Open at the top, shut further down: a branch that
-                        // touched one module wants that module visible, and a
-                        // repo of forty directories does not want all of them
-                        // unfolded at once.
-                        openDepth: 1,
-                      ),
-                  ],
-                ),
+          child: switch (tab) {
+            IndexTab.all => _all(context),
+            IndexTab.important => _important(context),
+          },
         ),
       ],
     );
   }
 
+  /// Everything in the delta: the tree, then the untracked paths under it.
+  Widget _all(BuildContext context) {
+    var tree = buildTree(
+      treeFiles(set, visible: visible, noiseOpen: noiseOpen),
+    );
+    var untracked = buildUntrackedRows(
+      set,
+      selected: selected,
+      visible: visible,
+    );
+    if (tree.totalFiles == 0 && untracked.isEmpty) {
+      return _Nothing(
+        set.changed.isEmpty ? 'Nothing to show.' : 'Nothing matches.',
+      );
+    }
+    // **Not virtualised, deliberately.** The index is the file count, not the
+    // line count — a 228-file branch is a few hundred rows, where the list it
+    // replaced could be four thousand. A tree that remembers which folders are
+    // open cannot be rebuilt by index anyway.
+    return ListView(
+      key: changesListKey,
+      controller: controller,
+      children: [
+        if (tree.totalFiles > 0)
+          _TreeNodeView(
+            node: tree,
+            depth: 0,
+            selected: selected,
+            uncommitted: set.uncommitted,
+            ranking: set.ranking,
+            onSelect: onSelect,
+            // Open at the top, shut further down: a branch that touched one
+            // module wants that module visible, and a repo of forty
+            // directories does not want all of them unfolded at once.
+            openDepth: 1,
+          ),
+        for (var row in untracked) _flat(context, row),
+      ],
+    );
+  }
+
+  /// What a rule pinned, and nothing else.
+  Widget _important(BuildContext context) {
+    var rows = buildImportantRows(set, selected: selected, visible: visible);
+    if (rows.isEmpty) {
+      // Two different silences, and telling them apart is the whole reason
+      // `attentionConfigured` exists: a project that has never written a rule
+      // is looking at a feature that appears not to work, and a project whose
+      // rules matched nothing is looking at good news.
+      return set.attentionConfigured
+          ? const _Nothing('No file matched an attention rule.')
+          : const _NoRulesYet();
+    }
+    return ListView(
+      key: changesListKey,
+      controller: controller,
+      children: [for (var row in rows) _flat(context, row)],
+    );
+  }
+
   Widget _flat(BuildContext context, ChangeRow row) => switch (row) {
-    SectionRow(:var label, :var detail) => Padding(
+    SectionRow(:var label) => Padding(
       padding: const EdgeInsets.fromLTRB(
         FwSpacing.md,
         FwSpacing.lg,
         FwSpacing.md,
         FwSpacing.xs,
       ),
-      child: Row(
-        children: [
-          Flexible(
-            child: Text(
-              label,
-              style: context.type.caption,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (detail case var it?) ...[
-            const Gap(FwSpacing.sm),
-            Text(
-              it,
-              style: context.type.micro.copyWith(color: context.colors.mut3),
-            ),
-          ],
-        ],
+      child: Text(
+        label,
+        style: context.type.caption,
+        overflow: TextOverflow.ellipsis,
       ),
     ),
     FileRow(:var file, :var selected, :var uncommitted, :var reason) =>
@@ -716,30 +766,175 @@ class _IndexPane extends StatelessWidget {
   };
 }
 
-/// Said once, quietly, to a project that has never written an `attention:`
-/// rule.
+/// The two tabs, with their counts.
 ///
-/// **There are no built-in ones**, so without this the band is simply absent
-/// and the whole ranking reads as a feature that does not work. A project that
-/// *has* rules and matched none of them is told nothing, because it already
-/// knows they exist.
+/// **The count is what pays for the tab.** A tab's cost is that half the time
+/// it is hiding what it holds; a number on the label means the Important tab
+/// still says *there are four files a rule pinned* without being opened, which
+/// is most of what the band it replaces was for.
+class _Tabs extends StatelessWidget {
+  const _Tabs({
+    required this.tab,
+    required this.all,
+    required this.important,
+    required this.onTab,
+  });
+
+  final IndexTab tab;
+  final int all;
+  final int important;
+  final ValueChanged<IndexTab> onTab;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: context.colors.line)),
+      ),
+      child: Row(
+        children: [
+          _Tab(
+            label: 'All',
+            count: all,
+            on: tab == IndexTab.all,
+            onTap: () => onTab(IndexTab.all),
+          ),
+          _Tab(
+            label: 'Important',
+            count: important,
+            on: tab == IndexTab.important,
+            onTap: () => onTab(IndexTab.important),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Tab extends StatelessWidget {
+  const _Tab({
+    required this.label,
+    required this.count,
+    required this.on,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(
+          FwSpacing.md,
+          FwSpacing.xs,
+          FwSpacing.md,
+          FwSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          border: Border(
+            // Two pixels, drawn where the divider is, so the selected tab sits
+            // on the list it is naming.
+            bottom: BorderSide(
+              color: on ? colors.accent : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              label,
+              style: context.type.bodySmall.copyWith(
+                color: on ? colors.accent : colors.mut2,
+              ),
+            ),
+            const Gap(FwSpacing.xs),
+            Text(
+              '$count',
+              style: context.type.micro.copyWith(
+                color: on ? colors.accent : colors.mut3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One line, centred, for a list that has nothing in it.
+class _Nothing extends StatelessWidget {
+  const _Nothing(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(FwSpacing.xl),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: context.type.bodySmall.copyWith(color: context.colors.mut2),
+      ),
+    ),
+  );
+}
+
+/// What the **Important** tab says to a project that has never written an
+/// `attention:` rule.
+///
+/// **There are no built-in ones**, so without this the tab is empty and the
+/// whole ranking reads as a feature that does not work. It is the empty state
+/// rather than a line above the list, which is where it used to sit: a note
+/// that a band could not fit is a full pane's worth of room here, and it can
+/// say the whole thing.
 class _NoRulesYet extends StatelessWidget {
   const _NoRulesYet();
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        FwSpacing.md,
-        FwSpacing.xs,
-        FwSpacing.md,
-        FwSpacing.md,
-      ),
-      child: Text(
-        'Nothing is pinned. Name what matters here with '
-        'fw.changes(ChangesConfig(attention: [...])) in tool/flutterware.dart.',
-        style: context.type.micro.copyWith(color: colors.mut3),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(FwSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Nothing is pinned yet.',
+              style: context.type.bodySmall.copyWith(color: colors.mut),
+            ),
+            const Gap(FwSpacing.sm),
+            Text(
+              'Name what you want to see first in tool/flutterware.dart:',
+              style: context.type.micro.copyWith(color: colors.mut2),
+            ),
+            const Gap(FwSpacing.sm),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(FwSpacing.sm),
+              decoration: BoxDecoration(
+                color: colors.panel2,
+                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+              ),
+              child: Text(
+                "fw.changes(ChangesConfig(\n  attention: ['lib/api/**'],\n));",
+                style: diffTextStyle(context).copyWith(color: colors.mut2),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1016,8 +1211,8 @@ class _FilePane extends StatelessWidget {
     return const _Empty(
       title: 'Pick a file',
       body:
-          'The list on the left is ranked: what a rule pinned comes first, '
-          'then the rest by weight.',
+          'All is every path in this delta, as a tree. Important is what a '
+          'rule in tool/flutterware.dart pinned.',
     );
   }
 }

@@ -46,12 +46,13 @@ class IndexFileRow extends StatelessWidget {
 
   /// False inside the tree, where the row's position already says where the
   /// file is and repeating the path is the noise the tree exists to remove.
-  /// True in the pinned band, which is flat and has no other way to say it.
+  /// True in the *Important* tab, which is flat and has no other way to say
+  /// it.
   final bool showDirectory;
 
   /// Draws the flag an attention rule earned this file. Set inside the tree,
-  /// where a pin has to be visible in passing; the band above is all pins and
-  /// would only be marking every row.
+  /// where a pin has to be visible in passing. Not in the *Important* tab,
+  /// which is all pins and would only be marking every row.
   final bool pinned;
 
   /// Why this file was pinned or demoted, in the words the rule was written in.

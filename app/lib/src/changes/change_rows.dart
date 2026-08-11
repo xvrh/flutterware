@@ -8,11 +8,11 @@
 /// moved the lines you were reading, and getting to the next file meant
 /// scrolling through the last one's diff.
 ///
-/// So [buildIndexRows] is the left column and [buildFileRows] is the right
-/// pane. Both stay flat and virtualised for the same reason as before: a file
-/// is thousands of diff lines, and only a flat list stays smooth at that size —
-/// which needs every row addressable by index without building the ones above
-/// it.
+/// So [buildImportantRows] and [buildUntrackedRows] are the left column's two
+/// flat lists and [buildFileRows] is the right pane. The body stays flat and
+/// virtualised for the same reason as before: a file is thousands of diff
+/// lines, and only a flat list stays smooth at that size — which needs every
+/// row addressable by index without building the ones above it.
 ///
 /// What makes that affordable is [HunkSpan.displayLines]: a hunk's header says
 /// how many lines it will draw, so the row list is built from **metadata
@@ -32,14 +32,12 @@ sealed class ChangeRow {
   const ChangeRow();
 }
 
-/// A heading — `Look here first`, `Changes`, `Untracked`.
+/// A heading. One survives: `Untracked`, at the foot of the *All* tab. The
+/// others became tab labels, and a tab label carries its own count.
 final class SectionRow extends ChangeRow {
-  const SectionRow(this.label, {this.detail});
+  const SectionRow(this.label);
 
   final String label;
-
-  /// The counts that belong to this section, or null.
-  final String? detail;
 }
 
 /// A file's own row in the index: status, name, counts, ruler.
@@ -97,89 +95,79 @@ final class UntrackedRow extends ChangeRow {
   final bool selected;
 }
 
-/// The index's **flat parts**: what is pinned, what is noise, what is
-/// untracked. Everything else is in the tree.
+/// The **Important** tab: every file a rule pinned, flat and all of it open.
 ///
-/// **The split is the answer to two orderings of one set of files.** *Look here
-/// first* is an alert and has to be seen without being asked for, so it is a
-/// short band at the top, in rank order. Everything else is navigation, and
-/// navigation wants structure, so it is a directory tree below — ordered by
-/// weight, so the ranking is still doing its work inside it. A tab would have
-/// been the other way to reconcile them, and it hides the alert half the time.
+/// **Two tabs, not a band above a tree.** The band was tried and rejected in
+/// use: it made the top of the index a place where the ranking's answer and the
+/// directory structure argued for the same column, and it was still there
+/// taking space on the branches where it said nothing. A tab hides the alert
+/// half the time — that is the real cost, and it is paid back by the tab
+/// *label*, which carries the count and so says there is something to look at
+/// without being opened.
+///
+/// No headings in here. The tab is the heading, and there is only one kind of
+/// row, which is the point: this is the short list, in rank order, and it never
+/// collapses anything.
 ///
 /// [visible] is null when nothing is filtering.
-List<ChangeRow> buildIndexRows(
+List<ChangeRow> buildImportantRows(
   ChangeSet set, {
   String? selected,
   Set<String>? visible,
-  bool noiseOpen = false,
 }) {
   var rows = <ChangeRow>[];
 
-  void addFile(RankedFile ranked) => rows.add(
-    FileRow(
-      ranked.file,
-      selected: ranked.file.path == selected,
-      uncommitted: set.uncommitted.contains(ranked.file.path),
-      reason: ranked.reason,
-    ),
-  );
-
-  List<RankedFile> kept(RankTier tier) => [
-    for (var ranked in set.ordered(tier))
-      if (visible == null || visible.contains(ranked.file.path)) ranked,
-  ];
-
-  var attention = kept(RankTier.attention);
-
-  // An untracked file that matched a rule belongs in the pinned section even
-  // though it has no diff — see `attentionForUntracked`. Filtering hides it
-  // like anything else.
-  var pinnedUntracked = [
-    for (var entry in set.untracked)
-      if (entry.isPinned && (visible == null || visible.contains(entry.path)))
-        entry,
-  ];
-
-  if (attention.isNotEmpty || pinnedUntracked.isNotEmpty) {
+  for (var ranked in set.ordered(RankTier.attention)) {
+    if (visible != null && !visible.contains(ranked.file.path)) continue;
     rows.add(
-      SectionRow(
-        'Look here first',
-        detail: _counts(attention, pinnedUntracked.length),
+      FileRow(
+        ranked.file,
+        selected: ranked.file.path == selected,
+        uncommitted: set.uncommitted.contains(ranked.file.path),
+        reason: ranked.reason,
       ),
     );
-    attention.forEach(addFile);
-    for (var entry in pinnedUntracked) {
-      rows.add(UntrackedRow(entry, selected: entry.path == selected));
-    }
   }
-  // **The ordinary files are not here.** They are the tree's, which is the
-  // whole point of putting one back: a flat list of fifty-three basenames says
-  // nothing about the shape of the branch.
-  //
-  // Neither is the noise drawer any more: it is a lens at the top of the pane,
-  // where you look, rather than a row below fifty others — which is where the
-  // original one sat, and slice 4 had already found that a control below the
-  // fold labels a distinction nobody can see.
 
-  // The pinned ones are drawn above; listing them twice would make the branch
-  // look bigger than it is.
-  var rest = [
-    for (var entry in set.untracked)
-      if (!entry.isPinned) entry,
-  ];
-  var keptRest = [
-    for (var entry in rest)
-      if (visible == null || visible.contains(entry.path)) entry,
-  ];
-  if (keptRest.isNotEmpty) {
-    rows.add(const SectionRow('Untracked'));
-    for (var entry in keptRest) {
-      rows.add(UntrackedRow(entry, selected: entry.path == selected));
-    }
+  // An untracked file that matched a rule belongs here even though it has no
+  // diff — see `attentionForUntracked`. The motivating case is a file an agent
+  // wrote thirty seconds ago and has not staged, which is exactly the thing
+  // this tab exists to surface.
+  for (var entry in set.untracked) {
+    if (!entry.isPinned) continue;
+    if (visible != null && !visible.contains(entry.path)) continue;
+    rows.add(UntrackedRow(entry, selected: entry.path == selected));
   }
 
   return rows;
+}
+
+/// The **All** tab's flat tail: the untracked paths, under one heading.
+///
+/// Everything tracked is in the tree above it — see [treeFiles]. Untracked
+/// entries cannot join it: git reports the topmost wholly-untracked *directory*
+/// and does not descend, so `build/` is one entry standing for a subtree nobody
+/// has walked, and folding that into a directory tree would claim a shape that
+/// was never read.
+///
+/// **Pinned ones are listed here too.** All means all: a tab that quietly drops
+/// the four files the other tab is about is a tab whose count disagrees with
+/// the header, which is the same bug the tree had when pins were held out of it.
+List<ChangeRow> buildUntrackedRows(
+  ChangeSet set, {
+  String? selected,
+  Set<String>? visible,
+}) {
+  var kept = [
+    for (var entry in set.untracked)
+      if (visible == null || visible.contains(entry.path)) entry,
+  ];
+  if (kept.isEmpty) return const [];
+  return [
+    const SectionRow('Untracked'),
+    for (var entry in kept)
+      UntrackedRow(entry, selected: entry.path == selected),
+  ];
 }
 
 /// The files the **tree** holds: everything, plus the noise once its lens is on.
@@ -190,9 +178,9 @@ List<ChangeRow> buildIndexRows(
 /// files over a tree that totalled 52, and browsing to `CLAUDE.md` could not
 /// find it. A quietly wrong count is worse than a repetition.
 ///
-/// The band above is an **alert**, not a section — a view onto the tree rather
-/// than a removal from it, the way a problems panel lists files that are also
-/// in the file explorer. The tree marks them where they live.
+/// The Important tab is a **view onto** this tree, not a removal from it — the
+/// way a problems panel lists files that are also in the file explorer. The
+/// tree marks a pinned file where it lives.
 List<FileChange> treeFiles(
   ChangeSet set, {
   Set<String>? visible,
@@ -235,15 +223,6 @@ List<ChangeRow> buildFileRows(FileChange file) {
       for (var i = 0; i < hunk.displayLines; i++) DiffLineRow(file, hunk, i),
     ],
   ];
-}
-
-String _counts(List<RankedFile> files, int untracked) {
-  var total = files.length + untracked;
-  var added = files.fold(0, (sum, r) => sum + r.file.added);
-  var removed = files.fold(0, (sum, r) => sum + r.file.removed);
-  // The +/- covers what has a delta. An untracked file has none against the
-  // base, so it is counted as a file and contributes no lines.
-  return '$total ${total == 1 ? 'file' : 'files'} +$added -$removed';
 }
 
 /// Paths containing [query], case-insensitively.

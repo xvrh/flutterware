@@ -256,15 +256,23 @@ void main() {
       );
     });
 
-    testWidgets('a project with no rules is told once that they exist', (
+    testWidgets('a project with no rules is told how to write one', (
       tester,
     ) async {
-      // **There are no built-in attention rules**, so without this line the
-      // band is simply absent and the whole ranking reads as a feature that
-      // does not work.
+      // **There are no built-in attention rules**, so without this the tab is
+      // empty and the whole ranking reads as a feature that does not work. It
+      // is the tab's empty state, which is a pane's worth of room to say the
+      // whole thing rather than the one dim line a band could fit.
       current = setOf([file('lib/a.dart')]);
       await pump(tester);
+      // Nothing is pinned, so it did not open here — All is where an empty
+      // Important tab would be the worst of both.
+      expect(find.textContaining('Nothing is pinned'), findsNothing);
+
+      await tester.tap(find.text('Important'));
+      await tester.pumpAndSettle();
       expect(find.textContaining('Nothing is pinned'), findsOneWidget);
+      expect(find.textContaining('ChangesConfig'), findsOneWidget);
     });
 
     testWidgets('a project that has rules is told nothing', (tester) async {
@@ -277,7 +285,13 @@ void main() {
         attentionConfigured: true,
       );
       await pump(tester);
+      await tester.tap(find.text('Important'));
+      await tester.pumpAndSettle();
+
+      // Two different silences: a project whose rules matched nothing is
+      // looking at good news, not at a feature that appears broken.
       expect(find.textContaining('Nothing is pinned'), findsNothing);
+      expect(find.text('No file matched an attention rule.'), findsOneWidget);
     });
 
     testWidgets('typing finds an untracked file, which it could not before', (

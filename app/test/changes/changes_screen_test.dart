@@ -327,9 +327,10 @@ void main() {
       expect(find.text('model.g.dart'), findsOneWidget);
     });
 
-    testWidgets('a pinned file leads, and names the rule that pinned it', (
-      tester,
-    ) async {
+    testWidgets('the screen opens on what a rule pinned', (tester) async {
+      // **The alert is not something you navigate to.** A tab hides what it
+      // holds half the time, so the half it is hidden in is the half where it
+      // is empty: a checkout with a pin opens on the pin.
       var files = [
         file('lib/huge.dart', added: 900, removed: 900),
         file('db/migrations/1.sql', added: 2, removed: 0),
@@ -345,15 +346,23 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Look here first'), findsOneWidget);
-      // Twice: the band, and the row in the tree that is flagged.
-      expect(find.textContaining('matches **/*.g.dart'), findsNWidgets(2));
+      expect(find.text('1.sql'), findsOneWidget);
+      expect(find.textContaining('matches **/*.g.dart'), findsOneWidget);
+      // The 1800-line file is not on this tab at all, which is the whole claim:
+      // every other ordering of these two puts it first.
+      expect(find.text('huge.dart'), findsNothing);
 
-      // The small pinned file is drawn above the 1800-line one — which is the
-      // whole claim, since every other sort would invert them.
-      var pinned = tester.getTopLeft(find.text('1.sql').first);
-      var big = tester.getTopLeft(find.text('huge.dart'));
-      expect(pinned.dy, lessThan(big.dy));
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
+      expect(find.text('huge.dart'), findsOneWidget);
+      // …and the pin is flagged in the tree, where it lives.
+      expect(find.text('1.sql'), findsOneWidget);
+      expect(
+        tester
+            .widgetList<IndexFileRow>(find.byType(IndexFileRow))
+            .where((r) => r.pinned),
+        hasLength(1),
+      );
     });
 
     testWidgets('a stale config is said out loud', (tester) async {

@@ -136,10 +136,11 @@ class ChangeSet {
   ///
   /// **Distinct from "nothing was pinned".** There are no built-in attention
   /// rules — flutterware cannot know what matters in somebody else's
-  /// repository — so a project that has never written any gets an empty band
-  /// and no explanation, which reads as a feature that does not work. This is
-  /// what lets the index say, once, that the rules exist. A project that *has*
-  /// rules and matched none of them is told nothing, because it already knows.
+  /// repository — so a project that has never written any gets an empty
+  /// *Important* tab and no explanation, which reads as a feature that does not
+  /// work. This is what lets that tab say how to write one. A project that
+  /// *has* rules and matched none of them is told only that: two silences, and
+  /// telling them apart is the whole reason this field exists.
   final bool attentionConfigured;
 
   final Ranking? _ranking;

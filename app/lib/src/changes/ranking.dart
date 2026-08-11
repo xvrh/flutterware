@@ -1,8 +1,8 @@
 /// **"What should I look at first?"** — the feature, not a garnish.
 ///
 /// Three tiers, and every one of them is a *hint*: the drawer is one click from
-/// open, the header always reports the true file count, and nothing here can
-/// make a file disappear. A ranking that can lose a file is a ranking nobody
+/// open, the *All* tab holds every path either way, the header always reports
+/// the true file count, and nothing here can make a file disappear. A ranking that can lose a file is a ranking nobody
 /// can trust, and this screen exists to be trusted about a worktree you were
 /// not watching.
 ///
@@ -21,7 +21,7 @@ import 'path_glob.dart';
 
 /// How much of your attention a file is asking for.
 enum RankTier {
-  /// Pinned into *Look here first*.
+  /// Pinned into the index's *Important* tab.
   attention,
 
   /// The ordinary case, and the one no rule fired for.
@@ -130,8 +130,8 @@ class Ranking {
 ///   something at the top of the screen and asserts it matters.
 ///
 /// So attention is the project's to declare, in `tool/flutterware.dart`, and
-/// nowhere else. When a project declares none, the band is simply absent, and
-/// the index says once that the rules exist.
+/// nowhere else. When a project declares none, the *Important* tab is empty,
+/// and it says there how to write one.
 const builtInNoise = [
   'pubspec.lock',
   'package-lock.json',

@@ -74,33 +74,28 @@ diff --git a/lib/b.dart b/lib/b.dart
         ),
     ]);
 
-    test('nothing ranked draws no headings at all', () {
-      // A section header over the only section is furniture.
-      var rows = buildIndexRows(setOf(index(twoFiles)));
-      expect(rows.whereType<SectionRow>(), isEmpty);
+    test('nothing ranked leaves the Important tab empty', () {
+      expect(buildImportantRows(setOf(index(twoFiles))), isEmpty);
     });
 
-    test('noise alone draws no heading at all', () {
+    test('noise is not important, and draws no heading anywhere', () {
       // Found by photographing a 25-file branch: a lone `Changes` heading sat
       // at the top with the thing it distinguished from below the fold. The
       // drawer that used to be that thing is a lens at the top of the pane now.
       var patch = index(twoFiles);
-      var rows = buildIndexRows(
-        setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'})),
-      );
-      expect(rows.whereType<SectionRow>(), isEmpty);
+      var set = setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'}));
+      expect(buildImportantRows(set), isEmpty);
+      expect(buildUntrackedRows(set).whereType<SectionRow>(), isEmpty);
     });
 
-    test('a pinned file gets its own section, above everything else', () {
+    test('the Important tab is the pinned files and nothing else', () {
+      // No heading in it: the tab is the heading, and there is one kind of row.
       var patch = index(twoFiles);
-      var rows = buildIndexRows(
+      var rows = buildImportantRows(
         setOf(patch, ranking: rankingOf(patch, attention: {'lib/b.dart'})),
       );
-      expect(rows.first, isA<SectionRow>());
-      expect((rows.first as SectionRow).label, 'Look here first');
-      expect((rows[1] as FileRow).file.path, 'lib/b.dart');
-      // …and the section says how much is in it.
-      expect((rows.first as SectionRow).detail, contains('1 file'));
+      expect(rows.whereType<SectionRow>(), isEmpty);
+      expect(rows.map((r) => (r as FileRow).file.path), ['lib/b.dart']);
     });
 
     test('the tree is a complete map, pins included', () {
@@ -119,32 +114,32 @@ diff --git a/lib/b.dart b/lib/b.dart
         containsAll(['lib/a.dart', 'lib/b.dart']),
       );
       expect(treeFiles(set), hasLength(set.changed.length));
-      // …and it is still in the band, which is the alert.
-      expect(buildIndexRows(set).whereType<FileRow>().map((r) => r.file.path), [
-        'lib/b.dart',
-      ]);
+      // …and it is in the other tab too, which is the alert.
+      expect(
+        buildImportantRows(set).whereType<FileRow>().map((r) => r.file.path),
+        ['lib/b.dart'],
+      );
     });
 
     test('the rule that fired reaches the row', () {
       var patch = index(twoFiles);
-      var rows = buildIndexRows(
+      var rows = buildImportantRows(
         setOf(patch, ranking: rankingOf(patch, attention: {'lib/b.dart'})),
       );
       var pinned = rows.whereType<FileRow>().firstWhere(
         (r) => r.file.path == 'lib/b.dart',
       );
       expect(pinned.reason, 'matches a rule');
-      // The ordinary one is the tree's, and a tree row has no rule to name.
+      // The ordinary one is the tree's, and never important.
       expect(rows.whereType<FileRow>(), hasLength(1));
     });
 
     test('noise is out of the index until its lens is on', () {
       var patch = index(twoFiles);
       var set = setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'}));
-      var rows = buildIndexRows(set);
 
-      // Nowhere: not a flat row, not in the tree.
-      expect(rows.whereType<FileRow>(), isEmpty);
+      // Nowhere: not in either tab, not in the tree.
+      expect(buildImportantRows(set), isEmpty);
       expect(treeFiles(set).map((f) => f.path), ['lib/a.dart']);
       // The count the lens draws is still the truth about the branch.
       expect(set.ordered(RankTier.noise), hasLength(1));
@@ -194,40 +189,33 @@ diff --git a/lib/b.dart b/lib/b.dart
       expect(set.ordered(RankTier.ordinary).single.file.path, 'lib/a.dart');
     });
 
-    test('a pinned untracked file is drawn with the pinned ones', () {
+    test('a pinned untracked file is important, and still in All', () {
       // The case that made this exist: an agent wrote a new migration and has
       // not staged it. A pin that only works after `git add` misses the exact
       // moment it is for. Found by photographing the screen with a real
       // `attention: ['docs/superpowers/specs/**']` in the config.
-      var patch = index(twoFiles);
-      var rows = buildIndexRows(
-        setOf(
-          patch,
-          untracked: const [
-            UntrackedEntry('db/migrations/2.sql', reason: 'matches db/**'),
-            UntrackedEntry('scratch.txt'),
-            UntrackedEntry.directory('build/'),
-          ],
-        ),
+      var set = setOf(
+        index(twoFiles),
+        untracked: const [
+          UntrackedEntry('db/migrations/2.sql', reason: 'matches db/**'),
+          UntrackedEntry('scratch.txt'),
+          UntrackedEntry.directory('build/'),
+        ],
       );
 
-      var first = rows.first as SectionRow;
-      expect(first.label, 'Look here first');
-      expect((rows[1] as UntrackedRow).entry.path, 'db/migrations/2.sql');
-      // Counted as a file, contributing no lines: it has no delta against the
-      // base to contribute.
-      expect(first.detail, '1 file +0 -0');
+      var important = buildImportantRows(set);
+      expect(important.single, isA<UntrackedRow>());
+      expect(
+        (important.single as UntrackedRow).entry.path,
+        'db/migrations/2.sql',
+      );
 
-      // …and it is not listed a second time below, which would make the
-      // branch look bigger than it is.
-      var untracked = rows.whereType<UntrackedRow>().toList();
-      expect(untracked, hasLength(3));
-      // No `Changes` heading any more: what it used to label is the tree, and
-      // the tree names its own directories.
-      expect(rows.whereType<SectionRow>().map((r) => r.label), [
-        'Look here first',
-        'Untracked',
-      ]);
+      // **All means all.** It is listed here too — a tab that quietly drops
+      // the file the other tab is about is a tab whose count disagrees with
+      // the header.
+      var all = buildUntrackedRows(set);
+      expect(all.whereType<SectionRow>().map((r) => r.label), ['Untracked']);
+      expect(all.whereType<UntrackedRow>(), hasLength(3));
     });
 
     test('an untracked directory is never pinned', () {
@@ -239,18 +227,14 @@ diff --git a/lib/b.dart b/lib/b.dart
       );
     });
 
-    test('filtering narrows the sections rather than emptying them', () {
+    test('filtering narrows both tabs', () {
       var patch = index(twoFiles);
       var set = setOf(
         patch,
         ranking: rankingOf(patch, attention: {'lib/b.dart'}),
       );
-      var rows = buildIndexRows(set, visible: {'lib/a.dart'});
-      // Nothing pinned survived the filter, so that heading is gone…
-      expect(
-        rows.whereType<SectionRow>().map((r) => r.label),
-        isNot(contains('Look here first')),
-      );
+      // Nothing pinned survived the filter…
+      expect(buildImportantRows(set, visible: {'lib/a.dart'}), isEmpty);
       // …and the one file that did is still there, in the tree.
       expect(treeFiles(set, visible: {'lib/a.dart'}).single.path, 'lib/a.dart');
     });
@@ -259,14 +243,12 @@ diff --git a/lib/b.dart b/lib/b.dart
   group('rows', () {
     test('the index holds no diff, and ordinary files belong to the tree', () {
       var set = setOf(index(twoFiles));
-      var rows = buildIndexRows(set);
 
-      // Nothing pinned, nothing noisy, nothing untracked: the flat part is
-      // empty and every file is the tree's.
-      expect(rows, isEmpty);
+      // Nothing pinned, nothing untracked: both flat lists are empty and every
+      // file is the tree's.
+      expect(buildImportantRows(set), isEmpty);
+      expect(buildUntrackedRows(set), isEmpty);
       expect(treeFiles(set), hasLength(2));
-      expect(rows.whereType<DiffLineRow>(), isEmpty);
-      expect(rows.whereType<HunkRow>(), isEmpty);
     });
 
     test('a body is its hunks and every line, and only that file', () {
@@ -302,10 +284,10 @@ diff --git a/lib/b.dart b/lib/b.dart
       var patch = index(twoFiles);
       var set = setOf(patch, untracked: const [UntrackedEntry('scratch.txt')]);
 
-      var all = buildIndexRows(set);
+      var all = buildUntrackedRows(set);
       expect(all.whereType<UntrackedRow>(), hasLength(1));
 
-      var filtered = buildIndexRows(set, visible: {'lib/b.dart'});
+      var filtered = buildUntrackedRows(set, visible: {'lib/b.dart'});
       expect(treeFiles(set, visible: {'lib/b.dart'}), hasLength(1));
       expect(
         filtered.whereType<UntrackedRow>(),
