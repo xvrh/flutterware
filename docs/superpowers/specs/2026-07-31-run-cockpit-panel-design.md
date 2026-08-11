@@ -172,8 +172,13 @@ from a plugin. So:
    returns its path, which left the artifact question open (below).
 3. ~~Panel: subject chips + tab strip + run header~~ **built**.
 4. ~~The New run page as a subject~~ **built**.
-5. ~~The desk widget in the panel's empty state~~ **built**. Still to promote to
-   shell chrome with the worktree-jump.
+5. ~~The desk widget in the panel's empty state~~ **built**, and ~~promoted to
+   shell chrome with the worktree-jump~~ **built 2026-08-11** — `DeskButton` in
+   the band (`app/lib/src/shell/device_desk.dart`), reading `devices.json` and
+   the ledger directly rather than a `RunCore`, because the chrome outlives any
+   one worktree session. A busy device's row jumps straight to the run's page
+   in the worktree that holds it; booting emulators stays in the panel's desk,
+   with the daemon.
 6. ~~Fix the `host` labels~~ **built**, and the fix went deeper than labels: the
    distinction is now `DaemonDevice.kind` (`physical`/`virtual`/`host`) and it
    is reported by the `devices` action, because `physical: false` covered both
@@ -296,3 +301,26 @@ moment `Process.start` returns. In that window it read the **previous** run's
 `refreshFromLog` then returned early because the handle already had both fields,
 which made the wrong value permanent. Fixed at both ends: the log is emptied
 before the spawn, and the log now always wins over the handle.
+
+## Revised after living with it (2026-08-11): the rail is scoped, the ledger is not
+
+The open question above — "does a foreign worktree's run get a full page or
+only a row?" — got answered in practice by a third option nobody chose: every
+worktree's runs were rows in *every* rail, distinguishable only by a status
+suffix, and the panel's fallback picked the newest handle on the machine — so
+opening Run in one worktree could land you on another checkout's app.
+
+The line now runs where the design originally drew it:
+
+- **Occupancy is machine-global.** `RunCore.handles`, the desk (both copies),
+  the `devices` and `apps` actions, and the probe-and-sweep loop still read the
+  whole ledger — a device held by another checkout is exactly the case they
+  answer.
+- **Subjects are worktree-scoped.** `report.children`, the rail badge, the
+  panel's fallback selection, `isStarting` (it gates `busyWith`, and a capture
+  must not wait out another checkout's cold build) and `.failed` records — which
+  now carry the launching worktree — use `ownHandles`/`ownFailures`.
+- **The read-only foreign page survives, behind an explicit address only.**
+  An address that names another worktree's run key still resolves — a tool that
+  knows should say — but nothing lists it here; the desk's worktree-jump takes
+  you to the owning worktree instead, where the run is drivable.

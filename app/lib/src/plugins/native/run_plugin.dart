@@ -120,19 +120,28 @@ class _RunPanelState extends State<_RunPanel> {
       ..removeWhere((s) => s.isEmpty),
   );
 
-  /// The run the place names, or the first one.
+  /// The run the place names, or this worktree's first one.
   ///
   /// By key rather than by identity, because the handle object is replaced on
   /// every probe — and by *falling back* rather than by showing nothing,
   /// because an address to a run that has since stopped should land you in the
   /// cockpit rather than in an error.
+  ///
+  /// The two lookups scope differently on purpose. An explicit key finds any
+  /// worktree's run — the read-only page exists precisely so a tool that
+  /// knows will say. The fallback is own runs only: it used to be the newest
+  /// handle on the machine, so opening Run in a fresh worktree landed you on
+  /// whatever another checkout launched last.
   RunHandle? _select(List<RunHandle> handles, RunPlace place) {
     if (place.runKey case var key?) {
       for (var handle in handles) {
         if (handle.key == key) return handle;
       }
     }
-    return handles.firstOrNull;
+    for (var handle in handles) {
+      if (_core.isMine(handle)) return handle;
+    }
+    return null;
   }
 
   @override
@@ -1636,11 +1645,12 @@ class _NewRunPageState extends State<_NewRunPage> {
                 style: context.type.caption.copyWith(color: context.colors.red),
               ),
             ],
-            // Nothing is running, so the panel is where the desk lives for now.
-            // It belongs in the shell's chrome — only the shell can jump you to
-            // the worktree holding a busy device — but nobody who never looks up
-            // there should lose the list.
-            if (_core.handles.isEmpty) ...[
+            // The desk also lives in the shell's chrome, where it can jump you
+            // to the worktree holding a busy device — but nobody who never
+            // looks up there should lose the list. Gated on *this worktree's*
+            // runs: another checkout holding the phone is exactly when the
+            // desk has something to say here.
+            if (_core.ownHandles.isEmpty) ...[
               const Gap(FwSpacing.xl),
               _Desk(core: _core),
             ],
