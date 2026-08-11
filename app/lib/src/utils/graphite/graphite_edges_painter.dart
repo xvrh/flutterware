@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/widgets.dart';
 import 'arrow_path.dart';
@@ -285,7 +286,11 @@ class LinesPainter extends CustomPainter {
         var a = points[points.length - 2];
         var b = points[points.length - 1];
         var paragraphBuilder = ParagraphBuilder(
-          ParagraphStyle(textAlign: TextAlign.center),
+          ParagraphStyle(
+            textAlign: TextAlign.center,
+            maxLines: 4,
+            ellipsis: '…',
+          ),
         );
         if (tooltip.text case var text?) {
           paragraphBuilder.pushStyle(tooltip.style.getTextStyle());
@@ -303,11 +308,34 @@ class LinesPainter extends CustomPainter {
         }
         var paragraph = paragraphBuilder.build();
         var rect = Rect.fromPoints(a, b);
-        paragraph.layout(ParagraphConstraints(width: rect.width));
-        canvas.drawParagraph(
-          paragraph,
-          rect.centerLeft - Offset(0, paragraph.height + 5),
+        // The gap between two nodes is too narrow for a sentence — laid out at
+        // the segment's own width, a transition label breaks mid-word. Give it
+        // room and center it back on the segment; the chip below covers where
+        // it strays over a node.
+        var width = math.max(rect.width, 220.0);
+        paragraph.layout(ParagraphConstraints(width: width));
+        var origin = Offset(
+          rect.center.dx - width / 2,
+          rect.centerLeft.dy - paragraph.height - 5,
         );
+        if (tooltip.background case var background?) {
+          var textWidth = paragraph.longestLine;
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromCenter(
+                center: Offset(
+                  rect.center.dx,
+                  origin.dy + paragraph.height / 2,
+                ),
+                width: textWidth + 12,
+                height: paragraph.height + 6,
+              ),
+              const Radius.circular(4),
+            ),
+            Paint()..color = background,
+          );
+        }
+        canvas.drawParagraph(paragraph, origin);
       }
     }
   }
