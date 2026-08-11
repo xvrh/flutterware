@@ -1,9 +1,10 @@
 # Comparison — what a worktree did to the pictures
 
 **Date:** 2026-08-11
-**Status:** design, brainstormed with the owner. **Steps 1–4 of §12 are
-built** (2026-08-11) and §12 records which commit did what; the renderer, the
-CLI, the space and the viewer are not. Every
+**Status:** design, brainstormed with the owner. **Steps 1–5 of §12 are
+built** (2026-08-11) and §12 records which commit did what; `fw compare` runs
+end to end for previews. The space, the static viewer, the scenario side and
+the MCP surface are not built. Every
 decision below was taken in that conversation and **all of them are settled** —
 §13 lists them, and §14 is the short list of constants deliberately left for
 measurement. Every number is cited to the findings doc that measured it; nothing
@@ -433,6 +434,23 @@ entries.
 | neither renders | one muted line |
 | scenario passes on one side only | outranks every pixel delta |
 
+### 11a. The base is rendered with the head's tooling
+
+Found by running it (`f554fced`). The generated entrypoint, the scanner and the
+daemon all come from the checkout the command was typed in; only the *sources*
+come from the base. So a generator that emits a call into `package:flutterware`
+meets whatever version the base checkout resolves — and comparing this repo
+against master fails to compile the base entirely, because `withPreviewClock`
+does not exist there.
+
+It is not self-hosting-specific: any project whose base commit pins an older
+flutterware can meet the same skew. It is also **a result rather than a
+crash** — a side that cannot start reports every entry as "this side could not
+render it" and lands on the severity ladder. Rendering each side with its own
+tooling would mean running two versions of the tool, which is a much larger
+call than this feature; the honest position for now is that a base too old to
+build with today's generator reports as broken, loudly, per entry.
+
 **SDK mismatch hard-fails**, for now. If base and head pin different Flutter
 versions, every pixel differs for reasons that are not yours. Detect it by
 comparing `.fvmrc` and the resolved `flutter --version` between the two
@@ -452,12 +470,12 @@ handles SDK management.
 4. ✅ **The diff kernel** (§4, §5) — `9b8379fd`. Pixels, tree, texts, the
    severity ladder. Not yet run in an isolate: it has no caller to be off the
    UI thread of.
-5. **`fw compare` + `index.json`** (§8) — CLI and MCP first, which forces the
-   schema honest before a widget can hide it. Both of its prerequisites landed
-   in `1445faf8`: `HeadlessCatalog.captureAll` streams a raw frame and a tree
-   per entry off one warm guest, and `ImportGraph` writes `ClosureMemo`. What
-   is left is the assembly — two sides, the SDK check, the skip pass, the
-   kernel, and the index.
+5. ✅ **`fw compare` + `index.json`** (§8) — `f554fced`, prerequisites in
+   `1445faf8`. Measured on this repo against `origin/master`: 6 entries, 0
+   rendered, 6 skipped, 142ms; change one label and it renders that entry
+   alone on both sides. MCP is not wired yet, and neither are scenarios — this
+   is the previews half. Three corrections it forced are in the commit
+   message, and one structural finding is in §11a.
 6. **The space** (§9) — overview, preview modes, merged split tree, two live
    revisions.
 7. **The static viewer** — in v1, and dumb: it reads `index.json` and renders,
