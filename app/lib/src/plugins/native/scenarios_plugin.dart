@@ -3,9 +3,14 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart' show fuzzyMatch;
+import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
 import '../../previews/devices.dart';
+import '../../previews/web_server.dart';
+import '../../scenarios/web_export_dialog.dart';
+import '../../scenarios/artifacts.dart';
+import '../../scenarios/artifacts_io.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/flow_view.dart';
@@ -37,6 +42,11 @@ export 'scenarios_core.dart' show ScenariosCore, scenariosPluginId;
 class ScenariosPlugin extends NativePlugin<ScenariosCore> {
   ScenariosPlugin(super.core);
 
+  /// A server per served directory, so re-exporting the same page reuses the
+  /// port a browser tab already has open — the tab reloads onto the new run
+  /// rather than pointing at a server that has gone.
+  final _servers = <String, CatalogWebServer>{};
+
   @override
   String? get busyWith {
     if (core.anyPanelRunning) return 'running scenarios';
@@ -46,6 +56,65 @@ class ScenariosPlugin extends NativePlugin<ScenariosCore> {
 
   @override
   Widget buildPanel(BuildContext context) => _ScenariosPanel(this);
+
+  /// One command, on the row for the package it would export.
+  ///
+  /// On the row rather than in the panel because that is what it is *of*: a
+  /// page is one package's whole suite, and the panel is always looking at one
+  /// scenario of it.
+  @override
+  List<PluginChildCommand> childCommands(
+    BuildContext context,
+    String childId,
+  ) => [
+    PluginChildCommand(
+      label: 'Export a web page…',
+      icon: Icons.language,
+      onSelected: (context) => unawaited(
+        showScenarioWebExportDialog(
+          context,
+          core: core,
+          package: childId,
+          serve: serveExport,
+        ),
+      ),
+    ),
+  ];
+
+  /// Serves an exported page and answers with the URL, starting a server only
+  /// if this directory has not got one.
+  ///
+  /// Owned here rather than by the dialog that asks for it: the dialog is
+  /// closed the moment you have the URL, and a server that died with it would
+  /// leave the tab it just opened showing a connection error. The worktree is
+  /// the right lifetime.
+  ///
+  /// A page **needs** this — it fetches its report and every artifact relative
+  /// to itself, which a browser refuses on a `file://` page. There is no
+  /// double-click-the-html path to offer.
+  Future<Uri> serveExport(String output, {String basePath = '/'}) async {
+    var directory = p.isAbsolute(output)
+        ? output
+        : p.join(host.worktree.path, output);
+    var existing = _servers[directory];
+    if (existing != null &&
+        existing.basePath == CatalogWebServer.normaliseBasePath(basePath)) {
+      return existing.url;
+    }
+    await existing?.close();
+    var server = await CatalogWebServer.serve(directory, basePath: basePath);
+    _servers[directory] = server;
+    return server.url;
+  }
+
+  @override
+  void dispose() {
+    for (var server in _servers.values) {
+      unawaited(server.close());
+    }
+    _servers.clear();
+    super.dispose();
+  }
 }
 
 /// Owns the subscription: mounting starts the scan, as the laziness rule
@@ -213,21 +282,27 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
             ),
           );
         }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              width: 240,
-              child: _ScenarioListPane(
-                _core,
-                place.package,
-                selected: place,
-                key: ValueKey(place.package),
+        // Every step below reads its frame and its trees through this. Here
+        // they are files in the worktree the harness just wrote them into; on
+        // the exported page the same widgets read the same steps over HTTP.
+        return ScenarioArtifactsScope(
+          artifacts: FileScenarioArtifacts(_core.host.worktree.path),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: 240,
+                child: _ScenarioListPane(
+                  _core,
+                  place.package,
+                  selected: place,
+                  key: ValueKey(place.package),
+                ),
               ),
-            ),
-            const VerticalDivider(width: 1),
-            Expanded(child: detail),
-          ],
+              const VerticalDivider(width: 1),
+              Expanded(child: detail),
+            ],
+          ),
         );
       },
     );

@@ -1,9 +1,12 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutterware/plugins.dart';
 import 'package:json_annotation/json_annotation.dart';
-import 'package:path/path.dart' as p;
+
+// The one thing in this file that needs a filesystem, behind the one seam that
+// lets the rest of it compile for the web. The exported scenario page renders
+// these very classes in a browser, where there is no `dart:io` to import — see
+// `2026-08-11-scenario-web-export-design.md`.
+import 'scenario_step_events_web.dart'
+    if (dart.library.io) 'scenario_step_events_io.dart';
 
 part 'scenarios_results.g.dart';
 
@@ -86,14 +89,18 @@ class ScenarioListEntry {
 
 /// `run` — scenarios executed in the runner's `flutter_tester`, with one
 /// artifact triple (PNG, widget tree, texts) per captured step.
-@JsonSerializable(
-  explicitToJson: true,
-  includeIfNull: false,
-  createFactory: false,
-)
+///
+/// Readable back, unlike most results here: the web export writes one of these
+/// beside the page as `report.json` and the viewer parses it into the same
+/// widgets the panel draws. A result shape with only one direction would have
+/// meant a second model to keep in step with this one.
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class ScenarioRunResult
     implements PluginResult, ReportsFailure, ProducesArtifacts {
   ScenarioRunResult({required this.packages, this.axes});
+
+  factory ScenarioRunResult.fromJson(Map<String, dynamic> json) =>
+      _$ScenarioRunResultFromJson(json);
 
   final List<ScenarioRunPackage> packages;
 
@@ -133,7 +140,7 @@ class ScenarioRunResult
                 // is the one step where the thing that broke it may be the
                 // twentieth line. Same reasoning as the frame itself: the
                 // reader should not have to make a second call for the answer.
-                if (step.readEvents() case var events when events.isNotEmpty)
+                if (readStepEvents(step) case var events when events.isNotEmpty)
                   'events': events,
                 if (scenario.errors.firstOrNull case var error?)
                   'error': error.error,
@@ -151,12 +158,11 @@ class ScenarioRunResult
   Map<String, Object?> toJson() => _$ScenarioRunResultToJson(this);
 }
 
-@JsonSerializable(
-  explicitToJson: true,
-  includeIfNull: false,
-  createFactory: false,
-)
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class ScenarioRunPackage {
+  factory ScenarioRunPackage.fromJson(Map<String, dynamic> json) =>
+      _$ScenarioRunPackageFromJson(json);
+
   ScenarioRunPackage({
     required this.path,
     required this.output,
@@ -189,12 +195,11 @@ class ScenarioRunPackage {
   Map<String, Object?> toJson() => _$ScenarioRunPackageToJson(this);
 }
 
-@JsonSerializable(
-  explicitToJson: true,
-  includeIfNull: false,
-  createFactory: false,
-)
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class ScenarioRunOutcome {
+  factory ScenarioRunOutcome.fromJson(Map<String, dynamic> json) =>
+      _$ScenarioRunOutcomeFromJson(json);
+
   ScenarioRunOutcome({
     required this.file,
     required this.name,
@@ -225,12 +230,11 @@ class ScenarioRunOutcome {
   Map<String, Object?> toJson() => _$ScenarioRunOutcomeToJson(this);
 }
 
-@JsonSerializable(
-  explicitToJson: true,
-  includeIfNull: false,
-  createFactory: false,
-)
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class ScenarioRunStep {
+  factory ScenarioRunStep.fromJson(Map<String, dynamic> json) =>
+      _$ScenarioRunStepFromJson(json);
+
   ScenarioRunStep({
     required this.index,
     required this.position,
@@ -242,7 +246,7 @@ class ScenarioRunStep {
     required this.tree,
     required this.texts,
     required this.address,
-    required this.root,
+    this.root = '',
     this.semantics,
     this.parent,
     this.branch,
@@ -322,24 +326,15 @@ class ScenarioRunStep {
   /// than inventing an empty screen.
   final String? semantics;
 
-  /// The worktree the two paths above are relative to.
+  /// The worktree the paths above are relative to, on **this** machine.
   ///
-  /// Not on the wire: a reader on another machine has its own checkout, and a
-  /// path naming this one is the thing being avoided. It is here so the panel,
-  /// which is in-process and does need to open the files, does not have to be
-  /// handed the root separately at four call sites.
-  @JsonKey(includeToJson: false)
+  /// On neither wire: a reader elsewhere has its own checkout, and a path
+  /// naming this one is the thing being avoided. It is here so the in-process
+  /// panel, which does open the files, is not handed the root separately at
+  /// four call sites — and it is empty on a step parsed back out of a report,
+  /// where the artifacts are beside the page rather than in a worktree.
+  @JsonKey(includeToJson: false, includeFromJson: false)
   final String root;
-
-  @JsonKey(includeToJson: false)
-  File get imageFile => File(p.join(root, image));
-
-  @JsonKey(includeToJson: false)
-  File get treeFile => File(p.join(root, tree));
-
-  @JsonKey(includeToJson: false)
-  File? get semanticsFile =>
-      semantics == null ? null : File(p.join(root, semantics!));
 
   /// The visible texts — the projection an agent reads next to the pixels.
   final List<String> texts;
@@ -356,25 +351,6 @@ class ScenarioRunStep {
   /// `recordScenarioEvent`. Relative like [image]; null when this transition
   /// was quiet, which is distinct from a run too old to have captured any.
   final String? events;
-
-  @JsonKey(includeToJson: false)
-  File? get eventsFile => events == null ? null : File(p.join(root, events!));
-
-  /// The transition's events, read from [eventsFile] — empty when there were
-  /// none, and empty rather than throwing when the file cannot be read: a
-  /// missing artifact must not take a failure report down with it.
-  List<Map<String, Object?>> readEvents() {
-    var file = eventsFile;
-    if (file == null || !file.existsSync()) return const [];
-    try {
-      return [
-        for (var event in jsonDecode(file.readAsStringSync()) as List)
-          (event as Map).cast<String, Object?>(),
-      ];
-    } catch (_) {
-      return const [];
-    }
-  }
 
   /// How many, and on which channels — `{platform: 3, print: 1}`. The badge on
   /// the flow's arrow, and the part of the digest that survives filtering.
@@ -425,22 +401,20 @@ class ScenarioRunStep {
   @JsonKey(includeToJson: false)
   bool get hasMotion => frames != null && (frameCount ?? 0) > 1;
 
-  /// The recorded frames in order, as files on disk.
+  /// The recorded frames in order, spelled the way [image] is — so whoever
+  /// reads them resolves them the same way, off a worktree's disk in the panel
+  /// or over HTTP on an exported page.
   ///
   /// Built from the count rather than listed: the harness numbers them from
   /// zero and a directory listing would sort `10` before `2` unless it were
-  /// re-sorted anyway.
+  /// re-sorted anyway — and on a page there is no directory to list.
   @JsonKey(includeToJson: false)
-  List<File> get frameFiles => [
+  List<String> get framePaths => [
     if (frames case var directory?)
       for (var index = 0; index < (frameCount ?? 0); index++)
-        File(
-          p.join(
-            root,
-            directory,
-            '${index.toString().padLeft(4, '0')}.$format',
-          ),
-        ),
+        // `p.url`, not `p`: this is a path in a report, and the one that has
+        // to keep working after the report crosses a machine.
+        '$directory/${index.toString().padLeft(4, '0')}.$format',
   ];
 
   /// The events a reader will actually be shown — everything but `system`.
@@ -486,12 +460,14 @@ class ScenarioRunStep {
 /// [target] is already decorated for reading (`#pay`, `"Buy"`); [kind] says
 /// how it was named, which is how much the name can be trusted to stay put —
 /// a key is the author's own word, visible text is translated.
-@JsonSerializable(
-  explicitToJson: true,
-  includeIfNull: false,
-  createFactory: false,
-)
+/// Readable back with the step that carries it — an exported page draws the
+/// verb on the arrow into a step, so a report that could not parse this would
+/// be a page of unlabelled arrows.
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class ScenarioStepAction {
+  factory ScenarioStepAction.fromJson(Map<String, dynamic> json) =>
+      _$ScenarioStepActionFromJson(json);
+
   ScenarioStepAction({required this.verb, this.target, this.kind});
 
   final String verb;
@@ -505,18 +481,68 @@ class ScenarioStepAction {
   Map<String, Object?> toJson() => _$ScenarioStepActionToJson(this);
 }
 
-@JsonSerializable(
-  explicitToJson: true,
-  includeIfNull: false,
-  createFactory: false,
-)
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class ScenarioRunError {
+  factory ScenarioRunError.fromJson(Map<String, dynamic> json) =>
+      _$ScenarioRunErrorFromJson(json);
+
   ScenarioRunError({required this.error, this.stack});
 
   final String error;
   final String? stack;
 
   Map<String, Object?> toJson() => _$ScenarioRunErrorToJson(this);
+}
+
+/// `export` — the run, written out as a page you can serve.
+///
+/// Reports the run's own verdict, not the build's: the scenarios really ran to
+/// produce this, and a page of red flows is still a failure worth an exit code.
+/// The page exists either way — showing what broke is most of what it is for.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioWebExportResult implements PluginResult, ReportsFailure {
+  ScenarioWebExportResult({
+    required this.output,
+    required this.indexHtml,
+    required this.scenarios,
+    required this.steps,
+    required this.artifacts,
+    required this.durationMs,
+    this.failed = 0,
+    required this.serve,
+  });
+
+  /// The directory to serve, worktree-relative where it sits inside one.
+  final String output;
+
+  final String indexHtml;
+
+  final int scenarios;
+  final int steps;
+
+  /// Files copied in beside the page — screenshots, trees, semantics, events.
+  final int artifacts;
+
+  final int durationMs;
+
+  /// Scenarios that came back red. Their flows are on the page, which is the
+  /// point.
+  final int failed;
+
+  /// How to look at it. A page nobody can open is a directory, and the one
+  /// thing every reader of this result needs to know is that a `file://` open
+  /// will not do.
+  final String serve;
+
+  @override
+  bool get ok => failed == 0;
+
+  @override
+  Map<String, Object?> toJson() => _$ScenarioWebExportResultToJson(this);
 }
 
 /// `new` — a runnable scenario file written where the package keeps them.

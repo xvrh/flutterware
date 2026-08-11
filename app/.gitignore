@@ -42,7 +42,6 @@
 # written and deleted by the test; they are simply visible while they exist.
 
 # Web related
-lib/generated_plugin_registrant.dart
 
 # Symbolication related
 app.*.symbols

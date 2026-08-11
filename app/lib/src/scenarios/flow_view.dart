@@ -8,6 +8,7 @@ import '../plugins/native/scenarios_results.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import '../utils/graphite.dart';
+import 'artifacts.dart';
 import 'framed_shot.dart';
 import 'motion_player.dart';
 import 'step_status.dart';
@@ -305,7 +306,11 @@ class _StepNodeState extends State<_StepNode>
     var motion = _motion;
     var frame = motion == null || !motion.playing
         ? null
-        : scenarioFrameImage(step, motion.frames[motion.index]);
+        : scenarioFrameImage(
+            ScenarioArtifactsScope.of(context),
+            step,
+            motion.frames[motion.index],
+          );
 
     return MouseRegion(
       onEnter: (_) => _enter(),

@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../plugins/native/scenarios_results.dart';
-import '../utils/raw_image_provider.dart';
+import 'artifacts.dart';
 
 /// Playback over one step's recorded frames.
 ///
@@ -34,13 +33,15 @@ class ScenarioMotionController extends ChangeNotifier {
   ) {
     if (!step.hasMotion) return null;
     return ScenarioMotionController(
-      frames: step.frameFiles,
+      frames: step.framePaths,
       interval: Duration(milliseconds: step.frameIntervalMs ?? 33),
       vsync: vsync,
     );
   }
 
-  final List<File> frames;
+  /// The frames, as the report spells them — resolved by whichever
+  /// [ScenarioArtifacts] the surface playing them reads through.
+  final List<String> frames;
 
   /// Fake time between two frames — the app's own speed.
   final Duration interval;
@@ -135,15 +136,14 @@ Duration scenarioMotionDuration(ScenarioRunStep step) =>
 
 /// The image provider for one recorded frame.
 ///
-/// Raw frames go through [RawImageProvider] — the panel records raw for the
+/// Raw frames go through `RawImageProvider` — the panel records raw for the
 /// same reason it captures shots raw, and decoding a PNG thirty times a
 /// second to show a transition would give the encoding cost straight back.
-ImageProvider scenarioFrameImage(ScenarioRunStep step, File frame) =>
-    step.format == 'raw'
-    ? RawImageProvider(
-        RawImageData(frame, step.frameWidth ?? 0, step.frameHeight ?? 0),
-      )
-    : FileImage(frame);
+ImageProvider scenarioFrameImage(
+  ScenarioArtifacts artifacts,
+  ScenarioRunStep step,
+  String frame,
+) => artifacts.frameImageOf(step, frame);
 
 /// The decoded bytes one step's recording occupies once every frame is in the
 /// image cache — raw or PNG alike, since the cache holds pixels either way.
@@ -183,6 +183,11 @@ class ScenarioMotionResidency {
   final _order = <String>[];
   final _steps = <String, ScenarioRunStep>{};
 
+  /// What each resident recording was read through, so eviction can rebuild
+  /// the very providers that decoded it. A provider built against a different
+  /// source is a different cache key, and evicting it would free nothing.
+  final _sources = <String, ScenarioArtifacts>{};
+
   /// What the recordings currently hold, in decoded bytes.
   int get residentBytes =>
       _steps.values.fold(0, (sum, step) => sum + scenarioMotionBytes(step));
@@ -196,12 +201,13 @@ class ScenarioMotionResidency {
   /// Marks [step]'s frames as the ones in use, and evicts whatever that pushes
   /// over the budget. The step just touched is never the one evicted, however
   /// big it is: a transition too large for the budget still has to play.
-  void touch(ScenarioRunStep step) {
+  void touch(ScenarioRunStep step, ScenarioArtifacts artifacts) {
     if (step.frames case var key?) {
       _order
         ..remove(key)
         ..add(key);
       _steps[key] = step;
+      _sources[key] = artifacts;
       while (_order.length > 1 && residentBytes > budgetBytes) {
         _release(_order.first);
       }
@@ -217,9 +223,10 @@ class ScenarioMotionResidency {
   void _release(String key) {
     _order.remove(key);
     var step = _steps.remove(key);
-    if (step == null) return;
-    for (var frame in step.frameFiles) {
-      unawaited(scenarioFrameImage(step, frame).evict());
+    var artifacts = _sources.remove(key);
+    if (step == null || artifacts == null) return;
+    for (var frame in step.framePaths) {
+      unawaited(scenarioFrameImage(artifacts, step, frame).evict());
     }
   }
 
@@ -243,8 +250,9 @@ Future<void> precacheScenarioMotion(
   BuildContext context,
   ScenarioRunStep step,
 ) async {
-  scenarioMotionResidency.touch(step);
-  for (var frame in step.frameFiles) {
+  var artifacts = ScenarioArtifactsScope.of(context);
+  scenarioMotionResidency.touch(step, artifacts);
+  for (var frame in step.framePaths) {
     if (!context.mounted) return;
     // Stops the moment this recording stops being one of the resident ones.
     // Sweeping the pointer across a flow starts a loop per node it crosses,
@@ -252,6 +260,6 @@ Future<void> precacheScenarioMotion(
     // still decoding straight back into the image cache — making the budget
     // true only for somebody hovering slowly.
     if (!scenarioMotionResidency.isResident(step)) return;
-    await precacheImage(scenarioFrameImage(step, frame), context);
+    await precacheImage(scenarioFrameImage(artifacts, step, frame), context);
   }
 }
