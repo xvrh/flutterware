@@ -444,6 +444,20 @@ class Session {
           // Only text needs converting; anything already typed came from a
           // transport that has types, and second-guessing it would be how
           // `7.0` becomes `7`.
+          // A bool where text was declared is a flag that lost its value —
+          // `--entry` with nothing after it, or `--entry --knobs`. Refused
+          // here rather than passed on: the action would cast it and die with
+          // a type error naming neither the flag nor what to do about it.
+          ActionParameterKind.string || ActionParameterKind.choice
+              when entry.value is bool =>
+            // Not `ArgumentError.value`: it would print "… (entry): true", and
+            // `true` is not what anybody wrote — it is what a flag with
+            // nothing after it became.
+            throw ArgumentError(
+              'needs a value — `--${entry.key}=<value>` or '
+              '`--${entry.key} <value>`',
+              entry.key,
+            ),
           null ||
           ActionParameterKind.string ||
           ActionParameterKind.choice => entry.value,

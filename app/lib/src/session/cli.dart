@@ -1122,7 +1122,10 @@ class FwCli {
         job = session.invoke(
           positional[0],
           positional[1],
-          arguments: parseArguments(arguments),
+          arguments: parseArguments(
+            arguments,
+            declared: declared?.parameters ?? const [],
+          ),
         );
       } on SessionException catch (e) {
         return fail('$e');
@@ -1178,17 +1181,46 @@ class FwCli {
 
   /// Flags to the argument map an action is invoked with.
   ///
-  /// A bare `--flag` is `true`; anything else is a string the plugin parses
-  /// according to its declared `ActionParameterKind`. A shell has no types to
-  /// pass, so this is where the CLI stops and the plugin's own contract starts.
-  static Map<String, Object?> parseArguments(List<String> arguments) {
+  /// `--flag=value` and `--flag value` both give the value; a bare `--flag` is
+  /// `true`. Anything else is a string the plugin parses according to its
+  /// declared `ActionParameterKind` — a shell has no types to pass, so this is
+  /// where the CLI stops and the plugin's own contract starts.
+  ///
+  /// **The separated form is the one everyone types**, and it used to be
+  /// dropped: `--entry demo/buttons.dart#buttons` set `entry` to `true` and
+  /// left the value to be counted as a positional, which came back as
+  /// `required (entry): true` — or, where the action cast it, as a type error
+  /// with a stack trace. Found by typing it.
+  ///
+  /// [declared] is what keeps the greed in check: a parameter declared boolean
+  /// never eats what follows it, so `--annotate --entry=x` still means two
+  /// flags. A value that begins with `--` is a flag too, and so is the end of
+  /// the line; both leave the bare flag as `true`, which the coercion then
+  /// refuses for a parameter that needed a value.
+  static Map<String, Object?> parseArguments(
+    List<String> arguments, {
+    List<ActionParameter> declared = const [],
+  }) {
+    var kinds = {for (var parameter in declared) parameter.id: parameter.kind};
     var parsed = <String, Object?>{};
-    for (var argument in arguments.where((a) => a.startsWith('--'))) {
+    for (var i = 0; i < arguments.length; i++) {
+      var argument = arguments[i];
+      if (!argument.startsWith('--')) continue;
       var body = argument.substring(2);
       var equals = body.indexOf('=');
-      parsed[equals < 0 ? body : body.substring(0, equals)] = equals < 0
-          ? true
-          : body.substring(equals + 1);
+      if (equals >= 0) {
+        parsed[body.substring(0, equals)] = body.substring(equals + 1);
+        continue;
+      }
+      var next = i + 1 < arguments.length ? arguments[i + 1] : null;
+      if (kinds[body] == ActionParameterKind.boolean ||
+          next == null ||
+          next.startsWith('--')) {
+        parsed[body] = true;
+        continue;
+      }
+      parsed[body] = next;
+      i++;
     }
     return parsed;
   }

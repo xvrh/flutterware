@@ -93,6 +93,7 @@ Map<String, dynamic> _$RunLaunchResultToJson(RunLaunchResult instance) =>
 Map<String, dynamic> _$RunControlResultToJson(RunControlResult instance) =>
     <String, dynamic>{
       'action': instance.action,
+      'run': instance.run,
       'device': instance.device,
       'entrypoint': instance.entrypoint,
       'ok': instance.ok,
@@ -110,6 +111,7 @@ Map<String, dynamic> _$RunAppsResultToJson(RunAppsResult instance) =>
 
 Map<String, dynamic> _$RunAppEntryToJson(RunAppEntry instance) =>
     <String, dynamic>{
+      'run': instance.run,
       'device': instance.device,
       'deviceName': ?instance.deviceName,
       'worktree': instance.worktree,

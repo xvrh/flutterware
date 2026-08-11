@@ -72,13 +72,15 @@ Takes no arguments.
 
 ### `flutterware_actions`
 
-Every action that can be invoked, per plugin, with the parameters each one takes and the shape of what it returns. Call this before flutterware_invoke when you do not already know an action id.
+Every action that can be invoked, per plugin. Call this before flutterware_invoke when you do not already know an action id. Without "plugin" it answers the index: every action of every plugin, with what it does and the names of the parameters it takes. Name a plugin to get that one in full — every parameter documented, and the shape of what comes back.
 
-Takes no arguments.
+| argument | required | |
+|---|---|---|
+| `plugin` | no | One plugin, in full: its id or the last dotted segment — "flutterware.previews" or just "previews". Omitted, the index. |
 
 ### `flutterware_invoke`
 
-Run one plugin action. Argument keys are the parameter ids reported by flutterware_actions. Returns whatever the action produced — often a path to an artifact.
+Run one plugin action. Argument keys are the parameter ids reported by flutterware_actions. Returns whatever the action produced — often a path to an artifact. A slow action narrates: ask for progress and what the panel is saying arrives as it changes — the entry being compiled, the point of a matrix, the launcher building an app.
 
 | argument | required | |
 |---|---|---|
@@ -105,6 +107,7 @@ One transaction against the running app — the loop tool for live work: edit co
 | `device` | no | Which device, when more than one app is running. |
 | `entrypoint` | no | Which entry point, when a device runs more than one. |
 | `worktree` | no | Worktree name or path, to drive a run another checkout launched. Only runs from this worktree match when omitted — the refusals name the worktrees that have one. |
+| `run` | no | The run key, when nothing else separates two runs — two Studios on one device from one worktree. The ambiguity refusal lists the keys; `apps` reports them too. |
 
 ## Plugins
 
@@ -310,6 +313,7 @@ Returns `RunAppsResult`:
 
 ```
 apps: List<RunAppEntry>
+  run: String   # What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.
   device: String
   deviceName: String?
   worktree: String   # The worktree name — `~` for the main checkout.
@@ -380,6 +384,7 @@ Returns `RunLaunchResult`:
 
 ```
 app: RunAppEntry   # The run as the ledger now holds it — the same shape `apps` reports.
+  run: String   # What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.
   device: String
   deviceName: String?
   worktree: String   # The worktree name — `~` for the main checkout.
@@ -418,13 +423,14 @@ note: String?
 Applies edited sources to a running app, in a few hundred milliseconds. Needs the `flutter run` that launched it to still be alive: hot reload is registered by the tool, not by the app, so it goes away with it while the app keeps running.
 
 ```sh
-fw run run reload [--device=…] [--entrypoint=…] [--worktree=…]
+fw run run reload [--device=…] [--entrypoint=…] [--worktree=…] [--run=…]
 ```
 
 Returns `RunControlResult`:
 
 ```
 action: String   # `reload`, `restart` or `stop`.
+run: String   # Which run it was done to — the id `apps` reports and a selector takes.
 device: String
 entrypoint: String
 ok: bool
@@ -438,19 +444,21 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 
 #### `restart` — Hot restart
 
 Restarts a running app from its main(), in about a second, without rebuilding or reinstalling. Same requirement as reload: the launcher has to be alive.
 
 ```sh
-fw run run restart [--device=…] [--entrypoint=…] [--worktree=…]
+fw run run restart [--device=…] [--entrypoint=…] [--worktree=…] [--run=…]
 ```
 
 Returns `RunControlResult`:
 
 ```
 action: String   # `reload`, `restart` or `stop`.
+run: String   # Which run it was done to — the id `apps` reports and a selector takes.
 device: String
 entrypoint: String
 ok: bool
@@ -464,19 +472,21 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 
 #### `stop` — Stop
 
 Asks a running app to exit, kills its launcher, and frees the device. Asking the app first matters: killing only the launcher leaves the app running on the phone.
 
 ```sh
-fw run run stop [--device=…] [--entrypoint=…] [--worktree=…]
+fw run run stop [--device=…] [--entrypoint=…] [--worktree=…] [--run=…]
 ```
 
 Returns `RunControlResult`:
 
 ```
 action: String   # `reload`, `restart` or `stop`.
+run: String   # Which run it was done to — the id `apps` reports and a selector takes.
 device: String
 entrypoint: String
 ok: bool
@@ -490,13 +500,14 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 
 #### `inspect` — Inspect
 
 One reading of a running app — whether it is up, whether it can still be reloaded, and whatever you ask about it: its widget tree, a picture, what it printed. With no flags it answers the question worth asking first, whether anything has gone wrong. Everything else is opt-in and every flag you add is answered from the **same** connection, and the tree and the picture from the same reading — two calls against a live app are two moments that only happen to agree. Answers even while the app is still building, when the logs are the only thing there is to read.
 
 ```sh
-fw run run inspect [--device=…] [--entrypoint=…] [--worktree=…] [--tree=…] [--full=…] [--screenshot=…] [--out=…] [--logs=…] [--source=…] [--lines=…] [--errors=…]
+fw run run inspect [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--tree=…] [--full=…] [--screenshot=…] [--out=…] [--logs=…] [--source=…] [--lines=…] [--errors=…]
 ```
 
 Returns `RunInspectResult`:
@@ -531,6 +542,7 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `tree` | boolean | no | false | Report the widget tree, with the file, line and column each widget was constructed at. Off by default because a real app is thousands of tokens of tree. |
 | `full` | boolean | no | false | Include the framework's own widgets, not just yours. Large: a one-screen app is 25 summary nodes and about 517 full ones, six megabytes of them. |
 | `screenshot` | boolean | no | false | Write a PNG of the same reading everything else comes from, and hand back its path. Rendered by the app rather than grabbed from the device, so it works on hardware that cannot be asked for a screen grab — and platform views (native maps, webviews, video) will not appear. |
@@ -545,7 +557,7 @@ note: String?
 One drive transaction against a running app: resolve the target, check the pointer can reach it (retrying through route transitions until a deadline), perform the verb, settle, and observe — texts, a screenshot, what was printed — all in one reply describing one moment. Needs the app to have been launched by flutterware (the launch wraps it in the drive guest); anything else is inspect-only. A refusal still observes: the error comes back with the screen it happened on. Every step is appended to the run's journal. On a phone the app has to be in the foreground: iOS suspends a backgrounded app, which answers nothing until somebody brings it back — that comes back as a timeout saying so, never a hang. A hidden desktop window is fine, and so is a backgrounded Android app.
 
 ```sh
-fw run run act [--device=…] [--entrypoint=…] [--worktree=…] --verb=<choice> [--target=…] [--text=…] [--dx=…] [--dy=…] [--within=…] [--route=…] [--waitMs=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
+fw run run act [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --verb=<choice> [--target=…] [--text=…] [--dx=…] [--dy=…] [--within=…] [--route=…] [--waitMs=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
 ```
 
 Returns `RunActResult`:
@@ -588,6 +600,7 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `verb` | choice | yes | — | What to do |
 | `target` | string | no | — | What to act on. Bare text matches a visible string; JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. Resolved inside the app at act time, and refused loudly on zero or several matches — never a silent wrong-target tap. A reply text ending in … was truncated: target it with {"containing": <prefix>}. |
 | `text` | string | no | — | What enterText types, as one editing value |
@@ -607,7 +620,7 @@ note: String?
 The act-less transaction: settle the running app and look — texts, a screenshot, what it printed since the last step. The opening move of a drive loop, and the call to make after a hot reload. Same reply shape and same journal as act.
 
 ```sh
-fw run run observe [--device=…] [--entrypoint=…] [--worktree=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
+fw run run observe [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
 ```
 
 Returns `RunActResult`:
@@ -650,6 +663,7 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop animating before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. |
 | `screenshot` | boolean | no | true | Write the step's PNG under the run's journal directory and return its path. On by default — the picture is what makes the loop self-verifying. |
 | `tree` | boolean | no | false | Include the widget tree in the reply. Off by default because a real app is thousands of tokens of tree; the texts ride along either way. |
@@ -661,7 +675,7 @@ note: String?
 Jumps the running app straight to a screen, through the navigation handler the app registered (router_outlet does, and any router can in one line: GuestDrive.navigator = …). Refuses plainly when the app declares none — it never falls back to hunting the UI with taps.
 
 ```sh
-fw run run navigate [--device=…] [--entrypoint=…] [--worktree=…] --route=<string> [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…]
+fw run run navigate [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --route=<string> [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…]
 ```
 
 Returns `RunActResult`:
@@ -704,6 +718,7 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `route` | string | yes | — | The route, as the app's handler understands it |
 | `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop animating before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. |
 | `screenshot` | boolean | no | true | Write the step's PNG under the run's journal directory and return its path. On by default — the picture is what makes the loop self-verifying. |
@@ -715,7 +730,7 @@ note: String?
 What the app says about *itself*: the panels its own devbar plugins declare, with every knob and its live value, every action and its parameters, the states it can be asked for and the feeds it reports on. Where `observe` sees what flutterware can see of the screen, this is what the app chose to expose — feature flags, a simulated push, whatever the project wrote. Answers plainly for an app with no `Devbar` mounted. One attach per call, so recent feed events replay from the app's ring rather than needing a live subscription.
 
 ```sh
-fw run run panels [--device=…] [--entrypoint=…] [--worktree=…] [--panel=…] [--events=…]
+fw run run panels [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] [--panel=…] [--events=…]
 ```
 
 Returns `RunPanelsResult`:
@@ -733,6 +748,7 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `panel` | string | no | — | One panel by id; all of them when omitted |
 | `events` | integer | no | 20 | How many recent events to bring back per feed, newest kept. Zero for the declarations alone. |
 
@@ -741,7 +757,7 @@ note: String?
 Runs one of the commands a panel declares, inside the app. This is the reach a test cannot buy: a push notification delivered with no backend, a permission answered with no device. The action ids and their parameters come from `panels`; a refusal is the app's own words, not a wrapper's.
 
 ```sh
-fw run run panelInvoke [--device=…] [--entrypoint=…] [--worktree=…] --panel=<string> --action=<string> [--args=…] [--event=…]
+fw run run panelInvoke [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --panel=<string> --action=<string> [--args=…] [--event=…]
 ```
 
 Returns `RunPanelResult`:
@@ -760,6 +776,7 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `panel` | string | yes | — | The panel id `panels` reports |
 | `action` | string | yes | — | The action id, from that panel's `actions` |
 | `args` | string | no | — | The action's arguments as a JSON object — {"title": "Order ready", "link": "/cart"}. A panel action takes whatever it declared, so this stays free-form rather than one flag per parameter. |
@@ -770,7 +787,7 @@ note: String?
 Writes one of a panel's read-write values — a feature flag, a permission, an environment. Answers with the knobs **after** the write, because an app is allowed to clamp or refuse and a reply that echoed the request would be a lie. A picker is set by its label.
 
 ```sh
-fw run run panelKnob [--device=…] [--entrypoint=…] [--worktree=…] --panel=<string> --knob=<string> --value=<string>
+fw run run panelKnob [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --panel=<string> --knob=<string> --value=<string>
 ```
 
 Returns `RunPanelResult`:
@@ -789,6 +806,7 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `panel` | string | yes | — | — |
 | `knob` | string | yes | — | The knob name `panels` reports |
 | `value` | string | yes | — | The new value. Parsed as JSON when it parses — so true, 3 and "text" arrive as the right type — and taken as a plain string when it does not. |
@@ -798,7 +816,7 @@ note: String?
 Asks the app for one snapshot it offers — the permissions it holds, its package info, its own account of the device. A separate call from `panels` because producing one can be expensive, and nothing should pay for it by listing.
 
 ```sh
-fw run run panelState [--device=…] [--entrypoint=…] [--worktree=…] --panel=<string> --state=<string>
+fw run run panelState [--device=…] [--entrypoint=…] [--worktree=…] [--run=…] --panel=<string> --state=<string>
 ```
 
 Returns `RunPanelResult`:
@@ -817,6 +835,7 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `run` | string | no | — | The run id `apps` reports as `run`, and the ambiguity refusal lists — the last resort, and the only thing that separates two runs of the same entry point on the same device from the same worktree. The stable key an address carries is accepted too, where it is not ambiguous. Explicit like `worktree`: naming one reaches any run of this repository. |
 | `panel` | string | yes | — | — |
 | `state` | string | yes | — | The state id `panels` reports |
 
@@ -1040,7 +1059,7 @@ packages: List<ScenarioListPackage>
 Runs scenarios under FakeAsync in a directly-spawned flutter_tester, capturing a PNG, a widget tree and the visible texts per step. The paths in the result point at the artifacts; a failing scenario reports its error with the frame captured **at** the failure, whatever the capture policy.
 
 ```sh
-fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--devices=…] [--languages=…] [--tag=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…]
+fw run scenarios run [--package=…] [--file=…] [--scenario=…] [--output=…] [--device=…] [--language=…] [--devices=…] [--languages=…] [--tag=…] [--steps=…] [--text-scale=…] [--brightness=…] [--bold-text=…] [--high-contrast=…] [--invert-colors=…] [--capture-scale=…] [--clock=…] [--format=…]
 ```
 
 Returns `ScenarioRunResult`:
@@ -1049,6 +1068,7 @@ Returns `ScenarioRunResult`:
 packages: List<ScenarioRunPackage>
   path: String
   output: String   # Where this run's artifacts were written.
+  report: String?   # The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.
   axes: Map<String, String>?   # The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].
   ms: int   # Whole-run wall time inside the harness.
   scenarios: List<ScenarioRunOutcome>
@@ -1095,6 +1115,7 @@ packages: List<ScenarioRunPackage>
       settled: bool   # False when the verb's settle policy gave up with frames still scheduled: something on this screen animates indefinitely — a spinner, a shimmer — and the capture is of a moving picture.
       strayFrames: int   # Frames drawn before this step that none of the scenario's verbs drew — the scenario reached for the raw `tester`, and whatever the app did in those frames is not in the flow.
       failure: String?   # The error, when this is the step a scenario broke on.
+    stepCount: int   # How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.
     errors: List<ScenarioRunError>   # The failure, when [ok] is false.
       error: String
       stack: String?
@@ -1114,6 +1135,7 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `devices` | string | no | — | A comma-separated matrix — `iphone-se,android-tall`. Runs everything once per device, each into its own `<output>/<device>-<language>/` directory with an `index.json` beside them. The same plural vocabulary as `flutter test --dart-define=fw.devices=`. Overrides `device`. |
 | `languages` | string | no | — | The other half of the matrix — `en,fr,de`. Crossed with `devices`, and overrides `language`. |
 | `tag` | string | no | — | Run only scenarios carrying this tag — the same tag `scenario(tags: [...])` declares and `flutter test --tags` filters on |
+| `steps` | choice | no | failing | How many steps ride back in the answer. Every run writes all of them to `run.json` in its output directory either way and each package names that file, so this is about what arrives without asking: `failing` (default) is the frame each red scenario died on, `all` is every step of every scenario — a matrix suite is hundreds — and `none` is the summary alone. Every scenario reports its `stepCount` whatever this says. |
 | `text-scale` | string | no | — | The platform text scale factor — `1.3` is a common accessibility setting |
 | `brightness` | choice | no | — | The platform brightness the app sees |
 | `bold-text` | choice | no | — | The bold-text accessibility switch |

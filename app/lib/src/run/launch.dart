@@ -563,12 +563,22 @@ Future<(RunHandle, LaunchLog)> awaitLaunch(
   RunHandle handle,
   Duration timeout, {
   Duration poll = const Duration(milliseconds: 250),
+  void Function(String line)? onProgress,
 }) async {
   var deadline = DateTime.now().add(timeout);
   var current = handle;
+  String? said;
   while (true) {
     current = refreshFromLog(current);
     var log = LaunchLog.read(current.logPath ?? '');
+    // The log is read here every quarter second either way, and its progress
+    // line is the only narration a cold build has. Handing each new one to the
+    // caller costs a comparison and is the difference between a ninety-second
+    // silence and a build saying where it is.
+    if (log.progress case var line? when line != said) {
+      said = line;
+      onProgress?.call(line);
+    }
     // Only a started app is worth returning on the spot. Every other way out
     // of here is a failure, and a failure's reason is still being written.
     if (log.started) return (current, log);

@@ -97,6 +97,14 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
     }
   }
 
+  /// How many rows of any one list a status reply carries.
+  ///
+  /// Chosen against what the plugins actually show: it keeps every device, every
+  /// surface of a splash, every icon role and every scenario whole, and cuts
+  /// only the catalogues — dependencies, preview entries — which are what their
+  /// own actions answer in full.
+  static const _statusViewRows = 10;
+
   static final _statusTool = Tool(
     name: 'flutterware_status',
     description:
@@ -123,8 +131,14 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
             // Carrying them here made this call three quarters a duplicate of
             // flutterware_actions — 33k tokens of first contact on
             // flutterware's own repo, before a question had been asked.
+            //
+            // And with the long lists cut short for the same reason: what was
+            // left was still 10k tokens, three quarters of it rows naming every
+            // dependency of every package — a catalogue this plugin has an
+            // action for. The count of what was left out rides along, so a
+            // reader that wants the rest knows there is a rest.
             for (var report in session.reports)
-              report.toJson(includeActions: false),
+              report.toJson(includeActions: false, viewRows: _statusViewRows),
           ],
         });
       });
@@ -132,42 +146,98 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
   static final _actionsTool = Tool(
     name: 'flutterware_actions',
     description:
-        'Every action that can be invoked, per plugin, with the parameters '
-        'each one takes and the shape of what it returns. Call this before '
-        'flutterware_invoke when you do not already know an action id.',
-    inputSchema: Schema.object(properties: {}),
+        'Every action that can be invoked, per plugin. Call this before '
+        'flutterware_invoke when you do not already know an action id. '
+        'Without "plugin" it answers the index: every action of every plugin, '
+        'with what it does and the names of the parameters it takes. Name a '
+        'plugin to get that one in full — every parameter documented, and the '
+        'shape of what comes back.',
+    inputSchema: Schema.object(
+      properties: {
+        'plugin': Schema.string(
+          description:
+              'One plugin, in full: its id or the last dotted segment — '
+              '"flutterware.previews" or just "previews". Omitted, the index.',
+        ),
+      },
+    ),
   );
 
-  Future<CallToolResult> _actions(CallToolRequest request) =>
-      _withSession((session) async {
-        return _json({
-          'plugins': [
-            for (var report in session.reports)
+  /// The index, or one plugin in full.
+  ///
+  /// **Because the full answer does not fit.** Every parameter of every action
+  /// documented is 34k tokens on flutterware's own repo — past the 25k a client
+  /// hands a model, so the reply an agent got was a note saying it had been
+  /// written to a file. The one documented way to learn an action id could not
+  /// be read. The index is a twentieth of that and carries what a call usually
+  /// needs — the id, what it does, what it takes — and the plugin that turns out
+  /// to matter is one more round trip away, in full.
+  Future<CallToolResult> _actions(CallToolRequest request) => _withSession((
+    session,
+  ) async {
+    var requested = request.arguments?['plugin'] as String?;
+    if (requested == null) {
+      return _json({
+        'plugins': [
+          for (var report in session.reports)
+            {
+              'id': report.id,
+              'label': report.label,
+              'actions': [
+                for (var action in report.actions)
+                  {
+                    'id': action.id,
+                    'description': ?action.description,
+                    // Names only. Enough to call a parameterless action, or
+                    // one whose parameters say what they are; anything else
+                    // is what naming the plugin is for.
+                    if (action.parameters.isNotEmpty)
+                      'takes': [
+                        for (var parameter in action.parameters) parameter.id,
+                      ],
+                  },
+              ],
+            },
+        ],
+      });
+    }
+
+    PluginCore core;
+    try {
+      core = session.requireCore(requested);
+    } on SessionException catch (e) {
+      return _error('$e');
+    }
+    var report = core.report;
+    return _json({
+      'plugins': [
+        {
+          'id': report.id,
+          'label': report.label,
+          'actions': [
+            for (var action in report.actions)
               {
-                'id': report.id,
-                'label': report.label,
-                'actions': [
-                  for (var action in report.actions)
-                    {
-                      ...action.toJson(),
-                      // The shape of what comes back, so an agent knows the
-                      // keys before it calls rather than after. Read from
-                      // generated data — the extraction ran at build time.
-                      if (resultShapes[action.returnsName] case var shape?)
-                        'shape': shape.toJson(),
-                    },
-                ],
+                ...action.toJson(),
+                // The shape of what comes back, so an agent knows the
+                // keys before it calls rather than after. Read from
+                // generated data — the extraction ran at build time.
+                if (resultShapes[action.returnsName] case var shape?)
+                  'shape': shape.toJson(),
               },
           ],
-        });
-      });
+        },
+      ],
+    });
+  });
 
   static final _invokeTool = Tool(
     name: 'flutterware_invoke',
     description:
         'Run one plugin action. Argument keys are the parameter ids reported '
         'by flutterware_actions. Returns whatever the action produced — often '
-        'a path to an artifact.',
+        'a path to an artifact. A slow action narrates: ask for progress and '
+        'what the panel is saying arrives as it changes — the entry being '
+        'compiled, the point of a matrix, the launcher building an app.',
     inputSchema: Schema.object(
       properties: {
         'plugin': Schema.string(
@@ -197,19 +267,25 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         (request.arguments?['arguments'] as Map?)?.cast<String, Object?>() ??
         const <String, Object?>{};
 
-    Job job;
+    PluginCore core;
     try {
-      job = session.invoke(pluginName, actionId, arguments: arguments);
+      // Resolved before the job rather than from it, so progress can be
+      // followed from before the first line: `invoke` starts the action
+      // running, and a plugin that says something in its first synchronous
+      // step would have said it into an empty room.
+      core = session.requireCore(pluginName);
     } on SessionException catch (e) {
       // The message names what *is* declared, so a model that guessed wrong
       // can correct itself without a second round-trip.
       return _error('$e');
     }
 
+    var stopFollowing = _followProgress(core, request.meta?.progressToken);
+    var job = session.invoke(pluginName, actionId, arguments: arguments);
     var result = await job.done;
+    stopFollowing();
     if (!result.ok) return _error(describeJobError(result.error!));
 
-    var core = session.coreById(job.plugin)!;
     var artifact = result.artifacts.isEmpty ? null : result.artifacts.first;
     var summary = {
       'plugin': job.plugin,
@@ -232,6 +308,70 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
 
     return _jsonWithImage(session, artifact, summary);
   });
+
+  /// Forwards what the plugin is saying about itself while the job runs, and
+  /// returns the way to stop.
+  ///
+  /// **The line the panel is showing, and nothing invented.** A core moves its
+  /// report's status as it works — `building`, `2 of 40 · 3 broken`, `Syncing
+  /// files to device macOS` — because that is what the sidebar renders, and
+  /// [PluginCore.changes] is the same bump every renderer already subscribes
+  /// to. So an agent watching a three-minute action reads what a human beside
+  /// it would read, out of one source. A plugin that says nothing while it
+  /// works sends nothing: silence is honest, and a heartbeat that only means
+  /// "still alive" is what a timeout is for.
+  ///
+  /// Only when the client asked. The token is the opt-in the protocol defines
+  /// — no token, no traffic — and the notifications never extend a client's
+  /// timeout, so this buys visibility rather than patience.
+  void Function() _followProgress(PluginCore core, ProgressToken? token) {
+    if (token == null) return () {};
+    var sent = 0;
+    // Seeded with what the plugin is already saying, because this subscribes
+    // before the action starts: a device count from before the call, or a
+    // failure from this morning's build, is not progress. What the action says
+    // next is.
+    var said = _progressLines(core);
+    var subscription = core.changes.stream.listen((_) {
+      // The bump carries no payload, so most of them are about something else
+      // entirely — a report is one object and any part of it moving rings this
+      // bell. Only a changed line is progress.
+      for (var line in _progressLines(core).entries) {
+        if (said[line.key] == line.value) continue;
+        said[line.key] = line.value;
+        notifyProgress(
+          ProgressNotification(
+            progressToken: token,
+            // Monotonic and unitless: the protocol asks progress to increase
+            // and takes `total` as optional. A count of things said is the only
+            // honest number here — an action that knows its own denominator
+            // says so in its message.
+            progress: ++sent,
+            message: line.value,
+          ),
+        );
+      }
+    });
+    return () => unawaited(subscription.cancel());
+  }
+
+  /// What the plugin is saying right now, keyed by who is saying it.
+  ///
+  /// The plugin *and* its children, because which one carries the news depends
+  /// on the plugin: previews moves its own line while it audits, and a run
+  /// moves the row of the app being built — `Studio (dev) · macOS: Syncing
+  /// files to device macOS…` — while its own line goes on counting devices.
+  /// Keying by speaker is what lets both be followed without either drowning
+  /// the other in repeats.
+  static Map<String, String> _progressLines(PluginCore core) {
+    var report = core.report;
+    return {
+      if (!report.status.isEmpty) '': report.status.message,
+      for (var child in report.children)
+        if (!child.status.isEmpty)
+          child.id: '${child.label}: ${child.status.message}',
+    };
+  }
 
   /// One drive transaction, promoted to its own tool.
   ///
@@ -319,6 +459,12 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               'Worktree name or path, to drive a run another checkout '
               'launched. Only runs from this worktree match when omitted — '
               'the refusals name the worktrees that have one.',
+        ),
+        'run': Schema.string(
+          description:
+              'The run key, when nothing else separates two runs — two '
+              'Studios on one device from one worktree. The ambiguity refusal '
+              'lists the keys; `apps` reports them too.',
         ),
       },
       required: ['verb'],

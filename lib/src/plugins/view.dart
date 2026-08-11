@@ -31,6 +31,21 @@ class PluginView {
 
   List<Map<String, Object?>> toJson() => [for (var n in nodes) n.toJson()];
 
+  /// The same projection with no list or table longer than [maxRows], the rest
+  /// counted in [ViewItems.truncated].
+  ///
+  /// For a reader that pays by the row. An agent's whole reply has a size
+  /// ceiling, and a plugin that lists every dependency of every package spends
+  /// it on a catalogue it has an action for: `flutterware_status` was 10k tokens
+  /// on this repo, three quarters of it item rows, before a question had been
+  /// asked. The panel and `fw` keep the full list — a window scrolls and a
+  /// terminal pipes.
+  ///
+  /// Capping, never dropping: the count rides along, so a short answer says it
+  /// is short.
+  PluginView capped(int maxRows) =>
+      PluginView([for (var n in nodes) n.capped(maxRows)]);
+
   @override
   String toString() => toText();
 }
@@ -41,6 +56,10 @@ sealed class ViewNode {
   Map<String, Object?> toJson();
 
   void writeText(StringBuffer out, int depth);
+
+  /// This node with its rows capped — see [PluginView.capped]. A node that
+  /// holds no rows is its own answer.
+  ViewNode capped(int maxRows) => this;
 
   static String _pad(int depth) => '  ' * depth;
 }
@@ -66,6 +85,10 @@ class ViewSection extends ViewNode {
       child.writeText(out, depth + 1);
     }
   }
+
+  @override
+  ViewNode capped(int maxRows) =>
+      ViewSection(title, [for (var c in children) c.capped(maxRows)]);
 }
 
 /// A free line of prose — a summary, a hint, an error message.
@@ -180,6 +203,14 @@ class ViewItems extends ViewNode {
       out.writeln('$pad… $truncated more');
     }
   }
+
+  @override
+  ViewNode capped(int maxRows) => items.length <= maxRows
+      ? this
+      : ViewItems(
+          items.take(maxRows).toList(),
+          truncated: truncated + items.length - maxRows,
+        );
 }
 
 /// A table with a header row. Columns are aligned in the text rendering.
@@ -227,4 +258,13 @@ class ViewTable extends ViewNode {
       out.writeln('$pad… $truncated more');
     }
   }
+
+  @override
+  ViewNode capped(int maxRows) => rows.length <= maxRows
+      ? this
+      : ViewTable(
+          columns,
+          rows.take(maxRows).toList(),
+          truncated: truncated + rows.length - maxRows,
+        );
 }

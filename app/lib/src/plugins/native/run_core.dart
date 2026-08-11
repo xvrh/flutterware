@@ -1236,7 +1236,27 @@ class RunCore extends PluginCore {
     );
   }
 
+  /// The launcher's line for a launch this process is waiting out.
+  ///
+  /// **Because nothing else is watching.** The rail's row fills in from the
+  /// probe loop, which only runs where something subscribed — the GUI. A
+  /// headless `launch` waits ninety seconds with a live log in front of it and
+  /// used to publish none of it, so `fw` and an agent both watched a blank
+  /// space. Reading it into the report puts it where every renderer already
+  /// looks, and MCP forwards each change as progress.
+  final _launching = <String, Status>{};
+
+  void _setLaunching(String key, Status? status) {
+    if (status == null) {
+      _launching.remove(key);
+    } else {
+      _launching[key] = status;
+    }
+    notifyChanged();
+  }
+
   Status _status(List<DaemonDevice> devices, Set<String> busy) {
+    if (_launching.values.firstOrNull case var launching?) return launching;
     if (_daemonError != null) return Status.error('no device list');
     if (!_scanned) return Status.none;
     if (devices.isEmpty) {
@@ -1368,6 +1388,18 @@ class RunCore extends PluginCore {
       description:
           'Worktree name or path, to reach a run another checkout launched; '
           'only runs from this worktree match when omitted',
+    ),
+    const ActionParameter(
+      'run',
+      'Run',
+      required: false,
+      description:
+          'The run id `apps` reports as `run`, and the ambiguity refusal '
+          'lists — the last resort, and the only thing that separates two runs '
+          'of the same entry point on the same device from the same worktree. '
+          'The stable key an address carries is accepted too, where it is not '
+          'ambiguous. Explicit like `worktree`: naming one reaches any run of '
+          'this repository.',
     ),
   ];
 
@@ -1680,7 +1712,15 @@ class RunCore extends PluginCore {
     var log = LaunchLog.read(handle.logPath ?? '');
     if (wait) {
       var timeout = Duration(seconds: _intArgument(arguments['timeout'], 300));
-      (handle, log) = await awaitLaunch(handle, timeout);
+      try {
+        (handle, log) = await awaitLaunch(
+          handle,
+          timeout,
+          onProgress: (line) => _setLaunching(handle.key, Status.info(line)),
+        );
+      } finally {
+        _setLaunching(handle.key, null);
+      }
     }
     _handles = _scanHandles();
     await _probeAll();
@@ -1919,12 +1959,7 @@ class RunCore extends PluginCore {
   ) async {
     _handles = _scanHandles();
     await _probeAll();
-    var handle = _selectApp(
-      arguments['device'] as String?,
-      arguments['entrypoint'] as String?,
-      arguments['worktree'] as String?,
-      await _repoWorktrees,
-    );
+    var handle = _selectApp(arguments, await _repoWorktrees);
     var started = DateTime.now();
     try {
       await control(action, handle);
@@ -1941,6 +1976,7 @@ class RunCore extends PluginCore {
       );
       return RunControlResult(
         action: action,
+        run: handle.runId,
         device: handle.device,
         entrypoint: handle.entrypoint,
         ok: true,
@@ -1949,6 +1985,7 @@ class RunCore extends PluginCore {
     } on Object catch (e) {
       return RunControlResult(
         action: action,
+        run: handle.runId,
         device: handle.device,
         entrypoint: handle.entrypoint,
         ok: false,
@@ -2095,12 +2132,7 @@ class RunCore extends PluginCore {
   Future<RunHandle> _selectRunningApp(Map<String, Object?> arguments) async {
     _handles = _scanHandles();
     await _probeAll();
-    return _selectApp(
-      arguments['device'] as String?,
-      arguments['entrypoint'] as String?,
-      arguments['worktree'] as String?,
-      await _repoWorktrees,
-    );
+    return _selectApp(arguments, await _repoWorktrees);
   }
 
   /// What the last launch from this panel chose.
@@ -2816,11 +2848,13 @@ class RunCore extends PluginCore {
       debugRepoWorktrees ?? _repoWorktreePaths;
 
   RunHandle _selectApp(
-    String? device,
-    String? entrypoint,
-    String? worktree,
+    Map<String, Object?> arguments,
     Set<String> repoWorktrees,
   ) {
+    var device = arguments['device'] as String?;
+    var entrypoint = arguments['entrypoint'] as String?;
+    var worktree = arguments['worktree'] as String?;
+    var run = arguments['run'] as String?;
     // Own runs by default, like the rail: the owner's Studio in another
     // worktree is the same device/entrypoint pair as this one's, and neither
     // argument could tell them apart. Naming a worktree is the explicit
@@ -2831,21 +2865,26 @@ class RunCore extends PluginCore {
       for (var handle in _handles)
         if (repoWorktrees.contains(p.canonicalize(handle.worktree))) handle,
     ];
-    var pool = worktree == null
+    // A key is as explicit as a worktree name and as unique as a run gets, so
+    // it opts into the repository's pool the same way — and then it is the
+    // whole selection: nothing else can narrow one run further.
+    var pool = worktree == null && run == null
         ? ownHandles
         : [
             for (var handle in repoHandles)
-              if (handle.worktreeName == worktree ||
+              if (worktree == null ||
+                  handle.worktreeName == worktree ||
                   p.canonicalize(handle.worktree) == p.canonicalize(worktree))
                 handle,
           ];
     var matches = [
       for (var handle in pool)
-        if (device == null || handle.device == device)
-          if (entrypoint == null ||
-              handle.entrypoint == entrypoint ||
-              handle.entrypointName == entrypoint)
-            handle,
+        if (run == null || handle.runId == run || handle.key == run)
+          if (device == null || handle.device == device)
+            if (entrypoint == null ||
+                handle.entrypoint == entrypoint ||
+                handle.entrypointName == entrypoint)
+              handle,
     ];
     if (matches.isEmpty) {
       // The next move rides in the refusal: this is an agent's first contact
@@ -2854,7 +2893,9 @@ class RunCore extends PluginCore {
         for (var handle in repoHandles)
           if (!isMine(handle)) handle,
       ];
-      var nothing = worktree != null
+      var nothing = run != null
+          ? 'No run "$run" — `apps` reports the keys that exist.'
+          : worktree != null
           ? 'Nothing is running from worktree "$worktree".'
           : device != null
           ? 'Nothing is running on "$device".'
@@ -2871,16 +2912,20 @@ class RunCore extends PluginCore {
       );
     }
     if (matches.length > 1) {
+      // Every match named by its key, because the ones this refusal exists for
+      // are the ones a worktree, a device and an entry point cannot separate:
+      // two Studios launched from one checkout onto one device printed the
+      // same string twice and left no argument that could pick either.
       throw StateError(
-        'More than one app matches. Name a worktree, a device and an entry '
-        'point: '
-        '${matches.map((h) => '${h.worktreeName}: ${h.device}/${h.entrypoint}').join(', ')}',
+        'More than one app matches. Pass `run` with one of: '
+        '${matches.map((h) => '${h.runId} (${h.worktreeName}: ${h.device}/${h.entrypoint}, ${_startedAgo(h.startedAt)})').join(', ')}',
       );
     }
     return matches.single;
   }
 
   RunAppEntry _appEntry(RunHandle handle, RunProbe? probe) => RunAppEntry(
+    run: handle.runId,
     device: handle.device,
     deviceName: handle.deviceName,
     worktree: handle.worktreeName,

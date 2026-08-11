@@ -50,7 +50,11 @@ class PluginReport {
   /// terminal pays nothing for that, so `fw status --json` keeps them. An agent
   /// pays for every one of them in every reply, and already has a tool that
   /// serves them once.
-  Map<String, Object?> toJson({bool includeActions = true}) => {
+  ///
+  /// [viewRows] caps every list and table in the projection, counting the rest
+  /// — see [PluginView.capped]. Null keeps the projection whole, which is what
+  /// a panel and a terminal want.
+  Map<String, Object?> toJson({bool includeActions = true, int? viewRows}) => {
     'id': id,
     'label': label,
     'status': status.toJson(),
@@ -60,7 +64,8 @@ class PluginReport {
     if (teardown.isNotEmpty) 'teardown': [for (var t in teardown) t.toJson()],
     if (guards.isNotEmpty) 'guards': [for (var g in guards) g.toJson()],
     if (children.isNotEmpty) 'children': [for (var c in children) c.toJson()],
-    if (!view.isEmpty) 'view': view.toJson(),
+    if (!view.isEmpty)
+      'view': (viewRows == null ? view : view.capped(viewRows)).toJson(),
   };
 
   /// The whole plugin as plain text — the shape `fw` prints and an agent reads.

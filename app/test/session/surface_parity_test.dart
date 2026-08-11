@@ -71,7 +71,6 @@ void main() {
 
     test('the parameters of every action are declared identically', () async {
       var cli = await surfaces.cliJson(['actions', '--json']);
-      var mcp = await surfaces.mcpJson('flutterware_actions');
 
       Map<String, Object?> parameters(Map<String, Object?> payload) => {
         for (var plugin in payload['plugins']! as List)
@@ -79,7 +78,48 @@ void main() {
             '${plugin['id']}/${(action as Map)['id']}': action['parameters'],
       };
 
-      expect(parameters(cli), parameters(mcp));
+      // Plugin by plugin, because MCP documents the parameters only when asked
+      // for one — the whole catalogue at once does not fit in a reply. Walking
+      // what the CLI answered means a plugin MCP cannot serve at all fails here
+      // rather than being skipped.
+      var fromMcp = <String, Object?>{};
+      for (var plugin in cli['plugins']! as List) {
+        fromMcp.addAll(
+          parameters(
+            await surfaces.mcpJson('flutterware_actions', {
+              'plugin': (plugin as Map)['id'],
+            }),
+          ),
+        );
+      }
+
+      expect(parameters(cli), fromMcp);
+    });
+
+    test('the index names every action, and the plugin fills one in', () async {
+      var index = await surfaces.mcpJson('flutterware_actions');
+      var indexed = (index['plugins']! as List)
+          .expand((p) => (p as Map)['actions']! as List)
+          .map((a) => (a as Map)['id'])
+          .toSet();
+
+      // The index is the reply an agent reads first, so what it must carry is
+      // every id — `takes` is a convenience, and the documentation is one call
+      // away, but an action missing here is an action nobody knows to ask for.
+      expect(indexed, {for (var action in _FakeCore.declared) action.id});
+      expect(
+        index.toString().contains('description'),
+        isTrue,
+        reason: 'an id with no sentence saying what it does is a guess',
+      );
+    });
+
+    test('an unknown plugin is refused with the declared ones', () async {
+      var refusal = await surfaces.mcpError('flutterware_actions', {
+        'plugin': 'previewz',
+      });
+      expect(refusal, contains('previewz'));
+      expect(refusal, contains(surfaces.session.reports.first.id));
     });
   });
 
@@ -146,6 +186,65 @@ void main() {
         expect(surfaces.core.lastArguments['loud'], isTrue);
       },
     );
+
+    group('a flag and its value', () {
+      // `--name Ada` is how everyone types it, and it used to be dropped:
+      // `name` became `true` and "Ada" was counted as a positional, which came
+      // back as `required (name): true` — or, where the action cast it, as a
+      // type error with a stack trace and no mention of the flag.
+
+      test('may be separated by a space', () async {
+        await surfaces.cli(['run', 'fake', 'query', '--name', 'Ada']);
+        expect(surfaces.core.lastArguments['name'], 'Ada');
+      });
+
+      test('is the same thing as an equals sign', () async {
+        await surfaces.cli(['run', 'fake', 'query', '--name=Ada']);
+        var equals = surfaces.core.lastArguments;
+        await surfaces.cli(['run', 'fake', 'query', '--name', 'Ada']);
+
+        expect(surfaces.core.lastArguments, equals);
+      });
+
+      test('is typed by the declaration either way', () async {
+        await surfaces.cli([
+          'run',
+          'fake',
+          'query',
+          '--name',
+          'Ada',
+          '--count',
+          '7',
+        ]);
+        expect(surfaces.core.lastArguments['count'], 7);
+      });
+
+      test('is not eaten by a boolean in front of it', () async {
+        // The one case greed would get wrong: a declared boolean takes no
+        // value, so what follows belongs to whatever comes next.
+        await surfaces.cli(['run', 'fake', 'query', '--loud', '--name', 'Ada']);
+
+        expect(surfaces.core.lastArguments['loud'], isTrue);
+        expect(surfaces.core.lastArguments['name'], 'Ada');
+      });
+
+      test('is refused, naming the flag, when there is no value', () async {
+        var refusal = await surfaces.cliError([
+          'run',
+          'fake',
+          'query',
+          '--name',
+        ]);
+
+        expect(refusal.code, isNot(0));
+        expect(
+          refusal.text,
+          allOf(contains('needs a value'), contains('--name=')),
+          reason:
+              'a flag that lost its value must not reach the action as true',
+        );
+      });
+    });
   });
 
   group('a result that reports failure', () {

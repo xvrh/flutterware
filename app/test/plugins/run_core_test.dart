@@ -1507,13 +1507,113 @@ void main() {
           isA<StateError>().having(
             (e) => e.message,
             'message',
+            allOf(contains('Pass `run`'), contains('mine: phone/lib/a.dart')),
+          ),
+        ),
+      );
+    });
+
+    test('two launchers of one run are told apart by their ids', () async {
+      // What a worktree, a device and an entry point cannot answer: two
+      // launchers up for the *same* run. Their descriptions are one string
+      // twice, and the key they share is stable across relaunch by design —
+      // so the pid-qualified id is the only thing that can pick either, and a
+      // refusal naming an argument the caller cannot look up is a dead end.
+      _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        launcherPid: pid,
+      );
+      _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        launcherPid: await _livePid(),
+      );
+
+      var runs = scanRunHandles(runDir.path);
+      expect(runs, hasLength(2));
+      expect(runs.first.key, runs.last.key, reason: 'one run, two launchers');
+      expect(runs.first.runId, isNot(runs.last.runId));
+
+      await expectLater(
+        core.invoke('restart'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
             allOf(
-              contains('Name a worktree'),
-              contains('mine: phone/lib/a.dart'),
+              contains('Pass `run`'),
+              contains(runs.first.runId),
+              contains(runs.last.runId),
             ),
           ),
         ),
       );
+    });
+
+    test('an id selects the one of them it names', () async {
+      _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        launcherPid: pid,
+      );
+      _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        launcherPid: await _livePid(),
+      );
+      var wanted = scanRunHandles(runDir.path).last;
+
+      var result =
+          (await core.invoke('restart', arguments: {'run': wanted.runId}))!
+              as RunControlResult;
+
+      // The answer names the run it moved — the other half of a refusal that
+      // told the caller to name one.
+      expect(result.run, wanted.runId);
+    });
+
+    test('an unknown id is refused as an id, not as a missing app', () async {
+      _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        launcherPid: pid,
+      );
+
+      await expectLater(
+        core.invoke('restart', arguments: {'run': 'app-nope-1'}),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('No run "app-nope-1"'), contains('apps')),
+          ),
+        ),
+      );
+    });
+
+    test('apps reports the id the refusal asks for', () async {
+      _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        launcherPid: pid,
+      );
+
+      var result = (await core.invoke('apps'))! as RunAppsResult;
+
+      expect(result.apps.single.run, scanRunHandles(runDir.path).single.runId);
     });
 
     test("a named worktree reaches a sibling checkout's run", () async {
@@ -1761,6 +1861,17 @@ RunHandle _writeHandle(
     logPath: logPath,
     startedAt: startedAt ?? DateTime.now(),
   ).publish(runDir.path);
+}
+
+/// A pid that is certainly *there*, and gone when the test ends.
+///
+/// Two launchers alive at once is the whole state the run id exists for: a
+/// probe sweeps the handle of a launcher that has died, so a dead pid would
+/// leave one match and no ambiguity to refuse.
+Future<int> _livePid() async {
+  var process = await Process.start('sleep', const ['30']);
+  addTearDown(process.kill);
+  return process.pid;
 }
 
 /// A pid that is certainly gone: a process started and waited for.

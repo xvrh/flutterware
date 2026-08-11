@@ -173,6 +173,24 @@ class PreviewsCore extends PluginCore {
   /// construction, closing over itself.
   Future<Object?> Function(Map<String, Object?> arguments)? compareRunner;
 
+  /// What a headless action of this core is doing, while one runs.
+  ///
+  /// The counterpart of [busyStatusFor] for the work that needs no GUI: an
+  /// audit compiles and renders every entry, which is the longest thing here,
+  /// and it used to say `scanning…` once and then nothing for two minutes.
+  /// Every renderer reads this — the sidebar shows it, and MCP forwards each
+  /// change as a progress notification to a client that asked for one.
+  final _busy = <String, Status>{};
+
+  void _setBusy(String path, Status? status) {
+    if (status == null) {
+      _busy.remove(path);
+    } else {
+      _busy[path] = status;
+    }
+    notifyChanged();
+  }
+
   /// The scan failure for [path], for a panel that wants to show it directly.
   String? failureFor(String path) => _failures[path];
 
@@ -966,6 +984,7 @@ class PreviewsCore extends PluginCore {
       return Status.error('${_failures.length} failed to scan');
     }
     for (var path in packages) {
+      if (_busy[path] case var busy?) return busy;
       if (busyStatusFor?.call(path) case var busy?) return busy;
     }
     if (isScanning) return const Status.info('scanning…');
@@ -998,6 +1017,7 @@ class PreviewsCore extends PluginCore {
 
   Status _packageStatus(String path) {
     if (_failures[path] case var failure?) return Status.error(failure);
+    if (_busy[path] case var busy?) return busy;
     if (busyStatusFor?.call(path) case var busy?) return busy;
     if (_scanning.contains(path)) return const Status.info('scanning…');
     var scan = _scans[path];
@@ -1564,12 +1584,19 @@ class PreviewsCore extends PluginCore {
       if (only != null && only.isEmpty) continue;
       CatalogAudit audit;
       try {
-        audit = await _headlessFor(path).auditAll(entryIds: only);
+        _setBusy(path, const Status.info('starting the compiler…'));
+        audit = await _headlessFor(path).auditAll(
+          entryIds: only,
+          onEntry: (done, total, entryId) =>
+              _setBusy(path, Status.info('$done of $total · $entryId')),
+        );
       } catch (e) {
         // Per package, exactly as `check` does it: one package that cannot
         // host a daemon must not decide the answer for the others.
         unreachable.add(CatalogAuditFailure(package: path, error: '$e'));
         continue;
+      } finally {
+        _setBusy(path, null);
       }
       checked += audit.entries.length + audit.quarantined.length;
 

@@ -617,6 +617,27 @@ class ScenariosCore extends PluginCore {
                   'filters on',
             ),
             const ActionParameter(
+              'steps',
+              'Steps',
+              kind: ActionParameterKind.choice,
+              required: false,
+              defaultValue: 'failing',
+              description:
+                  'How many steps ride back in the answer. Every run writes '
+                  'all of them to `run.json` in its output directory either '
+                  'way and each package names that file, so this is about what '
+                  'arrives without asking: `failing` (default) is the frame '
+                  'each red scenario died on, `all` is every step of every '
+                  'scenario — a matrix suite is hundreds — and `none` is the '
+                  'summary alone. Every scenario reports its `stepCount` '
+                  'whatever this says.',
+              options: [
+                ActionOption('failing'),
+                ActionOption('all'),
+                ActionOption('none'),
+              ],
+            ),
+            const ActionParameter(
               'text-scale',
               'Text scale',
               kind: ActionParameterKind.string,
@@ -1047,14 +1068,32 @@ class ScenariosCore extends PluginCore {
     );
   }
 
+  /// What a run of this core is doing, while one runs — read by the sidebar and
+  /// forwarded by MCP as progress. A matrix is one process per point and each
+  /// takes seconds, so the point being run is the news.
+  final _busy = <String, Status>{};
+
+  void _setBusy(String path, Status? status) {
+    if (status == null) {
+      _busy.remove(path);
+    } else {
+      _busy[path] = status;
+    }
+    notifyChanged();
+  }
+
   Status _status() {
     if (packages.isEmpty) return const Status.warn('no packages');
     if (_errors.isNotEmpty) return const Status.error('scan failed');
+    for (var path in packages) {
+      if (_busy[path] case var busy?) return busy;
+    }
     var scanning = _scans.keys.where((p) => !_results.containsKey(p)).length;
     return scanning == 0 ? Status.none : const Status.info('scanning…');
   }
 
   Status _packageStatus(String path) {
+    if (_busy[path] case var busy?) return busy;
     if (_errors.containsKey(path)) return const Status.error('scan failed');
     if (!_scans.containsKey(path)) return Status.none;
     if (!_results.containsKey(path)) return const Status.info('scanning…');
@@ -1495,7 +1534,14 @@ class ScenariosCore extends PluginCore {
       }
     }
 
+    var steps = arguments['steps'] as String? ?? 'failing';
+    if (!const ['failing', 'all', 'none'].contains(steps)) {
+      throw ArgumentError.value(steps, 'steps', 'accepted: failing, all, none');
+    }
+
     var results = <ScenarioRunPackage>[];
+    var points = paths.length * assignments.length;
+    var point = 0;
     for (var path in paths) {
       var packageRoot = host.workspace.packageFor(path).directory.path;
       var base =
@@ -1512,6 +1558,17 @@ class ScenariosCore extends PluginCore {
         // assignment overwrites the first — same file, same scenario, same
         // step names — and only the last language survives on disk.
         var outDir = fannedOut ? p.join(base, axisSlug(assignment)) : base;
+        // One process per point, seconds each — so which point is running is
+        // the news a sidebar shows and MCP forwards. The matrix count only
+        // when there is a matrix: "1 of 1" is noise.
+        _setBusy(
+          path,
+          Status.info(
+            points > 1
+                ? 'running ${++point} of $points · ${axisSlug(assignment)}'
+                : 'running…',
+          ),
+        );
         try {
           var report = await _runnerFor(path).run(
             outDir: outDir,
@@ -1562,13 +1619,78 @@ class ScenariosCore extends PluginCore {
               error: '$error',
             ),
           );
+        } finally {
+          _setBusy(path, null);
         }
       }
       if (fannedOut) _writeIndex(base, results.where((r) => r.path == path));
     }
-    return ScenarioRunResult(
-      packages: results,
+    var whole = ScenarioRunResult(
+      packages: [for (var run in results) _withReportOnDisk(run)],
       axes: fannedOut || axes.isEmpty ? null : axes.toParams(),
+    );
+    return _carrying(whole, steps);
+  }
+
+  /// Writes the package's own run beside its artifacts and names the file.
+  ///
+  /// Written before anything is trimmed, so the file is the whole answer no
+  /// matter what the caller asked to be handed. Best effort: a run that
+  /// produced pictures is not a failure because the directory turned
+  /// read-only between writing them and writing this.
+  ScenarioRunPackage _withReportOnDisk(ScenarioRunPackage run) {
+    if (run.scenarios.isEmpty) return run;
+    var file = p.join(run.output, scenarioRunReportFile);
+    try {
+      Directory(run.output).createSync(recursive: true);
+      File(file).writeAsStringSync(
+        const JsonEncoder.withIndent(
+          '  ',
+        ).convert(ScenarioRunResult(packages: [run]).toJson()),
+      );
+    } catch (_) {
+      return run;
+    }
+    return ScenarioRunPackage(
+      path: run.path,
+      output: run.output,
+      axes: run.axes,
+      ms: run.ms,
+      scenarios: run.scenarios,
+      report: file,
+      error: run.error,
+    );
+  }
+
+  /// [whole] with the steps [mode] asks for — the rest are in the file each
+  /// package names.
+  static ScenarioRunResult _carrying(ScenarioRunResult whole, String mode) {
+    if (mode == 'all') return whole;
+    var keepFailing = mode == 'failing';
+    return ScenarioRunResult(
+      axes: whole.axes,
+      packages: [
+        for (var run in whole.packages)
+          ScenarioRunPackage(
+            path: run.path,
+            output: run.output,
+            axes: run.axes,
+            ms: run.ms,
+            report: run.report,
+            error: run.error,
+            scenarios: [
+              for (var outcome in run.scenarios)
+                if (keepFailing && !outcome.ok)
+                  // The frame it died on, not the trail that led there: one
+                  // scenario with split branches is nineteen steps, and four
+                  // red ones were 99k characters of pictures nobody had asked
+                  // to see. The trail is in the file, one read away.
+                  outcome.withFailingStepOnly()
+                else
+                  outcome.withoutSteps(),
+            ],
+          ),
+      ],
     );
   }
 
@@ -1608,7 +1730,11 @@ class ScenariosCore extends PluginCore {
 
     // `output` names the page here and the raw artifacts in `run`, so the run
     // is left to its own default directory and the page copies out of it.
-    var runResult = await _run({...arguments}..remove('output'));
+    // Every step, because the page *is* the steps — the summary the action
+    // hands an agent would export a viewer with nothing in it.
+    var runResult = await _run(
+      {...arguments, 'steps': 'all'}..remove('output'),
+    );
 
     var page =
         (arguments['output'] as String?) ??
@@ -1905,6 +2031,7 @@ class ScenariosCore extends PluginCore {
             ok: outcome['ok'] == true,
             device: outcome['device'] as String?,
             ms: outcome['ms'] as int? ?? 0,
+            stepCount: (outcome['steps']! as List).length,
             steps: [
               for (var step
                   in (outcome['steps']! as List).cast<Map<String, dynamic>>())

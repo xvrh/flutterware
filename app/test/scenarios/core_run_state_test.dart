@@ -243,6 +243,9 @@ void main() {
                 'language': 'fr-CA',
                 'text-scale': '1.3',
                 'brightness': 'dark',
+                // The steps are what this is about, and a green scenario's
+                // stay in the file by default.
+                'steps': 'all',
               },
             ))!
             as ScenarioRunResult;

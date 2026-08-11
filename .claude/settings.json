@@ -1,0 +1,7 @@
+{
+  "env": {
+    "MCP_TIMEOUT": "300000",
+    "MAX_MCP_OUTPUT_TOKENS": "50000"
+  },
+  "enabledMcpjsonServers": ["flutterware"]
+}

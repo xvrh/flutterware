@@ -2587,6 +2587,12 @@ final resultShapes = <String, ResultShape>{
   'RunAppEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'RunAppEntry',
     'fields': <Object?>[
+      <String, Object?>{
+        'name': 'run',
+        'type': 'String',
+        'doc':
+            'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
+      },
       <String, Object?>{'name': 'device', 'type': 'String'},
       <String, Object?>{
         'name': 'deviceName',
@@ -2662,6 +2668,12 @@ final resultShapes = <String, ResultShape>{
         'shape': <String, Object?>{
           'type': 'RunAppEntry',
           'fields': <Object?>[
+            <String, Object?>{
+              'name': 'run',
+              'type': 'String',
+              'doc':
+                  'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
+            },
             <String, Object?>{'name': 'device', 'type': 'String'},
             <String, Object?>{
               'name': 'deviceName',
@@ -2774,6 +2786,12 @@ final resultShapes = <String, ResultShape>{
         'name': 'action',
         'type': 'String',
         'doc': '`reload`, `restart` or `stop`.',
+      },
+      <String, Object?>{
+        'name': 'run',
+        'type': 'String',
+        'doc':
+            'Which run it was done to — the id `apps` reports and a selector takes.',
       },
       <String, Object?>{'name': 'device', 'type': 'String'},
       <String, Object?>{'name': 'entrypoint', 'type': 'String'},
@@ -3595,6 +3613,12 @@ final resultShapes = <String, ResultShape>{
         'shape': <String, Object?>{
           'type': 'RunAppEntry',
           'fields': <Object?>[
+            <String, Object?>{
+              'name': 'run',
+              'type': 'String',
+              'doc':
+                  'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
+            },
             <String, Object?>{'name': 'device', 'type': 'String'},
             <String, Object?>{
               'name': 'deviceName',
@@ -4148,6 +4172,12 @@ final resultShapes = <String, ResultShape>{
         },
       },
       <String, Object?>{
+        'name': 'stepCount',
+        'type': 'int',
+        'doc':
+            'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
+      },
+      <String, Object?>{
         'name': 'errors',
         'type': 'List<ScenarioRunError>',
         'doc': 'The failure, when [ok] is false.',
@@ -4173,6 +4203,13 @@ final resultShapes = <String, ResultShape>{
         'name': 'output',
         'type': 'String',
         'doc': 'Where this run\'s artifacts were written.',
+      },
+      <String, Object?>{
+        'name': 'report',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
       },
       <String, Object?>{
         'name': 'axes',
@@ -4423,6 +4460,12 @@ final resultShapes = <String, ResultShape>{
               },
             },
             <String, Object?>{
+              'name': 'stepCount',
+              'type': 'int',
+              'doc':
+                  'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
+            },
+            <String, Object?>{
               'name': 'errors',
               'type': 'List<ScenarioRunError>',
               'doc': 'The failure, when [ok] is false.',
@@ -4464,6 +4507,13 @@ final resultShapes = <String, ResultShape>{
               'name': 'output',
               'type': 'String',
               'doc': 'Where this run\'s artifacts were written.',
+            },
+            <String, Object?>{
+              'name': 'report',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.',
             },
             <String, Object?>{
               'name': 'axes',
@@ -4719,6 +4769,12 @@ final resultShapes = <String, ResultShape>{
                         },
                       ],
                     },
+                  },
+                  <String, Object?>{
+                    'name': 'stepCount',
+                    'type': 'int',
+                    'doc':
+                        'How many steps the scenario captured — which is [steps]`.length` unless they were left out of this copy.',
                   },
                   <String, Object?>{
                     'name': 'errors',

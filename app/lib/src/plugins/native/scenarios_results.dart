@@ -94,6 +94,13 @@ class ScenarioListEntry {
 /// beside the page as `report.json` and the viewer parses it into the same
 /// widgets the panel draws. A result shape with only one direction would have
 /// meant a second model to keep in step with this one.
+/// What a run writes beside its artifacts: itself, whole, in this shape.
+///
+/// Named next to the model rather than next to the writer, because reading it
+/// back is the point — `ScenarioRunResult.fromJson` on this file is the other
+/// half of an answer that summarised.
+const scenarioRunReportFile = 'run.json';
+
 @JsonSerializable(explicitToJson: true, includeIfNull: false)
 class ScenarioRunResult
     implements PluginResult, ReportsFailure, ProducesArtifacts {
@@ -169,6 +176,7 @@ class ScenarioRunPackage {
     this.axes,
     this.ms = 0,
     this.scenarios = const [],
+    this.report,
     this.error,
   });
 
@@ -176,6 +184,17 @@ class ScenarioRunPackage {
 
   /// Where this run's artifacts were written.
   final String output;
+
+  /// The whole run, on disk, in this same shape — every step of every
+  /// scenario, whatever this copy carries.
+  ///
+  /// **Because the whole thing does not fit in an answer.** A full suite across
+  /// a 2×2 matrix is 160 steps and 60k tokens of paths, past anything a client
+  /// hands a model, and most of it is about scenarios that passed. So the
+  /// answer summarises and the file keeps everything: one read when a reader
+  /// wants a step it was not given, and no read at all in the ordinary case
+  /// where the answer is "20 scenarios, all green".
+  final String? report;
 
   /// The assignment **this** entry ran under, when the request asked for a
   /// matrix (`devices=` / `languages=`): one entry per package per point of
@@ -207,6 +226,7 @@ class ScenarioRunOutcome {
     this.device,
     this.ms = 0,
     this.steps = const [],
+    this.stepCount = 0,
     this.errors = const [],
   });
 
@@ -223,9 +243,37 @@ class ScenarioRunOutcome {
   final int ms;
   final List<ScenarioRunStep> steps;
 
+  /// How many steps the scenario captured — which is [steps]`.length` unless
+  /// they were left out of this copy.
+  ///
+  /// Carried separately so a trimmed answer cannot be read as an empty one: a
+  /// green scenario whose steps went to the file on disk still says it took
+  /// five pictures. See `ScenarioRunPackage.report`.
+  final int stepCount;
+
   /// The failure, when [ok] is false. The last captured step is the frame
   /// just before it.
   final List<ScenarioRunError> errors;
+
+  /// This outcome with [keep] of its steps; the rest are on disk.
+  ScenarioRunOutcome carrying(List<ScenarioRunStep> keep) => ScenarioRunOutcome(
+    file: file,
+    name: name,
+    ok: ok,
+    device: device,
+    ms: ms,
+    steps: keep,
+    stepCount: stepCount,
+    errors: errors,
+  );
+
+  /// This outcome with its steps left on disk.
+  ScenarioRunOutcome withoutSteps() => carrying(const []);
+
+  /// This outcome carrying only the frame the failure was captured at — the
+  /// last one, per [errors]. The trail that led there is in the file.
+  ScenarioRunOutcome withFailingStepOnly() =>
+      steps.isEmpty ? this : carrying([steps.last]);
 
   Map<String, Object?> toJson() => _$ScenarioRunOutcomeToJson(this);
 }

@@ -378,6 +378,7 @@ class RunLaunchResult implements PluginResult {
 class RunControlResult implements PluginResult {
   RunControlResult({
     required this.action,
+    required this.run,
     required this.device,
     required this.entrypoint,
     required this.ok,
@@ -388,6 +389,13 @@ class RunControlResult implements PluginResult {
 
   /// `reload`, `restart` or `stop`.
   final String action;
+
+  /// Which run it was done to — the id `apps` reports and a selector takes.
+  ///
+  /// The other half of the ambiguity refusal: a caller told to pass `run`
+  /// should be able to see, in the answer, that the one it named is the one
+  /// that moved.
+  final String run;
 
   final String device;
   final String entrypoint;
@@ -436,6 +444,7 @@ class RunAppsResult implements PluginResult {
 )
 class RunAppEntry {
   RunAppEntry({
+    required this.run,
     required this.device,
     required this.worktree,
     required this.entrypoint,
@@ -451,6 +460,16 @@ class RunAppEntry {
     this.error,
     this.mine = false,
   });
+
+  /// What names this launch — what a selector passes as `run`, and what its
+  /// handle, log and journal are called on disk.
+  ///
+  /// Reported because the ambiguity refusal tells a caller to pass one, and a
+  /// refusal naming an argument nobody can look up is a dead end. The last
+  /// resort by design — a device and an entry point read better — but two
+  /// Studios launched from one checkout onto one device differ in nothing
+  /// else, not even the address they share.
+  final String run;
 
   final String device;
   final String? deviceName;
