@@ -98,7 +98,17 @@ class _ComparisonTabsState extends State<ComparisonTabs>
 
   void _onShell() {
     if (!mounted || _controller != null) return;
-    if (widget.shell.sessionFor(widget.worktree) != null) unawaited(_open());
+    if (widget.shell.sessionFor(widget.worktree) != null) {
+      unawaited(_open());
+    } else if (!widget.shell.isOpen(widget.worktree) && _unavailable == null) {
+      // **Decided here, never on the first frame.** `ShellController.go`
+      // deliberately does not open a tab for this screen — it renders for a
+      // checkout nobody has opened — so at startup this mounts *before* the
+      // window's own worktree has a session. Concluding "no comparison" in
+      // that window latched the wrong answer, and told a window capture the
+      // screen was finished when it had not begun.
+      setState(() => _unavailable = 'Open this worktree to compare it.');
+    }
   }
 
   /// What a capture must not photograph through.
@@ -111,15 +121,15 @@ class _ComparisonTabsState extends State<ComparisonTabs>
   @override
   String? get busyWith {
     if (_loading) return 'opening the comparison';
-    // Open but not resolved yet: the comparison is still coming, and a capture
-    // that settled here would photograph the file diff alone.
-    if (_controller == null) {
-      return widget.shell.isOpen(widget.worktree)
-          ? 'opening the worktree'
-          : null;
-    }
+    // Undecided is busy. A capture that settled here would photograph the file
+    // diff alone and report success; the alternative failure — a capture that
+    // waits and then says `waitedOn: [opening the comparison]` — is one
+    // somebody can act on.
     var controller = _controller;
-    if (controller == null || controller.refusal != null) return null;
+    if (controller == null) {
+      return _unavailable == null ? 'opening the comparison' : null;
+    }
+    if (controller.refusal != null) return null;
     if (controller.baseRoot == null) return 'preparing the base checkout';
     var half = _tabs.firstWhere((tab) => tab.id == _tab).half;
     return switch (half?.stage) {
@@ -138,14 +148,9 @@ class _ComparisonTabsState extends State<ComparisonTabs>
       // Not open, so there are no cores and no comparison — only the file
       // diff, which needs none. Said rather than waited on: leaving `_loading`
       // true made this the one screen a window capture could never settle.
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _unavailable = widget.shell.isOpen(widget.worktree)
-              ? null
-              : 'Open this worktree to compare its previews.';
-        });
-      }
+      // Not concluded here — see [_onShell]. Left undecided, which is what
+      // keeps the screen busy until the shell has actually answered.
+      if (mounted) setState(() => _loading = false);
       return;
     }
     var environment = await SessionComparisonEnvironment.open(

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
 import '../../capture/settle.dart';
@@ -19,14 +20,23 @@ const scenariosTabKey = Key('comparison.scenarios');
 
 Key scenarioRowKey(String id) => ValueKey('comparison.scenario.$id');
 
-/// The scenario half: every flow on the left, one flow's merged tree beside it,
-/// and a picked step's two frames under that.
+const stepPageKey = Key('comparison.step-page');
+const stepBackKey = Key('comparison.step-back');
+
+/// The scenario half: every flow on the left, the picked flow's merged tree
+/// beside it, and a picked *step* pushed over both.
 ///
-/// **Three panes rather than two**, which is the one place this half is shaped
-/// differently from the previews half — and the reason is that a preview is one
-/// picture and a scenario is a tree of them. The middle pane is the navigation
-/// *within* a flow; without it, picking a step means a list of paths with `›` in
-/// them, which is the shape the tree exists to replace.
+/// **A tree where the previews half has a list**, because a preview is one
+/// picture and a scenario is a tree of them: without it, picking a step means
+/// reading a list of paths with `›` in them, which is the shape the tree exists
+/// to replace.
+///
+/// **And a pushed page where the previews half has a detail pane.** A step's
+/// two frames are portrait; a band under the tree is landscape and short, so
+/// two of them side by side came out postage-stamp sized in the one place the
+/// pictures are the point. The scenarios panel already pushes a step as a full
+/// page with a back arrow, and this is the same move — the flow stays one tap
+/// away, in the address as much as on screen.
 class ScenariosTab extends StatefulWidget {
   const ScenariosTab({
     super.key,
@@ -108,17 +118,15 @@ class _ScenariosTabState extends State<ScenariosTab> {
     );
   }
 
+  /// The step the address names, and **only** that.
+  ///
+  /// No falling back to the first finding: a step is a *pushed page* here, so
+  /// picking one for you would open it on arrival and hide the flow you came
+  /// to read.
   ComparedItem? get _step {
-    var scenario = _scenario;
-    if (scenario == null || scenario.items.isEmpty) return null;
     var named = _address.$2;
-    return scenario.items.firstWhere(
-      (item) => item.id == named,
-      orElse: () => scenario.items.firstWhere(
-        (item) => item.state.isFinding,
-        orElse: () => scenario.items.first,
-      ),
-    );
+    if (named == null) return null;
+    return _scenario?.items.firstWhereOrNull((item) => item.id == named);
   }
 
   void _load() {
@@ -137,6 +145,22 @@ class _ScenariosTabState extends State<ScenariosTab> {
     var colors = context.colors;
     var scenario = _scenario;
     var step = _step;
+
+    // **Pushed over the flow, not squeezed under it.** A phone frame is
+    // portrait; a band along the bottom is landscape and short, so two of them
+    // side by side came out postage-stamp sized in the one place the pictures
+    // are the whole point. The scenarios panel already answers this — it pushes
+    // a step as a full page with a back arrow — and the flow stays one tap
+    // away, in the address as well as on screen.
+    if (step != null && scenario != null) {
+      return _StepPage(
+        item: step,
+        shots: _shots,
+        mode: _mode,
+        onMode: (mode) => setState(() => _mode = mode),
+        onBack: () => widget.onSelect(scenario.scenario),
+      );
+    }
 
     return Row(
       key: scenariosTabKey,
@@ -162,28 +186,12 @@ class _ScenariosTabState extends State<ScenariosTab> {
               children: [
                 _Header(scenario),
                 Expanded(
-                  flex: 3,
                   child: MergedTree(
                     scenario: scenario,
-                    selected: step?.id,
+                    selected: null,
                     onSelect: (id) => _select(step: id),
                   ),
                 ),
-                if (step != null)
-                  Expanded(
-                    flex: 4,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        border: Border(top: BorderSide(color: colors.line)),
-                      ),
-                      child: _StepDetail(
-                        item: step,
-                        shots: _shots,
-                        mode: _mode,
-                        onMode: (mode) => setState(() => _mode = mode),
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -353,19 +361,21 @@ class _Header extends StatelessWidget {
   );
 }
 
-/// One step: the two frames, and what the other channels found.
-class _StepDetail extends StatelessWidget {
-  const _StepDetail({
+/// One step, over the flow: the two frames, and what the other channels found.
+class _StepPage extends StatelessWidget {
+  const _StepPage({
     required this.item,
     required this.shots,
     required this.mode,
     required this.onMode,
+    required this.onBack,
   });
 
   final ComparedItem item;
   final ShotPair shots;
   final StageMode mode;
   final ValueChanged<StageMode> onMode;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -376,18 +386,25 @@ class _StepDetail extends StatelessWidget {
         item.events != null;
 
     return Column(
+      key: stepPageKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(
-            FwSpacing.xl,
+            FwSpacing.lg,
             FwSpacing.md,
             FwSpacing.xl,
             0,
           ),
           child: Row(
             children: [
-              Expanded(child: Text(item.id, style: context.type.bodyStrong)),
+              Tappable(
+                key: stepBackKey,
+                onTap: onBack,
+                child: Icon(Icons.arrow_back, size: 18, color: colors.mut),
+              ),
+              const Gap(FwSpacing.lg),
+              Expanded(child: Text(item.id, style: context.type.heading)),
               StateChip(item.state),
             ],
           ),
@@ -406,7 +423,7 @@ class _StepDetail extends StatelessWidget {
             ),
           ),
         Expanded(
-          flex: 3,
+          flex: 5,
           child: shots.settled
               ? ComparisonStage(
                   shots: shots,

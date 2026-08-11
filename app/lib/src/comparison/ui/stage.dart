@@ -161,14 +161,25 @@ class _Body extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (mode) {
+    // Pulled together rather than centred in their own halves: two portrait
+    // frames on a wide pane end up a hand's width apart, and comparing them
+    // means looking away from one to see the other.
     StageMode.sideBySide => Row(
       children: [
         Expanded(
-          child: _Framed(label: 'base', child: ShotView(base)),
+          child: _Framed(
+            label: 'base',
+            align: Alignment.centerRight,
+            child: ShotView(base),
+          ),
         ),
         const Gap(FwSpacing.xl),
         Expanded(
-          child: _Framed(label: 'head', child: ShotView(head)),
+          child: _Framed(
+            label: 'head',
+            align: Alignment.centerLeft,
+            child: ShotView(head),
+          ),
         ),
       ],
     ),
@@ -372,10 +383,15 @@ class _OneSided extends StatelessWidget {
 }
 
 class _Framed extends StatelessWidget {
-  const _Framed({required this.label, required this.child});
+  const _Framed({
+    required this.label,
+    required this.child,
+    this.align = Alignment.center,
+  });
 
   final String label;
   final Widget child;
+  final Alignment align;
 
   @override
   Widget build(BuildContext context) {
@@ -393,7 +409,7 @@ class _Framed extends StatelessWidget {
             ),
             child: Padding(
               padding: const EdgeInsets.all(FwSpacing.sm),
-              child: child,
+              child: Align(alignment: align, child: child),
             ),
           ),
         ),
