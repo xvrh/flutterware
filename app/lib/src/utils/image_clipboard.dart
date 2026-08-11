@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Puts a picture on the system clipboard.
@@ -15,7 +16,10 @@ import 'package:flutter/services.dart';
 class ImageClipboard {
   static const _channel = MethodChannel('flutterware/clipboard');
 
-  static bool get isSupported => Platform.isMacOS;
+  // The web guard first: dart2js compiles `dart:io` but `Platform` *throws*
+  // when touched, and this getter runs inside `build` on any page a capture
+  // button shares with the scenario web export.
+  static bool get isSupported => !kIsWeb && Platform.isMacOS;
 
   /// Replaces the clipboard's contents with [png].
   ///

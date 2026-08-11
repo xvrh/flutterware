@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutterware/previews_guest.dart';
+import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as p;
 
 import '../address/address_scope.dart';
 import '../previews/devices.dart';
@@ -12,6 +16,7 @@ import '../inspect/inspect_dock.dart';
 import '../inspect/node_highlight.dart';
 import '../inspect/pick_region.dart';
 import '../plugins/native/scenarios_results.dart';
+import '../ui/capture_button.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
 import 'artifacts.dart';
@@ -249,6 +254,36 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
 
   void _select(String id) => AddressScope.write(context).setParam('node', id);
 
+  /// The step's shot as PNG bytes — the artifact as-is when the run captured
+  /// PNG, encoded here when it captured raw pixels. Encoding on demand
+  /// mirrors why raw exists at all: every capture pays a write, only the
+  /// rare one somebody exports pays an encode. Read through the artifacts
+  /// scope like every other read on this page; a missing file is a null, the
+  /// button's quiet refusal.
+  Future<Uint8List?> _capturePng() async {
+    var step = widget.step;
+    var bytes = await ScenarioArtifactsScope.of(context).readBytes(step.image);
+    if (bytes == null || step.format != 'raw') return bytes;
+    return img.encodePng(
+      img.Image.fromBytes(
+        width: step.width,
+        height: step.height,
+        bytes: bytes.buffer,
+        bytesOffset: bytes.offsetInBytes,
+        numChannels: 4,
+        order: img.ChannelOrder.rgba,
+      ),
+    );
+  }
+
+  /// Named after the files the run wrote — `<run dir>-<index>-<label>` — so a
+  /// directory of saves reads like the run that produced them.
+  String _suggestedName() {
+    var path = widget.step.image;
+    return '${p.basename(p.dirname(path))}-'
+        '${p.basenameWithoutExtension(path)}.png';
+  }
+
   /// The recorded frame to draw instead of the shot, or null when playback is
   /// parked at the end — where the shot itself is the frame, and the page is
   /// exactly what it was before any of this existed.
@@ -294,6 +329,19 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                // Not on the exported web page, which compiles this very
+                // file: the clipboard and the save dialog are desktop
+                // affordances (`dart:io` throws at first touch under
+                // dart2js), and the browser's own right-click already saves
+                // an image.
+                if (!kIsWeb)
+                  CaptureButton(
+                    primary: CaptureTarget(
+                      label: 'the screenshot',
+                      capture: _capturePng,
+                      suggestedName: _suggestedName,
+                    ),
+                  ),
               ],
             ),
           ),

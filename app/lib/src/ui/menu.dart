@@ -22,12 +22,17 @@ class MenuItem extends MenuEntry {
   final VoidCallback? onSelected;
   final bool danger;
 
+  /// The pointer entering or leaving the row — for a host that previews the
+  /// row's effect somewhere else on screen while you point at it.
+  final ValueChanged<bool>? onHover;
+
   const MenuItem(
     this.label, {
     this.icon,
     this.shortcut,
     this.onSelected,
     this.danger = false,
+    this.onHover,
   });
 }
 
@@ -58,6 +63,9 @@ class Menu extends StatelessWidget {
   final double minWidth;
   final double maxWidth;
 
+  /// See [Popover.onClose].
+  final VoidCallback? onClose;
+
   const Menu({
     super.key,
     required this.entries,
@@ -66,6 +74,7 @@ class Menu extends StatelessWidget {
     this.align = PopoverAlign.start,
     this.minWidth = 180,
     this.maxWidth = 320,
+    this.onClose,
   });
 
   @override
@@ -73,6 +82,7 @@ class Menu extends StatelessWidget {
     return Popover(
       side: side,
       align: align,
+      onClose: onClose,
       anchor: builder,
       content: (context, controller) => PopoverMenuSurface(
         minWidth: minWidth,
@@ -144,6 +154,9 @@ class _MenuItemRow extends StatelessWidget {
               item.onSelected!();
             }
           : null,
+      // Closing the menu takes this MouseRegion with it and no exit event
+      // follows, so a host previewing the hover pairs this with [Menu.onClose].
+      onHover: item.onHover,
       builder: (context, hover) => Container(
         color: enabled && hover ? hoverFill : Colors.transparent,
         padding: const EdgeInsets.symmetric(
