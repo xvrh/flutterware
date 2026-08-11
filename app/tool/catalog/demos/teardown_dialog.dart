@@ -76,8 +76,7 @@ class _AutoOpenState extends State<_AutoOpen> {
       unawaited(
         showTeardownDialog(
           context,
-          plan: widget.plan,
-          session: null,
+          prepare: () async => TeardownPreparation(widget.plan, null),
           repositoryRoot: '/tmp',
           remover: _Case._fakeGit(fails: false),
         ),
@@ -246,8 +245,13 @@ class _Case extends StatelessWidget {
           OutlinedButton(
             onPressed: () => showTeardownDialog(
               context,
-              plan: plan,
-              session: null,
+              // Slow on purpose: the preparing state is what a real closed
+              // worktree shows while its config runs, and it is the state the
+              // first version had no way to draw.
+              prepare: () async {
+                await Future<void>.delayed(const Duration(milliseconds: 900));
+                return TeardownPreparation(plan, null);
+              },
               repositoryRoot: '/tmp',
               remover: _fakeGit(fails: gitFails),
             ),

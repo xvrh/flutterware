@@ -1512,54 +1512,59 @@ class _ExplorerState extends State<_Explorer> {
     );
   }
 
-  /// Removing a checkout: **open it first, then ask.**
+  /// Removing a checkout: **ask first, and prepare behind the dialog.**
   ///
-  /// The explorer's design left this open — plugin guards need a session, and a
-  /// closed worktree has none. Opening costs a config subprocess and a second
-  /// of latency, which is nothing set against the failure it prevents: tearing
-  /// down a checkout without being told its stack was up or its app was still
-  /// running on a phone. Removal is rare enough to pay for being right.
+  /// The explorer's design left open how a closed worktree gets a checklist —
+  /// plugin steps need a session, and a closed worktree has none. It is opened,
+  /// and two things about *how* were bugs worth writing down:
   ///
-  /// The facts are refreshed too. `TeardownStep.enabled`, `checked` and
-  /// `detail` are values on a cached report, so a checklist drawn from a stale
-  /// one would offer to tear down a stack that went down five minutes ago —
-  /// and the blocking guard is computed from a `dirty` count that has to be
-  /// this moment's, not this morning's.
+  /// - **In the background.** `open` navigates, so opening from here unmounted
+  ///   the explorer mid-flow and the dialog never appeared — the press looked
+  ///   like it had simply switched worktrees. `openInBackground` gives the
+  ///   worktree a tab and a running config and leaves the address alone.
+  /// - **Behind the dialog.** Opening, refreshing the facts and warming every
+  ///   plugin takes seconds, and doing it before `showDialog` meant a press
+  ///   with no acknowledgement at all. The dialog goes up first and waits.
+  ///
+  /// The facts are refreshed rather than read: `TeardownStep.enabled`,
+  /// `checked` and `detail` are values on a cached report, so a stale one would
+  /// offer to tear down a stack that went down five minutes ago — and the
+  /// warning about uncommitted work has to be this moment's count, not this
+  /// morning's.
   Future<void> _remove(ExplorerEntry entry) async {
     var shell = widget.shell;
     var worktree = entry.worktree;
-    if (!shell.isOpen(worktree)) await shell.open(worktree);
-    if (!mounted) return;
-
-    await shell.refreshWorktreeFacts(force: true);
-    var session = shell.sessionFor(worktree);
-    // The same warm-up `fw status` does. A report is a pure read of cached
-    // state, so a plugin nothing has mounted this session would contribute
-    // "not computed" to a checklist that is about to delete a directory.
-    for (var core in session?.session.cores ?? const <PluginCore>[]) {
-      await core.computeAll();
-    }
-    if (!mounted) return;
-
-    var facts =
-        shell.worktreeFacts?.factsFor(worktree) ?? const WorktreeFacts();
-    var plan = TeardownPlan.build(
-      worktree: worktree.displayName,
-      path: worktree.path,
-      branch: worktree.branch,
-      isMain: worktree.isMain,
-      facts: facts,
-      reports: session?.reports ?? const [],
-      sessionOpen: session != null,
-    );
 
     var removed = await showTeardownDialog(
       context,
-      plan: plan,
-      session: session,
-      // Git runs in the primary checkout: the worktree's own directory is
-      // what is being removed, and `git worktree remove` cannot be run from
-      // inside it.
+      prepare: () async {
+        await shell.openInBackground(worktree);
+        await shell.refreshWorktreeFacts(force: true);
+        var session = shell.sessionFor(worktree);
+        // The same warm-up `fw status` does. A report is a pure read of cached
+        // state, so a plugin nothing has mounted this session would contribute
+        // "not computed" to a checklist that is about to delete a directory.
+        for (var core in session?.session.cores ?? const <PluginCore>[]) {
+          await core.computeAll();
+        }
+        return TeardownPreparation(
+          TeardownPlan.build(
+            worktree: worktree.displayName,
+            path: worktree.path,
+            branch: worktree.branch,
+            isMain: worktree.isMain,
+            facts:
+                shell.worktreeFacts?.factsFor(worktree) ??
+                const WorktreeFacts(),
+            reports: session?.reports ?? const [],
+            sessionOpen: session != null,
+          ),
+          session,
+        );
+      },
+      // Git runs in the primary checkout: the worktree's own directory is what
+      // is being removed, and `git worktree remove` cannot be run from inside
+      // it.
       repositoryRoot: shell.worktrees
           .firstWhere((w) => w.isMain, orElse: () => worktree)
           .path,

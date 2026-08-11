@@ -56,10 +56,16 @@ class DevStackCore extends PluginCore {
   @visibleForTesting
   static String Function() runDirProvider = flutterwareRunDir;
 
-  /// Runs a command and hands back (exitCode, combined output). A seam for
-  /// tests, which must not spawn `docker`.
-  @visibleForTesting
-  static Future<ProcessResult> Function(
+  /// Runs a command and hands back (exitCode, combined output).
+  ///
+  /// **Per instance, not static, and not test-only.** A static seam is one
+  /// global that every core in the process shares — fine for a test that builds
+  /// one at a time, wrong for anything that does not: the catalog draws five
+  /// stacks on one screen, each scripted differently, and they would overwrite
+  /// each other. The catalog is why this is not `@visibleForTesting`: a plugin
+  /// whose whole subject is a docker project cannot be looked at in a repo that
+  /// has none, so a preview scripts this and draws the shipping panel over it.
+  Future<ProcessResult> Function(
     List<String> command, {
     String? workingDirectory,
   })
@@ -85,6 +91,15 @@ class DevStackCore extends PluginCore {
   /// watching for `up`.
   String? _busy;
 
+  /// True while [refresh] has a probe out.
+  ///
+  /// Separate from [_busy], which is only for transitions the *user* started.
+  /// This exists for the window capture: a panel photographed between mounting
+  /// and its first probe returning shows "not checked yet" and is reported as a
+  /// success, which is the mid-resolve screenshot `SettleSource` was written
+  /// about.
+  var _probing = false;
+
   /// The tail of the last command's output, for the panel.
   String _lastOutput = '';
   String? _lastCommand;
@@ -98,6 +113,14 @@ class DevStackCore extends PluginCore {
   bool get canControl => _start != null || _stop != null;
   bool get stopIsDestructive => _stopIsDestructive;
   String? get busy => _busy;
+
+  /// What this is still working on, or null. Read by the capture settler.
+  String? get busyWith => switch ((_busy, _probing)) {
+    (var busy?, _) =>
+      busy == 'start' ? 'bringing the stack up' : 'tearing the stack down',
+    (_, true) => 'checking the stack',
+    _ => null,
+  };
   String get lastOutput => _lastOutput;
   String? get lastCommand => _lastCommand;
   Duration get pollInterval => _poll;
@@ -164,6 +187,7 @@ class DevStackCore extends PluginCore {
         ),
       );
     }
+    _probing = true;
     try {
       var result = await runProcess(
         probe.command,
@@ -181,6 +205,8 @@ class DevStackCore extends PluginCore {
           failure: '${probe.command.first}: $e',
         ),
       );
+    } finally {
+      _probing = false;
     }
   }
 
@@ -193,11 +219,19 @@ class DevStackCore extends PluginCore {
       try {
         decoded = jsonDecode(out.trim());
       } on FormatException catch (e) {
-        decoded = null;
+        // **The command's own words, when it left any.** A health check that
+        // cannot reach the docker daemon says so on stderr and exits non-zero;
+        // it does not print JSON about it. Reporting the parse error there
+        // buries the one sentence that explains the problem under a complaint
+        // about the format — the same reason the worktree remover prints git's
+        // refusal rather than paraphrasing it.
+        var said = _firstLine(out);
         return StackReading(
           state: StackState.unavailable,
           at: at,
-          failure: 'The probe printed something that is not JSON: ${e.message}',
+          failure:
+              said ??
+              'The probe printed something that is not JSON: ${e.message}',
         );
       }
       if (decoded is! Map) {

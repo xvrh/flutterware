@@ -130,17 +130,18 @@ const _agentWidth = 190.0;
 const _prWidth = 150.0;
 const _whenWidth = 64.0;
 // Wider than the 76 it was, and than the 32 the design budgeted: the column
-// now carries Open, a menu trigger and the chevron, and at 76 that Row
-// overflowed by 11px — which clipped the trigger off the right edge, so it
-// looked like it vanished as you reached for it.
+// carries Open, a menu trigger and the chevron, and at 76 that Row overflowed
+// by 11px — which clipped the trigger off the right edge, so it looked like it
+// vanished as you reached for it.
 //
-// **92 is measured, not chosen.** The content needs 87; at 96 the *name* cell
-// starts overflowing instead, because the space comes out of the one flexible
-// column. That upper bound is a latent fragility in `_NameCell` — its trailing
-// tag does not give way the way the label does — and it is guarded by
-// `explorer_row_menu_test.dart` rather than trusted, so widening this column
-// again fails a test instead of clipping a row.
-const _actionsWidth = 92.0;
+// It has to hold all three *at once*, because the hover-only controls keep
+// their space rather than vacating it — a button that disappeared shifted the
+// trigger out from under the cursor arriving at it. So this is sized for the
+// widest state, not the common one.
+//
+// Measured, not chosen, and guarded by `explorer_row_menu_test.dart`. The name
+// column no longer pays for it: `_affordable` drops a column instead.
+const _actionsWidth = 96.0;
 const _nameMinWidth = 220.0;
 
 /// Which optional columns fit, given how much room the row actually has.
@@ -948,9 +949,18 @@ class _Actions extends StatelessWidget {
               'open',
               style: context.type.micro.copyWith(color: colors.mut3),
             ),
-          if (hovered)
-            TextButton(
-              onPressed: onOpen,
+          // **Kept in the layout whether or not it is shown.** It is hover-only,
+          // and reaching for the menu beside it ends the hover — so a button
+          // that vacated its space made the trigger jump right, out from under
+          // the cursor that was arriving at it. The column is a fixed width
+          // either way, so reserving ~40px inside it costs nothing.
+          Visibility(
+            visible: hovered,
+            maintainSize: true,
+            maintainAnimation: true,
+            maintainState: true,
+            child: TextButton(
+              onPressed: hovered ? onOpen : null,
               style: TextButton.styleFrom(
                 minimumSize: Size.zero,
                 padding: const EdgeInsets.symmetric(
@@ -964,6 +974,7 @@ class _Actions extends StatelessWidget {
                 style: context.type.micro.copyWith(color: colors.accent),
               ),
             ),
+          ),
           // Destructive, so behind a menu rather than beside Open: a click that
           // deletes a checkout should not be one pixel from a click that opens
           // it.
@@ -1008,8 +1019,12 @@ class _Actions extends StatelessWidget {
                     )
                   : const SizedBox.shrink(),
             ),
-          if (showControls)
-            Tooltip(
+          Visibility(
+            visible: showControls,
+            maintainSize: true,
+            maintainAnimation: true,
+            maintainState: true,
+            child: Tooltip(
               message: expanded ? 'Hide the detail' : 'Show the detail',
               child: Icon(
                 expanded ? Icons.expand_less : Icons.expand_more,
@@ -1017,6 +1032,7 @@ class _Actions extends StatelessWidget {
                 color: colors.mut2,
               ),
             ),
+          ),
         ],
       ),
     );

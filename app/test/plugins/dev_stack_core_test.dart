@@ -29,21 +29,30 @@ void main() {
   ProcessResult resultFor(List<String> command) =>
       responses[command.take(2).join(' ')] ?? ProcessResult(0, 0, '', '');
 
-  DevStackCore coreWith(Map<String, Object?> config) => DevStackCore(
-    PluginHost(
-      id: devStackPluginId,
-      label: 'Dev stack',
-      worktree: Worktree(path: project.path),
-      workspace: Workspace(
-        root: project.path,
-        declared: [],
-        discovered: [],
-        appContext: AppContext(logger: LogClient.print()),
-        flutterSdk: FlutterSdkPath('/tmp/flutter'),
-      ),
-      config: config,
-    ),
-  );
+  /// Every core gets the same scripted process, set per instance.
+  DevStackCore coreWith(Map<String, Object?> config) =>
+      DevStackCore(
+          PluginHost(
+            id: devStackPluginId,
+            label: 'Dev stack',
+            worktree: Worktree(path: project.path),
+            workspace: Workspace(
+              root: project.path,
+              declared: [],
+              discovered: [],
+              appContext: AppContext(logger: LogClient.print()),
+              flutterSdk: FlutterSdkPath('/tmp/flutter'),
+            ),
+            config: config,
+          ),
+        )
+        ..runProcess = (command, {workingDirectory}) async {
+          ran.add([
+            ...command,
+            if (workingDirectory != null) '@$workingDirectory',
+          ]);
+          return resultFor(command);
+        };
 
   /// A stack delegated to a project's own CLI, as `DevStack.background(...)`
   /// emits it.
@@ -68,15 +77,10 @@ void main() {
     ran = [];
     responses = {};
     DevStackCore.runDirProvider = () => runDir.path;
-    DevStackCore.runProcess = (command, {workingDirectory}) async {
-      ran.add([...command, if (workingDirectory != null) '@$workingDirectory']);
-      return resultFor(command);
-    };
   });
 
   tearDown(() {
     DevStackCore.runDirProvider = flutterwareRunDir;
-    DevStackCore.runProcess = defaultRunProcess;
     for (var dir in [runDir, project]) {
       if (dir.existsSync()) dir.deleteSync(recursive: true);
     }
@@ -167,9 +171,9 @@ void main() {
     );
 
     test('a command that cannot be spawned is unavailable, not down', () async {
-      var core = coreWith(localEnvConfig());
-      DevStackCore.runProcess = (command, {workingDirectory}) async =>
-          throw const ProcessException('stack', [], 'No such file');
+      var core = coreWith(localEnvConfig())
+        ..runProcess = (command, {workingDirectory}) async =>
+            throw const ProcessException('stack', [], 'No such file');
       var reading = await core.refresh();
       // The distinction the five-state design exists for: a probe that could
       // not run says nothing about whether the stack is up.
@@ -203,9 +207,36 @@ void main() {
       core.dispose();
     });
 
+    test("keeps the command's own words when it did not print JSON", () async {
+      var core = coreWith(jsonConfig());
+      responses['stack doctor'] = ProcessResult(
+        0,
+        1,
+        '',
+        'Cannot connect to the Docker daemon.',
+      );
+      var reading = await core.refresh();
+      expect(reading.state, StackState.unavailable);
+      // Not "printed something that is not JSON": that buries the sentence
+      // explaining the problem under a complaint about the format.
+      expect(reading.failure, 'Cannot connect to the Docker daemon.');
+      core.dispose();
+    });
+
     test('reports unavailable when it cannot say what it is up to', () async {
       var core = coreWith(jsonConfig());
       responses['stack doctor'] = ProcessResult(0, 0, 'not json at all', '');
+      var reading = await core.refresh();
+      expect(reading.state, StackState.unavailable);
+      // Quoted rather than paraphrased — whatever it said is more use than a
+      // complaint about the format.
+      expect(reading.failure, 'not json at all');
+      core.dispose();
+    });
+
+    test('falls back to naming the format when it said nothing', () async {
+      var core = coreWith(jsonConfig());
+      responses['stack doctor'] = ProcessResult(0, 1, '', '');
       var reading = await core.refresh();
       expect(reading.state, StackState.unavailable);
       expect(reading.failure, contains('not JSON'));
@@ -237,8 +268,7 @@ void main() {
     test('refuse to overlap', () async {
       var core = coreWith(localEnvConfig());
       var completer = Completer<ProcessResult>();
-      DevStackCore.runProcess = (command, {workingDirectory}) =>
-          completer.future;
+      core.runProcess = (command, {workingDirectory}) => completer.future;
       var first = core.start();
       expect(core.busy, 'start');
       await expectLater(core.stop(), throwsStateError);
@@ -253,8 +283,7 @@ void main() {
       () async {
         var core = coreWith(localEnvConfig());
         var completer = Completer<ProcessResult>();
-        DevStackCore.runProcess = (command, {workingDirectory}) =>
-            completer.future;
+        core.runProcess = (command, {workingDirectory}) => completer.future;
         var pending = core.start();
         // The probe cannot see a compose project that has not finished coming up,
         // so the status must not fall back to what it last said.

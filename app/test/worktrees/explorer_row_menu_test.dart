@@ -91,6 +91,26 @@ void main() {
     expect(removed, 1);
   });
 
+  testWidgets('the trigger does not move when the hover ends', (tester) async {
+    // The jump that made it unclickable even once it stayed mounted: the
+    // hover-only `Open` button vacated its space, shifting the trigger right —
+    // out from under the cursor that was on its way to it.
+    await pump(tester, onRemove: () {});
+    var gesture = await hoverRow(tester);
+    var hovered = tester.getCenter(find.byIcon(Icons.more_horiz));
+
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    await gesture.moveTo(const Offset(1199, 1));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getCenter(find.byIcon(Icons.more_horiz)),
+      hovered,
+      reason: 'the trigger moved when the row lost hover',
+    );
+  });
+
   testWidgets('opening the menu does not expand the row', (tester) async {
     // The whole row is a tap target for expand/collapse, so the trigger has to
     // win its own taps.

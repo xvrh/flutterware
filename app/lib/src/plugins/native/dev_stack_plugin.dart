@@ -12,7 +12,7 @@ class DevStackPlugin extends NativePlugin<DevStackCore> {
   DevStackPlugin(super.core);
 
   @override
-  String? get busyWith => core.busy == null ? null : 'stack ${core.busy}';
+  String? get busyWith => core.busyWith;
 
   @override
   Widget buildPanel(BuildContext context) => _DevStackPanel(this);

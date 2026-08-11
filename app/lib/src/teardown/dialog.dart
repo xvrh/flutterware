@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
@@ -18,10 +20,18 @@ import 'runner.dart';
 /// and only then. A run that tore down a stack and then failed to remove the
 /// directory has not removed the worktree, and a tab closing on it would be the
 /// app disagreeing with the disk.
+///
+/// **[prepare] runs with the dialog already on screen.** Assembling a plan for a
+/// worktree nobody has open costs a config subprocess, a facts refresh and a
+/// warm-up of every plugin — seconds, during which the first version showed
+/// nothing at all and the press looked ignored. Worse, the caller had to stay
+/// mounted across that wait to show anything afterwards, and the thing it was
+/// waiting on could unmount it. Opening first and preparing inside removes both:
+/// the press is acknowledged immediately, and nothing outside this route can
+/// take the dialog away.
 Future<bool> showTeardownDialog(
   BuildContext context, {
-  required TeardownPlan plan,
-  required WorktreeSession? session,
+  required Future<TeardownPreparation> Function() prepare,
   required String repositoryRoot,
   WorktreeRemover? remover,
 }) async =>
@@ -31,24 +41,33 @@ Future<bool> showTeardownDialog(
       // is the one state nothing here knows how to describe.
       barrierDismissible: false,
       builder: (context) => _TeardownDialog(
-        plan: plan,
-        session: session,
+        prepare: prepare,
         repositoryRoot: repositoryRoot,
         remover: remover,
       ),
     ) ??
     false;
 
+/// What [showTeardownDialog] waits for: the plan, and the session its plugin
+/// steps will be invoked through.
+class TeardownPreparation {
+  const TeardownPreparation(this.plan, this.session);
+
+  final TeardownPlan plan;
+
+  /// Null when the worktree could not be opened, in which case [plan] carries
+  /// only what the shell knows on its own.
+  final WorktreeSession? session;
+}
+
 class _TeardownDialog extends StatefulWidget {
   const _TeardownDialog({
-    required this.plan,
-    required this.session,
+    required this.prepare,
     required this.repositoryRoot,
     this.remover,
   });
 
-  final TeardownPlan plan;
-  final WorktreeSession? session;
+  final Future<TeardownPreparation> Function() prepare;
   final String repositoryRoot;
   final WorktreeRemover? remover;
 
@@ -57,19 +76,43 @@ class _TeardownDialog extends StatefulWidget {
 }
 
 class _TeardownDialogState extends State<_TeardownDialog> {
-  late final Set<PlannedStep> _ticked = {...widget.plan.defaultSelection};
+  final _ticked = <PlannedStep>{};
   var _deleteBranch = false;
   TeardownRunner? _runner;
+  TeardownPreparation? _prepared;
+  Object? _prepareError;
 
-  TeardownPlan get _plan => widget.plan;
+  TeardownPlan? get _plan => _prepared?.plan;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_prepare());
+  }
+
+  Future<void> _prepare() async {
+    TeardownPreparation prepared;
+    try {
+      prepared = await widget.prepare();
+    } on Object catch (e) {
+      if (mounted) setState(() => _prepareError = e);
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _prepared = prepared;
+      _ticked.addAll(prepared.plan.defaultSelection);
+    });
+  }
 
   Future<void> _start() async {
+    var prepared = _prepared!;
     var runner = TeardownRunner(
-      plan: _plan,
-      session: widget.session,
+      plan: prepared.plan,
+      session: prepared.session,
       repositoryRoot: widget.repositoryRoot,
       selected: [
-        for (var planned in _plan.steps)
+        for (var planned in prepared.plan.steps)
           if (_ticked.contains(planned)) planned,
       ],
       deleteBranch: _deleteBranch,
@@ -134,18 +177,26 @@ class _TeardownDialogState extends State<_TeardownDialog> {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    var plan = _plan;
     return AlertDialog(
       backgroundColor: colors.bg,
-      title: Text(
-        _runner == null
-            ? 'Remove “${_plan.worktree}”?'
-            : 'Removing “${_plan.worktree}”',
-        style: context.type.heading,
-      ),
+      title: Text(switch ((plan, _runner)) {
+        (null, _) => 'Remove this worktree?',
+        (var p?, null) => 'Remove “${p.worktree}”?',
+        (var p?, _) => 'Removing “${p.worktree}”',
+      }, style: context.type.heading),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
-          child: _runner == null ? _checklist(context) : _run(context),
+          child: switch ((plan, _runner)) {
+            _ when _prepareError != null => _Note(
+              'Could not work out what this worktree is running: '
+              '$_prepareError',
+            ),
+            (null, _) => const _Preparing(),
+            (_, var runner?) => _run(context, runner),
+            _ => _checklist(context, plan!),
+          },
         ),
       ),
       actions: _actions(context),
@@ -154,26 +205,26 @@ class _TeardownDialogState extends State<_TeardownDialog> {
 
   // ── the checklist ────────────────────────────────────────────────────────
 
-  Widget _checklist(BuildContext context) {
+  Widget _checklist(BuildContext context, TeardownPlan plan) {
     var type = context.type;
     var colors = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        SelectableText(_plan.path, style: type.caption),
-        if (_plan.branch case var branch?) ...[
+        SelectableText(plan.path, style: type.caption),
+        if (plan.branch case var branch?) ...[
           const Gap(FwSpacing.xs),
           Text(branch, style: type.caption),
         ],
         const Gap(FwSpacing.xl),
 
-        for (var guard in _plan.guards) ...[
+        for (var guard in plan.guards) ...[
           _GuardBanner(guard),
           const Gap(FwSpacing.md),
         ],
 
-        if (!_plan.sessionOpen) ...[
+        if (!plan.sessionOpen) ...[
           _Note(
             'This worktree is not open, so nothing here knows what it is '
             'running. Open it first to see its stack and its apps.',
@@ -181,7 +232,7 @@ class _TeardownDialogState extends State<_TeardownDialog> {
           const Gap(FwSpacing.md),
         ],
 
-        if (!_plan.isBlocked) ...[
+        if (!plan.isBlocked) ...[
           for (var phase in TeardownPhase.values)
             if (_stepsIn(phase) case var steps when steps.isNotEmpty) ...[
               const Gap(FwSpacing.md),
@@ -200,15 +251,15 @@ class _TeardownDialogState extends State<_TeardownDialog> {
             // Says what it takes with it. The warning above is read once at the
             // top; this row is the one directly above the button, and it is
             // where "and my uncommitted files?" is actually asked.
-            detail: _plan.destroysUncommittedWork
-                ? 'always last · deletes ${_plan.uncommittedFiles} uncommitted '
-                      '${_plan.uncommittedFiles == 1 ? 'file' : 'files'} with it'
+            detail: plan.destroysUncommittedWork
+                ? 'always last · deletes ${plan.uncommittedFiles} uncommitted '
+                      '${plan.uncommittedFiles == 1 ? 'file' : 'files'} with it'
                 : 'always last · cannot be unchecked',
             value: true,
-            danger: _plan.destroysUncommittedWork,
+            danger: plan.destroysUncommittedWork,
             onChanged: null,
           ),
-          if (_plan.branch case var branch?)
+          if (plan.branch case var branch?)
             _Row(
               label: 'Delete the branch $branch',
               detail: 'only if it is merged — git refuses otherwise',
@@ -227,7 +278,7 @@ class _TeardownDialogState extends State<_TeardownDialog> {
   }
 
   List<PlannedStep> _stepsIn(TeardownPhase phase) => [
-    for (var planned in _plan.steps)
+    for (var planned in _plan!.steps)
       if (planned.step.phase == phase) planned,
   ];
 
@@ -252,8 +303,7 @@ class _TeardownDialogState extends State<_TeardownDialog> {
 
   // ── the run ──────────────────────────────────────────────────────────────
 
-  Widget _run(BuildContext context) {
-    var runner = _runner!;
+  Widget _run(BuildContext context, TeardownRunner runner) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -280,6 +330,7 @@ class _TeardownDialogState extends State<_TeardownDialog> {
   List<Widget> _actions(BuildContext context) {
     var colors = context.colors;
     var runner = _runner;
+    var plan = _plan;
     if (runner == null) {
       return [
         TextButton(
@@ -287,10 +338,12 @@ class _TeardownDialogState extends State<_TeardownDialog> {
           child: const Text('Cancel'),
         ),
         TextButton(
-          onPressed: _plan.isBlocked ? null : _start,
+          onPressed: plan == null || plan.isBlocked ? null : _start,
           child: Text(
             _ticked.isEmpty ? 'Remove' : 'Tear down & remove',
-            style: TextStyle(color: _plan.isBlocked ? colors.mut3 : colors.red),
+            style: TextStyle(
+              color: plan == null || plan.isBlocked ? colors.mut3 : colors.red,
+            ),
           ),
         ),
       ];
@@ -476,5 +529,32 @@ class _Note extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     text,
     style: context.type.caption.copyWith(color: context.colors.mut),
+  );
+}
+
+/// While the plan is being worked out.
+///
+/// Says what is being waited on rather than spinning silently: opening a
+/// worktree that was closed runs its config, and a checklist that appeared
+/// instantly with nothing in it would be a lie about a checkout it had not
+/// looked at yet.
+class _Preparing extends StatelessWidget {
+  const _Preparing();
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      const SizedBox.square(
+        dimension: 14,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+      const Gap(FwSpacing.lg),
+      Expanded(
+        child: Text(
+          'Reading what this checkout is running…',
+          style: context.type.body.copyWith(color: context.colors.mut),
+        ),
+      ),
+    ],
   );
 }

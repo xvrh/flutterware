@@ -505,6 +505,17 @@ class ShellController extends ChangeNotifier {
     await loaded;
   }
 
+  /// Opens [worktree] **without going there** — a tab and a running config,
+  /// and the address left exactly where it was.
+  ///
+  /// [open] navigates, which is right when opening *is* the intent and wrong
+  /// when it is a means to something else. Removing a worktree needs its
+  /// plugins resolved so the teardown checklist knows what is running, and
+  /// navigating for that would take you off the screen you pressed the button
+  /// on — the explorer would unmount mid-flow, taking the dialog with it.
+  Future<void> openInBackground(Worktree worktree) =>
+      isOpen(worktree) ? Future.value() : _openTab(worktree);
+
   /// Gives [worktree] a tab and starts its config running.
   ///
   /// Deliberately says nothing about the address. [open] lands on the home
