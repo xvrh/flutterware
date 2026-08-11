@@ -11,14 +11,6 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
-      # `.fvmrc` stays while contributors may still be on fvm; two pins are
-      # fine, two versions are not.
-      - name: "the pins agree"
-        run: |
-          test "$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc)" \
-            = "$(cat flutter_version | tr -d ' \n')" \
-          || (echo "##[error] .fvmrc and flutter_version disagree" && exit 1)
-        shell: bash
       # The committed wrapper downloads the SDK flutter_version pins — CI runs
       # the exact toolchain the repo records, not whatever a setup action
       # resolves the channel to today.

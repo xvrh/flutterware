@@ -14,9 +14,6 @@ always go through `./fw flutter ...` / `./fw dart ...` (from a subdirectory,
 git config core.hooksPath hooks  # once per clone; worktrees inherit it
 ```
 
-`.fvmrc` pins the same version for contributors who prefer
-[fvm](https://fvm.app); the two pins must agree, and CI checks that they do.
-
 `core.hooksPath hooks` points git at the version-controlled `hooks/` directory.
 The value is relative, so it resolves against each worktree's own root — added
 worktrees inherit it from the shared config and need no extra step.

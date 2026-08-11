@@ -22,7 +22,7 @@ One-time setup in a fresh clone or worktree:
 ./fw flutter pub get     # first run also downloads the pinned SDK
 ```
 
-`.fvmrc` still pins the same version for fvm users and `FlutterSdkPath.findSdks` — it must agree with `flutter_version`, and CI fails when the two diverge. `./fw flutter upgrade`/`downgrade`/`channel <x>` are refused: bump the pin by editing `flutter_version` (and `.fvmrc` to match).
+`./fw flutter upgrade`/`downgrade`/`channel <x>` are refused: bump the pin by editing `flutter_version`.
 
 Note: `.gitignore` starts with `.*`, so dot-directories like `.claude/` are silently unaddable — `git add` no-ops on them.
 
@@ -103,7 +103,7 @@ The only sanctioned formatter is `./fw dart tool/prepare_submit.dart` (or lettin
 
 ## CI expectations
 
-`.github/workflows/analyze-and-test.yaml` runs on the pinned SDK via `./fw` (it also fails when `flutter_version` and `.fvmrc` disagree) and will fail if `tool/prepare_submit.dart` produces any diff (excluding `pubspec.lock`). Always run that formatter before committing.
+`.github/workflows/analyze-and-test.yaml` runs on the pinned SDK via `./fw` and will fail if `tool/prepare_submit.dart` produces any diff (excluding `pubspec.lock`). Always run that formatter before committing.
 
 ## Lint rules worth knowing
 

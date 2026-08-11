@@ -142,10 +142,11 @@ class FlutterSdkPath {
   /// `.fvm/flutter_sdk` symlink — which does not exist until someone runs
   /// `fvm use`, and a fresh worktree is exactly the place nobody has.
   ///
-  /// The pre-commit hook resolves the same way for the same reason, and this
-  /// follows its two rules: the cache roots are `FVM_CACHE_PATH`, `FVM_HOME`,
-  /// then `~/fvm`, and the fvm CLI is never invoked — it can prompt, and on
-  /// the MCP surface stdin is the protocol stream.
+  /// This serves *user projects* pinned with fvm (flutterware's own repo pins
+  /// with `flutter_version` and the committed `fw` wrapper instead). Two
+  /// rules: the cache roots are `FVM_CACHE_PATH`, `FVM_HOME`, then `~/fvm`,
+  /// and the fvm CLI is never invoked — it can prompt, and on the MCP surface
+  /// stdin is the protocol stream.
   static Future<FlutterSdkPath?> _findPinned(
     Directory start,
     Map<String, String> env,

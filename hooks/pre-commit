@@ -19,42 +19,21 @@ relevant_lockhash() {
   ' pubspec.lock | cksum | awk '{print $1"-"$2}'
 }
 
-# Dart from the pinned SDK, not whatever is on PATH. The package's
-# resolved language version (from the pinned beta SDK) can be higher than a
-# globally-installed stable dart, which fails AOT compilation with "language
-# version too high". Reads `flutter_version` and the `./fw` wrapper's cache
-# first, then falls back to fvm's pin and cache for a checkout still on fvm.
-# Never invokes `./fw` or the fvm CLI: fw may start a multi-minute SDK
-# download and fvm can prompt, and a hook must do neither — resolution here
-# is passive, and absence skips the hook gracefully below.
+# Dart from the SDK pinned in flutter_version, not whatever is on PATH. The
+# package's resolved language version (from the pinned beta SDK) can be
+# higher than a globally-installed stable dart, which fails AOT compilation
+# with "language version too high". Reads the `./fw` wrapper's cache but
+# never invokes `./fw` itself: fw may start a multi-minute SDK download, and
+# a hook must not — resolution here is passive, and absence skips the hook
+# gracefully below.
 pinned_dart() {
-  if [ -f flutter_version ]; then
-    local fw_version fw_dart
-    fw_version="$(tr -d ' \t\r\n' < flutter_version)"
-    fw_dart="${FW_SDK_CACHE:-$HOME/.flutterware/sdks}/$fw_version/bin/dart"
-    [ -n "$fw_version" ] && [ -x "$fw_dart" ] && { echo "$fw_dart"; return 0; }
-  fi
-  local version=""
-  if [ -f .fvmrc ]; then
-    version="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc | head -n1)"
-  fi
-  local link="$REPO_ROOT/.fvm/flutter_sdk"
-  if [ -x "$link/bin/dart" ]; then
-    local target
-    target="$(readlink "$link" || true)"
-    if [ -z "$version" ] || [ "$(basename "$target")" = "$version" ]; then
-      echo "$link/bin/dart"
-      return 0
-    fi
-  fi
+  [ -f flutter_version ] || return 1
+  local version dart
+  version="$(tr -d ' \t\r\n' < flutter_version)"
   [ -n "$version" ] || return 1
-  local base d
-  for base in "${FVM_CACHE_PATH:-}" "${FVM_HOME:-}" "$HOME/fvm"; do
-    [ -n "$base" ] || continue
-    d="$base/versions/$version/bin/dart"
-    [ -x "$d" ] && { echo "$d"; return 0; }
-  done
-  return 1
+  dart="${FW_SDK_CACHE:-$HOME/.flutterware/sdks}/$version/bin/dart"
+  [ -x "$dart" ] || return 1
+  echo "$dart"
 }
 
 CURRENT_LOCKHASH=$(relevant_lockhash)
