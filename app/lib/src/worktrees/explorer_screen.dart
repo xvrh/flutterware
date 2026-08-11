@@ -252,6 +252,9 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
           (r.$1.facts.agent.value?.state ?? AgentState.none) != AgentState.none,
     );
     var showForge = rows.any((r) => r.$1.facts.forge.hasValue);
+    // Most repositories declare no stack anywhere, and a column of dashes is
+    // 116 pixels taken from the names for nothing.
+    var showStack = rows.any((r) => r.$1.facts.stack.hasValue);
 
     return ColoredBox(
       color: colors.bg,
@@ -298,6 +301,7 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
                         scale: busiest == 0 ? 0 : entry.branchLines / busiest,
                         showAgent: showAgent,
                         showForge: showForge,
+                        showStack: showStack,
                         expanded: _expanded.contains(worktree.path),
                         path: worktree.path,
                         onToggleExpand: () => _toggle(worktree.path),

@@ -78,6 +78,10 @@ class WorktreeDetail extends StatelessWidget {
           if (agent?.lastPrompt case var it?) _Long('Last asked', '“$it”'),
           if (path case var it?) _Long('Path', it, selectable: true),
           if (facts.git.failure case var why?) _Long('Git said', why),
+          // The one thing the 116px cell cannot hold. It says `can't tell`;
+          // this is the sentence explaining why, without opening the checkout.
+          if (facts.stack.value?.failure case var why?)
+            _Long('Stack said', why),
         ],
       ),
     );

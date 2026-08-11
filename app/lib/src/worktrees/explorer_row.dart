@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
+import '../plugins/native/dev_stack_results.dart';
 import '../shell/worktree_filter.dart';
 import '../ui/menu.dart';
 import '../ui/popover.dart';
@@ -33,6 +34,7 @@ class WorktreeRow extends StatefulWidget {
     this.scale = 1,
     this.showAgent = true,
     this.showForge = true,
+    this.showStack = false,
     this.expanded = false,
     this.cursor = false,
     this.path,
@@ -74,6 +76,12 @@ class WorktreeRow extends StatefulWidget {
   /// parsing looks like. One rule covers all three.
   final bool showAgent;
   final bool showForge;
+
+  /// Off unless some checkout in this repository has a stack reading — which
+  /// most repositories will never have, since most projects declare no stack.
+  /// A column that is empty for everyone should not exist at all, let alone
+  /// take 116 pixels from the names.
+  final bool showStack;
 
   /// The label-priority winner: agent title, then PR title, then branch, then
   /// the directory. Resolved above this widget — the row does not know the
@@ -125,9 +133,18 @@ const _gutterWidth = explorerInsetLeft;
 const changesCellKey = ValueKey('worktree-row.changes');
 const _scrollGutter = explorerInsetRight;
 
+/// Marks the stack column, so a test can assert it left rather than assert on
+/// a picture.
+const stackCellKey = ValueKey('worktree-row.stack');
+
 const _changesWidth = 220.0;
 const _agentWidth = 190.0;
 const _prWidth = 150.0;
+
+/// A word and a port. It carries less than any other column and is sized for
+/// it — which is also why it is the last to be dropped: taking it away buys
+/// half of what taking `forge` away buys.
+const _stackWidth = 116.0;
 const _whenWidth = 64.0;
 // Wider than the 76 it was, and than the 32 the design budgeted: the column
 // carries Open, a menu trigger and the chevron, and at 76 that Row overflowed
@@ -161,27 +178,41 @@ const _nameMinWidth = 220.0;
 ///
 /// The name column keeps [_nameMinWidth] throughout, because a list of
 /// worktrees you cannot read the names of is not a list of worktrees.
-({bool changes, bool agent, bool forge}) _affordable(
+({bool changes, bool agent, bool forge, bool stack}) _affordable(
   double width, {
   required bool agent,
   required bool forge,
+  required bool stack,
 }) {
-  if (width.isInfinite) return (changes: true, agent: agent, forge: forge);
+  if (width.isInfinite) {
+    return (changes: true, agent: agent, forge: forge, stack: stack);
+  }
   var fixed =
       _gutterWidth + _whenWidth + _actionsWidth + _scrollGutter + _nameMinWidth;
   var showChanges = true;
   var showAgent = agent;
   var showForge = forge;
+  var showStack = stack;
   double total() =>
       fixed +
       (showChanges ? _changesWidth : 0) +
       (showAgent ? _agentWidth : 0) +
-      (showForge ? _prWidth : 0);
+      (showForge ? _prWidth : 0) +
+      (showStack ? _stackWidth : 0);
 
   if (total() > width) showChanges = false;
   if (total() > width) showAgent = false;
   if (total() > width) showForge = false;
-  return (changes: showChanges, agent: showAgent, forge: showForge);
+  // Last, on the same widest-first rule: at 116 it is the narrowest column
+  // here, so dropping it is the smallest saving available and buying room with
+  // it is the worst trade on offer.
+  if (total() > width) showStack = false;
+  return (
+    changes: showChanges,
+    agent: showAgent,
+    forge: showForge,
+    stack: showStack,
+  );
 }
 
 class _WorktreeRowState extends State<WorktreeRow> {
@@ -222,6 +253,7 @@ class _WorktreeRowState extends State<WorktreeRow> {
                       constraints.maxWidth,
                       agent: widget.showAgent,
                       forge: widget.showForge,
+                      stack: widget.showStack,
                     );
                     return Row(
                       children: [
@@ -242,6 +274,15 @@ class _WorktreeRowState extends State<WorktreeRow> {
                             child: _ChangesCell(
                               fact: facts.git,
                               scale: widget.scale,
+                            ),
+                          ),
+                        if (afford.stack)
+                          SizedBox(
+                            key: stackCellKey,
+                            width: _stackWidth,
+                            child: _StackCell(
+                              fact: facts.stack,
+                              now: widget.now,
                             ),
                           ),
                         if (afford.agent)
@@ -732,6 +773,93 @@ class _Fingerprint extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// What this checkout's dev stack was last seen doing.
+///
+/// **The answer to "which of my worktrees is holding the port block".** That is
+/// the question the whole per-worktree port allocation exists to create, and
+/// until this column existed the only way to answer it was to open eight
+/// checkouts one at a time.
+///
+/// One word and a port, and never anything else: this cell is 116 pixels and
+/// the state is the only thing that fits. The reasons, the services and the
+/// controls are two clicks away on the worktree's own screen.
+///
+/// **Everything here is a cached reading** — see `providers/stack.dart`. So the
+/// age is not decoration: a stale cell means *nobody has looked recently*, not
+/// *this is what is true now*, and it dims to say so.
+class _StackCell extends StatelessWidget {
+  const _StackCell({required this.fact, required this.now});
+
+  final Fact<StackReading> fact;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    // No `_Broken` case: there is no probe here to fail, only a file that is
+    // there or is not.
+    if (!fact.hasValue) return const _Nothing();
+
+    var reading = fact.value!;
+    var (label, color) = switch (reading.state) {
+      StackState.up when reading.isPartial => (
+        'up ${reading.serviceCount!.$1}/${reading.serviceCount!.$2}',
+        colors.amber,
+      ),
+      StackState.up => ('up', colors.grn),
+      StackState.down => ('down', colors.mut2),
+      StackState.starting => ('bringing up', colors.amber),
+      StackState.stopping => ('tearing down', colors.amber),
+      StackState.unavailable => ("can't tell", colors.red),
+      StackState.unknown => ('—', colors.mut3),
+    };
+
+    // The port, when the probe named one. It is what you actually go looking
+    // for — "which one has 8080" — and it is four characters.
+    var port = reading.services.map((s) => s.port).whereType<int>().firstOrNull;
+
+    return _Lines(
+      dim: fact.isDim,
+      top: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const Gap(FwSpacing.sm),
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: context.type.bodySmall.copyWith(color: color),
+            ),
+          ),
+          if (port != null && reading.state == StackState.up) ...[
+            const Gap(FwSpacing.sm),
+            Text(
+              ':$port',
+              style: context.type.bodySmall.copyWith(color: colors.mut2),
+            ),
+          ],
+        ],
+      ),
+      // Only once it is old enough to doubt. On a checkout somebody is watching
+      // this line is absent, which is the difference between a column that
+      // reports and one that natters.
+      bottom: fact.isDim && reading.at != null
+          ? Text(
+              'seen ${_ago(reading.at!, now)}',
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: context.type.micro.copyWith(color: colors.mut3),
+            )
+          : null,
     );
   }
 }

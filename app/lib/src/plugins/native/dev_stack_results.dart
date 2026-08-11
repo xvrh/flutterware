@@ -1,4 +1,20 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutterware/plugins.dart';
+import 'package:path/path.dart' as p;
+
+/// Where a worktree's last stack reading is cached, under the run dir.
+///
+/// **One formula, two readers.** The core writes this file after every probe;
+/// the worktree explorer reads it for every checkout in the repository, and
+/// reads *only* this — a list of eight worktrees must not spawn eight
+/// subprocesses to fill a column. The two halves cannot be allowed to disagree
+/// about where the file is, so neither of them spells the name.
+String stackCachePath(String runDir, String worktreePath) => p.join(
+  runDir,
+  'stack-${sha1.convert(utf8.encode(worktreePath)).toString().substring(0, 16)}.json',
+);
 
 /// What state a [DevStack] is in.
 ///

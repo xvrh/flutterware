@@ -172,14 +172,85 @@ for photographing every state rather than the happy one.
 
 ### Not built, and why
 
-- **The explorer column** (finding 8) — the largest piece. It needs a fifth
-  `WorktreeFacts` provider reading the existing `stack-<hash>.json` cache and
-  **never probing**: a list of eight checkouts must not spawn eight subprocesses.
-  The column budget in `explorer_row.dart` is already tight enough to have
-  needed a drop order.
+- ~~The explorer column~~ **Built** — see below.
 - **Live output during a transition** — `runProcess` returns a finished
   `ProcessResult`, so streaming needs a second variant of the seam. The clock
   and the bar are what landed instead.
 - **Services as `PluginChild`ren** in the sidebar — the mechanism the Run plugin
   already uses, and it would give the CLI and an agent the same breakdown. A
   different surface from this study's subject; worth doing next.
+
+---
+
+## The explorer column (2026-08-11)
+
+Finding 8, built. The premise of the whole plugin is that a port block belongs
+to a *checkout*; the question that follows is **which of my eight checkouts is
+holding one**, and until now the only way to ask it was to open eight checkouts
+one at a time.
+
+| | |
+|---|---|
+| `app/lib/src/worktrees/providers/stack.dart` | `StackProbe` / `RunDirStackProbe` — a file read, never a probe |
+| `app/lib/src/worktrees/facts.dart` | `WorktreeFacts.stack`, a `Fact<StackReading>` |
+| `app/lib/src/worktrees/facts_probe.dart` | reads it per worktree, ages it against `stackFreshFor` |
+| `app/lib/src/worktrees/explorer_row.dart` | `_StackCell`, `_stackWidth`, last in the drop order |
+| `app/lib/src/worktrees/facts_text.dart` | the same words for `fw worktrees` |
+| `app/lib/src/plugins/native/dev_stack_results.dart` | `stackCachePath` — one formula, two readers |
+
+### The bargain
+
+**It reads the cache the panel writes and never runs anything.** Every other
+fact on that screen is a git call or a file the shell itself wrote; a stack's
+state belongs to the project and costs a subprocess to find out. Fourteen
+checkouts × one config + one probe each, per refresh, is exactly the cost the
+explorer exists not to pay. So the column is a **ledger**, the same bargain
+`devices.json` strikes: a fact that happened, drawn with its age.
+
+Two consequences that look like bugs and are not, so they are stated in the
+provider's own doc comment:
+
+- **A checkout you have never opened shows nothing**, even if it declares a
+  stack. Nothing has ever looked.
+- **A reading can be out of date** — tearing a stack down from a terminal does
+  not update a file flutterware writes. Hence `stackFreshFor`: past a minute the
+  cell dims and prints `seen 2h` instead of asserting.
+
+### Decided while building
+
+- **The column does not exist unless some checkout has a reading.** Most
+  repositories declare no stack anywhere, and a column of dashes is 116 pixels
+  taken from the names for nothing. Same rule the agent and forge columns
+  already follow.
+- **It is last in the drop order**, which looks like a demotion and is the
+  opposite. The rule is widest-first; at 116 it is the narrowest column here, so
+  dropping it is the smallest saving available and the worst trade on offer.
+- **The cell shows a word and a port and nothing else.** 116 pixels holds a
+  state or an explanation, not both. `can't tell` in the cell, and the sentence
+  saying why in the expanded detail — which costs nothing, because expanding
+  reads facts that are already in hand.
+- **The age only appears once the reading is stale.** A column that prints "now"
+  on every row has spent a line saying nothing.
+- **One cache-path formula, two readers.** `stackCachePath` moved beside
+  `StackReading` so the writer and the explorer cannot disagree about where the
+  file is.
+
+### A bug found trying to photograph it
+
+`fw capture fw:///worktrees` produced fourteen rows of dashes and reported
+`settled: true`. The explorer refreshes its facts on becoming visible, and
+nothing in that path was a `SettleSource` — so the capture photographed the
+screen a beat before any fact arrived and called it a success.
+
+`WorktreeFactsController` now implements `SettleSource` (`reading the
+worktrees`) and registers with the window's registry. Exactly the same class of
+bug as the one the stack panel's `busyWith` fixed a day earlier, on a different
+screen: **a picture of a screen that has not finished thinking is worse than no
+picture, because nothing in it says so.**
+
+### Still not built
+
+A run-dir watch. Bringing a stack up in worktree A does not refresh the explorer
+until something else does — the facts refresh on git events and on the refresh
+button. `watchers.dart` is where that would go, and it is worth doing only if
+the staleness turns out to be annoying in practice rather than in theory.

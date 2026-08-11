@@ -428,7 +428,10 @@ class ShellController extends ChangeNotifier {
     if (_worktrees.firstOrNull case var main?) {
       _worktreeFacts =
           (_buildWorktreeFacts ??
-                (root) => WorktreeFactsController(repoRoot: root))(main.path)
+                (root) => WorktreeFactsController(
+                  repoRoot: root,
+                  settle: appContext.settle,
+                ))(main.path)
             ..addListener(notifyListeners);
       _startWatchingRepo(main.path);
     }

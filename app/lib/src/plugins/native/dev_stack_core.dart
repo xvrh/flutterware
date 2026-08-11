@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
@@ -411,10 +410,7 @@ class DevStackCore extends PluginCore {
   // read answer "nothing has ever looked" about a stack that had a state a
   // minute ago.
 
-  String get _cachePath => p.join(
-    runDirProvider(),
-    'stack-${sha1.convert(utf8.encode(host.worktree.path)).toString().substring(0, 16)}.json',
-  );
+  String get _cachePath => stackCachePath(runDirProvider(), host.worktree.path);
 
   void _loadCache() {
     if (_loadedCache || _reading.isKnown) return;

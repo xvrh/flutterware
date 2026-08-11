@@ -13,6 +13,8 @@ library;
 
 import 'package:flutterware/plugins.dart';
 
+import '../plugins/native/dev_stack_results.dart';
+
 /// How much a [Fact] is worth believing.
 enum FactState {
   /// Never computed. The first launch, before anything is cached.
@@ -354,12 +356,23 @@ class WorktreeFacts {
     this.agent = const Fact.unknown(),
     this.forge = const Fact.unknown(),
     this.activity = const Fact.unknown(),
+    this.stack = const Fact.unknown(),
   });
 
   final Fact<GitFacts> git;
   final Fact<AgentFacts> agent;
   final Fact<ForgeFacts> forge;
   final Fact<ActivityFacts> activity;
+
+  /// What this checkout's dev stack was last seen doing.
+  ///
+  /// **The one fact here the shell does not compute.** Everything else on this
+  /// screen is a git call or a file the shell itself wrote; a stack's state
+  /// belongs to the project and costs a subprocess to find out. So this is read
+  /// from the cache a session left behind — a fact that happened, drawn with
+  /// its age — and it is the only fact here that is *empty for most repos*, as
+  /// most projects declare no stack at all.
+  final Fact<StackReading> stack;
 
   /// For the refresh that only re-reads one provider — an agent writing to its
   /// session file must not drag fourteen `git status` calls behind it.
@@ -368,11 +381,13 @@ class WorktreeFacts {
     Fact<AgentFacts>? agent,
     Fact<ForgeFacts>? forge,
     Fact<ActivityFacts>? activity,
+    Fact<StackReading>? stack,
   }) => WorktreeFacts(
     git: git ?? this.git,
     agent: agent ?? this.agent,
     forge: forge ?? this.forge,
     activity: activity ?? this.activity,
+    stack: stack ?? this.stack,
   );
 
   /// **Will this worktree fail to progress until you act?**
@@ -408,5 +423,6 @@ class WorktreeFacts {
     'agent': agent.toJson((v) => v.toJson()),
     'forge': forge.toJson((v) => v.toJson()),
     'activity': activity.toJson((v) => v.toJson()),
+    'stack': stack.toJson((v) => v.toJson()),
   };
 }

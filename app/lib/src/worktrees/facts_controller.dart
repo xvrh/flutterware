@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../capture/settle.dart';
 import '../shell/worktree.dart';
 import 'facts.dart';
 import 'facts_probe.dart';
@@ -19,14 +20,34 @@ import 'facts_store.dart';
 /// and when the button is pressed. Filesystem watchers are the third trigger
 /// and are not here yet; when they land they call [refresh] like everything
 /// else, so nothing above this changes.
-class WorktreeFactsController extends ChangeNotifier {
-  WorktreeFactsController({required this.repoRoot, WorktreeFactsProbe? probe})
-    : _probe =
-          probe ??
-          WorktreeFactsProbe(
-            repoRoot: repoRoot,
-            store: WorktreeFactsStore.open(repoRoot),
-          );
+///
+/// It is a [SettleSource], which is not decoration: the explorer refreshes on
+/// becoming visible, so `fw capture fw:///worktrees` used to photograph the
+/// screen a beat *before* any fact arrived — fourteen rows of dashes, reported
+/// as `settled: true`. A picture of a screen that had not finished thinking is
+/// worse than no picture, because nothing in it says so.
+class WorktreeFactsController extends ChangeNotifier implements SettleSource {
+  WorktreeFactsController({
+    required this.repoRoot,
+    WorktreeFactsProbe? probe,
+    SettleRegistry? settle,
+  }) : _probe =
+           probe ??
+           WorktreeFactsProbe(
+             repoRoot: repoRoot,
+             store: WorktreeFactsStore.open(repoRoot),
+           ),
+       // ignore: prefer_initializing_formals
+       _settle = settle {
+    _settle?.add(this);
+  }
+
+  final SettleRegistry? _settle;
+
+  /// What a capture waits for. Named for what is happening rather than for this
+  /// class, because it is printed to whoever ran the command.
+  @override
+  String? get busyWith => _refreshing ? 'reading the worktrees' : null;
 
   /// The main checkout. Branch diffs are repository-wide, so the cache under it
   /// is shared by every worktree rather than copied per checkout.
@@ -137,6 +158,7 @@ class WorktreeFactsController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _settle?.remove(this);
     super.dispose();
   }
 }
