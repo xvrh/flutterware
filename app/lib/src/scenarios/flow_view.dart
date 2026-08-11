@@ -178,39 +178,40 @@ class _ScenarioFlowViewState extends State<ScenarioFlowView> {
               var step = byId[to];
               if (step == null) return null;
               var transition = scenarioStepTransition(step);
-              // Spelled out on its own line rather than iconified: the gap
-              // between two nodes is narrow, a glyph there reads as an
-              // artifact, and `7 events` needs no legend.
+              // The quiet facts share one line under the transition: `7
+              // events` needs no legend, and the milliseconds — only where
+              // the run recorded the motion, which makes them the cue that
+              // hovering the node will play it — are the animation's declared
+              // duration in fake time, never a measurement of this machine.
               var count = step.notableEventCount;
-              var events = count == 0
-                  ? ''
-                  : '\n$count event${count == 1 ? '' : 's'}';
-              // How long the app took to get here, in its own milliseconds —
-              // only where the run recorded the motion, which makes it the
-              // cue that hovering the node will play it. Fake time, so it is
-              // the animation's declared duration and never a measurement of
-              // this machine.
-              var motion = step.hasMotion
-                  ? '${events.isEmpty ? '\n' : ' · '}'
-                        '${scenarioMotionDuration(step).inMilliseconds}ms'
-                  : '';
+              var meta = [
+                if (count > 0) '$count event${count == 1 ? '' : 's'}',
+                if (step.hasMotion)
+                  '${scenarioMotionDuration(step).inMilliseconds}ms',
+              ].join(' · ');
               if (step.branch == null && transition == null) return null;
               return EdgeTooltip(
                 step.branch,
-                // Sized like the node labels, for the same reason: the canvas
-                // opens at half scale.
+                // dev_studio's edge-label size. The painter gives the label
+                // more width than the gap between nodes, so a transition
+                // stays on one line instead of wrapping mid-word.
                 style: context.type.body.copyWith(
-                  fontSize: 22,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
                   color: context.colors.accent,
                 ),
                 subtitle: transition == null
                     ? null
-                    : '$transition$events$motion',
+                    : meta.isEmpty
+                    ? transition
+                    : '$transition\n$meta',
                 subtitleStyle: context.type.body.copyWith(
-                  fontSize: 18,
+                  fontSize: 12.5,
                   color: context.colors.mut,
                 ),
+                // The label may stray over a phone's bezel now that it is
+                // wider than the gap; the chip keeps it legible there.
+                background: context.colors.bg.withValues(alpha: 0.85),
               );
             },
           ),
@@ -323,10 +324,10 @@ class _StepNodeState extends State<_StepNode>
               '${step.index} · ${scenarioStepLabel(step)}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              // Sized to survive the canvas's zoom-out: at half scale this
-              // reads like a caption.
+              // Big enough to survive the canvas's half-scale opening, small
+              // enough not to shout at full scale.
               style: context.type.body.copyWith(
-                fontSize: 22,
+                fontSize: 17,
                 color: scenarioStepTone(context, step),
               ),
             ),

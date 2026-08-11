@@ -77,10 +77,16 @@ class EdgeTooltip {
   final String? subtitle;
   final TextStyle? subtitleStyle;
 
+  /// Chip painted behind the label. The label may be laid out wider than the
+  /// gap between two nodes and end up over a node's own pixels; the chip keeps
+  /// it readable there.
+  final Color? background;
+
   EdgeTooltip(
     this.text, {
     required this.style,
     this.subtitle,
     this.subtitleStyle,
+    this.background,
   });
 }
