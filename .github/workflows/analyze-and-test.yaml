@@ -69,7 +69,7 @@ jobs:
         # session down the same daemon handshake and can say so with an exit
         # code; talking MCP from a workflow step would test the transport, not
         # the resolution.
-        run: dart run flutterware_app:fw run previews check
+        run: ../../fw dart run flutterware_app:fw run previews check
         working-directory: examples/example
 
       - name: "the compiler daemon, as a process"
