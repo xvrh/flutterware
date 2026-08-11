@@ -113,6 +113,31 @@ The trap is the inputs you forget. Assets, `FontManifest.json`, `pubspec.lock`,
 l10n `.arb`, the SDK pin are all in the key. **Over-invalidate on doubt** — a
 false "changed" costs one render, a false "same" is a lie the tool cannot detect.
 
+## 3a. Correction — the compiler cannot answer the closure
+
+§3 says "the frontend_server knows each entry's transitive dependency set".
+**It does not, and cannot be made to.** Its program is the *generated
+entrypoint*, which imports a wrapper for every entry visited so far
+(`EntrypointGenerator._entrypoint`), so the source set it reports is the union
+of all of them; `FrontendServerResult.newSources` is a delta against whatever
+was already loaded, not a closure. Only a fresh daemon per entry gives a
+per-entry answer, and that is a cold compile each — the cost the skip rule
+exists to avoid.
+
+`ImportGraph` follows imports instead, and that is the better shape rather than
+a concession: **no daemon, no guest, no compile**, so the skip decision runs
+before anything is started, which is what §3's second-order claim actually
+requires. Measured on this repo: first entry 171ms across 118 files
+(its own, its shell's, and `package:flutterware`'s — a path dependency inside
+the checkout, so a change to the framework package correctly invalidates the
+example's previews); ~1ms per entry after that, since closures overlap and each
+file is parsed once.
+
+It over-approximates deliberately: both branches of a conditional import,
+`part`s, exports, unused imports. A file wrongly included costs one render; a
+file wrongly left out reports a regression as clean, and nothing downstream can
+detect that.
+
 ## 4. The diff kernel
 
 Pure Dart, `package:image` is already a dependency, and it runs in `Isolate.run`
@@ -422,19 +447,17 @@ handles SDK management.
 2. ✅ **Preview clock pin** (§6) — `9e29155d`, smoke-tested through a real
    guest — and the **SDK-mismatch detector** (§11) — `bbc2ac6f`.
 3. ✅ **Shot cache + skip rule** (§2, §3) — `55207ba6`; **base checkout**
-   (§1) — `b396d464`. One seam is open: `ClosureMemo` has readers and no
-   writer, because the per-entry closure comes from the compiler and nothing
-   asks it for one yet. Until step 5 fills it, every entry answers "unknown"
-   and nothing is skipped — correct, and slow.
+   (§1) — `b396d464`; **the closure** — `1445faf8`, and it corrects §3: the
+   compiler cannot answer it. See §3a.
 4. ✅ **The diff kernel** (§4, §5) — `9b8379fd`. Pixels, tree, texts, the
    severity ladder. Not yet run in an isolate: it has no caller to be off the
    UI thread of.
 5. **`fw compare` + `index.json`** (§8) — CLI and MCP first, which forces the
-   schema honest before a widget can hide it. Needs two things the kernel does
-   not: a **batch capture** in `HeadlessCatalog` (one guest, reload per entry,
-   raw frame + tree out — `auditAll` is the shape, it collects errors where
-   this needs pixels), and the **compiler's per-entry source list** over the
-   daemon protocol, to give `ClosureMemo` its writer.
+   schema honest before a widget can hide it. Both of its prerequisites landed
+   in `1445faf8`: `HeadlessCatalog.captureAll` streams a raw frame and a tree
+   per entry off one warm guest, and `ImportGraph` writes `ClosureMemo`. What
+   is left is the assembly — two sides, the SDK check, the skip pass, the
+   kernel, and the index.
 6. **The space** (§9) — overview, preview modes, merged split tree, two live
    revisions.
 7. **The static viewer** — in v1, and dumb: it reads `index.json` and renders,
