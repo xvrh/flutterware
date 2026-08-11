@@ -103,6 +103,7 @@ One transaction against the running app — the loop tool for live work: edit co
 | `maxSide` | no | Cap the screenshot's longest side in pixels. Default 1200 here. |
 | `device` | no | Which device, when more than one app is running. |
 | `entrypoint` | no | Which entry point, when a device runs more than one. |
+| `worktree` | no | Worktree name or path, to drive a run another checkout launched. Only runs from this worktree match when omitted — the refusals name the worktrees that have one. |
 
 ## Plugins
 
@@ -416,7 +417,7 @@ note: String?
 Applies edited sources to a running app, in a few hundred milliseconds. Needs the `flutter run` that launched it to still be alive: hot reload is registered by the tool, not by the app, so it goes away with it while the app keeps running.
 
 ```sh
-fw run run reload [--device=…] [--entrypoint=…]
+fw run run reload [--device=…] [--entrypoint=…] [--worktree=…]
 ```
 
 Returns `RunControlResult`:
@@ -435,13 +436,14 @@ note: String?
 |---|---|---|---|---|
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 
 #### `restart` — Hot restart
 
 Restarts a running app from its main(), in about a second, without rebuilding or reinstalling. Same requirement as reload: the launcher has to be alive.
 
 ```sh
-fw run run restart [--device=…] [--entrypoint=…]
+fw run run restart [--device=…] [--entrypoint=…] [--worktree=…]
 ```
 
 Returns `RunControlResult`:
@@ -460,13 +462,14 @@ note: String?
 |---|---|---|---|---|
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 
 #### `stop` — Stop
 
 Asks a running app to exit, kills its launcher, and frees the device. Asking the app first matters: killing only the launcher leaves the app running on the phone.
 
 ```sh
-fw run run stop [--device=…] [--entrypoint=…]
+fw run run stop [--device=…] [--entrypoint=…] [--worktree=…]
 ```
 
 Returns `RunControlResult`:
@@ -485,13 +488,14 @@ note: String?
 |---|---|---|---|---|
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 
 #### `inspect` — Inspect
 
 One reading of a running app — whether it is up, whether it can still be reloaded, and whatever you ask about it: its widget tree, a picture, what it printed. With no flags it answers the question worth asking first, whether anything has gone wrong. Everything else is opt-in and every flag you add is answered from the **same** connection, and the tree and the picture from the same reading — two calls against a live app are two moments that only happen to agree. Answers even while the app is still building, when the logs are the only thing there is to read.
 
 ```sh
-fw run run inspect [--device=…] [--entrypoint=…] [--tree=…] [--full=…] [--screenshot=…] [--out=…] [--logs=…] [--source=…] [--lines=…] [--errors=…]
+fw run run inspect [--device=…] [--entrypoint=…] [--worktree=…] [--tree=…] [--full=…] [--screenshot=…] [--out=…] [--logs=…] [--source=…] [--lines=…] [--errors=…]
 ```
 
 Returns `RunInspectResult`:
@@ -525,6 +529,7 @@ note: String?
 |---|---|---|---|---|
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 | `tree` | boolean | no | false | Report the widget tree, with the file, line and column each widget was constructed at. Off by default because a real app is thousands of tokens of tree. |
 | `full` | boolean | no | false | Include the framework's own widgets, not just yours. Large: a one-screen app is 25 summary nodes and about 517 full ones, six megabytes of them. |
 | `screenshot` | boolean | no | false | Write a PNG of the same reading everything else comes from, and hand back its path. Rendered by the app rather than grabbed from the device, so it works on hardware that cannot be asked for a screen grab — and platform views (native maps, webviews, video) will not appear. |
@@ -539,7 +544,7 @@ note: String?
 One drive transaction against a running app: resolve the target, check the pointer can reach it (retrying through route transitions until a deadline), perform the verb, settle, and observe — texts, a screenshot, what was printed — all in one reply describing one moment. Needs the app to have been launched by flutterware (the launch wraps it in the drive guest); anything else is inspect-only. A refusal still observes: the error comes back with the screen it happened on. Every step is appended to the run's journal. On a phone the app has to be in the foreground: iOS suspends a backgrounded app, which answers nothing until somebody brings it back — that comes back as a timeout saying so, never a hang. A hidden desktop window is fine, and so is a backgrounded Android app.
 
 ```sh
-fw run run act [--device=…] [--entrypoint=…] --verb=<choice> [--target=…] [--text=…] [--dx=…] [--dy=…] [--within=…] [--route=…] [--waitMs=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
+fw run run act [--device=…] [--entrypoint=…] [--worktree=…] --verb=<choice> [--target=…] [--text=…] [--dx=…] [--dy=…] [--within=…] [--route=…] [--waitMs=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
 ```
 
 Returns `RunActResult`:
@@ -581,6 +586,7 @@ note: String?
 |---|---|---|---|---|
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 | `verb` | choice | yes | — | What to do |
 | `target` | string | no | — | What to act on. Bare text matches a visible string; JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. Resolved inside the app at act time, and refused loudly on zero or several matches — never a silent wrong-target tap. A reply text ending in … was truncated: target it with {"containing": <prefix>}. |
 | `text` | string | no | — | What enterText types, as one editing value |
@@ -600,7 +606,7 @@ note: String?
 The act-less transaction: settle the running app and look — texts, a screenshot, what it printed since the last step. The opening move of a drive loop, and the call to make after a hot reload. Same reply shape and same journal as act.
 
 ```sh
-fw run run observe [--device=…] [--entrypoint=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
+fw run run observe [--device=…] [--entrypoint=…] [--worktree=…] [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…] [--actor=…]
 ```
 
 Returns `RunActResult`:
@@ -642,6 +648,7 @@ note: String?
 |---|---|---|---|---|
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 | `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop animating before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. |
 | `screenshot` | boolean | no | true | Write the step's PNG under the run's journal directory and return its path. On by default — the picture is what makes the loop self-verifying. |
 | `tree` | boolean | no | false | Include the widget tree in the reply. Off by default because a real app is thousands of tokens of tree; the texts ride along either way. |
@@ -653,7 +660,7 @@ note: String?
 Jumps the running app straight to a screen, through the navigation handler the app registered (router_outlet does, and any router can in one line: GuestDrive.navigator = …). Refuses plainly when the app declares none — it never falls back to hunting the UI with taps.
 
 ```sh
-fw run run navigate [--device=…] [--entrypoint=…] --route=<string> [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…]
+fw run run navigate [--device=…] [--entrypoint=…] [--worktree=…] --route=<string> [--settleMs=…] [--screenshot=…] [--tree=…] [--maxSide=…]
 ```
 
 Returns `RunActResult`:
@@ -695,6 +702,7 @@ note: String?
 |---|---|---|---|---|
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
 | `route` | string | yes | — | The route, as the app's handler understands it |
 | `settleMs` | integer | no | 800 | Milliseconds to wait for the app to stop animating before observing. Running out is reported (settled: false), never an error — a spinner would otherwise hang every step. |
 | `screenshot` | boolean | no | true | Write the step's PNG under the run's journal directory and return its path. On by default — the picture is what makes the loop self-verifying. |

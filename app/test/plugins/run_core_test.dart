@@ -1486,6 +1486,85 @@ void main() {
       );
     });
 
+    test('the ambiguity refusal names each worktree', () async {
+      // Two Studios on one device/entrypoint pair used to refuse with two
+      // identical strings — no argument could pick one. The worktree is the
+      // discriminator, so the refusal has to say it.
+      for (var entrypoint in ['lib/a.dart', 'lib/b.dart']) {
+        _writeHandle(
+          runDir,
+          worktree,
+          device: 'phone',
+          entrypoint: entrypoint,
+          worktreeName: 'mine',
+          launcherPid: pid,
+        );
+      }
+
+      await expectLater(
+        core.invoke('restart'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('Name a worktree'),
+              contains('mine: phone/lib/a.dart'),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test("a named worktree reaches a sibling checkout's run", () async {
+      // Same device and entry point as this worktree would use — the pair the
+      // arguments cannot tell apart. Naming the worktree selects it; the
+      // reload then genuinely fails because nothing answers, which is the
+      // proof an attempt was made against *that* handle.
+      _writeHandle(
+        runDir,
+        otherWorktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        worktreeName: 'feature-x',
+        launcherPid: pid,
+        vmService: 'ws://127.0.0.1:1/ws',
+      );
+
+      var result =
+          (await core.invoke('reload', arguments: {'worktree': 'feature-x'}))!
+              as RunControlResult;
+
+      expect(result.ok, isFalse);
+      expect(result.error, isNotNull);
+    });
+
+    test('an empty own ledger points at the worktrees that do run', () async {
+      _writeHandle(
+        runDir,
+        otherWorktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        worktreeName: 'feature-x',
+        launcherPid: pid,
+      );
+
+      await expectLater(
+        core.invoke('reload'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('Nothing is running from this worktree'),
+              contains('feature-x (phone/lib/main.dart)'),
+              contains('worktree'),
+            ),
+          ),
+        ),
+      );
+    });
+
     test('reports a reload it could not do rather than throwing', () async {
       // The app is unreachable, so the attempt is real and it fails. That is
       // an outcome, not a mistake by the caller.

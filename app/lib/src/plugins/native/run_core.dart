@@ -1229,6 +1229,14 @@ class RunCore extends PluginCore {
       description:
           'Package-relative path, when one device is running more than one',
     ),
+    const ActionParameter(
+      'worktree',
+      'Worktree',
+      required: false,
+      description:
+          'Worktree name or path, to reach a run another checkout launched; '
+          'only runs from this worktree match when omitted',
+    ),
   ];
 
   /// What every drive transaction lets you tune about its observation.
@@ -1778,6 +1786,7 @@ class RunCore extends PluginCore {
     var handle = _selectApp(
       arguments['device'] as String?,
       arguments['entrypoint'] as String?,
+      arguments['worktree'] as String?,
     );
     var started = DateTime.now();
     try {
@@ -1949,6 +1958,7 @@ class RunCore extends PluginCore {
     return _selectApp(
       arguments['device'] as String?,
       arguments['entrypoint'] as String?,
+      arguments['worktree'] as String?,
     );
   }
 
@@ -2425,13 +2435,22 @@ class RunCore extends PluginCore {
         : 'The app is not answering yet.';
   }
 
-  RunHandle _selectApp(String? device, String? entrypoint) {
-    // Own runs only, like the rail: the owner's Studio in another worktree
-    // is the same device/entrypoint pair as this one's, and no argument
-    // could tell them apart — while driving a sibling checkout's app is
-    // never what a session means.
+  RunHandle _selectApp(String? device, String? entrypoint, String? worktree) {
+    // Own runs by default, like the rail: the owner's Studio in another
+    // worktree is the same device/entrypoint pair as this one's, and neither
+    // argument could tell them apart. Naming a worktree is the explicit
+    // opt-in — it widens the pool to every checkout's runs and picks by the
+    // name the handle itself carries.
+    var pool = worktree == null
+        ? ownHandles
+        : [
+            for (var handle in _handles)
+              if (handle.worktreeName == worktree ||
+                  p.canonicalize(handle.worktree) == p.canonicalize(worktree))
+                handle,
+          ];
     var matches = [
-      for (var handle in ownHandles)
+      for (var handle in pool)
         if (device == null || handle.device == device)
           if (entrypoint == null ||
               handle.entrypoint == entrypoint ||
@@ -2441,16 +2460,31 @@ class RunCore extends PluginCore {
     if (matches.isEmpty) {
       // The next move rides in the refusal: this is an agent's first contact
       // with a cold machine, and "what now" should not cost a discovery call.
+      var others = [
+        for (var handle in _handles)
+          if (!isMine(handle)) handle,
+      ];
+      var nothing = worktree != null
+          ? 'Nothing is running from worktree "$worktree".'
+          : device != null
+          ? 'Nothing is running on "$device".'
+          : 'Nothing is running${others.isEmpty ? '' : ' from this worktree'}.';
+      var elsewhere = others.isEmpty
+          ? ''
+          : ' Other worktrees are: '
+                '${others.map((h) => '${h.worktreeName} (${h.device}/${h.entrypoint})').join(', ')}'
+                ' — pass `worktree` to drive one.';
       throw StateError(
-        '${device == null ? 'Nothing is running.' : 'Nothing is running on "$device".'} '
+        '$nothing$elsewhere '
         '`launch` starts an app; `status` lists devices and declared entry '
         'points.',
       );
     }
     if (matches.length > 1) {
       throw StateError(
-        'More than one app matches. Name a device and an entry point: '
-        '${matches.map((h) => '${h.device}/${h.entrypoint}').join(', ')}',
+        'More than one app matches. Name a worktree, a device and an entry '
+        'point: '
+        '${matches.map((h) => '${h.worktreeName}: ${h.device}/${h.entrypoint}').join(', ')}',
       );
     }
     return matches.single;
