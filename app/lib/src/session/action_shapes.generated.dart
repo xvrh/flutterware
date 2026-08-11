@@ -1557,6 +1557,129 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'durationMs', 'type': 'int'},
     ],
   }),
+  'ComparisonCompareResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'ComparisonCompareResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'against',
+        'type': 'String',
+        'doc':
+            'What the comparison was against — the ref\'s name, as a header shows it.',
+      },
+      <String, Object?>{
+        'name': 'baseSha',
+        'type': 'String',
+        'doc': 'The merge base it resolved to.',
+      },
+      <String, Object?>{
+        'name': 'counts',
+        'type': 'Map<String, int>',
+        'doc':
+            'Every row by state, both halves merged: `{"changed": 2, "skipped": 9}`.',
+      },
+      <String, Object?>{
+        'name': 'findings',
+        'type': 'List<ComparisonFinding>',
+        'doc': 'The rows worth attention, worst first.',
+        'shape': <String, Object?>{
+          'type': 'ComparisonFinding',
+          'fields': <Object?>[
+            <String, Object?>{
+              'name': 'id',
+              'type': 'String',
+              'doc': 'The entry id, or the scenario id for a flow.',
+            },
+            <String, Object?>{
+              'name': 'half',
+              'type': 'String',
+              'doc': '`previews` or `scenarios`.',
+            },
+            <String, Object?>{
+              'name': 'state',
+              'type': 'String',
+              'doc':
+                  '`broke`, `failed`, `wasBroken`, `added`, `removed` or `changed` — declared worst-first, and the list is sorted by it.',
+            },
+            <String, Object?>{
+              'name': 'note',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'Why it is in the state it is, when the state alone does not say.',
+            },
+            <String, Object?>{
+              'name': 'delta',
+              'type': 'String',
+              'optional': true,
+              'doc':
+                  'The size of the change: `0.38% · 2 regions` for pixels, the step that moved for a flow.',
+            },
+          ],
+        },
+      },
+      <String, Object?>{
+        'name': 'index',
+        'type': 'String',
+        'doc':
+            'The whole verdict as a file — every row, every channel, the shot keys.',
+      },
+      <String, Object?>{
+        'name': 'export',
+        'type': 'String',
+        'optional': true,
+        'doc': 'The browsable page, when `export` asked for one.',
+      },
+      <String, Object?>{
+        'name': 'report',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The PR report directory, when `report` asked for one: `comment.md`, `mosaic.png`, the page under `web/`.',
+      },
+      <String, Object?>{
+        'name': 'scenariosNote',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Why the scenario half has nothing to say, when it has nothing to say — a base harness that would not build reads differently from a project with no scenarios.',
+      },
+    ],
+  }),
+  'ComparisonFinding': ResultShape.fromJson(<String, Object?>{
+    'type': 'ComparisonFinding',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'id',
+        'type': 'String',
+        'doc': 'The entry id, or the scenario id for a flow.',
+      },
+      <String, Object?>{
+        'name': 'half',
+        'type': 'String',
+        'doc': '`previews` or `scenarios`.',
+      },
+      <String, Object?>{
+        'name': 'state',
+        'type': 'String',
+        'doc':
+            '`broke`, `failed`, `wasBroken`, `added`, `removed` or `changed` — declared worst-first, and the list is sorted by it.',
+      },
+      <String, Object?>{
+        'name': 'note',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'Why it is in the state it is, when the state alone does not say.',
+      },
+      <String, Object?>{
+        'name': 'delta',
+        'type': 'String',
+        'optional': true,
+        'doc':
+            'The size of the change: `0.38% · 2 regions` for pixels, the step that moved for a flow.',
+      },
+    ],
+  }),
   'DartDefineEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'DartDefineEntry',
     'fields': <Object?>[

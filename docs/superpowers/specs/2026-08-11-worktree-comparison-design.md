@@ -594,10 +594,38 @@ handles SDK management.
    the flow** rather than banded under it — a phone frame is portrait and a band
    is landscape, so two of them side by side came out postage-stamp sized.
    Estimates ride the tabs; a half runs when its tab is opened.
-7. **The static viewer** — in v1, and dumb: it reads `index.json` and renders,
-   with no diffing logic of its own. "Improve later" means richer modes, never
-   moving computation into the page.
-8. Later: `events` channel, arbitrary A/B, and the four below.
+7. ✅ **The static viewer** — dumb as promised: it reads `index.json` and
+   renders, with no diffing logic of its own. **Corrected in the building
+   (2026-08-11): it is not a hand-rolled HTML page.** #92 had already
+   established the house pattern — a data-free Flutter web bundle
+   (`lib/main_comparison_web.dart`) reusing the panel's own widgets, built
+   once into `app/build/comparison_web_viewer` and copied per export — so the
+   five-mode stage and the merged tree came for free instead of being
+   rewritten worse in JS. What made it possible is a seam the panel needed
+   anyway: `ShotStore` (cache-backed on the panel, URL-backed on the page),
+   plus `fromJson` mirrors for every row type, which had only ever been
+   written. The export (`fw compare --export`) encodes the raw cached frames
+   to PNG — the one place that pays the encoding cost the cache exists to
+   avoid, because a hosted page downloading 2.5MB of raw rgba per frame is
+   the worse deal. The page must be served; `file://` cannot fetch beside
+   itself.
+8. ✅ **The PR report** (`fw compare --report=<dir>`) — `comment.md` with a
+   findings table, a `mosaic.png` (one row per finding, capped at 20, base
+   beside head, clusters boxed), and the page under `web/`. fw emits, the
+   workflow hosts and posts: the comment carries `__MOSAIC_URL__` /
+   `__VIEWER_URL__` placeholders because where images live is the
+   repository's business. Recipe in `docs/compare-in-ci.md`. Also the run
+   `compare` was, until now, dispatched but absent from `fwCommands` — it is
+   in `fw help` and the capability document from here on.
+9. ✅ **The MCP surface** — `fw run previews compare`, one orchestration
+   behind all three surfaces: `runComparison` in
+   `app/lib/src/comparison/compare_command.dart` is what `fw compare`, the
+   action, and MCP invoke all call. The action lives on the previews core but
+   spans both plugins, which a core cannot do — so the *session* installs the
+   runner on construction, the same hook-not-dependency move as
+   `busyStatusFor`. Returns counts, ranked findings and the `index.json`
+   path; `export`/`report` parameters produce the artifacts above.
+10. Later: `events` channel, arbitrary A/B, and the three below.
 
 ### What is left, in the order it would bite
 
@@ -605,11 +633,14 @@ handles SDK management.
    calls it, so a panel visit is one run.
 2. **A base selector.** §9's `checkout-redesign..master` grammar assumes one;
    today the base is the project's `fw.changes(base:)` or an inference, with no
-   way to override from the screen. It is also what would let somebody
-   photograph the stage on a repository whose base does not build.
-3. **The MCP surface.** An agent can read `index.json`; it cannot ask for one.
-4. **Two live revisions** (§8's *previous · running*), which nothing needs until
+   way to override from the screen (`fw compare --base=` and the action's
+   `base` parameter exist). It is also what would let somebody photograph the
+   stage on a repository whose base does not build.
+3. **Two live revisions** (§8's *previous · running*), which nothing needs until
    a comparison is slow enough to browse the old one during.
+4. **Serving the exported page from `fw`.** The scenario page has
+   `CatalogWebServer` in front of it in the GUI; the comparison page is
+   export-only and says "serve it over HTTP" without offering to.
 
 ### What a comparison of *this* repository still reports, and why
 

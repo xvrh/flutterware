@@ -11,6 +11,7 @@ import '../../ui/theme.dart';
 import '../channels.dart';
 import '../comparison_controller.dart';
 import '../session_environment.dart';
+import '../shot_store_io.dart';
 import 'previews_tab.dart';
 import 'scenarios_tab.dart';
 import 'state_chip.dart';
@@ -464,14 +465,14 @@ class _HalfView extends StatelessWidget {
         return switch (half.kind) {
           ComparisonHalfKind.previews => PreviewsTab(
             half: half,
-            cache: controller.environment.shots,
+            store: CacheShotStore(controller.environment.shots),
             settle: settle,
             selected: selected,
             onSelect: onSelect,
           ),
           ComparisonHalfKind.scenarios => ScenariosTab(
             half: half,
-            cache: controller.environment.shots,
+            store: CacheShotStore(controller.environment.shots),
             settle: settle,
             selected: selected,
             onSelect: onSelect,

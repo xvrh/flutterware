@@ -205,6 +205,15 @@ class TreeDelta {
     this.head,
   });
 
+  static TreeDelta fromJson(Map<String, Object?> json) => TreeDelta(
+    kind:
+        TreeDeltaKind.values.asNameMap()[json['kind']] ?? TreeDeltaKind.changed,
+    path: json['path'] as String? ?? '',
+    property: json['property'] as String?,
+    base: json['base'] as String?,
+    head: json['head'] as String?,
+  );
+
   TreeDelta.added(this.path, String type)
     : kind = TreeDeltaKind.added,
       property = null,

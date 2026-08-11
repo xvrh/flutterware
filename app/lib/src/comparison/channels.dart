@@ -65,6 +65,43 @@ class ComparedItem {
       },
   };
 
+  /// A row read back off `index.json` — what an exported page draws from.
+  ///
+  /// Lossy exactly where [toJson] is: the pixel counts come back as the rounded
+  /// fraction, the mask never travels, and a capped cluster list stays capped.
+  /// Everything a viewer draws survives the round trip; nothing recomputes.
+  static ComparedItem fromJson(Map<String, Object?> json) {
+    var channels = json['channels'] as Map<String, Object?>? ?? const {};
+    var shots = json['shots'] as Map<String, Object?>?;
+    var base = shots?['base'] as String?;
+    var head = shots?['head'] as String?;
+    return ComparedItem(
+      id: json['id'] as String? ?? '',
+      state:
+          ComparedState.values.asNameMap()[json['state']] ??
+          ComparedState.skipped,
+      label: json['label'] as String?,
+      note: json['note'] as String?,
+      shots: base == null || head == null ? null : (base: base, head: head),
+      pixels: switch (channels['pixels']) {
+        Map<String, Object?> pixels => PixelChannel.fromJson(pixels),
+        _ => null,
+      },
+      tree: switch (channels['tree']) {
+        Map<String, Object?> tree => TreeChannel.fromJson(tree),
+        _ => null,
+      },
+      texts: switch (channels['texts']) {
+        Map<String, Object?> texts => TextChannel.fromJson(texts),
+        _ => null,
+      },
+      events: switch (channels['events']) {
+        Map<String, Object?> events => EventChannel.fromJson(events),
+        _ => null,
+      },
+    );
+  }
+
   /// Assembles the verdict from the channels.
   ///
   /// The ladder is severity, not arithmetic. **A head that fails to render
@@ -165,6 +202,30 @@ class PixelChannel {
 
   bool get changed => diff.changed;
 
+  /// The written form back into a [PixelDiff] a stage can draw.
+  ///
+  /// The exact counts are gone — [toJson] keeps a rounded fraction — so they
+  /// are reconstructed from it, which is faithful to the same five decimal
+  /// places every reader of the file sees.
+  static PixelChannel fromJson(Map<String, Object?> json) {
+    var width = json['width'] as int? ?? 0;
+    var height = json['height'] as int? ?? 0;
+    var fraction = (json['changed'] as num?)?.toDouble() ?? 0;
+    return PixelChannel(
+      PixelDiff(
+        width: width,
+        height: height,
+        comparedPixels: width * height,
+        changedPixels: (fraction * width * height).round(),
+        sizeChanged: json['sizeChanged'] as bool? ?? false,
+        clusters: [
+          for (var rect in json['clusters'] as List? ?? const [])
+            DiffRect.fromJson((rect as Map).cast<String, Object?>()),
+        ],
+      ),
+    );
+  }
+
   Map<String, Object?> toJson() => {
     'changed': double.parse(diff.fraction.toStringAsFixed(5)),
     'sizeChanged': diff.sizeChanged,
@@ -182,6 +243,13 @@ class TreeChannel {
   const TreeChannel(this.diff);
 
   final TreeDiff diff;
+
+  static TreeChannel fromJson(Map<String, Object?> json) => TreeChannel(
+    TreeDiff([
+      for (var delta in json['deltas'] as List? ?? const [])
+        TreeDelta.fromJson((delta as Map).cast<String, Object?>()),
+    ]),
+  );
 
   /// A tree that differs *only* below a resized ancestor has not changed —
   /// something above it did, and that something is already reported.
@@ -201,6 +269,11 @@ class TreeChannel {
 /// what fraction of the screen moved.
 class TextChannel {
   const TextChannel({required this.added, required this.removed});
+
+  static TextChannel fromJson(Map<String, Object?> json) => TextChannel(
+    added: (json['added'] as List? ?? const []).cast<String>(),
+    removed: (json['removed'] as List? ?? const []).cast<String>(),
+  );
 
   factory TextChannel.of({
     required List<String> base,
@@ -249,6 +322,11 @@ class TextChannel {
 /// request".
 class EventChannel {
   const EventChannel({required this.added, required this.removed});
+
+  static EventChannel fromJson(Map<String, Object?> json) => EventChannel(
+    added: (json['added'] as List? ?? const []).cast<String>(),
+    removed: (json['removed'] as List? ?? const []).cast<String>(),
+  );
 
   factory EventChannel.of({
     required List<Map<String, Object?>> base,

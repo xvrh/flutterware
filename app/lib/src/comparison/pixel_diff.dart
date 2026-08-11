@@ -195,6 +195,14 @@ class PixelDiff {
 
 /// One region that changed.
 class DiffRect {
+  static DiffRect fromJson(Map<String, Object?> json) => DiffRect(
+    x: json['x'] as int? ?? 0,
+    y: json['y'] as int? ?? 0,
+    width: json['width'] as int? ?? 0,
+    height: json['height'] as int? ?? 0,
+    pixels: json['pixels'] as int? ?? 0,
+  );
+
   const DiffRect({
     required this.x,
     required this.y,

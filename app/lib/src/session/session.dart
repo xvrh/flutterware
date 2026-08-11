@@ -11,6 +11,7 @@ import 'package:flutterware/src/log_client.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../comparison/compare_command.dart';
 import '../constants.dart';
 import '../context.dart';
 import '../plugins/manifest_loader.dart';
@@ -54,7 +55,17 @@ class Session {
     List<PluginCore> cores,
     this._ownsWorkspace,
     this.manifest,
-  ) : _cores = cores;
+  ) : _cores = cores {
+    // The `compare` action spans the previews and scenarios plugins, and a
+    // core cannot see its siblings — so the one thing that holds them both
+    // installs the runner, closing over itself. Same hook-not-dependency
+    // pattern as `busyStatusFor`.
+    var previews = coreById(uiCatalogPluginId);
+    if (previews is PreviewsCore) {
+      previews.compareRunner = (arguments) =>
+          runCompareAction(session: this, arguments: arguments);
+    }
+  }
 
   /// Builds a session over pieces the caller has already resolved.
   ///

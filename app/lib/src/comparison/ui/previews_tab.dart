@@ -7,7 +7,7 @@ import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../channels.dart';
 import '../comparison_controller.dart';
-import '../shot_cache.dart';
+import '../shot_store.dart';
 import 'channel_lines.dart';
 import 'shot_image.dart';
 import 'stage.dart';
@@ -27,14 +27,14 @@ class PreviewsTab extends StatefulWidget {
   const PreviewsTab({
     super.key,
     required this.half,
-    required this.cache,
+    required this.store,
     required this.settle,
     required this.selected,
     required this.onSelect,
   });
 
   final ComparisonHalf half;
-  final ShotCache cache;
+  final ShotStore store;
 
   /// Where the frame decode declares itself, so a capture waits for it.
   final SettleRegistry settle;
@@ -48,7 +48,7 @@ class PreviewsTab extends StatefulWidget {
 }
 
 class _PreviewsTabState extends State<PreviewsTab> {
-  late final _shots = ShotPair(widget.cache);
+  late final _shots = ShotPair(widget.store);
   var _mode = StageMode.sideBySide;
 
   @override
