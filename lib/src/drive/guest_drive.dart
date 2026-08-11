@@ -12,6 +12,7 @@ import '../inspect/guest_inspect.dart';
 import '../inspect/guest_logs.dart';
 import '../scenarios/target.dart';
 import 'drive.dart';
+import 'human_actions.dart';
 import 'live_settle.dart';
 import 'resolve.dart';
 
@@ -24,13 +25,18 @@ import 'resolve.dart';
 /// Calls are serialized on a queue: two drivers interleave as transactions,
 /// never as overlapping gestures.
 class GuestDrive {
-  GuestDrive({Drive? drive, this.inspector}) : drive = drive ?? Drive();
+  GuestDrive({Drive? drive, this.inspector, this.humanActions})
+    : drive = drive ?? Drive();
 
   final Drive drive;
 
   /// Wired when the tree rides the bundle; without it `tree` is absent and
   /// everything else still works.
   final GuestInspector? inspector;
+
+  /// Wired when the human's taps between tool steps should ride the bundle
+  /// as `human` entries; without it the journal stays tool-steps-only.
+  final HumanActions? humanActions;
 
   /// The `navigate` verb's registration point. A routing system — the app's
   /// own, or a package like router_outlet — sets this to jump straight to a
@@ -73,9 +79,15 @@ class GuestDrive {
   Future<Map<String, Object?>> _dispatch(Map<String, String> params) async {
     var settle = _durationOf(params, 'settleMs');
     var before = _beforeAct();
+    // Taken before the verb runs: what is in the buffer now happened on the
+    // way here, which is the step these entries precede in the journal.
+    var human = humanActions?.take();
     DriveStep? step;
     String? refusal;
     TargetFailure? failure;
+    // The verb's own pointer events arrive on the same global route as the
+    // human's; without the suppression every agent tap would journal twice.
+    humanActions?.suppress = true;
     try {
       step = await _verb(params, settle);
     } on TargetError catch (error) {
@@ -84,11 +96,14 @@ class GuestDrive {
       refusal = error.message;
       failure = error.failure;
       await settleLive(budget: settle ?? drive.settleBudget);
+    } finally {
+      humanActions?.suppress = false;
     }
     return {
       if (step != null) 'step': step.toJson(),
       'error': ?refusal,
       if (failure != null) 'failure': failure.name,
+      if (human != null && human.isNotEmpty) 'human': human,
       ...await _observe(params, before),
     };
   }

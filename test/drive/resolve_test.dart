@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/src/drive/resolve.dart';
+import 'package:flutterware/src/scenarios/target.dart';
 
 /// The shared actionability ladder in its live flavor — no `s.` prefix, no
 /// `s.tester` escape hatch, and a [TargetFailure] kind on every refusal so a
@@ -51,6 +52,25 @@ void main() {
 
     expect(error.failure, TargetFailure.multiple);
     expect('$error', contains('2 widgets match "Buy"'));
+  });
+
+  testWidgets('an essay-length text is capped with an ellipsis, and still '
+      'resolves via containing', (tester) async {
+    var essay = 'log line ${'x' * visibleTextCap}';
+    await tester.pumpWidget(
+      MaterialApp(home: ListView(children: [const Text('Buy'), Text(essay)])),
+    );
+
+    var texts = visibleTextsOf(tester);
+
+    expect(texts, contains('Buy'));
+    var capped = texts.singleWhere((t) => t.startsWith('log line'));
+    expect(capped.length, visibleTextCap + 1);
+    expect(capped, endsWith('…'));
+
+    var resolver = TargetResolver(tester);
+    var finder = await resolver.resolve(Target.containing('log line'), 'tap');
+    expect(finder.evaluate(), hasLength(1));
   });
 
   testWidgets('below the fold resolves after the ladder scrolls to it', (

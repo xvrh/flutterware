@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -100,6 +101,27 @@ void main() {
       ),
     );
     expect(shell.address, before);
+  });
+
+  testWidgets('the scope re-registers the handler on hot reload', (
+    tester,
+  ) async {
+    var shell = _controller();
+    await shell.start('/repo');
+    await tester.pumpWidget(DriveNavigatorScope(shell: shell));
+    expect(GuestDrive.navigator, isNotNull);
+
+    // What a stale registration would look like: a reload replaced the code
+    // and nothing re-ran main. Reassembly is the reload's widget-side hook.
+    // Not awaited: reassembleApplication resolves at end-of-frame, which a
+    // test binding only reaches by pumping.
+    GuestDrive.navigator = null;
+    unawaited(tester.binding.reassembleApplication());
+    await tester.pump();
+    expect(GuestDrive.navigator, isNotNull);
+
+    await tester.pumpWidget(const SizedBox());
+    expect(GuestDrive.navigator, isNull);
   });
 
   test('unknown worktree: refused with the names git reports', () async {

@@ -205,6 +205,7 @@ Map<String, dynamic> _$RunActResultToJson(RunActResult instance) =>
       'frames': ?instance.frames,
       'framesEnabled': ?instance.framesEnabled,
       'lifecycle': ?instance.lifecycle,
+      'human': ?instance.human,
       'texts': ?instance.texts,
       'tree': ?instance.tree,
       'nodes': ?instance.nodes,

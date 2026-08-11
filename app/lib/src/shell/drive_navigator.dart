@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutterware/drive.dart' show TargetError, TargetFailure;
 import 'package:flutterware/plugins.dart' show Address;
 import 'package:flutterware/run_guest.dart' show GuestDrive;
@@ -35,4 +36,50 @@ void registerDriveNavigator(ShellController shell) {
       );
     }
   };
+}
+
+/// Keeps [registerDriveNavigator] registered across hot reloads.
+///
+/// A widget mounted by `ShellApp` rather than a call from `main`: `main` runs
+/// once per process, so a handler registered there only ever changes by hot
+/// *restart*. Re-registering in [State.reassemble] makes the handler — and
+/// any edit to it — arrive with every hot reload, the cadence everything else
+/// in the drive loop already moves at.
+class DriveNavigatorScope extends StatefulWidget {
+  const DriveNavigatorScope({super.key, required this.shell, this.child});
+
+  final ShellController shell;
+  final Widget? child;
+
+  @override
+  State<DriveNavigatorScope> createState() => _DriveNavigatorScopeState();
+}
+
+class _DriveNavigatorScopeState extends State<DriveNavigatorScope> {
+  @override
+  void initState() {
+    super.initState();
+    registerDriveNavigator(widget.shell);
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    registerDriveNavigator(widget.shell);
+  }
+
+  @override
+  void didUpdateWidget(DriveNavigatorScope old) {
+    super.didUpdateWidget(old);
+    if (old.shell != widget.shell) registerDriveNavigator(widget.shell);
+  }
+
+  @override
+  void dispose() {
+    GuestDrive.navigator = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child ?? const SizedBox();
 }

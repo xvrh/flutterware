@@ -185,16 +185,28 @@ class TargetResolver {
   }
 }
 
+/// Longest string [visibleTextsOf] reports before truncating with an
+/// ellipsis. Screens that render logs or protocol dumps put whole essays in
+/// single `Text` widgets, and every one of them rides every reply; the cap
+/// bounds the worst screen while leaving ordinary UI copy whole. A truncated
+/// text still resolves as a target via `containing` with any prefix.
+const visibleTextCap = 200;
+
 /// Every `Text` and `EditableText` currently in the tree, in tree order —
 /// the text projection of the screen an agent reads next to the pixels, and
-/// the material of the nothing-matches message.
+/// the material of the nothing-matches message. Strings longer than
+/// [visibleTextCap] are truncated with a trailing `…`.
 List<String> visibleTextsOf(WidgetController controller) => [
   for (var widget in controller.widgetList(
     find.byWidgetPredicate((w) => w is Text || w is EditableText),
   ))
-    switch (widget) {
+    _capped(switch (widget) {
       Text(:var data, :var textSpan) => data ?? textSpan?.toPlainText() ?? '',
       EditableText(:var controller) => controller.text,
       _ => '',
-    },
+    }),
 ];
+
+String _capped(String text) => text.length <= visibleTextCap
+    ? text
+    : '${text.substring(0, visibleTextCap)}…';

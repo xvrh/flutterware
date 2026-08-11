@@ -23,6 +23,7 @@ import 'config_screen.dart';
 import 'device_desk.dart';
 import '../utils/hot_reload.dart';
 import '../utils/value_stream_builder.dart';
+import 'drive_navigator.dart';
 import 'shell_controller.dart';
 import 'shell_search.dart';
 import 'sidebar_row.dart';
@@ -95,7 +96,7 @@ class ShellApp extends StatelessWidget {
                 child: RepaintBoundary(key: captureKey, child: child),
               ),
             ),
-      home: ShellView(shell),
+      home: DriveNavigatorScope(shell: shell, child: ShellView(shell)),
     );
   }
 }

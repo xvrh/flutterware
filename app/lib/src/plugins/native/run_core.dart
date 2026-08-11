@@ -301,10 +301,14 @@ class RunCore extends PluginCore {
   ScriptOutcome? outcomeOf(ScriptSource source) =>
       _scriptOutcomes[_scriptKey(source)];
 
+  /// Machine-global on purpose — see [handles] vs [ownHandles] for where the
+  /// worktree line is drawn.
+  List<RunHandle> _scanHandles() => scanRunHandles(runDirProvider());
+
   @override
   Future<void> computeAll() async {
     _cache = DeviceCache.read(runDirProvider());
-    _handles = scanRunHandles(runDirProvider());
+    _handles = _scanHandles();
     _failures = {
       for (var failure in scanRunFailures(runDirProvider()))
         failure.key: failure,
@@ -398,7 +402,7 @@ class RunCore extends PluginCore {
     _probeTimer = Timer(
       isStarting ? const Duration(seconds: 1) : const Duration(seconds: 5),
       () {
-        _handles = scanRunHandles(runDirProvider());
+        _handles = _scanHandles();
         unawaited(_probeAll().then((_) => _scheduleProbe()));
       },
     );
@@ -909,7 +913,9 @@ class RunCore extends PluginCore {
                   '{"containing": …}, {"within": {"scope": …, "child": …}}, '
                   '{"nth": {"target": …, "index": …}}. Resolved inside the '
                   'app at act time, and refused loudly on zero or several '
-                  'matches — never a silent wrong-target tap.',
+                  'matches — never a silent wrong-target tap. A reply text '
+                  'ending in … was truncated: target it with '
+                  '{"containing": <prefix>}.',
             ),
             const ActionParameter(
               'text',
@@ -1532,7 +1538,7 @@ class RunCore extends PluginCore {
       var timeout = Duration(seconds: _intArgument(arguments['timeout'], 300));
       (handle, log) = await awaitLaunch(handle, timeout);
     }
-    _handles = scanRunHandles(runDirProvider());
+    _handles = _scanHandles();
     await _probeAll();
 
     var probe = probeOf(handle) ?? await probeRunHandle(handle);
@@ -1553,7 +1559,7 @@ class RunCore extends PluginCore {
       // where the reason is, and [logPath] below is what points at it.
       recordFailure(handle, log);
       handle.delete();
-      _handles = scanRunHandles(runDirProvider());
+      _handles = _scanHandles();
     }
     return RunLaunchResult(
       status: status,
@@ -1767,7 +1773,7 @@ class RunCore extends PluginCore {
     String action,
     Map<String, Object?> arguments,
   ) async {
-    _handles = scanRunHandles(runDirProvider());
+    _handles = _scanHandles();
     await _probeAll();
     var handle = _selectApp(
       arguments['device'] as String?,
@@ -1938,7 +1944,7 @@ class RunCore extends PluginCore {
   /// launcher's log, so topping it up is what lets a run started by somebody
   /// else — another `fw`, a GUI that has since closed — be read here.
   Future<RunHandle> _selectRunningApp(Map<String, Object?> arguments) async {
-    _handles = scanRunHandles(runDirProvider());
+    _handles = _scanHandles();
     await _probeAll();
     return _selectApp(
       arguments['device'] as String?,
@@ -2263,6 +2269,7 @@ class RunCore extends PluginCore {
     var logs = (reply['logs'] as List?)?.cast<Map>();
     var guestErrors = (reply['errors'] as List?)?.cast<Map>();
     var framesEnabled = settle?['framesEnabled'] as bool?;
+    var human = (reply['human'] as List?)?.cast<Map>();
 
     String? shotPath;
     String? treePath;
@@ -2291,6 +2298,21 @@ class RunCore extends PluginCore {
           utf8.encode(jsonEncode(texts)),
         )?.absolute.path;
       }
+    }
+
+    // What the human did on the way here, ahead of the step that saw it —
+    // the guest buffers between transactions, so these precede this step in
+    // wall time and must precede it in the story too.
+    for (var action in human ?? const <Map>[]) {
+      appendJournal(
+        handle,
+        JournalEntry(
+          at: action['at'] as String? ?? started.toUtc().toIso8601String(),
+          verb: action['verb'] as String? ?? 'tap',
+          actor: 'human',
+          target: action['target'] as String?,
+        ),
+      );
     }
 
     appendJournal(
@@ -2350,6 +2372,9 @@ class RunCore extends PluginCore {
       frames: settle?['frames'] as int?,
       framesEnabled: framesEnabled,
       lifecycle: reply['lifecycle'] as String?,
+      human: human == null
+          ? null
+          : [for (var action in human) '${action['verb']} ${action['target']}'],
       texts: texts,
       tree: wantsTree ? treeJson : null,
       nodes: treeJson == null ? null : _countNodes(treeJson['root']),
@@ -2401,8 +2426,12 @@ class RunCore extends PluginCore {
   }
 
   RunHandle _selectApp(String? device, String? entrypoint) {
+    // Own runs only, like the rail: the owner's Studio in another worktree
+    // is the same device/entrypoint pair as this one's, and no argument
+    // could tell them apart — while driving a sibling checkout's app is
+    // never what a session means.
     var matches = [
-      for (var handle in _handles)
+      for (var handle in ownHandles)
         if (device == null || handle.device == device)
           if (entrypoint == null ||
               handle.entrypoint == entrypoint ||
@@ -2466,7 +2495,7 @@ class RunCore extends PluginCore {
       _cache = DeviceCache.read(runDirProvider());
     }
 
-    _handles = scanRunHandles(runDirProvider());
+    _handles = _scanHandles();
     await _probeAll();
 
     var devices = this.devices;
@@ -2527,7 +2556,7 @@ class RunCore extends PluginCore {
   }
 
   Future<RunAppsResult> _appsAction() async {
-    _handles = scanRunHandles(runDirProvider());
+    _handles = _scanHandles();
     var swept = await _probeAll();
     return RunAppsResult(
       swept: swept,
