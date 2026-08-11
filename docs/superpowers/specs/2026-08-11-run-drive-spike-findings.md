@@ -91,6 +91,11 @@ may hold a diverging editing state (we never tell it). Harmless on desktop;
 on a phone with the soft keyboard up, unverified. Check when a physical
 device run lands; composition (dead keys, CJK) stays out of scope regardless.
 
+> **Answered the same evening, and it was a bug** — the divergence is real on
+> both mobile platforms: the human's next keystroke replaced the agent's text.
+> Neither mechanism here is the right one; `userUpdateTextEditingValue` is.
+> See `2026-08-11-run-drive-design.md` § Mobile.
+
 ## Q4 — settle: works, and found the load-bearing fact of the spike
 
 The planned answer first: bounded wall-clock settle behaves —
@@ -166,7 +171,9 @@ hardware session.
 
 ## Not answered here
 
-- Real phone (Android/iOS) run — compile check only (above); input + IME
+- Real phone (Android/iOS) run — **since answered on an emulator and a
+  simulator, `2026-08-11-run-drive-design.md` § Mobile.** Compile check only
+  here (above); input + IME
   behavior on device is the remaining spike-shaped item, one afternoon with
   hardware.
 - Profile mode (extensions register there; inspector-free operation is the

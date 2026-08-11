@@ -253,7 +253,11 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         'happen. `settled: false` means the budget ran out with the app '
         'still animating — normal for a spinner, act anyway. Needs an app '
         'launched by flutterware (run.launch); every step lands in the '
-        "run's journal, reviewable in the GUI's Steps tab. For flows "
+        "run's journal, reviewable in the GUI's Steps tab. On a phone, keep "
+        'the app in the foreground: iOS suspends a backgrounded app and it '
+        'answers nothing until somebody brings it back — you get a timeout '
+        'saying exactly that. A hidden desktop window and a backgrounded '
+        'Android app both drive fine. For flows '
         'expressible headlessly, scenarios are milliseconds and '
         'deterministic — reach for this tool when it must be the real '
         'thing: real backend, real data, real device, or the flutterware '
