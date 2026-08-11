@@ -105,6 +105,31 @@ class ComparisonResult {
   };
 }
 
+/// What a comparison already knows before it renders anything.
+class ComparisonPlan {
+  const ComparisonPlan({
+    required this.settled,
+    required this.toRender,
+    required this.keys,
+    required this.total,
+  });
+
+  /// Rows whose verdict needed no picture: added, removed, skipped.
+  final List<ComparedItem> settled;
+
+  /// The entries that have to be rendered to be answered.
+  final List<String> toRender;
+
+  /// Each entry's cache key on both sides.
+  final Map<String, ({String base, String head})> keys;
+
+  /// Every entry either side declares, settled and unsettled together.
+  final int total;
+
+  /// *14 of 213* — what a tab says before it costs anything.
+  String get estimate => '${toRender.length} of $total';
+}
+
 /// Refused before anything is rendered.
 class ComparisonRefused implements Exception {
   ComparisonRefused(this.message);
@@ -157,9 +182,18 @@ class ComparisonRunner {
   /// than wait for the whole run.
   final void Function(ComparedItem item)? onItem;
 
-  Future<ComparisonResult> run() async {
-    var watch = Stopwatch()..start();
-
+  /// Everything that can be decided without rendering anything.
+  ///
+  /// **The whole skip rule, and none of the cost.** Split out of [run] so a tab
+  /// can say *14 of 213* before you click it: the estimate has to arrive before
+  /// the work does, and an estimate that had to render to know would be the
+  /// work. Measured at 142ms on a real branch — one parse of each package and
+  /// a sha1 per file in the touched closures.
+  ///
+  /// Also what makes a screen honest while it fills: every row that is added,
+  /// removed or skipped is already settled here, so the list draws its full
+  /// shape immediately and only the pictures arrive late.
+  Future<ComparisonPlan> plan() async {
     // Before anything: two checkouts on different Flutter versions differ in
     // every pixel for reasons that are not the branch's, and there is no
     // threshold that separates that from a real change.
@@ -180,24 +214,19 @@ class ComparisonRunner {
       ];
     }
 
-    var items = <String, ComparedItem>{};
-    void report(ComparedItem item) {
-      items[item.id] = item;
-      onItem?.call(item);
-    }
-
+    var settled = <ComparedItem>[];
     var common = [
       for (var id in headEntries)
         if (baseEntries.contains(id)) id,
     ];
     for (var id in headEntries) {
       if (!baseEntries.contains(id)) {
-        report(ComparedItem(id: id, state: ComparedState.added));
+        settled.add(ComparedItem(id: id, state: ComparedState.added));
       }
     }
     for (var id in baseEntries) {
       if (!headEntries.contains(id)) {
-        report(ComparedItem(id: id, state: ComparedState.removed));
+        settled.add(ComparedItem(id: id, state: ComparedState.removed));
       }
     }
 
@@ -220,18 +249,46 @@ class ComparisonRunner {
         baseRoot: baseRoot,
         headRoot: headRoot,
       );
-      var key = (
+      keys[id] = (
         base: _keyFor(id, baseGraph, baseRoot, file, sdkKey),
         head: _keyFor(id, headGraph, headRoot, file, sdkKey),
       );
-      keys[id] = key;
 
       if (decision.skip) {
-        report(ComparedItem(id: id, state: ComparedState.skipped));
+        settled.add(ComparedItem(id: id, state: ComparedState.skipped));
         continue;
       }
       toRender.add(id);
     }
+
+    return ComparisonPlan(
+      settled: settled,
+      toRender: toRender,
+      keys: keys,
+      total: settled.length + toRender.length,
+    );
+  }
+
+  /// Renders what [plan] left and diffs it.
+  ///
+  /// Takes a plan when one was already made — the tab that showed the estimate
+  /// made one, and remaking it would hash every closure a second time to reach
+  /// the same answer.
+  Future<ComparisonResult> run({ComparisonPlan? from}) async {
+    var watch = Stopwatch()..start();
+    var plan = from ?? await this.plan();
+
+    var items = <String, ComparedItem>{};
+    void report(ComparedItem item) {
+      items[item.id] = item;
+      onItem?.call(item);
+    }
+
+    for (var item in plan.settled) {
+      report(item);
+    }
+    var toRender = plan.toRender;
+    var keys = plan.keys;
 
     // Only what is not already filed under its key. After the first
     // comparison against a base, that is the head side alone; after an

@@ -424,37 +424,68 @@ an address naming a revision would be pasted into agent output and go stale
 within a minute. A segmented *previous · running* control in the header is where
 something that transient belongs.
 
-## 9. The space
+## 9. Where it lives — corrected (2026-08-11)
 
-Its own space, not a plugin — a comparison spans two plugins, needs a session on
-both sides, and has no home in the plugin slot. Following the address brief's
-grammar (plural noun; the collection is the space with nothing selected):
+**Not its own space. Three tabs on the worktree's changes panel**, alongside the
+file diff:
 
 ```
-fw:///comparisons                                  every comparison
-fw:///comparisons/<id>                             one comparison, overview
-fw:///comparisons/<id>/previews/<entry>
-fw:///comparisons/<id>/scenarios/<file>/<scenario>/<branch…>/<step>
+[ files ][ previews · 14 of 213 ][ scenarios · 5 ]
 ```
 
-`<id>` is pasteable rather than a counter: `checkout-redesign` is that worktree
-against its merge-base, `checkout-redesign..master` names the base explicitly,
-and `agent-a..agent-b` is the deferred two-worktree case falling out of the same
-grammar for free.
+This reverses §13.8, and the reversal is worth writing down because the original
+was argued from the wrong thing. "A comparison spans two plugins and needs a
+session on both sides" is a fact about the *runner* — and `fw compare` already
+disproves it, running with no session on the base at all, materialising a
+checkout and driving its own. What a comparison spans is not what a screen
+belongs to. The case that matters is *this work against its base*, which is a
+fact about one worktree.
+
+**Files, previews and scenarios are three renderings of one delta** — same base,
+same scope, same question. The argument for putting them together is not
+tidiness: **files is free and instant while the other two cost seconds.** Behind
+tabs on the panel you already open to read a diff, the expensive halves get
+discovered. In their own space they have to be remembered, and a feature that
+has to be remembered is used twice.
+
+The address falls out of the existing grammar for free, since a plugin owns
+everything after its own segment:
+
+```
+fw:///worktrees/<name>/<changes>/previews/demo/card.dart#card
+fw:///worktrees/<name>/<changes>/scenarios/test/shop.dart#Checkout/signed in/3
+```
+
+`fw:///comparisons/…` is **not** spent. It is where the deferred `agent-a..agent-b`
+case goes — the one that genuinely has no worktree to live in — so the space
+slot stays reserved for the case that needs it.
+
+**A tab exists only if its plugin is declared.** A previews tab that always says
+"no previews here" should not be there; the explorer already drops a column
+every worktree leaves empty.
 
 ### The screens
 
-**Entering the space runs it.** No Run button: the skip rule usually makes a
-comparison seconds, and a tool that asks permission to do the only thing it does
-is a tool nobody opens. The header carries what it is about to cost — *14 of 213
-entries touched* — so the estimate arrives before the work does, and a run
-already in flight is joined rather than restarted.
+**Entering a tab runs that tab**, which narrows §13.11 rather than reversing it.
+No Run button — the skip rule usually makes a comparison seconds, and a tool
+that asks permission to do the only thing it does is a tool nobody opens. But
+*per tab*: opening the panel must not spawn two compilers and a `flutter_tester`
+for a half you did not want. Files runs nothing. The tab carries its own
+estimate, so the cost arrives before the work does, and a run already in flight
+is joined rather than restarted.
 
-**Overview.** A header naming both sides, the scope, and the elapsed time; four
-counts (changed · added · removed · skipped); one list, grouped previews then
-scenarios. Sorted by **severity**, not by name — head-broke, then scenario
-failed, then branch removed, then percent changed. The top row should be the
-thing most likely to be a mistake.
+**The header** names both sides, the scope and the elapsed time, and carries the
+counts (broke · changed · added · removed · skipped). Lists are sorted by
+**severity**, not by name — head-broke, then scenario failed, then branch
+removed, then percent changed. The top row should be the thing most likely to be
+a mistake.
+
+**Getting there from the live panels.** Previews and scenarios each offer
+*compare against base* on the entry you are looking at, and a comparison row
+offers *open live* back. A **jump, not a toggle**: the previews panel is live —
+a running guest with knobs and axes you can turn — and a comparison is two
+frozen shots. `ShellController.goToWorktree` is the same move already argued for
+("the same place, in another checkout").
 
 **A preview.** The two frames in one stage with five modes — *side by side ·
 slider · onion · blink · pixels*. Under it, the tree channel as prose:
@@ -553,10 +584,13 @@ handles SDK management.
 5. Previews pin the clock, always.
 6. Replay a whole scenario; no per-branch replay.
 7. Merged tree is the primary scenario view; side-by-side is a drill-down.
-8. Its own space, not a plugin.
+8. ~~Its own space, not a plugin.~~ **Reversed 2026-08-11** — three tabs on the
+   worktree's changes panel. `fw:///comparisons` is kept for the deferred
+   two-worktree case. See §9.
 9. Latest revision is enough, plus the running one while it runs.
 10. SDK mismatch hard-fails until `fw` owns the SDK.
-11. Entering the space runs the comparison; there is no Run button.
+11. Entering a **tab** runs that half; there is no Run button. Narrowed
+    2026-08-11 from "entering the space" — see §9.
 12. Scenario axes are the profile's first of each — never the last manual run's.
 13. A renamed preview entry reads as removed + added. No rename pairing.
 14. The static viewer ships in v1 and stays a dumb reader of `index.json`.

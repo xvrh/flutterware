@@ -70,6 +70,92 @@ void main() {
   ComparedItem itemFor(ComparisonResult result, String id) =>
       result.items.firstWhere((item) => item.id == id);
 
+  // What a tab says before you click it. An estimate that had to render to
+  // know would be the work rather than an estimate of it.
+  group('the plan costs only hashing', () {
+    ComparisonRunner runnerFor({required String base, required String head}) =>
+        ComparisonRunner(
+          headRoot: head,
+          baseRoot: base,
+          baseSha: 'abc123',
+          side: side,
+          cache: cache,
+        );
+
+    test('it counts what has to be rendered, and renders nothing', () async {
+      side.declared['*'] = ['demo/card.dart#card', 'demo/list.dart#list'];
+
+      var plan = await runnerFor(
+        base: checkout('base', {
+          'demo/card.dart': '1',
+          'demo/list.dart': 'same',
+        }),
+        head: checkout('head', {
+          'demo/card.dart': '2',
+          'demo/list.dart': 'same',
+        }),
+      ).plan();
+
+      expect(plan.estimate, '1 of 2');
+      expect(plan.toRender, ['demo/card.dart#card']);
+      expect(side.renderedFor, isEmpty);
+    });
+
+    // Every row that needs no picture is answered here, which is what lets a
+    // list draw its full shape while the pictures are still arriving.
+    test('added, removed and skipped are settled before any render', () async {
+      side.declared[p.join(root.path, 'base')] = ['demo/gone.dart#gone'];
+      side.declared[p.join(root.path, 'head')] = ['demo/new.dart#fresh'];
+
+      var plan = await runnerFor(
+        base: checkout('base', {'demo/gone.dart': '1'}),
+        head: checkout('head', {'demo/new.dart': '1'}),
+      ).plan();
+
+      expect(plan.toRender, isEmpty);
+      expect(plan.settled.map((i) => '${i.id}:${i.state.name}'), [
+        'demo/new.dart#fresh:added',
+        'demo/gone.dart#gone:removed',
+      ]);
+    });
+
+    test('a plan already made is not made again', () async {
+      side.declared['*'] = ['demo/card.dart#card'];
+      var runner = runnerFor(
+        base: checkout('base', {'demo/card.dart': '1'}),
+        head: checkout('head', {'demo/card.dart': '2'}),
+      );
+
+      var plan = await runner.plan();
+      var result = await runner.run(from: plan);
+
+      expect(result.rendered, 2);
+      expect(itemFor(result, 'demo/card.dart#card').state, isNot(isNull));
+    });
+
+    // The estimate is the first thing a tab asks for, so it is the first place
+    // an SDK mismatch can be caught — before a base checkout is even built.
+    test('a mismatched SDK refuses at plan time', () async {
+      side.declared['*'] = ['demo/card.dart#card'];
+      var base = checkout('base', {'demo/card.dart': '1'});
+      var head = checkout('head', {'demo/card.dart': '2'});
+      var other = Directory(p.join(root.path, 'other-sdk', 'bin'))
+        ..createSync(recursive: true);
+      Directory(p.join(other.path, 'cache')).createSync();
+      File(
+        p.join(other.path, 'cache', 'flutter.version.json'),
+      ).writeAsStringSync(jsonEncode({'frameworkVersion': '3.40.0'}));
+      Link(
+        p.join(head, '.fvm', 'flutter_sdk'),
+      ).updateSync(p.dirname(other.path));
+
+      await expectLater(
+        runnerFor(base: base, head: head).plan(),
+        throwsA(isA<ComparisonRefused>()),
+      );
+    });
+  });
+
   group('the skip rule decides before anything renders', () {
     test('a branch that changed nothing renders nothing', () async {
       var files = {'demo/card.dart': 'const card = 1;'};

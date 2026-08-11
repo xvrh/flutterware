@@ -10,14 +10,12 @@ import '../changes/changes_text.dart';
 import '../comparison/artifact.dart';
 import '../comparison/base_checkout.dart';
 import '../comparison/base_ref.dart';
-import '../comparison/import_graph.dart';
 import '../comparison/channels.dart';
 import '../comparison/previews_side.dart';
 import '../comparison/runner.dart';
-import '../comparison/scenario_comparison.dart';
+import '../comparison/scenarios_runner.dart';
 import '../comparison/scenarios_side.dart';
 import '../comparison/shot_cache.dart';
-import '../comparison/skip.dart';
 import '../comparison/tree_diff.dart';
 import '../constants.dart';
 import '../plugins/native/previews_core.dart';
@@ -592,14 +590,21 @@ class FwCli {
       ),
       directory: core.scanRootFor(package),
     );
-    var head = side.runnerFor(top);
-    var base = side.runnerFor(baseRoot);
+    var source = LiveScenarioSource(
+      side: side,
+      headRoot: top,
+      baseRoot: baseRoot,
+    );
     try {
-      List<String> headIds;
-      List<String> baseIds;
+      ScenarioResults results;
       try {
-        headIds = await side.scenarios(head);
-        baseIds = await side.scenarios(base);
+        results = await ScenariosRunner(
+          headRoot: top,
+          baseRoot: baseRoot,
+          source: source,
+          cache: ShotCache(p.join(flutterwareDir(), 'shots')),
+          only: only.isEmpty ? null : only,
+        ).run(outDir: p.join(flutterwareDir(), 'comparisons', 'scenarios'));
       } on Object catch (error) {
         // A side whose harness will not build is a side, not a crash — the
         // same rule the previews half follows, and the same skew causes it.
@@ -616,81 +621,10 @@ class FwCli {
           note: note,
         );
       }
-      if (only.isNotEmpty) {
-        headIds = [
-          for (var id in headIds)
-            if (only.contains(id)) id,
-        ];
-        baseIds = [
-          for (var id in baseIds)
-            if (only.contains(id)) id,
-        ];
-      }
-
-      var memo = ShotCache(p.join(flutterwareDir(), 'shots')).memo;
-      var graph = ImportGraph.read(
-        root: top,
-        packageConfig: p.join(top, '.dart_tool', 'package_config.json'),
-      );
-      var ran = 0;
-      var skipped = 0;
-      var compared = <ScenarioComparison>[];
-      var outDir = p.join(flutterwareDir(), 'comparisons', 'scenarios');
-
-      for (var id in headIds) {
-        if (!baseIds.contains(id)) {
-          compared.add(
-            ScenarioComparison.notRun(scenario: id, state: ComparedState.added),
-          );
-          continue;
-        }
-        memo.remember(id, graph.closureOf(side.fileOf(id)));
-        if (SkipDecision.of(
-          entryId: id,
-          memo: memo,
-          baseRoot: baseRoot,
-          headRoot: top,
-        ).skip) {
-          skipped++;
-          compared.add(
-            ScenarioComparison.notRun(
-              scenario: id,
-              state: ComparedState.skipped,
-            ),
-          );
-          continue;
-        }
-        ran++;
-        compared.add(
-          ScenarioComparison.of(
-            scenario: id,
-            base: await side.run(base, id, outDir: p.join(outDir, 'base')),
-            head: await side.run(head, id, outDir: p.join(outDir, 'head')),
-          ),
-        );
-      }
-      for (var id in baseIds) {
-        if (!headIds.contains(id)) {
-          compared.add(
-            ScenarioComparison.notRun(
-              scenario: id,
-              state: ComparedState.removed,
-            ),
-          );
-        }
-      }
-
-      var results = ScenarioResults.of(
-        items: compared,
-        ran: ran,
-        skipped: skipped,
-        elapsed: watch.elapsed,
-      );
       if (!json) _printScenarios(results);
       return results;
     } finally {
-      await head.dispose();
-      await base.dispose();
+      await source.dispose();
     }
   }
 
