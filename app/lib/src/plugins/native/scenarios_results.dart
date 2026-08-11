@@ -256,6 +256,12 @@ class ScenarioRunStep {
     this.eventChannels,
     this.eventTitles,
     this.eventsDropped,
+    this.frames,
+    this.frameCount,
+    this.frameWidth,
+    this.frameHeight,
+    this.frameIntervalMs,
+    this.framesDropped,
     this.settled = true,
     this.strayFrames = 0,
     this.failure,
@@ -380,6 +386,50 @@ class ScenarioRunStep {
   /// Whether anything happened on the way to this step.
   @JsonKey(includeToJson: false)
   bool get hasEvents => (eventCount ?? 0) > 0;
+
+  /// The directory of numbered frames recorded on the way to this step —
+  /// what the transition *looked like*, where the events say what it did.
+  /// Relative like [image]; null on every run that did not record, which is
+  /// every CLI run and every run older than the capture.
+  ///
+  /// The frames are in [format], at [frameWidth]×[frameHeight] — their own
+  /// size, not the step's: a recording runs at half scale and the shot beside
+  /// it does not.
+  final String? frames;
+  final int? frameCount;
+  final int? frameWidth;
+  final int? frameHeight;
+
+  /// Fake milliseconds between two frames — the speed a player runs at to
+  /// show the animation as the app would have played it.
+  final int? frameIntervalMs;
+
+  /// Frames refused by the recorder's cap: the transition went on longer than
+  /// the recording does, and the last frame is not where the app stopped.
+  final int? framesDropped;
+
+  /// Whether there is motion here to play. Two frames is the floor — one is
+  /// the still the transition started from.
+  @JsonKey(includeToJson: false)
+  bool get hasMotion => frames != null && (frameCount ?? 0) > 1;
+
+  /// The recorded frames in order, as files on disk.
+  ///
+  /// Built from the count rather than listed: the harness numbers them from
+  /// zero and a directory listing would sort `10` before `2` unless it were
+  /// re-sorted anyway.
+  @JsonKey(includeToJson: false)
+  List<File> get frameFiles => [
+    if (frames case var directory?)
+      for (var index = 0; index < (frameCount ?? 0); index++)
+        File(
+          p.join(
+            root,
+            directory,
+            '${index.toString().padLeft(4, '0')}.$format',
+          ),
+        ),
+  ];
 
   /// The events a reader will actually be shown — everything but `system`.
   ///

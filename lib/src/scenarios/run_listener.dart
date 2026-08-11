@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'events.dart';
+import 'motion.dart';
 
 /// One captured step, handed from [ScenarioTester]'s capture to whoever is
 /// listening — the harness, when a scenario runs under the flutterware
@@ -23,6 +24,8 @@ class ScenarioStepCapture {
     this.target,
     this.events = const [],
     this.eventsDropped = 0,
+    this.motion = ScenarioMotionFrames.empty,
+    this.motionInterval,
     this.settled = true,
     this.strayFrames = 0,
     this.failure,
@@ -71,6 +74,18 @@ class ScenarioStepCapture {
   /// Events dropped to stay inside the per-step or per-run cap. Reported
   /// rather than swallowed — silence would read as "the app did nothing".
   final int eventsDropped;
+
+  /// What the transition *looked like* on the way here — every frame between
+  /// the previous step and this one, when the run was recording. Empty
+  /// otherwise, which is every run that did not ask.
+  ///
+  /// The same lifetime as [events], and for the same reason: both describe
+  /// the edge into this step rather than the step itself.
+  final ScenarioMotionFrames motion;
+
+  /// The fake time between two of [motion]'s frames — what a player runs at
+  /// to show the animation at its real speed. Null when nothing recorded.
+  final Duration? motionInterval;
 
   /// The app's declared `SystemUiOverlayStyle` icon brightness at capture
   /// time (`light`/`dark`), or null when it never declared one. What the

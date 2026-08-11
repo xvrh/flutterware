@@ -773,6 +773,12 @@ packages: List<ScenarioRunPackage>
       eventChannels: Map<String, int>?
       eventTitles: List<String>?   # The one-line summaries, capped, `system` excluded — what a reader gets without opening [events].
       eventsDropped: int?   # Events dropped to stay inside the per-step or per-run cap.
+      frames: String?   # The directory of numbered frames recorded on the way to this step — what the transition *looked like*, where the events say what it did.
+      frameCount: int?
+      frameWidth: int?
+      frameHeight: int?
+      frameIntervalMs: int?   # Fake milliseconds between two frames — the speed a player runs at to show the animation as the app would have played it.
+      framesDropped: int?   # Frames refused by the recorder's cap: the transition went on longer than the recording does, and the last frame is not where the app stopped.
       address: String   # The step's `fw://` address.
       statusBrightness: String?   # The `SystemUiOverlayStyle` icon brightness the app had declared at capture time (`light`/`dark`), if any — what the fake status bar and home indicator tint themselves with.
       navBrightness: String?

@@ -255,6 +255,39 @@ class ScenariosCore extends PluginCore {
 
   bool get anyPanelRunning => _panelRuns.values.any((run) => run.running);
 
+  /// Whether panel runs record the motion of every transition.
+  ///
+  /// On, because a recording you have to ask for is a recording nobody
+  /// discovers: the whole feature is hovering an arrow and watching what
+  /// happened. It costs the panel about 70ms a transition — measured, at the
+  /// 30fps half-scale settings below — and the switch is here for the run
+  /// where that is 70ms too many.
+  ///
+  /// Panel-only, deliberately. `fw run scenarios` and the MCP surface never
+  /// record: nothing on the other end of those can watch a movie, and the
+  /// frames would be artifacts nobody opens.
+  var recordMotion = true;
+
+  void setRecordMotion(bool value) {
+    if (recordMotion == value) return;
+    recordMotion = value;
+    notifyChanged();
+  }
+
+  /// 30fps, at the same scale as the step's own screenshot.
+  ///
+  /// 30fps is the measured knee — a transition costs ~35ms of pumping here
+  /// against ~150ms at 60fps, and no eye reading a page push on a flow canvas
+  /// can tell the two apart. The *scale* is not a knob for the same reason:
+  /// half scale was tried, and playback that blurs and then snaps sharp when
+  /// it stops is worse than the work it saves. What that costs is memory —
+  /// 1.29MB a frame decoded, on a phone — and that is bounded by
+  /// `ScenarioMotionResidency` rather than by recording something smaller.
+  ///
+  /// See `docs/superpowers/specs/2026-08-11-scenario-motion-capture-findings.md`.
+  static const panelMotionInterval = Duration(milliseconds: 33);
+  static const panelMotionMaxFrames = 90;
+
   /// Starts one scenario's run for the panel. A no-op while that scenario is
   /// already running; a completed run may be started again.
   ///
@@ -333,6 +366,8 @@ class ScenariosCore extends PluginCore {
         unspecifiedDevice: defaultScenarioDeviceId,
         captureScale: captureScaleFor(package),
         captureRaw: true,
+        recordInterval: recordMotion ? panelMotionInterval : null,
+        recordMaxFrames: panelMotionMaxFrames,
       );
       var described = _describeRun(package, outDir, report, axes: axes);
       var outcome = described.scenarios
@@ -1566,6 +1601,15 @@ class ScenariosCore extends PluginCore {
           (step['eventChannels'] as Map?)?.cast<String, int>() ?? const {},
       eventTitles: (step['eventTitles'] as List?)?.cast<String>() ?? const [],
       eventsDropped: step['eventsDropped'] as int? ?? 0,
+      frames: switch (step['frames']) {
+        String path => _relative(path),
+        _ => null,
+      },
+      frameCount: step['frameCount'] as int?,
+      frameWidth: step['frameWidth'] as int?,
+      frameHeight: step['frameHeight'] as int?,
+      frameIntervalMs: step['frameIntervalMs'] as int?,
+      framesDropped: step['framesDropped'] as int?,
       // Absent means settled: the harness writes the field only when it is
       // not, so a healthy step's record stays the size it was.
       settled: step['settled'] as bool? ?? true,

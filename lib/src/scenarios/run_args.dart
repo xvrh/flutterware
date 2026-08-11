@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../devices.dart';
+import 'motion.dart';
 import 'profile.dart';
 
 /// One run's axis assignment — device geometry, locale, text scale,
@@ -21,6 +22,7 @@ class ScenarioRunArgs {
     this.captureScale,
     this.captureRaw = false,
     this.captureNative = false,
+    this.record,
     this.clockOrigin,
   });
 
@@ -67,6 +69,7 @@ class ScenarioRunArgs {
     captureScale: captureScale,
     captureRaw: captureRaw,
     captureNative: captureNative,
+    record: record,
     clockOrigin: clockOrigin,
   );
 
@@ -135,8 +138,13 @@ class ScenarioRunArgs {
 
   /// Capture raw rgba8888 instead of PNG. PNG *encoding* is ~80% of a 1×
   /// capture's cost (and ~96% at 3×); a host that can display raw pixels —
-  /// the GUI can — skips it entirely.
+  /// the GUI can — skips it entirely. Recorded motion follows this too.
   final bool captureRaw;
+
+  /// Record every transition's frames, or null to capture only the frame each
+  /// step ended on — which is what a bare `flutter test` and every CLI run
+  /// do, and what costs nothing.
+  final MotionRecording? record;
 }
 
 /// The accessibility features a run can turn on — the platform switches a
@@ -155,6 +163,18 @@ class ScenarioRunAccessibility {
 
   bool get isDefault => !boldText && !highContrast && !invertColors;
 }
+
+/// Output pixels per logical pixel for a capture under [args], on a view whose
+/// ratio is [devicePixelRatio].
+///
+/// One definition, because two things ask: the step's own screenshot, and the
+/// frames of the transition into it — and a recording that resolved this
+/// differently would land on a last frame that did not match the shot it is
+/// supposed to become.
+double scenarioCaptureScale(ScenarioRunArgs? args, double devicePixelRatio) =>
+    (args?.captureNative ?? false)
+    ? devicePixelRatio
+    : (args?.captureScale ?? 1.0);
 
 /// Set by the flutterware harness for the duration of one run request; null
 /// under a bare `flutter test`, where every scenario runs at the test

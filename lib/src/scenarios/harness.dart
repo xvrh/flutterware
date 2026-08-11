@@ -19,6 +19,7 @@ import 'package:test_api/src/backend/test.dart';
 
 import '../inspect/guest_inspect.dart';
 import 'events.dart';
+import 'motion.dart';
 import 'profile.dart';
 import 'run_args.dart';
 import 'scenario.dart';
@@ -452,6 +453,14 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
     captureScale: number('captureScale'),
     captureRaw: args['captureRaw'] == 'true',
     captureNative: args['captureNative'] == 'true',
+    record: switch (number('recordIntervalMs')) {
+      null => null,
+      var interval => MotionRecording(
+        interval: Duration(microseconds: (interval * 1000).round()),
+        scale: number('recordScale'),
+        maxFrames: number('recordMaxFrames')?.round() ?? 90,
+      ),
+    },
     clockOrigin: switch (args['clock']) {
       null => null,
       var raw => DateTime.parse(raw),
@@ -469,6 +478,7 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       runArgs.captureScale == null &&
       !runArgs.captureRaw &&
       !runArgs.captureNative &&
+      runArgs.record == null &&
       runArgs.clockOrigin == null;
   return untouched ? null : runArgs;
 }
@@ -743,6 +753,22 @@ Future<Map<String, Object?>> _runOne(
         ),
       );
     }
+    // And the sixth: what the transition *looked like*. A directory of
+    // numbered frames rather than one blob, so a player can decode the frame
+    // it is on and no other, and so the panel's ordinary image plumbing —
+    // which already reads a step's pixels off disk — reads these unchanged.
+    String? framesDir;
+    if (capture.motion.hasMotion) {
+      var directory = Directory('$base.frames')..createSync(recursive: true);
+      var extension = capture.format == 'raw' ? 'raw' : 'png';
+      for (var (index, frame) in capture.motion.bytes.indexed) {
+        File(
+          '${directory.path}/'
+          '${index.toString().padLeft(4, '0')}.$extension',
+        ).writeAsBytesSync(frame);
+      }
+      framesDir = directory.path;
+    }
     var counts = <String, int>{};
     for (var event in capture.events) {
       counts[event.channel] = (counts[event.channel] ?? 0) + 1;
@@ -781,6 +807,16 @@ Future<Map<String, Object?>> _runOne(
         ].take(_maxInlineTitles).toList(),
       },
       if (capture.eventsDropped > 0) 'eventsDropped': capture.eventsDropped,
+      if (framesDir != null) ...{
+        'frames': framesDir,
+        'frameCount': capture.motion.bytes.length,
+        'frameWidth': capture.motion.width,
+        'frameHeight': capture.motion.height,
+        // The fake milliseconds between two frames — what a player runs at to
+        // show the animation at the speed the app would have played it.
+        'frameIntervalMs': capture.motionInterval!.inMilliseconds,
+        if (capture.motion.dropped > 0) 'framesDropped': capture.motion.dropped,
+      },
       // Both omitted in the healthy case, so a normal step's record stays the
       // size it was.
       if (!capture.settled) 'settled': false,
