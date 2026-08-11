@@ -211,6 +211,18 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   void _restoreAnchor(({String key, double delta}) anchor) {
     if (!mounted || !_scroll.hasClients) return;
+    // **Never while the list is moving under a hand.** The correction is a
+    // `jumpTo`, and `jumpTo` ends the current scroll activity — measured: a
+    // fling that was mid-flight at 549 px stops dead and stays there. On a
+    // checkout an agent is writing in, that is a flick killed every two
+    // seconds, which is far worse than the drift this exists to fix. While you
+    // are scrolling you are not reading a fixed line anyway.
+    //
+    // `correctBy` was tried instead, since it is the mechanism built for
+    // adjusting an offset without disturbing the activity. It keeps the fling
+    // alive and does not move anything: it is a layout-time correction, and
+    // from a post-frame callback there is no layout left for it to correct.
+    if (_scroll.position.isScrollingNotifier.value) return;
     var index = _rows.indexWhere((row) => row.anchorKey == anchor.key);
     // The row is gone — the file it belonged to was committed away, or its
     // hunks moved. Nothing to hold on to, and pretending otherwise would put

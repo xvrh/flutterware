@@ -969,6 +969,16 @@ Testing, in the order the parts are likely to break:
    >   offset into it**, and restored after the new rows are laid out. Its
    >   bound is stated rather than hidden: only rows the sliver laid out can be
    >   measured, which is a screenful of insertions and then some.
+   > - **And the correction must never take the list away from a hand.** The
+   >   fix for one problem was immediately a worse one: `jumpTo` ends the
+   >   current scroll activity, so a flick stopped dead the next time the
+   >   watcher fired — measured mid-flight at 549 px, frozen there, on a
+   >   checkout an agent writes in every two seconds. `correctBy` is the
+   >   mechanism built for adjusting an offset without disturbing the activity,
+   >   and it keeps the fling *and* moves nothing: it is a layout-time
+   >   correction with no layout left to correct from a post-frame callback.
+   >   So the correction is skipped while the list is scrolling. You are not
+   >   reading a fixed line while you fling.
    > - **The liveness has to be visible.** A screen that updates by itself and
    >   never says so is indistinguishable from one that has stopped — and a
    >   watch *can* fail. `Watching` / `Not watching`, with the last read's
@@ -1096,7 +1106,9 @@ detection**; **blast radius**.
   decoded text and costs the screen no rebuild at all.
 - **Scroll position is remembered as a row and an offset into it**, not as
   pixels, and restored after a re-index. Keying the rows was tried first and
-  does not do this — it preserves elements, not the viewport.
+  does not do this — it preserves elements, not the viewport. **Never while the
+  list is scrolling**: the correction is a `jumpTo`, and a `jumpTo` mid-fling
+  stops the fling.
 - **A watch that is not established is said out loud.** The screen otherwise
   looks live and has stopped being true, which is worse than a screen that
   never claimed to be.

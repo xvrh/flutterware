@@ -132,6 +132,50 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a re-probe mid-fling does not stop the fling', (tester) async {
+    // **The correction must never take the list away from a hand.** `jumpTo`
+    // ends the current scroll activity, so a flick was stopping dead the next
+    // time the watcher fired — measured at 549 px, frozen there. On a checkout
+    // an agent is writing in that is every two seconds, which is a far worse
+    // screen than the drift the anchor exists to remove.
+    var forty = [
+      for (var i = 0; i < 40; i++) file('lib/g$i.dart', added: 200 - i),
+    ];
+    current = setOf(forty);
+    await pump(tester);
+
+    var list = find.byKey(changesListKey);
+    var position = tester
+        .state<ScrollableState>(
+          find.descendant(of: list, matching: find.byType(Scrollable)),
+        )
+        .position;
+
+    await tester.fling(list, const Offset(0, -400), 3000);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    var midFlight = position.pixels;
+    expect(position.activity, isA<BallisticScrollActivity>());
+
+    // The watcher fires, with a file inserted above everything on screen.
+    current = setOf([file('lib/BIG.dart', added: 9999), ...forty]);
+    await tester.tap(
+      find.byTooltip('Read this checkout again'),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(position.activity, isA<BallisticScrollActivity>());
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(
+      position.pixels,
+      greaterThan(midFlight),
+      reason: 'the fling carried on past where the re-probe found it',
+    );
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('an expanded file stays expanded, and keeps its lines', (
     tester,
   ) async {
