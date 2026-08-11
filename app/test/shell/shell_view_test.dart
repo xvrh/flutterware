@@ -16,8 +16,13 @@ import 'package:flutterware_app/src/changes/patch_index.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/plugins/native_plugin.dart';
+import 'package:flutterware_app/src/plugins/native/run_core.dart'
+    show runPluginId;
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/plugins/registry.dart';
+import 'package:flutterware_app/src/run/handle.dart';
+import 'package:flutterware_app/src/run/inventory.dart';
+import 'package:flutterware_app/src/shell/device_desk.dart';
 import 'package:flutterware_app/src/shell/shell_controller.dart';
 import 'package:flutterware_app/src/shell/shell_search.dart';
 import 'package:flutterware_app/src/shell/shell_view.dart';
@@ -25,7 +30,9 @@ import 'package:flutterware_app/src/ui/command_palette.dart';
 import 'package:flutterware_app/src/shell/worktree_discovery.dart';
 import 'package:flutterware_app/src/shell/config_load.dart';
 import 'package:flutterware_app/src/shell/config_screen.dart';
+import 'package:flutterware_app/src/utils/daemon/device.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+import 'package:flutterware_app/src/utils/run_dir.dart';
 
 const _listing =
     'worktree /repo\nbranch refs/heads/main\n\n'
@@ -229,6 +236,46 @@ void main() {
     expect(find.text('Tests'), findsOneWidget);
     expect(find.text('170 direct'), findsOneWidget);
     expect(find.text('3 failing'), findsOneWidget);
+  });
+
+  testWidgets('the desk lists devices and jumps to the holding worktree', (
+    tester,
+  ) async {
+    var runDir = Directory.systemTemp.createTempSync('fw-desk-');
+    DeskButton.runDirProvider = () => runDir.path;
+    addTearDown(() {
+      DeskButton.runDirProvider = flutterwareRunDir;
+      runDir.deleteSync(recursive: true);
+    });
+    DeviceCache.write(runDir.path, const [
+      DaemonDevice(id: 'phone', name: 'Xavier iPhone'),
+    ]);
+    // A run announced by a checkout this window has never opened: the desk is
+    // the one surface that still shows it, and its row is the way there.
+    RunHandle(
+      worktree: '/repo-explorer',
+      worktreeName: 'feature-explorer',
+      device: 'phone',
+      entrypoint: 'lib/main.dart',
+      entrypointName: 'App',
+      launcherPid: 1,
+      startedAt: DateTime.now(),
+    ).publish(runDir.path);
+
+    var shell = await _pumpShell(tester);
+    await tester.tap(find.byType(DeskButton));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Xavier iPhone'), findsOneWidget);
+    expect(find.text('App · feature-explorer'), findsOneWidget);
+
+    // The jump lands on the run's own page in the worktree that can drive
+    // it — opening that worktree, since it was closed.
+    await tester.tap(find.text('App · feature-explorer'));
+    await tester.pumpAndSettle();
+
+    expect(shell.selected?.path, '/repo-explorer');
+    expect(shell.address.plugin, runPluginId);
   });
 
   testWidgets('mounts the selected plugin panel and switches', (tester) async {

@@ -170,6 +170,103 @@ void main() {
       expect(core.isLive, isFalse);
       expect(core.report.status.message, contains('just now'));
     });
+
+    test("the rail lists this worktree's runs, not the machine's", () async {
+      // The ledger stays every worktree's — that is what makes "who holds the
+      // phone" answerable — but the rail's rows are subjects you can drive,
+      // and another checkout's app is not one of yours. It reaches you through
+      // the desk's worktree-jump instead.
+      var mine = _writeHandle(
+        runDir,
+        worktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        launcherPid: pid,
+      );
+      _writeHandle(
+        runDir,
+        otherWorktree,
+        device: 'sim',
+        entrypoint: 'lib/main.dart',
+        worktreeName: 'feature-x',
+        launcherPid: pid,
+      );
+
+      await core.computeAll();
+
+      expect(core.handles, hasLength(2));
+      expect(core.ownHandles.single.key, mine.key);
+      expect([for (var c in core.report.children) c.id], [mine.key]);
+      // The badge counts the rows, so it cannot claim runs the rail will not
+      // show.
+      expect(core.report.badge.count, 1);
+      // And the device occupancy still sees both.
+      DeviceCache.write(runDir.path, [
+        const DaemonDevice(id: 'phone'),
+        const DaemonDevice(id: 'sim'),
+      ]);
+      await core.computeAll();
+      expect(core.report.status.message, contains('2 busy'));
+    });
+
+    test("another worktree's cold build does not hold this window", () async {
+      // `isStarting` gates `busyWith`, and a capture of this worktree must
+      // not wait out another checkout's ninety-second Android build.
+      _writeHandle(
+        runDir,
+        otherWorktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        launcherPid: pid,
+      );
+
+      await core.computeAll();
+      expect(core.isStarting, isFalse);
+
+      _writeHandle(
+        runDir,
+        worktree,
+        device: 'sim',
+        entrypoint: 'lib/main.dart',
+        launcherPid: pid,
+      );
+      await core.computeAll();
+      expect(core.isStarting, isTrue);
+    });
+
+    test('a failure is a row in the worktree that launched it', () async {
+      // A `.failed` record carries its worktree since failures were scoped;
+      // one written by another checkout must not appear in this rail — the
+      // key would not even resolve here.
+      var theirs = _writeHandle(
+        runDir,
+        otherWorktree,
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        logPath: p.join(runDir.path, 'app-theirs.log'),
+        launcherPid: await _deadPid(),
+      );
+      File(theirs.logPath!).writeAsStringSync('Error: no code signing\n');
+      var elsewhere = _coreFor(otherWorktree);
+      addTearDown(elsewhere.dispose);
+      await elsewhere.invoke('apps');
+
+      await core.computeAll();
+      expect(core.failures, hasLength(1), reason: 'the record itself is read');
+      expect(core.ownFailures, isEmpty);
+      expect(core.report.children, isEmpty);
+
+      // A record from before failures carried a worktree shows everywhere
+      // rather than nowhere.
+      RunFailure(
+        key: 'app-legacy',
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        at: DateTime.now(),
+      ).write(runDir.path);
+      await core.computeAll();
+      expect(core.ownFailures.single.key, 'app-legacy');
+    });
   });
 
   group('devices', () {

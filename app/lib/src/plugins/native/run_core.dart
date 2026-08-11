@@ -120,6 +120,26 @@ class RunCore extends PluginCore {
   /// device held by another checkout is exactly the case this answers.
   List<RunHandle> get handles => _handles;
 
+  /// The runs this worktree launched — what the rail lists and what the panel
+  /// falls back to when the address names no run.
+  ///
+  /// The split matters: [handles] stays every worktree's because *occupancy*
+  /// is a machine question, but the rail's rows are subjects you can drive,
+  /// and another checkout's app is not one of yours. It is reached through the
+  /// desk instead, which jumps to the worktree holding it.
+  List<RunHandle> get ownHandles => [
+    for (var handle in _handles)
+      if (isMine(handle)) handle,
+  ];
+
+  /// Whether this worktree launched [handle]. Canonicalized, because the
+  /// handle was written by another process whose spelling of the path — a
+  /// symlink, a trailing separator — is not ours to assume.
+  bool isMine(RunHandle handle) => _isOwnPath(handle.worktree);
+
+  bool _isOwnPath(String path) =>
+      p.canonicalize(path) == p.canonicalize(host.worktree.path);
+
   RunProbe? probeOf(RunHandle handle) =>
       handle.handlePath == null ? null : _probes[handle.handlePath];
 
@@ -133,8 +153,12 @@ class RunCore extends PluginCore {
 
   final _logs = <String, LaunchLog>{};
 
-  /// True while any announced run has not come up yet — a build in flight.
-  bool get isStarting => _handles.any(
+  /// True while a run this worktree launched has not come up yet — a build in
+  /// flight.
+  ///
+  /// Own runs only: this gates `busyWith`, and a capture of *this* worktree
+  /// must not wait out another checkout's ninety-second Android build.
+  bool get isStarting => ownHandles.any(
     (handle) => handle.vmService == null && !(logOf(handle)?.stopped ?? false),
   );
 
@@ -433,6 +457,15 @@ class RunCore extends PluginCore {
   List<RunFailure> get failures =>
       _failures.values.toList()..sort((a, b) => b.at.compareTo(a.at));
 
+  /// The failures this worktree's launches recorded, for the rail.
+  ///
+  /// A record with no worktree — written before failures carried one — is
+  /// kept everywhere rather than shown nowhere.
+  List<RunFailure> get ownFailures => [
+    for (var failure in failures)
+      if (failure.worktree == null || _isOwnPath(failure.worktree!)) failure,
+  ];
+
   RunFailure? failureFor(String key) => _failures[key];
 
   /// Notes why a run is gone, so the panel has something to show where the
@@ -447,6 +480,7 @@ class RunCore extends PluginCore {
     }
     var failure = RunFailure(
       key: handle.key,
+      worktree: handle.worktree,
       device: handle.device,
       deviceName: handle.deviceName,
       entrypoint: handle.entrypoint,
@@ -528,8 +562,8 @@ class RunCore extends PluginCore {
       status: _status(devices, busy),
       badge: _daemonError != null
           ? const StatusBadge.dot(Tone.error)
-          : busy.isNotEmpty
-          ? StatusBadge.count(busy.length, tone: Tone.good)
+          : ownHandles.isNotEmpty
+          ? StatusBadge.count(ownHandles.length, tone: Tone.good)
           : StatusBadge.none,
       // **Runs, not devices.** A child's id becomes the first address segment
       // (`_childAddress`), so these have to be the things the panel can be
@@ -539,8 +573,15 @@ class RunCore extends PluginCore {
       // Devices have not gone anywhere: they are the desk, which the panel
       // renders when nothing is running and which belongs in the shell's
       // chrome. The status line below still counts them.
+      //
+      // **This worktree's runs, not the machine's.** The unfiltered ledger
+      // put every checkout's runs in every rail, indistinguishable at a
+      // glance and first in line for the panel's fallback — opening Run in
+      // one worktree landed you on another's app. Occupancy stays global
+      // ([handles], the desk, the `apps` action); the rows do not. The badge
+      // counts the rows, so it cannot claim runs the rail will not show.
       children: [
-        for (var handle in _handles)
+        for (var handle in ownHandles)
           PluginChild(
             id: handle.key,
             label: '${handle.runLabel} · ${handle.deviceLabel}',
@@ -550,7 +591,7 @@ class RunCore extends PluginCore {
         // panel's chip row and nowhere else, which was the wrong half: the rail
         // is the list, so a launch that failed has to be in it or it has
         // vanished again.
-        for (var failure in failures)
+        for (var failure in ownFailures)
           PluginChild(
             id: failure.key,
             label: '${failure.runLabel} · ${failure.deviceLabel}',
@@ -1076,14 +1117,12 @@ class RunCore extends PluginCore {
   /// only "running" would hide it.
   Status _handleStatus(RunHandle handle) {
     var probe = probeOf(handle);
-    var mine = handle.worktreeName == host.worktree.name;
-    var where = mine ? '' : ' · ${handle.worktreeName}';
-    if (probe == null) return Status.neutral('not probed$where');
+    if (probe == null) return const Status.neutral('not probed');
     if (!probe.canInspect) {
-      return Status.neutral('${logOf(handle)?.progress ?? 'building'}$where');
+      return Status.neutral(logOf(handle)?.progress ?? 'building');
     }
-    if (!probe.launcher) return Status.warn('no launcher$where');
-    return Status.good('live$where');
+    if (!probe.launcher) return const Status.warn('no launcher');
+    return const Status.good('live');
   }
 
   String _deviceDetail(DaemonDevice device) => [
@@ -1143,18 +1182,17 @@ class RunCore extends PluginCore {
   /// that a device held by another checkout is visible; a teardown that stopped
   /// those too would be closing one tab and killing somebody else's run.
   List<TeardownStep> get _teardown => [
-    for (var handle in _handles)
-      if (handle.worktree == host.worktree.path)
-        TeardownStep(
-          'stop',
-          'Stop ${handle.runLabel} on ${handle.deviceLabel}',
-          detail: _startedAgo(handle.startedAt),
-          // The same arguments the `stop` action takes from `fw` and a form,
-          // because it is the same action.
-          arguments: {'device': handle.device, 'entrypoint': handle.entrypoint},
-          checked: true,
-          phase: TeardownPhase.apps,
-        ),
+    for (var handle in ownHandles)
+      TeardownStep(
+        'stop',
+        'Stop ${handle.runLabel} on ${handle.deviceLabel}',
+        detail: _startedAgo(handle.startedAt),
+        // The same arguments the `stop` action takes from `fw` and a form,
+        // because it is the same action.
+        arguments: {'device': handle.device, 'entrypoint': handle.entrypoint},
+        checked: true,
+        phase: TeardownPhase.apps,
+      ),
   ];
 
   static String _startedAgo(DateTime startedAt) {
@@ -2393,7 +2431,7 @@ class RunCore extends PluginCore {
     device: handle.device,
     deviceName: handle.deviceName,
     worktree: handle.worktreeName,
-    mine: p.canonicalize(handle.worktree) == p.canonicalize(host.worktree.path),
+    mine: isMine(handle),
     package: handle.package,
     entrypoint: handle.entrypoint,
     entrypointName: handle.entrypointName,

@@ -20,6 +20,7 @@ import '../worktrees/facts.dart';
 import 'address_bar.dart';
 import 'config_load.dart';
 import 'config_screen.dart';
+import 'device_desk.dart';
 import '../utils/hot_reload.dart';
 import '../utils/value_stream_builder.dart';
 import 'shell_controller.dart';
@@ -280,6 +281,11 @@ class _Band extends StatelessWidget {
             ],
           ),
         ),
+        // The desk: devices, occupancy, and the jump to the worktree holding
+        // a busy one. In the chrome because only the shell can switch
+        // worktrees — the panel's copy of the desk can show who holds a
+        // phone, but not take you there.
+        DeskButton(shell),
         SearchTrigger(onTap: () => unawaited(showShellSearch(context, shell))),
         const Gap(FwSpacing.md),
         _ConfigLoadLine(shell),

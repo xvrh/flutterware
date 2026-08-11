@@ -375,6 +375,7 @@ class RunFailure {
     required this.device,
     required this.entrypoint,
     required this.at,
+    this.worktree,
     this.deviceName,
     this.entrypointName,
     this.package,
@@ -387,6 +388,11 @@ class RunFailure {
   /// [runHandleKey], so the address that pointed at the run still points at
   /// the reason it is gone.
   final String key;
+
+  /// Absolute path of the worktree whose launch failed — what scopes a
+  /// failure to the rail that owns it. Null in records written before
+  /// failures carried one; those show everywhere rather than nowhere.
+  final String? worktree;
 
   final String device;
   final String? deviceName;
@@ -420,6 +426,7 @@ class RunFailure {
 
   Map<String, Object?> toJson() => {
     'key': key,
+    if (worktree != null) 'worktree': worktree,
     'device': device,
     if (deviceName != null) 'deviceName': deviceName,
     'entrypoint': entrypoint,
@@ -462,6 +469,7 @@ class RunFailure {
       var map = json.cast<String, Object?>();
       return RunFailure(
         key: map['key']! as String,
+        worktree: map['worktree'] as String?,
         device: map['device']! as String,
         deviceName: map['deviceName'] as String?,
         entrypoint: map['entrypoint']! as String,
