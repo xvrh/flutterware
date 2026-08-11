@@ -4922,6 +4922,38 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'kind', 'type': 'String', 'optional': true},
     ],
   }),
+  'ScenarioWebExportResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'ScenarioWebExportResult',
+    'fields': <Object?>[
+      <String, Object?>{
+        'name': 'output',
+        'type': 'String',
+        'doc':
+            'The directory to serve, worktree-relative where it sits inside one.',
+      },
+      <String, Object?>{'name': 'indexHtml', 'type': 'String'},
+      <String, Object?>{'name': 'scenarios', 'type': 'int'},
+      <String, Object?>{'name': 'steps', 'type': 'int'},
+      <String, Object?>{
+        'name': 'artifacts',
+        'type': 'int',
+        'doc':
+            'Files copied in beside the page — screenshots, trees, semantics, events.',
+      },
+      <String, Object?>{'name': 'durationMs', 'type': 'int'},
+      <String, Object?>{
+        'name': 'failed',
+        'type': 'int',
+        'doc': 'Scenarios that came back red.',
+      },
+      <String, Object?>{
+        'name': 'serve',
+        'type': 'String',
+        'doc': 'How to look at it.',
+      },
+      <String, Object?>{'name': 'ok', 'type': 'bool'},
+    ],
+  }),
   'SplashArtifactEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'SplashArtifactEntry',
     'fields': <Object?>[

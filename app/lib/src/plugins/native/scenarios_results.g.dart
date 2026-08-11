@@ -29,12 +29,39 @@ Map<String, dynamic> _$ScenarioListEntryToJson(ScenarioListEntry instance) =>
       'line': instance.line,
     };
 
+ScenarioRunResult _$ScenarioRunResultFromJson(Map<String, dynamic> json) =>
+    ScenarioRunResult(
+      packages: (json['packages'] as List<dynamic>)
+          .map((e) => ScenarioRunPackage.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      axes: (json['axes'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, e as String),
+      ),
+    );
+
 Map<String, dynamic> _$ScenarioRunResultToJson(ScenarioRunResult instance) =>
     <String, dynamic>{
       'packages': instance.packages.map((e) => e.toJson()).toList(),
-      'ok': instance.ok,
       'axes': ?instance.axes,
     };
+
+ScenarioRunPackage _$ScenarioRunPackageFromJson(Map<String, dynamic> json) =>
+    ScenarioRunPackage(
+      path: json['path'] as String,
+      output: json['output'] as String,
+      axes: (json['axes'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, e as String),
+      ),
+      ms: (json['ms'] as num?)?.toInt() ?? 0,
+      scenarios:
+          (json['scenarios'] as List<dynamic>?)
+              ?.map(
+                (e) => ScenarioRunOutcome.fromJson(e as Map<String, dynamic>),
+              )
+              .toList() ??
+          const [],
+      error: json['error'] as String?,
+    );
 
 Map<String, dynamic> _$ScenarioRunPackageToJson(ScenarioRunPackage instance) =>
     <String, dynamic>{
@@ -46,6 +73,25 @@ Map<String, dynamic> _$ScenarioRunPackageToJson(ScenarioRunPackage instance) =>
       'error': ?instance.error,
     };
 
+ScenarioRunOutcome _$ScenarioRunOutcomeFromJson(Map<String, dynamic> json) =>
+    ScenarioRunOutcome(
+      file: json['file'] as String,
+      name: json['name'] as String,
+      ok: json['ok'] as bool,
+      device: json['device'] as String?,
+      ms: (json['ms'] as num?)?.toInt() ?? 0,
+      steps:
+          (json['steps'] as List<dynamic>?)
+              ?.map((e) => ScenarioRunStep.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      errors:
+          (json['errors'] as List<dynamic>?)
+              ?.map((e) => ScenarioRunError.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+    );
+
 Map<String, dynamic> _$ScenarioRunOutcomeToJson(ScenarioRunOutcome instance) =>
     <String, dynamic>{
       'file': instance.file,
@@ -56,6 +102,52 @@ Map<String, dynamic> _$ScenarioRunOutcomeToJson(ScenarioRunOutcome instance) =>
       'steps': instance.steps.map((e) => e.toJson()).toList(),
       'errors': instance.errors.map((e) => e.toJson()).toList(),
     };
+
+ScenarioRunStep _$ScenarioRunStepFromJson(Map<String, dynamic> json) =>
+    ScenarioRunStep(
+      index: (json['index'] as num).toInt(),
+      position: json['position'] as String,
+      auto: json['auto'] as bool,
+      image: json['image'] as String,
+      format: json['format'] as String,
+      width: (json['width'] as num).toInt(),
+      height: (json['height'] as num).toInt(),
+      tree: json['tree'] as String,
+      texts: (json['texts'] as List<dynamic>).map((e) => e as String).toList(),
+      address: json['address'] as String,
+      semantics: json['semantics'] as String?,
+      parent: (json['parent'] as num?)?.toInt(),
+      branch: json['branch'] as String?,
+      name: json['name'] as String?,
+      action: json['action'] == null
+          ? null
+          : ScenarioStepAction.fromJson(json['action'] as Map<String, dynamic>),
+      tags:
+          (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+          const [],
+      statusBrightness: json['statusBrightness'] as String?,
+      navBrightness: json['navBrightness'] as String?,
+      verb: json['verb'] as String?,
+      target: json['target'] as String?,
+      events: json['events'] as String?,
+      eventCount: (json['eventCount'] as num?)?.toInt(),
+      eventChannels: (json['eventChannels'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, (e as num).toInt()),
+      ),
+      eventTitles: (json['eventTitles'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList(),
+      eventsDropped: (json['eventsDropped'] as num?)?.toInt(),
+      frames: json['frames'] as String?,
+      frameCount: (json['frameCount'] as num?)?.toInt(),
+      frameWidth: (json['frameWidth'] as num?)?.toInt(),
+      frameHeight: (json['frameHeight'] as num?)?.toInt(),
+      frameIntervalMs: (json['frameIntervalMs'] as num?)?.toInt(),
+      framesDropped: (json['framesDropped'] as num?)?.toInt(),
+      settled: json['settled'] as bool? ?? true,
+      strayFrames: (json['strayFrames'] as num?)?.toInt() ?? 0,
+      failure: json['failure'] as String?,
+    );
 
 Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
     <String, dynamic>{
@@ -95,6 +187,13 @@ Map<String, dynamic> _$ScenarioRunStepToJson(ScenarioRunStep instance) =>
       'failure': ?instance.failure,
     };
 
+ScenarioStepAction _$ScenarioStepActionFromJson(Map<String, dynamic> json) =>
+    ScenarioStepAction(
+      verb: json['verb'] as String,
+      target: json['target'] as String?,
+      kind: json['kind'] as String?,
+    );
+
 Map<String, dynamic> _$ScenarioStepActionToJson(ScenarioStepAction instance) =>
     <String, dynamic>{
       'verb': instance.verb,
@@ -102,8 +201,28 @@ Map<String, dynamic> _$ScenarioStepActionToJson(ScenarioStepAction instance) =>
       'kind': ?instance.kind,
     };
 
+ScenarioRunError _$ScenarioRunErrorFromJson(Map<String, dynamic> json) =>
+    ScenarioRunError(
+      error: json['error'] as String,
+      stack: json['stack'] as String?,
+    );
+
 Map<String, dynamic> _$ScenarioRunErrorToJson(ScenarioRunError instance) =>
     <String, dynamic>{'error': instance.error, 'stack': ?instance.stack};
+
+Map<String, dynamic> _$ScenarioWebExportResultToJson(
+  ScenarioWebExportResult instance,
+) => <String, dynamic>{
+  'output': instance.output,
+  'indexHtml': instance.indexHtml,
+  'scenarios': instance.scenarios,
+  'steps': instance.steps,
+  'artifacts': instance.artifacts,
+  'durationMs': instance.durationMs,
+  'failed': instance.failed,
+  'serve': instance.serve,
+  'ok': instance.ok,
+};
 
 Map<String, dynamic> _$ScenarioNewResultToJson(ScenarioNewResult instance) =>
     <String, dynamic>{

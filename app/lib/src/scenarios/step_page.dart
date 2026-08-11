@@ -14,6 +14,7 @@ import '../inspect/pick_region.dart';
 import '../plugins/native/scenarios_results.dart';
 import '../ui/tappable.dart';
 import '../ui/theme.dart';
+import 'artifacts.dart';
 import 'events_view.dart';
 import 'framed_shot.dart';
 import 'motion_player.dart';
@@ -96,9 +97,19 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   var _events = const <Map<String, Object?>>[];
   String? _eventsPlaceholder;
 
+  /// The source the three reads below go through, and part of what decides
+  /// whether they have to be done again.
+  ScenarioArtifacts? _artifacts;
+
+  /// Bumped on every load, so a read that finishes after the reader moved on
+  /// does not write its answer over the step now on screen.
+  var _generation = 0;
+
+  // `didChangeDependencies`, not `initState`: the artifacts come from an
+  // inherited widget, which cannot be depended on before the first build.
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     _loadTree();
     _loadMotion();
   }
@@ -145,61 +156,95 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
     if (mounted) setState(() {});
   }
 
-  /// Reads the step's trees once per step. The files are already on disk —
-  /// the harness wrote them beside the pixels — and small, so this is a plain
-  /// synchronous read from `initState`/`didUpdateWidget`, never a spinner.
+  /// Reads the step's three JSON artifacts, once per step.
+  ///
+  /// Asynchronous, because on the exported page these are three HTTP requests
+  /// rather than three small files the harness just wrote — the panel's own
+  /// reads still complete within a frame or two, and nothing here shows a
+  /// spinner for them.
   void _loadTree() {
+    var artifacts = ScenarioArtifactsScope.of(context);
     var path = widget.step.tree;
-    if (path == _loadedPath) return;
+    if (path == _loadedPath && artifacts == _artifacts) return;
     _loadedPath = path;
+    _artifacts = artifacts;
     _highlight.value = null;
     _semanticsHighlight.value = null;
-    try {
-      _tree = InspectTree.fromJson(
-        (jsonDecode(widget.step.treeFile.readAsStringSync()) as Map)
-            .cast<String, Object?>(),
-      );
-      _treeError = null;
-    } catch (error) {
-      _tree = null;
-      _treeError = 'The tree could not be read:\n$error';
-    }
-    _semantics = null;
-    if (widget.step.semanticsFile case var file?) {
-      try {
-        _semantics = SemanticsSnapshotNode.fromJson(
-          (jsonDecode(file.readAsStringSync()) as Map).cast<String, Object?>(),
-        );
-        _semanticsError = null;
-      } catch (error) {
-        _semanticsError = 'The semantics tree could not be read:\n$error';
+    unawaited(_read(artifacts, ++_generation));
+  }
+
+  Future<void> _read(ScenarioArtifacts artifacts, int generation) async {
+    var step = widget.step;
+    // Fetched together: three round trips one after another is three times the
+    // latency on a page served from anywhere but localhost.
+    var (tree, semantics, events) = await (
+      artifacts.readString(step.tree),
+      step.semantics == null
+          ? Future<String?>.value()
+          : artifacts.readString(step.semantics!),
+      step.events == null
+          ? Future<String?>.value()
+          : artifacts.readString(step.events!),
+    ).wait;
+    if (!mounted || generation != _generation) return;
+
+    setState(() {
+      if (tree == null) {
+        _tree = null;
+        _treeError = 'The tree could not be read: ${step.tree} is not there.';
+      } else {
+        try {
+          _tree = InspectTree.fromJson(
+            (jsonDecode(tree) as Map).cast<String, Object?>(),
+          );
+          _treeError = null;
+        } catch (error) {
+          _tree = null;
+          _treeError = 'The tree could not be read:\n$error';
+        }
       }
-    } else {
-      // Absence has two honest readings and only one file to tell them by.
-      _semanticsError =
-          'No semantics captured for this step — the run predates the '
-          'capture, or the app disabled semantics.';
-    }
-    _events = const [];
-    _eventsPlaceholder = null;
-    if (widget.step.eventsFile case var file? when file.existsSync()) {
-      try {
-        _events = [
-          for (var event in jsonDecode(file.readAsStringSync()) as List)
-            (event as Map).cast<String, Object?>(),
-        ];
-      } catch (error) {
-        _eventsPlaceholder = 'The events could not be read:\n$error';
+
+      _semantics = null;
+      if (step.semantics == null) {
+        // Absence has two honest readings and only one file to tell them by.
+        _semanticsError =
+            'No semantics captured for this step — the run predates the '
+            'capture, or the app disabled semantics.';
+      } else if (semantics == null) {
+        _semanticsError =
+            'The semantics tree is gone: ${step.semantics} is not there.';
+      } else {
+        try {
+          _semantics = SemanticsSnapshotNode.fromJson(
+            (jsonDecode(semantics) as Map).cast<String, Object?>(),
+          );
+          _semanticsError = null;
+        } catch (error) {
+          _semanticsError = 'The semantics tree could not be read:\n$error';
+        }
       }
-    } else {
-      // A quiet transition is the common case and reads as one; a step with a
-      // count but no file is a run whose artifacts have moved.
-      _eventsPlaceholder = widget.step.hasEvents
-          ? 'This step recorded ${widget.step.eventCount} events, but the '
-                'file is gone. Run the scenario again.'
-          : 'Nothing happened on the way to this step — no logs, no requests, '
-                'no platform calls.';
-    }
+
+      _events = const [];
+      _eventsPlaceholder = null;
+      if (events != null) {
+        try {
+          _events = [
+            for (var event in jsonDecode(events) as List)
+              (event as Map).cast<String, Object?>(),
+          ];
+        } catch (error) {
+          _eventsPlaceholder = 'The events could not be read:\n$error';
+        }
+      } else {
+        // A quiet transition is the common case and reads as one; a step with
+        // a count but no file is a run whose artifacts have moved.
+        _eventsPlaceholder = step.hasEvents
+            ? 'This step recorded ${step.eventCount} events, but the '
+                  'file is gone. Run the scenario again.'
+            : 'Nothing happened on the way to this step — no logs, no '
+                  'requests, no platform calls.';
+      }
+    });
   }
 
   void _select(String id) => AddressScope.write(context).setParam('node', id);
@@ -210,7 +255,11 @@ class _ScenarioStepPageState extends State<ScenarioStepPage>
   ImageProvider? get _frame {
     var motion = _motion;
     if (motion == null || motion.index >= motion.frames.length - 1) return null;
-    return scenarioFrameImage(widget.step, motion.frames[motion.index]);
+    return scenarioFrameImage(
+      ScenarioArtifactsScope.of(context),
+      widget.step,
+      motion.frames[motion.index],
+    );
   }
 
   @override

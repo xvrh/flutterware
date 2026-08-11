@@ -108,6 +108,10 @@ void main() {
     await tester.pump();
     expect(address.value.segments.last, '0');
     expect(find.text('Elements'), findsOneWidget);
+    // A second frame: the page reads its trees through `ScenarioArtifacts`,
+    // which is an asynchronous interface even where — as here — it is backed by
+    // synchronous file reads.
+    await tester.pump();
     expect(find.text('ShotRoot'), findsOneWidget);
     expect(find.text('ChildBox'), findsOneWidget);
     expect(find.text('VISIBLE TEXTS'), findsNothing);

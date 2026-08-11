@@ -12,6 +12,8 @@ import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/runner.dart';
+import '../../scenarios/web_export.dart';
+import '../../scenarios/web_report.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
 import 'scenarios_address.dart';
@@ -19,6 +21,10 @@ import 'scenarios_results.dart';
 
 /// The registered id — also what `tool/flutterware.dart` declares.
 const scenariosPluginId = 'flutterware.scenarios';
+
+/// The action that writes a run out as a page, named once so the CLI, the
+/// dialog and the command the dialog echoes cannot drift apart.
+const webExportActionId = 'export';
 
 /// One scenario's latest panel-driven run — what the flow page renders.
 ///
@@ -695,6 +701,147 @@ class ScenariosCore extends PluginCore {
           ],
         ),
         PluginAction(
+          webExportActionId,
+          'Export a web page',
+          returns: ScenarioWebExportResult,
+          description:
+              'Runs the scenarios and writes the result as a browsable page: '
+              'the same flow canvas, step pages and inspect dock the GUI '
+              'draws, over the run it just did. Takes every selector and axis '
+              '`run` takes — the page shows what was run, so what to run is '
+              'the question it asks. Needs serving over HTTP; the result says '
+              'how. For a CI artifact, a review link, or anyone who has the '
+              'app but not the checkout.',
+          parameters: [
+            ActionParameter(
+              'package',
+              'Package',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'Which declared package; all of them when omitted',
+              options: [
+                for (var path in packages)
+                  ActionOption(path, label: path == '.' ? 'root' : path),
+              ],
+            ),
+            const ActionParameter(
+              'file',
+              'File',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Export only this scenario file, package-relative — as '
+                  '`list` reports it',
+            ),
+            const ActionParameter(
+              'scenario',
+              'Scenario',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Export only this scenario, by name. Needs `file` too.',
+            ),
+            const ActionParameter(
+              'tag',
+              'Tag',
+              kind: ActionParameterKind.string,
+              required: false,
+              description: 'Export only scenarios carrying this tag',
+            ),
+            const ActionParameter(
+              'output',
+              'Output directory',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Where the page goes; defaults to '
+                  '`${ScenarioWebExporter.defaultOutput}` under the package. '
+                  'Emptied before writing.',
+            ),
+            const ActionParameter(
+              'base-href',
+              'Base href',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'What the page is mounted under when it is not the root — '
+                  '`/scenarios/`. Leading and trailing slash.',
+            ),
+            const ActionParameter(
+              'offline',
+              'Self-contained',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description:
+                  'Bundle CanvasKit into the page instead of fetching it '
+                  "from Google's CDN. Bigger, and the only form that works "
+                  'behind a firewall or after the engine revision stops being '
+                  'hosted.',
+              options: [ActionOption('true'), ActionOption('false')],
+            ),
+            // The axes, exactly as `run` declares them: a page is a picture of
+            // a run, and a picture is under-specified without them.
+            ActionParameter(
+              'device',
+              'Device',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'Run as a device before capturing the page',
+              options: [for (var id in deviceIds) ActionOption(id)],
+            ),
+            const ActionParameter(
+              'language',
+              'Language',
+              kind: ActionParameterKind.string,
+              required: false,
+              description: 'A locale tag — `fr`, `fr-CA`',
+            ),
+            const ActionParameter(
+              'devices',
+              'Devices',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'A matrix — `iphone-se,ipad`. Every point lands on the same '
+                  'page, each scenario labelled with what it ran as.',
+            ),
+            const ActionParameter(
+              'languages',
+              'Languages',
+              kind: ActionParameterKind.string,
+              required: false,
+              description: 'The other half of the matrix — `en,fr,de`',
+            ),
+            const ActionParameter(
+              'brightness',
+              'Brightness',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'The platform brightness the app sees',
+              options: [ActionOption('light'), ActionOption('dark')],
+            ),
+            const ActionParameter(
+              'capture-scale',
+              'Capture scale',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Screenshot pixels per logical pixel, up to 4. A page is '
+                  'read on a retina screen, so 2 is worth the bytes where 1 is '
+                  'right for a panel.',
+            ),
+            const ActionParameter(
+              'clock',
+              'Clock origin',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'An ISO-8601 timestamp `clock.now()` starts at. Pin it and '
+                  'two exported pages of the same suite are comparable.',
+            ),
+          ],
+        ),
+        PluginAction(
           'new',
           'New scenario',
           returns: ScenarioNewResult,
@@ -962,6 +1109,7 @@ class ScenariosCore extends PluginCore {
     return switch (actionId) {
       'list' => _list(arguments),
       'run' => _run(arguments),
+      webExportActionId => _exportWeb(arguments),
       'new' => _new(arguments),
       'shots' => _shots(arguments),
       'restart' => _restart(arguments),
@@ -1063,8 +1211,10 @@ class ScenariosCore extends PluginCore {
               var number = (kept.length + 1).toString().padLeft(2, '0');
               var name = '$number-${_shotSlug(step.name!)}.png';
               // `step.image` is relative to the worktree, which is what keeps
-              // a result portable — the file itself is `imageFile`.
-              step.imageFile.copySync(p.join(into.path, name));
+              // a result portable; `step.root` is this machine's copy of it.
+              File(
+                p.join(step.root, step.image),
+              ).copySync(p.join(into.path, name));
               kept.add(name);
               total++;
             }
@@ -1422,6 +1572,106 @@ class ScenariosCore extends PluginCore {
     );
   }
 
+  /// Runs the scenarios and writes the result as a page.
+  ///
+  /// **Re-runs rather than publishing the last run.** A page is dated, shared,
+  /// and read by people who cannot check it — the one thing it may not be is a
+  /// picture of a suite as it stood at some earlier moment nobody recorded.
+  /// Which is also why every selector and axis `run` takes is taken here: what
+  /// to run is the whole question the export asks.
+  ///
+  /// Takes the same argument map the action does, so the command the dialog
+  /// echoes is the call the button makes.
+  Future<ScenarioWebExportResult> exportWeb(
+    Map<String, Object?> arguments, {
+    void Function(String line)? onOutput,
+  }) async {
+    var baseHref = arguments['base-href'] as String?;
+    if (baseHref != null &&
+        baseHref.isNotEmpty &&
+        (!baseHref.startsWith('/') || !baseHref.endsWith('/'))) {
+      throw ArgumentError.value(
+        baseHref,
+        'base-href',
+        'must begin and end with a slash — `/scenarios/`',
+      );
+    }
+    // One at a time: an export empties its output directory before writing,
+    // and two of them pointed at the same one would each delete the other's
+    // page halfway through copying it.
+    if (_export != null) {
+      throw StateError(
+        'An export is already running. Wait for it, or close the worktree to '
+        'stop it.',
+      );
+    }
+
+    // `output` names the page here and the raw artifacts in `run`, so the run
+    // is left to its own default directory and the page copies out of it.
+    var runResult = await _run({...arguments}..remove('output'));
+
+    var page =
+        (arguments['output'] as String?) ??
+        ScenarioWebExporter.defaultOutputIn(
+          packageRootFor(_requested(arguments).first),
+        );
+    if (!p.isAbsolute(page)) {
+      page = p.join(packageRootFor(_requested(arguments).first), page);
+    }
+
+    var exporter = _export = ScenarioWebExporter(
+      flutterExecutable: host.workspace.flutterSdk.flutter,
+      appToolRoot: host.workspace.appContext.appToolDirectory.path,
+      worktreeRoot: host.worktree.path,
+    );
+    ScenarioWebExport written;
+    try {
+      written = await exporter.export(
+        report: ScenarioWebReport(
+          // The worktree rather than the plugin: a page says what it is a page
+          // *of*, and "Scenarios" tells a reader nothing they did not know
+          // from the link they followed.
+          title: host.worktree.name,
+          generated: DateTime.now(),
+          run: runResult,
+        ),
+        output: page,
+        baseHref: baseHref == null || baseHref.isEmpty ? null : baseHref,
+        offline: arguments['offline'] == 'true' || arguments['offline'] == true,
+        onOutput: onOutput,
+      );
+    } finally {
+      _export = null;
+    }
+
+    var failed = runResult.packages
+        .expand((package) => package.scenarios)
+        .where((scenario) => !scenario.ok)
+        .length;
+    return ScenarioWebExportResult(
+      output: _relative(written.output),
+      indexHtml: _relative(written.indexHtml),
+      scenarios: written.scenarios,
+      steps: written.steps,
+      artifacts: written.artifacts,
+      durationMs: written.duration.inMilliseconds,
+      failed: failed,
+      serve:
+          'Serve it with any static server — `cd ${_relative(written.output)} '
+          '&& python3 -m http.server`. Opening index.html as a file leaves the '
+          'browser unable to fetch the report beside it, and the page says so '
+          'rather than appearing empty. (The GUI serves it for you: "Export a '
+          'web page…" on the package, then Open in browser.)',
+    );
+  }
+
+  Future<ScenarioWebExportResult> _exportWeb(Map<String, Object?> arguments) =>
+      exportWeb(arguments);
+
+  /// The export in flight, so a second is refused and the first can be killed
+  /// when the worktree goes.
+  ScenarioWebExporter? _export;
+
   /// Why a `file`/`scenario` selector ran nothing, naming what it could have
   /// named instead — so a misspelling costs one round-trip and not a debugging
   /// session against a result that looked like a pass.
@@ -1699,6 +1949,10 @@ class ScenariosCore extends PluginCore {
       unawaited(runner.dispose());
     }
     _runners.clear();
+    // A `flutter build web` outlives its parent on macOS, and the one this
+    // started is writing into the worktree that is going away.
+    unawaited(_export?.cancel());
+    _export = null;
     super.dispose();
   }
 }

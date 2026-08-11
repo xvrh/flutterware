@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/plugins/native/scenarios_results.dart';
+import 'package:flutterware_app/src/scenarios/artifacts_io.dart';
 import 'package:flutterware_app/src/scenarios/motion_player.dart';
 import 'package:path/path.dart' as p;
 
@@ -18,8 +19,13 @@ void main() {
 
   late Directory root;
 
+  /// The residency evicts through whichever source decoded the frames, so the
+  /// test hands it the same one every time — a page would hand it an HTTP one.
+  late FileScenarioArtifacts artifacts;
+
   setUp(() {
     root = Directory.systemTemp.createTempSync('fw_motion_residency');
+    artifacts = FileScenarioArtifacts(root.path);
   });
   tearDown(() {
     scenarioMotionResidency.clear();
@@ -32,7 +38,7 @@ void main() {
     var directory = Directory(p.join(root.path, frames))
       ..createSync(recursive: true);
     // 10 frames of 512×512 rgba is ~10MB; the files only have to exist for
-    // `frameFiles` to name them.
+    // `framePaths` to name them.
     var count = megabytes;
     for (var frame = 0; frame < count; frame++) {
       File(
@@ -73,17 +79,17 @@ void main() {
     var c = step(3, megabytes: 10);
 
     residency
-      ..touch(a)
-      ..touch(b);
+      ..touch(a, artifacts)
+      ..touch(b, artifacts);
     expect(residency.residentSteps, 2);
 
-    residency.touch(c);
+    residency.touch(c, artifacts);
     expect(residency.residentSteps, 2, reason: 'the oldest was released');
     expect(residency.residentBytes, lessThan(25 * 1024 * 1024));
 
     // Hovering back to `b` keeps it — it was the most recent, not the oldest,
     // so walking back and forth between two neighbours never re-decodes.
-    residency.touch(b);
+    residency.touch(b, artifacts);
     expect(residency.residentSteps, 2);
   });
 
@@ -91,7 +97,7 @@ void main() {
     // A recording bigger than the whole budget still has to play, so the step
     // just touched is never the one evicted.
     var residency = ScenarioMotionResidency(budgetBytes: 1024);
-    residency.touch(step(1, megabytes: 40));
+    residency.touch(step(1, megabytes: 40), artifacts);
     expect(residency.residentSteps, 1);
     expect(residency.residentBytes, greaterThan(1024));
   });
@@ -106,10 +112,10 @@ void main() {
     var a = step(1, megabytes: 10);
     var b = step(2, megabytes: 10);
 
-    residency.touch(a);
+    residency.touch(a, artifacts);
     expect(residency.isResident(a), isTrue);
 
-    residency.touch(b);
+    residency.touch(b, artifacts);
     expect(residency.isResident(a), isFalse, reason: 'a was pushed out');
     expect(residency.isResident(b), isTrue);
   });
@@ -117,7 +123,7 @@ void main() {
   test('a re-run releases the frames it replaced', () {
     var residency = ScenarioMotionResidency();
     var old = step(1, megabytes: 5);
-    residency.touch(old);
+    residency.touch(old, artifacts);
     expect(residency.residentSteps, 1);
 
     // The previous run's directory is deleted the moment the next one lands
@@ -132,7 +138,7 @@ void main() {
     // recording, walked end to end.
     var residency = ScenarioMotionResidency();
     for (var index = 1; index <= 20; index++) {
-      residency.touch(step(index, megabytes: 21));
+      residency.touch(step(index, megabytes: 21), artifacts);
     }
     expect(residency.residentBytes, lessThanOrEqualTo(residency.budgetBytes));
     // And what it holds is a whole number of transitions — half a recording

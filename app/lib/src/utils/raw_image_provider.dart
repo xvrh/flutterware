@@ -1,6 +1,5 @@
 // From https://github.com/yrom/flutter_raw_image_provider/blob/master/lib/raw_image_provider.dart
 
-import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
@@ -28,7 +27,7 @@ class RawImageProvider extends ImageProvider<Object> {
   /// see [ui.decodeImageFromPixels]
   Future<ui.Codec> _loadAsync(Object key) async {
     assert(key == image._obtainKey());
-    var bytes = await image.file.readAsBytes();
+    var bytes = await image.load();
     var buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
     final descriptor = ui.ImageDescriptor.raw(
       buffer,
@@ -44,9 +43,9 @@ class _RawImageKey {
   final int w;
   final int h;
   final int format;
-  final String path;
+  final String id;
 
-  _RawImageKey(this.w, this.h, this.format, this.path);
+  _RawImageKey(this.w, this.h, this.format, this.id);
 
   @override
   bool operator ==(Object other) {
@@ -56,24 +55,30 @@ class _RawImageKey {
         other.w == w &&
         other.h == h &&
         other.format == format &&
-        other.path == path;
+        other.id == id;
   }
 
   @override
   int get hashCode {
-    return Object.hash(w, h, format, path);
+    return Object.hash(w, h, format, id);
   }
 }
 
-/// Raw pixels data of an image
+/// Raw pixels data of an image.
+///
+/// Takes a loader and an [id] to cache by rather than a `File`: the same
+/// provider serves the panel, which reads the bytes off disk, and the exported
+/// scenario page, which fetches them over HTTP with no filesystem in reach.
 class RawImageData {
-  final File file;
+  final String id;
+  final Future<Uint8List> Function() load;
   final int width;
   final int height;
   final ui.PixelFormat pixelFormat;
 
   RawImageData(
-    this.file,
+    this.id,
+    this.load,
     this.width,
     this.height, {
     this.pixelFormat = ui.PixelFormat.rgba8888,
@@ -81,6 +86,6 @@ class RawImageData {
 
   _RawImageKey? _key;
   _RawImageKey _obtainKey() {
-    return _key ??= _RawImageKey(width, height, pixelFormat.index, file.path);
+    return _key ??= _RawImageKey(width, height, pixelFormat.index, id);
   }
 }

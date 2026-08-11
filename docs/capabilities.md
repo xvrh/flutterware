@@ -1001,6 +1001,45 @@ axes: Map<String, String>?   # The axis assignment the whole request ran under �
 | `clock` | string | no | — | An ISO-8601 timestamp `clock.now()` starts at — `2026-01-01T09:00:00Z`. A scenario clock already advances deterministically under FakeAsync, but it starts at the wall time of the run, so any screen showing a date differs run to run. Pinning it is what makes two runs comparable. Reaches code that reads `package:clock`; a direct `DateTime.now()` cannot be intercepted by anything. |
 | `format` | choice | no | — | `png` (the default) is what everything opens. `raw` — bare rgba8888 rows, width×height×4 bytes as the result reports them — skips PNG encoding, which is ~80% of a capture's cost; for pipelines that consume pixels directly. |
 
+#### `export` — Export a web page
+
+Runs the scenarios and writes the result as a browsable page: the same flow canvas, step pages and inspect dock the GUI draws, over the run it just did. Takes every selector and axis `run` takes — the page shows what was run, so what to run is the question it asks. Needs serving over HTTP; the result says how. For a CI artifact, a review link, or anyone who has the app but not the checkout.
+
+```sh
+fw run scenarios export [--package=…] [--file=…] [--scenario=…] [--tag=…] [--output=…] [--base-href=…] [--offline=…] [--device=…] [--language=…] [--devices=…] [--languages=…] [--brightness=…] [--capture-scale=…] [--clock=…]
+```
+
+Returns `ScenarioWebExportResult`:
+
+```
+output: String   # The directory to serve, worktree-relative where it sits inside one.
+indexHtml: String
+scenarios: int
+steps: int
+artifacts: int   # Files copied in beside the page — screenshots, trees, semantics, events.
+durationMs: int
+failed: int   # Scenarios that came back red.
+serve: String   # How to look at it.
+ok: bool
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package; all of them when omitted |
+| `file` | string | no | — | Export only this scenario file, package-relative — as `list` reports it |
+| `scenario` | string | no | — | Export only this scenario, by name. Needs `file` too. |
+| `tag` | string | no | — | Export only scenarios carrying this tag |
+| `output` | string | no | — | Where the page goes; defaults to `build/scenarios/web` under the package. Emptied before writing. |
+| `base-href` | string | no | — | What the page is mounted under when it is not the root — `/scenarios/`. Leading and trailing slash. |
+| `offline` | choice | no | — | Bundle CanvasKit into the page instead of fetching it from Google's CDN. Bigger, and the only form that works behind a firewall or after the engine revision stops being hosted. |
+| `device` | choice | no | — | Run as a device before capturing the page |
+| `language` | string | no | — | A locale tag — `fr`, `fr-CA` |
+| `devices` | string | no | — | A matrix — `iphone-se,ipad`. Every point lands on the same page, each scenario labelled with what it ran as. |
+| `languages` | string | no | — | The other half of the matrix — `en,fr,de` |
+| `brightness` | choice | no | — | The platform brightness the app sees |
+| `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. A page is read on a retina screen, so 2 is worth the bytes where 1 is right for a panel. |
+| `clock` | string | no | — | An ISO-8601 timestamp `clock.now()` starts at. Pin it and two exported pages of the same suite are comparable. |
+
 #### `new` — New scenario
 
 Writes a runnable scenario file where the package keeps them, and reports the command that runs it. The scaffold pumps a stub app and drives it, so it passes as written — replace the stub with your own widget. Start here when you have never written one: it is the API, in a file that already works.

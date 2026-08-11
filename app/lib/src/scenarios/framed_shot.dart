@@ -7,8 +7,8 @@ import 'package:flutter_svg/svg.dart';
 // Ours hidden here, not theirs: this file names `device_frame`'s bodies.
 import '../previews/catalog_devices.dart' hide Devices;
 import '../plugins/native/scenarios_results.dart';
-import '../utils/raw_image_provider.dart';
 import '../ui/theme.dart';
+import 'artifacts.dart';
 
 /// A captured step, in the silhouette of the device it ran as, wearing the
 /// status chrome a real screenshot would have.
@@ -27,8 +27,9 @@ import '../ui/theme.dart';
 /// capture time — dev_studio's trick, kept because a status bar of the wrong
 /// brightness is a shipped bug a screenshot exists to catch.
 ///
-/// Displays `raw` captures through [RawImageProvider] — no decode, which is
-/// the point of capturing raw — and `png` through the ordinary file image.
+/// Reads the frame through the [ScenarioArtifactsScope] above it, which is
+/// what lets the same widget draw a step off a worktree's disk in the panel
+/// and off an HTTP server on the exported page.
 ///
 /// Unconstrained: renders at the device's logical size plus bezels. Put it in
 /// a `FittedBox` (the flow graph does) or size it from outside.
@@ -91,13 +92,7 @@ class FramedShot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget image = Image(
-      image:
-          this.image ??
-          (step.format == 'raw'
-              ? RawImageProvider(
-                  RawImageData(step.imageFile, step.width, step.height),
-                )
-              : FileImage(step.imageFile)),
+      image: this.image ?? ScenarioArtifactsScope.of(context).imageOf(step),
       fit: BoxFit.fill,
       filterQuality: FilterQuality.medium,
       // A frame that has not decoded yet holds the one before it rather than
