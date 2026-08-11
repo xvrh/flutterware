@@ -104,6 +104,9 @@ ShellController _controller({
 /// Mutable: a reload test has to change what the config "prints" between two
 /// loads, which is the whole thing being exercised.
 class _StubLoader implements ManifestLoader {
+  @override
+  String? get flutterRoot => null;
+
   _StubLoader(this.manifest, this.exitCode);
 
   String manifest;

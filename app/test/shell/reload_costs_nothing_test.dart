@@ -35,6 +35,9 @@ String _manifest({String depsDir = 'app'}) =>
     ']}';
 
 class _StubLoader implements ManifestLoader {
+  @override
+  String? get flutterRoot => null;
+
   _StubLoader(this.manifest);
 
   String manifest;

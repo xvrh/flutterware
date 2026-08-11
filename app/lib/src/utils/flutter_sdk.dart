@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 // The frozen name of the link `init` writes, taken from the walker rather than
@@ -70,11 +71,16 @@ class FlutterSdkPath {
   /// 2. `.flutterware/sdk`, what `init` wrote down.
   /// 3. `.fvm/flutter_sdk`, for a project that pins with fvm and has not run
   ///    flutterware yet.
-  /// 4. The SDK running us: `fvm dart app/bin/fw.dart` resolves to
+  /// 4. The version `.fvmrc` pins, read from fvm's cache — for a *fresh
+  ///    worktree* of such a project, where the pin is versioned but the
+  ///    symlink `fvm use` writes is not. Without this, `fw mcp` in a worktree
+  ///    nobody has set up answers "No Flutter SDK found" about a project that
+  ///    says, in a committed file, exactly which SDK it wants.
+  /// 5. The SDK running us: `fvm dart app/bin/fw.dart` resolves to
   ///    `<flutter>/bin/cache/dart-sdk/bin/dart`, and walking up from it finds
   ///    the Flutter root three levels above. Null when the running executable
   ///    is not inside an SDK — the AOT `fw` and the GUI, where it is the app.
-  /// 5. `FLUTTER_HOME`, which describes the machine rather than this project,
+  /// 6. `FLUTTER_HOME`, which describes the machine rather than this project,
   ///    so it answers only when nothing above it did.
   ///
   /// Both [from] and [environment] exist so a test can ask about a directory
@@ -94,6 +100,7 @@ class FlutterSdkPath {
 
     sdks.add(await _findAbove(start, sdkLinkPath));
     sdks.add(await _findAbove(start, p.join('.fvm', 'flutter_sdk')));
+    sdks.add(await _findPinned(start, env));
 
     sdks.add(await tryFind(Platform.resolvedExecutable));
 
@@ -129,6 +136,55 @@ class FlutterSdkPath {
       if (parent.path == dir.path) return null;
       dir = parent;
     }
+  }
+
+  /// The SDK `.fvmrc` pins, resolved through fvm's cache rather than the
+  /// `.fvm/flutter_sdk` symlink — which does not exist until someone runs
+  /// `fvm use`, and a fresh worktree is exactly the place nobody has.
+  ///
+  /// The pre-commit hook resolves the same way for the same reason, and this
+  /// follows its two rules: the cache roots are `FVM_CACHE_PATH`, `FVM_HOME`,
+  /// then `~/fvm`, and the fvm CLI is never invoked — it can prompt, and on
+  /// the MCP surface stdin is the protocol stream.
+  static Future<FlutterSdkPath?> _findPinned(
+    Directory start,
+    Map<String, String> env,
+  ) async {
+    // Walked up like [_findAbove]'s pointers: the pin sits at the repo root
+    // and a command may be typed anywhere inside the project.
+    var dir = start.absolute;
+    File? pin;
+    while (pin == null) {
+      var candidate = File(p.join(dir.path, '.fvmrc'));
+      if (candidate.existsSync()) {
+        pin = candidate;
+      } else {
+        var parent = dir.parent;
+        if (parent.path == dir.path) return null;
+        dir = parent;
+      }
+    }
+    String version;
+    try {
+      if (jsonDecode(pin.readAsStringSync()) case {'flutter': String pinned}) {
+        version = pinned;
+      } else {
+        return null;
+      }
+    } on Object {
+      // An unreadable pin names nothing — the sources below still answer.
+      return null;
+    }
+    for (var base in [
+      env['FVM_CACHE_PATH'],
+      env['FVM_HOME'],
+      if (env['HOME'] case var home?) p.join(home, 'fvm'),
+    ]) {
+      if (base == null || base.isEmpty) continue;
+      var candidate = FlutterSdkPath(p.join(base, 'versions', version));
+      if (await isValid(candidate)) return candidate;
+    }
+    return null;
   }
 
   static String _resolve(String path) {

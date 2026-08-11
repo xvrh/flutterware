@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:device_frame/device_frame.dart' hide Devices;
-import 'package:file_selector/file_selector.dart';
 import 'package:flutterware/previews_guest.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,8 +13,8 @@ import '../embedder/input_region.dart';
 import '../inspect/node_highlight.dart';
 import '../inspect/pick_region.dart';
 import '../inspect/semantics_node.dart';
+import '../ui/capture_button.dart';
 import '../ui/design/design.dart';
-import '../utils/image_clipboard.dart';
 import 'app_chords.dart';
 import 'catalog_params.dart';
 import 'catalog_devices.dart';
@@ -90,6 +89,10 @@ class _CatalogViewState extends State<CatalogView> {
 
   /// Whether a click on the preview picks a widget instead of reaching the demo.
   final _picking = ValueNotifier<bool>(false);
+
+  /// The top bar's capture button, so ⌘⇧C is that button pressed rather than
+  /// a second copy path — see [_copyPreview].
+  final _captureButton = GlobalKey<CaptureButtonState>();
 
   final FocusNode _focusNode = FocusNode();
   Timer? _poll;
@@ -242,22 +245,11 @@ class _CatalogViewState extends State<CatalogView> {
     );
   }
 
-  /// The same thing the top bar's copy button does — see [_capturePreview] for
-  /// why the two share their capture rather than each having one.
+  /// The same thing the top bar's copy button does — routed *through* the
+  /// button so the shortcut shows the same tick a click would, instead of
+  /// being a second implementation that happens to agree.
   void _copyPreview() {
-    if (!ImageClipboard.isSupported) return;
-    unawaited(() async {
-      try {
-        var png = await _capturePreview(context, _session);
-        if (png != null) await ImageClipboard.setPng(png);
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not copy the preview: $e')),
-          );
-        }
-      }
-    }());
+    unawaited(_captureButton.currentState?.copy());
   }
 
   void _reload() {
@@ -292,7 +284,11 @@ class _CatalogViewState extends State<CatalogView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _TopBar(session: _session),
+                    _TopBar(
+                      session: _session,
+                      captureButton: _captureButton,
+                      highlight: _highlight,
+                    ),
                     const Divider(height: 1),
                     // Wrapped so the panel can be told how much room there is,
                     // and wrapped *here* rather than higher so the number is
@@ -1077,9 +1073,20 @@ class _NumberFieldState extends State<_NumberField> {
 /// What the guest is being rendered as, and nothing about which entry it is —
 /// that is the list's job, and the status bar's.
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.session});
+  const _TopBar({
+    required this.session,
+    required this.captureButton,
+    required this.highlight,
+  });
 
   final CatalogSession session;
+
+  /// Owned by the page, which routes ⌘⇧C through it.
+  final GlobalKey<CaptureButtonState> captureButton;
+
+  /// The overlay's hover notifier — the capture menu lights the node its
+  /// cropped entries would photograph.
+  final ValueNotifier<String?> highlight;
 
   @override
   Widget build(BuildContext context) {
@@ -1139,7 +1146,11 @@ class _TopBar extends StatelessWidget {
               ),
             ),
           ),
-          _CaptureButtons(session: session),
+          _CaptureButtons(
+            session: session,
+            captureButton: captureButton,
+            highlight: highlight,
+          ),
           if (device != null)
             IconButton(
               icon: Icon(
@@ -1159,29 +1170,26 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-/// The live guest's next frame, cropped to whatever node is selected.
-///
-/// Shared by the top bar's buttons and the panel's ⌘⇧C. A shortcut that copied
-/// the whole frame while the button beside it copied the selected node would be
-/// two behaviours wearing one name.
+/// The live guest's next frame, cropped to [node]'s box when one is passed.
 ///
 /// Null when there is no guest to ask — the panel is compiling, or the last
 /// build failed — which is a refusal rather than an error: there is nothing on
 /// screen to be a picture of.
 Future<Uint8List?> _capturePreview(
-  BuildContext context,
-  CatalogSession session,
-) async {
+  CatalogSession session, {
+  InspectNode? node,
+}) async {
   var engine = session.engine;
   if (engine == null || engine.phase != EmbeddedEnginePhase.running) {
     return null;
   }
-  var node = _croppedNode(context, session);
   return engine.capturePng(
     crop: node?.layout,
-    // A crop arrives in the guest's logical coordinates; its pixels are in the
-    // device's.
-    pixelRatio: _deviceOf(context, session)?.pixelRatio ?? 1,
+    // A crop arrives in the guest's logical coordinates; its pixels are in
+    // whatever ratio the guest is rendering at — the engine's, not a staged
+    // device's, because with no device staged the guest renders at the
+    // panel's ratio and a retina display makes that 2.
+    pixelRatio: engine.pixelRatio,
   );
 }
 
@@ -1209,127 +1217,65 @@ InspectNode? _croppedNode(BuildContext context, CatalogSession session) {
 /// attached session gives it a VM service and no frames. The panel is the only
 /// place that holds the socket the picture comes over.
 ///
-/// With a node selected in the Elements tab they capture that node's box
-/// instead of the whole frame — cropped out of the real composited frame, so it
-/// is the widget among its surroundings rather than the different picture that
-/// re-rendering it alone would produce.
-class _CaptureButtons extends StatefulWidget {
-  const _CaptureButtons({required this.session});
+/// The click always takes the whole frame. Capturing the node selected in the
+/// Elements tab is the *menu's* — an entry named after the widget it would
+/// crop to, lighting that node's box on the preview while you point at it.
+/// It used to be a silent mode: with a node selected, the same-looking button
+/// photographed the crop, and the only tell was the tooltip.
+class _CaptureButtons extends StatelessWidget {
+  const _CaptureButtons({
+    required this.session,
+    required this.captureButton,
+    required this.highlight,
+  });
 
   final CatalogSession session;
-
-  @override
-  State<_CaptureButtons> createState() => _CaptureButtonsState();
-}
-
-class _CaptureButtonsState extends State<_CaptureButtons> {
-  /// Set while a capture is in flight, so a second click cannot start one on
-  /// top of it — the two would write the same scratch path.
-  var _busy = false;
-
-  /// Flips the copy icon to a tick for a moment. A 36px bar has no room for a
-  /// message, and a button that looks identical before and after is a button
-  /// you press twice.
-  Timer? _copied;
-
-  @override
-  void dispose() {
-    _copied?.cancel();
-    super.dispose();
-  }
-
-  Future<Uint8List?> _capture() async {
-    setState(() => _busy = true);
-    try {
-      return await _capturePreview(context, widget.session);
-    } catch (e) {
-      if (mounted) _complain('$e');
-      return null;
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _copy() async {
-    var png = await _capture();
-    if (png == null || !mounted) return;
-    try {
-      await ImageClipboard.setPng(png);
-      if (!mounted) return;
-      _copied?.cancel();
-      setState(() {});
-      _copied = Timer(const Duration(milliseconds: 1400), () {
-        if (mounted) setState(() {});
-      });
-    } catch (e) {
-      if (mounted) _complain('$e');
-    }
-  }
-
-  Future<void> _save() async {
-    var png = await _capture();
-    if (png == null || !mounted) return;
-    var location = await getSaveLocation(
-      suggestedName: _suggestedName(),
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'PNG image', extensions: ['png']),
-      ],
-    );
-    if (location == null) return;
-    try {
-      await File(location.path).writeAsBytes(png);
-    } catch (e) {
-      if (mounted) _complain('$e');
-    }
-  }
+  final GlobalKey<CaptureButtonState> captureButton;
+  final ValueNotifier<String?> highlight;
 
   /// Named after what it is a picture *of*, so a directory of these is still
   /// readable a week later. Matches what the `screenshot` action derives.
-  String _suggestedName() {
-    var entry = widget.session.selected ?? widget.session.active;
+  String _suggestedName({InspectNode? node}) {
+    var entry = session.selected ?? session.active;
     var base = entry == null
         ? 'catalog'
         : entry.id.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-');
-    var node = AddressScope.params(
-      context,
-      namespace: _inspectNamespace,
-    )['node'];
-    return '$base${node == null ? '' : '-node-${node.replaceAll('/', '-')}'}.png';
+    return node == null ? '$base.png' : '$base-${node.type}.png';
   }
-
-  /// Failures only. A capture that worked says so by changing the icon; one
-  /// that did not has a reason, and a reason needs words.
-  void _complain(String message) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text('Could not capture the preview: $message')),
-  );
 
   @override
   Widget build(BuildContext context) {
-    var running = widget.session.engine?.phase == EmbeddedEnginePhase.running;
-    var enabled = running && !_busy;
-    var cropped = _croppedNode(context, widget.session) != null;
-    var what = cropped ? 'the selected node' : 'the preview';
-    var justCopied = _copied?.isActive ?? false;
-
-    return Row(
-      spacing: FwSpacing.xs,
-      children: [
-        IconButton(
-          icon: Icon(justCopied ? Icons.check : Icons.content_copy, size: 15),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-          tooltip: ImageClipboard.isSupported
-              ? 'Copy $what (⌘⇧C)'
-              : 'Copying an image is not implemented on this platform',
-          onPressed: enabled && ImageClipboard.isSupported ? _copy : null,
-        ),
-        IconButton(
-          icon: const Icon(Icons.save_alt, size: 15),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-          tooltip: 'Save $what as PNG',
-          onPressed: enabled ? _save : null,
-        ),
+    var running = session.engine?.phase == EmbeddedEnginePhase.running;
+    var node = _croppedNode(context, session);
+    return CaptureButton(
+      key: captureButton,
+      enabled: running,
+      shortcutHint: '⌘⇧C',
+      primary: CaptureTarget(
+        label: 'the preview',
+        capture: () => _capturePreview(session),
+        suggestedName: _suggestedName,
+      ),
+      secondary: [
+        if (node != null)
+          CaptureTarget(
+            // The widget's own name, because the entry is the explanation:
+            // "just Card" says what the feature does better than "the
+            // selected node" ever did.
+            label: 'just ${node.type}',
+            capture: () => _capturePreview(session, node: node),
+            suggestedName: () => _suggestedName(node: node),
+            // Cropped out of the real composited frame rather than
+            // re-rendered alone — the widget among its surroundings. The
+            // hover shows exactly which box that will be.
+            onHover: (hovered) {
+              if (hovered) {
+                highlight.value = node.id;
+              } else if (highlight.value == node.id) {
+                highlight.value = null;
+              }
+            },
+          ),
       ],
     );
   }

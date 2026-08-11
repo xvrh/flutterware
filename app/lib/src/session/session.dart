@@ -160,7 +160,10 @@ class Session {
 
     var sdk = flutterSdk ?? await _defaultSdk();
 
-    var loaded = await ManifestLoader(dartExecutable: sdk.dart).tryLoad(root);
+    var loaded = await ManifestLoader(
+      dartExecutable: sdk.dart,
+      flutterRoot: sdk.root,
+    ).tryLoad(root);
     if (loaded.error != null) {
       throw SessionException('tool/flutterware.dart failed:\n${loaded.error}');
     }

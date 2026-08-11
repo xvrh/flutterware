@@ -48,6 +48,7 @@ void main() async {
     registry: buildNativeRegistry(),
     manifestLoader: ManifestLoader(
       dartExecutable: p.join(flutterSdk.root, 'bin', 'dart'),
+      flutterRoot: flutterSdk.root,
     ),
   );
   runApp(

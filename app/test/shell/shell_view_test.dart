@@ -124,6 +124,9 @@ PluginRegistry _panels(Iterable<String> ids) =>
     PluginRegistry({for (var id in ids) id: panelFor<_FakeCore>(_Fake.new)});
 
 class _StubLoader implements ManifestLoader {
+  @override
+  String? get flutterRoot => null;
+
   _StubLoader();
 
   String manifest = _manifestJson;
@@ -1079,6 +1082,9 @@ void main() {
 }
 
 class _EmptyLoader implements ManifestLoader {
+  @override
+  String? get flutterRoot => null;
+
   @override
   Future<PluginManifest?> load(String path) async => null;
 

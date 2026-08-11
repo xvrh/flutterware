@@ -37,6 +37,7 @@ class ManifestLoadException implements Exception {
 class ManifestLoader {
   ManifestLoader({
     required this.dartExecutable,
+    this.flutterRoot,
     this.timeout = const Duration(seconds: 30),
     Future<ProcessResult> Function(
       String executable,
@@ -49,6 +50,16 @@ class ManifestLoader {
 
   /// The `dart` to run — the SDK pinned by the project, not whatever is on PATH.
   final String dartExecutable;
+
+  /// The Flutter SDK root, exported as `FLUTTER_ROOT` while the config runs.
+  ///
+  /// `dart run` resolves an unresolved workspace before running — which is
+  /// every fresh worktree's first load — and satisfying a `flutter from sdk`
+  /// dependency during that resolve needs the root spelled out: the SDK's own
+  /// `bin/dart` does not export it, and without it the load dies with "the
+  /// Flutter SDK is not available" about a project whose SDK discovery just
+  /// succeeded. On a resolved worktree it changes nothing.
+  final String? flutterRoot;
 
   /// How long the config gets before it is killed and reported.
   ///
@@ -95,6 +106,7 @@ class ManifestLoader {
       executable,
       arguments,
       workingDirectory: workingDirectory,
+      environment: {'FLUTTER_ROOT': ?flutterRoot},
     );
     var stdout = process.stdout.transform(utf8.decoder).join();
     var stderr = process.stderr.transform(utf8.decoder).join();

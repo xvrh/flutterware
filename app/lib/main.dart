@@ -52,6 +52,7 @@ void main() async {
     registry: buildNativeRegistry(),
     manifestLoader: ManifestLoader(
       dartExecutable: p.join(flutterSdk.root, 'bin', 'dart'),
+      flutterRoot: flutterSdk.root,
     ),
   );
   // A capture run is the same window, driven and then closed. It is set up

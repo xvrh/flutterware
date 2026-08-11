@@ -301,6 +301,16 @@ class EmbeddedEngine extends ChangeNotifier {
     }
   }
 
+  /// The ratio the guest is rendering at — the last [resize]'s, 1 before any.
+  ///
+  /// This is the number that turns a node's logical rect into pixels of the
+  /// captured frame, and it is **not** always a staged device's: with no device
+  /// the guest renders at the panel's ratio, 2 on any retina display. The crop
+  /// used to guess from the device and fall back to 1, which cut the wrong
+  /// quarter of every capture in the default staging.
+  double get pixelRatio => _pixelRatio;
+  var _pixelRatio = 1.0;
+
   /// Forwards a new physical-pixel size to the guest.
   void resize(
     int width,
@@ -308,6 +318,7 @@ class EmbeddedEngine extends ChangeNotifier {
     double pixelRatio, {
     EdgeInsets insets = EdgeInsets.zero,
   }) {
+    _pixelRatio = pixelRatio;
     _send(
       ResizeMessage(
         width: width,

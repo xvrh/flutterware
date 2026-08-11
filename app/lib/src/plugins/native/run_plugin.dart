@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
+import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
 import '../../run/defines.dart';
@@ -20,6 +21,7 @@ import '../../run/launch.dart';
 import '../../run/logs.dart';
 import '../../inspect/elements_view.dart';
 import '../../inspect/inspect_dock.dart';
+import '../../ui/capture_button.dart';
 import '../../ui/design/design.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/popover.dart';
@@ -308,6 +310,20 @@ class _RunViewState extends State<_RunView> {
           onRefresh: view == RunViewKind.screen && state.canInspect
               ? () => _screen.currentState?.read()
               : null,
+          capture: view == RunViewKind.screen && state.canInspect
+              ? CaptureButton(
+                  primary: CaptureTarget(
+                    label: 'the screenshot',
+                    // The pane's last reading, resolved at click time — a
+                    // null is the pane saying it has nothing yet, which ends
+                    // the gesture quietly like any other empty capture.
+                    capture: () async => _screen.currentState?.imageBytes,
+                    suggestedName: () =>
+                        '${handle.runLabel.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')}'
+                        '-screen.png',
+                  ),
+                )
+              : null,
         ),
         const Divider(height: 1),
         Expanded(
@@ -563,10 +579,14 @@ class _ViewTabs extends StatelessWidget {
     required this.enabled,
     this.busy = false,
     this.onRefresh,
+    this.capture,
   });
 
   final String runKey;
   final RunViewKind view;
+
+  /// The open pane's capture button, when it shows a picture worth exporting.
+  final Widget? capture;
 
   /// False while the app has nothing to read. The tabs stay visible and stop
   /// responding — hiding them would move the page's furniture around every
@@ -601,6 +621,7 @@ class _ViewTabs extends StatelessWidget {
       // three surfaces. It had a row of its own, which held one icon and a
       // caption and floated between the header and the panes.
       trailing: [
+        ?capture,
         if (busy)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: FwSpacing.sm),
@@ -711,6 +732,10 @@ class _ScreenTabState extends State<_ScreenTab> {
   double _split = 0.34;
 
   bool get isReading => _loading;
+
+  /// The last reading's picture, for the strip's capture button — bytes the
+  /// pane already holds, so exporting one costs no round trip to the app.
+  Uint8List? get imageBytes => _image;
 
   /// What the tree hovers, for a box drawn over the picture.
   ///
@@ -1319,7 +1344,23 @@ class _StepDetailState extends State<_StepDetail> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(stepSentence(entry), style: context.type.body),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(stepSentence(entry), style: context.type.body),
+                  ),
+                  if (hasShot)
+                    CaptureButton(
+                      primary: CaptureTarget(
+                        label: "the step's screenshot",
+                        capture: () => File(screenshot).readAsBytes(),
+                        // The journal already names the file after the step;
+                        // a save keeps that identity.
+                        suggestedName: () => p.basename(screenshot),
+                      ),
+                    ),
+                ],
+              ),
               if (facts.isNotEmpty) ...[
                 const Gap(FwSpacing.xxs),
                 Text(

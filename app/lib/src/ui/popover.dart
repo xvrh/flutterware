@@ -43,6 +43,12 @@ class Popover extends StatefulWidget {
   /// this; a read-only tip should pass false to keep the caller's focus.
   final bool autofocus;
 
+  /// Fires however the popover closes — selection, outside tap or Escape.
+  /// For state the content leaves behind that an unmount will not undo: a
+  /// hovered row's `onExit` never fires when dismissal removes the overlay
+  /// from under the pointer.
+  final VoidCallback? onClose;
+
   const Popover({
     super.key,
     required this.anchor,
@@ -51,6 +57,7 @@ class Popover extends StatefulWidget {
     this.align = PopoverAlign.start,
     this.gap = 6,
     this.autofocus = true,
+    this.onClose,
   });
 
   @override
@@ -82,7 +89,10 @@ class _PopoverState extends State<Popover> implements PopoverController {
     return RawMenuAnchor(
       controller: _menu,
       onOpen: () => setState(() => _isOpen = true),
-      onClose: () => setState(() => _isOpen = false),
+      onClose: () {
+        setState(() => _isOpen = false);
+        widget.onClose?.call();
+      },
       builder: (context, controller, child) => widget.anchor(context, this),
       overlayBuilder: (context, info) {
         _anchorWidth = info.anchorRect.width;
