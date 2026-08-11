@@ -57,6 +57,7 @@ class RenderedEntry {
     required this.width,
     required this.height,
     this.tree,
+    this.complaint,
   });
 
   final String entryId;
@@ -64,6 +65,12 @@ class RenderedEntry {
   final int width;
   final int height;
   final InspectNode? tree;
+
+  /// What the framework said while drawing it, when it drew it anyway — an
+  /// overflow, a missing font. The picture is comparable and the complaint is
+  /// still worth carrying, because "this overflows now" is a finding even when
+  /// the pixels barely moved.
+  final String? complaint;
 }
 
 /// Everything a comparison concluded.
@@ -395,9 +402,14 @@ class ComparisonRunner {
   ComparedItem _compare(String id, ({String base, String head}) key) {
     var baseMeta = cache.meta(key.base)!;
     var headMeta = cache.meta(key.head)!;
+    // The head side's, not both: a complaint present on base too is the state
+    // of the world rather than something this branch did, and the row is
+    // `same` anyway.
+    var complaint = headMeta.complaint;
     return ComparedItem.of(
       id: id,
       shots: key,
+      note: complaint == baseMeta.complaint ? null : complaint,
       pixels: PixelDiff.of(
         base: cache.read(key.base)!,
         baseWidth: baseMeta.width,
@@ -436,6 +448,7 @@ class ComparisonRunner {
             width: frame.width,
             height: frame.height,
             entryId: frame.entryId,
+            complaint: frame.complaint,
           ),
         );
         if (frame.tree case var tree?) {

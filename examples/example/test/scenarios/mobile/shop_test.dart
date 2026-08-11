@@ -28,8 +28,13 @@ void main() {
             await s.tap(ShopKeys.addToCart, shot: Shot('Cart · large'));
           },
         });
-        await s.enterText(ShopKeys.cupName, 'Xavier');
+        await s.enterText(ShopKeys.cupName, 'Ada');
         await s.tap(ShopKeys.placeOrder, shot: Shot('Order placed'));
+      },
+      'a flat white': () async {
+        await s.tap('Flat white');
+        await s.tap(ShopKeys.size(DrinkSize.medium));
+        await s.tap(ShopKeys.addToCart, shot: Shot('Cart'));
       },
       'a cold brew': () async {
         await s.tap('Cold brew');
@@ -38,6 +43,7 @@ void main() {
       },
       'the empty cart': () async {
         await s.tap(ShopKeys.openCart, shot: Shot('Empty cart'));
+        await s.tap(ShopKeys.backToMenu, shot: Shot('Back at the menu'));
       },
     });
   });

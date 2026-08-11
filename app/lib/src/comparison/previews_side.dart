@@ -1,5 +1,8 @@
 import 'package:path/path.dart' as p;
 
+// ignore: implementation_imports
+import 'package:flutterware/src/inspect/error.dart';
+
 import '../previews/discovery.dart';
 import '../previews/headless_catalog.dart';
 import '../previews/protocol.dart';
@@ -79,19 +82,30 @@ class PreviewsSide implements ComparisonSide {
         previewAnnotations: previewAnnotations,
       ),
     );
-    // An entry that compiled and then threw while building is a picture of
+    // An entry that compiled and then threw *while building* is a picture of
     // Flutter's red error screen. Two of those compared say nothing, and one
     // of them compared against a working screen says "97% changed" when the
-    // finding is "this throws now". So a frame with errors is *not* a frame.
+    // finding is "this throws now".
+    //
+    // **But only a build error replaces the picture.** This used to drop any
+    // frame that reported anything, which threw away a perfectly comparable
+    // screen because something overflowed by 1.5 pixels — a complaint about
+    // the frame, not the absence of one. `InspectError.library` is there to
+    // tell those apart without reading the message, and says so.
     var threw = <String, String>{};
+    var complained = <String, String>{};
     CatalogBatch batch;
     try {
       batch = await catalog.captureAll(
         entryIds: entryIds,
         onFrame: (frame) async {
-          if (frame.errors.errors.firstOrNull case var error?) {
-            threw[frame.entry.id] = error.exception;
+          var errors = frame.errors.errors;
+          if (errors.where(_replacesTheFrame).firstOrNull case var fatal?) {
+            threw[frame.entry.id] = fatal.exception;
             return;
+          }
+          if (errors.firstOrNull case var complaint?) {
+            complained[frame.entry.id] = complaint.exception;
           }
           await onFrame(
             RenderedEntry(
@@ -100,6 +114,7 @@ class PreviewsSide implements ComparisonSide {
               width: frame.width,
               height: frame.height,
               tree: frame.tree?.root,
+              complaint: complained[frame.entry.id],
             ),
           );
         },
@@ -117,6 +132,17 @@ class PreviewsSide implements ComparisonSide {
     }
     return {...batch.failed, ...threw};
   }
+
+  /// Whether this error replaced what would have been on screen.
+  ///
+  /// A build that throws is caught by the widgets library and the subtree
+  /// becomes an `ErrorWidget`: there is no picture left of the thing you asked
+  /// for, and comparing one is comparing error screens. A layout overflow is
+  /// reported by the rendering library and **paints anyway**, with a stripe
+  /// over the part that did not fit — a picture, plus a complaint, and the
+  /// complaint is not a reason to refuse to compare it.
+  static bool _replacesTheFrame(InspectError error) =>
+      error.library == 'widgets library';
 
   String _packageRootIn(String checkout) =>
       p.normalize(p.join(checkout, packagePath));

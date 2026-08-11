@@ -310,6 +310,59 @@ void main() {
     });
   });
 
+  // A complaint about a frame is not the absence of one. This used to drop
+  // any frame that reported anything, which threw away a perfectly comparable
+  // screen because something overflowed by 1.5 pixels.
+  group('a frame that was drawn anyway', () {
+    test('an overflow is compared, and carried as the note', () async {
+      side.declared['*'] = ['demo/card.dart#card'];
+      side.complain = (entry, checkout) => checkout.endsWith('head')
+          ? 'A RenderFlex overflowed by 1.5 pixels on the right.'
+          : null;
+
+      var result = await compare(
+        base: checkout('base', {'demo/card.dart': '1'}),
+        head: checkout('head', {'demo/card.dart': '2'}),
+      );
+
+      var item = itemFor(result, 'demo/card.dart#card');
+      expect(item.state, isNot(ComparedState.failed));
+      expect(item.pixels, isNotNull);
+      expect(item.note, contains('overflowed'));
+    });
+
+    // A build that throws leaves an error screen where the entry was, and
+    // comparing one of those against a working screen measures nothing.
+    test('a build that threw is still not a frame', () async {
+      side.declared['*'] = ['demo/card.dart#card'];
+      side.fatal['demo/card.dart#card'] = 'Bad state: no';
+
+      var result = await compare(
+        base: checkout('base', {'demo/card.dart': '1'}),
+        head: checkout('head', {'demo/card.dart': '2'}),
+      );
+
+      expect(
+        itemFor(result, 'demo/card.dart#card').state,
+        ComparedState.failed,
+      );
+    });
+
+    // Both sides overflowing is the state of the world, not something this
+    // branch did.
+    test('a complaint both sides make is not a note', () async {
+      side.declared['*'] = ['demo/card.dart#card'];
+      side.complain = (entry, checkout) => 'overflowed by 1.5 pixels';
+
+      var result = await compare(
+        base: checkout('base', {'demo/card.dart': '1'}),
+        head: checkout('head', {'demo/card.dart': '2'}),
+      );
+
+      expect(itemFor(result, 'demo/card.dart#card').note, isNull);
+    });
+  });
+
   group('the severity ladder', () {
     test('an entry that stopped rendering is the loudest row', () async {
       side.declared['*'] = ['demo/a.dart#a', 'demo/b.dart#b'];
@@ -438,6 +491,13 @@ class _FakeSide implements ComparisonSide {
 
   String? Function(String entry, String checkout)? refuse;
 
+  /// What the framework said while drawing it anyway, per side — a complaint
+  /// about a frame rather than the absence of one.
+  String? Function(String entry, String checkout)? complain;
+
+  /// Entry id → a build that threw, leaving no frame.
+  final fatal = <String, String>{};
+
   @override
   Future<List<String>> entries(String checkout) async =>
       declared[checkout] ?? declared['*'] ?? const [];
@@ -455,7 +515,21 @@ class _FakeSide implements ComparisonSide {
         failed[entry] = why;
         continue;
       }
-      await onFrame(frame(entry, checkout));
+      if (fatal[entry] case var why?) {
+        failed[entry] = why;
+        continue;
+      }
+      var drawn = frame(entry, checkout);
+      await onFrame(
+        RenderedEntry(
+          entryId: drawn.entryId,
+          rgba: drawn.rgba,
+          width: drawn.width,
+          height: drawn.height,
+          tree: drawn.tree,
+          complaint: complain?.call(entry, checkout),
+        ),
+      );
     }
     return failed;
   }

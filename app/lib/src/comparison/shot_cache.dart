@@ -97,6 +97,7 @@ class ShotRecord {
     required this.width,
     required this.height,
     this.entryId,
+    this.complaint,
   });
 
   factory ShotRecord.fromJson(Map<String, Object?> json) => ShotRecord(
@@ -104,6 +105,7 @@ class ShotRecord {
     width: json['width'] as int? ?? 0,
     height: json['height'] as int? ?? 0,
     entryId: json['entry'] as String?,
+    complaint: json['complaint'] as String?,
   );
 
   /// `raw` — rgba8888 rows, [width]×[height]×4 — or `png`.
@@ -120,10 +122,20 @@ class ShotRecord {
   /// of the key and not read by anything: the key is the identity.
   final String? entryId;
 
+  /// What the framework said while this frame was drawn, when it drew it
+  /// anyway — an overflow, a missing font.
+  ///
+  /// Kept beside the picture rather than recomputed, because the picture
+  /// outlives the render: a cached frame is served without the guest that
+  /// produced it, and "this overflows now" would otherwise be a finding that
+  /// survives exactly one comparison.
+  final String? complaint;
+
   Map<String, Object?> toJson() => {
     'format': format,
     'width': width,
     'height': height,
     'entry': ?entryId,
+    'complaint': ?complaint,
   };
 }
