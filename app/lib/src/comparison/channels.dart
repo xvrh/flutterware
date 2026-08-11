@@ -19,6 +19,7 @@ class ComparedItem {
     this.texts,
     this.events,
     this.note,
+    this.shots,
   });
 
   /// What was compared: an entry id, or a step's path through its flow.
@@ -38,11 +39,23 @@ class ComparedItem {
   /// file made it worth rendering, or which side failed to render.
   final String? note;
 
+  /// Where the two frames are filed, as `ShotCache` keys.
+  ///
+  /// **The verdict is not the picture, and a reader wants both.** Without this
+  /// a comparison could say a preview changed by 0.38% and nothing anywhere
+  /// could show it: the keys are computed inside the runner from a closure
+  /// fingerprint nobody outside can reproduce. They go in the artifact too, so
+  /// a panel, an agent and a static page all address the same two files.
+  final ({String base, String head})? shots;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'state': state.name,
     'label': ?label,
     'note': ?note,
+    'shots': ?(shots == null
+        ? null
+        : {'base': shots!.base, 'head': shots!.head}),
     if (pixels != null || tree != null || texts != null || events != null)
       'channels': {
         'pixels': ?pixels?.toJson(),
@@ -71,6 +84,7 @@ class ComparedItem {
     bool baseRendered = true,
     bool headRendered = true,
     String? note,
+    ({String base, String head})? shots,
   }) {
     if (!headRendered) {
       return ComparedItem(
@@ -78,6 +92,7 @@ class ComparedItem {
         label: label,
         state: baseRendered ? ComparedState.broke : ComparedState.failed,
         note: note ?? (baseRendered ? 'renders on base, throws here' : null),
+        shots: shots,
       );
     }
     if (!baseRendered) {
@@ -86,6 +101,7 @@ class ComparedItem {
         label: label,
         state: ComparedState.wasBroken,
         note: note ?? 'was already broken on base',
+        shots: shots,
       );
     }
 
@@ -108,6 +124,7 @@ class ComparedItem {
       texts: textChannel.changed ? textChannel : null,
       events: eventChannel.changed ? eventChannel : null,
       note: note,
+      shots: shots,
     );
   }
 }

@@ -11,17 +11,24 @@ import '../../ui/theme.dart';
 import '../channels.dart';
 import '../comparison_controller.dart';
 import '../session_environment.dart';
+import 'previews_tab.dart';
 import 'state_chip.dart';
 
-/// The changes screen's root, so a test can scope to it.
-const changesScreenKey = Key('changes-screen');
+/// The tab strip's root, so a test can scope to it.
+const comparisonTabsKey = Key('comparison-tabs');
 
-Key changesTabKey(String id) => ValueKey('changes.tab.$id');
+Key comparisonTabKey(String id) => ValueKey('changes.tab.$id');
+
+/// The tab ids, which are also their first address segment.
+const filesTabId = 'files';
 
 /// **`fw:///worktrees/<worktree>/changes`** — what this branch did.
 ///
-/// Three renderings of one delta, against one base: the files that changed,
+/// Three renderings of one delta against one base: the files that changed,
 /// what the previews look like on either side, and what the scenarios do.
+/// This owns the strip and the two comparison halves; the file diff is handed
+/// in as [files], because it is a screen of its own with its own master,
+/// detail and index tabs.
 ///
 /// **Not its own space, and the reversal is the interesting part.** The design
 /// doc argued for one, from the premise that a comparison spans two plugins and
@@ -35,17 +42,31 @@ Key changesTabKey(String id) => ValueKey('changes.tab.$id');
 /// screen you already open to read a diff, the expensive halves get discovered.
 /// Somewhere else they would have to be remembered, and a feature that has to
 /// be remembered is used twice.
-class ChangesScreen extends StatefulWidget {
-  const ChangesScreen(this.shell, this.worktree, {super.key});
+///
+/// **The file half renders without a session and these two cannot.** It reads
+/// git; they need the previews and scenarios cores, which need a resolved
+/// config. So a checkout nobody has opened gets the files tab and no others,
+/// which is the honest shape rather than a tab that would explain itself.
+class ComparisonTabs extends StatefulWidget {
+  const ComparisonTabs({
+    super.key,
+    required this.shell,
+    required this.worktree,
+    required this.files,
+  });
 
   final ShellController shell;
   final Worktree worktree;
 
+  /// The file diff, built only when its tab is showing.
+  final WidgetBuilder files;
+
   @override
-  State<ChangesScreen> createState() => _ChangesScreenState();
+  State<ComparisonTabs> createState() => _ComparisonTabsState();
 }
 
-class _ChangesScreenState extends State<ChangesScreen> implements SettleSource {
+class _ComparisonTabsState extends State<ComparisonTabs>
+    implements SettleSource {
   ComparisonController? _controller;
 
   /// Why there is no comparison at all — not a git repository, no base.
@@ -113,16 +134,22 @@ class _ChangesScreenState extends State<ChangesScreen> implements SettleSource {
     if (mounted) setState(() {});
   }
 
-  /// The tab named by the address, or the first one that has anything to show.
+  /// The tab named by the address's first segment.
+  ///
+  /// **Anything that is not a tab id is a file path**, which is what makes the
+  /// grammar backwards compatible: `changes/app/lib/foo.dart` was a whole
+  /// address before there were tabs, and it still means the file diff. New
+  /// addresses spell it `changes/files/app/lib/foo.dart`, because a repository
+  /// with a top-level `previews/` directory would otherwise be ambiguous
+  /// exactly where it matters.
   String get _tab {
     var named = widget.shell.address.segments.firstOrNull;
-    var tabs = _tabs;
-    if (named != null && tabs.any((tab) => tab.id == named)) return named;
-    return tabs.firstWhere((tab) => tab.available, orElse: () => tabs.first).id;
+    if (named != null && _tabs.any((tab) => tab.id == named)) return named;
+    return filesTabId;
   }
 
   List<_Tab> get _tabs => [
-    const _Tab(id: 'files', label: 'files', available: false),
+    const _Tab(id: filesTabId, label: 'files'),
     for (var half in _controller?.declared ?? const <ComparisonHalf>[])
       _Tab(id: half.kind.name, label: half.kind.label, half: half),
   ];
@@ -139,9 +166,10 @@ class _ChangesScreenState extends State<ChangesScreen> implements SettleSource {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const SizedBox.shrink();
-    if (_unavailable case var message?) {
-      return EmptyState(title: 'Nothing to compare', message: message);
+    // No comparison to be had — the files tab still is one, and it is the one
+    // that needs nothing from us.
+    if (_loading || _unavailable != null || _controller == null) {
+      return Builder(builder: widget.files);
     }
 
     var controller = _controller!;
@@ -149,15 +177,26 @@ class _ChangesScreenState extends State<ChangesScreen> implements SettleSource {
     var selected = tabs.firstWhere((tab) => tab.id == _tab);
 
     return Column(
-      key: changesScreenKey,
+      key: comparisonTabsKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _Header(controller),
         _TabStrip(tabs: tabs, selected: selected.id, onSelect: _select),
         Expanded(
           child: selected.half == null
-              ? const _FilesPlaceholder()
-              : _HalfView(controller, selected.half!),
+              ? Builder(builder: widget.files)
+              : _HalfView(
+                  controller: controller,
+                  half: selected.half!,
+                  settle: widget.shell.appContext.settle,
+                  selected: widget.shell.address.segments.skip(1).isEmpty
+                      ? null
+                      : widget.shell.address.segments.skip(1).join('/'),
+                  onSelect: (id) => widget.shell.selectChanges(
+                    tab: selected.id,
+                    segments: id.split('/'),
+                  ),
+                ),
         ),
       ],
     );
@@ -174,17 +213,14 @@ class _ChangesScreenState extends State<ChangesScreen> implements SettleSource {
 }
 
 class _Tab {
-  const _Tab({
-    required this.id,
-    required this.label,
-    this.half,
-    this.available = true,
-  });
+  const _Tab({required this.id, required this.label, this.half});
 
   final String id;
   final String label;
+
+  /// Null for the file diff, which is not a comparison half — it needs no base
+  /// checkout, costs nothing, and is built by the host.
   final ComparisonHalf? half;
-  final bool available;
 }
 
 /// Both sides, and what the comparison found.
@@ -314,7 +350,7 @@ class _TabButton extends StatelessWidget {
     };
 
     return Tappable.builder(
-      key: changesTabKey(tab.id),
+      key: comparisonTabKey(tab.id),
       onTap: onTap,
       builder: (context, hovered) => Container(
         padding: const EdgeInsets.symmetric(
@@ -335,11 +371,7 @@ class _TabButton extends StatelessWidget {
             Text(
               tab.label,
               style: context.type.body.copyWith(
-                color: selected
-                    ? colors.ink
-                    : tab.available
-                    ? colors.mut
-                    : colors.mut3,
+                color: selected ? colors.ink : colors.mut,
               ),
             ),
             if (half?.stage == HalfStage.refused) ...[
@@ -362,10 +394,21 @@ class _TabButton extends StatelessWidget {
 
 /// One half, in whatever state it is in.
 class _HalfView extends StatelessWidget {
-  const _HalfView(this.controller, this.half);
+  const _HalfView({
+    required this.controller,
+    required this.half,
+    required this.settle,
+    required this.selected,
+    required this.onSelect,
+  });
 
   final ComparisonController controller;
   final ComparisonHalf half;
+  final SettleRegistry settle;
+
+  /// What the address names below the tab, or null.
+  final String? selected;
+  final ValueChanged<String> onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -379,7 +422,23 @@ class _HalfView extends StatelessWidget {
       case HalfStage.ready:
       case HalfStage.running:
       case HalfStage.done:
-        return _Rows(controller, half);
+        // Nothing to point a stage at until the first verdict lands, and the
+        // list would be an empty column beside an empty pane.
+        if (half.rows.isEmpty && half.scenarios.isEmpty) {
+          return _Working(
+            half.isRunning ? 'Comparing…' : 'Nothing to compare yet.',
+          );
+        }
+        return switch (half.kind) {
+          ComparisonHalfKind.previews => PreviewsTab(
+            half: half,
+            cache: controller.environment.shots,
+            settle: settle,
+            selected: selected,
+            onSelect: onSelect,
+          ),
+          ComparisonHalfKind.scenarios => _Rows(controller, half),
+        };
     }
   }
 }
@@ -510,19 +569,5 @@ class _Working extends StatelessWidget {
       message,
       style: context.type.body.copyWith(color: context.colors.mut),
     ),
-  );
-}
-
-/// Until the file-changes panel lands and takes this tab.
-class _FilesPlaceholder extends StatelessWidget {
-  const _FilesPlaceholder();
-
-  @override
-  Widget build(BuildContext context) => const EmptyState(
-    icon: Icons.description_outlined,
-    title: 'The file diff lands here',
-    message:
-        'The two tabs beside this one compare what the branch looks like and '
-        'what it does.',
   );
 }

@@ -104,7 +104,10 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
     from: topLevel,
   );
 
-  ShotCache get _cache => ShotCache(p.join(cacheRoot, 'shots'));
+  @override
+  late final ShotCache shots = ShotCache(p.join(cacheRoot, 'shots'));
+
+  ShotCache get _cache => shots;
 
   @override
   Future<String> prepareBase() async {

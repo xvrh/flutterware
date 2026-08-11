@@ -4,6 +4,7 @@ import 'artifact.dart';
 import 'channels.dart';
 import 'runner.dart';
 import 'scenario_comparison.dart';
+import 'shot_cache.dart';
 
 /// Which half of a comparison, where both are spelled the same way.
 enum ComparisonHalfKind {
@@ -131,6 +132,12 @@ abstract interface class ComparisonEnvironment {
 
   bool get hasPreviews;
   bool get hasScenarios;
+
+  /// Where the frames a comparison rendered are filed.
+  ///
+  /// Exposed because a verdict is not a picture: `ComparedItem.shots` names two
+  /// keys, and something has to be able to open them.
+  ShotCache get shots;
 
   /// *14 of 213* for the previews half, or null when it cannot be worked out.
   Future<String?> previewsEstimate(String baseRoot);
@@ -331,8 +338,22 @@ class ComparisonController extends ChangeNotifier {
     );
   }
 
-  static String _firstLine(Object error) =>
-      '$error'.split('\n').first.replaceFirst(RegExp(r'^\w+: '), '');
+  /// The readable part of an error, without the stack of nested prefixes.
+  ///
+  /// **Not always one line.** A daemon failure ends its first line with a colon
+  /// and puts what actually went wrong on the next, so a strict first-line rule
+  /// renders a sentence that stops mid-thought — which reads as a truncation
+  /// bug rather than as the reason it is.
+  static String _firstLine(Object error) {
+    var lines = [
+      for (var line in '$error'.split('\n'))
+        if (line.trim().isNotEmpty) line.trim(),
+    ];
+    if (lines.isEmpty) return '$error';
+    var first = lines.first.replaceFirst(RegExp(r'^\w+: '), '');
+    if (!first.endsWith(':') || lines.length < 2) return first;
+    return '$first ${lines[1]}';
+  }
 
   @override
   void dispose() {

@@ -105,14 +105,12 @@ class PreviewsSide implements ComparisonSide {
         },
       );
     } on Object catch (error) {
-      // **A side that cannot start is a side, not a crash.** The daemon
-      // refuses as a whole when the generated entrypoint does not compile —
-      // and one way that happens is version skew, because the base is
-      // rendered with the *head's* tooling: a generator that emits a call
-      // into `package:flutterware` meets whatever version that checkout
-      // resolves. Reported per entry, which lands them on the severity ladder
-      // as "this side could not render it" rather than ending the comparison.
-      return {for (var id in entryIds) id: '$error'.split('\n').first};
+      // **A side that cannot start is one finding.** The daemon refuses as a
+      // whole when the generated entrypoint does not compile — one way that
+      // happens is version skew, because the base is rendered with the *head's*
+      // tooling (see the design doc's §11a). Nothing about that is per entry,
+      // and reporting it per entry produced twenty-four rows of one sentence.
+      throw SideDidNotCompile('$error'.split('\n').first);
     }
     return {...batch.failed, ...threw};
   }

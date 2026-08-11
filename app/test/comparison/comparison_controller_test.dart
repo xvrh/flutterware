@@ -5,6 +5,7 @@ import 'package:flutterware_app/src/comparison/channels.dart';
 import 'package:flutterware_app/src/comparison/comparison_controller.dart';
 import 'package:flutterware_app/src/comparison/runner.dart';
 import 'package:flutterware_app/src/comparison/scenario_comparison.dart';
+import 'package:flutterware_app/src/comparison/shot_cache.dart';
 import 'package:test/test.dart';
 
 /// The sequencing: the base is prepared on the panel, a half runs on its tab.
@@ -223,6 +224,9 @@ class _FakeEnvironment implements ComparisonEnvironment {
 
   @override
   var hasScenarios = true;
+
+  @override
+  final shots = ShotCache('/unused');
 
   String? baseError;
   String? previewsEstimateError;

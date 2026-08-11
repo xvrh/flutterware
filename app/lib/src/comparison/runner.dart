@@ -130,6 +130,27 @@ class ComparisonPlan {
   String get estimate => '${toRender.length} of $total';
 }
 
+/// One side could not render *anything* — it did not compile.
+///
+/// **One finding, not one per entry.** This used to be mapped onto every entry
+/// the side was asked for, on the reasoning that a per-entry verdict lands on
+/// the severity ladder rather than ending the comparison. Measured against a
+/// base whose catalog did not compile, that reasoning produced twenty-four
+/// identical rows, each saying the same sentence once, burying everything else
+/// the run found. It is the argument the split branches already settled: one
+/// decision in the source is one row, however many things hang off it.
+///
+/// Thrown by the side, which knows the reason; named by the runner, which knows
+/// which checkout it handed over.
+class SideDidNotCompile implements Exception {
+  SideDidNotCompile(this.reason);
+
+  final String reason;
+
+  @override
+  String toString() => reason;
+}
+
 /// Refused before anything is rendered.
 class ComparisonRefused implements Exception {
   ComparisonRefused(this.message);
@@ -303,18 +324,37 @@ class ComparisonRunner {
     ];
 
     var rendered = wantedByBase.length + wantedByHead.length;
-    var baseFailures = await _renderInto(
-      baseRoot,
-      wantedByBase,
-      keys,
-      isBase: true,
-    );
-    var headFailures = await _renderInto(
-      headRoot,
-      wantedByHead,
-      keys,
-      isBase: false,
-    );
+    // A side that will not compile ends the half with one sentence. Which side
+    // is the reader's first question and the side cannot answer it, so it is
+    // answered here.
+    Map<String, String> baseFailures;
+    Map<String, String> headFailures;
+    try {
+      baseFailures = await _renderInto(
+        baseRoot,
+        wantedByBase,
+        keys,
+        isBase: true,
+      );
+    } on SideDidNotCompile catch (e) {
+      throw ComparisonRefused(
+        'the base checkout does not compile, so there is nothing to compare '
+        'against: ${e.reason}',
+      );
+    }
+    try {
+      headFailures = await _renderInto(
+        headRoot,
+        wantedByHead,
+        keys,
+        isBase: false,
+      );
+    } on SideDidNotCompile catch (e) {
+      throw ComparisonRefused(
+        'this worktree does not compile, so its previews cannot be '
+        'rendered: ${e.reason}',
+      );
+    }
 
     for (var id in toRender) {
       var key = keys[id]!;
@@ -327,6 +367,10 @@ class ComparisonRunner {
             baseRendered: baseOk,
             headRendered: headOk,
             note: headFailures[id] ?? baseFailures[id],
+            // Even here: the side that *did* render is worth looking at, and
+            // "renders on base, throws here" is a row somebody will want to
+            // see the base of.
+            shots: key,
           ),
         );
         continue;
@@ -353,6 +397,7 @@ class ComparisonRunner {
     var headMeta = cache.meta(key.head)!;
     return ComparedItem.of(
       id: id,
+      shots: key,
       pixels: PixelDiff.of(
         base: cache.read(key.base)!,
         baseWidth: baseMeta.width,
