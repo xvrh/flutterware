@@ -1,10 +1,11 @@
 # Comparison — what a worktree did to the pictures
 
 **Date:** 2026-08-11
-**Status:** design, brainstormed with the owner. **Steps 1–5 of §12 are
-built** (2026-08-11) and §12 records which commit did what; `fw compare` runs
-end to end for previews. The space, the static viewer, the scenario side and
-the MCP surface are not built. Every
+**Status:** design, brainstormed with the owner. **Steps 1–5 of §12 are built**
+(2026-08-11), previews and scenarios both; §12 records which commit did what.
+Rebased onto master's transition-events work, which shipped `verb`/`target` on
+the step capture while this branch was adding the same thing — §7a records what
+survived. The space, the static viewer and the MCP surface are not built. Every
 decision below was taken in that conversation and **all of them are settled** —
 §13 lists them, and §14 is the short list of constants deliberately left for
 measurement. Every number is cited to the findings doc that measured it; nothing
@@ -181,7 +182,7 @@ each with its own differ and its own normalise/ignore rules**:
 | `tree` | `.tree.json` | node identity; property allow-list |
 | `semantics` | `.semantics.json` | traversal order is significant |
 | `texts` | `capture.texts` | none |
-| `events` | *not built* — network and friends, captured between steps | field masks |
+| `events` | ✅ `08db2c68` — network, analytics, logs, platform channels, captured between steps | channel + title, digits masked |
 
 `events` is the reason to build the seam now rather than later. Tokens,
 timestamps and request ids will make every event diff 100% noise without field
@@ -248,6 +249,14 @@ Three reasons it must not be the string `tap(#pay)`:
 `auto` stays as it is and `name` is not overwritten — which steps the author
 named is real information. `action` sits beside them.
 
+**Master shipped `verb` and `target` while this was being written** (`#87`,
+rebased 2026-08-11), so the plan's `action: {verb, target, kind}` became
+master's two flat fields plus one addition — `targetKind`, the trust rank,
+which is what the aligner reads before deciding how far a label can be trusted.
+Master's own test caught the rest: the richer per-`Target` descriptions this
+proposed broke the rule that the error a verb throws and the step it records
+use *one* spelling. A target reads back as what the author wrote, everywhere.
+
 **Write `position` down.** `_capture` already computes
 `'${_state.plan.path}#${_ordinal}'` — the split choice path plus the ordinal
 since the last split — uses it for replay dedup, and throws it away. Putting it
@@ -307,6 +316,18 @@ otherwise avoid.
 When a scenario is mostly auto steps with `kind: text` targets, say so in the
 header — *"6 unnamed steps, alignment is a guess"* — rather than producing a
 confident-looking wrong diff.
+
+### 7b-bis. What building the aligner corrected
+
+Two things reasoning had wrong (`08db2c68`):
+
+- **A linear scenario is a chain of single-child nodes, not a list of
+  siblings.** Aligning sibling lists compares one step against one at each
+  level and recognises no insertion at all. The run has to be flattened —
+  every step until one forks — before the LCS can see it.
+- **A retarget claim needs a verb on both sides.** Two steps that merely lack
+  one share nothing but a gap; pairing them on that turns a renamed `Shot`
+  into a claim about what the app did.
 
 ### 7c. Axes — always the default
 
@@ -470,12 +491,13 @@ handles SDK management.
 4. ✅ **The diff kernel** (§4, §5) — `9b8379fd`. Pixels, tree, texts, the
    severity ladder. Not yet run in an isolate: it has no caller to be off the
    UI thread of.
-5. ✅ **`fw compare` + `index.json`** (§8) — `f554fced`, prerequisites in
-   `1445faf8`. Measured on this repo against `origin/master`: 6 entries, 0
-   rendered, 6 skipped, 142ms; change one label and it renders that entry
-   alone on both sides. MCP is not wired yet, and neither are scenarios — this
-   is the previews half. Three corrections it forced are in the commit
-   message, and one structural finding is in §11a.
+5. ✅ **`fw compare` + `index.json`** (§8) — previews in `f554fced`
+   (prerequisites in `1445faf8`), **scenarios in `08db2c68`**. Measured on this
+   repo against `origin/master`: 6 entries, 0 rendered, 6 skipped, 142ms;
+   change one label and it renders that entry alone on both sides. Scenarios
+   run per-scenario on a warm runner, skipped by the same closure rule. MCP is
+   not wired. Corrections these forced are in their commit messages; one
+   structural finding is in §11a.
 6. **The space** (§9) — overview, preview modes, merged split tree, two live
    revisions.
 7. **The static viewer** — in v1, and dumb: it reads `index.json` and renders,
