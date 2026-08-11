@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/changes/change_set.dart';
 import 'package:flutterware_app/src/changes/changes_screen.dart';
 import 'package:flutterware_app/src/changes/changes_tree.dart';
+import 'package:flutterware_app/src/changes/diff_view.dart';
 import 'package:flutterware_app/src/changes/patch_index.dart';
 import 'package:flutterware_app/src/changes/ranking.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
@@ -173,12 +174,18 @@ void main() {
       },
     );
 
-    testWidgets('a pinned file stays above the tree, and out of it', (
+    testWidgets('a pinned file is in the band and also where it lives', (
       tester,
     ) async {
-      // **The alert must not be something you navigate to.** A tab would have
+      // **The alert must not be something you navigate to** — a tab would have
       // reconciled the two orderings by hiding one of them, which for this one
       // is the wrong half.
+      //
+      // But taking pins *out* of the tree to avoid listing a file twice made
+      // the tree an incomplete map: its counts came out one short per pin, so
+      // the header said 53 over a tree totalling 52, and browsing to the pinned
+      // file could not find it. The band is a view onto the tree, not a removal
+      // from it.
       var files = [at('app/lib/a.dart'), at('db/migrations/2.sql', added: 4)];
       current = setOf(
         files,
@@ -197,16 +204,24 @@ void main() {
       await pump(tester);
 
       expect(find.text('Look here first'), findsOneWidget);
-      expect(find.text('2.sql'), findsOneWidget);
-      expect(find.text('matches **/migrations/**'), findsOneWidget);
-      // Not a folder in the tree as well: a file in both places makes the
-      // branch look bigger than it is.
+      // Twice: once in the band, once under `db/migrations` in the tree.
+      expect(find.text('2.sql'), findsNWidgets(2));
+      expect(find.text('matches **/migrations/**'), findsNWidgets(2));
       expect(
         find.text('db/migrations'),
-        findsOneWidget,
-        reason: 'once, as the pinned row own directory line',
+        findsNWidgets(2),
+        reason: 'the band row own directory line, and the folder in the tree',
       );
       expect(find.text('app/lib'), findsOneWidget);
+
+      // And the tree is a complete map: both directories, one file each.
+      expect(
+        tester
+            .widgetList<IndexFileRow>(find.byType(IndexFileRow))
+            .where((r) => r.pinned),
+        hasLength(1),
+        reason: 'flagged where it lives, not in the band that is all pins',
+      );
     });
 
     testWidgets('folders open one level down, and can be shut', (tester) async {

@@ -346,11 +346,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Look here first'), findsOneWidget);
-      expect(find.textContaining('matches **/*.g.dart'), findsOneWidget);
+      // Twice: the band, and the row in the tree that is flagged.
+      expect(find.textContaining('matches **/*.g.dart'), findsNWidgets(2));
 
       // The small pinned file is drawn above the 1800-line one — which is the
       // whole claim, since every other sort would invert them.
-      var pinned = tester.getTopLeft(find.text('1.sql'));
+      var pinned = tester.getTopLeft(find.text('1.sql').first);
       var big = tester.getTopLeft(find.text('huge.dart'));
       expect(pinned.dy, lessThan(big.dy));
     });

@@ -182,18 +182,27 @@ List<ChangeRow> buildIndexRows(
   return rows;
 }
 
-/// The files the **tree** holds: everything that is not pinned, plus the noise
-/// once its drawer is open.
+/// The files the **tree** holds: everything, plus the noise once its lens is on.
 ///
-/// Pinned files are deliberately not in it. They are drawn above, and a file in
-/// both places makes the branch look bigger than it is — the same rule the
-/// untracked section has followed since the first slice.
+/// **Pinned files are in here too**, which they were not at first. Leaving them
+/// out to avoid "listing a file twice" made the tree an *incomplete map*: its
+/// directory counts came out one short for every pin, so the header said 53
+/// files over a tree that totalled 52, and browsing to `CLAUDE.md` could not
+/// find it. A quietly wrong count is worse than a repetition.
+///
+/// The band above is an **alert**, not a section — a view onto the tree rather
+/// than a removal from it, the way a problems panel lists files that are also
+/// in the file explorer. The tree marks them where they live.
 List<FileChange> treeFiles(
   ChangeSet set, {
   Set<String>? visible,
   bool noiseOpen = false,
 }) => [
-  for (var tier in [RankTier.ordinary, if (noiseOpen) RankTier.noise])
+  for (var tier in [
+    RankTier.attention,
+    RankTier.ordinary,
+    if (noiseOpen) RankTier.noise,
+  ])
     for (var ranked in set.ordered(tier))
       if (visible == null || visible.contains(ranked.file.path)) ranked.file,
 ];

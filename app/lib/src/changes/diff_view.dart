@@ -33,6 +33,7 @@ class IndexFileRow extends StatelessWidget {
     required this.onTap,
     this.reason,
     this.showDirectory = true,
+    this.pinned = false,
     super.key,
   });
 
@@ -47,6 +48,11 @@ class IndexFileRow extends StatelessWidget {
   /// file is and repeating the path is the noise the tree exists to remove.
   /// True in the pinned band, which is flat and has no other way to say it.
   final bool showDirectory;
+
+  /// Draws the flag an attention rule earned this file. Set inside the tree,
+  /// where a pin has to be visible in passing; the band above is all pins and
+  /// would only be marking every row.
+  final bool pinned;
 
   /// Why this file was pinned or demoted, in the words the rule was written in.
   final String? reason;
@@ -63,10 +69,17 @@ class IndexFileRow extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: selected ? colors.accentSoft : Colors.transparent,
+          // A 2 px edge rather than a badge: it is scannable down a column of
+          // forty rows and costs the text no width at all.
+          border: pinned
+              ? Border(left: BorderSide(color: colors.accent, width: 2))
+              : null,
         ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.md,
-          vertical: FwSpacing.sm,
+        padding: EdgeInsets.only(
+          left: pinned ? FwSpacing.md - 2 : FwSpacing.md,
+          right: FwSpacing.md,
+          top: FwSpacing.sm,
+          bottom: FwSpacing.sm,
         ),
         // **Baselines, not box tops.** Three different type sizes sit on this
         // row — the status letter, the name, the counts — and

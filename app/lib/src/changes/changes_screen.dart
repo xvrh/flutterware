@@ -656,6 +656,7 @@ class _IndexPane extends StatelessWidget {
                         depth: 0,
                         selected: selected,
                         uncommitted: set.uncommitted,
+                        ranking: set.ranking,
                         onSelect: onSelect,
                         // Open at the top, shut further down: a branch that
                         // touched one module wants that module visible, and a
@@ -817,6 +818,7 @@ class _TreeNodeView extends StatefulWidget {
     required this.depth,
     required this.selected,
     required this.uncommitted,
+    required this.ranking,
     required this.onSelect,
     required this.openDepth,
   });
@@ -825,6 +827,10 @@ class _TreeNodeView extends StatefulWidget {
   final int depth;
   final String? selected;
   final Set<String> uncommitted;
+
+  /// So a pinned file can say, where it lives, what pinned it.
+  final Ranking ranking;
+
   final ValueChanged<String> onSelect;
   final int openDepth;
 
@@ -889,6 +895,7 @@ class _TreeNodeViewState extends State<_TreeNodeView> {
               depth: widget.depth + 1,
               selected: widget.selected,
               uncommitted: widget.uncommitted,
+              ranking: widget.ranking,
               onSelect: widget.onSelect,
               openDepth: widget.openDepth,
             ),
@@ -901,6 +908,13 @@ class _TreeNodeViewState extends State<_TreeNodeView> {
                 file: file,
                 selected: file.path == widget.selected,
                 uncommitted: widget.uncommitted.contains(file.path),
+                // The second place attention is surfaced: a pinned file says
+                // what pinned it here too, where you are browsing, not only in
+                // the band you may have scrolled past.
+                reason: widget.ranking.forPath(file.path)?.reason,
+                pinned:
+                    widget.ranking.forPath(file.path)?.tier ==
+                    RankTier.attention,
                 // **No directory line under a file in the tree.** Its position
                 // already says where it is, and repeating the path is the noise
                 // the tree exists to remove.

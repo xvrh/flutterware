@@ -103,6 +103,28 @@ diff --git a/lib/b.dart b/lib/b.dart
       expect((rows.first as SectionRow).detail, contains('1 file'));
     });
 
+    test('the tree is a complete map, pins included', () {
+      // **The bug this exists to stop coming back.** Pinned files were kept out
+      // of the tree so nothing would be listed twice, which made the tree's
+      // directory counts one short per pin: the header said 53 files over a
+      // tree totalling 52, and browsing to the pinned file could not find it. A
+      // quietly wrong count is worse than a repetition.
+      var patch = index(twoFiles);
+      var set = setOf(
+        patch,
+        ranking: rankingOf(patch, attention: {'lib/b.dart'}),
+      );
+      expect(
+        treeFiles(set).map((f) => f.path),
+        containsAll(['lib/a.dart', 'lib/b.dart']),
+      );
+      expect(treeFiles(set), hasLength(set.changed.length));
+      // …and it is still in the band, which is the alert.
+      expect(buildIndexRows(set).whereType<FileRow>().map((r) => r.file.path), [
+        'lib/b.dart',
+      ]);
+    });
+
     test('the rule that fired reaches the row', () {
       var patch = index(twoFiles);
       var rows = buildIndexRows(

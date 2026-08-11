@@ -675,6 +675,9 @@ split is the whole design, and everything below follows from it.
   - A lens whose count is zero is not drawn, so *just changed* appears the
     first time the agent writes something — which is exactly when it becomes
     useful.
+  - *Low-signal* is the **only** thing that hides a file, and it is what the
+    `noise:` config and the built-in noise list feed. Nothing else on the
+    screen subtracts anything: the tree holds every path in the delta.
   - **This replaced the noise drawer**, and kept its argument: the count is the
     information — `11 low-signal` says the branch is mostly generated code, and
     hiding them silently would say it is a small branch. What changed is
