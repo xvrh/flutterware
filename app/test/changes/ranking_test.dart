@@ -31,15 +31,26 @@ void main() {
   ).files.single;
 
   group('built-in defaults, with no config at all', () {
-    test('pins what a project would want pinned', () {
-      expect(rank('db/migrations/001_users.sql').tier, RankTier.attention);
-      expect(
-        rank('db/migrations/001_users.sql').reason,
-        'built-in: **/migrations/**',
-      );
-      expect(rank('openapi.yaml').tier, RankTier.attention);
-      expect(rank('app/pubspec.yaml').tier, RankTier.attention);
-      expect(rank('.github/workflows/ci.yaml').tier, RankTier.attention);
+    test('pins nothing at all, because it cannot know what matters', () {
+      // **There used to be a built-in attention list** — `**/migrations/**`,
+      // `openapi.yaml`, `pubspec.yaml`, `.github/workflows/**` — and every one
+      // of those was a guess about somebody else's project. flutterware does
+      // not know whether a repository has migrations, and putting a file under
+      // a heading that says *look here first* is a claim only the person
+      // reading it can make.
+      for (var path in [
+        'db/migrations/001_users.sql',
+        'openapi.yaml',
+        'app/pubspec.yaml',
+        '.github/workflows/ci.yaml',
+        'tool/flutterware.dart',
+      ]) {
+        expect(
+          rank(path).tier,
+          isNot(RankTier.attention),
+          reason: "$path is the project's to pin, not ours",
+        );
+      }
     });
 
     test('demotes generated code and lockfiles', () {
@@ -59,9 +70,14 @@ void main() {
       expect(ranked.rule, isNull);
     });
 
-    test('pubspec.yaml is pinned and pubspec.lock is not — they differ', () {
-      expect(rank('pubspec.yaml').tier, RankTier.attention);
+    test('the lock is still demoted, and the manifest is left alone', () {
+      // **The asymmetry that survives.** Noise defaults are facts about the
+      // toolchain flutterware is *for* — `pubspec.lock` is pub's output — and
+      // getting one wrong is cheap: the file is still listed, one lens away.
+      // Getting attention wrong is loud, so nothing pins `pubspec.yaml` unless
+      // the project says to.
       expect(rank('pubspec.lock').tier, RankTier.noise);
+      expect(rank('pubspec.yaml').tier, RankTier.ordinary);
     });
   });
 
@@ -220,7 +236,8 @@ void main() {
     });
 
     test('the derived rules never demote a pinned file', () {
-      // A migration that was only reindented is still a migration.
+      // A migration that was only reindented is still a migration — but only
+      // the project can say that it is one.
       var patch = index([
         'diff --git a/db/migrations/1.sql b/db/migrations/1.sql',
         '--- a/db/migrations/1.sql',
@@ -230,7 +247,11 @@ void main() {
         '+  select 1;',
         '',
       ]);
-      var ranked = rankChanges(patch.files, patch: patch).files.single;
+      var ranked = rankChanges(
+        patch.files,
+        patch: patch,
+        config: const ChangesConfig(attention: ['**/migrations/**']),
+      ).files.single;
       expect(ranked.tier, RankTier.attention);
     });
 
@@ -252,8 +273,9 @@ void main() {
       );
     });
 
-    test('the built-in rules apply here too', () {
-      expect(attentionForUntracked('openapi.yaml'), 'built-in: openapi.yaml');
+    test('with no project rules it pins nothing', () {
+      expect(attentionForUntracked('openapi.yaml'), isNull);
+      expect(attentionForUntracked('db/migrations/1.sql'), isNull);
     });
 
     test('a directory is never pinned, whatever it matches', () {

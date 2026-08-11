@@ -477,6 +477,34 @@ This is the feature, not a garnish. Three tiers, cheapest first.
   later, which is more than the language-agnostic version can claim, but it is a
   project rather than a section. Same for the symbol outline.
 
+> **Corrected 2026-08-11: there are no built-in attention rules, and there
+> must not be.** There were — `**/migrations/**`, `openapi.yaml`,
+> `pubspec.yaml`, `.github/workflows/**` — and every one is a guess about
+> somebody else's project. flutterware does not know whether a repository has
+> migrations, and putting a file under a heading that says *look here first* is
+> a claim only the person reading it can make.
+>
+> The asymmetry with the built-in **noise** list is the whole argument, and it
+> holds in both directions:
+>
+> - Noise defaults are facts about the **toolchain flutterware is for**:
+>   `*.g.dart` is build_runner's output, `pubspec.lock` is pub's, `build/` is
+>   Flutter's. They are not opinions about a domain.
+> - Getting noise wrong is **cheap and reversible** — a demoted file is still
+>   listed, one lens away. Getting attention wrong is **loud**: it puts
+>   something at the top of the screen and asserts that it matters.
+>
+> So attention is the project's to declare and nowhere else. The cost is that a
+> project which has declared none gets an empty band and no explanation, which
+> reads as a feature that does not work — so the index says once, quietly, that
+> the rules exist. A project that *has* rules and matched none is told nothing,
+> because it already knows.
+>
+> This repository's own rules now live in its own `tool/flutterware.dart`:
+> `tool/flutterware.dart`, `CLAUDE.md`, `lib/*.dart`, both `pubspec.yaml`s,
+> `.fvmrc`, `.github/workflows/**`, `analysis_options.yaml`,
+> `docs/superpowers/specs/**`.
+
 ### Config: `tool/flutterware.dart`, executed once and cached
 
 **There is no second config file, and no second way of reading the one there

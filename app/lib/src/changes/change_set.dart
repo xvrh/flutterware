@@ -98,6 +98,7 @@ class ChangeSet {
     this.files,
     Ranking? ranking,
     this.configState = ChangesConfigState.none,
+    this.attentionConfigured = false,
     // ignore: prefer_initializing_formals
   }) : _ranking = ranking;
 
@@ -130,6 +131,16 @@ class ChangeSet {
   /// How much the ranking rules are worth believing. Only [ChangesConfigState]
   /// `.stale` says anything on screen.
   final ChangesConfigState configState;
+
+  /// Whether the project declared any `attention:` globs at all.
+  ///
+  /// **Distinct from "nothing was pinned".** There are no built-in attention
+  /// rules — flutterware cannot know what matters in somebody else's
+  /// repository — so a project that has never written any gets an empty band
+  /// and no explanation, which reads as a feature that does not work. This is
+  /// what lets the index say, once, that the rules exist. A project that *has*
+  /// rules and matched none of them is told nothing, because it already knows.
+  final bool attentionConfigured;
 
   final Ranking? _ranking;
 

@@ -176,6 +176,7 @@ class ChangesProbe {
         baseSource: source,
         untracked: untracked,
         configState: configState,
+        attentionConfigured: config?.attention.isNotEmpty ?? false,
       );
     }
 
@@ -198,6 +199,7 @@ class ChangesProbe {
         uncommitted: uncommitted,
         untracked: untracked,
         configState: configState,
+        attentionConfigured: config?.attention.isNotEmpty ?? false,
       );
     }
 
@@ -219,6 +221,7 @@ class ChangesProbe {
         // they are the ones that pass a patch.
         ranking: await rank(files, null),
         configState: configState,
+        attentionConfigured: config?.attention.isNotEmpty ?? false,
       );
     }
 
@@ -234,6 +237,7 @@ class ChangesProbe {
       untracked: untracked,
       ranking: await rank(index.files, index),
       configState: configState,
+      attentionConfigured: config?.attention.isNotEmpty ?? false,
     );
   }
 

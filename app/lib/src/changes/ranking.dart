@@ -111,18 +111,27 @@ class Ranking {
   };
 }
 
-/// **Ships and is what most repositories will ever use.**
+/// **There is no built-in attention list, and there must not be one.**
 ///
-/// Config *adds* to these, and subtracts by naming a path in the other
-/// section — a project that considers `pubspec.yaml` unremarkable puts it in
-/// `noise:` and the built-in pin below stops applying.
-const builtInAttention = [
-  '**/migrations/**',
-  'openapi.yaml',
-  'pubspec.yaml',
-  '.github/workflows/**',
-];
-
+/// There was: `**/migrations/**`, `openapi.yaml`, `pubspec.yaml`,
+/// `.github/workflows/**`. Every one of those is a guess about somebody else's
+/// project. flutterware does not know whether a repository has migrations, and
+/// putting a file under a heading that says **look here first** is a claim only
+/// the person reading it can make.
+///
+/// The asymmetry with [builtInNoise] below is the whole argument, and it holds
+/// in both directions:
+///
+/// - Noise defaults are facts about the **toolchain flutterware is for**.
+///   `*.g.dart` is build_runner's output, `pubspec.lock` is pub's, `build/` is
+///   Flutter's. They are not opinions about a domain.
+/// - Getting noise wrong is **cheap and reversible**: a demoted file is still
+///   listed, one lens away. Getting attention wrong is **loud** — it puts
+///   something at the top of the screen and asserts it matters.
+///
+/// So attention is the project's to declare, in `tool/flutterware.dart`, and
+/// nowhere else. When a project declares none, the band is simply absent, and
+/// the index says once that the rules exist.
 const builtInNoise = [
   'pubspec.lock',
   'package-lock.json',
@@ -184,7 +193,6 @@ Ranking rankChanges(
 }) {
   var projectAttention = PathGlobSet(config?.attention ?? const []);
   var projectNoise = PathGlobSet(config?.noise ?? const []);
-  var defaultAttention = PathGlobSet(builtInAttention);
   var defaultNoise = PathGlobSet(builtInNoise);
 
   RankedFile rank(FileChange file) {
@@ -221,14 +229,8 @@ Ranking rankChanges(
         }
       }
     }
-    if (defaultAttention.firstMatch(path) case var rule?) {
-      return RankedFile(
-        file: file,
-        tier: RankTier.attention,
-        rule: rule,
-        source: RankSource.builtIn,
-      );
-    }
+    // No built-in attention step here, deliberately — see [builtInNoise].
+    // Nothing is pinned that the project did not ask for.
     if (defaultNoise.firstMatch(path) case var rule?) {
       return RankedFile(
         file: file,
@@ -277,9 +279,6 @@ String? attentionForUntracked(String path, {ChangesConfig? config}) {
   if (PathGlobSet(config?.attention ?? const []).firstMatch(path)
       case var rule?) {
     return 'matches $rule';
-  }
-  if (PathGlobSet(builtInAttention).firstMatch(path) case var rule?) {
-    return 'built-in: $rule';
   }
   return null;
 }

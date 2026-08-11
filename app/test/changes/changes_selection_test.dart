@@ -256,6 +256,30 @@ void main() {
       );
     });
 
+    testWidgets('a project with no rules is told once that they exist', (
+      tester,
+    ) async {
+      // **There are no built-in attention rules**, so without this line the
+      // band is simply absent and the whole ranking reads as a feature that
+      // does not work.
+      current = setOf([file('lib/a.dart')]);
+      await pump(tester);
+      expect(find.textContaining('Nothing is pinned'), findsOneWidget);
+    });
+
+    testWidgets('a project that has rules is told nothing', (tester) async {
+      current = ChangeSet(
+        worktreePath: worktree.path,
+        patch: PatchIndex.empty,
+        base: 'master',
+        baseSource: BaseSource.inferred,
+        files: [file('lib/a.dart')],
+        attentionConfigured: true,
+      );
+      await pump(tester);
+      expect(find.textContaining('Nothing is pinned'), findsNothing);
+    });
+
     testWidgets('typing finds an untracked file, which it could not before', (
       tester,
     ) async {

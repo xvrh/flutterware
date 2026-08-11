@@ -648,6 +648,7 @@ class _IndexPane extends StatelessWidget {
                   key: changesListKey,
                   controller: controller,
                   children: [
+                    if (!set.attentionConfigured) const _NoRulesYet(),
                     for (var row in rows) _flat(context, row),
                     if (tree.totalFiles > 0)
                       _TreeNodeView(
@@ -712,6 +713,35 @@ class _IndexPane extends StatelessWidget {
     // The body's rows never reach the index.
     HunkRow() || DiffLineRow() || FileNoticeRow() => const SizedBox.shrink(),
   };
+}
+
+/// Said once, quietly, to a project that has never written an `attention:`
+/// rule.
+///
+/// **There are no built-in ones**, so without this the band is simply absent
+/// and the whole ranking reads as a feature that does not work. A project that
+/// *has* rules and matched none of them is told nothing, because it already
+/// knows they exist.
+class _NoRulesYet extends StatelessWidget {
+  const _NoRulesYet();
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        FwSpacing.md,
+        FwSpacing.xs,
+        FwSpacing.md,
+        FwSpacing.md,
+      ),
+      child: Text(
+        'Nothing is pinned. Name what matters here with '
+        'fw.changes(ChangesConfig(attention: [...])) in tool/flutterware.dart.',
+        style: context.type.micro.copyWith(color: colors.mut3),
+      ),
+    );
+  }
 }
 
 /// The lenses, drawn only when they would say something.
