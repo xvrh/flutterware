@@ -12,7 +12,6 @@ class AlignableStep {
     this.name,
     this.verb,
     this.target,
-    this.targetKind,
   });
 
   final int index;
@@ -29,7 +28,6 @@ class AlignableStep {
   final String? name;
   final String? verb;
   final String? target;
-  final String? targetKind;
 
   /// What two steps are "the same step" under.
   ///

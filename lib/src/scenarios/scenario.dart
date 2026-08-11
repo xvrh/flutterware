@@ -615,12 +615,7 @@ class ScenarioTester {
       // The verb that broke captures its own frame; `scenario`'s catch is the
       // backstop for everything else. Both go through the same once-per-error
       // guard, so an error travelling up the stack yields one failed step.
-      await _captureFailure(
-        error,
-        verb: verb,
-        target: target ?? described?.$1,
-        targetKind: described?.$2,
-      );
+      await _captureFailure(error, verb: verb, target: target);
       rethrow;
     }
     _framesAtLastStep = _frames;
@@ -828,7 +823,6 @@ class ScenarioTester {
     Object error, {
     String? verb,
     String? target,
-    ScenarioTargetKind? targetKind,
   }) async {
     // Compared unwrapped: `split` re-throws the same failure wearing its
     // branch, and that is one failure, not two.
@@ -841,20 +835,16 @@ class ScenarioTester {
       branch: _pendingBranch,
       shot: null,
       settled: true,
-<<<<<<< HEAD
       // The position this step *would* have had. A failure is never captured
       // twice, so nothing is keyed on it — but a comparison aligning two runs
       // needs somewhere to put it, and "the place the flow stopped" is the
       // only honest answer.
       position: '${_state.plan.path}#${_ordinal + 1}',
-=======
       // The verb that broke, on the step that records the break — a failed
       // step used to be the one step in a flow that could not say what it was
       // trying to do.
       verb: verb,
       target: target,
-      targetKind: targetKind,
->>>>>>> ee516508 (The step label meets master's transition, and keeps only what it adds)
       failure: '${_inContext(error)}',
     );
   }

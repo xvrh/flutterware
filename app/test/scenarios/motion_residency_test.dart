@@ -41,6 +41,7 @@ void main() {
     }
     return ScenarioRunStep(
       index: index,
+      position: '#$index',
       auto: false,
       image: 'run/$index.raw',
       format: 'raw',

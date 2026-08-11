@@ -68,19 +68,14 @@ void main() {
   });
 
   group('a step with no name is known by its verb and target', () {
-    AlignableStep did(
-      int index, {
-      required String verb,
-      String? target,
-      String? kind,
-    }) => AlignableStep(
-      index: index,
-      position: '#$index',
-      parent: index == 1 ? null : index - 1,
-      verb: verb,
-      target: target,
-      targetKind: kind,
-    );
+    AlignableStep did(int index, {required String verb, String? target}) =>
+        AlignableStep(
+          index: index,
+          position: '#$index',
+          parent: index == 1 ? null : index - 1,
+          verb: verb,
+          target: target,
+        );
 
     test('the same line is the same step', () {
       var alignment = align(

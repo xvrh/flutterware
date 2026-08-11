@@ -23,7 +23,6 @@ class ScenarioStepCapture {
     required this.navBrightness,
     this.verb,
     this.target,
-    required this.position,
     this.events = const [],
     this.eventsDropped = 0,
     this.motion = ScenarioMotionFrames.empty,
@@ -85,14 +84,6 @@ class ScenarioStepCapture {
   /// reads to know how far it can trust the label: an author's key is theirs
   /// alone, and visible text is translated, so `tap "Pay"` and `tap "Payer"`
   /// are one step run under two languages.
-  /// Where this step sits in the scenario's *shape*: the split choices taken
-  /// to reach it, then the count since the last one.
-  ///
-  /// Not the index. An index counts steps in one run; this names a place two
-  /// runs can share, which is what lets a comparison say "the same step now
-  /// aims somewhere else" rather than reporting a deletion and a coincidence.
-  final String position;
-
   /// What the app did on the way here: everything recorded between the
   /// previous capture and this one, in the order it happened.
   final List<ScenarioEvent> events;

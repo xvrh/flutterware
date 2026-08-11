@@ -113,7 +113,6 @@ class ScenariosSide {
         name: step['name'] as String?,
         verb: step['verb'] as String?,
         target: step['target'] as String?,
-        targetKind: step['targetKind'] as String?,
       ),
       // Only a raw capture is comparable as pixels. A PNG here would mean the
       // run was asked for one, which this never does — and decoding it to
