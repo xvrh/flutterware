@@ -625,15 +625,28 @@ split is the whole design, and everything below follows from it.
   search box that closes the document you are reading is a bug. It matches
   untracked paths too, which it did not at first — `pathsMatching` took
   `FileChange`s, so typing `scratch` hid the one file you were after.
-- **Two lenses under the filter box, each with a count**: *uncommitted* and
+- **Two lenses under the filter box, each with a count**: *just changed* and
   *low-signal*. They are the answer to "make this list smaller": the pinned
-  band says what a **rule** declared important, and these say what is **fresh**
-  and what is **skippable** — the other two questions a fifty-file branch
-  raises. They compose with the typed filter by intersection.
-  - The *uncommitted* count includes untracked entries, because an untracked
-    file is the most uncommitted thing on the screen.
-  - A lens whose count is zero is not drawn. A `0 uncommitted` chip is a
-    control that does nothing, which is worse than no control.
+  band says what a **rule** declared important, and these say what is
+  **moving** and what is **skippable** — the other two questions a fifty-file
+  branch raises. They compose with the typed filter by intersection.
+  - *Just changed* is every path that has read differently since the screen
+    opened. **It replaced an *uncommitted* lens, which asked the wrong
+    question**: committed-versus-not matters when a *person* is deciding what
+    to push, and this screen watches something that commits on its own
+    schedule. What was actually being asked is "what is it doing **now**".
+  - It is cumulative, not per-probe — a probe fires every couple of seconds, so
+    a per-probe set would empty itself before anybody could look at it — and it
+    lives only as long as the screen, which is the right lifetime for "what has
+    happened while I have been here".
+  - It costs nothing to compute: the live screen already compares each
+    re-probe against the last to decide whether to redraw, so the paths that
+    moved fall out of the same pass. A file's own patch **bytes** are compared,
+    not its counts, so an edit that swaps one line for another of the same
+    length is still noticed.
+  - A lens whose count is zero is not drawn, so *just changed* appears the
+    first time the agent writes something — which is exactly when it becomes
+    useful.
   - **This replaced the noise drawer**, and kept its argument: the count is the
     information — `11 low-signal` says the branch is mostly generated code, and
     hiding them silently would say it is a small branch. What changed is

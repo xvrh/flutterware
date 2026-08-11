@@ -19,9 +19,13 @@ void main() {
     branch: 'claude/feature',
   );
 
-  FileChange file(String path, {int added = 10}) => FileChange(
+  FileChange file(
+    String path, {
+    int added = 10,
+    ChangeStatus status = ChangeStatus.modified,
+  }) => FileChange(
     path: path,
-    status: ChangeStatus.modified,
+    status: status,
     added: added,
     removed: 0,
     hunks: [
@@ -158,97 +162,98 @@ void main() {
   });
 
   group('the lenses', () {
-    // **The answer to "filter this huge list down to what matters".** The
-    // pinned band says what a *rule* declared important; these two say what is
-    // fresh and what is skippable, which are the other two questions a
+    // **The answer to "filter this list down to what I care about".** The
+    // pinned band says what a *rule* declared important; these say what is
+    // **moving** and what is **skippable**, which are the other two questions a
     // fifty-file branch raises. Counts on both, because the count is the
     // information: `11 low-signal` says the branch is mostly generated code.
 
-    testWidgets("uncommitted narrows the index to the agent's fresh work", (
+    testWidgets('just changed is empty on arrival, so it is not drawn', (
       tester,
     ) async {
-      current = ChangeSet(
-        worktreePath: worktree.path,
-        patch: PatchIndex.empty,
-        base: 'master',
-        baseSource: BaseSource.inferred,
-        files: [file('lib/fresh.dart'), file('lib/landed.dart')],
-        uncommitted: {'lib/fresh.dart'},
-        untracked: const [UntrackedEntry('scratch.txt')],
-      );
-      await pump(tester);
-      expect(inIndex('landed.dart'), findsOneWidget);
-
-      await tester.tap(find.widgetWithText(IndexLens, 'uncommitted'));
-      await tester.pumpAndSettle();
-
-      expect(inIndex('fresh.dart'), findsOneWidget);
-      expect(inIndex('landed.dart'), findsNothing);
-      expect(
-        inIndex('scratch.txt'),
-        findsOneWidget,
-        reason: 'an untracked file is the most uncommitted thing on the screen',
-      );
-    });
-
-    testWidgets('its count includes the untracked, and it toggles back', (
-      tester,
-    ) async {
-      current = ChangeSet(
-        worktreePath: worktree.path,
-        patch: PatchIndex.empty,
-        base: 'master',
-        baseSource: BaseSource.inferred,
-        files: [file('lib/fresh.dart'), file('lib/landed.dart')],
-        uncommitted: {'lib/fresh.dart'},
-        untracked: const [UntrackedEntry('scratch.txt')],
-      );
-      await pump(tester);
-
-      expect(
-        tester
-            .widget<IndexLens>(find.widgetWithText(IndexLens, 'uncommitted'))
-            .count,
-        2,
-      );
-
-      await tester.tap(find.widgetWithText(IndexLens, 'uncommitted'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(IndexLens, 'uncommitted'));
-      await tester.pumpAndSettle();
-      expect(inIndex('landed.dart'), findsOneWidget);
-    });
-
-    testWidgets('a lens that would say nothing is not drawn', (tester) async {
-      // A `0 uncommitted` chip is a control that does nothing, which is worse
-      // than no control — the same rule the section headings follow.
+      // Nothing has moved yet — a chip saying `0` is a control that does
+      // nothing, which is worse than no control.
       current = setOf([file('lib/a.dart')]);
       await pump(tester);
       expect(find.byType(IndexLens), findsNothing);
     });
 
-    testWidgets('the typed filter and a lens compose', (tester) async {
+    testWidgets('it appears when the agent writes, and narrows to that', (
+      tester,
+    ) async {
+      current = setOf([file('lib/quiet.dart'), file('lib/busy.dart')]);
+      await pump(tester);
+
+      // A re-probe in which one file moved and the other did not.
+      current = setOf([
+        file('lib/quiet.dart'),
+        file('lib/busy.dart', added: 90),
+      ]);
+      await tester.tap(find.byTooltip('Read this checkout again'));
+      await tester.pumpAndSettle();
+
+      var lens = tester.widget<IndexLens>(
+        find.widgetWithText(IndexLens, 'just changed'),
+      );
+      expect(lens.count, 1);
+
+      await tester.tap(find.widgetWithText(IndexLens, 'just changed'));
+      await tester.pumpAndSettle();
+      expect(inIndex('busy.dart'), findsOneWidget);
+      expect(inIndex('quiet.dart'), findsNothing);
+    });
+
+    testWidgets('it accumulates, because a probe fires every two seconds', (
+      tester,
+    ) async {
+      // Per-probe it would empty itself before anybody could look at it. This
+      // answers "what has happened while I have been here".
+      current = setOf([file('lib/a.dart'), file('lib/b.dart')]);
+      await pump(tester);
+
+      current = setOf([file('lib/a.dart', added: 50), file('lib/b.dart')]);
+      await tester.tap(find.byTooltip('Read this checkout again'));
+      await tester.pumpAndSettle();
+      current = setOf([
+        file('lib/a.dart', added: 50),
+        file('lib/b.dart', added: 60),
+      ]);
+      await tester.tap(find.byTooltip('Read this checkout again'));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<IndexLens>(find.widgetWithText(IndexLens, 'just changed'))
+            .count,
+        2,
+      );
+    });
+
+    testWidgets('a file whose bytes moved without its counts still counts', (
+      tester,
+    ) async {
+      // An edit that swaps one line for another of the same length moves
+      // neither `+n` nor `−n`, and is exactly the sort of thing you want to
+      // have noticed.
+      current = setOf([file('lib/a.dart')]);
+      await pump(tester);
+
       current = ChangeSet(
         worktreePath: worktree.path,
         patch: PatchIndex.empty,
         base: 'master',
         baseSource: BaseSource.inferred,
-        files: [
-          file('lib/fresh.dart'),
-          file('lib/other_fresh.dart'),
-          file('lib/landed.dart'),
-        ],
-        uncommitted: {'lib/fresh.dart', 'lib/other_fresh.dart'},
+        files: [file('lib/a.dart', status: ChangeStatus.added)],
       );
-      await pump(tester);
-
-      await tester.tap(find.widgetWithText(IndexLens, 'uncommitted'));
-      await tester.enterText(find.byType(TextField), 'other');
+      await tester.tap(find.byTooltip('Read this checkout again'));
       await tester.pumpAndSettle();
 
-      expect(inIndex('other_fresh.dart'), findsOneWidget);
-      expect(inIndex('fresh.dart'), findsNothing);
-      expect(inIndex('landed.dart'), findsNothing);
+      expect(
+        tester
+            .widget<IndexLens>(find.widgetWithText(IndexLens, 'just changed'))
+            .count,
+        1,
+      );
     });
 
     testWidgets('typing finds an untracked file, which it could not before', (

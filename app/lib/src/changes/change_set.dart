@@ -251,6 +251,54 @@ class ChangeSet {
     return true;
   }
 
+  /// Which paths read differently here than in [previous].
+  ///
+  /// **What an agent is doing right now**, and it costs nothing extra: the live
+  /// screen already compares every re-probe against the last one to decide
+  /// whether to redraw, so the paths that moved fall out of the same pass.
+  ///
+  /// A file's own patch bytes are compared, not its counts — an edit that swaps
+  /// one line for another of the same length moves neither `+n` nor `−n`, and
+  /// is exactly the sort of thing you want to have noticed.
+  Set<String> movedFrom(ChangeSet previous) {
+    var before = {for (var file in previous.changed) file.path: file};
+    var moved = <String>{};
+    for (var file in changed) {
+      var was = before.remove(file.path);
+      if (was == null ||
+          was.status != file.status ||
+          was.added != file.added ||
+          was.removed != file.removed ||
+          !_sameSlice(previous.patch, was, patch, file)) {
+        moved.add(file.path);
+      }
+    }
+    // A file that left the delta has moved too, though nothing on screen can
+    // hold it — the caller keeps a session-long set and this stops it lying.
+    moved.addAll(before.keys);
+
+    var untrackedNow = {for (var entry in untracked) entry.path};
+    var untrackedWas = {for (var entry in previous.untracked) entry.path};
+    moved
+      ..addAll(untrackedNow.difference(untrackedWas))
+      ..addAll(untrackedWas.difference(untrackedNow));
+    return moved;
+  }
+
+  static bool _sameSlice(
+    PatchIndex a,
+    FileChange fa,
+    PatchIndex b,
+    FileChange fb,
+  ) {
+    var lengthA = fa.byteEnd - fa.byteStart;
+    if (lengthA != fb.byteEnd - fb.byteStart) return false;
+    for (var i = 0; i < lengthA; i++) {
+      if (a.bytes[fa.byteStart + i] != b.bytes[fb.byteStart + i]) return false;
+    }
+    return true;
+  }
+
   static bool _sameBytes(Uint8List a, Uint8List b) {
     if (identical(a, b)) return true;
     if (a.length != b.length) return false;

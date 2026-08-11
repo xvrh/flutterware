@@ -115,13 +115,21 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   var _query = '';
 
-  /// **The lenses.** Two toggles over the index, each with a count: *what has
-  /// this agent not committed yet* and *what did the ranking demote*. They are
-  /// the answer to "filter this list down to what matters" — the pinned band
-  /// says what a rule declared important, and these two say what is *fresh* and
-  /// what is *skippable*, which are the other two questions a fifty-file branch
-  /// raises.
-  var _uncommittedOnly = false;
+  /// **The lenses.** Two toggles over the index, each with a count.
+  ///
+  /// *Just changed* is what has moved while this screen has been open — an
+  /// agent's current sentence, not its paragraph. It replaced an *uncommitted*
+  /// lens, which was the wrong question: committed-versus-not is a distinction
+  /// that matters when a person is deciding what to push, and this screen is
+  /// for watching something that commits on its own schedule. "What is it doing
+  /// **now**" is the question that was actually being asked.
+  ///
+  /// *Low-signal* is what the ranking demoted.
+  ///
+  /// Between them and the pinned band above, the three questions a fifty-file
+  /// branch raises: what a **rule** says matters, what is **moving**, and what
+  /// is **skippable**.
+  var _justChangedOnly = false;
 
   /// Whether the noise drawer is open. **Off by default and remembered for the
   /// session**, not persisted: the whole value of the drawer is that the
@@ -189,7 +197,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
   /// Null when nothing is narrowing the index at all.
   ///
   /// The typed query and the lenses compose by intersection, so `motion` plus
-  /// *uncommitted* means both, which is what anybody would expect of two
+  /// *just changed* means both, which is what anybody would expect of two
   /// controls sitting next to each other.
   Set<String>? _visible(ChangeSet set) {
     Set<String>? visible;
@@ -199,11 +207,9 @@ class _ChangesScreenState extends State<ChangesScreen> {
         ...set.untracked.map((e) => e.path),
       ], _query);
     }
-    if (_uncommittedOnly) {
-      // An untracked file is the most uncommitted thing on the screen, so the
-      // lens would be lying if it hid them.
-      var fresh = {...set.uncommitted, ...set.untracked.map((e) => e.path)};
-      visible = visible == null ? fresh : visible.intersection(fresh);
+    if (_justChangedOnly) {
+      var moved = _changes.moved;
+      visible = visible == null ? {...moved} : visible.intersection(moved);
     }
     return visible;
   }
@@ -284,13 +290,14 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         selected: _selected,
                         visible: _visible(set),
                         noiseOpen: _noiseOpen,
-                        uncommittedOnly: _uncommittedOnly,
+                        justChanged: _changes.moved,
+                        justChangedOnly: _justChangedOnly,
                         onQuery: (q) => setState(() => _query = q),
                         onSelect: _show,
                         onToggleNoise: () =>
                             setState(() => _noiseOpen = !_noiseOpen),
-                        onToggleUncommitted: () => setState(
-                          () => _uncommittedOnly = !_uncommittedOnly,
+                        onToggleJustChanged: () => setState(
+                          () => _justChangedOnly = !_justChangedOnly,
                         ),
                       ),
                     ),
@@ -560,9 +567,10 @@ class _IndexPane extends StatelessWidget {
     required this.onQuery,
     required this.onSelect,
     required this.onToggleNoise,
-    required this.onToggleUncommitted,
+    required this.onToggleJustChanged,
     required this.noiseOpen,
-    required this.uncommittedOnly,
+    required this.justChanged,
+    required this.justChangedOnly,
     required this.visible,
   });
 
@@ -577,9 +585,10 @@ class _IndexPane extends StatelessWidget {
   final ValueChanged<String> onQuery;
   final ValueChanged<String> onSelect;
   final VoidCallback onToggleNoise;
-  final VoidCallback onToggleUncommitted;
+  final VoidCallback onToggleJustChanged;
   final bool noiseOpen;
-  final bool uncommittedOnly;
+  final Set<String> justChanged;
+  final bool justChangedOnly;
   final Set<String>? visible;
 
   @override
@@ -615,9 +624,10 @@ class _IndexPane extends StatelessWidget {
         _LensRow(
           set: set,
           noiseOpen: noiseOpen,
-          uncommittedOnly: uncommittedOnly,
+          justChanged: justChanged,
+          justChangedOnly: justChangedOnly,
           onToggleNoise: onToggleNoise,
-          onToggleUncommitted: onToggleUncommitted,
+          onToggleJustChanged: onToggleJustChanged,
         ),
         Expanded(
           child: nothing
@@ -713,22 +723,25 @@ class _LensRow extends StatelessWidget {
   const _LensRow({
     required this.set,
     required this.noiseOpen,
-    required this.uncommittedOnly,
+    required this.justChanged,
+    required this.justChangedOnly,
     required this.onToggleNoise,
-    required this.onToggleUncommitted,
+    required this.onToggleJustChanged,
   });
 
   final ChangeSet set;
   final bool noiseOpen;
-  final bool uncommittedOnly;
+  final Set<String> justChanged;
+  final bool justChangedOnly;
   final VoidCallback onToggleNoise;
-  final VoidCallback onToggleUncommitted;
+  final VoidCallback onToggleJustChanged;
 
   @override
   Widget build(BuildContext context) {
-    var fresh =
-        set.changed.where((f) => set.uncommitted.contains(f.path)).length +
-        set.untracked.length;
+    // **It appears when it becomes true, which is exactly when it is useful.**
+    // Nothing has moved on arrival, so there is no chip; the first time the
+    // agent writes something, one shows up saying so.
+    var fresh = justChanged.length;
     var noise = set.ordered(RankTier.noise).length;
     if (fresh == 0 && noise == 0) return const SizedBox.shrink();
 
@@ -745,10 +758,10 @@ class _LensRow extends StatelessWidget {
         children: [
           if (fresh > 0)
             IndexLens(
-              label: 'uncommitted',
+              label: 'just changed',
               count: fresh,
-              on: uncommittedOnly,
-              onTap: onToggleUncommitted,
+              on: justChangedOnly,
+              onTap: onToggleJustChanged,
             ),
           if (noise > 0)
             IndexLens(

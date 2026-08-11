@@ -78,6 +78,20 @@ class ChangesController extends ChangeNotifier {
   Object? get failure => _failure;
   Object? _failure;
 
+  /// Every path that has read differently at some point since this screen
+  /// opened — **what the agent has been doing while you watched.**
+  ///
+  /// Deliberately cumulative rather than "since the last probe": a probe fires
+  /// every couple of seconds, so a per-probe set would empty itself before you
+  /// could look at it. This grows for as long as the screen is open and is
+  /// gone when it closes, which is the right lifetime — it answers "what has
+  /// happened *while I have been here*", and nothing else has to be persisted
+  /// for it to be true.
+  ///
+  /// Empty on the first read, because there is nothing to have moved from.
+  Set<String> get moved => _moved;
+  final _moved = <String>{};
+
   /// When the last load finished, whatever it found. The header shows this, so
   /// a screen that has been sitting open says how old what it is showing is.
   DateTime? get readAt => _readAt;
@@ -144,6 +158,9 @@ class ChangesController extends ChangeNotifier {
       // build output git ignores, and re-probing it produces this set again.
       // Keeping the old one keeps every expanded hunk's decoded text, and the
       // screen does not rebuild. See [ChangeSet.sameAnswerAs].
+      if (_value case var was? when !was.sameAnswerAs(set)) {
+        _moved.addAll(set.movedFrom(was));
+      }
       _value = _value?.sameAnswerAs(set) ?? false ? _value : set;
       _failure = null;
       _readAt = DateTime.now();

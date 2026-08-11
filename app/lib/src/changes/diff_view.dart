@@ -68,13 +68,17 @@ class IndexFileRow extends StatelessWidget {
           horizontal: FwSpacing.md,
           vertical: FwSpacing.sm,
         ),
+        // **Baselines, not box tops.** Three different type sizes sit on this
+        // row — the status letter, the name, the counts — and
+        // `CrossAxisAlignment.start` aligns the tops of their boxes, which for
+        // two different ascents is not the same line. It is a two-pixel error
+        // that nobody can name and everybody can see. `Column` reports its
+        // first child's baseline, so aligning on it puts the letter and the
+        // counts on the *name's* line, which is the one being read.
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
           children: [
-            // **The same size as the name it sits beside.** At `micro` against
-            // a `bodySmall` name, top-aligning two different glyph boxes puts
-            // the letter visibly off the line — the column reads as ragged for
-            // a reason nobody can point at.
             SizedBox(
               width: 12,
               child: Text(
@@ -439,7 +443,8 @@ class IndexUntrackedRow extends StatelessWidget {
           vertical: FwSpacing.sm,
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
           children: [
             SizedBox(
               width: 12,
