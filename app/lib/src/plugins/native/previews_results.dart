@@ -658,3 +658,92 @@ class CatalogWebBuildResult implements PluginResult {
   @override
   Map<String, Object?> toJson() => _$CatalogWebBuildResultToJson(this);
 }
+
+/// `compare` — the verdict of one comparison run, both halves.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ComparisonCompareResult implements PluginResult {
+  ComparisonCompareResult({
+    required this.against,
+    required this.baseSha,
+    required this.counts,
+    required this.findings,
+    required this.index,
+    this.export,
+    this.report,
+    this.scenariosNote,
+  });
+
+  /// What the comparison was against — the ref's name, as a header shows it.
+  final String against;
+
+  /// The merge base it resolved to.
+  final String baseSha;
+
+  /// Every row by state, both halves merged: `{"changed": 2, "skipped": 9}`.
+  /// One preview that broke and one scenario that broke is two broken things;
+  /// which half they came from is the second question, and the findings below
+  /// answer it.
+  final Map<String, int> counts;
+
+  /// The rows worth attention, worst first. The `same` and `skipped` rows are
+  /// in the artifact at [index], where a reader who needs proof of coverage
+  /// finds them.
+  final List<ComparisonFinding> findings;
+
+  /// The whole verdict as a file — every row, every channel, the shot keys.
+  final String index;
+
+  /// The browsable page, when `export` asked for one. Serve it over HTTP.
+  final String? export;
+
+  /// The PR report directory, when `report` asked for one: `comment.md`,
+  /// `mosaic.png`, the page under `web/`.
+  final String? report;
+
+  /// Why the scenario half has nothing to say, when it has nothing to say —
+  /// a base harness that would not build reads differently from a project
+  /// with no scenarios.
+  final String? scenariosNote;
+
+  @override
+  Map<String, Object?> toJson() => _$ComparisonCompareResultToJson(this);
+}
+
+/// One row that came out worth looking at.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ComparisonFinding {
+  ComparisonFinding({
+    required this.id,
+    required this.half,
+    required this.state,
+    this.note,
+    this.delta,
+  });
+
+  /// The entry id, or the scenario id for a flow.
+  final String id;
+
+  /// `previews` or `scenarios`.
+  final String half;
+
+  /// `broke`, `failed`, `wasBroken`, `added`, `removed` or `changed` —
+  /// declared worst-first, and the list is sorted by it.
+  final String state;
+
+  /// Why it is in the state it is, when the state alone does not say.
+  final String? note;
+
+  /// The size of the change: `0.38% · 2 regions` for pixels, the step that
+  /// moved for a flow.
+  final String? delta;
+
+  Map<String, Object?> toJson() => _$ComparisonFindingToJson(this);
+}

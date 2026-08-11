@@ -9,7 +9,7 @@ import '../../ui/theme.dart';
 import '../channels.dart';
 import '../comparison_controller.dart';
 import '../scenario_comparison.dart';
-import '../shot_cache.dart';
+import '../shot_store.dart';
 import 'channel_lines.dart';
 import 'merged_tree.dart';
 import 'shot_image.dart';
@@ -41,14 +41,14 @@ class ScenariosTab extends StatefulWidget {
   const ScenariosTab({
     super.key,
     required this.half,
-    required this.cache,
+    required this.store,
     required this.settle,
     required this.selected,
     required this.onSelect,
   });
 
   final ComparisonHalf half;
-  final ShotCache cache;
+  final ShotStore store;
   final SettleRegistry settle;
 
   /// `<file>#<scenario>/<step path>` as the address names it, or null.
@@ -60,7 +60,7 @@ class ScenariosTab extends StatefulWidget {
 }
 
 class _ScenariosTabState extends State<ScenariosTab> {
-  late final _shots = ShotPair(widget.cache);
+  late final _shots = ShotPair(widget.store);
   var _mode = StageMode.sideBySide;
 
   @override
@@ -188,6 +188,7 @@ class _ScenariosTabState extends State<ScenariosTab> {
                 Expanded(
                   child: MergedTree(
                     scenario: scenario,
+                    store: widget.store,
                     selected: null,
                     onSelect: (id) => _select(step: id),
                   ),

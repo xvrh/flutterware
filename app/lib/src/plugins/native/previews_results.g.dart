@@ -155,3 +155,25 @@ Map<String, dynamic> _$CatalogWebBuildResultToJson(
   'entries': instance.entries,
   'durationMs': instance.durationMs,
 };
+
+Map<String, dynamic> _$ComparisonCompareResultToJson(
+  ComparisonCompareResult instance,
+) => <String, dynamic>{
+  'against': instance.against,
+  'baseSha': instance.baseSha,
+  'counts': instance.counts,
+  'findings': instance.findings.map((e) => e.toJson()).toList(),
+  'index': instance.index,
+  'export': ?instance.export,
+  'report': ?instance.report,
+  'scenariosNote': ?instance.scenariosNote,
+};
+
+Map<String, dynamic> _$ComparisonFindingToJson(ComparisonFinding instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'half': instance.half,
+      'state': instance.state,
+      'note': ?instance.note,
+      'delta': ?instance.delta,
+    };

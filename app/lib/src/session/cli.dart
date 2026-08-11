@@ -8,24 +8,15 @@ import '../changes/changes_config_cache.dart';
 import '../changes/changes_probe.dart';
 import '../changes/changes_text.dart';
 import '../comparison/artifact.dart';
-import '../comparison/base_checkout.dart';
-import '../comparison/base_ref.dart';
 import '../comparison/channels.dart';
-import '../comparison/previews_side.dart';
+import '../comparison/compare_command.dart';
 import '../comparison/runner.dart';
-import '../comparison/scenarios_runner.dart';
-import '../comparison/scenarios_side.dart';
-import '../comparison/shot_cache.dart';
-import '../comparison/skip.dart';
 import '../comparison/tree_diff.dart';
 import '../constants.dart';
-import '../plugins/native/previews_core.dart';
-import '../plugins/native/scenarios_core.dart';
 import '../plugins/plugin_core.dart';
 import '../shell/repo_layout.dart';
 import '../shell/worktree_discovery.dart';
 import '../utils/flutter_sdk.dart';
-import '../utils/run_dir.dart';
 import '../worktrees/facts.dart';
 import '../worktrees/facts_probe.dart';
 import '../worktrees/facts_store.dart';
@@ -199,6 +190,38 @@ const fwCommands = [
         '\n'
         'stdout is the wire. Everything a human might want to read — logs, and\n'
         'whatever this has to build before it can answer — goes to stderr.',
+  ),
+  FwCommand(
+    'compare',
+    usage:
+        'compare [--base=<ref>] [--package=<path>] [--entry=<id>] '
+        '[--export[=<dir>]] [--report=<dir>] [--json]',
+    summary: 'what this worktree did to the pictures, against its base',
+    details:
+        'Renders previews and replays scenarios on both sides of the branch '
+        'and\ndiffs them — pixels, widget tree, visible texts. Nothing is '
+        'blessed:\nthere is no golden and no approve button, both sides are '
+        'computed from\ngit on demand. The skip rule answers most entries '
+        'without rendering\nanything, so a branch that touched no preview '
+        'concludes in milliseconds.\n'
+        '\n'
+        'The verdict is written to `index.json` (the path prints last) and '
+        'shown\non the changes panel of the GUI.\n'
+        '\n'
+        '`--base` compares against any ref git can name; the default is the '
+        "project's\nconfigured base, then the default branch. `--entry` "
+        'narrows to named\nentries and may repeat.\n'
+        '\n'
+        '`--export` writes the comparison as a browsable page: a viewer, the\n'
+        '`index.json`, and a PNG per frame. Serve the directory over HTTP — '
+        'a\n`file://` page cannot fetch its own frames. The default directory '
+        'is\n`build/comparison/web` at the repository top level.\n'
+        '\n'
+        '`--report` writes what a pull-request comment needs: `comment.md`, '
+        'a\n`mosaic.png` of the changed rows, and the exported page under '
+        '`web/`.\nThe comment references images by `__MOSAIC_URL__` and '
+        '`__VIEWER_URL__`\nplaceholders for the workflow to substitute after '
+        'it hosts the files.',
   ),
   FwCommand(
     'capture',
@@ -385,14 +408,16 @@ class FwCli {
 
   /// Compares this worktree's previews against its base.
   ///
-  /// The order is the design and it is visible in the output: the SDK check
-  /// refuses before anything is checked out, the skip rule decides before
-  /// anything is rendered, and only then does a guest start. A branch that
-  /// touched no preview prints its verdict without compiling anything.
+  /// The orchestration lives in `runComparison` — shared with the `compare`
+  /// action an agent invokes — and this is its terminal rendering: parse the
+  /// flags, stream the halves as they land, print where things were written.
   Future<int> _compare(List<String> arguments, {required bool json}) async {
     String? baseRef;
     String? packagePath;
     var only = <String>[];
+    var export = false;
+    String? exportDir;
+    String? reportDir;
     for (var argument in arguments) {
       if (argument.startsWith('--base=')) {
         baseRef = argument.substring('--base='.length);
@@ -400,6 +425,13 @@ class FwCli {
         packagePath = argument.substring('--package='.length);
       } else if (argument.startsWith('--entry=')) {
         only.add(argument.substring('--entry='.length));
+      } else if (argument == '--export') {
+        export = true;
+      } else if (argument.startsWith('--export=')) {
+        export = true;
+        exportDir = argument.substring('--export='.length);
+      } else if (argument.startsWith('--report=')) {
+        reportDir = argument.substring('--report='.length);
       } else if (argument.startsWith('-')) {
         return fail('unknown option "$argument". Try `fw help compare`.');
       }
@@ -407,146 +439,61 @@ class FwCli {
 
     var session = await openSession();
     try {
-      PreviewsCore core;
+      CompareOutcome outcome;
       try {
-        core = session.requireCore(uiCatalogPluginId) as PreviewsCore;
-      } on SessionException catch (e) {
-        return fail('$e');
-      }
-      var packageInWorktree = packagePath ?? core.packages.firstOrNull;
-      if (packageInWorktree == null) {
-        return fail(
-          'no package declares previews, so there is nothing to compare.',
+        outcome = await runComparison(
+          session: session,
+          options: CompareOptions(
+            baseRef: baseRef,
+            package: packagePath,
+            entries: only,
+            export: export,
+            exportDir: exportDir,
+            reportDir: reportDir,
+          ),
+          // Progress belongs to a terminal, not to a document: a `--json` run
+          // has to be one parseable object from its first byte.
+          onProgress: json ? null : out.writeln,
+          // Printed before the scenarios start rather than with them at the
+          // end: the previews half is the fast one, and a terminal that shows
+          // it while the slow half runs is the difference between a report
+          // and a wait.
+          onPreviews: json ? null : _printPreviews,
+          onScenarios: json ? null : _printScenarios,
         );
-      }
-
-      // The two sides are two *checkouts*, not two package directories: a
-      // base checkout mirrors the whole worktree, so the package has to be
-      // named relative to its top level. Running this from inside
-      // `examples/example` reported every entry as added until it did.
-      var top = await BaseRef.topLevelOf(session.worktree.path);
-      var package = p.relative(
-        p.normalize(p.join(session.worktree.path, packageInWorktree)),
-        from: top,
-      );
-      BaseRef base;
-      try {
-        base = await BaseRef.resolve(top, ref: baseRef);
-      } on BaseRefError catch (e) {
+      } on CompareException catch (e) {
         return fail('$e');
       }
 
-      var sdk = session.workspace.flutterSdk;
-      // Progress belongs to a terminal, not to a document: a `--json` run has
-      // to be one parseable object from its first byte.
-      if (!json) {
-        out.writeln('Comparing against ${base.against} (${_sha(base.sha)})…');
-      }
-      var checkout = await BaseCheckout.ensure(
-        repoRoot: top,
-        sha: base.sha,
-        cacheRoot: BaseCheckout.defaultRoot,
-        resolve: (path) async {
-          // `.fvm/flutter_sdk` is a link some tool made and `.gitignore`
-          // hides, so a fresh checkout has none and would resolve to whatever
-          // SDK happens to be running this. The base is given the head's, and
-          // what makes that legitimate rather than a fudge is that `.fvmrc`
-          // *is* versioned — `SdkIdentity.pinned` compares the two commits'
-          // own claims before it looks at any link.
-          var link = Link(p.join(path, '.fvm', 'flutter_sdk'));
-          if (!link.existsSync()) {
-            Directory(p.dirname(link.path)).createSync(recursive: true);
-            link.createSync(sdk.root);
-          }
-          // The base is the same resolution as the head, but it is a
-          // *different directory*, and pub resolves per directory.
-          if (!json) out.writeln('Resolving the base checkout…');
-          var result = await Process.run(sdk.flutter, [
-            'pub',
-            'get',
-          ], workingDirectory: path);
-          if (result.exitCode != 0) {
-            throw StateError(
-              'pub get failed in the base checkout:\n${result.stderr}',
-            );
-          }
-        },
-      );
-
-      var runner = ComparisonRunner(
-        headRoot: top,
-        baseRoot: checkout.path,
-        baseSha: base.sha,
-        cache: ShotCache(p.join(flutterwareDir(), 'shots')),
-        only: only.isEmpty ? null : only,
-        side: PreviewsSide(
-          dartExecutable: p.join(sdk.root, 'bin', 'dart'),
-          flutterSdkRoot: sdk.root,
-          appToolDirectory: session.workspace.appContext.appToolDirectory.path,
-          packagePath: package,
-          root: core.rootFor(packageInWorktree),
-          previewAnnotations: core.previewAnnotationsFor(packageInWorktree),
-        ),
-      );
-
-      ComparisonResult result;
-      try {
-        result = await runner.run();
-      } on ComparisonRefused catch (e) {
-        return fail('$e');
-      }
-
-      // Printed before the scenarios start rather than with them at the end:
-      // the previews half is the fast one, and a terminal that shows it while
-      // the slow half runs is the difference between a report and a wait.
-      if (!json) {
-        for (var item in result.items) {
-          if (item.state == ComparedState.same ||
-              item.state == ComparedState.skipped) {
-            continue;
-          }
-          out.writeln(
-            '  ${item.state.name.padRight(10)} ${item.id}'
-            '${item.note == null ? '' : '  — ${item.note}'}',
-          );
-          for (var delta
-              in item.tree?.diff.deltas.take(3) ?? const <TreeDelta>[]) {
-            out.writeln('             ${_nearest(delta)}');
-          }
-        }
-        out.writeln(
-          '${result.items.length} entries, ${result.rendered} rendered, '
-          '${result.countOf(ComparedState.skipped)} skipped '
-          'in ${result.elapsed.inMilliseconds}ms',
-        );
-      }
-
-      var scenarios = await _compareScenarios(
-        session: session,
-        top: top,
-        baseRoot: checkout.path,
-        sdkRoot: sdk.root,
-        only: only,
-        json: json,
-      );
-
-      // Written once both halves are in. The artifact is the whole verdict, so
-      // a file holding only the previews would be a file that answers "did
-      // this branch break anything" wrongly.
-      var artifact = ComparisonArtifact(previews: result, scenarios: scenarios);
-      var index = artifact.writeTo(
-        p.join(
-          comparisonDirFor(flutterwareDir(), session.worktree),
-          'index.json',
-        ),
-      );
-
+      var exported = outcome.exported;
+      var report = outcome.report;
       if (json) {
         out.writeln(
-          const JsonEncoder.withIndent('  ').convert(artifact.toJson()),
+          const JsonEncoder.withIndent('  ').convert({
+            ...outcome.artifact.toJson(),
+            'export': ?(exported == null
+                ? null
+                : {'output': exported.output, 'frames': exported.frames}),
+            'report': ?(report == null
+                ? null
+                : {
+                    'comment': report.commentPath,
+                    'mosaic': ?report.mosaicPath,
+                  }),
+          }),
         );
       } else {
-        out.writeln('  ${index.path}');
+        if (exported != null) {
+          out.writeln(
+            '  exported ${exported.frames} frame'
+            '${exported.frames == 1 ? '' : 's'} to ${exported.output} '
+            '(serve it over HTTP)',
+          );
+        }
+        if (report != null) {
+          out.writeln('  report in $reportDir');
+        }
+        out.writeln('  ${outcome.indexPath}');
       }
       return 0;
     } finally {
@@ -554,87 +501,26 @@ class FwCli {
     }
   }
 
-  /// The scenario half of a comparison.
-  ///
-  /// Separate from the previews half rather than folded into the same runner,
-  /// and the design doc argues why at length: a preview is one picture and a
-  /// scenario is a *tree* of them. What they share is the kernel — the same
-  /// pixel, tree and text channels — and the skip rule, which asks the same
-  /// question of a scenario's closure that it asks of an entry's.
-  Future<ScenarioResults?> _compareScenarios({
-    required Session session,
-    required String top,
-    required String baseRoot,
-    required String sdkRoot,
-    required List<String> only,
-    required bool json,
-  }) async {
-    var watch = Stopwatch()..start();
-    ScenariosCore core;
-    try {
-      core = session.requireCore(scenariosPluginId) as ScenariosCore;
-    } on SessionException {
-      // No scenarios plugin at all: the artifact says nothing about scenarios
-      // rather than saying there are none, which are different claims.
-      return null;
-    }
-    var package = core.packages.firstOrNull;
-    if (package == null) return null;
-
-    var side = ScenariosSide(
-      flutterSdkRoot: sdkRoot,
-      packagePath: p.relative(
-        p.normalize(p.join(session.worktree.path, package)),
-        from: top,
-      ),
-      directory: core.scanRootFor(package),
-    );
-    var source = LiveScenarioSource(
-      side: side,
-      headRoot: top,
-      baseRoot: baseRoot,
-    );
-    try {
-      ScenarioResults results;
-      try {
-        results =
-            await ScenariosRunner(
-              headRoot: top,
-              baseRoot: baseRoot,
-              source: source,
-              cache: ShotCache(p.join(flutterwareDir(), 'shots')),
-              extraPaths: pixelInputsOf(
-                packagePath: side.packagePath,
-                roots: [top, baseRoot],
-              ),
-              only: only.isEmpty ? null : only,
-            ).run(
-              outDir: p.join(
-                comparisonDirFor(flutterwareDir(), session.worktree),
-                'scenarios',
-              ),
-            );
-      } on Object catch (error) {
-        // A side whose harness will not build is a side, not a crash — the
-        // same rule the previews half follows, and the same skew causes it.
-        // It goes into the artifact too: an empty list is what a project with
-        // no scenarios leaves behind, and a reader has to be able to tell the
-        // two apart.
-        var note = '$error'.split('\n').first;
-        if (!json) out.writeln('scenarios: $note');
-        return ScenarioResults.of(
-          items: const [],
-          ran: 0,
-          skipped: 0,
-          elapsed: watch.elapsed,
-          note: note,
-        );
+  /// The previews half, in a terminal.
+  void _printPreviews(ComparisonResult result) {
+    for (var item in result.items) {
+      if (item.state == ComparedState.same ||
+          item.state == ComparedState.skipped) {
+        continue;
       }
-      if (!json) _printScenarios(results);
-      return results;
-    } finally {
-      await source.dispose();
+      out.writeln(
+        '  ${item.state.name.padRight(10)} ${item.id}'
+        '${item.note == null ? '' : '  — ${item.note}'}',
+      );
+      for (var delta in item.tree?.diff.deltas.take(3) ?? const <TreeDelta>[]) {
+        out.writeln('             ${_nearest(delta)}');
+      }
     }
+    out.writeln(
+      '${result.items.length} entries, ${result.rendered} rendered, '
+      '${result.countOf(ComparedState.skipped)} skipped '
+      'in ${result.elapsed.inMilliseconds}ms',
+    );
   }
 
   /// The scenario half, in a terminal.
@@ -668,8 +554,6 @@ class FwCli {
       '${results.skipped} skipped in ${results.elapsed.inMilliseconds}ms',
     );
   }
-
-  String _sha(String sha) => sha.length > 8 ? sha.substring(0, 8) : sha;
 
   /// A tree delta with the top of its path cut off.
   ///

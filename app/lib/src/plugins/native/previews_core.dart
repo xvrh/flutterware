@@ -165,6 +165,14 @@ class PreviewsCore extends PluginCore {
   /// status here that takes seconds.
   Status? Function(String path)? busyStatusFor;
 
+  /// Runs the `compare` action.
+  ///
+  /// A hook for the same reason as [busyStatusFor], though the wall is a
+  /// different one: a comparison spans the previews *and* scenarios plugins,
+  /// and a core cannot see its siblings. The session installs this on
+  /// construction, closing over itself.
+  Future<Object?> Function(Map<String, Object?> arguments)? compareRunner;
+
   /// The scan failure for [path], for a panel that wants to show it directly.
   String? failureFor(String path) => _failures[path];
 
@@ -880,6 +888,71 @@ class PreviewsCore extends PluginCore {
           ),
         ],
       ),
+      PluginAction(
+        'compare',
+        'Compare against the base',
+        returns: ComparisonCompareResult,
+        description:
+            'What this worktree did to the pictures: renders previews and '
+            'replays scenarios on both sides of the branch and diffs them — '
+            'pixels, widget tree, visible texts. Nothing is blessed: both '
+            'sides are computed from git on demand, and the skip rule answers '
+            'entries whose closure nothing touched without rendering '
+            'anything. Returns the verdict; the artifact at `index` has every '
+            'row and channel.',
+        parameters: [
+          const ActionParameter(
+            'base',
+            'Against',
+            required: false,
+            description:
+                'Any ref git can name — `origin/main`, a sha. Defaults to '
+                "the project's base, then the default branch, taken at the "
+                'merge base either way.',
+          ),
+          ActionParameter(
+            'package',
+            'Package',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description:
+                'Which declared previews package; the first when omitted',
+            options: [
+              for (var path in packages)
+                ActionOption(path, label: path == '.' ? 'root' : path),
+            ],
+          ),
+          const ActionParameter(
+            'entry',
+            'Entry',
+            required: false,
+            description:
+                'Narrow to one entry or scenario id — as `entries` and the '
+                'scenarios `list` action report them',
+          ),
+          const ActionParameter(
+            'export',
+            'Export a page',
+            kind: ActionParameterKind.boolean,
+            required: false,
+            description:
+                'Write the comparison as a browsable page under '
+                '`build/comparison/web` — the viewer, the index and a PNG '
+                'per frame. Serve it over HTTP.',
+          ),
+          const ActionParameter(
+            'report',
+            'PR report into',
+            required: false,
+            description:
+                'Write what a pull-request comment needs into this '
+                'directory: `comment.md`, `mosaic.png`, and the page under '
+                '`web/`. The comment references images by `__MOSAIC_URL__` '
+                'and `__VIEWER_URL__` placeholders for the workflow to '
+                'substitute after it hosts the files.',
+          ),
+        ],
+      ),
     ],
     view: _view,
   );
@@ -1047,6 +1120,17 @@ class PreviewsCore extends PluginCore {
         return _audit(arguments);
       case webBuildActionId:
         return _buildWeb(arguments);
+      case 'compare':
+        var runner = compareRunner;
+        if (runner == null) {
+          // A core driven without a session around it — a test, usually.
+          // Naming the wiring beats a null error three calls deep.
+          throw StateError(
+            'compare needs the session to install its runner, and this core '
+            'was built without one.',
+          );
+        }
+        return runner(arguments);
       default:
         return super.invoke(actionId, arguments: arguments);
     }

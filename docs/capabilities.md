@@ -28,6 +28,7 @@ cd app && dart run bin/fw.dart <command>
 | `init` | record what this project needs, once |
 | `app [--release] [--json]` | open the flutterware GUI |
 | `mcp` | serve this project to an agent, over stdio |
+| `compare [--base=<ref>] [--package=<path>] [--entry=<id>] [--export[=<dir>]] [--report=<dir>] [--json]` | what this worktree did to the pictures, against its base |
 | `capture [<address>] -o <file> [--size=WxH] [--theme=light|dark] [--pixel-ratio=N] [--timeout=<seconds>]` | photograph the GUI window itself, at an address |
 | `help [<command>]` | this, or one command in detail |
 
@@ -1716,6 +1717,40 @@ durationMs: int
 | `package` | choice | no | — | Which declared package; the only one when there is one |
 | `output` | string | no | — | Where the page goes. Package-relative unless absolute; defaults to `build/catalog/web`. |
 | `base-href` | string | no | — | What `flutter build web --base-href` takes, for serving the page from a subdirectory rather than the root of a host. Must begin and end with a slash — `/catalog/`. |
+
+#### `compare` — Compare against the base
+
+What this worktree did to the pictures: renders previews and replays scenarios on both sides of the branch and diffs them — pixels, widget tree, visible texts. Nothing is blessed: both sides are computed from git on demand, and the skip rule answers entries whose closure nothing touched without rendering anything. Returns the verdict; the artifact at `index` has every row and channel.
+
+```sh
+fw run previews compare [--base=…] [--package=…] [--entry=…] [--export=…] [--report=…]
+```
+
+Returns `ComparisonCompareResult`:
+
+```
+against: String   # What the comparison was against — the ref's name, as a header shows it.
+baseSha: String   # The merge base it resolved to.
+counts: Map<String, int>   # Every row by state, both halves merged: `{"changed": 2, "skipped": 9}`.
+findings: List<ComparisonFinding>   # The rows worth attention, worst first.
+  id: String   # The entry id, or the scenario id for a flow.
+  half: String   # `previews` or `scenarios`.
+  state: String   # `broke`, `failed`, `wasBroken`, `added`, `removed` or `changed` — declared worst-first, and the list is sorted by it.
+  note: String?   # Why it is in the state it is, when the state alone does not say.
+  delta: String?   # The size of the change: `0.38% · 2 regions` for pixels, the step that moved for a flow.
+index: String   # The whole verdict as a file — every row, every channel, the shot keys.
+export: String?   # The browsable page, when `export` asked for one.
+report: String?   # The PR report directory, when `report` asked for one: `comment.md`, `mosaic.png`, the page under `web/`.
+scenariosNote: String?   # Why the scenario half has nothing to say, when it has nothing to say — a base harness that would not build reads differently from a project with no scenarios.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `base` | string | no | — | Any ref git can name — `origin/main`, a sha. Defaults to the project's base, then the default branch, taken at the merge base either way. |
+| `package` | choice | no | — | Which declared previews package; the first when omitted |
+| `entry` | string | no | — | Narrow to one entry or scenario id — as `entries` and the scenarios `list` action report them |
+| `export` | boolean | no | — | Write the comparison as a browsable page under `build/comparison/web` — the viewer, the index and a PNG per frame. Serve it over HTTP. |
+| `report` | string | no | — | Write what a pull-request comment needs into this directory: `comment.md`, `mosaic.png`, and the page under `web/`. The comment references images by `__MOSAIC_URL__` and `__VIEWER_URL__` placeholders for the workflow to substitute after it hosts the files. |
 
 
 ### `flutterware.dev_stack`

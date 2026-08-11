@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/comparison/pixel_diff.dart';
 import 'package:flutterware_app/src/comparison/shot_cache.dart';
+import 'package:flutterware_app/src/comparison/shot_store_io.dart';
 import 'package:flutterware_app/src/comparison/ui/shot_image.dart';
 import 'package:flutterware_app/src/comparison/ui/stage.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
@@ -46,7 +47,7 @@ void main() {
   }) async {
     if (base) write('base', 40);
     if (head) write('head', 200);
-    var shots = ShotPair(cache);
+    var shots = ShotPair(CacheShotStore(cache));
     // **Inside `runAsync`.** Decoding an image goes out to the engine, and the
     // fake clock a widget test runs on never lets that future complete — the
     // test does not fail, it hangs.
@@ -103,7 +104,7 @@ void main() {
   // frames and never will, and a pane that said "Loading…" over it said so
   // forever.
   testWidgets('a load that found nothing has still settled', (tester) async {
-    var shots = ShotPair(cache);
+    var shots = ShotPair(CacheShotStore(cache));
     addTearDown(shots.dispose);
 
     await tester.runAsync(

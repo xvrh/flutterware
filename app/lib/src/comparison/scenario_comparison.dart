@@ -120,6 +120,46 @@ class ScenarioComparison {
     ],
   };
 
+  /// A scenario read back off `index.json` — the exported page's side of
+  /// [toJson].
+  static ScenarioComparison fromJson(Map<String, Object?> json) {
+    var items = <ComparedItem>[];
+    var frames = <String, ({FrameRef? base, FrameRef? head})>{};
+    for (var step in json['steps'] as List? ?? const []) {
+      var map = (step as Map).cast<String, Object?>();
+      var item = ComparedItem.fromJson(map);
+      items.add(item);
+      var pair = map['frames'] as Map<String, Object?>?;
+      if (pair != null) {
+        frames[item.id] = (
+          base: FrameRef.fromJson(
+            (pair['base'] as Map?)?.cast<String, Object?>(),
+          ),
+          head: FrameRef.fromJson(
+            (pair['head'] as Map?)?.cast<String, Object?>(),
+          ),
+        );
+      }
+    }
+    return ScenarioComparison(
+      scenario: json['id'] as String? ?? '',
+      state:
+          ComparedState.values.asNameMap()[json['state']] ??
+          ComparedState.skipped,
+      items: items,
+      frames: frames,
+      branches: [
+        for (var branch in json['branches'] as List? ?? const [])
+          BranchDelta(
+            label: (branch as Map)['label'] as String? ?? '',
+            added: branch['state'] == 'added',
+            steps: branch['steps'] as int? ?? 0,
+            path: (branch['path'] as List? ?? const []).cast<String>(),
+          ),
+      ],
+    );
+  }
+
   /// Compares two runs of one scenario.
   ///
   /// **Pass and fail outrank every pixel.** A scenario that stopped completing

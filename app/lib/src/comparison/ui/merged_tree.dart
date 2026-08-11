@@ -9,6 +9,7 @@ import '../channels.dart';
 import '../frame_ref.dart';
 import '../scenario_alignment.dart';
 import '../scenario_comparison.dart';
+import '../shot_store.dart';
 import 'shot_image.dart';
 import 'state_chip.dart';
 
@@ -32,11 +33,13 @@ class MergedTree extends StatelessWidget {
   const MergedTree({
     super.key,
     required this.scenario,
+    required this.store,
     required this.selected,
     required this.onSelect,
   });
 
   final ScenarioComparison scenario;
+  final ShotStore store;
 
   /// The step id the address names, or null.
   final String? selected;
@@ -73,6 +76,7 @@ class MergedTree extends StatelessWidget {
           _StepCell(:var item) => _StepNode(
             item: item,
             frames: scenario.frames[item.id],
+            store: store,
             selected: item.id == selected,
             onTap: () => onSelect(item.id),
           ),
@@ -217,12 +221,14 @@ class _StepNode extends StatelessWidget {
   const _StepNode({
     required this.item,
     required this.frames,
+    required this.store,
     required this.selected,
     required this.onTap,
   });
 
   final ComparedItem item;
   final ({FrameRef? base, FrameRef? head})? frames;
+  final ShotStore store;
   final bool selected;
   final VoidCallback onTap;
 
@@ -257,6 +263,7 @@ class _StepNode extends StatelessWidget {
                   // The head frame, falling back to base for a step only the
                   // base run had — there is nothing else to show for it.
                   frames?.head ?? frames?.base,
+                  store: store,
                 ),
               ),
               const Gap(FwSpacing.xs),
@@ -280,9 +287,10 @@ class _StepNode extends StatelessWidget {
 
 /// One frame, decoded on demand.
 class _Thumbnail extends StatefulWidget {
-  const _Thumbnail(this.frame);
+  const _Thumbnail(this.frame, {required this.store});
 
   final FrameRef? frame;
+  final ShotStore store;
 
   @override
   State<_Thumbnail> createState() => _ThumbnailState();
@@ -304,7 +312,8 @@ class _ThumbnailState extends State<_Thumbnail> {
   }
 
   Future<void> _load() async {
-    var shot = await ShotPair.fromFile(widget.frame);
+    var frame = widget.frame;
+    var shot = frame == null ? null : await widget.store.byRef(frame);
     if (!mounted) {
       shot?.image.dispose();
       return;
