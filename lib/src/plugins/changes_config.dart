@@ -6,7 +6,7 @@
 /// ```dart
 /// void main() => Flutterware.configure((fw) {
 ///   fw.changes(ChangesConfig(
-///     attention: ['**/migrations/**', 'openapi.yaml'],
+///     attention: ['lib/api/**', 'tool/flutterware.dart'],
 ///     noise: ['**/*.g.dart'],
 ///     base: 'develop',
 ///   ));
@@ -31,8 +31,13 @@ class ChangesConfig {
     this.base,
   });
 
-  /// Paths worth looking at first, as globs. Each pinned row names the pattern
-  /// that pinned it, so precedence is inspectable rather than magic.
+  /// Paths worth looking at first, as globs — the changes screen's *Important*
+  /// tab. Each pinned row names the pattern that pinned it, so precedence is
+  /// inspectable rather than magic.
+  ///
+  /// **There is no built-in list, and there must not be one.** flutterware
+  /// does not know what matters in your repository, and putting a file under a
+  /// heading that says *look here first* is a claim only you can make.
   ///
   /// Matching follows the rules everybody already knows from `.gitignore`: a
   /// pattern with no `/` matches a file of that name at any depth, and a
@@ -40,10 +45,14 @@ class ChangesConfig {
   final List<String> attention;
 
   /// Paths that are almost never what you opened the screen for — generated
-  /// code, lockfiles, snapshots. Collapsed into one drawer row.
+  /// code, lockfiles, snapshots. Demoted out of the list, behind the
+  /// *low-signal* lens.
   ///
-  /// **A hint, never a hide.** The drawer is one click from open and the header
-  /// always reports the true file count.
+  /// **A hint, never a hide.** The lens is one click from on and the header
+  /// always reports the true file count. Unlike [attention] this one *does*
+  /// have built-in defaults, because `*.g.dart` and `pubspec.lock` are facts
+  /// about the toolchain rather than opinions about a domain — and getting a
+  /// demotion wrong is cheap, where getting a promotion wrong is loud.
   final List<String> noise;
 
   /// The branch the delta is measured from.
