@@ -13,6 +13,11 @@
 /// - **Pull requests** are keyed by branch and stamped, because there is no
 ///   cheap key for "has the PR changed" and 890 ms is too long to pay on every
 ///   glance.
+/// - **Changes configs** are keyed by the mtime and size of the worktree's
+///   `tool/flutterware.dart`. Running that file is what "opening a worktree"
+///   costs, and the changes screen has to rank a worktree **nobody has
+///   opened** — so the executed value is remembered rather than approximated.
+///   See the design doc's §5.
 ///
 /// Lives outside the repository: this is machine state, and a cache written
 /// into the checkout would turn up in the dirty count it is there to report.
@@ -22,6 +27,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/run_dir.dart';
@@ -54,6 +60,32 @@ class CachedDiff {
   );
 }
 
+/// A `ChangesConfig` as last executed, beside what it was executed from.
+///
+/// The key is [CachedChangesConfig.validityKey] — the config file's mtime and
+/// size. A key that still matches means this **is** the executed value, not an
+/// approximation of one; a key that has moved means the file was edited since,
+/// and the screen says so rather than ranking silently by yesterday's rules.
+class CachedChangesConfig {
+  const CachedChangesConfig({required this.config, required this.validityKey});
+
+  final ChangesConfig config;
+  final String validityKey;
+
+  Map<String, Object?> toJson() => {
+    'key': validityKey,
+    'config': config.toJson(),
+  };
+
+  static CachedChangesConfig fromJson(Map<String, Object?> json) =>
+      CachedChangesConfig(
+        validityKey: json['key']! as String,
+        config: ChangesConfig.fromJson(
+          (json['config'] as Map?)?.cast<String, Object?>() ?? const {},
+        ),
+      );
+}
+
 class WorktreeFactsStore {
   WorktreeFactsStore._(
     this.file,
@@ -61,6 +93,7 @@ class WorktreeFactsStore {
     this._opened,
     this._pullRequests,
     this._pullRequestsAt,
+    this._changesConfigs,
   );
 
   /// Opens the store for the repository rooted at [repoRoot].
@@ -77,6 +110,7 @@ class WorktreeFactsStore {
     var diffs = <String, CachedDiff>{};
     var opened = <String, DateTime>{};
     var pullRequests = <String, ForgeFacts>{};
+    var changesConfigs = <String, CachedChangesConfig>{};
     DateTime? pullRequestsAt;
     try {
       if (file.existsSync()) {
@@ -89,6 +123,11 @@ class WorktreeFactsStore {
         for (var entry in (json['opened'] as Map? ?? {}).entries) {
           var at = DateTime.tryParse('${entry.value}');
           if (at != null) opened['${entry.key}'] = at;
+        }
+        for (var entry in (json['changesConfigs'] as Map? ?? {}).entries) {
+          changesConfigs['${entry.key}'] = CachedChangesConfig.fromJson(
+            (entry.value as Map).cast<String, Object?>(),
+          );
         }
         if (json['pullRequests'] case Map<Object?, Object?> prs) {
           pullRequestsAt = DateTime.tryParse('${prs['at']}');
@@ -111,6 +150,7 @@ class WorktreeFactsStore {
       // forever.
       pullRequestsAt == null ? {} : pullRequests,
       pullRequestsAt,
+      changesConfigs,
     );
   }
 
@@ -130,6 +170,7 @@ class WorktreeFactsStore {
   final Map<String, DateTime> _opened;
   Map<String, ForgeFacts> _pullRequests;
   DateTime? _pullRequestsAt;
+  final Map<String, CachedChangesConfig> _changesConfigs;
 
   static String diffKey(String baseSha, String headSha) => '$baseSha..$headSha';
 
@@ -161,6 +202,13 @@ class WorktreeFactsStore {
     _pullRequestsAt = at;
   }
 
+  /// The last `ChangesConfig` this worktree's config file produced.
+  CachedChangesConfig? changesConfig(String worktreePath) =>
+      _changesConfigs[worktreePath];
+
+  void putChangesConfig(String worktreePath, CachedChangesConfig entry) =>
+      _changesConfigs[worktreePath] = entry;
+
   /// Drops diffs beyond [keep], oldest-inserted first.
   ///
   /// An entry is never *wrong* — a sha pair has one diff forever — so this is
@@ -189,6 +237,11 @@ class WorktreeFactsStore {
             for (var entry in _opened.entries)
               entry.key: entry.value.toIso8601String(),
           },
+          if (_changesConfigs.isNotEmpty)
+            'changesConfigs': {
+              for (var entry in _changesConfigs.entries)
+                entry.key: entry.value.toJson(),
+            },
           if (_pullRequestsAt case var at?)
             'pullRequests': {
               'at': at.toIso8601String(),

@@ -60,6 +60,34 @@ class Address {
   /// ids are dotted and globally unique, so nothing legitimate wanted it.
   static const shellConfig = 'config';
 
+  /// `fw:///worktrees/<worktree>/changes` — what this checkout has changed
+  /// against its base branch, committed and uncommitted together.
+  ///
+  /// Reserved on the same terms as [shellConfig], and in the plugin slot for the
+  /// same reason: one thing per worktree, mounted where a panel mounts.
+  ///
+  /// **The one that is different in kind**, and the difference is the point: it
+  /// reads git rather than the project, so unlike every other id in this slot it
+  /// renders for a worktree that is **not open**. Naming it must therefore not
+  /// spend a config subprocess — see `ShellController.go`.
+  static const shellChanges = 'changes';
+
+  /// Every id in the plugin slot the shell owns rather than a plugin.
+  ///
+  /// A set rather than a list of comparisons, because the reservation has to be
+  /// enforced in three places and the failure mode of adding a fourth screen and
+  /// forgetting one of them is silent: the plugin is simply unreachable.
+  static const shellOwned = {shellConfig, shellChanges};
+
+  /// The shell-owned ids that need **no session** to render, and therefore
+  /// resolve for a worktree that is not open.
+  ///
+  /// Named as a set rather than tested for by name so the rule reads as a
+  /// property of the screen — *this one reads git, not the project* — at the one
+  /// place that acts on it, `ShellController.go`, which otherwise opens
+  /// everything it is pointed at.
+  static const shellSessionless = {shellChanges};
+
   /// Which project this address belongs to, or null for "the one the session
   /// reading it was launched in" — which is every address anything emits today,
   /// since a shell is opened on one repo and discovers that repo's worktrees.

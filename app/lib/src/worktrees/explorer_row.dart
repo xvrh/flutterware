@@ -3,8 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
+import '../changes/change_set.dart';
+import '../changes/changes_summary.dart';
 import '../plugins/native/dev_stack_results.dart';
 import '../shell/worktree_filter.dart';
+import '../ui/hover_card.dart';
 import '../ui/menu.dart';
 import '../ui/popover.dart';
 import '../ui/theme.dart';
@@ -41,6 +44,10 @@ class WorktreeRow extends StatefulWidget {
     this.onToggleExpand,
     this.onOpen,
     this.onRemove,
+    this.onOpenChanges,
+    this.repoRoot,
+    this.changesLoad,
+    this.onChangesOpening,
   });
 
   /// Whether the detail is showing below the row.
@@ -66,6 +73,21 @@ class WorktreeRow extends StatefulWidget {
 
   /// Opens the teardown checklist. Null for the primary checkout.
   final VoidCallback? onRemove;
+
+  /// Opens the full changes screen for this checkout — the popover's footer,
+  /// and where `⌘⇧D` goes.
+  final VoidCallback? onOpenChanges;
+
+  /// The main checkout, which keys the cached `ChangesConfig` the popover ranks
+  /// by. Null ranks by the built-in defaults.
+  final String? repoRoot;
+
+  /// Injected for tests, so pumping a row never spawns an isolate.
+  final Future<ChangeSet> Function(String path)? changesLoad;
+
+  /// Fired just before this row's popover opens, so the screen can shut
+  /// whichever one was open.
+  final VoidCallback? onChangesOpening;
 
   /// Whether these columns are drawn at all.
   ///
@@ -111,7 +133,7 @@ class WorktreeRow extends StatefulWidget {
   final VoidCallback? onOpen;
 
   @override
-  State<WorktreeRow> createState() => _WorktreeRowState();
+  State<WorktreeRow> createState() => WorktreeRowState();
 }
 
 const _rowHeight = 52.0;
@@ -215,8 +237,69 @@ const _nameMinWidth = 220.0;
   );
 }
 
-class _WorktreeRowState extends State<WorktreeRow> {
+class WorktreeRowState extends State<WorktreeRow> {
   var _hovered = false;
+
+  /// The hover card's handle, so the *screen* can open it: `c` acts on the
+  /// cursor row, and the keyboard has no pointer to put on a trigger.
+  ///
+  /// Null until the row has built a changes cell with something in it — a
+  /// checkout in sync has nothing to show and correctly has no card.
+  final _card = GlobalKey<HoverCardState>();
+
+  /// Opens the ranked file list, if this row has one. Called by the explorer's
+  /// `c` binding, which skips the hover delay: pressing a key has already
+  /// expressed the intent the delay exists to wait for.
+  void showChanges() {
+    if (_card.currentState == null) return;
+    widget.onChangesOpening?.call();
+    _card.currentState!.show();
+  }
+
+  /// Shuts it, so the screen can keep **one open at a time**.
+  void hideChanges() => _card.currentState?.hide();
+
+  /// Whether this row is the one holding a card open.
+  bool get changesOpen => _card.currentState?.isOpen ?? false;
+
+  /// Wraps the changes cell in the card that replaced its tooltip.
+  ///
+  /// **The cell, not the fingerprint bar.** The bar was the original trigger,
+  /// chosen because it is the one thing on the row that already means
+  /// *changes*. What that argument never checked is that the bar is
+  /// `_Fingerprint._height` — **4 pixels tall**. A 100×4 target inside a
+  /// 1450×52 row is not a target; driving the real window, every click aimed at
+  /// it landed on the row behind it instead. The reasoning was about the 100,
+  /// and the 4 is what decided it.
+  ///
+  /// It also had a `Tooltip` over the whole cell, which is the same target
+  /// forty times larger offering a *different* interaction. Hovering therefore
+  /// always won and always produced text, so the card was unreachable in
+  /// practice and unknown in principle. One gesture, one result: the card **is**
+  /// the tip now.
+  ///
+  /// The cost this pays that the bar did not: the whole 220 px column stops
+  /// expanding the row. It is worth it, and the click is not wasted — it goes
+  /// to the changes screen, which is where the card's own footer link goes.
+  Widget _buildChangesCard(Widget cell) => HoverCard(
+    key: _card,
+    align: PopoverAlign.start,
+    onTap: () {
+      widget.onChangesOpening?.call();
+      widget.onOpenChanges?.call();
+    },
+    anchor: (context, controller) => cell,
+    content: (context, controller) => ChangesSummaryCard(
+      worktreePath: widget.path ?? '',
+      repoRoot: widget.repoRoot,
+      git: widget.facts.git,
+      load: widget.changesLoad,
+      onOpen: () {
+        controller.close();
+        widget.onOpenChanges?.call();
+      },
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -274,6 +357,7 @@ class _WorktreeRowState extends State<WorktreeRow> {
                             child: _ChangesCell(
                               fact: facts.git,
                               scale: widget.scale,
+                              card: _buildChangesCard,
                             ),
                           ),
                         if (afford.stack)
@@ -556,10 +640,15 @@ class _Tag extends StatelessWidget {
 }
 
 class _ChangesCell extends StatelessWidget {
-  const _ChangesCell({required this.fact, required this.scale});
+  const _ChangesCell({required this.fact, required this.scale, this.card});
 
   final Fact<GitFacts> fact;
   final double scale;
+
+  /// Wraps the whole cell in its hover card. Null in a row that has none to
+  /// offer, and deliberately not applied when there is nothing to show: a
+  /// checkout in sync has no files to list, so hovering it does nothing.
+  final Widget Function(Widget cell)? card;
 
   @override
   Widget build(BuildContext context) {
@@ -578,8 +667,15 @@ class _ChangesCell extends StatelessWidget {
     // and common — the first repo this ran against had one with 45 changed
     // files and no commits of its own. "in sync" is true of the branch and a
     // lie about the worktree, so the dirt is the headline when there is any.
+    //
+    // **And it still gets a card, which is the case that matters most.**
+    // `ChangeShape` comes from the branch diff, keyed by two commit shas and so
+    // committed-only, so a checkout whose agent has written fifteen files and
+    // committed none draws no fingerprint at all. Hanging the trigger off the
+    // fingerprint put the whole feature out of reach for exactly the worktree
+    // it exists for.
     if (shape == null || shape.isEmpty) {
-      return _Lines(
+      var lines = _Lines(
         dim: fact.isDim,
         top: git.dirty > 0
             ? Row(
@@ -605,67 +701,59 @@ class _ChangesCell extends StatelessWidget {
               )
             : null,
       );
+      // Nothing changed and nothing uncommitted means there is genuinely
+      // nothing to list, so hovering it stays inert.
+      return git.dirty > 0 ? card?.call(lines) ?? lines : lines;
     }
 
     var ranked = shape.ranked;
-    return Tooltip(
-      // **The row is terse on purpose and terse is unreadable without this.**
-      // `20f` is twenty files; nothing on screen says so, and a legend would be
-      // a permanent explanation of something you learn once.
-      message: [
-        '${shape.files} file${shape.files == 1 ? '' : 's'} changed against ${git.base ?? 'the base branch'}',
-        '+${shape.added} added, −${shape.removed} removed',
-        if (git.dirty > 0)
-          '${git.dirty} uncommitted file${git.dirty == 1 ? '' : 's'} (●)',
-        if (git.ahead > 0) '${git.ahead} commit(s) ahead (↑)',
-        if (git.behind > 0) '${git.behind} commit(s) behind (↓)',
-        '',
-        for (var b in ranked) '${b.name}  +${b.added} −${b.removed}',
-      ].join('\n'),
-      child: _Lines(
-        dim: fact.isDim,
-        top: Row(
-          children: [
-            _Fingerprint(shape: shape, scale: scale),
+    var lines = _Lines(
+      dim: fact.isDim,
+      top: Row(
+        children: [
+          _Fingerprint(shape: shape, scale: scale),
+          const Gap(FwSpacing.md),
+          Flexible(
+            child: Text(
+              [for (var b in ranked.take(2)) b.name].join('·'),
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: context.type.micro.copyWith(color: colors.mut2),
+            ),
+          ),
+        ],
+      ),
+      bottom: Row(
+        children: [
+          Text(
+            '${shape.files}f',
+            style: context.type.micro.copyWith(color: colors.mut),
+          ),
+          const Gap(FwSpacing.sm),
+          Text(
+            '+${_short(shape.added)}',
+            style: context.type.micro.copyWith(color: colors.grn),
+          ),
+          const Gap(FwSpacing.xs),
+          Text(
+            '−${_short(shape.removed)}',
+            style: context.type.micro.copyWith(color: colors.red),
+          ),
+          if (git.dirty > 0) ...[const Gap(FwSpacing.md), _Dirty(git.dirty)],
+          if (git.ahead > 0 || git.behind > 0) ...[
             const Gap(FwSpacing.md),
-            Flexible(
-              child: Text(
-                [for (var b in ranked.take(2)) b.name].join('·'),
-                overflow: TextOverflow.ellipsis,
-                softWrap: false,
-                style: context.type.micro.copyWith(color: colors.mut2),
-              ),
+            Text(
+              '↑${git.ahead}${git.behind > 0 ? ' ↓${git.behind}' : ''}',
+              style: context.type.micro.copyWith(color: colors.mut3),
             ),
           ],
-        ),
-        bottom: Row(
-          children: [
-            Text(
-              '${shape.files}f',
-              style: context.type.micro.copyWith(color: colors.mut),
-            ),
-            const Gap(FwSpacing.sm),
-            Text(
-              '+${_short(shape.added)}',
-              style: context.type.micro.copyWith(color: colors.grn),
-            ),
-            const Gap(FwSpacing.xs),
-            Text(
-              '−${_short(shape.removed)}',
-              style: context.type.micro.copyWith(color: colors.red),
-            ),
-            if (git.dirty > 0) ...[const Gap(FwSpacing.md), _Dirty(git.dirty)],
-            if (git.ahead > 0 || git.behind > 0) ...[
-              const Gap(FwSpacing.md),
-              Text(
-                '↑${git.ahead}${git.behind > 0 ? ' ↓${git.behind}' : ''}',
-                style: context.type.micro.copyWith(color: colors.mut3),
-              ),
-            ],
-          ],
-        ),
+        ],
       ),
     );
+    // **No `Tooltip` here any more.** It used to explain that `20f` is twenty
+    // files, which the card's own header says in words — and having both meant
+    // the cheap gesture always won and always produced the lesser answer.
+    return card?.call(lines) ?? lines;
   }
 }
 

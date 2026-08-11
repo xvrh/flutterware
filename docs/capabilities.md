@@ -22,6 +22,7 @@ cd app && dart run bin/fw.dart <command>
 |---|---|
 | `status [--json]` | what every plugin says about itself |
 | `worktrees [--refresh] [--json]` | every checkout of this repo, and what is going on in each |
+| `changes [<worktree>] [--file=<path>] [--json]` | what a checkout has changed, ranked |
 | `actions [--json]` | what can be invoked, and with what |
 | `run <plugin> <action> [--k=v]` | invoke one action |
 | `init` | record what this project needs, once |

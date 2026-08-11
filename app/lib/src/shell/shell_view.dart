@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutterware/plugins.dart';
 
 import '../address/address_scope.dart';
+import '../changes/changes_screen.dart';
 import '../capture/capture_mode.dart';
 import '../capture/capture_request.dart';
 import '../plugins/native_plugin.dart';
@@ -116,6 +117,24 @@ class ShellView extends StatelessWidget {
               unawaited(showShellSearch(context, shell)),
           const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
               unawaited(showShellSearch(context, shell)),
+          const SingleActivator(
+            LogicalKeyboardKey.keyD,
+            meta: true,
+            shift: true,
+          ): shell.selectChanges,
+          const SingleActivator(
+            LogicalKeyboardKey.keyD,
+            control: true,
+            shift: true,
+          ): shell.selectChanges,
+          // **Only out of the worktrees space, and only when there is somewhere
+          // to go.** Escape is the most overloaded key in any window; binding it
+          // to a general "back" here would steal it from every dialog and text
+          // field under this widget. A changes screen for an unopened checkout
+          // is the one place with no tab to click your way out of.
+          if (shell.inWorktreesSpace && !shell.isExplorer)
+            const SingleActivator(LogicalKeyboardKey.escape):
+                shell.selectExplorer,
           // The same screen in the next checkout, and back. The bracket pair is
           // what every editor uses for cycling, and with two worktrees open it
           // is the A/B flick that makes a visual comparison possible at all.
@@ -177,11 +196,13 @@ class ShellView extends StatelessWidget {
                     child: Row(
                       children: [
                         // Derived rather than assigned: the rail lists *this
-                        // worktree's* plugins and the explorer is about all of
-                        // them, so it has nothing to show. Writing
+                        // worktree's* plugins, and nothing in the worktrees
+                        // space has any — the explorer is about every checkout,
+                        // and a changes screen for a checkout nobody opened has
+                        // no session to list plugins from. Writing
                         // `sidebarVisible = false` on arrival would clobber a
                         // window preference the user set, and not give it back.
-                        if (shell.sidebarVisible && !shell.isExplorer)
+                        if (shell.sidebarVisible && !shell.inWorktreesSpace)
                           _Sidebar(shell),
                         Expanded(child: _Panel(shell)),
                       ],
@@ -673,7 +694,12 @@ class _ExplorerTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var selected = shell.isExplorer;
+    // **Lit for the whole space, not only the list.** A changes screen for a
+    // checkout nobody has opened is a page *in* the worktrees space — it has no
+    // tab of its own, and leaving every tab dark would say the window is
+    // nowhere. This is the pinned tab meaning what a pinned tab means in a
+    // browser: the place, not one document in it.
+    var selected = shell.inWorktreesSpace;
     var needsYou = shell.worktreeFacts?.needsYou ?? 0;
     var radius = Radius.circular(context.radii.radiusSmall);
     var edge = BorderSide(color: selected ? colors.line : Colors.transparent);
@@ -1201,6 +1227,15 @@ class _Sidebar extends StatelessWidget {
                       ? Status.none
                       : const Status.error('config'),
                 ),
+                // Above the plugin list, because it is not one: it reads git
+                // rather than the project, and it is the one destination here
+                // that works before a config has resolved.
+                _Row(
+                  label: 'Changes',
+                  selected: shell.isChangesScreen,
+                  onTap: shell.selectChanges,
+                  icon: Icons.difference_outlined,
+                ),
                 const Gap(FwSpacing.lg),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
@@ -1423,9 +1458,27 @@ class _Panel extends StatelessWidget {
     var worktree = shell.selected;
     var session = shell.selectedSession;
 
+    // **Resolved before the session check, which is the whole point.** The
+    // changes screen reads git, so it draws for a checkout that has no tab and
+    // no config — and going through `addressedWorktree` rather than `selected`
+    // is what makes that possible, since `selected` only knows the open ones.
+    var changesFor = shell.isChangesScreen ? shell.addressedWorktree : null;
+
     Widget body;
     if (shell.isExplorer) {
       body = _Explorer(shell);
+    } else if (changesFor != null) {
+      body = ChangesScreen(
+        key: ValueKey(changesFor.path),
+        worktree: changesFor,
+        isOpen: shell.isOpen(changesFor),
+        repoRoot: shell.repoRoot,
+        initialPath: shell.address.segments.isEmpty
+            ? null
+            : shell.address.segments.join('/'),
+        onPathChanged: (path) => shell.selectChangesFile(changesFor, path),
+        gitMoved: shell.gitMoved,
+      );
     } else if (worktree == null) {
       body = const _Message(title: 'No worktree open');
     } else if (session == null) {
@@ -1513,6 +1566,10 @@ class _ExplorerState extends State<_Explorer> {
       // you can decide before spending that.
       onOpen: (entry) => unawaited(shell.open(entry.worktree)),
       onRemove: (entry) => unawaited(_remove(entry)),
+      // …and reading what it changed opens nothing. That is the whole reason
+      // the changes screen is shell-owned rather than a plugin.
+      onOpenChanges: (entry) => shell.selectChanges(entry.worktree),
+      repoRoot: shell.repoRoot,
     );
   }
 

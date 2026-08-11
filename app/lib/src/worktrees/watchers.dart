@@ -33,6 +33,9 @@
 ///   refreshes on visibility and on demand. It is also the least urgent cell —
 ///   it changes when *you* type, and you know that you typed.
 ///
+/// [WorkingTreeWatcher] is that gap's scoped exception, for the one screen
+/// where the file being edited *is* the subject.
+///
 /// **Never `.git` recursively.** `objects/` churns on every fetch, and a watch
 /// that recursed into it would spend the day reporting packfiles. The top level
 /// is watched flat, which is enough for the main checkout's own HEAD and index.
@@ -284,6 +287,131 @@ class WorktreeWatcher {
     String path, {
     required bool recursive,
   }) => Directory(path).watch(recursive: recursive).map((event) => event.path);
+}
+
+/// One checkout's **working tree**, watched recursively — the scoped exception
+/// to the rule above, and the only reason the changes screen is live.
+///
+/// [WorktreeWatcher] deliberately watches no working tree at all: fourteen
+/// recursive watches is the cost the explorer's design exists to avoid, and a
+/// dirty count that is a minute stale is not worth them. The changes screen
+/// inverts every term of that trade — **one** checkout, watched only while the
+/// screen is on it, and the file an agent just wrote *is* the subject. A screen
+/// you have to press refresh on to see what an agent did is one you stop
+/// trusting.
+///
+/// **Measured on this repository (2026-08-11)**, a 2.3 GB checkout, with real
+/// `Directory.watch` streams:
+///
+/// | operation | this watch |
+/// |---|---|
+/// | write to a file, at any depth | **fires** |
+/// | `touch` — mtime only, no write | nothing |
+/// | create or delete a file | **fires** |
+/// | `git status` | nothing |
+/// | `git add`, `git commit` | nothing |
+/// | 3,000 files written under `build/` | 9,002 events |
+///
+/// Three things in that table decide the design:
+///
+/// - **Arming it is free.** `watch()` returned in 5 ms over 2.3 GB and events
+///   arrived immediately: FSEvents does not walk the tree, so "the checkout is
+///   huge" is not a reason to hesitate.
+/// - **`touch` firing nothing is correct, not a miss.** An mtime that moves
+///   without a byte changing does not move the diff either.
+/// - **Staging and committing are invisible here**, because a linked
+///   worktree's HEAD and index live in `<main>/.git/worktrees/<name>/`. That is
+///   *already* watched, repository-wide, by [WorktreeWatcher] — so this class
+///   deliberately does not watch git at all, and the screen listens to both.
+///   Adding a git watch here would be a second watch on the same directory for
+///   the same event.
+///
+/// **`.git` is filtered out**, which matters most for the *main* checkout,
+/// where it sits inside the tree being watched. `objects/` churns on every
+/// fetch, and recursing into it would spend the day reporting packfiles — the
+/// same rule, and the same reason, as the class above.
+///
+/// The cost this does not dodge: 3,000 build outputs are 9,002 events, and
+/// nothing here can tell they were all gitignored without asking git. The
+/// [minInterval] floor is the bound — a continuous writer costs one re-probe
+/// every two seconds, not one per write.
+class WorkingTreeWatcher {
+  WorkingTreeWatcher({
+    required this.worktreePath,
+    this.debounce = const Duration(milliseconds: 300),
+    this.minInterval = const Duration(seconds: 2),
+    WatchDirectory? watch,
+    DateTime Function()? now,
+    this.onFailure,
+  }) : _watch = watch ?? WorktreeWatcher._watchDirectory,
+       _now = now ?? DateTime.now;
+
+  final String worktreePath;
+
+  /// How long a burst is allowed to settle. One save is several writes.
+  final Duration debounce;
+
+  /// The floor between two fires. See [WorktreeWatcher.minInterval]: an agent
+  /// writing continuously never offers a quiet moment, so a debounce alone
+  /// would either never fire or fire on every write.
+  final Duration minInterval;
+
+  final WatchDirectory _watch;
+  final DateTime Function() _now;
+
+  /// Told when the watch could not be established. Liveness, never
+  /// correctness — the screen still refreshes on arrival and on the button.
+  final void Function(Object error)? onFailure;
+
+  Stream<void> get changes => _changes.stream;
+  final _changes = StreamController<void>.broadcast();
+
+  /// Whether a watch is actually established. False before [start], and after
+  /// a [start] that could not — which the screen says out loud, because a live
+  /// screen that has silently stopped being live is the failure worth naming.
+  bool get isWatching => _subscription != null;
+
+  StreamSubscription<String>? _subscription;
+  late final _coalescer = _Coalescer(
+    debounce: debounce,
+    minInterval: minInterval,
+    now: _now,
+    fire: () {
+      if (!_changes.isClosed) _changes.add(null);
+    },
+  );
+
+  /// Begins watching. Idempotent, and **never throws** — a checkout that has
+  /// been deleted under us, or a system out of watches, costs one live signal
+  /// and nothing else.
+  void start() {
+    if (_started) return;
+    _started = true;
+    try {
+      if (!Directory(worktreePath).existsSync()) return;
+      var git = p.join(worktreePath, '.git');
+      _subscription = _watch(worktreePath, recursive: true).listen(
+        (changed) {
+          if (changed == git || p.isWithin(git, changed)) return;
+          if (changed.endsWith('.lock')) return;
+          _coalescer.poke();
+        },
+        onError: (Object error) => onFailure?.call(error),
+        cancelOnError: true,
+      );
+    } catch (e) {
+      onFailure?.call(e);
+    }
+  }
+
+  var _started = false;
+
+  Future<void> dispose() async {
+    _coalescer.cancel();
+    unawaited(_subscription?.cancel());
+    _subscription = null;
+    await _changes.close();
+  }
 }
 
 /// Debounce with a floor: settles a burst, and never fires faster than

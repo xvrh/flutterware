@@ -354,6 +354,8 @@ void main() {
     expect(fixture.watched, hasLength(5));
   });
 
+  group('the working tree', _workingTree);
+
   test('disposing stops the signal that was already pending', () {
     fakeAsync((async) {
       var watcher = build()..start();
@@ -368,5 +370,161 @@ void main() {
 
       expect(signals, isEmpty);
     });
+  });
+}
+
+/// The scoped exception: one checkout's working tree, watched because the file
+/// an agent just wrote is the subject of the screen looking at it.
+void _workingTree() {
+  late Directory root;
+  late String worktree;
+  late Map<String, StreamController<String>> controllers;
+  late List<({String path, bool recursive})> watched;
+  late List<Object> failures;
+
+  setUp(() {
+    root = Directory.systemTemp.createTempSync('fw-tree-watch-test');
+    worktree = p.join(root.path, 'checkout');
+    Directory(p.join(worktree, '.git')).createSync(recursive: true);
+    controllers = {};
+    watched = [];
+    failures = [];
+  });
+
+  tearDown(() => root.deleteSync(recursive: true));
+
+  Stream<String> watch(String path, {required bool recursive}) {
+    watched.add((path: path, recursive: recursive));
+    return (controllers[path] = StreamController<String>.broadcast()).stream;
+  }
+
+  WorkingTreeWatcher build({String? path, DateTime Function()? now}) =>
+      WorkingTreeWatcher(
+        worktreePath: path ?? worktree,
+        debounce: _debounce,
+        minInterval: _floor,
+        watch: watch,
+        now: now,
+        onFailure: failures.add,
+      );
+
+  void change(String relative) =>
+      controllers[worktree]!.add(p.join(worktree, relative));
+
+  void withClock(void Function(WorkingTreeWatcher, FakeAsync) body) {
+    fakeAsync((async) {
+      var start = DateTime(2026, 8, 11, 9);
+      var watcher = build(now: () => start.add(async.elapsed))..start();
+      body(watcher, async);
+      unawaited(watcher.dispose());
+      async.flushTimers();
+    });
+  }
+
+  test('one recursive watch, on the checkout itself', () {
+    build().start();
+    expect(watched, [(path: worktree, recursive: true)]);
+  });
+
+  test('a burst of saves is one signal', () {
+    withClock((watcher, async) {
+      var fired = 0;
+      watcher.changes.listen((_) => fired++);
+
+      for (var i = 0; i < 40; i++) {
+        change('lib/a$i.dart');
+      }
+      async.elapse(_debounce * 2);
+      expect(fired, 1, reason: 'a save is several writes, and it is one edit');
+    });
+  });
+
+  test('an agent writing without pause still fires on the floor', () {
+    // The case the floor exists for: a debounce alone never finds the quiet
+    // moment, so the screen would update either never or on every write.
+    withClock((watcher, async) {
+      var fired = 0;
+      watcher.changes.listen((_) => fired++);
+
+      for (var tick = 0; tick < 60; tick++) {
+        change('lib/busy.dart');
+        async.elapse(const Duration(milliseconds: 100));
+      }
+
+      expect(fired, 3, reason: '6 s of continuous writing, a 2 s floor');
+    });
+  });
+
+  test("git's own directory is not the working tree", () {
+    // The rule that matters for the *main* checkout, where `.git` sits inside
+    // the tree being watched: `objects/` churns on every fetch, and a watch
+    // that reported it would spend the day re-probing packfiles.
+    withClock((watcher, async) {
+      var fired = 0;
+      watcher.changes.listen((_) => fired++);
+
+      change('.git/objects/pack/pack-abc.pack');
+      change('.git/index');
+      change('.git');
+      async.elapse(_debounce * 2);
+      expect(fired, 0);
+
+      change('lib/a.dart');
+      async.elapse(_debounce * 2);
+      expect(fired, 1, reason: 'and the rest of the tree still counts');
+    });
+  });
+
+  test('a directory merely named like git is still the working tree', () {
+    withClock((watcher, async) {
+      var fired = 0;
+      watcher.changes.listen((_) => fired++);
+      change('.github/workflows/ci.yaml');
+      async.elapse(_debounce * 2);
+      expect(fired, 1);
+    });
+  });
+
+  test('lock files are scaffolding, not edits', () {
+    withClock((watcher, async) {
+      var fired = 0;
+      watcher.changes.listen((_) => fired++);
+      change('lib/.a.dart.lock');
+      async.elapse(_debounce * 2);
+      expect(fired, 0);
+    });
+  });
+
+  test('a checkout that is not there costs liveness and nothing else', () {
+    var watcher = build(path: p.join(root.path, 'deleted'))..start();
+    addTearDown(watcher.dispose);
+
+    expect(watched, isEmpty);
+    expect(failures, isEmpty, reason: 'gone is not an error, it is just gone');
+    expect(
+      watcher.isWatching,
+      isFalse,
+      reason: 'and the screen says so rather than pretending to be live',
+    );
+  });
+
+  test('a watch the system refuses is reported, never thrown', () {
+    var watcher = WorkingTreeWatcher(
+      worktreePath: worktree,
+      watch: (path, {required recursive}) =>
+          throw const FileSystemException('too many open files'),
+      onFailure: failures.add,
+    )..start();
+    addTearDown(watcher.dispose);
+
+    expect(failures, hasLength(1));
+    expect(watcher.isWatching, isFalse);
+  });
+
+  test('starting twice does not double the watch', () {
+    build()
+      ..start()
+      ..start();
+    expect(watched, hasLength(1));
   });
 }

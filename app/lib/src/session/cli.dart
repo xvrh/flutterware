@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
+import '../changes/changes_config_cache.dart';
+import '../changes/changes_probe.dart';
+import '../changes/changes_text.dart';
 import '../constants.dart';
 import '../plugins/plugin_core.dart';
 import '../shell/repo_layout.dart';
@@ -75,6 +78,24 @@ const fwCommands = [
         'kept\nfor five minutes. `--refresh` asks again.\n\n'
         'A column every worktree leaves empty is not printed: no `gh`, no '
         'agent,\nor a format that stopped parsing all read as one column less.',
+  ),
+  FwCommand(
+    'changes',
+    usage: 'changes [<worktree>] [--file=<path>] [--json]',
+    summary: 'what a checkout has changed, ranked',
+    details:
+        'The delta from the base branch to the files on disk — committed, '
+        "staged,\nunstaged and untracked together. An agent's most "
+        'interesting work is the\nwork it has not committed yet, so '
+        'committed-ness is a mark on a file rather\nthan what selects one.\n\n'
+        'Runs no project code, so a worktree you have never opened reports as '
+        'fully\nas the one you are standing in. Name one by directory or '
+        'branch; with no\nname it reads the checkout you are in.\n\n'
+        "`--file=<path>` prints that file's patch and nothing else — what an "
+        'agent\nwants when it already knows which file it is asking about.\n\n'
+        'The base is inferred from origin/HEAD, then main, then master. When '
+        'none\nof them resolve it says so rather than diffing against a '
+        'guess.',
   ),
   FwCommand(
     'actions',
@@ -327,6 +348,7 @@ class FwCli {
           json: json,
           refresh: rest.remove('--refresh'),
         ),
+        'changes' => await _changes(rest, json: json),
         'actions' => await _actions(json: json),
         'run' => await _run(rest, json: json),
         'app' => await _app(
@@ -715,6 +737,98 @@ class FwCli {
       out.writeln(line);
     }
     return 0;
+  }
+
+  /// One worktree's delta, from the base branch to the files on disk.
+  ///
+  /// Opens no session: like `worktrees`, this is the facts layer's posture —
+  /// git only, so a checkout nobody has opened answers as fully as this one.
+  Future<int> _changes(List<String> rest, {required bool json}) async {
+    var file = _optionValue(rest, '--file');
+    var named = rest.where((a) => !a.startsWith('--')).firstOrNull;
+
+    var probe = ChangesProbe();
+    var directory = Directory.current.path;
+
+    if (named != null) {
+      var root = findRepoRoot(directory);
+      if (root == null) {
+        return fail('not inside a project: $directory');
+      }
+      var worktrees = await WorktreeDiscovery().discover(root);
+      // Identity first, then branch — the same forgiving-input rule the
+      // address uses, so a name that is one worktree's directory and another's
+      // branch resolves to the directory.
+      var found =
+          worktrees.where((w) => w.name == named).firstOrNull ??
+          worktrees.where((w) => w.branch == named).firstOrNull;
+      if (found == null) {
+        return fail(
+          'no worktree "$named". Known: '
+          '${worktrees.map((w) => w.name).join(', ')}',
+        );
+      }
+      directory = found.path;
+    }
+
+    var root = await probe.worktreeRoot(directory);
+    if (root == null) {
+      return fail('not inside a git repository: $directory');
+    }
+
+    // The same one reader the GUI uses: whatever last executed this worktree's
+    // config wrote the rules, and `fw changes` opens no session to run it
+    // again. A checkout nobody has opened ranks by the built-in defaults, and
+    // says so rather than claiming otherwise.
+    var config = await _changesConfigFor(root, directory);
+
+    if (file != null) {
+      // The configured base too, or `--file` would diff one file against a
+      // different commit from the one every other line of this command used.
+      var patch = await probe.patchFor(root, file, base: config.config?.base);
+      if (patch == null || patch.isEmpty) {
+        return fail('no changes to $file against the base.');
+      }
+      out.writeln(patch);
+      return 0;
+    }
+
+    var changes = await probe.probe(
+      root,
+      config: config.config,
+      configState: config.state,
+    );
+    if (json) {
+      _printJson(changes.toJson());
+      return 0;
+    }
+    for (var line in changesReport(changes)) {
+      out.writeln(line);
+    }
+    return 0;
+  }
+
+  /// The ranking rules for [worktreePath], out of the repository's cache.
+  Future<ResolvedChangesConfig> _changesConfigFor(
+    String worktreePath,
+    String directory,
+  ) async {
+    var project = findRepoRoot(directory);
+    if (project == null) return ResolvedChangesConfig.defaults;
+    var worktrees = await WorktreeDiscovery().discover(project);
+    // Main first, matching how the explorer keys the same file.
+    var main = worktrees.firstOrNull?.path ?? project;
+    return resolveChangesConfig(worktreePath, WorktreeFactsStore.open(main));
+  }
+
+  /// Reads `--name=value` out of the remaining arguments.
+  static String? _optionValue(List<String> rest, String name) {
+    for (var argument in rest) {
+      if (argument.startsWith('$name=')) {
+        return argument.substring(name.length + 1);
+      }
+    }
+    return null;
   }
 
   /// What can be invoked, and what each action needs to be told.

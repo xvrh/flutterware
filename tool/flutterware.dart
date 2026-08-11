@@ -19,6 +19,41 @@ const example = Pkg('examples/example');
 final dart = Platform.resolvedExecutable;
 
 void main() => Flutterware.configure((fw) {
+  // **What to surface first on the changes screen, for this repository.**
+  //
+  // There are no built-in attention rules and there must not be: flutterware
+  // cannot know whether a project has migrations, and putting a file under a
+  // heading that says *look here first* is a claim only the person reading it
+  // can make. So every entry below is a statement about *this* repo.
+  fw.changes(
+    ChangesConfig(
+      attention: [
+        // The file you are reading. A change here changes what every other
+        // screen in the app is looking at.
+        'tool/flutterware.dart',
+        // Instructions to whoever — or whatever — is working in this checkout.
+        // An agent quietly rewriting its own brief is the single thing most
+        // worth seeing.
+        'CLAUDE.md',
+        // The published package's public surface. Slice 4 found this the hard
+        // way: `lib/plugins.dart` gaining one `export` was demoted as "only
+        // imports changed", and that export *is* the API.
+        'lib/*.dart',
+        // The two versions CLAUDE.md says must stay in sync, and the SDK pin
+        // that decides whether anything builds at all.
+        'pubspec.yaml',
+        'app/pubspec.yaml',
+        '.fvmrc',
+        // What CI will actually run, and the lint rules it runs with.
+        '.github/workflows/**',
+        'analysis_options.yaml',
+        // The design docs. Every screen in this app was argued in one of
+        // these first, and a spec moving is usually the reason the code did.
+        'docs/superpowers/specs/**',
+      ],
+    ),
+  );
+
   fw.use(
     Dependencies(packages: DependenciesPackage.each([root, app, example])),
   );
