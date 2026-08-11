@@ -11,12 +11,14 @@ library;
 
 import 'dart:async';
 
+import '../plugins/native/dev_stack_results.dart';
 import '../shell/worktree.dart';
 import 'facts.dart';
 import 'facts_store.dart';
 import 'providers/agent.dart';
 import 'providers/forge.dart';
 import 'providers/git.dart';
+import 'providers/stack.dart';
 
 /// A forge answer plus the clock it was answered on — which is *not* now when
 /// it came from the cache, and the row shows the difference.
@@ -29,12 +31,14 @@ class WorktreeFactsProbe {
     GitProbe? git,
     AgentProbe? agent,
     ForgeProbe? forge,
+    StackProbe? stack,
     this.concurrency = 4,
     this.forgeTtl = const Duration(minutes: 5),
     DateTime Function()? now,
   }) : git = git ?? GitProbe(),
        agent = agent ?? ClaudeAgentProbe(),
        forge = forge ?? RemoteForgeProbe(),
+       stack = stack ?? RunDirStackProbe(),
        _now = now ?? DateTime.now;
 
   /// The main checkout — where the batched calls run, and where every
@@ -51,6 +55,11 @@ class WorktreeFactsProbe {
 
   /// Also nice to have: a machine with no `gh` is a repo with no PR column.
   final ForgeProbe forge;
+
+  /// The cheapest of the lot — one `stat` and, at most, one small file read per
+  /// worktree. It never runs project code, which is the whole reason the column
+  /// can exist on a screen that lists every checkout.
+  final StackProbe stack;
 
   /// How long a pull request answer is believed.
   ///
@@ -138,6 +147,27 @@ class WorktreeFactsProbe {
     return facts;
   }
 
+  /// Re-reads **only** the stacks, keeping every other fact as it was.
+  ///
+  /// The cheapest refresh here by a wide margin: one `stat` and one small JSON
+  /// read per worktree, no subprocesses and no git. That is what lets a cache
+  /// file changing under `~/.flutterware/run` drive a live column without
+  /// dragging fourteen `git status` calls behind it — the same separation the
+  /// agent path already makes, and for the same reason.
+  Future<Map<String, WorktreeFacts>> probeStacks(
+    List<Worktree> worktrees,
+    Map<String, WorktreeFacts> previous,
+  ) async {
+    var facts = <String, WorktreeFacts>{};
+    await _pooled(worktrees, (worktree) async {
+      var was = previous[worktree.path] ?? const WorktreeFacts();
+      facts[worktree.path] = was.copyWith(
+        stack: _stackFact(await stack.probe(worktree.path)),
+      );
+    });
+    return facts;
+  }
+
   Fact<ActivityFacts> _laterActivity(
     Fact<ActivityFacts> previous,
     AgentFacts? agent,
@@ -159,6 +189,7 @@ class WorktreeFactsProbe {
     required Future<_ForgeAnswer> forge,
   }) async {
     var agentFacts = await agent.probe(worktree.path);
+    var stackFact = _stackFact(await stack.probe(worktree.path));
 
     var status = await git.status(worktree.path);
     if (status == null) {
@@ -167,6 +198,7 @@ class WorktreeFactsProbe {
         agent: _agentFact(agentFacts),
         forge: _forgeFact(worktree.branch, await forge),
         activity: _activity(worktree, null, agentFacts),
+        stack: stackFact,
       );
     }
 
@@ -197,7 +229,27 @@ class WorktreeFactsProbe {
       agent: _agentFact(agentFacts),
       forge: _forgeFact(branch, await forge),
       activity: _activity(worktree, tips[branch]?.committedAt, agentFacts),
+      stack: stackFact,
     );
+  }
+
+  /// A cached reading, aged.
+  ///
+  /// Never [FactState.failed]: there is no probe here to fail, only a file that
+  /// is there or is not. Absent means [FactState.unavailable] — *there is
+  /// nothing here to know* — which is what most checkouts in most repositories
+  /// will report, since most projects declare no stack at all.
+  ///
+  /// Past [stackFreshFor] the reading is [FactState.stale] rather than dropped.
+  /// It is still the last thing anybody saw, and a stack that was up an hour
+  /// ago is very probably still up — the row dims it and prints its age instead
+  /// of pretending to certainty or pretending to ignorance.
+  Fact<StackReading> _stackFact(StackReading? reading) {
+    if (reading?.at == null) return const Fact.unavailable('no stack');
+    var age = _now().difference(reading!.at!);
+    return age > stackFreshFor
+        ? Fact.stale(reading, computedAt: reading.at)
+        : Fact.fresh(reading, computedAt: reading.at);
   }
 
   /// One sweep's worth of pull requests, from the cache or from the forge.

@@ -11,6 +11,9 @@ import '../capture/capture_request.dart';
 import '../plugins/native_plugin.dart';
 import '../ui/theme.dart';
 import '../worktrees/explorer_screen.dart';
+import '../plugins/plugin_core.dart';
+import '../teardown/dialog.dart';
+import '../teardown/plan.dart';
 import '../worktrees/facts.dart';
 import 'address_bar.dart';
 import 'config_load.dart';
@@ -1434,7 +1437,11 @@ class _Panel extends StatelessWidget {
           ? null
           : session.pluginById(shell.selectedPluginId!);
       body = plugin == null
-          ? WorktreeHome(worktree)
+          ? WorktreeHome(
+              worktree,
+              session: session,
+              onOpenPlugin: shell.selectPlugin,
+            )
           : KeyedSubtree(
               // Rebuild the panel from scratch when the worktree or the plugin
               // changes; panels hold their own state and must not leak it
@@ -1505,7 +1512,71 @@ class _ExplorerState extends State<_Explorer> {
       // opening costs a config subprocess and a tab, and this screen exists so
       // you can decide before spending that.
       onOpen: (entry) => unawaited(shell.open(entry.worktree)),
+      onRemove: (entry) => unawaited(_remove(entry)),
     );
+  }
+
+  /// Removing a checkout: **ask first, and prepare behind the dialog.**
+  ///
+  /// The explorer's design left open how a closed worktree gets a checklist —
+  /// plugin steps need a session, and a closed worktree has none. It is opened,
+  /// and two things about *how* were bugs worth writing down:
+  ///
+  /// - **In the background.** `open` navigates, so opening from here unmounted
+  ///   the explorer mid-flow and the dialog never appeared — the press looked
+  ///   like it had simply switched worktrees. `openInBackground` gives the
+  ///   worktree a tab and a running config and leaves the address alone.
+  /// - **Behind the dialog.** Opening, refreshing the facts and warming every
+  ///   plugin takes seconds, and doing it before `showDialog` meant a press
+  ///   with no acknowledgement at all. The dialog goes up first and waits.
+  ///
+  /// The facts are refreshed rather than read: `TeardownStep.enabled`,
+  /// `checked` and `detail` are values on a cached report, so a stale one would
+  /// offer to tear down a stack that went down five minutes ago — and the
+  /// warning about uncommitted work has to be this moment's count, not this
+  /// morning's.
+  Future<void> _remove(ExplorerEntry entry) async {
+    var shell = widget.shell;
+    var worktree = entry.worktree;
+
+    var removed = await showTeardownDialog(
+      context,
+      prepare: () async {
+        await shell.openInBackground(worktree);
+        await shell.refreshWorktreeFacts(force: true);
+        var session = shell.sessionFor(worktree);
+        // The same warm-up `fw status` does. A report is a pure read of cached
+        // state, so a plugin nothing has mounted this session would contribute
+        // "not computed" to a checklist that is about to delete a directory.
+        for (var core in session?.session.cores ?? const <PluginCore>[]) {
+          await core.computeAll();
+        }
+        return TeardownPreparation(
+          TeardownPlan.build(
+            worktree: worktree.displayName,
+            path: worktree.path,
+            branch: worktree.branch,
+            isMain: worktree.isMain,
+            facts:
+                shell.worktreeFacts?.factsFor(worktree) ??
+                const WorktreeFacts(),
+            reports: session?.reports ?? const [],
+            sessionOpen: session != null,
+          ),
+          session,
+        );
+      },
+      // Git runs in the primary checkout: the worktree's own directory is what
+      // is being removed, and `git worktree remove` cannot be run from inside
+      // it.
+      repositoryRoot: shell.worktrees
+          .firstWhere((w) => w.isMain, orElse: () => worktree)
+          .path,
+    );
+    if (!mounted || !removed) return;
+    // Re-read from git rather than editing the list: `rescanWorktrees` closes
+    // whatever disappeared, so the tab goes because the directory did.
+    await shell.rescanWorktrees();
   }
 }
 

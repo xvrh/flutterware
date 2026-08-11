@@ -493,7 +493,7 @@ would lose half of it. It has to arrive percent-encoded.
 `app/test/utils/entry_point_purity_test.dart` walks the transitive import graph
 of each entry point that must stay pure and fails if it reaches
 `package:flutter` or `dart:ui`, printing the chain. `ImportWalker`
-(`app/lib/src/utils/import_walker.dart`) is ported from rimbaud
+(`app/lib/src/utils/import_walker.dart`) is ported from a sibling project
 (`packages/server/lib/src/tools/import_walker/`), including its resolution of
 conditional imports against a simulated build environment.
 
@@ -598,7 +598,7 @@ The compile guardrail it describes cannot be armed from here; the walker test
 is what enforces purity instead.
 
 **The install story is explicitly not solved**, and an earlier draft of this
-document was wrong about it. `rimbaud/bin/fw` calls itself frozen, but that was
+document was wrong about it. that project's `bin/fw` calls itself frozen, but that was
 an aspiration in a design doc, not a shipped mechanism: flutterware has no
 `bin/fw`, and the only reason `fw` resolves anywhere is a hand-written alias in
 one developer's `.zshrc` pointing into another project's repo. Nothing is

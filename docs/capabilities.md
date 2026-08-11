@@ -1361,3 +1361,20 @@ durationMs: int
 | `package` | choice | no | — | Which declared package; the only one when there is one |
 | `output` | string | no | — | Where the page goes. Package-relative unless absolute; defaults to `build/catalog/web`. |
 | `base-href` | string | no | — | What `flutter build web --base-href` takes, for serving the page from a subdirectory rather than the root of a host. Must begin and end with a slash — `/catalog/`. |
+
+
+### `flutterware.dev_stack`
+
+#### `status` — Check
+
+Runs the declared probe and reports what state the stack is in, with the time it was read. Every other surface shows a cached reading and how old it is; this is the one that goes and looks.
+
+```sh
+fw run dev_stack status
+```
+
+Returns `StackReading`:
+
+Shape not published: `StackReading` writes its own `toJson`, so its fields are not its keys.
+
+Takes no parameters.

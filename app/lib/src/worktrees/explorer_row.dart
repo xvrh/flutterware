@@ -3,7 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
+import '../plugins/native/dev_stack_results.dart';
 import '../shell/worktree_filter.dart';
+import '../ui/menu.dart';
+import '../ui/popover.dart';
 import '../ui/theme.dart';
 import 'explorer_detail.dart';
 import 'facts.dart';
@@ -31,11 +34,13 @@ class WorktreeRow extends StatefulWidget {
     this.scale = 1,
     this.showAgent = true,
     this.showForge = true,
+    this.showStack = false,
     this.expanded = false,
     this.cursor = false,
     this.path,
     this.onToggleExpand,
     this.onOpen,
+    this.onRemove,
   });
 
   /// Whether the detail is showing below the row.
@@ -59,6 +64,9 @@ class WorktreeRow extends StatefulWidget {
   /// deliberate act and has its own button.
   final VoidCallback? onToggleExpand;
 
+  /// Opens the teardown checklist. Null for the primary checkout.
+  final VoidCallback? onRemove;
+
   /// Whether these columns are drawn at all.
   ///
   /// **Decided across the list, not per row** — otherwise the cells stop lining
@@ -68,6 +76,12 @@ class WorktreeRow extends StatefulWidget {
   /// parsing looks like. One rule covers all three.
   final bool showAgent;
   final bool showForge;
+
+  /// Off unless some checkout in this repository has a stack reading — which
+  /// most repositories will never have, since most projects declare no stack.
+  /// A column that is empty for everyone should not exist at all, let alone
+  /// take 116 pixels from the names.
+  final bool showStack;
 
   /// The label-priority winner: agent title, then PR title, then branch, then
   /// the directory. Resolved above this widget — the row does not know the
@@ -113,14 +127,93 @@ const explorerInsetLeft = 26.0;
 const explorerInsetRight = 16.0;
 
 const _gutterWidth = explorerInsetLeft;
+
+/// Marks the changes column, which is the first to go when the row runs out of
+/// room. Named so a test can assert it left, rather than asserting on a picture.
+const changesCellKey = ValueKey('worktree-row.changes');
 const _scrollGutter = explorerInsetRight;
+
+/// Marks the stack column, so a test can assert it left rather than assert on
+/// a picture.
+const stackCellKey = ValueKey('worktree-row.stack');
 
 const _changesWidth = 220.0;
 const _agentWidth = 190.0;
 const _prWidth = 150.0;
+
+/// A word and a port. It carries less than any other column and is sized for
+/// it — which is also why it is the last to be dropped: taking it away buys
+/// half of what taking `forge` away buys.
+const _stackWidth = 116.0;
 const _whenWidth = 64.0;
-const _actionsWidth = 76.0;
+// Wider than the 76 it was, and than the 32 the design budgeted: the column
+// carries Open, a menu trigger and the chevron, and at 76 that Row overflowed
+// by 11px — which clipped the trigger off the right edge, so it looked like it
+// vanished as you reached for it.
+//
+// It has to hold all three *at once*, because the hover-only controls keep
+// their space rather than vacating it — a button that disappeared shifted the
+// trigger out from under the cursor arriving at it. So this is sized for the
+// widest state, not the common one.
+//
+// Measured, not chosen, and guarded by `explorer_row_menu_test.dart`. The name
+// column no longer pays for it: `_affordable` drops a column instead.
+const _actionsWidth = 96.0;
 const _nameMinWidth = 220.0;
+
+/// Which optional columns fit, given how much room the row actually has.
+///
+/// **The row has to survive a narrow window, and it did not.** The fixed
+/// columns come to 758px before the name gets anything, so at an 800px window
+/// the name cell was squeezed to 42 — and a name cell that narrow cannot hold
+/// its own trailing marker. The label ellipsised to nothing, as it should, but
+/// `current` is not text that gives way: it is a fixed 75px sitting in 30px of
+/// space, and the row painted a yellow-and-black stripe over itself.
+///
+/// So the fix is not in the cell. Ellipsis cannot save a row whose *fixed*
+/// parts already exceed it; something has to go. Columns drop widest-first,
+/// which is also least-first by what the screen is for: `changes` is the
+/// fingerprint, while `agent` and PR carry "needs you", and that is the
+/// question the explorer exists to answer.
+///
+/// The name column keeps [_nameMinWidth] throughout, because a list of
+/// worktrees you cannot read the names of is not a list of worktrees.
+({bool changes, bool agent, bool forge, bool stack}) _affordable(
+  double width, {
+  required bool agent,
+  required bool forge,
+  required bool stack,
+}) {
+  if (width.isInfinite) {
+    return (changes: true, agent: agent, forge: forge, stack: stack);
+  }
+  var fixed =
+      _gutterWidth + _whenWidth + _actionsWidth + _scrollGutter + _nameMinWidth;
+  var showChanges = true;
+  var showAgent = agent;
+  var showForge = forge;
+  var showStack = stack;
+  double total() =>
+      fixed +
+      (showChanges ? _changesWidth : 0) +
+      (showAgent ? _agentWidth : 0) +
+      (showForge ? _prWidth : 0) +
+      (showStack ? _stackWidth : 0);
+
+  if (total() > width) showChanges = false;
+  if (total() > width) showAgent = false;
+  if (total() > width) showForge = false;
+  // Last, on the same widest-first rule: at 116 it is the narrowest column
+  // here, so dropping it is the smallest saving available and buying room with
+  // it is the worst trade on offer.
+  if (total() > width) showStack = false;
+  return (
+    changes: showChanges,
+    agent: showAgent,
+    forge: showForge,
+    stack: showStack,
+  );
+}
 
 class _WorktreeRowState extends State<WorktreeRow> {
   var _hovered = false;
@@ -154,53 +247,79 @@ class _WorktreeRowState extends State<WorktreeRow> {
             children: [
               SizedBox(
                 height: _rowHeight,
-                child: Row(
-                  children: [
-                    _Gutter(isOpen: widget.isOpen, tone: facts.tone),
-                    Expanded(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          minWidth: _nameMinWidth,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    var afford = _affordable(
+                      constraints.maxWidth,
+                      agent: widget.showAgent,
+                      forge: widget.showForge,
+                      stack: widget.showStack,
+                    );
+                    return Row(
+                      children: [
+                        _Gutter(isOpen: widget.isOpen, tone: facts.tone),
+                        Expanded(
+                          child: _NameCell(
+                            label: widget.label,
+                            branch: widget.branch,
+                            isMain: widget.isMain,
+                            isCurrent: widget.isCurrent,
+                            match: widget.match,
+                          ),
                         ),
-                        child: _NameCell(
-                          label: widget.label,
-                          branch: widget.branch,
-                          isMain: widget.isMain,
-                          isCurrent: widget.isCurrent,
-                          match: widget.match,
+                        if (afford.changes)
+                          SizedBox(
+                            key: changesCellKey,
+                            width: _changesWidth,
+                            child: _ChangesCell(
+                              fact: facts.git,
+                              scale: widget.scale,
+                            ),
+                          ),
+                        if (afford.stack)
+                          SizedBox(
+                            key: stackCellKey,
+                            width: _stackWidth,
+                            child: _StackCell(
+                              fact: facts.stack,
+                              now: widget.now,
+                            ),
+                          ),
+                        if (afford.agent)
+                          SizedBox(
+                            width: _agentWidth,
+                            child: _AgentCell(
+                              fact: facts.agent,
+                              now: widget.now,
+                            ),
+                          ),
+                        if (afford.forge)
+                          SizedBox(
+                            width: _prWidth,
+                            child: _PrCell(fact: facts.forge),
+                          ),
+                        SizedBox(
+                          width: _whenWidth,
+                          child: _WhenCell(
+                            fact: facts.activity,
+                            now: widget.now,
+                          ),
                         ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: _changesWidth,
-                      child: _ChangesCell(fact: facts.git, scale: widget.scale),
-                    ),
-                    if (widget.showAgent)
-                      SizedBox(
-                        width: _agentWidth,
-                        child: _AgentCell(fact: facts.agent, now: widget.now),
-                      ),
-                    if (widget.showForge)
-                      SizedBox(
-                        width: _prWidth,
-                        child: _PrCell(fact: facts.forge),
-                      ),
-                    SizedBox(
-                      width: _whenWidth,
-                      child: _WhenCell(fact: facts.activity, now: widget.now),
-                    ),
-                    SizedBox(
-                      width: _actionsWidth,
-                      child: _Actions(
-                        hovered: _hovered,
-                        isOpen: widget.isOpen,
-                        expanded: widget.expanded,
-                        onOpen: widget.onOpen,
-                        onToggleExpand: widget.onToggleExpand,
-                      ),
-                    ),
-                    const Gap(_scrollGutter),
-                  ],
+                        SizedBox(
+                          width: _actionsWidth,
+                          child: _Actions(
+                            hovered: _hovered,
+                            isOpen: widget.isOpen,
+                            expanded: widget.expanded,
+                            onOpen: widget.onOpen,
+                            onToggleExpand: widget.onToggleExpand,
+                            onRemove: widget.onRemove,
+                          ),
+                        ),
+                        const Gap(_scrollGutter),
+                      ],
+                    );
+                  },
                 ),
               ),
               if (widget.expanded)
@@ -658,6 +777,93 @@ class _Fingerprint extends StatelessWidget {
   }
 }
 
+/// What this checkout's dev stack was last seen doing.
+///
+/// **The answer to "which of my worktrees is holding the port block".** That is
+/// the question the whole per-worktree port allocation exists to create, and
+/// until this column existed the only way to answer it was to open eight
+/// checkouts one at a time.
+///
+/// One word and a port, and never anything else: this cell is 116 pixels and
+/// the state is the only thing that fits. The reasons, the services and the
+/// controls are two clicks away on the worktree's own screen.
+///
+/// **Everything here is a cached reading** — see `providers/stack.dart`. So the
+/// age is not decoration: a stale cell means *nobody has looked recently*, not
+/// *this is what is true now*, and it dims to say so.
+class _StackCell extends StatelessWidget {
+  const _StackCell({required this.fact, required this.now});
+
+  final Fact<StackReading> fact;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    // No `_Broken` case: there is no probe here to fail, only a file that is
+    // there or is not.
+    if (!fact.hasValue) return const _Nothing();
+
+    var reading = fact.value!;
+    var (label, color) = switch (reading.state) {
+      StackState.up when reading.isPartial => (
+        'up ${reading.serviceCount!.$1}/${reading.serviceCount!.$2}',
+        colors.amber,
+      ),
+      StackState.up => ('up', colors.grn),
+      StackState.down => ('down', colors.mut2),
+      StackState.starting => ('bringing up', colors.amber),
+      StackState.stopping => ('tearing down', colors.amber),
+      StackState.unavailable => ("can't tell", colors.red),
+      StackState.unknown => ('—', colors.mut3),
+    };
+
+    // The port, when the probe named one. It is what you actually go looking
+    // for — "which one has 8080" — and it is four characters.
+    var port = reading.services.map((s) => s.port).whereType<int>().firstOrNull;
+
+    return _Lines(
+      dim: fact.isDim,
+      top: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const Gap(FwSpacing.sm),
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: context.type.bodySmall.copyWith(color: color),
+            ),
+          ),
+          if (port != null && reading.state == StackState.up) ...[
+            const Gap(FwSpacing.sm),
+            Text(
+              ':$port',
+              style: context.type.bodySmall.copyWith(color: colors.mut2),
+            ),
+          ],
+        ],
+      ),
+      // Only once it is old enough to doubt. On a checkout somebody is watching
+      // this line is absent, which is the difference between a column that
+      // reports and one that natters.
+      bottom: fact.isDim && reading.at != null
+          ? Text(
+              'seen ${_ago(reading.at!, now)}',
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: context.type.micro.copyWith(color: colors.mut3),
+            )
+          : null,
+    );
+  }
+}
+
 class _AgentCell extends StatelessWidget {
   const _AgentCell({required this.fact, required this.now});
 
@@ -842,6 +1048,7 @@ class _Actions extends StatelessWidget {
     required this.expanded,
     required this.onOpen,
     required this.onToggleExpand,
+    required this.onRemove,
   });
 
   final bool hovered;
@@ -850,31 +1057,38 @@ class _Actions extends StatelessWidget {
   final VoidCallback? onOpen;
   final VoidCallback? onToggleExpand;
 
+  /// Null for the primary checkout, which cannot be removed.
+  final VoidCallback? onRemove;
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
     // The chevron persists while expanded, so an open row still says how it
     // got that way and how to close it. Otherwise controls are hover-only: a
     // button beside every row is a wall rather than a list.
-    if (!hovered && !expanded) {
-      return isOpen
-          ? Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                'open',
-                style: context.type.micro.copyWith(color: colors.mut3),
-              ),
-            )
-          : const SizedBox.shrink();
-    }
+    var showControls = hovered || expanded;
     return Align(
       alignment: Alignment.centerRight,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (hovered)
-            TextButton(
-              onPressed: onOpen,
+          if (!showControls && isOpen)
+            Text(
+              'open',
+              style: context.type.micro.copyWith(color: colors.mut3),
+            ),
+          // **Kept in the layout whether or not it is shown.** It is hover-only,
+          // and reaching for the menu beside it ends the hover — so a button
+          // that vacated its space made the trigger jump right, out from under
+          // the cursor that was arriving at it. The column is a fixed width
+          // either way, so reserving ~40px inside it costs nothing.
+          Visibility(
+            visible: hovered,
+            maintainSize: true,
+            maintainAnimation: true,
+            maintainState: true,
+            child: TextButton(
+              onPressed: hovered ? onOpen : null,
               style: TextButton.styleFrom(
                 minimumSize: Size.zero,
                 padding: const EdgeInsets.symmetric(
@@ -888,12 +1102,63 @@ class _Actions extends StatelessWidget {
                 style: context.type.micro.copyWith(color: colors.accent),
               ),
             ),
-          Tooltip(
-            message: expanded ? 'Hide the detail' : 'Show the detail',
-            child: Icon(
-              expanded ? Icons.expand_less : Icons.expand_more,
-              size: 16,
-              color: colors.mut2,
+          ),
+          // Destructive, so behind a menu rather than beside Open: a click that
+          // deletes a checkout should not be one pixel from a click that opens
+          // it.
+          //
+          // **Mounted whenever there is something to open, and hidden by its
+          // own builder rather than by this list.** A trigger that unmounts
+          // when hover ends takes its open menu with it — and reaching for a
+          // menu item is precisely the gesture that leaves the row, so the item
+          // could be seen and never clicked. `controller.isOpen` is what keeps
+          // it alive across that gap.
+          if (onRemove != null)
+            Menu(
+              // **Keyed, and that is what makes the menu clickable at all.**
+              // The `Open` button above disappears when hover ends, so this
+              // widget shifts index within the Row — and unkeyed children are
+              // matched by position, so it would be diffed against a
+              // `TextButton`, lose its element, and take its open popover with
+              // it. Reaching for a menu item is precisely the gesture that ends
+              // the hover, so the item could be seen and never clicked.
+              key: const ValueKey('worktree-row.menu'),
+              entries: [
+                MenuItem(
+                  'Remove worktree…',
+                  icon: Icons.delete_outline,
+                  danger: true,
+                  onSelected: onRemove,
+                ),
+              ],
+              side: PopoverSide.bottom,
+              align: PopoverAlign.end,
+              builder: (context, controller) => hovered || controller.isOpen
+                  ? Tooltip(
+                      message: 'More',
+                      child: InkWell(
+                        onTap: controller.toggle,
+                        child: Icon(
+                          Icons.more_horiz,
+                          size: 16,
+                          color: colors.mut2,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          Visibility(
+            visible: showControls,
+            maintainSize: true,
+            maintainAnimation: true,
+            maintainState: true,
+            child: Tooltip(
+              message: expanded ? 'Hide the detail' : 'Show the detail',
+              child: Icon(
+                expanded ? Icons.expand_less : Icons.expand_more,
+                size: 16,
+                color: colors.mut2,
+              ),
             ),
           ),
         ],

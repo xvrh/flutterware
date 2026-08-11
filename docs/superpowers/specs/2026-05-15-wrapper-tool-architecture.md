@@ -72,7 +72,7 @@ That is what makes "observe runs started any way" achievable. The exact
 placement of the wrapped scripts (shared SDK cache vs. per-project mirror dir)
 is a sub-project 0 decision; see that section.
 
-The sibling `rimbaud` project (`bin/fw` + `tool/fw`) is a working prototype of
+A sibling project (`bin/fw` + `tool/fw`) is a working prototype of
 the SDK-management half and a useful reference, but its structure is *not* the
 model — see the distribution model below.
 

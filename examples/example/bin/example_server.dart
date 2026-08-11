@@ -20,12 +20,26 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 final _log = Logger('example_server');
 
 Future<void> main() async {
+  // Launched in the background — by `tool/stack.dart up`, which is what the
+  // `DevStack` plugin runs — this process has no terminal to print into, so the
+  // launcher names a file to append to as well. Started by hand, the variable
+  // is absent and stdout is the only destination.
+  var logFile = Platform.environment['EXAMPLE_SERVER_LOG'];
+
   // Adapter: forward `package:logging` to the `log` channel. The listener
   // runs in whatever zone called `listen`, so correlation must come from
   // `record.zone` — the zone the log call happened in.
   Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen((record) {
     stdout.writeln(record);
+    if (logFile != null) {
+      // Written through rather than buffered: `tool/stack.dart logs` reads this
+      // file from another process, and a line still sitting in an IOSink is a
+      // line that log command cannot see.
+      File(
+        logFile,
+      ).writeAsStringSync('$record\n', mode: FileMode.append, flush: true);
+    }
     (record.zone ?? Zone.current).run(() {
       FlutterwareServer.event('log', {
         'level': record.level.name,

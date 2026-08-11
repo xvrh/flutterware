@@ -9,6 +9,7 @@ library;
 import 'package:flutterware/plugins.dart';
 
 import '../shell/worktree.dart';
+import '../plugins/native/dev_stack_results.dart';
 import 'facts.dart';
 
 /// One column of the table.
@@ -41,6 +42,7 @@ List<String> worktreeTable(
   var columns = <_Column>[
     _Column((facts, _) => _dot(facts)),
     const _Column(_changesOf),
+    const _Column(_stackOf),
     _Column(_agentOf),
     const _Column(_forgeOf),
     _Column(_whenOf),
@@ -102,6 +104,36 @@ String _changesOf(WorktreeFacts facts, DateTime now) {
   if (git.ahead > 0) out.write(' ^${git.ahead}');
   if (git.behind > 0) out.write(' v${git.behind}');
   return out.toString();
+}
+
+/// The stack, as a word and a port.
+///
+/// Shares the column-is-dropped-when-empty rule above, which is what keeps this
+/// out of `fw worktrees` for the many repositories that declare no stack. What
+/// it prints is deliberately the same vocabulary the GUI's cell uses — one set
+/// of words for two renderers, so a terminal and a window never call the same
+/// state different things.
+String _stackOf(WorktreeFacts facts, DateTime now) {
+  var reading = facts.stack.value;
+  if (reading == null) return '';
+  var count = reading.serviceCount;
+  var word = switch (reading.state) {
+    StackState.up when reading.isPartial => 'up ${count!.$1}/${count.$2}',
+    StackState.up => 'up',
+    StackState.down => 'down',
+    StackState.starting => 'bringing up',
+    StackState.stopping => 'tearing down',
+    StackState.unavailable => "can't tell",
+    StackState.unknown => '',
+  };
+  if (word.isEmpty) return '';
+  var port = reading.services.map((s) => s.port).whereType<int>().firstOrNull;
+  if (port != null && reading.state == StackState.up) word = '$word :$port';
+  // The age only when it is old enough to doubt — the same rule the cell
+  // follows, so the two agree about when a reading stops speaking for itself.
+  var at = reading.at;
+  if (facts.stack.isDim && at != null) word = '$word (${ago(at, now)})';
+  return word;
 }
 
 String _agentOf(WorktreeFacts facts, DateTime now) {

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../dev_stack/stack_block.dart';
+import '../plugins/native/dev_stack_core.dart';
+import '../plugins/native/dev_stack_plugin.dart';
+import '../plugins/worktree_session.dart';
 import '../ui/theme.dart';
 import 'worktree.dart';
 
@@ -12,10 +16,43 @@ import 'worktree.dart';
 /// It used to also carry the config failure. The band banner above it now says
 /// that on every screen rather than only this one, so keeping a copy here meant
 /// rendering the same sentence twice on the one screen where both are visible.
+///
+/// **"Everything on it is free" now has one exception, declared by the
+/// project.** A worktree that declares a `DevStack` gets its state here,
+/// because "which port block does this checkout hold, and is it up" is a fact
+/// about *this worktree* in the strictest sense — it is allocated per worktree,
+/// by name — and this is the screen that names the worktree. The cost is one
+/// subprocess per [DevStack.poll] **while this screen is on**: the block starts
+/// polling when it mounts and stops when it leaves, so a worktree open in a
+/// background tab pays nothing, and a project with no stack declared sees
+/// exactly what it saw before.
 class WorktreeHome extends StatelessWidget {
-  const WorktreeHome(this.worktree, {super.key});
+  const WorktreeHome(
+    this.worktree, {
+    super.key,
+    this.session,
+    this.onOpenPlugin,
+  });
 
   final Worktree worktree;
+
+  /// Navigates to a plugin's panel. Null for a caller with no shell — the
+  /// block then draws without its way out, rather than with a link that does
+  /// nothing.
+  final void Function(String pluginId)? onOpenPlugin;
+
+  /// The open session, when there is one. Null before the config resolves, and
+  /// for any caller that has only the worktree — the screen degrades to what it
+  /// always was rather than refusing to draw.
+  final WorktreeSession? session;
+
+  /// The stack panel for this worktree, or null when none is declared or the
+  /// session has not landed. Read through the plugin rather than the core so
+  /// the block subscribes to the same notifier the sidebar does.
+  DevStackPlugin? get _stack {
+    var plugin = session?.pluginById(devStackPluginId);
+    return plugin is DevStackPlugin ? plugin : null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +75,17 @@ class WorktreeHome extends StatelessWidget {
               _Chip('detached at ${_short(head)}'),
           ],
         ),
+
+        if (_stack case var stack?) ...[
+          const Gap(FwSpacing.xxxl),
+          DevStackBlock(
+            stack,
+            compact: true,
+            onOpenPanel: onOpenPlugin == null
+                ? null
+                : () => onOpenPlugin!(devStackPluginId),
+          ),
+        ],
       ],
     );
   }

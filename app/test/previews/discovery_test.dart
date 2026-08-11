@@ -53,7 +53,8 @@ Widget a() => const Placeholder();
   });
 
   test('finds annotated constructors, torn off with .new', () {
-    // rimbaud's ~168 demos are all Widget classes, so this is the shape that
+    // The reference project's ~168 demos are all Widget classes, so this is
+    // the shape that
     // matters most for migration.
     write('tile.dart', '''
 import 'package:flutter/widgets.dart';

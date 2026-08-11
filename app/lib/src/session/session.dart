@@ -14,6 +14,7 @@ import '../context.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/native/assets_core.dart';
 import '../plugins/native/dependencies_core.dart';
+import '../plugins/native/dev_stack_core.dart';
 import '../plugins/native/run_core.dart';
 import '../plugins/native/server_core.dart';
 import '../plugins/native/motion_core.dart';
@@ -452,6 +453,7 @@ PluginCoreRegistry defaultCoreRegistry() => PluginCoreRegistry({
   launcherIconPluginId: launcherIconCoreFactory,
   splashPluginId: splashCoreFactory,
   uiCatalogPluginId: uiCatalogCoreFactory,
+  devStackPluginId: devStackCoreFactory,
 });
 
 class SessionException implements Exception {

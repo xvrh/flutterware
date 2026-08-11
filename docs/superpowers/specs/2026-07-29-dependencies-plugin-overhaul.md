@@ -339,7 +339,7 @@ catches:
 
 - importing a package you never declared, and
 - **importing a `dev_dependency` from `lib/`** — which the first draft claimed
-  was a gap in rimbaud's test worth building a plugin around. It is a gap in
+  was a gap in the reference project's test worth building a plugin around. It is a gap in
   that test, but it is not a gap in the toolchain, so it is not a reason for
   anything here.
 
@@ -359,7 +359,7 @@ Two questions, neither of which any lint answers:
    because the answer needs every file in the package at once.
 2. **In `dependencies:` but referenced only from test scope.**
 
-rimbaud's `test/dependendies_usage_test.dart` already answers both, in ~150
+the reference project's `test/dependendies_usage_test.dart` already answers both, in ~150
 lines, as a CI gate, with a checked-in allow list — including the good trick of
 asserting an allow-listed package is *still* a violation, so a stale exemption
 fails the build.

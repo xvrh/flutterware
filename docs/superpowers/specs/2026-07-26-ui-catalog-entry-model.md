@@ -46,7 +46,7 @@ kept the map small and made those states invisible to the tree, to search, to th
 `testWidgets` walk, and unaddressable for a screenshot.
 
 **Stacked sections inside one demo** — and this, measured, is the actual
-incumbent. In rimbaud, `parameters.*` appears in **9 of 168 demo files** and
+incumbent. In the reference project, `parameters.*` appears in **9 of 168 demo files** and
 `parameters.picker` in **6 usages total**; an earlier draft of this doc claimed
 pickers were "what everyone reached for", and that was wrong. What people
 actually write is `avatar_tile.dart`: one demo whose body is a scrolling `Column`
@@ -96,7 +96,7 @@ nobody — including Flutter — interprets a preview annotation statically.
    earlier wording ("every variant carries an `id`") read as mandating the field;
    it did not, and open item 5 settled the other way.
 
-6. **Hierarchy is path-derived.** Display name from `name:`. rimbaud's folder
+6. **Hierarchy is path-derived.** Display name from `name:`. the reference project's folder
    layout already reproduces its hand-written tree.
 
 7. **Discovery is syntactic, never resolved, and registration is the whole
@@ -240,7 +240,7 @@ layer.** Precedence, first non-null wins:
 3. the project's `FormFactorPicker` — our host and `flutter test` only;
 4. host fallback — ours picks the mobile bucket, Flutter's previewer uses its own.
 
-Layer 3 is why rimbaud's ~50 desktop entries need no annotation. Its cost is
+Layer 3 is why the reference project's ~50 desktop entries need no annotation. Its cost is
 stated plainly rather than buried: **an entry that relies on layer 3 is sized by
 the previewer's default in the second host**, because the previewer cannot read
 project config. That is a per-entry trade, not a per-project one — annotate the
@@ -268,7 +268,7 @@ catalog test shares this function today, so its viewport rule moves with it.
 override a project path rule back to nothing for a component that is not pinned
 to a device. It keeps routing to the mobile bucket. The name now reads slightly
 wrong (it suggests a mosaic, which it never meant); renaming it to `any` would
-cost nothing measurable, since rimbaud writes `FormFactor.desktop` and `null` and
+cost nothing measurable, since the reference project writes `FormFactor.desktop` and `null` and
 never writes `all` or `mobile`. Left alone for now, recorded so the choice is
 deliberate.
 
@@ -287,7 +287,7 @@ axes            →  applied assignment, e.g. {theme: dark, locale: fr}
 **`id:` is optional, and a colliding derivation is a hard error.** (Open item 5,
 settled 2026-07-27.)
 
-*Requiring it would pay for stability no consumer has yet.* Measured in rimbaud:
+*Requiring it would pay for stability no consumer has yet.* Measured in the reference project:
 `Figma(` — **0 usages**, so the `figma:` field is aspirational; **no golden
 baselines** keyed on entries; and **no per-entry URLs** — the catalog app's
 identity is `TreeEntry.path`, a breadcrumb of *display names*, held in
@@ -346,7 +346,7 @@ annotation names.
 ### The class-hierarchy closure is cut
 
 Two earlier revisions kept a second output — every `class X extends Y` edge, 1177
-of them in rimbaud — for two stated purposes. Both dissolved on 2026-07-27.
+of them in the reference project — for two stated purposes. Both dissolved on 2026-07-27.
 
 **Purpose one: discard noise.** The claim was that a declaration-shape filter was
 needed against 2180 `@override`s. But `@override` is not in `previewAnnotations`,
@@ -355,7 +355,7 @@ asked. The noise never reaches the filter.
 
 **Purpose two: recognise annotated constructors.** A revision noted, correctly,
 that filtering to *top-level functions returning `Widget`/`WidgetBuilder`* would
-drop **100% of rimbaud's 168 entries** (every one a `class XDemo extends
+drop **100% of the reference project's 168 entries** (every one a `class XDemo extends
 StatelessWidget`), and proposed fixing it by checking the `extends` clause
 against a Widget closure. The right fix was to delete the filter, not extend it:
 
@@ -610,7 +610,7 @@ expensive.
 
 The empirical check settles it: today's in-process catalog already renders the
 whole recursive index live — `IndexView` → `_Folder` → nested `IndexView` — with
-rimbaud's ~300 entries. Many demos live in one tree is current shipping
+the reference project's ~300 entries. Many demos live in one tree is current shipping
 behaviour, not a hypothesis.
 
 ### The boundary
@@ -673,7 +673,7 @@ since the generator maps file → entries.
 
 ## The same catalog, written both ways
 
-Every capability rimbaud exercises today, before and after. Written against real
+Every capability the reference project exercises today, before and after. Written against real
 files, not invented examples — this is the section to check the design against.
 
 ### 1. Declare an entry
@@ -711,7 +711,7 @@ body, where it works in all three hosts with no configuration.
 
 **The annotation site is not restricted to constructors.** `@Preview` accepts
 top-level functions, static methods, and public constructors or factories with no
-required arguments; this example annotates a constructor only because rimbaud's
+required arguments; this example annotates a constructor only because the reference project's
 168 demos are already Widget classes, making it the zero-churn migration. §2
 annotates top-level functions. Dart's forthcoming primary constructors collapse
 the distinction anyway — `@Demo(...) class AvatarTileDemo(...)` will read as the
@@ -772,7 +772,7 @@ Two consequences worth stating, since the rule is implicit:
   not move — and arguably the point: the parent appears exactly when there is
   something to parent. It does show up as a diff in the generated file.
 - **The derived name is a humanized filename**, which is a weaker name than a
-  curated one. rimbaud's map says `'Tiles sizes'` where the file says
+  curated one. the reference project's map says `'Tiles sizes'` where the file says
   `tiles_size.dart`, and `'Image comparison — empty'` where the file says
   `image_comparison.dart`. When the derived name is wrong, `group:` overrides it.
 
@@ -780,7 +780,7 @@ Two consequences worth stating, since the rule is implicit:
 
 The override earns its keep in one case the implicit rule cannot reach:
 **a group spanning several files in one directory.** Implicit groups are
-file-bounded; rimbaud's real tree is not.
+file-bounded; the reference project's real tree is not.
 
 | tree node today | comes from | implicit rule gives |
 |---|---|---|
@@ -893,7 +893,7 @@ picker, reconciled*.
 ### 6. Figma
 
 ```dart
-// TODAY — a widget wrapping the demo (0 usages in rimbaud; the API exists)
+// TODAY — a widget wrapping the demo (0 usages in the reference project; the API exists)
 Figma(links: ['https://figma.com/…node-id=1:234'], child: ...)
 
 // TOMORROW — a field, visible to the tree without rendering anything
@@ -982,7 +982,7 @@ Honest inventory, so the trade is visible:
 - **Path-glob form-factor config as the primary mechanism.** It solved verbosity
   but is invisible to Flutter's previewer, so it cannot carry render-affecting
   defaults for the second host. **Demoted, not deleted**: it becomes layer 3 of
-  the precedence chain, which is what keeps rimbaud's ~50 desktop entries
+  the precedence chain, which is what keeps the reference project's ~50 desktop entries
   unannotated. See *`FormFactor` and the device picker, reconciled*.
 - **The resolved analyzer pass**, and with it the `byteStore` persistence and
   multi-root sharing designs. `package:analyzer` is needed as a *parser* only.
@@ -1070,7 +1070,7 @@ Redundant with the CI check, which catches the same thing one step later.
 Four of the five open items, settled 2026-07-27.
 
 **1 — Ordering: alphabetical, no ordering file.** The premise that "the old map's
-order was deliberate" does not survive reading it. rimbaud's order is *creation*
+order was deliberate" does not survive reading it. the reference project's order is *creation*
 order — Mobile → Login, Legal, Settings, Dashboard, Case… — with `'Update
 required'` a leaf stranded among folders. Nobody maintains it. The one genuinely
 meaningful bit is Mobile-before-Desktop-before-Shared at the root, which
@@ -1080,7 +1080,7 @@ does**, and search is the real navigation for both humans and agents. Revisit
 when someone complains.
 
 **2 — `FormFactor` does not split into `phone` / `tablet`.** `formFactor` appears
-**twice in 168 rimbaud files**; the concept is barely exercised, and `size:` says
+**twice in 168 the reference project files**; the concept is barely exercised, and `size:` says
 "tablet" more precisely than an enum value that invites "which tablet". The
 question underneath it was the real one — *`mobile` is the wrong hardcoded
 default for a shipped package* — and that is answered by making the default a

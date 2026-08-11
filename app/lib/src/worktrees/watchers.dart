@@ -46,12 +46,46 @@
 /// a window sitting in the background would spawn fourteen `git status` calls
 /// every couple of seconds for as long as anybody was working. So the kinds
 /// coalesce separately and the listener refreshes only what moved.
+///
+/// [WorktreeChange.stack] is the third, and the cheapest: one small JSON read
+/// per worktree, no subprocesses either.
+///
+/// ## The run dir needs a filter, and it is the only watch that does
+///
+/// `~/.flutterware/run` is shared scratch — every daemon writes a `<key>.log`
+/// and a `<key>.lock` there, and a measured directory held 123 files of which
+/// 88 were logs and locks. Watching it whole would report a running server's
+/// every log line as a worktree change. So this watch takes an [_Accept]
+/// predicate and keeps only `stack-*`, which is the one thing in there that
+/// says anything about a checkout.
+///
+/// **Measured, because the filter is the whole reason this is affordable.**
+/// Thirty seconds on a directory holding 123 files, with a server logging and
+/// a stack being probed:
+///
+/// | | events in 30 s |
+/// |---|---|
+/// | everything the run dir emitted | 679 |
+/// | `.log` writes from one running server | 676 |
+/// | `stack-*` caches | 3 |
+///
+/// Unfiltered, that is a server's every log line arriving as a worktree
+/// change. Filtered, it is three — which the coalescer then turns into at most
+/// one refresh every [minInterval], each costing one small file read per
+/// worktree and no subprocesses at all.
+///
+/// The filter also catches something the platform does that is easy to miss:
+/// **macOS emits an event naming the watched directory itself**, both when the
+/// watch registers and alongside the per-file events. Its basename is the
+/// directory's, so it never looks like a stack file.
 library;
 
 import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+
+import '../utils/run_dir.dart';
 
 /// What moved. See the note above on why this is not one signal.
 enum WorktreeChange {
@@ -60,6 +94,16 @@ enum WorktreeChange {
 
   /// An agent session file was written.
   agent,
+
+  /// A dev stack's cached reading was rewritten — by another window, or by
+  /// `fw run dev_stack start` in a terminal.
+  ///
+  /// **Rarer than it sounds, and that is by design.** A stack is only probed
+  /// while one of its surfaces is mounted, so sitting on the explorer produces
+  /// no writes at all. What this catches is the case nothing else can: the
+  /// state changing while you are looking at a screen that is not the one
+  /// changing it.
+  stack,
 }
 
 /// How a directory is watched: a stream of **paths that changed**, nothing more.
@@ -71,10 +115,14 @@ enum WorktreeChange {
 typedef WatchDirectory =
     Stream<String> Function(String path, {required bool recursive});
 
+/// Whether a changed path is worth waking anything for.
+typedef _Accept = bool Function(String path);
+
 class WorktreeWatcher {
   WorktreeWatcher({
     required this.repoRoot,
     String? agentRoot,
+    this.runDir,
     this.debounce = const Duration(milliseconds: 300),
     this.minInterval = const Duration(seconds: 2),
     WatchDirectory? watch,
@@ -89,6 +137,11 @@ class WorktreeWatcher {
   final String repoRoot;
 
   final String agentRoot;
+
+  /// `~/.flutterware/run` when null — resolved in [start] rather than here,
+  /// because [flutterwareRunDir] *creates* the directory and a constructor
+  /// should not leave one behind on a machine that never watches anything.
+  final String? runDir;
 
   /// How long a burst is allowed to settle. One commit is several writes.
   final Duration debounce;
@@ -175,6 +228,15 @@ class WorktreeWatcher {
       recursive: true,
       kind: WorktreeChange.agent,
     );
+    _add(
+      'dev stacks',
+      runDir ?? flutterwareRunDir(),
+      // Flat: the cache files are direct children, and the run dir has
+      // subdirectories nothing here cares about.
+      recursive: false,
+      kind: WorktreeChange.stack,
+      accept: (path) => p.basename(path).startsWith('stack-'),
+    );
   }
 
   var _started = false;
@@ -184,6 +246,7 @@ class WorktreeWatcher {
     String path, {
     required bool recursive,
     required WorktreeChange kind,
+    _Accept? accept,
   }) {
     try {
       if (!Directory(path).existsSync()) return;
@@ -194,6 +257,7 @@ class WorktreeWatcher {
             // and always accompany the real write. Ignoring them halves the
             // events without losing one.
             if (changed.endsWith('.lock')) return;
+            if (accept != null && !accept(changed)) return;
             _coalescers[kind]!.poke();
           },
           onError: (Object error) => onFailure?.call(what, error),

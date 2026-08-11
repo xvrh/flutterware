@@ -85,13 +85,13 @@ prefix *and* fresh call sites — but the root cause is not established.
 ## Compile economics
 
 Measured with `frontend_server`, Flutter target, SDK 3.45.0-0.1.pre, against
-`rimbaud/packages/web_app` — a real ~300-entry catalog.
+the reference project's web-app package — a real ~300-entry catalog.
 
 | entrypoint | libraries | cold compile |
 |---|---|---|
 | bare `MaterialApp` (framework floor) | 772 | **2.3s** |
 | `package:server/client.dart` alone (no Flutter) | 2741 | 5.9s |
-| the `twinskin_ui` barrel alone | 3587 | 8.5s |
+| the design-system barrel alone | 3587 | 8.5s |
 | one View — `AvatarTile` + `MaterialApp` | 3588 | 8.5s |
 | one demo entry — `avatar_tile.dart` | 3623 | 9.5s |
 | **the full catalog — all ~300 demos** | 5954 | **12.9s** |
@@ -186,7 +186,7 @@ get fast restarts), so this needs a direct invoke or a small fork.
 - No test of many entries loaded at once (memory growth of a long browse
   session), of unloading, or of a worktree whose `package_config.json` changed
   mid-session.
-- All rimbaud compiles reported 4 pre-existing errors in `package:server`
+- All reference-project compiles reported 4 pre-existing errors in `package:server`
   (`forcePathStyle`, `regenerateProjectApiKey`). The CFE compiles the reachable
   closure regardless, so timings are representative — and it independently
   confirms `package:server` is reachable from a View — but those entrypoints do
