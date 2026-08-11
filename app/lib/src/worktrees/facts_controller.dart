@@ -55,14 +55,14 @@ class WorktreeFactsController extends ChangeNotifier implements SettleSource {
 
   final WorktreeFactsProbe _probe;
 
-  /// **The repository's one store instance, and it has to be one.**
+  /// **The repository's one store instance in this process.**
   ///
-  /// `WorktreeFactsStore` reads the whole file at `open` and writes the whole
-  /// file at `save`, so two instances over one path are two full copies and
-  /// the last one to save wins. A second opener that wrote something this one
-  /// had not read would have that write silently reverted on the next sweep —
-  /// which is exactly what happened to the changes config until this getter
-  /// existed. Anything else in the window that needs the store takes this.
+  /// `save` merges with the file before writing, so a second opener — another
+  /// Studio, a `fw` in a sibling worktree — no longer gets its writes
+  /// reverted. One instance per process is still right, though: two instances
+  /// *here* would be two copies of the same unmerged in-memory state, and the
+  /// merge only reconciles what reached the disk. Anything else in the window
+  /// that needs the store takes this.
   WorktreeFactsStore get store => _probe.store;
 
   Map<String, WorktreeFacts> get facts => _facts;

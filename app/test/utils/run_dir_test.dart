@@ -32,10 +32,10 @@ void main() {
     return file;
   }
 
-  /// A run handle naming [launcherPid], [age] old. Only the pid is read by the
-  /// sweeper; the rest is there so the file is a real handle rather than a
-  /// shape that happens to parse.
-  File handle(String name, int launcherPid, Duration age) {
+  /// A run handle naming [launcherPid], [age] old. Only the pid and start
+  /// time are read by the sweeper; the rest is there so the file is a real
+  /// handle rather than a shape that happens to parse.
+  File handle(String name, int launcherPid, Duration age, {DateTime? started}) {
     var file = File(p.join(runDir.path, name))
       ..writeAsStringSync(
         jsonEncode({
@@ -44,7 +44,7 @@ void main() {
           'device': 'phone',
           'entrypoint': 'lib/main.dart',
           'launcherPid': launcherPid,
-          'startedAt': DateTime.now().toUtc().toIso8601String(),
+          'startedAt': (started ?? DateTime.now()).toUtc().toIso8601String(),
         }),
       );
     file.setLastModifiedSync(DateTime.now().subtract(age));
@@ -161,6 +161,17 @@ void main() {
   });
 
   group('what it spares', () {
+    test("a living run's journal, however old", () async {
+      // The handle is still in the ledger — its launcher is this very test's
+      // process — so the run's story stays replayable in the Steps tab. Only
+      // the handle's own death starts the journal's clock.
+      handle('app-z-$pid.json', pid, const Duration(days: 3));
+      aged('app-z-$pid.journal.jsonl', const Duration(days: 30));
+
+      expect(await sweep(), 0);
+      expect(runDir.listSync(), hasLength(2));
+    });
+
     test('a run handle whose launcher is still alive, however old', () async {
       // A desktop session can legitimately be up since Monday. Sweeping its
       // handle would free a device that is very much in use — the same lie the
@@ -169,6 +180,57 @@ void main() {
 
       expect(await sweep(), 0);
       expect(runDir.listSync(), hasLength(1));
+    });
+
+    test("a dead run's journal, its rotation and its artifacts", () async {
+      // No handle named app-x-9 exists, so the story's run is gone and the
+      // story ages out. Before this rule the journals matched no sweep rule
+      // and grew forever.
+      aged('app-x-9.journal.jsonl', const Duration(days: 3));
+      aged('app-x-9.journal.jsonl.1', const Duration(days: 3));
+      var artifacts = Directory(p.join(runDir.path, 'journal', 'app-x-9'))
+        ..createSync(recursive: true);
+      File(p.join(artifacts.path, '1-9.png')).writeAsStringSync('x');
+      // `File.setLastModifiedSync` has no `Directory` counterpart.
+      var old = DateTime.now().subtract(const Duration(days: 3));
+      String two(int n) => n.toString().padLeft(2, '0');
+      Process.runSync('touch', [
+        '-mt',
+        '${old.year}${two(old.month)}${two(old.day)}${two(old.hour)}${two(old.minute)}',
+        artifacts.path,
+      ]);
+
+      expect(await sweep(), 3);
+      expect(artifacts.existsSync(), isFalse);
+    });
+
+    test('a journal in the same pass as its dying handle', () async {
+      // The handle is swept by loop three — dead launcher — and the journal
+      // rule runs after it, so one pass takes the run and its story together
+      // rather than leaving the story for tomorrow's sweep.
+      var dead = await _deadPid();
+      handle('app-y-$dead.json', dead, const Duration(days: 3));
+      aged('app-y-$dead.journal.jsonl', const Duration(days: 3));
+
+      expect(await sweep(), 2);
+      expect(runDir.listSync(), isEmpty);
+    });
+
+    test('a run handle whose pid was recycled is swept anyway', () async {
+      // The pid is alive — it is this very test's — but the handle claims a
+      // launcher recorded two days ago, and this process is minutes old. A
+      // number that young is somebody else wearing a dead launcher's pid;
+      // without the age check the handle read as alive forever and pinned
+      // its device as busy in every worktree.
+      handle(
+        'app-abcdef123456-$pid.json',
+        pid,
+        const Duration(days: 3),
+        started: DateTime.now().subtract(const Duration(days: 2)),
+      );
+
+      expect(await sweep(), 1);
+      expect(runDir.listSync(), isEmpty);
     });
 
     test('the device cache, which is bounded and self-refreshing', () async {
@@ -297,4 +359,43 @@ void main() {
       );
     });
   });
+
+  group('process age', () {
+    // `etime` rather than `lstart` because elapsed prints the same way in
+    // every locale. These pin the format: [[dd-]hh:]mm:ss.
+    test('parses every etime shape ps produces', () {
+      expect(parseElapsed('04:05'), const Duration(minutes: 4, seconds: 5));
+      expect(
+        parseElapsed(' 03:04:05\n'),
+        const Duration(hours: 3, minutes: 4, seconds: 5),
+      );
+      expect(
+        parseElapsed('12-03:04:05'),
+        const Duration(days: 12, hours: 3, minutes: 4, seconds: 5),
+      );
+      expect(parseElapsed('nonsense'), isNull);
+      expect(parseElapsed(''), isNull);
+    });
+
+    test('this process is current against a record from before it', () {
+      expect(isProcessCurrent(pid, DateTime.now()), isTrue);
+    });
+
+    test('this process is not the launcher a day-old record names', () {
+      expect(
+        isProcessCurrent(pid, DateTime.now().subtract(const Duration(days: 1))),
+        isFalse,
+      );
+    });
+  });
+}
+
+/// A pid that is certainly gone: a process started and waited for.
+///
+/// Better than a large constant, which is only *probably* free and would make
+/// these tests flaky on whichever machine happened to be using it.
+Future<int> _deadPid() async {
+  var process = await Process.start('true', const []);
+  await process.exitCode;
+  return process.pid;
 }

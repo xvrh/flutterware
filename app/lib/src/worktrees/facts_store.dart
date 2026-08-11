@@ -21,6 +21,15 @@
 ///
 /// Lives outside the repository: this is machine state, and a cache written
 /// into the checkout would turn up in the dirty count it is there to report.
+///
+/// **The file is shared by every process on this repository** — the file is
+/// keyed by the repo root on purpose, and a Studio in one worktree plus a `fw`
+/// in another are both writers. So a save is not "write my snapshot": it is
+/// re-read, fold in what the others wrote since [open], overlay only what this
+/// process itself learned, and rename into place — under a lock, so two saves
+/// serialize instead of interleaving. Without that, whichever window touched
+/// the file last silently reverted every other window's opened-clocks and
+/// caches.
 library;
 
 import 'dart:convert';
@@ -86,15 +95,24 @@ class CachedChangesConfig {
       );
 }
 
+/// What one reading of the file said. Shared by [WorktreeFactsStore.open] and
+/// the merge inside [WorktreeFactsStore.save], which are the same parse at two
+/// different moments.
+typedef _Snapshot = ({
+  Map<String, CachedDiff> diffs,
+  Map<String, DateTime> opened,
+  Map<String, ForgeFacts> pullRequests,
+  DateTime? pullRequestsAt,
+  Map<String, CachedChangesConfig> changesConfigs,
+});
+
 class WorktreeFactsStore {
-  WorktreeFactsStore._(
-    this.file,
-    this._diffs,
-    this._opened,
-    this._pullRequests,
-    this._pullRequestsAt,
-    this._changesConfigs,
-  );
+  WorktreeFactsStore._(this.file, _Snapshot snapshot)
+    : _diffs = snapshot.diffs,
+      _opened = snapshot.opened,
+      _pullRequests = snapshot.pullRequests,
+      _pullRequestsAt = snapshot.pullRequestsAt,
+      _changesConfigs = snapshot.changesConfigs;
 
   /// Opens the store for the repository rooted at [repoRoot].
   ///
@@ -107,6 +125,10 @@ class WorktreeFactsStore {
   /// the developer's real `~/.flutterware` to check that a cache round-trips.
   static WorktreeFactsStore open(String repoRoot, {File? at}) {
     var file = at ?? File(fileFor(repoRoot));
+    return WorktreeFactsStore._(file, _read(file));
+  }
+
+  static _Snapshot _read(File file) {
     var diffs = <String, CachedDiff>{};
     var opened = <String, DateTime>{};
     var pullRequests = <String, ForgeFacts>{};
@@ -141,16 +163,15 @@ class WorktreeFactsStore {
     } catch (_) {
       // Unreadable, half-written, or written by a future version.
     }
-    return WorktreeFactsStore._(
-      file,
-      diffs,
-      opened,
+    return (
+      diffs: diffs,
+      opened: opened,
       // A stamp we could not read is a cache whose age we cannot judge, and an
       // undated pull request is worse than none — it would show as current
       // forever.
-      pullRequestsAt == null ? {} : pullRequests,
-      pullRequestsAt,
-      changesConfigs,
+      pullRequests: pullRequestsAt == null ? {} : pullRequests,
+      pullRequestsAt: pullRequestsAt,
+      changesConfigs: changesConfigs,
     );
   }
 
@@ -172,13 +193,22 @@ class WorktreeFactsStore {
   DateTime? _pullRequestsAt;
   final Map<String, CachedChangesConfig> _changesConfigs;
 
+  /// What *this* process wrote since it last saved — the only keys a save is
+  /// entitled to impose on the file. Everything else in memory is a reading of
+  /// the file, and imposing a reading is how one window reverts another.
+  final _dirtyDiffs = <String>{};
+  final _dirtyChangesConfigs = <String>{};
+  bool _pullRequestsDirty = false;
+
   static String diffKey(String baseSha, String headSha) => '$baseSha..$headSha';
 
   CachedDiff? diff(String baseSha, String headSha) =>
       _diffs[diffKey(baseSha, headSha)];
 
-  void putDiff(String baseSha, String headSha, CachedDiff diff) =>
-      _diffs[diffKey(baseSha, headSha)] = diff;
+  void putDiff(String baseSha, String headSha, CachedDiff diff) {
+    _diffs[diffKey(baseSha, headSha)] = diff;
+    _dirtyDiffs.add(diffKey(baseSha, headSha));
+  }
 
   /// When you last opened this worktree in flutterware — one of the clocks
   /// [ActivityFacts] takes the maximum of, and the only one nothing else knows.
@@ -200,14 +230,17 @@ class WorktreeFactsStore {
   void putPullRequests(Map<String, ForgeFacts> byBranch, DateTime at) {
     _pullRequests = byBranch;
     _pullRequestsAt = at;
+    _pullRequestsDirty = true;
   }
 
   /// The last `ChangesConfig` this worktree's config file produced.
   CachedChangesConfig? changesConfig(String worktreePath) =>
       _changesConfigs[worktreePath];
 
-  void putChangesConfig(String worktreePath, CachedChangesConfig entry) =>
-      _changesConfigs[worktreePath] = entry;
+  void putChangesConfig(String worktreePath, CachedChangesConfig entry) {
+    _changesConfigs[worktreePath] = entry;
+    _dirtyChangesConfigs.add(worktreePath);
+  }
 
   /// Drops diffs beyond [keep], oldest-inserted first.
   ///
@@ -222,38 +255,102 @@ class WorktreeFactsStore {
     }
   }
 
+  /// Folds what other processes wrote since this store last read the file.
+  ///
+  /// Per section, the merge that matches its semantics:
+  /// - **Diffs** are never wrong, so the disk's map is taken whole and only
+  ///   this process's own writes are laid over it. A non-dirty entry the disk
+  ///   no longer has was evicted by somebody, and re-adding it would undo
+  ///   their eviction.
+  /// - **Opened** takes the later timestamp per worktree, whoever wrote it —
+  ///   "when was this last opened" has exactly one right answer.
+  /// - **Changes configs** overlay dirty keys only, like diffs; the validity
+  ///   key makes a stale survivor self-correcting at read time.
+  /// - **Pull requests** are one stamped block: the fresher stamp wins.
+  void _mergeFromDisk() {
+    var disk = _read(file);
+
+    var diffs = {...disk.diffs, for (var key in _dirtyDiffs) key: ?_diffs[key]};
+    _diffs
+      ..clear()
+      ..addAll(diffs);
+
+    for (var entry in disk.opened.entries) {
+      var ours = _opened[entry.key];
+      if (ours == null || entry.value.isAfter(ours)) {
+        _opened[entry.key] = entry.value;
+      }
+    }
+
+    var configs = {
+      ...disk.changesConfigs,
+      for (var key in _dirtyChangesConfigs) key: ?_changesConfigs[key],
+    };
+    _changesConfigs
+      ..clear()
+      ..addAll(configs);
+
+    if (disk.pullRequestsAt case var diskAt?) {
+      var ours = _pullRequestsAt;
+      var oursWin = _pullRequestsDirty && ours != null && !diskAt.isAfter(ours);
+      if (!oursWin) {
+        _pullRequests = disk.pullRequests;
+        _pullRequestsAt = diskAt;
+      }
+    }
+  }
+
   /// **Never throws**, for the same reason [open] does not: failing to write an
   /// optional cache must not fail the command that produced it.
+  ///
+  /// Read-merge-write under an exclusive lock, then rename into place: the
+  /// lock is what makes the merge worth doing (two unserialized merges still
+  /// lose one), and the rename is what keeps a concurrent reader from parsing
+  /// half a file and starting over with an empty cache.
   void save() {
     try {
-      evict();
       file.parent.createSync(recursive: true);
-      file.writeAsStringSync(
-        jsonEncode({
-          'diffs': {
-            for (var entry in _diffs.entries) entry.key: entry.value.toJson(),
-          },
-          'opened': {
-            for (var entry in _opened.entries)
-              entry.key: entry.value.toIso8601String(),
-          },
-          if (_changesConfigs.isNotEmpty)
-            'changesConfigs': {
-              for (var entry in _changesConfigs.entries)
-                entry.key: entry.value.toJson(),
+      var lock = File('${file.path}.lock').openSync(mode: FileMode.write);
+      try {
+        lock.lockSync(FileLock.blockingExclusive);
+        _mergeFromDisk();
+        evict();
+        var tmp = File('${file.path}.$pid.tmp');
+        tmp.writeAsStringSync(
+          jsonEncode({
+            'diffs': {
+              for (var entry in _diffs.entries) entry.key: entry.value.toJson(),
             },
-          if (_pullRequestsAt case var at?)
-            'pullRequests': {
-              'at': at.toIso8601String(),
-              'byBranch': {
-                for (var entry in _pullRequests.entries)
+            'opened': {
+              for (var entry in _opened.entries)
+                entry.key: entry.value.toIso8601String(),
+            },
+            if (_changesConfigs.isNotEmpty)
+              'changesConfigs': {
+                for (var entry in _changesConfigs.entries)
                   entry.key: entry.value.toJson(),
               },
-            },
-        }),
-      );
+            if (_pullRequestsAt case var at?)
+              'pullRequests': {
+                'at': at.toIso8601String(),
+                'byBranch': {
+                  for (var entry in _pullRequests.entries)
+                    entry.key: entry.value.toJson(),
+                },
+              },
+          }),
+        );
+        tmp.renameSync(file.path);
+        _dirtyDiffs.clear();
+        _dirtyChangesConfigs.clear();
+        _pullRequestsDirty = false;
+      } finally {
+        // Closing releases the lock.
+        lock.closeSync();
+      }
     } catch (_) {
-      // A read-only home, a full disk. The facts are still correct in memory.
+      // A read-only home, a full disk. The facts are still correct in memory,
+      // and the dirty sets survive for the next attempt.
     }
   }
 }

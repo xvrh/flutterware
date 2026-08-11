@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/plugins.dart' show ChangesConfig;
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/worktrees/facts.dart';
 import 'package:flutterware_app/src/worktrees/facts_probe.dart';
@@ -122,6 +123,74 @@ void main() {
       // The most recent survive; the oldest are dropped.
       expect(written.diff('base', 'head59'), isNotNull);
       expect(written.diff('base', 'head0'), isNull);
+    });
+
+    test('two writers merge instead of last-writer-wins', () {
+      // Two processes over one repository: a Studio in one worktree and a
+      // `fw` in another. Each opened before the other saved, so each holds a
+      // snapshot without the other's write — the bug was that the second
+      // save silently reverted the first.
+      var a = store();
+      var b = store();
+      a.putDiff('a1', 'a2', _emptyDiff);
+      a.save();
+      b.putDiff('b1', 'b2', _emptyDiff);
+      b.save();
+
+      var read = store();
+      expect(read.diff('a1', 'a2'), isNotNull);
+      expect(read.diff('b1', 'b2'), isNotNull);
+    });
+
+    test('the later opened clock wins, whoever wrote it', () {
+      var earlier = DateTime.utc(2026, 8, 11, 9);
+      var later = DateTime.utc(2026, 8, 11, 10);
+
+      var a = store();
+      var b = store();
+      b.markOpened('/repo/x', later);
+      b.save();
+      // A opened before B saved and still holds no clock for x; its save must
+      // not revert B's. And A's own older mark must not either.
+      a.markOpened('/repo/x', earlier);
+      a.save();
+
+      expect(store().openedAt('/repo/x'), later);
+    });
+
+    test('a stale writer does not revert fresher pull requests', () {
+      var stale = DateTime.utc(2026, 8, 11, 9);
+      var fresh = DateTime.utc(2026, 8, 11, 10);
+
+      var a = store();
+      a.putPullRequests({'feature': _pr}, stale);
+      var b = store();
+      b.putPullRequests({'feature': _pr, 'other': _pr}, fresh);
+      b.save();
+      a.save();
+
+      var read = store().pullRequests()!;
+      expect(read.at, fresh);
+      expect(read.byBranch.keys, containsAll(['feature', 'other']));
+    });
+
+    test('a merged save still overlays this process own change', () {
+      var a = store();
+      var b = store();
+      b.putChangesConfig(
+        '/repo/x',
+        const CachedChangesConfig(config: ChangesConfig(), validityKey: 'old'),
+      );
+      b.save();
+      a.putChangesConfig(
+        '/repo/x',
+        const CachedChangesConfig(config: ChangesConfig(), validityKey: 'new'),
+      );
+      a.save();
+
+      // A executed the config after B did; A's save came last and its own
+      // write — dirty in A — wins over what it merged in from B.
+      expect(store().changesConfig('/repo/x')!.validityKey, 'new');
     });
 
     test('the cache path is keyed by the repo, not by a name', () {

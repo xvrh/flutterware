@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 /// Where flutterware puts unix sockets and other per-run scratch.
@@ -184,6 +185,46 @@ Future<int> sweepRunDir({
     }
   }
 
+  // A run's journal and its step artifacts. The stem ties the pieces to
+  // their run: `app-<key>-<pid>.journal.jsonl` (and its `.1` rotation) and
+  // `journal/app-<key>-<pid>/` belong to the handle `app-<key>-<pid>.json`.
+  // A story whose run is still in the ledger is spared at any age — the
+  // Steps tab replays it — and once the handle is gone (loop three, possibly
+  // this very pass) the story ages out on the normal terms. Before this rule
+  // existed the journals matched nothing and accumulated forever.
+  bool runIsGone(String stem) =>
+      !File(p.join(dir.path, '$stem.json')).existsSync();
+  for (var entity in entries) {
+    var name = p.basename(entity.path);
+    var stem = name.endsWith('.journal.jsonl')
+        ? name.substring(0, name.length - '.journal.jsonl'.length)
+        : name.endsWith('.journal.jsonl.1')
+        ? name.substring(0, name.length - '.journal.jsonl.1'.length)
+        : null;
+    if (stem == null) continue;
+    if (!_isOlderThan(entity, cutoff)) continue;
+    if (!runIsGone(stem)) continue;
+    if (_delete(entity)) deleted++;
+  }
+  List<FileSystemEntity> journalDirs;
+  try {
+    journalDirs = Directory(p.join(dir.path, 'journal')).listSync();
+  } on FileSystemException {
+    journalDirs = const [];
+  }
+  for (var entity in journalDirs) {
+    if (entity is! Directory) continue;
+    if (!_isOlderThan(entity, cutoff)) continue;
+    if (!runIsGone(p.basename(entity.path))) continue;
+    try {
+      entity.deleteSync(recursive: true);
+      deleted++;
+    } on FileSystemException {
+      // Same as `cap-*`: a step mid-write or a lost race, neither ours to
+      // force.
+    }
+  }
+
   return deleted;
 }
 
@@ -198,7 +239,14 @@ bool _launcherIsAlive(File handle) {
   try {
     var json = jsonDecode(handle.readAsStringSync());
     if (json is! Map) return false;
-    return isProcessAlive(json['launcherPid'] as int? ?? 0);
+    var pid = json['launcherPid'] as int? ?? 0;
+    // Current, not merely alive — a recycled pid would shield a dead run's
+    // handle from every sweep. A handle old enough to sweep is exactly the
+    // kind old enough to have had its pid recycled.
+    var startedAt = DateTime.tryParse('${json['startedAt']}');
+    return startedAt == null
+        ? isProcessAlive(pid)
+        : isProcessCurrent(pid, startedAt);
   } on Object {
     // Unreadable is not "alive": a handle nothing can parse is litter.
     return false;
@@ -213,8 +261,9 @@ bool _launcherIsAlive(File handle) {
 ///
 /// Two ways this can be wrong, both narrow and both worth naming: a pid
 /// recycled onto an unrelated process reads as alive, and a process owned by
-/// another user reads as dead. Neither applies to a launcher this machine's
-/// own tooling started, which is the only kind that appears in the ledger.
+/// another user reads as dead. Recycling matters whenever the answer decides
+/// an *action* — a handle lives on disk for up to a day, and a busy machine
+/// recycles pids well inside that — which is what [isProcessCurrent] is for.
 bool isProcessAlive(int pid) {
   if (pid <= 0) return false;
   try {
@@ -222,6 +271,60 @@ bool isProcessAlive(int pid) {
   } on Object {
     return false;
   }
+}
+
+/// Whether [pid] is alive *and* still the process that was recorded at
+/// [recordedAt], rather than a newer one wearing a recycled number.
+///
+/// The tie-breaker is the process's own age: a launcher recorded at T cannot
+/// have started after T, so a process younger than the record is somebody
+/// else. Believing a recycled pid compounds badly in both directions — `stop`
+/// would SIGTERM whatever unrelated process holds the number now, and a dead
+/// run whose pid was recycled reads as alive forever, pinning its device as
+/// busy in every worktree and shielding its handle from every sweep.
+///
+/// The slack absorbs `etime`'s whole-second coarseness and the gap between
+/// spawning and publishing the handle; doubt resolves to "same process",
+/// which is exactly the failure mode this had before. Where the platform
+/// cannot say how old a process is, liveness alone answers, as before.
+bool isProcessCurrent(int pid, DateTime recordedAt) {
+  if (!isProcessAlive(pid)) return false;
+  var elapsed = processElapsed(pid);
+  if (elapsed == null) return true;
+  var started = DateTime.now().subtract(elapsed);
+  return !started.isAfter(recordedAt.add(const Duration(minutes: 10)));
+}
+
+/// How long [pid] has been running, or null when the platform cannot say.
+///
+/// `etime` rather than `lstart`: elapsed time is `[[dd-]hh:]mm:ss` on every
+/// POSIX `ps`, while a start *time* prints in the current locale and would
+/// need a parser per language.
+Duration? processElapsed(int pid) {
+  if (Platform.isWindows) return null;
+  try {
+    var result = Process.runSync('ps', ['-p', '$pid', '-o', 'etime=']);
+    if (result.exitCode != 0) return null;
+    return parseElapsed('${result.stdout}');
+  } on Object {
+    return null;
+  }
+}
+
+/// `ps` elapsed format: `[[dd-]hh:]mm:ss`.
+@visibleForTesting
+Duration? parseElapsed(String text) {
+  var match = RegExp(
+    r'^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)$',
+  ).firstMatch(text.trim());
+  if (match == null) return null;
+  int part(int group) => int.parse(match[group] ?? '0');
+  return Duration(
+    days: part(1),
+    hours: part(2),
+    minutes: part(3),
+    seconds: part(4),
+  );
 }
 
 bool _isOlderThan(FileSystemEntity entity, DateTime cutoff) {

@@ -32,6 +32,7 @@ class PreviewsSide implements ComparisonSide {
 
   /// The package inside each checkout, relative — `.` for a single-package
   /// project, `examples/example` in a workspace.
+  @override
   final String packagePath;
 
   /// The scan root inside the package, and the preview annotations, both taken

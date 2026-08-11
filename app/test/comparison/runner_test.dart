@@ -471,6 +471,7 @@ class _FakeSide implements ComparisonSide {
 
   /// Where the package sits inside each checkout — `.` for a single-package
   /// project, `examples/example` in a workspace.
+  @override
   final String packagePath;
 
   @override

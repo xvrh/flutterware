@@ -180,6 +180,97 @@ void main() {
     });
   });
 
+  group('the pixel inputs', () {
+    // The inputs no compile names, and the leak they closed: a worktree that
+    // changed only an asset computed its base's key, `has()` said yes, and
+    // the comparison served the base's picture back as "same".
+    test('names the pubspec, the lockfiles and the declared assets', () {
+      var head = checkout('head', {
+        'pkg/pubspec.yaml':
+            'name: pkg\n'
+            'flutter:\n'
+            '  assets:\n'
+            '    - assets/logo.png\n'
+            '    - assets/icons/\n',
+        'pkg/assets/icons/a.png': 'a',
+        'pkg/assets/icons/b.png': 'b',
+      });
+
+      var paths = pixelInputsOf(packagePath: 'pkg', roots: [head]);
+
+      expect(
+        paths,
+        containsAll([
+          'pkg/pubspec.yaml',
+          'pkg/pubspec.lock',
+          'pubspec.lock',
+          'pkg/assets/logo.png',
+          'pkg/assets/icons/a.png',
+          'pkg/assets/icons/b.png',
+        ]),
+      );
+    });
+
+    test('a directory asset is listed on every side and unioned', () {
+      // A file only one side has must still be hashed, where the other side
+      // reads it as missing — a single-side listing would let a deleted
+      // asset slip through as "same".
+      var pubspec =
+          'name: pkg\n'
+          'flutter:\n'
+          '  assets:\n'
+          '    - assets/\n';
+      var head = checkout('head2', {
+        'pkg/pubspec.yaml': pubspec,
+        'pkg/assets/new.png': 'new',
+      });
+      var base = checkout('base2', {
+        'pkg/pubspec.yaml': pubspec,
+        'pkg/assets/old.png': 'old',
+      });
+
+      var paths = pixelInputsOf(packagePath: 'pkg', roots: [head, base]);
+
+      expect(paths, containsAll(['pkg/assets/new.png', 'pkg/assets/old.png']));
+    });
+
+    test('an asset-only change defeats the skip', () {
+      var pubspec =
+          'name: pkg\n'
+          'flutter:\n'
+          '  assets:\n'
+          '    - assets/logo.png\n';
+      var dart = {'pkg/lib/a.dart': 'const a = 1;'};
+      var head = checkout('head3', {
+        ...dart,
+        'pkg/pubspec.yaml': pubspec,
+        'pkg/assets/logo.png': 'red',
+      });
+      var base = checkout('base3', {
+        ...dart,
+        'pkg/pubspec.yaml': pubspec,
+        'pkg/assets/logo.png': 'blue',
+      });
+
+      var decision = SkipDecision.of(
+        entryId: 'e',
+        memo: memoWith('e', ['pkg/lib/a.dart']),
+        baseRoot: base,
+        headRoot: head,
+        extraPaths: pixelInputsOf(packagePath: 'pkg', roots: [head, base]),
+      );
+
+      expect(decision.skip, isFalse);
+      expect(decision.changed, ['pkg/assets/logo.png']);
+    });
+
+    test('a package with no flutter section still hashes its lockfiles', () {
+      var head = checkout('head4', {'pkg/pubspec.yaml': 'name: pkg\n'});
+      var paths = pixelInputsOf(packagePath: 'pkg', roots: [head]);
+      expect(paths, containsAll(['pkg/pubspec.lock', 'pubspec.lock']));
+    });
+  });
+
   group('the key', () {
     String key({
       String entry = 'demo/a.dart#one',

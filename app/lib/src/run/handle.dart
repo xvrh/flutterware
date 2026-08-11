@@ -395,7 +395,10 @@ Future<RunProbe> probeRunHandle(
   RunHandle handle, {
   Duration timeout = const Duration(seconds: 3),
 }) async {
-  var launcher = isProcessAlive(handle.launcherPid);
+  // Current, not merely alive: a dead launcher whose pid was recycled would
+  // otherwise read `launcher: true` forever — never `isDead`, never swept,
+  // its device reported busy to every worktree.
+  var launcher = isProcessCurrent(handle.launcherPid, handle.startedAt);
   var uri = handle.vmService;
   if (uri == null) {
     // Still building: there is no service to ask, and the launcher being alive

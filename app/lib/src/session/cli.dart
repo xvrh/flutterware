@@ -16,6 +16,7 @@ import '../comparison/runner.dart';
 import '../comparison/scenarios_runner.dart';
 import '../comparison/scenarios_side.dart';
 import '../comparison/shot_cache.dart';
+import '../comparison/skip.dart';
 import '../comparison/tree_diff.dart';
 import '../constants.dart';
 import '../plugins/native/previews_core.dart';
@@ -535,9 +536,7 @@ class FwCli {
       var artifact = ComparisonArtifact(previews: result, scenarios: scenarios);
       var index = artifact.writeTo(
         p.join(
-          flutterwareDir(),
-          'comparisons',
-          session.worktree.name,
+          comparisonDirFor(flutterwareDir(), session.worktree),
           'index.json',
         ),
       );
@@ -598,13 +597,23 @@ class FwCli {
     try {
       ScenarioResults results;
       try {
-        results = await ScenariosRunner(
-          headRoot: top,
-          baseRoot: baseRoot,
-          source: source,
-          cache: ShotCache(p.join(flutterwareDir(), 'shots')),
-          only: only.isEmpty ? null : only,
-        ).run(outDir: p.join(flutterwareDir(), 'comparisons', 'scenarios'));
+        results =
+            await ScenariosRunner(
+              headRoot: top,
+              baseRoot: baseRoot,
+              source: source,
+              cache: ShotCache(p.join(flutterwareDir(), 'shots')),
+              extraPaths: pixelInputsOf(
+                packagePath: side.packagePath,
+                roots: [top, baseRoot],
+              ),
+              only: only.isEmpty ? null : only,
+            ).run(
+              outDir: p.join(
+                comparisonDirFor(flutterwareDir(), session.worktree),
+                'scenarios',
+              ),
+            );
       } on Object catch (error) {
         // A side whose harness will not build is a side, not a crash — the
         // same rule the previews half follows, and the same skew causes it.

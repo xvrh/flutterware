@@ -1521,6 +1521,10 @@ void main() {
       // arguments cannot tell apart. Naming the worktree selects it; the
       // reload then genuinely fails because nothing answers, which is the
       // proof an attempt was made against *that* handle.
+      core.debugRepoWorktrees = Future.value({
+        p.canonicalize(worktree.path),
+        p.canonicalize(otherWorktree.path),
+      });
       _writeHandle(
         runDir,
         otherWorktree,
@@ -1539,7 +1543,39 @@ void main() {
       expect(result.error, isNotNull);
     });
 
+    test('a name never selects across repositories', () async {
+      // `~` is every repository's main checkout, so a name matched against
+      // the machine-wide ledger would drive an unrelated project's app the
+      // moment exactly one matched. The pool is this repo's worktrees; a
+      // handle from outside it is invisible even when its name fits.
+      core.debugRepoWorktrees = Future.value({p.canonicalize(worktree.path)});
+      _writeHandle(
+        runDir,
+        otherWorktree, // some other repository's checkout
+        device: 'phone',
+        entrypoint: 'lib/main.dart',
+        worktreeName: '~',
+        launcherPid: pid,
+        vmService: 'ws://127.0.0.1:1/ws',
+      );
+
+      await expectLater(
+        core.invoke('reload', arguments: {'worktree': '~'}),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Nothing is running from worktree "~"'),
+          ),
+        ),
+      );
+    });
+
     test('an empty own ledger points at the worktrees that do run', () async {
+      core.debugRepoWorktrees = Future.value({
+        p.canonicalize(worktree.path),
+        p.canonicalize(otherWorktree.path),
+      });
       _writeHandle(
         runDir,
         otherWorktree,

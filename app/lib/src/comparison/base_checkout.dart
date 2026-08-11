@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -63,8 +64,57 @@ class BaseCheckout {
     Future<void> Function(String checkout)? resolve,
   }) async {
     var path = p.join(cacheRoot, sha);
-    var marker = File(p.join(path, _marker));
+    Directory(cacheRoot).createSync(recursive: true);
+    // One creator per sha at a time, across processes — the directory is
+    // shared by every worktree on the machine by design, and without the
+    // lock a second comparison arriving mid-`resolve` saw a directory with
+    // no marker, called it a corpse, and force-removed it out from under the
+    // first's `pub get`. The lock lives *beside* the checkout because the
+    // recovery path deletes the checkout; blocking is the point: the loser
+    // waits out the winner's resolve, then finds the marker and reuses.
+    var gate = _inProcess[path] ?? Future<void>.value();
+    var done = Completer<void>();
+    var turn = gate.then((_) => done.future);
+    _inProcess[path] = turn;
+    try {
+      // The OS lock is advisory *per process* — two ensures inside one GUI
+      // would both acquire it — so the in-process queue above serializes
+      // those, and the file lock serializes everybody else.
+      await gate;
+      var lock = File(
+        p.join(cacheRoot, '$sha.lock'),
+      ).openSync(mode: FileMode.write);
+      try {
+        await lock.lock(FileLock.blockingExclusive);
+        return await _ensureLocked(
+          repoRoot: repoRoot,
+          sha: sha,
+          path: path,
+          resolve: resolve,
+        );
+      } finally {
+        // Closing releases the lock.
+        lock.closeSync();
+      }
+    } finally {
+      done.complete();
+      if (identical(_inProcess[path], turn)) {
+        unawaited(_inProcess.remove(path));
+      }
+    }
+  }
 
+  static final _inProcess = <String, Future<void>>{};
+
+  static Future<BaseCheckout> _ensureLocked({
+    required String repoRoot,
+    required String sha,
+    required String path,
+    required Future<void> Function(String checkout)? resolve,
+  }) async {
+    // Checked under the lock: the common case after losing the race is that
+    // the winner just wrote it.
+    var marker = File(p.join(path, _marker));
     if (marker.existsSync()) {
       return BaseCheckout(path: path, sha: sha, created: false);
     }
@@ -75,7 +125,6 @@ class BaseCheckout {
       await _remove(repoRoot: repoRoot, path: path);
     }
 
-    Directory(cacheRoot).createSync(recursive: true);
     var added = await Process.run('git', [
       '-C',
       repoRoot,

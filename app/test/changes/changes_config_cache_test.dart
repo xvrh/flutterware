@@ -127,19 +127,15 @@ void main() {
     expect(openStore().changesConfig('x'), isNull);
   });
 
-  test('a second store instance writes the first one back out again', () {
+  test('a stale store instance no longer reverts a fresher write', () {
     // **The bug this test exists for, found by running the app twice.** The
-    // store reads the whole file at `open` and writes the whole file at
-    // `save`, so two instances over one path are two full copies of it. The
-    // shell wrote the changes config through its own instance; the explorer's
-    // instance — opened at startup, before that write — saved its sweep a
-    // second later and reverted it. Nothing was ever wrong in memory, which is
-    // why the screen looked right until the next launch.
-    //
-    // The fix is upstream (one instance per repository, see
-    // `WorktreeFactsController.store`); this pins the behaviour that makes
-    // sharing necessary, so nobody re-introduces a second opener thinking it
-    // is harmless.
+    // store used to write the whole file from its open-time snapshot, so an
+    // instance opened at startup — the explorer's — saved its sweep a second
+    // after the shell wrote the changes config and reverted it. Two openers
+    // in one process were fenced off by `WorktreeFactsController.store`, but
+    // two *processes* — a Studio per worktree — were the same bug with no
+    // fence possible. `save` now merges with the file first, so the stale
+    // copy folds the fresher write in instead of erasing it.
     writeConfigFile('void main() {}');
 
     var explorer = openStore(); // opened first, knows nothing
@@ -154,8 +150,8 @@ void main() {
 
     expect(
       resolveChangesConfig(worktree.path, openStore()).config,
-      isNull,
-      reason: 'the stale copy wins, which is why there must be only one',
+      isNotNull,
+      reason: 'the merge keeps the write the stale copy never saw',
     );
   });
 
