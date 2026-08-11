@@ -434,10 +434,11 @@ This is the feature, not a garnish. Three tiers, cheapest first.
 
 - **Deletions and renames.** Highest signal per byte on the screen, and `-M`
   gives both in the index already.
-- **Attention globs** — pinned into a *Look here first* section, each row
+- **Attention globs** — pinned into the index's *Important* tab (§6), each row
   showing the rule that pinned it, so precedence is inspectable rather than
-  magic.
-- **Noise** — collapsed into one drawer row, `N low-signal files, +x −y`.
+  magic. In the CLI, where there are no tabs, they are a *look here first*
+  section.
+- **Noise** — demoted behind the *low-signal* lens, `N low-signal, +x −y`.
 - **Recency** — file mtime. On an agent's worktree this is *what it touched
   last*, and it is a `stat`.
 
@@ -617,21 +618,29 @@ the wrong one presented as fact.
 │ 53 files  +12.8k −37  ·  1 uncommitted  ·  base master (inferred)         │
 ├────────────────────────┬─────────────────────────────────────────────────┤
 │ ⌕ Filter paths         │ ranking.dart  app/lib/src/changes/               │
-│ [4 uncommitted][11 low-│ ▁▊▊▁▂   modified · +309 −0 · uncommitted · 4 hunks│
-│ Look here first 1 file ├─────────────────────────────────────────────────┤
-│ A 0042_stream_log.sql 8│ @@ -1,6 +1,9 @@ class Ranking {                  │
-│   db/migrations        │  one                                            │
-│   matches **/migr…**   │ +import 'dart:io';                              │
-│ ⌄ 11 low-signal, +55   │ …                                               │
-│ ▾ app              46  │                                                 │
-│   ▾ lib/src/changes 12 │                                                 │
-│     M diff_view.dart   │                                                 │
-│     M ranking.dart     │                                                 │
+│  All 53   Important 1  │ ▁▊▊▁▂   modified · +309 −0 · uncommitted · 4 hunks│
+│ ────────  ───────────  ├─────────────────────────────────────────────────┤
+│ [3 just changed][11 low│ @@ -1,6 +1,9 @@ class Ranking {                  │
+│ ▾ app              46  │  one                                            │
+│   ▾ lib/src/changes 12 │ +import 'dart:io';                              │
+│     M diff_view.dart   │ …                                               │
+│    ▌M ranking.dart     │                                                 │
+│      matches lib/*.dart│                                                 │
 │   ▸ test           19  │                                                 │
 │ ▸ docs              2  │                                                 │
 │ UNTRACKED              │                                                 │
 │ ? scratch.txt          │                                                 │
 └────────────────────────┴─────────────────────────────────────────────────┘
+```
+
+The *Important* tab is the same column, flat and all of it open:
+
+```
+│  All 53   Important 1  │
+│ ────────  ───────────  │
+│ A 0042_stream_log.sql 8│
+│   db/migrations        │
+│   matches **/migr…**   │
 ```
 
 **Master and detail.** The left column is the index: every path in the delta,
@@ -678,6 +687,8 @@ split is the whole design, and everything below follows from it.
   - *Low-signal* is the **only** thing that hides a file, and it is what the
     `noise:` config and the built-in noise list feed. Nothing else on the
     screen subtracts anything: the tree holds every path in the delta.
+  - Both lenses are drawn **under `All` only**. Neither means anything on the
+    other tab: attention outranks noise, so nothing pinned is ever demoted.
   - **This replaced the noise drawer**, and kept its argument: the count is the
     information — `11 low-signal` says the branch is mostly generated code, and
     hiding them silently would say it is a small branch. What changed is
@@ -698,14 +709,42 @@ Gone, and why:
   above was wrong. It is not a competing ordering, it is a different *question*:
   a flat column of fifty-three basenames answers "what should I look at" and
   says nothing about the shape of the branch — that 27 of them are under
-  `app/lib`, that `docs` was touched once. The two coexist without a tab:
-  **the pins are a short band at the top**, because an alert you have to
-  navigate to is not an alert, and **the tree below is ordered by weight**
+  `app/lib`, that `docs` was touched once. **The tree is ordered by weight**
   rather than alphabetically, so the module an agent hammered still sorts
   first. Alphabetical is right for a file explorer, where you know the name you
   want; here you do not, which is the whole reason the screen exists. A file
-  never appears in both, and a file inside the tree does not repeat its
-  directory — its position says it.
+  inside the tree does not repeat its directory — its position says it.
+
+**Two tabs, `All` and `Important`** — corrected 2026-08-11, again by somebody
+using it. The pins were a short band above the tree, on the argument that an
+alert you have to navigate to is not an alert. Used, it lost twice: the
+ranking's answer and the directory structure argued for the top of the same
+320 px column, and on a branch where no rule fired the band was still occupying
+it to say so.
+
+- *All* is the tree, complete: every path in the delta, pins included.
+- *Important* is what a rule pinned — flat, in rank order, everything open, no
+  headings. A list of four files has no shape to communicate, and folding it
+  would only hide it.
+- **The count on the tab label is what pays for the tab.** Hiding the alert
+  half the time is the real cost; a label reading `Important 4` still says
+  there is something to look at without being opened.
+- **The screen opens on `Important` when it is non-empty**, on `All` when it is
+  not — and never switches afterwards. A screen that changes tabs because a
+  rule started matching is a screen that moved your place while you read.
+- **A pinned file is in both.** Holding pins out of the tree to avoid listing a
+  file twice made the tree an *incomplete map*: its directory counts came out
+  one short per pin — the header said 53 files over a tree totalling 52 — and
+  browsing to a pinned file could not find it. A quietly wrong count is worse
+  than a repetition. The tree marks it with a 2 px accent edge and the rule
+  that pinned it. Untracked entries are listed in `All` on the same argument,
+  pinned or not.
+- **The empty `Important` tab is where the feature explains itself.** There are
+  no built-in attention rules (§5), so a project that has never written one
+  gets the `fw.changes(ChangesConfig(attention: [...]))` snippet there, with a
+  pane's worth of room for it. A project whose rules matched nothing is told
+  only that — two different silences, and `attentionConfigured` is what tells
+  them apart.
 - **The keyboard.** `↑↓ ↵ ←→` were built and removed the same day: they worked
   in every test that pumped the panel alone and did nothing in a window,
   because the shell around it takes the keys first. It will come back tested
