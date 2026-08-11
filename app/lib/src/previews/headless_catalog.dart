@@ -388,7 +388,9 @@ class HeadlessCatalog {
         // The picture *is* the settling frame, as in [observe]: nothing here
         // has to be read before it is taken, so a separate settle would draw a
         // second frame per entry for nothing.
-        var image = await guest.captureImage(pixelRatio: viewport.pixelRatio);
+        var (image, settled) = await guest.captureImage(
+          pixelRatio: viewport.pixelRatio,
+        );
         var tree = wantTree ? await guest.readTree(entry.id) : null;
         var errors = await guest.readErrors(entry.id);
         captured.add(entry.id);
@@ -400,6 +402,8 @@ class HeadlessCatalog {
             height: image.height,
             tree: tree,
             errors: errors,
+            settled: settled.settled,
+            seesAnimations: settled.seesAnimations,
           ),
         );
       }
@@ -707,6 +711,8 @@ class CatalogFrame {
     required this.height,
     required this.tree,
     required this.errors,
+    this.settled = true,
+    this.seesAnimations = true,
   });
 
   final CatalogEntry entry;
@@ -726,6 +732,23 @@ class CatalogFrame {
   /// What the entry threw while building. A picture with errors is still a
   /// picture, and on a comparison's base side it is often the answer.
   final InspectErrors errors;
+
+  /// Whether everything had stopped moving when the shutter fired.
+  ///
+  /// False for a preview that animates forever — a spinner, a shimmer. The
+  /// picture is real; what it is *not* is reproducible, and a comparison that
+  /// reported the resulting difference as a change would be blaming the branch
+  /// for the clock.
+  final bool settled;
+
+  /// Whether the guest could report animations at all.
+  ///
+  /// False for one built from a `package:flutterware` that predates the field —
+  /// which is the base side of a comparison against a checkout older than this
+  /// change. It settles for images only, so its frames can be mid-transition
+  /// while the other side's are not: the two sides differ by their *tooling*,
+  /// and saying so is the only thing that separates that from a finding.
+  final bool seesAnimations;
 }
 
 /// What a whole batch managed to photograph.
@@ -1175,9 +1198,12 @@ class _GuestSession {
   ///
   /// What [capture] does minus the PNG: a batch comparing pixels never wants
   /// the file, and encoding is ~80% of what a 1× capture costs.
-  Future<img.Image> captureImage({double pixelRatio = 1}) async {
-    await _settleImages();
-    return _capture.capture(pixelRatio: pixelRatio);
+  /// The frame, and what the guest could say about it having stopped moving.
+  Future<(img.Image, ({bool settled, bool seesAnimations}))> captureImage({
+    double pixelRatio = 1,
+  }) async {
+    var settled = await _settle();
+    return (await _capture.capture(pixelRatio: pixelRatio), settled);
   }
 
   /// Asks the guest to write its next frame, and waits for the ack.
@@ -1195,7 +1221,7 @@ class _GuestSession {
     /// Logical-to-physical, for turning either of the above into pixels.
     double pixelRatio = 1,
   }) async {
-    await _settleImages();
+    await _settle();
     var image = await _capture.capture(
       crop: crop,
       annotate: annotate,
@@ -1232,20 +1258,43 @@ class _GuestSession {
   /// "not registered yet" as "no answer needed" skips the wait on exactly the
   /// capture most likely to race the decode — intermittently, which is how the
   /// missing images stayed invisible in the first place.
-  Future<void> _settleImages() async {
+  /// Draws frames until nothing is still moving, or until the deadline.
+  ///
+  /// Returns false when it gave up — a looping animation never drains, and a
+  /// picture taken in the middle of one is worth having *and* worth labelling.
+  ///
+  /// `transient` is absent from an older guest's reply and reads as zero, which
+  /// is the old behaviour: images only. That is the graceful half of a version
+  /// skew — the base side of a comparison against a checkout that predates the
+  /// field settles for images alone rather than failing to answer at all.
+  Future<({bool settled, bool seesAnimations})> _settle() async {
     var deadline = Stopwatch()..start();
     var zeros = 0;
+    var seesAnimations = true;
     while (deadline.elapsed < const Duration(seconds: 3)) {
       var report = await _vmService.requireExtension(
         'ext.flutterware.imagesSettled',
       );
-      if (report == null) return;
-      if ((report['pending'] as num? ?? 0) == 0) {
-        if (++zeros >= 2) return;
+      if (report == null) return (settled: true, seesAnimations: true);
+      // Absent from a guest built before the field existed. Reported rather
+      // than silently treated as zero: that guest settles for images alone, so
+      // its frames can be taken mid-transition — and a comparison whose two
+      // sides settle by different rules differs for a reason that is not the
+      // branch's.
+      seesAnimations = report.containsKey('transient');
+      var pending = report['pending'] as num? ?? 0;
+      var transient = report['transient'] as num? ?? 0;
+      if (pending == 0 && transient == 0) {
+        // Twice, because one quiet frame is what the frame *before* an
+        // animation starts also looks like.
+        if (++zeros >= 2) {
+          return (settled: true, seesAnimations: seesAnimations);
+        }
       } else {
         zeros = 0;
       }
     }
+    return (settled: false, seesAnimations: seesAnimations);
   }
 
   Future<void> close() async {

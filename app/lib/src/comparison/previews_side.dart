@@ -107,6 +107,21 @@ class PreviewsSide implements ComparisonSide {
           if (errors.firstOrNull case var complaint?) {
             complained[frame.entry.id] = complaint.exception;
           }
+          // **Said, not silently compared.** A preview that never stops moving
+          // is photographed at whatever point the deadline fell on, so a
+          // difference between the two sides may be the clock rather than the
+          // branch. Both sides carry the same note, so it cancels and the row
+          // stays quiet — until only one side animates, which is itself the
+          // finding.
+          if (!frame.settled) {
+            complained[frame.entry.id] =
+                'still animating when it was captured, so this picture is not '
+                'reproducible';
+          } else if (!frame.seesAnimations) {
+            complained[frame.entry.id] =
+                'this side cannot tell whether anything was still animating, '
+                'so the frame may have been taken mid-transition';
+          }
           await onFrame(
             RenderedEntry(
               entryId: frame.entry.id,

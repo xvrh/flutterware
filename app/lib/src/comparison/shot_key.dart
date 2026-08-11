@@ -27,7 +27,8 @@ class ShotKey {
   ///
   /// v2 — the generated entrypoint pins the clock through `package:clock`
   /// rather than through flutterware's own wrapper.
-  static const revision = 'v2';
+  /// v3 — a capture waits for animations to stop, not only for images.
+  static const revision = 'v3';
 
   /// [closure] is a [SourceClosure.fingerprint]; [sdk] identifies the engine
   /// (see `SdkIdentity`); [axes] and [knobs] are whatever was applied.

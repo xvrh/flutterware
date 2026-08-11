@@ -402,14 +402,19 @@ class ComparisonRunner {
   ComparedItem _compare(String id, ({String base, String head}) key) {
     var baseMeta = cache.meta(key.base)!;
     var headMeta = cache.meta(key.head)!;
-    // The head side's, not both: a complaint present on base too is the state
-    // of the world rather than something this branch did, and the row is
-    // `same` anyway.
+    // The head side's, or the base's said as the base's. A complaint present on
+    // both is the state of the world rather than something this branch did; one
+    // the *base* alone makes is usually a skew in the tooling that rendered it,
+    // and that is the sentence which separates "the branch changed this" from
+    // "the two sides were photographed by different rules".
     var complaint = headMeta.complaint;
+    complaint ??= baseMeta.complaint == null
+        ? null
+        : 'on base: ${baseMeta.complaint}';
     return ComparedItem.of(
       id: id,
       shots: key,
-      note: complaint == baseMeta.complaint ? null : complaint,
+      note: headMeta.complaint == baseMeta.complaint ? null : complaint,
       pixels: PixelDiff.of(
         base: cache.read(key.base)!,
         baseWidth: baseMeta.width,
