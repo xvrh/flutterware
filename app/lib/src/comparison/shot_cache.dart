@@ -60,6 +60,29 @@ class ShotCache {
     staging.renameSync(path);
   }
 
+  /// The tree taken off the same frame, filed beside it.
+  ///
+  /// Same key, because it is the same render: a tree that came from a
+  /// different build than the picture is the exact thing
+  /// `HeadlessCatalog.observe`'s one-render rule exists to prevent, and
+  /// splitting the key here would reintroduce it through the back door.
+  void writeTree(String key, Map<String, Object?> tree) {
+    var path = '${_pathFor(key)}.tree.json';
+    Directory(p.dirname(path)).createSync(recursive: true);
+    File(path).writeAsStringSync(jsonEncode(tree));
+  }
+
+  Map<String, Object?>? readTree(String key) {
+    var file = File('${_pathFor(key)}.tree.json');
+    if (!file.existsSync()) return null;
+    try {
+      var json = jsonDecode(file.readAsStringSync());
+      return json is Map<String, Object?> ? json : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
   /// Two levels of fan-out, as every content-addressed store does it: a
   /// hundred thousand shots in one directory is a directory listing nothing
   /// wants to do.

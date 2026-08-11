@@ -66,10 +66,20 @@ class SdkMatch {
 class SdkIdentity {
   const SdkIdentity({
     required this.root,
+    this.pinned,
     this.version,
     this.frameworkRevision,
     this.engineHash,
   });
+
+  /// The version `.fvmrc` asks for, when the checkout pins one.
+  ///
+  /// **Versioned, unlike everything else here.** `.fvm/flutter_sdk` is a
+  /// symlink some tool created and `.gitignore` hides; `.fvmrc` is a file the
+  /// commit itself carries. So it is the checkout's own claim about which SDK
+  /// it needs, and it outranks a link that a comparison may well have made
+  /// itself — which is exactly what a base checkout's link is.
+  final String? pinned;
 
   /// The resolved SDK directory.
   final String root;
@@ -84,7 +94,7 @@ class SdkIdentity {
   /// do not, whatever the framework says.
   final String? engineHash;
 
-  String get describe => version ?? root;
+  String get describe => pinned ?? version ?? root;
 
   /// Whether [other] would put the same pixels on screen.
   ///
@@ -98,6 +108,13 @@ class SdkIdentity {
   /// written by the SDK itself, so its absence says the tool is looking at
   /// something it does not understand.
   bool rendersAs(SdkIdentity other) {
+    // Before the root, because a base checkout is handed a link to the head's
+    // SDK so that it can build at all. If the two commits pin different
+    // versions, that link is the tool papering over the mismatch it exists to
+    // report.
+    if (pinned != null && other.pinned != null && pinned != other.pinned) {
+      return false;
+    }
     if (root == other.root) return true;
     if (engineHash != null && other.engineHash != null) {
       return engineHash == other.engineHash &&
@@ -131,10 +148,23 @@ class SdkIdentity {
     var meta = await _metadata(sdk.root);
     return SdkIdentity(
       root: sdk.root,
+      pinned: _pinned(checkout),
       version: meta?.version,
       frameworkRevision: meta?.framework,
       engineHash: meta?.engine,
     );
+  }
+
+  /// The version in `<checkout>/.fvmrc`, or null where there is none.
+  static String? _pinned(String checkout) {
+    var file = File(p.join(checkout, '.fvmrc'));
+    if (!file.existsSync()) return null;
+    try {
+      var json = jsonDecode(file.readAsStringSync());
+      return json is Map ? json['flutter'] as String? : null;
+    } on FormatException {
+      return null;
+    }
   }
 
   static Future<({String? version, String? framework, String? engine})?>

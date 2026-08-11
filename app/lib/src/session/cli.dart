@@ -7,11 +7,20 @@ import 'package:path/path.dart' as p;
 import '../changes/changes_config_cache.dart';
 import '../changes/changes_probe.dart';
 import '../changes/changes_text.dart';
+import '../comparison/base_checkout.dart';
+import '../comparison/base_ref.dart';
+import '../comparison/channels.dart';
+import '../comparison/previews_side.dart';
+import '../comparison/runner.dart';
+import '../comparison/shot_cache.dart';
+import '../comparison/tree_diff.dart';
 import '../constants.dart';
+import '../plugins/native/previews_core.dart';
 import '../plugins/plugin_core.dart';
 import '../shell/repo_layout.dart';
 import '../shell/worktree_discovery.dart';
 import '../utils/flutter_sdk.dart';
+import '../utils/run_dir.dart';
 import '../worktrees/facts.dart';
 import '../worktrees/facts_probe.dart';
 import '../worktrees/facts_store.dart';
@@ -359,6 +368,7 @@ class FwCli {
         ),
         'mcp' => await _mcp(),
         'capture' => await _capture(rest, json: json, verbose: verbose),
+        'compare' => await _compare(rest, json: json),
         'help' || '--help' || '-h' => _help(rest.firstOrNull),
         _ => fail('unknown command "$command". Try `fw help`.'),
       };
@@ -366,6 +376,178 @@ class FwCli {
       err.writeln('fw: $e');
       return 1;
     }
+  }
+
+  /// Compares this worktree's previews against its base.
+  ///
+  /// The order is the design and it is visible in the output: the SDK check
+  /// refuses before anything is checked out, the skip rule decides before
+  /// anything is rendered, and only then does a guest start. A branch that
+  /// touched no preview prints its verdict without compiling anything.
+  Future<int> _compare(List<String> arguments, {required bool json}) async {
+    String? baseRef;
+    String? packagePath;
+    var only = <String>[];
+    for (var argument in arguments) {
+      if (argument.startsWith('--base=')) {
+        baseRef = argument.substring('--base='.length);
+      } else if (argument.startsWith('--package=')) {
+        packagePath = argument.substring('--package='.length);
+      } else if (argument.startsWith('--entry=')) {
+        only.add(argument.substring('--entry='.length));
+      } else if (argument.startsWith('-')) {
+        return fail('unknown option "$argument". Try `fw help compare`.');
+      }
+    }
+
+    var session = await openSession();
+    try {
+      PreviewsCore core;
+      try {
+        core = session.requireCore(uiCatalogPluginId) as PreviewsCore;
+      } on SessionException catch (e) {
+        return fail('$e');
+      }
+      var packageInWorktree = packagePath ?? core.packages.firstOrNull;
+      if (packageInWorktree == null) {
+        return fail(
+          'no package declares previews, so there is nothing to compare.',
+        );
+      }
+
+      // The two sides are two *checkouts*, not two package directories: a
+      // base checkout mirrors the whole worktree, so the package has to be
+      // named relative to its top level. Running this from inside
+      // `examples/example` reported every entry as added until it did.
+      var top = await BaseRef.topLevelOf(session.worktree.path);
+      var package = p.relative(
+        p.normalize(p.join(session.worktree.path, packageInWorktree)),
+        from: top,
+      );
+      BaseRef base;
+      try {
+        base = await BaseRef.resolve(top, ref: baseRef);
+      } on BaseRefError catch (e) {
+        return fail('$e');
+      }
+
+      var sdk = session.workspace.flutterSdk;
+      out.writeln('Comparing against ${base.against} (${_sha(base.sha)})…');
+      var checkout = await BaseCheckout.ensure(
+        repoRoot: top,
+        sha: base.sha,
+        cacheRoot: BaseCheckout.defaultRoot,
+        resolve: (path) async {
+          // `.fvm/flutter_sdk` is a link some tool made and `.gitignore`
+          // hides, so a fresh checkout has none and would resolve to whatever
+          // SDK happens to be running this. The base is given the head's, and
+          // what makes that legitimate rather than a fudge is that `.fvmrc`
+          // *is* versioned — `SdkIdentity.pinned` compares the two commits'
+          // own claims before it looks at any link.
+          var link = Link(p.join(path, '.fvm', 'flutter_sdk'));
+          if (!link.existsSync()) {
+            Directory(p.dirname(link.path)).createSync(recursive: true);
+            link.createSync(sdk.root);
+          }
+          // The base is the same resolution as the head, but it is a
+          // *different directory*, and pub resolves per directory.
+          out.writeln('Resolving the base checkout…');
+          var result = await Process.run(sdk.flutter, [
+            'pub',
+            'get',
+          ], workingDirectory: path);
+          if (result.exitCode != 0) {
+            throw StateError(
+              'pub get failed in the base checkout:\n${result.stderr}',
+            );
+          }
+        },
+      );
+
+      var runner = ComparisonRunner(
+        headRoot: top,
+        baseRoot: checkout.path,
+        baseSha: base.sha,
+        cache: ShotCache(p.join(flutterwareDir(), 'shots')),
+        only: only.isEmpty ? null : only,
+        side: PreviewsSide(
+          dartExecutable: p.join(sdk.root, 'bin', 'dart'),
+          flutterSdkRoot: sdk.root,
+          appToolDirectory: session.workspace.appContext.appToolDirectory.path,
+          packagePath: package,
+          root: core.rootFor(packageInWorktree),
+          previewAnnotations: core.previewAnnotationsFor(packageInWorktree),
+        ),
+      );
+
+      ComparisonResult result;
+      try {
+        result = await runner.run();
+      } on ComparisonRefused catch (e) {
+        return fail('$e');
+      }
+
+      var index = ComparisonRunner.writeIndex(
+        result,
+        p.join(
+          flutterwareDir(),
+          'comparisons',
+          session.worktree.name,
+          'index.json',
+        ),
+      );
+
+      if (json) {
+        out.writeln(
+          const JsonEncoder.withIndent('  ').convert(result.toJson()),
+        );
+        return 0;
+      }
+      for (var item in result.items) {
+        if (item.state == ComparedState.same ||
+            item.state == ComparedState.skipped) {
+          continue;
+        }
+        out.writeln(
+          '  ${item.state.name.padRight(10)} ${item.id}'
+          '${item.note == null ? '' : '  — ${item.note}'}',
+        );
+        for (var delta
+            in item.tree?.diff.deltas.take(3) ?? const <TreeDelta>[]) {
+          out.writeln('             ${_nearest(delta)}');
+        }
+      }
+      out.writeln(
+        '${result.items.length} entries, ${result.rendered} rendered, '
+        '${result.countOf(ComparedState.skipped)} skipped '
+        'in ${result.elapsed.inMilliseconds}ms',
+      );
+      out.writeln('  ${index.path}');
+      return 0;
+    } finally {
+      session.dispose();
+    }
+  }
+
+  String _sha(String sha) => sha.length > 8 ? sha.substring(0, 8) : sha;
+
+  /// A tree delta with the top of its path cut off.
+  ///
+  /// The path is every widget from the entry's root down, which in a terminal
+  /// is one line of chrome per finding — `KeyedSubtree › PreviewShell ›
+  /// ValueListenableBuilder › MaterialApp › Scaffold › …` before anything that
+  /// changed. The last two names are the ones that changed and what holds it;
+  /// the whole path stays in `index.json` for a reader with room for it.
+  String _nearest(TreeDelta delta) {
+    var parts = delta.path.split(' › ');
+    var tail = parts.length <= 2 ? parts : parts.sublist(parts.length - 2);
+    return switch (delta.kind) {
+      TreeDeltaKind.added => '+ ${tail.join(' › ')}',
+      TreeDeltaKind.removed => '- ${tail.join(' › ')}',
+      _ =>
+        '${tail.join(' › ')} ${delta.property} '
+            '${delta.base}→${delta.head}',
+    };
   }
 
   /// Serves MCP until the client hangs up.
