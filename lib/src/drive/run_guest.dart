@@ -6,6 +6,7 @@ import '../inspect/guest_errors.dart';
 import '../inspect/guest_images.dart';
 import '../inspect/guest_inspect.dart';
 import '../inspect/guest_logs.dart';
+import '../server/vm_transport.dart';
 import 'guest_drive.dart';
 import 'human_actions.dart';
 
@@ -45,6 +46,11 @@ FutureOr<void> runGuest(FutureOr<void> Function() appMain) {
       inspector: inspector,
       humanActions: humanActions,
     ).registerExtensions();
+    // The channel transport, with no channels on it yet. Installed here rather
+    // than by whoever first has something to report, because registering an
+    // extension after the host has already looked for it is a race the host
+    // cannot win — and an empty channel list is a real answer.
+    GuestChannels.install();
     return appMain();
   });
 }

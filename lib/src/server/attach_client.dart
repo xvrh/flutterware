@@ -1,33 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'attach_session.dart';
 import 'protocol.dart';
+
+export 'attach_session.dart' show InspectorEvent, InspectorRequestException;
 
 /// One event received from an inspected server — replayed from its ring or
 /// live off its tail.
-class ServerEvent {
-  ServerEvent({
-    required this.channel,
-    required this.id,
-    required this.time,
-    required this.payload,
-    required this.isReplay,
-    this.rid,
-  });
-
-  final String channel;
-  final int id;
-  final DateTime time;
-
-  /// The correlation id an adapter stamped — the HTTP request this event
-  /// happened under, for everything the shelf middleware wraps.
-  final String? rid;
-
-  final Map<String, Object?> payload;
-
-  /// True for events that predate this attachment.
-  final bool isReplay;
-}
+///
+/// The server-facing spelling of [InspectorEvent]: the same type, under the
+/// name this library has always published.
+typedef ServerEvent = InspectorEvent;
 
 /// What the server answered `meta/attach` with.
 class ServerHello {
@@ -60,6 +44,9 @@ class ServerHello {
 /// writes nothing to a connection that has not attached.
 class ServerAttachClient {
   ServerAttachClient._(this.handle, this._socket) {
+    _session = AttachSession(
+      sendFrame: (frame) => _socket.write(encodeFrame(frame)),
+    );
     _socket
         .cast<List<int>>()
         .transform(utf8.decoder)
@@ -82,8 +69,8 @@ class ServerAttachClient {
     ).timeout(timeout);
     var client = ServerAttachClient._(handle, socket);
     try {
-      client._hello = await client
-          ._request(metaChannel, metaAttach)
+      client._hello = await client._session
+          .attach()
           .then(_decodeHello)
           .timeout(timeout);
       return client;
@@ -96,36 +83,27 @@ class ServerAttachClient {
   final ServerHandle handle;
   final Socket _socket;
 
+  /// The protocol bookkeeping — correlation, replay boundary, event list —
+  /// shared with every other attacher. This class is only the socket.
+  late final AttachSession _session;
+
   ServerHello? _hello;
 
   /// Available once [connect] returned.
   ServerHello get hello => _hello!;
 
   /// Every event this attachment has seen — the replay, then the live tail.
-  ///
-  /// A retained list rather than a bare stream, deliberately: the server
-  /// replays in the same socket flush as the hello, so by the time [connect]
-  /// returns the replay has already been read — a broadcast stream would have
-  /// dropped it before the caller could subscribe. Bounded by the server's
-  /// ring plus this attachment's lifetime.
-  List<ServerEvent> get received => List.unmodifiable(_received);
-  final _received = <ServerEvent>[];
+  List<ServerEvent> get received => _session.received;
 
   /// Fires after each event is appended to [received] — a change signal, not
   /// the storage.
-  Stream<ServerEvent> get events => _events.stream;
-  final _events = StreamController<ServerEvent>.broadcast();
+  Stream<ServerEvent> get events => _session.events;
 
   /// Flips when the replay boundary passes; events after this are live.
-  bool get replayComplete => _replayComplete;
-  var _replayComplete = false;
+  bool get replayComplete => _session.replayComplete;
 
   /// Resolves when the server goes away.
-  Future<void> get done => _done.future;
-  final _done = Completer<void>();
-
-  final _pending = <int, Completer<Map<String, Object?>>>{};
-  var _nextRequestId = 1;
+  Future<void> get done => _session.done;
 
   /// Sends a `req` frame and returns the response payload; throws
   /// [ServerRequestException] when the server answers with `err` — a missing
@@ -134,96 +112,19 @@ class ServerAttachClient {
     String channel,
     String method, [
     Map<String, Object?> params = const {},
-  ]) => _request(channel, method, params);
+  ]) => _session.request(channel, method, params);
 
   /// The lazily-held details of one event — headers, bodies — or null when
   /// the server never captured them or has since evicted them.
-  Future<Map<String, Object?>?> details(int eventId) async {
-    var response = await _request(metaChannel, metaDetail, {'event': eventId});
-    var details = response['details'];
-    return details is Map ? details.cast<String, Object?>() : null;
-  }
-
-  Future<Map<String, Object?>> _request(
-    String channel,
-    String method, [
-    Map<String, Object?> params = const {},
-  ]) {
-    var id = _nextRequestId++;
-    var completer = Completer<Map<String, Object?>>();
-    _pending[id] = completer;
-    _socket.write(
-      encodeFrame({
-        frameChannel: channel,
-        frameType: typeRequest,
-        frameRequestId: id,
-        frameMethod: method,
-        framePayload: params,
-      }),
-    );
-    return completer.future;
-  }
+  Future<Map<String, Object?>?> details(int eventId) =>
+      _session.details(eventId);
 
   void _onLine(String line) {
     var frame = tryDecodeFrame(line);
-    if (frame == null) return;
-    switch (frame[frameType]) {
-      case typeEvent:
-        _onEvent(frame);
-      case typeResponse || typeError:
-        var id = frame[frameRequestId];
-        var completer = id is int ? _pending.remove(id) : null;
-        if (completer == null) return;
-        var payload = frame[framePayload];
-        var map = payload is Map
-            ? payload.cast<String, Object?>()
-            : <String, Object?>{};
-        if (frame[frameType] == typeError) {
-          completer.completeError(
-            ServerRequestException(map['message']?.toString() ?? 'error'),
-          );
-        } else {
-          completer.complete(map);
-        }
-    }
+    if (frame != null) _session.receive(frame);
   }
 
-  void _onEvent(Map<String, Object?> frame) {
-    var channel = frame[frameChannel];
-    if (channel is! String) return;
-    var payload = frame[framePayload];
-    var map = payload is Map
-        ? payload.cast<String, Object?>()
-        : <String, Object?>{};
-    if (channel == metaChannel && map['type'] == metaReplayDone) {
-      _replayComplete = true;
-      return;
-    }
-    var ts = frame[frameTimestamp];
-    var event = ServerEvent(
-      channel: channel,
-      id: frame[frameEventId] is int ? frame[frameEventId]! as int : 0,
-      time: ts is int
-          ? DateTime.fromMillisecondsSinceEpoch(ts)
-          : DateTime.now(),
-      rid: frame[frameCorrelation] as String?,
-      payload: map,
-      isReplay: !_replayComplete,
-    );
-    _received.add(event);
-    _events.add(event);
-  }
-
-  void _onClosed() {
-    if (!_done.isCompleted) _done.complete();
-    for (var completer in _pending.values) {
-      if (!completer.isCompleted) {
-        completer.completeError(ServerRequestException('server disconnected'));
-      }
-    }
-    _pending.clear();
-    unawaited(_events.close());
-  }
+  void _onClosed() => _session.closed('server disconnected');
 
   Future<void> close() async {
     _socket.destroy();
@@ -245,14 +146,8 @@ class ServerAttachClient {
   );
 }
 
-class ServerRequestException implements Exception {
-  ServerRequestException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
-}
+/// The server-facing spelling of [InspectorRequestException].
+typedef ServerRequestException = InspectorRequestException;
 
 /// [ServerAttachClient.connect] with `attachToLiveSession`'s cleanup rule: a
 /// handle that will not connect is deleted on the way past, and null comes

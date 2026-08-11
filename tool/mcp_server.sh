@@ -100,4 +100,11 @@ if ! sdk_current || [ ! -f .dart_tool/package_config.json ]; then
   trap - EXIT INT TERM
 fi
 
-exec fvm dart run flutterware_app:mcp
+# APP_TOOL_PATH is the "record, do not discover" half of the contract the
+# launcher normally fills in. `Session.findAppToolDirectory` can resolve this
+# package on its own now, but recording it here is free and keeps the catalog
+# daemon working even if that resolution ever stops answering — which is how
+# it was found: the server ran for weeks resolving null, and every previews
+# screenshot refused with a message about `appPackageRoot` that named the
+# symptom rather than the invocation.
+exec env APP_TOOL_PATH="$PWD/app" fvm dart run flutterware_app:mcp

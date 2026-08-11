@@ -46,7 +46,12 @@ enum RunViewKind {
   /// while the app is building or after it died: the journal is a file.
   steps,
 
-  logs;
+  logs,
+
+  /// What the *app* reports about itself — the devbar plugins that declared a
+  /// panel. `Screen` is what flutterware can see of a run; this is what the
+  /// app chose to say.
+  panels;
 
   static RunViewKind? byName(String name) {
     for (var kind in values) {

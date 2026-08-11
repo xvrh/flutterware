@@ -709,6 +709,116 @@ note: String?
 | `tree` | boolean | no | false | Include the widget tree in the reply. Off by default because a real app is thousands of tokens of tree; the texts ride along either way. |
 | `maxSide` | integer | no | — | Cap the screenshot's longest side, in pixels — the render is scaled, not re-encoded. Full resolution when omitted. |
 
+#### `panels` — Panels
+
+What the app says about *itself*: the panels its own devbar plugins declare, with every knob and its live value, every action and its parameters, the states it can be asked for and the feeds it reports on. Where `observe` sees what flutterware can see of the screen, this is what the app chose to expose — feature flags, a simulated push, whatever the project wrote. Answers plainly for an app with no `Devbar` mounted. One attach per call, so recent feed events replay from the app's ring rather than needing a live subscription.
+
+```sh
+fw run run panels [--device=…] [--entrypoint=…] [--worktree=…] [--panel=…] [--events=…]
+```
+
+Returns `RunPanelsResult`:
+
+```
+device: String
+entrypoint: String
+panels: List<Map<String, Object?>>   # One `PanelDescriptor` per panel: its knobs with their live values, its actions with their parameters, its states and its feeds.
+events: Map<String, List<Map<String, Object?>>>   # Recent feed events, keyed `<panel>/<feed>` — the same channel name the descriptor gives.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `panel` | string | no | — | One panel by id; all of them when omitted |
+| `events` | integer | no | 20 | How many recent events to bring back per feed, newest kept. Zero for the declarations alone. |
+
+#### `panelInvoke` — Run a panel action
+
+Runs one of the commands a panel declares, inside the app. This is the reach a test cannot buy: a push notification delivered with no backend, a permission answered with no device. The action ids and their parameters come from `panels`; a refusal is the app's own words, not a wrapper's.
+
+```sh
+fw run run panelInvoke [--device=…] [--entrypoint=…] [--worktree=…] --panel=<string> --action=<string> [--args=…] [--event=…]
+```
+
+Returns `RunPanelResult`:
+
+```
+device: String
+entrypoint: String
+panel: String
+result: Map<String, Object?>   # What the app answered.
+knobs: List<Map<String, Object?>>?   # The panel's knobs **after** the call — what the app now holds, which is not always what was asked for: an app may clamp a value or refuse it.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `panel` | string | yes | — | The panel id `panels` reports |
+| `action` | string | yes | — | The action id, from that panel's `actions` |
+| `args` | string | no | — | The action's arguments as a JSON object — {"title": "Order ready", "link": "/cart"}. A panel action takes whatever it declared, so this stays free-form rather than one flag per parameter. |
+| `event` | integer | no | — | For an item action: the id of the feed event to run it on, as `panels` reports it. |
+
+#### `panelKnob` — Set a panel knob
+
+Writes one of a panel's read-write values — a feature flag, a permission, an environment. Answers with the knobs **after** the write, because an app is allowed to clamp or refuse and a reply that echoed the request would be a lie. A picker is set by its label.
+
+```sh
+fw run run panelKnob [--device=…] [--entrypoint=…] [--worktree=…] --panel=<string> --knob=<string> --value=<string>
+```
+
+Returns `RunPanelResult`:
+
+```
+device: String
+entrypoint: String
+panel: String
+result: Map<String, Object?>   # What the app answered.
+knobs: List<Map<String, Object?>>?   # The panel's knobs **after** the call — what the app now holds, which is not always what was asked for: an app may clamp a value or refuse it.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `panel` | string | yes | — | — |
+| `knob` | string | yes | — | The knob name `panels` reports |
+| `value` | string | yes | — | The new value. Parsed as JSON when it parses — so true, 3 and "text" arrive as the right type — and taken as a plain string when it does not. |
+
+#### `panelState` — Read a panel state
+
+Asks the app for one snapshot it offers — the permissions it holds, its package info, its own account of the device. A separate call from `panels` because producing one can be expensive, and nothing should pay for it by listing.
+
+```sh
+fw run run panelState [--device=…] [--entrypoint=…] [--worktree=…] --panel=<string> --state=<string>
+```
+
+Returns `RunPanelResult`:
+
+```
+device: String
+entrypoint: String
+panel: String
+result: Map<String, Object?>   # What the app answered.
+knobs: List<Map<String, Object?>>?   # The panel's knobs **after** the call — what the app now holds, which is not always what was asked for: an app may clamp a value or refuse it.
+note: String?
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `device` | choice | no | — | Which device the app is on; the only running app when omitted |
+| `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
+| `worktree` | string | no | — | Worktree name or path, to reach a run another checkout launched; only runs from this worktree match when omitted |
+| `panel` | string | yes | — | — |
+| `state` | string | yes | — | The state id `panels` reports |
+
 #### `emulators` — Emulators
 
 Every emulator and simulator this machine could boot, and whether each is already up. Different from devices, which only lists the ones that are: an emulator that is not running is not a device. Costs a few seconds — it starts a flutter daemon.

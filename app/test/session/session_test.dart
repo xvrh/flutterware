@@ -7,6 +7,7 @@ import 'package:flutterware_app/src/plugins/native/dependencies_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/session/session.dart';
 import 'package:flutterware_app/src/shell/repo_layout.dart';
+import 'package:path/path.dart' as p;
 
 import '../support/declared_dependencies.dart';
 
@@ -14,6 +15,8 @@ import '../support/declared_dependencies.dart';
 /// real `tool/flutterware.dart`. Nothing here computes anything: the laziness
 /// rule is most of what is being asserted.
 void main() {
+  _appToolDirectoryTests();
+
   late Session session;
 
   setUp(() async {
@@ -201,5 +204,35 @@ void main() {
       searchReport(dependencies.report, 'auto_size', worktree: 'wt'),
       isEmpty,
     );
+  });
+}
+
+/// `Session.findAppToolDirectory()` has to answer however this process was
+/// started, because the ways differ and none of them is exotic: the launcher
+/// records `APP_TOOL_PATH`, a source run derives from `Platform.script`, and
+/// `dart run flutterware_app:<bin>` — the form `.mcp.json` uses — gets a
+/// snapshot path under `.dart_tool/pub/bin/` that derives to nothing.
+///
+/// That last case shipped broken: the MCP server resolved null and every
+/// catalog action refused with a message about `appPackageRoot` that named the
+/// symptom rather than the invocation. A test here rather than at the previews
+/// daemon because this is the function that was wrong.
+void _appToolDirectoryTests() {
+  test('the app package root is recognised by name, not by having a '
+      'pubspec', () {
+    // This repo is a workspace whose *root* is also a package, so "a
+    // pubspec.yaml is here" was satisfied by `flutterware` itself — and the
+    // catalog daemon was then looked for one directory tree away from where it
+    // lives. The name is the check.
+    var app = Directory.current.path;
+    var repoRoot = p.dirname(app);
+
+    expect(Session.debugAppPackageRootAt(app)?.path, app);
+    expect(
+      Session.debugAppPackageRootAt(repoRoot),
+      isNull,
+      reason: 'the root package is `flutterware`, not `flutterware_app`',
+    );
+    expect(Session.debugAppPackageRootAt(p.join(app, 'lib')), isNull);
   });
 }

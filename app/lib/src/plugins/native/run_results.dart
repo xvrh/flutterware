@@ -859,3 +859,76 @@ class RunActResult implements PluginResult, ProducesArtifacts {
   @override
   Map<String, Object?> toJson() => _$RunActResultToJson(this);
 }
+
+/// `panels` — what the running app says it offers, from its own devbar
+/// plugins.
+///
+/// **The descriptors travel raw.** They are already published JSON — the same
+/// `PanelDescriptor.toJson` the cockpit decodes — and re-modelling them here
+/// would be a second model of the app's declaration, kept in step by hand.
+/// `panel_client.dart` refuses that for the same reason.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunPanelsResult implements PluginResult {
+  RunPanelsResult({
+    required this.device,
+    required this.entrypoint,
+    required this.panels,
+    this.events = const {},
+    this.note,
+  });
+
+  final String device;
+  final String entrypoint;
+
+  /// One `PanelDescriptor` per panel: its knobs with their live values, its
+  /// actions with their parameters, its states and its feeds.
+  final List<Map<String, Object?>> panels;
+
+  /// Recent feed events, keyed `<panel>/<feed>` — the same channel name the
+  /// descriptor gives. Oldest first, capped by the `events` argument.
+  final Map<String, List<Map<String, Object?>>> events;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunPanelsResultToJson(this);
+}
+
+/// One call against one panel: an action run, a knob set, a state read.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunPanelResult implements PluginResult {
+  RunPanelResult({
+    required this.device,
+    required this.entrypoint,
+    required this.panel,
+    required this.result,
+    this.knobs,
+    this.note,
+  });
+
+  final String device;
+  final String entrypoint;
+  final String panel;
+
+  /// What the app answered. For an action, whatever its handler returned; for
+  /// a state, the snapshot.
+  final Map<String, Object?> result;
+
+  /// The panel's knobs **after** the call — what the app now holds, which is
+  /// not always what was asked for: an app may clamp a value or refuse it.
+  /// Only on `panelKnob`.
+  final List<Map<String, Object?>>? knobs;
+
+  final String? note;
+
+  @override
+  Map<String, Object?> toJson() => _$RunPanelResultToJson(this);
+}

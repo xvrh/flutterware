@@ -16,7 +16,16 @@ export 'shop_strings.dart';
 /// under every language: `tap(ShopKeys.addToCart)` does not care what the
 /// button says.
 class ShopApp extends StatefulWidget {
-  const ShopApp({super.key});
+  const ShopApp({super.key, this.navigatorKey, this.overlay});
+
+  /// Reaches the navigator from outside the widget tree. Ordinary app
+  /// machinery: a notification tapped on a lock screen is delivered to a
+  /// callback, not to a widget, so something has to hold the key.
+  final GlobalKey<NavigatorState>? navigatorKey;
+
+  /// Painted above every screen, below nothing. Brewline has nothing of its
+  /// own to put here; the push demo puts its banner there.
+  final Widget? overlay;
 
   @override
   State<ShopApp> createState() => _ShopAppState();
@@ -39,8 +48,22 @@ class _ShopAppState extends State<ShopApp> {
       ],
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),
+      navigatorKey: widget.navigatorKey,
       // Above the navigator, so every pushed route sees the cart.
-      builder: (context, child) => CartScope(cart: _cart, child: child!),
+      builder: (context, child) => CartScope(
+        cart: _cart,
+        child: widget.overlay == null
+            ? child!
+            : Stack(
+                children: [
+                  child!,
+                  // Positioned rather than a plain child: an overlay sized to
+                  // the whole stack would swallow every tap meant for the app
+                  // underneath it.
+                  Positioned(top: 0, left: 0, right: 0, child: widget.overlay!),
+                ],
+              ),
+      ),
       home: const WelcomeScreen(),
     );
   }

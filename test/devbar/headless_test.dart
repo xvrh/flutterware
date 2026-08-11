@@ -1,0 +1,157 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/devbar.dart';
+
+/// The subject: something with enough going on that a stray `FittedBox` or an
+/// extra `Stack` child would move a pixel.
+Widget _app() => MaterialApp(
+  home: Scaffold(
+    appBar: AppBar(title: const Text('Subject')),
+    body: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('hello'),
+          Container(width: 120, height: 40, color: Colors.teal),
+          const Icon(Icons.star, size: 48),
+        ],
+      ),
+    ),
+    floatingActionButton: FloatingActionButton(
+      onPressed: () {},
+      child: const Icon(Icons.add),
+    ),
+  ),
+);
+
+/// Photographs the root view exactly the way the run guest does
+/// (`lib/src/drive/guest_drive.dart`'s `_screenshot`) — the same layer, the
+/// same rasterisation. Comparing anything else would be comparing something
+/// the cockpit never looks at.
+Future<Uint8List> _shot(WidgetTester tester, Widget child) async {
+  await tester.pumpWidget(child);
+  await tester.pumpAndSettle();
+  var view = tester.binding.renderViews.single;
+  var dpr = view.flutterView.devicePixelRatio;
+  var image = (view.debugLayer! as OffsetLayer).toImageSync(
+    Offset.zero & (view.size * dpr),
+    pixelRatio: 1 / dpr,
+  );
+  late Uint8List bytes;
+  await tester.runAsync(() async {
+    bytes = (await image.toByteData(
+      format: ui.ImageByteFormat.rawRgba,
+    ))!.buffer.asUint8List();
+  });
+  image.dispose();
+  return bytes;
+}
+
+void main() {
+  /// **E2, the gate on the whole devbar split.**
+  ///
+  /// The cockpit photographs the app's tree: every `flutterware_act` reply,
+  /// every scenario shot, every screenshot in the Screen tab. If mounting a
+  /// devbar changes one pixel, then every one of those pictures is of a
+  /// slightly different app than the one that ships, and nobody would ever
+  /// connect the difference back to here.
+  ///
+  /// `overlayVisible: false` deliberately does *not* satisfy this — see the
+  /// test below it, which is why `headless` had to exist as a separate path.
+  testWidgets('a headless devbar leaves the picture byte-identical', (
+    tester,
+  ) async {
+    var bare = await _shot(tester, _app());
+    var wrapped = await _shot(
+      tester,
+      Devbar(plugins: const [], headless: true, child: _app()),
+    );
+
+    expect(wrapped, bare);
+  });
+
+  /// **What `overlayVisible: false` does not buy, measured.**
+  ///
+  /// The pixels *do* match with the panel shut and no plugin adding a button —
+  /// which was not what this design assumed, and is recorded here so nobody
+  /// re-derives the wrong reason. What does not match is the tree, and the
+  /// tree is half of what an `act` reply carries: `Target` resolution walks
+  /// it, `nth` counts in it, and a tap resolves against it.
+  testWidgets('hiding the button leaves the chrome in the tree', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      Devbar(
+        plugins: const [],
+        headless: false,
+        overlayVisible: false,
+        child: _app(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FittedBox), findsWidgets);
+    expect(find.byIcon(Icons.bug_report), findsNothing);
+
+    await tester.pumpWidget(
+      Devbar(plugins: const [], headless: true, child: _app()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FittedBox), findsNothing);
+  });
+
+  testWidgets('a headless devbar still hosts its plugins and its flags', (
+    tester,
+  ) async {
+    var flag = FeatureFlag<bool>('newCheckout', false);
+    DevbarState? state;
+    bool? seen;
+
+    await tester.pumpWidget(
+      Devbar(
+        plugins: [(devbar) => _CountingPlugin()],
+        headless: true,
+        flags: [flag.withValue(true)],
+        child: Builder(
+          builder: (context) {
+            state = Devbar.of(context);
+            seen = flag.dependsOnValue(context);
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(state, isNotNull, reason: 'the state is still findable by plugins');
+    expect(state!.maybePlugin<_CountingPlugin>(), isNotNull);
+    expect(seen, isTrue, reason: 'a flag works with nobody watching the panel');
+  });
+
+  testWidgets('the overlay is absent from the tree, not merely invisible', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      Devbar(plugins: const [], headless: true, child: _app()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.bug_report), findsNothing);
+    expect(find.byType(FittedBox), findsNothing);
+    expect(
+      find.byType(Directionality),
+      findsOneWidget,
+      reason: "the app's own",
+    );
+  });
+}
+
+class _CountingPlugin implements DevbarPlugin {
+  @override
+  void dispose() {}
+}

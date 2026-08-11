@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutterware/channels.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/inspect/node.dart';
@@ -10,6 +11,7 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart' show RPCError;
 
+import '../../run/channel_client.dart';
 import '../../run/connection.dart';
 import '../../run/define_scripts.dart';
 import '../../run/defines.dart';
@@ -22,6 +24,7 @@ import '../../run/inventory.dart';
 import '../../run/journal.dart';
 import '../../run/launch.dart';
 import '../../run/logs.dart';
+import '../../run/panel_client.dart';
 import '../../shell/worktree_discovery.dart';
 import '../../utils/daemon/device.dart';
 import '../../utils/run_dir.dart';
@@ -71,6 +74,10 @@ class RunCore extends PluginCore {
   /// it at a temp dir rather than the developer's real run dir.
   @visibleForTesting
   static String Function() runDirProvider = flutterwareRunDir;
+
+  /// Where this core's run state lives — what production reads, so a test that
+  /// redirects [runDirProvider] redirects everything rather than most things.
+  String get runDir => runDirProvider();
 
   DeviceCache? _cache;
   DeviceDaemon? _daemon;
@@ -1013,6 +1020,130 @@ class RunCore extends PluginCore {
           ],
         ),
         PluginAction(
+          'panels',
+          'Panels',
+          returns: RunPanelsResult,
+          description:
+              'What the app says about *itself*: the panels its own devbar '
+              'plugins declare, with every knob and its live value, every '
+              'action and its parameters, the states it can be asked for and '
+              'the feeds it reports on. Where `observe` sees what flutterware '
+              'can see of the screen, this is what the app chose to expose — '
+              'feature flags, a simulated push, whatever the project wrote. '
+              'Answers plainly for an app with no `Devbar` mounted. One '
+              "attach per call, so recent feed events replay from the app's "
+              'ring rather than needing a live subscription.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'panel',
+              'Panel',
+              required: false,
+              description: 'One panel by id; all of them when omitted',
+            ),
+            const ActionParameter(
+              'events',
+              'Feed events',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '20',
+              description:
+                  'How many recent events to bring back per feed, newest '
+                  'kept. Zero for the declarations alone.',
+            ),
+          ],
+        ),
+        PluginAction(
+          'panelInvoke',
+          'Run a panel action',
+          returns: RunPanelResult,
+          description:
+              'Runs one of the commands a panel declares, inside the app. '
+              'This is the reach a test cannot buy: a push notification '
+              'delivered with no backend, a permission answered with no '
+              'device. The action ids and their parameters come from '
+              "`panels`; a refusal is the app's own words, not a wrapper's.",
+          parameters: [
+            ..._appSelector,
+            const ActionParameter(
+              'panel',
+              'Panel',
+              description: 'The panel id `panels` reports',
+            ),
+            const ActionParameter(
+              'action',
+              'Action',
+              description: "The action id, from that panel's `actions`",
+            ),
+            const ActionParameter(
+              'args',
+              'Arguments',
+              required: false,
+              description:
+                  "The action's arguments as a JSON object — "
+                  '{"title": "Order ready", "link": "/cart"}. A panel action '
+                  'takes whatever it declared, so this stays free-form rather '
+                  'than one flag per parameter.',
+            ),
+            const ActionParameter(
+              'event',
+              'Event',
+              kind: ActionParameterKind.integer,
+              required: false,
+              description:
+                  'For an item action: the id of the feed event to run it '
+                  'on, as `panels` reports it.',
+            ),
+          ],
+        ),
+        PluginAction(
+          'panelKnob',
+          'Set a panel knob',
+          returns: RunPanelResult,
+          description:
+              "Writes one of a panel's read-write values — a feature flag, a "
+              'permission, an environment. Answers with the knobs **after** '
+              'the write, because an app is allowed to clamp or refuse and a '
+              'reply that echoed the request would be a lie. A picker is set '
+              'by its label.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter('panel', 'Panel'),
+            const ActionParameter(
+              'knob',
+              'Knob',
+              description: 'The knob name `panels` reports',
+            ),
+            const ActionParameter(
+              'value',
+              'Value',
+              description:
+                  'The new value. Parsed as JSON when it parses — so true, 3 '
+                  'and "text" arrive as the right type — and taken as a plain '
+                  'string when it does not.',
+            ),
+          ],
+        ),
+        PluginAction(
+          'panelState',
+          'Read a panel state',
+          returns: RunPanelResult,
+          description:
+              'Asks the app for one snapshot it offers — the permissions it '
+              'holds, its package info, its own account of the device. A '
+              'separate call from `panels` because producing one can be '
+              'expensive, and nothing should pay for it by listing.',
+          parameters: [
+            ..._appSelector,
+            const ActionParameter('panel', 'Panel'),
+            const ActionParameter(
+              'state',
+              'State',
+              description: 'The state id `panels` reports',
+            ),
+          ],
+        ),
+        PluginAction(
           'emulators',
           'Emulators',
           returns: RunEmulatorsResult,
@@ -1304,6 +1435,10 @@ class RunCore extends PluginCore {
       'act' => _actAction(arguments),
       'observe' => _actAction({...arguments, 'verb': 'observe'}),
       'navigate' => _actAction({...arguments, 'verb': 'navigate'}),
+      'panels' => _panelsAction(arguments),
+      'panelInvoke' => _panelInvokeAction(arguments),
+      'panelKnob' => _panelKnobAction(arguments),
+      'panelState' => _panelStateAction(arguments),
       'emulators' => _emulatorsAction(),
       'bootEmulator' => _bootEmulatorAction(arguments),
       _ => super.invoke(actionId, arguments: arguments),
@@ -2063,6 +2198,218 @@ class RunCore extends PluginCore {
     } finally {
       await connection.close();
     }
+  }
+
+  /// Attaches to the app's channels for the length of one action.
+  ///
+  /// **A fresh attach per call, deliberately.** The alternative is a cached
+  /// attachment per handle, and the cost of that is a queue nobody is draining
+  /// between calls: the app would ring events for a peer that might never
+  /// return. Attaching costs one round trip and buys the ring's replay, which
+  /// is what makes recent feed events readable at all from a stateless call.
+  ///
+  /// The peer id is unique per call for the same reason the cockpit's is
+  /// unique per pane — two attachers sharing a queue race for it, and the
+  /// drain that loses returns frames the winner already took.
+  Future<T> _withPanels<T>(
+    RunHandle handle,
+    Future<T> Function(RunChannelClient client, RunPanels panels) body,
+  ) async {
+    var uri = handle.vmService;
+    if (uri == null) {
+      throw StateError(
+        '${handle.entrypointLabel} has no VM service yet — it is still '
+        'building. Watch ${handle.logPath}.',
+      );
+    }
+    var connection = await RunConnection.connect(uri);
+    RunChannelClient client;
+    try {
+      client = await RunChannelClient.attach(
+        connection,
+        peer: 'action:${_nextPanelPeer++}',
+      );
+    } on Object {
+      await connection.close();
+      // Not a failure of this call so much as a fact about the app: an app
+      // that mounts no `Devbar` installs no channels, and saying which is the
+      // difference between a bug hunt and reading one line.
+      throw StateError(
+        '${handle.entrypointLabel} is not reporting any panels. An app '
+        'reports them by mounting `Devbar(plugins: …)` around its own widget '
+        'and being launched by flutterware.',
+      );
+    }
+    try {
+      return await body(client, RunPanels(client));
+    } finally {
+      await client.close();
+      await connection.close();
+    }
+  }
+
+  var _nextPanelPeer = 1;
+
+  /// The events this attachment replayed, per feed, newest [limit] kept.
+  Map<String, List<Map<String, Object?>>> _feedEvents(
+    RunChannelClient client,
+    List<PanelDescriptor> panels,
+    int limit,
+  ) {
+    if (limit <= 0) return const {};
+    var wanted = {
+      for (var panel in panels)
+        for (var feed in panel.feeds) panel.feedChannel(feed.id),
+    };
+    var byChannel = <String, List<Map<String, Object?>>>{};
+    for (var event in client.received) {
+      if (!wanted.contains(event.channel)) continue;
+      (byChannel[event.channel] ??= []).add({
+        'event': event.id,
+        'at': event.time.toIso8601String(),
+        if (event.rid != null) 'rid': event.rid,
+        ...event.payload,
+      });
+    }
+    return {
+      for (var entry in byChannel.entries)
+        entry.key: entry.value.length <= limit
+            ? entry.value
+            : entry.value.sublist(entry.value.length - limit),
+    };
+  }
+
+  Future<RunPanelsResult> _panelsAction(Map<String, Object?> arguments) async {
+    var handle = await _selectRunningApp(arguments);
+    var only = arguments['panel'] as String?;
+    var limit = switch (arguments['events']) {
+      null => 20,
+      var value => _intArgument(value, 20),
+    };
+    return _withPanels(handle, (client, panels) async {
+      var listed = await panels.list();
+      var chosen = only == null
+          ? listed
+          : [
+              for (var panel in listed)
+                if (panel.id == only) panel,
+            ];
+      if (only != null && chosen.isEmpty) {
+        throw StateError(
+          'This app declares no panel "$only" — it has '
+          '${listed.isEmpty ? 'none' : listed.map((p) => p.id).join(', ')}.',
+        );
+      }
+      return RunPanelsResult(
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        panels: [for (var panel in chosen) panel.toJson()],
+        events: _feedEvents(client, chosen, limit),
+        note: listed.isEmpty
+            ? 'The app is reporting, but no plugin declared a panel. A devbar '
+                  'plugin joins by implementing `DevbarPanelSource`.'
+            : null,
+      );
+    });
+  }
+
+  Future<RunPanelResult> _panelInvokeAction(
+    Map<String, Object?> arguments,
+  ) async {
+    var handle = await _selectRunningApp(arguments);
+    var panelId = _requiredArgument(arguments, 'panel');
+    var actionId = _requiredArgument(arguments, 'action');
+    var args = _jsonObjectArgument(arguments['args'], 'args');
+    if (arguments['event'] case var event?) {
+      args = {...args, 'event': _intArgument(event, 0)};
+    }
+    return _withPanels(handle, (client, panels) async {
+      var result = await panels.invoke(panelId, actionId, args);
+      return RunPanelResult(
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        panel: panelId,
+        result: result,
+      );
+    });
+  }
+
+  Future<RunPanelResult> _panelKnobAction(
+    Map<String, Object?> arguments,
+  ) async {
+    var handle = await _selectRunningApp(arguments);
+    var panelId = _requiredArgument(arguments, 'panel');
+    var knob = _requiredArgument(arguments, 'knob');
+    var raw = arguments['value'];
+    return _withPanels(handle, (client, panels) async {
+      var knobs = await panels.setKnob(panelId, knob, _looseValue(raw));
+      var after = knobs.where((k) => k.name == knob).firstOrNull;
+      return RunPanelResult(
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        panel: panelId,
+        result: {'knob': knob, 'value': after?.value},
+        knobs: [for (var k in knobs) k.toJson()],
+        note: after == null
+            ? 'The app kept no knob called "$knob" — it may have been declared '
+                  'by a screen that has since unmounted.'
+            : null,
+      );
+    });
+  }
+
+  Future<RunPanelResult> _panelStateAction(
+    Map<String, Object?> arguments,
+  ) async {
+    var handle = await _selectRunningApp(arguments);
+    var panelId = _requiredArgument(arguments, 'panel');
+    var stateId = _requiredArgument(arguments, 'state');
+    return _withPanels(handle, (client, panels) async {
+      var snapshot = await panels.state(panelId, stateId);
+      return RunPanelResult(
+        device: handle.device,
+        entrypoint: handle.entrypoint,
+        panel: panelId,
+        result: snapshot,
+      );
+    });
+  }
+
+  static String _requiredArgument(Map<String, Object?> arguments, String id) {
+    var value = arguments[id];
+    if (value is String && value.isNotEmpty) return value;
+    throw ArgumentError('`$id` is required');
+  }
+
+  /// A knob value the way a caller can actually type one: `true`, `3` and
+  /// `"prod"` all arrive as strings from `fw` and from a form, and the app
+  /// wants the real type. Anything that is not JSON is itself — a bare
+  /// `Staging` is the string, not a syntax error.
+  static Object? _looseValue(Object? raw) {
+    if (raw is! String) return raw;
+    try {
+      return jsonDecode(raw);
+    } on FormatException {
+      return raw;
+    }
+  }
+
+  static Map<String, Object?> _jsonObjectArgument(Object? raw, String id) {
+    if (raw == null) return const {};
+    if (raw is Map) return raw.cast<String, Object?>();
+    if (raw is! String || raw.isEmpty) return const {};
+    Object? decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } on FormatException catch (e) {
+      throw ArgumentError('`$id` is not JSON: $e');
+    }
+    if (decoded is! Map) {
+      throw ArgumentError(
+        '`$id` must be a JSON object, not ${decoded.runtimeType}',
+      );
+    }
+    return decoded.cast<String, Object?>();
   }
 
   /// One file per run, overwritten. A screenshot is an observation of a

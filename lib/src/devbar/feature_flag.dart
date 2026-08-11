@@ -198,7 +198,17 @@ class _FlagToVariableState extends State<_FlagToVariable> {
       return;
     }
 
-    var variable = flag._addVariable(_devbar.variables, flagValue);
+    // A devbar without the variables plugin still carries its flags — they
+    // simply cannot be edited. This used to reach `plugin<VariablesPlugin>()`
+    // unconditionally and throw `Bad state: No element`, which made passing
+    // `flags:` a trap for any app that had not also installed that plugin.
+    var service = _devbar.maybePlugin<VariablesPlugin>();
+    if (service == null) {
+      _flagValues[flag] = FlagRegistration(flagValue);
+      return;
+    }
+
+    var variable = flag._addVariable(service, flagValue);
 
     flagValue = flag.withValue(variable.currentValue);
 
