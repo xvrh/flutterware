@@ -118,17 +118,11 @@ class _ComparisonStageState extends State<ComparisonStage> {
                     split: _split,
                     blend: _blend,
                     blinkHead: _blinkHead,
+                    onSplit: (value) => setState(() => _split = value),
+                    onBlend: (value) => setState(() => _blend = value),
                   ),
           ),
         ),
-        if (base != null && head != null)
-          _Controls(
-            mode: widget.mode,
-            split: _split,
-            blend: _blend,
-            onSplit: (value) => setState(() => _split = value),
-            onBlend: (value) => setState(() => _blend = value),
-          ),
       ],
     );
   }
@@ -148,6 +142,8 @@ class _Body extends StatelessWidget {
     required this.split,
     required this.blend,
     required this.blinkHead,
+    required this.onSplit,
+    required this.onBlend,
     this.diff,
   });
 
@@ -158,6 +154,8 @@ class _Body extends StatelessWidget {
   final double split;
   final double blend;
   final bool blinkHead;
+  final ValueChanged<double> onSplit;
+  final ValueChanged<double> onBlend;
 
   @override
   Widget build(BuildContext context) => switch (mode) {
@@ -192,11 +190,23 @@ class _Body extends StatelessWidget {
         // boundary falls — a button's edge, a baseline — and a soft one is
         // exactly the thing you cannot measure against.
         clip: split,
+        onClip: onSplit,
       ),
     ),
     StageMode.onion => _Framed(
       label: 'base under head',
-      child: _Stacked(base: base, head: head, opacity: blend),
+      child: _Stacked(
+        base: base,
+        head: head,
+        opacity: blend,
+        // Under the frame and no wider than it: a blend has no boundary to
+        // point at, but a control that spans a pane the picture does not still
+        // reads as belonging to something else.
+        blendSlider: (width) => SizedBox(
+          width: width,
+          child: Slider(value: blend, onChanged: onBlend),
+        ),
+      ),
     ),
     StageMode.blink => _Framed(
       label: blinkHead ? 'head' : 'base',
@@ -220,6 +230,8 @@ class _Stacked extends StatelessWidget {
     required this.head,
     this.clip,
     this.opacity = 1.0,
+    this.onClip,
+    this.blendSlider,
   });
 
   final Shot base;
@@ -229,6 +241,12 @@ class _Stacked extends StatelessWidget {
   final double? clip;
   final double opacity;
 
+  /// Moves [clip]. Given, the boundary is dragged **on the frame**.
+  final ValueChanged<double>? onClip;
+
+  /// The onion control, built at the frame's own width.
+  final Widget Function(double width)? blendSlider;
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
@@ -236,32 +254,79 @@ class _Stacked extends StatelessWidget {
       builder: (context, constraints) {
         // Both frames laid on the *base* aspect, so a head that changed size
         // shows that change as a change rather than as a different framing.
-        var box = _fit(base.aspect, constraints.biggest);
+        // The control's room comes off the top first: fitting the picture to
+        // the whole box and then adding a slider under it overflows by exactly
+        // the slider.
+        var available = Size(
+          constraints.maxWidth,
+          constraints.maxHeight - (blendSlider == null ? 0 : _sliderHeight),
+        );
+        var box = _fit(base.aspect, available);
+        void moveTo(Offset local) =>
+            onClip?.call((local.dx / box.width).clamp(0.0, 1.0));
+
         return Center(
-          child: SizedBox(
-            width: box.width,
-            height: box.height,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ShotView(base),
-                if (clip == null)
-                  ShotView(head, opacity: opacity)
-                else ...[
-                  ClipRect(
-                    clipper: _LeftFraction(clip!),
-                    child: ShotView(head),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: box.width,
+                height: box.height,
+                child: GestureDetector(
+                  // **The boundary is dragged where it is.** A slider along the
+                  // bottom of a wide pane is nowhere near the line it moves,
+                  // and a control that far from its effect stops feeling like
+                  // it is moving the line at all.
+                  onTapDown: onClip == null
+                      ? null
+                      : (details) => moveTo(details.localPosition),
+                  onHorizontalDragUpdate: onClip == null
+                      ? null
+                      : (details) => moveTo(details.localPosition),
+                  child: MouseRegion(
+                    cursor: onClip == null
+                        ? MouseCursor.defer
+                        : SystemMouseCursors.resizeLeftRight,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ShotView(base),
+                        if (clip == null)
+                          ShotView(head, opacity: opacity)
+                        else ...[
+                          ClipRect(
+                            clipper: _LeftFraction(clip!),
+                            child: ShotView(head),
+                          ),
+                          Positioned(
+                            left: box.width * clip! - 1,
+                            top: 0,
+                            bottom: 0,
+                            width: 2,
+                            child: ColoredBox(color: colors.accent),
+                          ),
+                          Positioned(
+                            left: box.width * clip! - 7,
+                            top: box.height / 2 - 7,
+                            child: Container(
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color: colors.accent,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: colors.bg, width: 2),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                  Positioned(
-                    left: box.width * clip! - 1,
-                    top: 0,
-                    bottom: 0,
-                    width: 2,
-                    child: ColoredBox(color: colors.accent),
-                  ),
-                ],
-              ],
-            ),
+                ),
+              ),
+              if (blendSlider case var slider?)
+                SizedBox(height: _sliderHeight, child: slider(box.width)),
+            ],
           ),
         );
       },
@@ -482,36 +547,8 @@ class _ModeBar extends StatelessWidget {
   }
 }
 
-/// The one slider the current mode has, and nothing when it has none.
-class _Controls extends StatelessWidget {
-  const _Controls({
-    required this.mode,
-    required this.split,
-    required this.blend,
-    required this.onSplit,
-    required this.onBlend,
-  });
-
-  final StageMode mode;
-  final double split;
-  final double blend;
-  final ValueChanged<double> onSplit;
-  final ValueChanged<double> onBlend;
-
-  @override
-  Widget build(BuildContext context) {
-    var (value, onChanged) = switch (mode) {
-      StageMode.slider => (split, onSplit),
-      StageMode.onion => (blend, onBlend),
-      _ => (null, null),
-    };
-    if (value == null || onChanged == null) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.xl),
-      child: Slider(value: value, onChanged: onChanged),
-    );
-  }
-}
+/// How much height the onion control takes off the picture.
+const _sliderHeight = 40.0;
 
 /// The largest box of [aspect] that fits inside [available].
 Size _fit(double aspect, Size available) {
