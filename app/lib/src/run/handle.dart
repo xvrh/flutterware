@@ -174,6 +174,17 @@ class RunHandle {
   /// run, whatever pid is carrying it this time.
   String get key => runHandleKey(worktree, device, entrypoint, flavor);
 
+  /// This *launch* — [key] plus the pid carrying it, which is exactly how the
+  /// handle, the log and the journal are named on disk.
+  ///
+  /// The one identity that separates two live runs of the same entry point on
+  /// the same device from the same worktree. [key] deliberately cannot: it is
+  /// stable across relaunch, which is what makes it an address, and what makes
+  /// it useless as an argument when two launchers are up at once — a `stop`
+  /// asked to choose between them could only refuse with the same string
+  /// twice.
+  String get runId => '$key-$launcherPid';
+
   /// What to call the run on screen: the entry point, and the flavor when
   /// there is one to tell it apart from.
   String get runLabel =>

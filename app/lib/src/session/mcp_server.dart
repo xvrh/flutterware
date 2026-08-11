@@ -460,6 +460,12 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               'launched. Only runs from this worktree match when omitted — '
               'the refusals name the worktrees that have one.',
         ),
+        'run': Schema.string(
+          description:
+              'The run key, when nothing else separates two runs — two '
+              'Studios on one device from one worktree. The ambiguity refusal '
+              'lists the keys; `apps` reports them too.',
+        ),
       },
       required: ['verb'],
     ),

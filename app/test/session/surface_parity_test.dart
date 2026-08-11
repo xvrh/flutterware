@@ -186,6 +186,65 @@ void main() {
         expect(surfaces.core.lastArguments['loud'], isTrue);
       },
     );
+
+    group('a flag and its value', () {
+      // `--name Ada` is how everyone types it, and it used to be dropped:
+      // `name` became `true` and "Ada" was counted as a positional, which came
+      // back as `required (name): true` — or, where the action cast it, as a
+      // type error with a stack trace and no mention of the flag.
+
+      test('may be separated by a space', () async {
+        await surfaces.cli(['run', 'fake', 'query', '--name', 'Ada']);
+        expect(surfaces.core.lastArguments['name'], 'Ada');
+      });
+
+      test('is the same thing as an equals sign', () async {
+        await surfaces.cli(['run', 'fake', 'query', '--name=Ada']);
+        var equals = surfaces.core.lastArguments;
+        await surfaces.cli(['run', 'fake', 'query', '--name', 'Ada']);
+
+        expect(surfaces.core.lastArguments, equals);
+      });
+
+      test('is typed by the declaration either way', () async {
+        await surfaces.cli([
+          'run',
+          'fake',
+          'query',
+          '--name',
+          'Ada',
+          '--count',
+          '7',
+        ]);
+        expect(surfaces.core.lastArguments['count'], 7);
+      });
+
+      test('is not eaten by a boolean in front of it', () async {
+        // The one case greed would get wrong: a declared boolean takes no
+        // value, so what follows belongs to whatever comes next.
+        await surfaces.cli(['run', 'fake', 'query', '--loud', '--name', 'Ada']);
+
+        expect(surfaces.core.lastArguments['loud'], isTrue);
+        expect(surfaces.core.lastArguments['name'], 'Ada');
+      });
+
+      test('is refused, naming the flag, when there is no value', () async {
+        var refusal = await surfaces.cliError([
+          'run',
+          'fake',
+          'query',
+          '--name',
+        ]);
+
+        expect(refusal.code, isNot(0));
+        expect(
+          refusal.text,
+          allOf(contains('needs a value'), contains('--name=')),
+          reason:
+              'a flag that lost its value must not reach the action as true',
+        );
+      });
+    });
   });
 
   group('a result that reports failure', () {

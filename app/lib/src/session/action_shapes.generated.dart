@@ -2587,6 +2587,12 @@ final resultShapes = <String, ResultShape>{
   'RunAppEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'RunAppEntry',
     'fields': <Object?>[
+      <String, Object?>{
+        'name': 'run',
+        'type': 'String',
+        'doc':
+            'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
+      },
       <String, Object?>{'name': 'device', 'type': 'String'},
       <String, Object?>{
         'name': 'deviceName',
@@ -2662,6 +2668,12 @@ final resultShapes = <String, ResultShape>{
         'shape': <String, Object?>{
           'type': 'RunAppEntry',
           'fields': <Object?>[
+            <String, Object?>{
+              'name': 'run',
+              'type': 'String',
+              'doc':
+                  'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
+            },
             <String, Object?>{'name': 'device', 'type': 'String'},
             <String, Object?>{
               'name': 'deviceName',
@@ -2774,6 +2786,12 @@ final resultShapes = <String, ResultShape>{
         'name': 'action',
         'type': 'String',
         'doc': '`reload`, `restart` or `stop`.',
+      },
+      <String, Object?>{
+        'name': 'run',
+        'type': 'String',
+        'doc':
+            'Which run it was done to — the id `apps` reports and a selector takes.',
       },
       <String, Object?>{'name': 'device', 'type': 'String'},
       <String, Object?>{'name': 'entrypoint', 'type': 'String'},
@@ -3595,6 +3613,12 @@ final resultShapes = <String, ResultShape>{
         'shape': <String, Object?>{
           'type': 'RunAppEntry',
           'fields': <Object?>[
+            <String, Object?>{
+              'name': 'run',
+              'type': 'String',
+              'doc':
+                  'What names this launch — what a selector passes as `run`, and what its handle, log and journal are called on disk.',
+            },
             <String, Object?>{'name': 'device', 'type': 'String'},
             <String, Object?>{
               'name': 'deviceName',
