@@ -5,15 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/changes/change_set.dart';
 import 'package:flutterware_app/src/changes/changes_screen.dart';
-import 'package:flutterware_app/src/changes/churn_map.dart';
 import 'package:flutterware_app/src/changes/diff_view.dart';
 import 'package:flutterware_app/src/changes/patch_index.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
-/// The view's own claims: that a body appears only when asked for, that the
-/// churn map keeps whole-branch context while the list narrows, and that a
-/// four-thousand-line file costs a screenful rather than four thousand widgets.
+/// The view's own claims: that the right pane shows the file you picked and
+/// only that one, that the filter narrows the index without touching what you
+/// are reading, and that a four-thousand-line file costs a screenful rather
+/// than four thousand widgets.
 void main() {
   const worktree = Worktree(
     path: '/wt/feature',
@@ -62,19 +62,42 @@ void main() {
     '',
   ].join('\n');
 
-  testWidgets('a file shows no body until it is expanded', (tester) async {
+  /// Scoped to the left column, because the right pane's header draws the same
+  /// filename — which is the point of it.
+  Finder inIndex(String text) => find.descendant(
+    of: find.byKey(changesListKey),
+    matching: find.text(text),
+  );
+
+  testWidgets('nothing is read until a file is picked', (tester) async {
     await pumpPatch(tester, index(twoFiles));
 
     expect(find.byType(DiffLineView), findsNothing);
+    expect(find.text('Pick a file'), findsOneWidget);
 
-    await tester.tap(find.text('lib/alpha.dart'));
+    await tester.tap(find.text('alpha.dart'));
     await tester.pumpAndSettle();
 
     expect(find.byType(DiffLineView), findsWidgets);
     expect(find.text('is here now'), findsOneWidget);
     expect(find.text('was here'), findsOneWidget);
-    // The other file kept its body to itself.
+    // **One file at a time.** The other one's diff is not below this one, it
+    // is not anywhere — which is the whole difference from the list that used
+    // to inline every expansion.
     expect(find.text('new beta'), findsNothing);
+  });
+
+  testWidgets('picking another replaces it rather than adding to it', (
+    tester,
+  ) async {
+    await pumpPatch(tester, index(twoFiles));
+    await tester.tap(find.text('alpha.dart'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('beta.dart'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('new beta'), findsOneWidget);
+    expect(find.text('is here now'), findsNothing);
   });
 
   testWidgets('the hunk header is drawn from the span, with its context', (
@@ -96,41 +119,45 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('lib/a.dart'));
+    await tester.tap(find.text('a.dart'));
     await tester.pumpAndSettle();
 
     expect(find.text('@@ -12,2 +12,2 @@'), findsOneWidget);
     expect(find.text('class StreamParser {'), findsOneWidget);
   });
 
-  testWidgets('expanding again puts it away', (tester) async {
+  testWidgets('picking the same file again keeps it open', (tester) async {
+    // **Never a toggle.** Clicking a name means "show me that file", and
+    // meaning "hide it" the second time is the opposite of the ask.
     await pumpPatch(tester, index(twoFiles));
 
-    await tester.tap(find.text('lib/alpha.dart'));
+    await tester.tap(inIndex('alpha.dart'));
     await tester.pumpAndSettle();
-    expect(find.byType(DiffLineView), findsWidgets);
+    await tester.tap(inIndex('alpha.dart'));
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.text('lib/alpha.dart'));
-    await tester.pumpAndSettle();
-    expect(find.byType(DiffLineView), findsNothing);
+    expect(find.byType(DiffLineView), findsWidgets);
   });
 
-  testWidgets('the churn map keeps every column while the list narrows', (
+  testWidgets('the filter narrows the index and leaves the pane alone', (
     tester,
   ) async {
+    // The filter is for finding the *next* file. Taking away the one you are
+    // reading because it stopped matching would be a search box that closes
+    // your document.
     await pumpPatch(tester, index(twoFiles));
-    expect(find.text('lib/alpha.dart'), findsOneWidget);
-    expect(find.text('lib/beta.dart'), findsOneWidget);
-
-    await tester.enterText(find.byType(TextField), 'alpha');
+    await tester.tap(find.text('alpha.dart'));
     await tester.pumpAndSettle();
 
-    expect(find.text('lib/beta.dart'), findsNothing);
-    // **Dimmed, not dropped.** The strip is the whole-branch context, and a
-    // column that vanished would take it with it.
-    var map = tester.widget<ChurnMap>(find.byType(ChurnMap));
-    expect(map.files, hasLength(2));
-    expect(map.visible, {'lib/alpha.dart'});
+    await tester.enterText(find.byType(TextField), 'beta');
+    await tester.pumpAndSettle();
+
+    expect(inIndex('alpha.dart'), findsNothing, reason: 'gone from the index');
+    expect(
+      find.text('is here now'),
+      findsOneWidget,
+      reason: 'and still open on the right',
+    );
   });
 
   testWidgets('a filter that matches nothing says so', (tester) async {
@@ -158,7 +185,7 @@ void main() {
     lines.add('');
 
     await pumpPatch(tester, index(lines.join('\n')));
-    await tester.tap(find.text('lib/huge.dart'));
+    await tester.tap(find.text('huge.dart'));
     await tester.pumpAndSettle();
 
     var built = tester.widgetList<DiffLineView>(find.byType(DiffLineView));
@@ -192,7 +219,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('lib/a.dart'));
+    await tester.tap(find.text('a.dart'));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);

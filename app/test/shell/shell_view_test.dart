@@ -933,9 +933,39 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(changesScreenKey), findsOneWidget);
-      expect(find.text('lib/agent_wrote_this.dart'), findsOneWidget);
+      expect(find.text('agent_wrote_this.dart'), findsOneWidget);
       expect(shell.isOpen(closed), isFalse, reason: 'and still no tab for it');
       expect(find.byKey(worktreeTabKey(closed)), findsNothing);
+    });
+
+    testWidgets('picking a file in it reaches the address bar', (tester) async {
+      // **Pumped through the shell, not on its own**, which is the lesson of
+      // the keyboard this screen briefly had: it worked in every test that
+      // built the panel directly and did nothing in a window, because the
+      // shell around it was taking the keys first. A panel tested only in
+      // isolation is a panel tested against a stage set.
+      var shell = await _pumpShell(tester);
+      var closed = shell.closedWorktrees.single;
+      shell.selectChanges(closed);
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(changesListKey),
+          matching: find.text('agent_wrote_this.dart'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(shell.address.segments, ['lib', 'agent_wrote_this.dart']);
+      expect(
+        find.descendant(
+          of: find.byKey(changesFileKey),
+          matching: find.textContaining('No text changed'),
+        ),
+        findsOneWidget,
+        reason: 'and the right pane is showing that file',
+      );
     });
 
     testWidgets('hides the rail, since there is no session to list', (

@@ -1,8 +1,9 @@
 # The changes screen — design
 
 **Date:** 2026-08-10
-**Status:** Slices 1–6 built — **v1 complete** (§10); what is left is listed
-after the build order. Decisions below are settled unless listed under "Open
+**Status:** Slices 1–6 built; §6's layout **rewritten 2026-08-11** after use —
+master/detail, no churn map, no tree, no keyboard. What is left is listed after
+the build order. Decisions below are settled unless listed under "Open
 questions". Measurements are from this machine on 2026-08-10 and 2026-08-11
 against this repository's own worktrees, and are reproducible.
 **Parent:** `2026-08-10-worktree-explorer-view-design.md` (the facts layer this
@@ -144,6 +145,15 @@ The whole row is one `GestureDetector` around `onToggleExpand`. So any new click
 target is subtracted from the expand gesture, and the naive choice — "click the
 changes cell" — subtracts the **220 px column whose expanded content is the
 detail's widest element**. That is backwards.
+
+> **Corrected 2026-08-11 by clicking at it.** The trigger is the whole cell,
+> and the tooltip is gone — the card replaced it. `_Fingerprint._height` is
+> **4 pixels**; the argument below is entirely about the 100 and never checked
+> the other number. A 100×4 target inside a 1450×52 row is not a target, and in
+> a real window every click aimed at it hit the row behind. Worse, the cell also
+> carried a `Tooltip`, so one target offered two interactions and the cheap one
+> won every time: hovering always worked and always produced text. Now hovering
+> the cell shows the card and clicking it opens the screen.
 
 **The trigger is the fingerprint bar itself**, roughly 100 px of the 220, with a
 click cursor on hover:
@@ -566,51 +576,102 @@ the wrong one presented as fact.
 
 ## 6. The view
 
+> **Corrected 2026-08-11 by somebody using it.** What this section described —
+> one scrolling list of file rows that expand to inline their own diff, with a
+> churn map and a directory tree as two further ways in — was built, used for
+> an afternoon, and rejected. The layout below replaces it. The original is
+> quoted at the end of this section, because the reasons it was wrong are worth
+> more than the drawing was.
+
 ```
-┌────────────────────────────────────────────────────────────────────────────────┐
-│ animation-timeline · claude/animation-…-bca225 vs master   53 files  +2.1k −890 │
-│ ▁▂█▃▁▁▂▅▂▁ ▁▂▁  churn                          ●7 uncommitted   ↻ 4s ago        │
-├──────────────┬─────────────────────────────────────────────────────────────────┤
-│ ⌕ filter     │ LOOK HERE FIRST      ChangesConfig.attention · base master (inferred)│
-│              │ ┌─────────────────────────────────────────────────────────────┐ │
-│ ts 7  dart 31│ │ A  db/migrations/0042_stream_log.sql       ▊▁▁▁▁   +8  −0    │ │
-│ yaml 2  md 4 │ │    PIN **/migrations/**  · uncommitted                       │ │
-│              │ └─────────────────────────────────────────────────────────────┘ │
-│ ▸ app        │ EVERYTHING ELSE                                                 │
-│   ▾ lib/src  │ ┌─────────────────────────────────────────────────────────────┐ │
-│     motion/  │ │ M  app/lib/src/motion/timeline.dart       ▁▊▊▁▂  +140 −22   │ │
-│     ...      │ │    3 hunks · uncommitted · 2m ago                            │ │
-│              │ └─────────────────────────────────────────────────────────────┘ │
-│              │ ⌄ 6 low-signal files, +210 −278                                  │
-└──────────────┴─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Changes   claude/worktree-code-review-ebd398            ● Watching   ↻    │
+│ 53 files  +12.8k −37  ·  1 uncommitted  ·  base master (inferred)         │
+├────────────────────────┬─────────────────────────────────────────────────┤
+│ ⌕ Filter paths         │ ranking.dart  app/lib/src/changes/               │
+│                        │ ▁▊▊▁▂   modified · +309 −0 · uncommitted · 4 hunks│
+│ LOOK HERE FIRST  1 file├─────────────────────────────────────────────────┤
+│ A 0042_stream_log.sql  │ @@ -1,6 +1,9 @@ class Ranking {                  │
+│   matches **/migr…** ·8│  one                                            │
+│                        │ +import 'dart:io';                              │
+│ CHANGES                │ …                                               │
+│ M ranking.dart    +309 │                                                 │
+│   app/lib/src/changes  │                                                 │
+│ M diff_view.dart  +440 │                                                 │
+│ ⌄ 11 low-signal, +55   │                                                 │
+│ UNTRACKED              │                                                 │
+│ ? scratch.txt          │                                                 │
+└────────────────────────┴─────────────────────────────────────────────────┘
 ```
 
-Kept from the prototype, because both earn their pixels:
+**Master and detail.** The left column is the index: every path in the delta,
+ranked, and nothing to read. The right pane is the one file you picked. The
+split is the whole design, and everything below follows from it.
 
-- **The churn map.** One column per file, additions up, deletions down, shared
-  scale. It answers "is this branch a rewrite of one module or scattered edits"
-  before you read a line. Filtering **dims** rather than removes, so the
-  whole-branch context survives the filter.
-- **The hunk ruler**, per row: where in the file the change sits and how
-  add/delete-heavy each hunk is, from `HunkSpan` directly.
+- **Navigation and content are different surfaces.** When they were one list,
+  getting to the next file meant scrolling through the last one's diff, and a
+  live re-index moved the lines under your eyes. Both stop being possible here
+  rather than being fixed.
+- **Naming a file opens it.** Clicking a row shows it, writes it into the
+  address, and scrolls the pane to the top. Never a toggle: clicking a name
+  twice means "show me that file" twice.
+- **Nothing is auto-selected.** Tempting, given the screen's claim to know what
+  to look at first — and wrong. The first question is the *shape* of what an
+  agent did, which is the index; reading a file is the second question, and one
+  you should have asked.
+- **The filter narrows the index only.** It is for finding the next file. A
+  search box that closes the document you are reading is a bug.
+- **The hunk ruler moved into the pane header**, where there is width for it
+  and where it sits directly above the hunks it describes.
 
-Changed from the prototype:
+Gone, and why:
 
-- **Colour follows the app's tone palette**, not the prototype's teal/amber. The
-  prototype chose those to be colour-blind-safe and to not look like GitHub;
-  both are good reasons, and both are already settled questions inside
-  `app/lib/src/ui/design`, which every other panel obeys. A screen with its own
-  palette is a screen that looks bolted on.
-- **Uncommitted is a badge, not a mode** (§1).
-- **No commit selector in v1** (§10).
+- **The churn map.** Fifty-three near-identical columns, in a screenshot, above
+  a list sorted by the same weight that carries the names. Its three jobs were
+  "where is the weight" (the first row of the index says that, with a
+  filename), "click to jump" (a third door to what the index is), and dimming
+  during a filter (real, and niche). It cost 60 px at the top of every visit.
+- **The directory tree.** With ranking, a tree is a second ordering competing
+  with *look here first*. The filter covers "only show me `app/lib`", and each
+  row carries its directory.
+- **The keyboard.** `↑↓ ↵ ←→` were built and removed the same day: they worked
+  in every test that pumped the panel alone and did nothing in a window,
+  because the shell around it takes the keys first. It will come back tested
+  through the shell. See §10.
 
 **Syntax highlighting** uses the vendored `lib/src/third_party/highlight` +
 `flutter_highlight`, computed **per visible hunk, lazily**, never per file and
 never eagerly. It is the one thing on this screen expensive enough to show up in
-a frame budget, and the only thing that gets a cache keyed by hunk.
+a frame budget, and the only thing that gets a cache keyed by hunk. Still not
+built.
 
-**Keyboard**: `j`/`k` move · `o` expand · `⏎` open in editor · `/` filter ·
-`Esc` clear.
+Changed from the prototype, and still true:
+
+- **Colour follows the app's tone palette**, not the prototype's teal/amber. A
+  screen with its own palette is a screen that looks bolted on.
+- **Uncommitted is a badge, not a mode** (§1).
+- **No commit selector in v1** (§10).
+
+<details><summary>The original §6, kept for its argument</summary>
+
+> Kept from the prototype, because both earn their pixels:
+>
+> - **The churn map.** One column per file, additions up, deletions down,
+>   shared scale. It answers "is this branch a rewrite of one module or
+>   scattered edits" before you read a line. Filtering **dims** rather than
+>   removes, so the whole-branch context survives the filter.
+> - **The hunk ruler**, per row: where in the file the change sits and how
+>   add/delete-heavy each hunk is, from `HunkSpan` directly.
+>
+> **Keyboard**: `j`/`k` move · `o` expand · `⏎` open in editor · `/` filter ·
+> `Esc` clear.
+
+Both claims were about *reading a branch end to end*, which is what a pull
+request is for. §1 says in its first paragraph that this screen is not that.
+The layout contradicted the brief at the top of its own document for a day and
+a half, and it took somebody using it to notice.
+
+</details>
 
 ## 7. Live, because that is the point
 
@@ -999,7 +1060,27 @@ Testing, in the order the parts are likely to break:
    > one exception, and it is not a guess: git's own directory is never part of
    > a delta, and on the main checkout it sits inside the tree being watched.
 
-Deliberately after v1, in likely order: **since-last-read** with content-keyed
+> **✅ 2026-08-11, and then rebuilt.** Slice 6 landed the watcher and the
+> state preservation as designed. Using it for an afternoon rejected the
+> layout, and §6 now describes what replaced it. Four reports, all fair:
+>
+> - **The popover was unreachable** — a 4 px trigger under a tooltip. Fixed by
+>   making the cell the trigger and the card the tip.
+> - **"If I click a file it scrolls to it but doesn't open it"** — the exact
+>   symptom of one list being both index and content.
+> - **The keyboard did not work.** It was built, passed twelve tests, and did
+>   nothing in a window: the shell takes the keys before the panel sees them.
+>   Removed rather than patched, and it comes back tested *through the shell*.
+> - **"What is the purpose of the big graph"** — nothing the ranked list does
+>   not say with names on it. Removed.
+>
+> The lesson under all four: **a panel tested only in isolation is a panel
+> tested against a stage set.** Two of these passed their tests comfortably.
+> `shell_view_test.dart` now pumps the changes screen through the real shell
+> and clicks a file in it.
+
+Deliberately after v1, in likely order: **the keyboard, through the shell**;
+**since-last-read** with content-keyed
 reviewed state (the prototype is right that this is the biggest
 quality-of-life win in repeat review, and it needs the scanner to be settled
 first); **the commit selector**, including its honest warning that a
@@ -1104,11 +1185,20 @@ detection**; **blast radius**.
   object.** Most of what fires a working-tree watch is gitignored build output,
   so this is the common case; keeping the object keeps every expanded hunk's
   decoded text and costs the screen no rebuild at all.
-- **Scroll position is remembered as a row and an offset into it**, not as
-  pixels, and restored after a re-index. Keying the rows was tried first and
-  does not do this — it preserves elements, not the viewport. **Never while the
-  list is scrolling**: the correction is a `jumpTo`, and a `jumpTo` mid-fling
-  stops the fling.
+- ~~**Scroll position is remembered as a row and an offset into it**~~ —
+  built, measured, and then **deleted with the layout that needed it**. Index
+  and content were one list, so a new file renumbered rows under the reader;
+  separated, a new file changes the left column and the right pane does not
+  move. The anchor was solving a problem the layout created. (For the record,
+  since it may come back if an "all files" mode ever does: keying the rows does
+  not do it — that preserves elements, not the viewport — and the correction
+  must never run while the list is scrolling, because `jumpTo` ends a fling.)
+- **Master and detail**: the index is navigation, the pane is content, and they
+  are never the same surface. Naming a file opens it and never toggles it;
+  nothing is auto-selected; the filter narrows the index only.
+- **One trigger, one gesture.** Hovering the explorer's changes cell shows the
+  ranked card; clicking it opens the screen. A tooltip and a popover on one
+  target is a target that teaches the wrong interaction.
 - **A watch that is not established is said out loud.** The screen otherwise
   looks live and has stopped being true, which is worse than a screen that
   never claimed to be.

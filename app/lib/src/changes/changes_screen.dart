@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 
 import '../shell/worktree.dart';
 import '../ui/theme.dart';
@@ -10,8 +8,6 @@ import 'change_rows.dart';
 import 'change_set.dart';
 import 'changes_config_cache.dart';
 import 'changes_controller.dart';
-import 'changes_tree.dart';
-import 'churn_map.dart';
 import 'diff_lines.dart';
 import 'diff_view.dart';
 import 'hunk_ruler.dart';
@@ -20,8 +16,11 @@ import 'patch_index.dart';
 /// The changes screen's root, so a test can scope to it.
 const changesScreenKey = Key('changes-screen');
 
-/// The scrolling list of files and diff lines.
+/// The index of paths, on the left.
 const changesListKey = Key('changes-list');
+
+/// The selected file's diff, on the right.
+const changesFileKey = Key('changes-file');
 
 /// **`fw:///worktrees/<worktree>/changes`** — what this checkout has changed
 /// against its base branch, committed and uncommitted together.
@@ -32,9 +31,16 @@ const changesListKey = Key('changes-list');
 /// session; the checkout you most want to look at is the one an agent has been
 /// working in while you were elsewhere.
 ///
-/// Three views of one delta, each answering something the others cannot: the
-/// **churn map** says where the weight is before you read a line, the **tree**
-/// says what was touched where, and the **list** is the diff itself.
+/// **Master and detail.** Left: every path in the delta, ranked, and nothing
+/// else. Right: the one file you picked. They used to be a single list of file
+/// rows that expanded to inject their own diff, which made the surface you
+/// navigate with and the surface you read the same one — every complaint about
+/// this screen came out of that, from "clicking a file scrolls but does not
+/// open it" to a live update sliding the lines under your eyes.
+///
+/// A churn map and a directory tree were the other two ways in. Both are gone:
+/// three navigation surfaces for one list of files is two too many, and the
+/// ranked index says what they said, with names on it.
 class ChangesScreen extends StatefulWidget {
   const ChangesScreen({
     required this.worktree,
@@ -88,11 +94,17 @@ class ChangesScreen extends StatefulWidget {
 
 class _ChangesScreenState extends State<ChangesScreen> {
   late ChangesController _changes;
-  final _scroll = ScrollController();
 
-  /// Paths whose bodies are showing. **Keyed by path, not by index**, so a
-  /// reload that reordered the list leaves what you had open, open.
-  final _expanded = <String>{};
+  /// One controller each, because they are two independent readings. The index
+  /// stays where you left it while you read; the body starts at the top of
+  /// whatever you just picked.
+  final _index = ScrollController();
+  final _body = ScrollController();
+
+  /// The path the right pane is showing. **One, not a set** — the screen used
+  /// to expand any number of files inline, which is what made the list you
+  /// navigate with and the thing you read the same surface.
+  String? _selected;
 
   /// Rebuilt whenever the patch is, which is what throws the decoded text of
   /// the previous one away.
@@ -100,31 +112,16 @@ class _ChangesScreenState extends State<ChangesScreen> {
   ChangeSet? _cachedFor;
 
   var _query = '';
-  String? _directory;
-  String? _current;
 
   /// Whether the noise drawer is open. **Off by default and remembered for the
   /// session**, not persisted: the whole value of the drawer is that the
   /// screen opens on the signal.
   var _noiseOpen = false;
 
-  /// A path the address named that has not been scrolled to yet.
-  ///
-  /// The jump cannot happen when the address arrives: the rows do not exist
-  /// until the delta has loaded, and the list has no clients until it has been
-  /// laid out. So it is remembered and spent on the first frame that has both —
-  /// otherwise an address naming the fortieth file opens on the first one, and
-  /// the link only appears to work for whatever is near the top.
-  String? _pendingJump;
-
   @override
   void initState() {
     super.initState();
-    if (widget.initialPath case var path?) {
-      _expanded.add(path);
-      _current = path;
-      _pendingJump = path;
-    }
+    _selected = widget.initialPath;
     _start();
   }
 
@@ -133,17 +130,15 @@ class _ChangesScreenState extends State<ChangesScreen> {
     super.didUpdateWidget(old);
     if (old.worktree.path != widget.worktree.path) {
       _changes.dispose();
-      _expanded.clear();
+      _selected = widget.initialPath;
       _start();
       return;
     }
     // An address that arrived from outside — pasted, or followed from the
-    // explorer — opens what it names without disturbing anything else already
-    // open.
+    // explorer — selects what it names.
     if (widget.initialPath case var path?
-        when path != old.initialPath && _expanded.add(path)) {
-      _current = path;
-      _pendingJump = path;
+        when path != old.initialPath && path != _selected) {
+      _show(path);
     }
   }
 
@@ -161,204 +156,15 @@ class _ChangesScreenState extends State<ChangesScreen> {
     unawaited(_changes.refresh());
   }
 
-  void _onChanged() {
-    // Read where we are **before** the new rows exist: once `setState` has run
-    // the old layout is gone, and with it the only evidence of what you were
-    // looking at.
-    //
-    // Only when the answer actually moved. The controller also notifies when a
-    // read *starts*, and when one comes back saying nothing changed — neither
-    // renumbers a row, and measuring the viewport for them would be a walk of
-    // the sliver twice every two seconds for no reason.
-    if (!identical(_changes.value, _cachedFor)) _anchor = _readAnchor();
-    setState(() {});
-  }
-
-  /// The row at the top of the viewport, and how far above the top it starts.
-  ///
-  /// **Scroll position is pixels, and a live re-index moves pixels.** An agent
-  /// creating one file inserts a row 63 px tall above everything below it, so
-  /// an unchanged offset is now pointing 63 px earlier into the diff you were
-  /// reading. Measured in a window: it is small enough to look like a glitch
-  /// and large enough to lose your line. Keying the rows does **not** fix it —
-  /// that was tried first, and `RenderSliverList` still lays out from the
-  /// offset it was given.
-  ///
-  /// So the position is remembered as *a row and an offset into it*, which is
-  /// what it means, and put back after the new rows have been laid out.
-  ({String key, double delta})? _anchor;
-
-  ({String key, double delta})? _readAnchor() {
-    if (!_scroll.hasClients || _rows.isEmpty) return null;
-    var sliver = _sliverOf();
-    if (sliver == null) return null;
-    var offset = _scroll.offset;
-    ({String key, double delta})? best;
-    for (var child = sliver.firstChild; child != null;) {
-      var data = child.parentData! as SliverMultiBoxAdaptorParentData;
-      var index = data.index;
-      if (index != null && index >= 0 && index < _rows.length) {
-        var reveal = _revealOffsetOf(child);
-        // The topmost row whose start is at or above the viewport top: the one
-        // the eye treats as "where I am".
-        if (reveal != null && reveal <= offset + 0.5) {
-          best = (key: _rows[index].anchorKey, delta: offset - reveal);
-        }
-      }
-      child = sliver.childAfter(child);
-    }
-    return best;
-  }
-
-  void _restoreAnchor(({String key, double delta}) anchor) {
-    if (!mounted || !_scroll.hasClients) return;
-    // **Never while the list is moving under a hand.** The correction is a
-    // `jumpTo`, and `jumpTo` ends the current scroll activity — measured: a
-    // fling that was mid-flight at 549 px stops dead and stays there. On a
-    // checkout an agent is writing in, that is a flick killed every two
-    // seconds, which is far worse than the drift this exists to fix. While you
-    // are scrolling you are not reading a fixed line anyway.
-    //
-    // `correctBy` was tried instead, since it is the mechanism built for
-    // adjusting an offset without disturbing the activity. It keeps the fling
-    // alive and does not move anything: it is a layout-time correction, and
-    // from a post-frame callback there is no layout left for it to correct.
-    if (_scroll.position.isScrollingNotifier.value) return;
-    var index = _rows.indexWhere((row) => row.anchorKey == anchor.key);
-    // The row is gone — the file it belonged to was committed away, or its
-    // hunks moved. Nothing to hold on to, and pretending otherwise would put
-    // you somewhere arbitrary.
-    if (index < 0) return;
-    var sliver = _sliverOf();
-    if (sliver == null) return;
-    for (var child = sliver.firstChild; child != null;) {
-      var data = child.parentData! as SliverMultiBoxAdaptorParentData;
-      if (data.index == index) {
-        if (_revealOffsetOf(child) case var reveal?) {
-          var want = (reveal + anchor.delta).clamp(
-            _scroll.position.minScrollExtent,
-            _scroll.position.maxScrollExtent,
-          );
-          if ((want - _scroll.offset).abs() > 0.5) _scroll.jumpTo(want);
-        }
-        return;
-      }
-      child = sliver.childAfter(child);
-    }
-    // **The bound, stated rather than hidden.** Only rows the sliver actually
-    // laid out can be measured, which is the viewport plus its cache extent —
-    // more than a screenful of insertions above you. Past that the offset is
-    // left where it was, which is what this screen did before any of this.
-  }
-
-  /// The scroll offset at which [child] would sit at the top of the viewport.
-  static double? _revealOffsetOf(RenderBox child) {
-    var viewport = RenderAbstractViewport.maybeOf(child);
-    return viewport?.getOffsetToReveal(child, 0).offset;
-  }
-
-  /// The list's sliver. Found by walking down from the list itself: `ListView`
-  /// gives no handle on the sliver it builds, and the tree pane's own `ListView`
-  /// comes first in this subtree, so starting from the screen would find the
-  /// wrong one.
-  RenderSliverMultiBoxAdaptor? _sliverOf() {
-    RenderSliverMultiBoxAdaptor? found;
-    void visit(RenderObject node) {
-      if (found != null) return;
-      if (node is RenderSliverMultiBoxAdaptor) {
-        found = node;
-        return;
-      }
-      node.visitChildren(visit);
-    }
-
-    var root = _listKey.currentContext?.findRenderObject();
-    if (root != null) visit(root);
-    return found;
-  }
-
-  final _listKey = GlobalKey();
-
-  /// The rows the last build produced, which is what an anchor index means.
-  var _rows = const <ChangeRow>[];
-
-  /// **The keyboard, which this screen did not have.** The explorer has had one
-  /// since it shipped, and arriving here from it by pressing keys only to find
-  /// the keys stop working is the sort of seam that makes a tool feel like two
-  /// tools. Same idiom, deliberately: ↑↓ move, ↵ opens, ←→ close and open.
-  ///
-  /// Attached above the filter field rather than to it, unlike the explorer.
-  /// There the field holds the focus the whole time because typing *is* the
-  /// primary action; here the list is, and a `TextField` that has the focus
-  /// consumes arrows for its caret — which is right, and is why this only sees
-  /// them when the field does not.
-  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    var files = [
-      for (var row in _rows)
-        if (row is FileRow) row.file,
-    ];
-    if (files.isEmpty) return KeyEventResult.ignored;
-
-    switch (event.logicalKey) {
-      case LogicalKeyboardKey.arrowDown:
-        _moveCursor(files, 1);
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.arrowUp:
-        _moveCursor(files, -1);
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.enter:
-      case LogicalKeyboardKey.numpadEnter:
-        if (_cursorFile(files) case var file?) {
-          _toggle(file);
-          _revealCursor();
-          return KeyEventResult.handled;
-        }
-      case LogicalKeyboardKey.arrowRight:
-        // The tree idiom, and the one that pairs with ← : right opens and never
-        // closes, so holding it walks *into* things rather than flapping one.
-        if (_cursorFile(files) case var file?
-            when !_expanded.contains(file.path)) {
-          _toggle(file);
-          _revealCursor();
-          return KeyEventResult.handled;
-        }
-      case LogicalKeyboardKey.arrowLeft:
-        if (_cursorFile(files) case var file?
-            when _expanded.contains(file.path)) {
-          _toggle(file);
-          _revealCursor();
-          return KeyEventResult.handled;
-        }
-    }
-    return KeyEventResult.ignored;
-  }
-
-  FileChange? _cursorFile(List<FileChange> files) =>
-      switch (files.indexWhere((f) => f.path == _current)) {
-        < 0 => null,
-        var index => files[index],
-      };
-
-  void _moveCursor(List<FileChange> files, int step) {
-    var index = files.indexWhere((f) => f.path == _current);
-    // No cursor yet: the first Down lands on the first file rather than the
-    // second, which is what every list does and what the hand expects.
-    var next = index < 0
-        ? (step > 0 ? 0 : files.length - 1)
-        : (index + step).clamp(0, files.length - 1);
-    setState(() => _current = files[next].path);
-    _revealCursor();
-  }
+  void _onChanged() => setState(() {});
 
   @override
   void dispose() {
     _changes
       ..removeListener(_onChanged)
       ..dispose();
-    _scroll.dispose();
+    _index.dispose();
+    _body.dispose();
     super.dispose();
   }
 
@@ -370,222 +176,112 @@ class _ChangesScreenState extends State<ChangesScreen> {
     return _lines!;
   }
 
-  /// Null when nothing is filtering — which is what tells the churn map to draw
-  /// every column at full strength, and the list to include the untracked.
+  /// Null when nothing is filtering.
   Set<String>? _visible(ChangeSet set) {
-    if (_query.trim().isEmpty && _directory == null) return null;
-    var byQuery = pathsMatching(set.changed, _query);
-    if (_directory == null) return byQuery;
-    return byQuery.intersection(pathsUnder(set.changed, _directory!));
+    if (_query.trim().isEmpty) return null;
+    return pathsMatching(set.changed, _query);
   }
 
-  void _toggle(FileChange file) {
-    var opened = !_expanded.remove(file.path);
-    setState(() {
-      if (opened) _expanded.add(file.path);
-      _current = file.path;
-    });
-    widget.onPathChanged?.call(opened ? file.path : null);
-  }
-
-  /// **Naming a file opens it.** The tree and the churn map used to scroll to a
-  /// file and leave it shut, which reads as a broken click: you asked for a
-  /// file and got a highlighted one-line row. Picking a name out of either is a
-  /// request to *read* it, and the row itself is still the toggle.
+  /// Shows [path] in the right pane, from the top.
   ///
-  /// Never a collapse. Clicking `a.dart` in the tree twice means "show me
-  /// a.dart" twice, and closing it the second time is the opposite of the ask.
-  void _open(FileChange file, List<ChangeRow> rows) {
-    if (_expanded.add(file.path)) {
-      widget.onPathChanged?.call(file.path);
-      setState(() {});
-      // The rows it should scroll within are the ones this expansion produces,
-      // which do not exist yet.
-      _pendingJump = file.path;
-      return;
+  /// **The body scrolls back to the start.** Two files' diffs share a scroll
+  /// offset only by accident, and arriving four hundred lines into a file you
+  /// just picked is the sort of thing that reads as the app losing its place.
+  void _show(String? path) {
+    if (path == _selected) return;
+    setState(() => _selected = path);
+    if (_body.hasClients) _body.jumpTo(0);
+    widget.onPathChanged?.call(path);
+  }
+
+  /// What the right pane is showing, and what it falls back to.
+  ///
+  /// **Nothing is auto-selected.** The claim this screen makes is that it knows
+  /// what to look at first, so opening straight into the top-ranked file would
+  /// be tempting — and wrong: the first thing you want is the *shape* of what
+  /// an agent did, which is the index. Reading a file is the second question,
+  /// and it is one you should have asked.
+  FileChange? _selectedFile(ChangeSet set) {
+    if (_selected case var path?) {
+      return set.changed.where((f) => f.path == path).firstOrNull;
     }
-    _jumpTo(file, rows);
+    return null;
   }
 
-  /// Scrolls the cursor row **just** into view, never re-centring it.
-  ///
-  /// Measured rather than estimated: `_jumpTo`'s `index × 34` is fine for "take
-  /// me near that file" and useless for a cursor, because one expanded file
-  /// between here and there is four thousand rows the arithmetic knows nothing
-  /// about. The sliver's own children carry their real offsets; the fallback
-  /// only runs when the target is beyond what is laid out, and then it measures
-  /// again on the next frame, which by then it can.
-  void _revealCursor([int attempt = 0]) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) return;
-      var index = _rows.indexWhere(
-        (row) => row is FileRow && row.file.path == _current,
-      );
-      if (index < 0) return;
-      var sliver = _sliverOf();
-      if (sliver == null) return;
-
-      for (var child = sliver.firstChild; child != null;) {
-        var data = child.parentData! as SliverMultiBoxAdaptorParentData;
-        if (data.index == index) {
-          var viewport = RenderAbstractViewport.maybeOf(child);
-          if (viewport == null) return;
-          var atTop = viewport.getOffsetToReveal(child, 0).offset;
-          var atBottom = viewport.getOffsetToReveal(child, 1).offset;
-          var want = _scroll.offset.clamp(
-            atBottom < atTop ? atBottom : atTop,
-            atBottom < atTop ? atTop : atBottom,
-          );
-          if ((want - _scroll.offset).abs() > 0.5) {
-            _scroll.jumpTo(
-              want.clamp(
-                _scroll.position.minScrollExtent,
-                _scroll.position.maxScrollExtent,
-              ),
-            );
-          }
-          return;
-        }
-        child = sliver.childAfter(child);
-      }
-
-      // Beyond the laid-out range. Step toward it and measure again — bounded,
-      // because each step lays out the rows the next one needs.
-      if (attempt >= 3) return;
-      _scroll.jumpTo(
-        (index * _rowEstimate).clamp(
-          _scroll.position.minScrollExtent,
-          _scroll.position.maxScrollExtent,
-        ),
-      );
-      _revealCursor(attempt + 1);
-    });
+  UntrackedEntry? _selectedUntracked(ChangeSet set) {
+    if (_selected case var path?) {
+      return set.untracked.where((e) => e.path == path).firstOrNull;
+    }
+    return null;
   }
-
-  void _jumpTo(FileChange file, List<ChangeRow> rows) {
-    setState(() => _current = file.path);
-    var index = rows.indexWhere(
-      (row) => row is FileRow && row.file.path == file.path,
-    );
-    if (index < 0 || !_scroll.hasClients) return;
-    // **An estimate, not a measurement.** Rows are not uniform, so this lands
-    // near the file rather than exactly on it. Near is what a churn-map click
-    // is asking for, and measuring would mean building every row above the
-    // target — which is precisely what the virtualised list exists to avoid.
-    unawaited(
-      _scroll.animateTo(
-        (index * _rowEstimate).clamp(0, _scroll.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-      ),
-    );
-  }
-
-  static const _rowEstimate = 34.0;
 
   @override
   Widget build(BuildContext context) {
     var set = _changes.value;
-    var visible = set == null ? null : _visible(set);
     var rows = set == null
         ? const <ChangeRow>[]
-        : buildRows(
+        : buildIndexRows(
             set,
-            expanded: _expanded,
-            visible: visible,
+            selected: _selected,
+            visible: _visible(set),
             noiseOpen: _noiseOpen,
           );
 
-    _rows = rows;
-
-    if (_anchor case var it? when rows.isNotEmpty) {
-      _anchor = null;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _restoreAnchor(it));
-    }
-
-    if (_pendingJump case var path? when rows.isNotEmpty) {
-      var target = set?.changed.where((f) => f.path == path).firstOrNull;
-      _pendingJump = null;
-      if (target != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _jumpTo(target, rows);
-        });
-      }
-    }
-
-    return Focus(
-      autofocus: true,
-      onKeyEvent: _onKey,
-      child: Column(
-        key: changesScreenKey,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _Header(
-            worktree: widget.worktree,
-            set: set,
-            isLoading: _changes.isLoading,
-            live: widget.live,
-            isWatching: _changes.isWatching,
-            readAt: _changes.readAt,
-            failure: _changes.failure,
-            onRefresh: () => unawaited(_changes.refresh()),
-          ),
-          if (set != null && set.changed.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                FwSpacing.xxl,
-                0,
-                FwSpacing.xxl,
-                FwSpacing.lg,
-              ),
-              child: ChurnMap(
-                files: set.changed,
-                visible: visible,
-                current: _current,
-                onTap: (file) => _open(file, rows),
-              ),
-            ),
-          Divider(height: 1, color: context.colors.line),
-          Expanded(
-            child: set == null
-                ? const SizedBox.shrink()
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SizedBox(
-                        width: _treeWidth,
-                        child: _TreePane(
-                          set: set,
-                          directory: _directory,
-                          onQuery: (q) => setState(() => _query = q),
-                          onDirectory: (d) => setState(() => _directory = d),
-                          onFile: (file) => _open(file, rows),
-                        ),
+    return Column(
+      key: changesScreenKey,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Header(
+          worktree: widget.worktree,
+          set: set,
+          isLoading: _changes.isLoading,
+          live: widget.live,
+          isWatching: _changes.isWatching,
+          readAt: _changes.readAt,
+          failure: _changes.failure,
+          onRefresh: () => unawaited(_changes.refresh()),
+        ),
+        Divider(height: 1, color: context.colors.line),
+        Expanded(
+          child: set == null
+              ? const SizedBox.shrink()
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: _indexWidth,
+                      child: _IndexPane(
+                        set: set,
+                        rows: rows,
+                        controller: _index,
+                        query: _query,
+                        onQuery: (q) => setState(() => _query = q),
+                        onSelect: _show,
+                        onToggleNoise: () =>
+                            setState(() => _noiseOpen = !_noiseOpen),
                       ),
-                      VerticalDivider(width: 1, color: context.colors.line),
-                      Expanded(
-                        child: _List(
-                          listKey: _listKey,
-                          set: set,
-                          rows: rows,
-                          lines: _linesFor(set),
-                          controller: _scroll,
-                          current: _current,
-                          onToggle: _toggle,
-                          onToggleNoise: () =>
-                              setState(() => _noiseOpen = !_noiseOpen),
-                        ),
+                    ),
+                    VerticalDivider(width: 1, color: context.colors.line),
+                    Expanded(
+                      child: _FilePane(
+                        file: _selectedFile(set),
+                        untracked: _selectedUntracked(set),
+                        missing: _selected,
+                        uncommitted: set.uncommitted,
+                        lines: _linesFor(set),
+                        controller: _body,
                       ),
-                    ],
-                  ),
-          ),
-          if (set != null && set.changed.isNotEmpty) const _KeyHints(),
-        ],
-      ),
+                    ),
+                  ],
+                ),
+        ),
+      ],
     );
   }
 
-  static const _treeWidth = 240.0;
+  /// Wider than the tree it replaced, because it now carries the whole index —
+  /// a filename, its directory and its counts on one row.
+  static const _indexWidth = 320.0;
 }
 
 class _Header extends StatelessWidget {
@@ -803,27 +499,33 @@ class _Summary extends StatelessWidget {
   }
 }
 
-/// Filter, then tree. Both narrow the list; neither opens anything.
-class _TreePane extends StatelessWidget {
-  const _TreePane({
+/// The **index**: filter, then every path in the delta, ranked.
+///
+/// Navigation only. Nothing here is content, which is the whole point of the
+/// split — the list stays where you left it while you read, and a live re-probe
+/// that adds a file changes this column without moving a line of what is open.
+class _IndexPane extends StatelessWidget {
+  const _IndexPane({
     required this.set,
-    required this.directory,
+    required this.rows,
+    required this.controller,
+    required this.query,
     required this.onQuery,
-    required this.onDirectory,
-    required this.onFile,
+    required this.onSelect,
+    required this.onToggleNoise,
   });
 
   final ChangeSet set;
-  final String? directory;
+  final List<ChangeRow> rows;
+  final ScrollController controller;
+  final String query;
   final ValueChanged<String> onQuery;
-  final ValueChanged<String?> onDirectory;
-  final ValueChanged<FileChange> onFile;
+  final ValueChanged<String> onSelect;
+  final VoidCallback onToggleNoise;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var tree = buildTree(set.changed);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -846,323 +548,346 @@ class _TreePane extends StatelessWidget {
             ),
           ),
         ),
-        if (directory case var it?)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
-            child: _Chip(label: it, onClear: () => onDirectory(null)),
-          ),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(vertical: FwSpacing.sm),
-            children: [
-              for (var child in tree.sortedChildren)
-                _TreeRow(
-                  node: child,
-                  depth: 0,
-                  selected: directory,
-                  onDirectory: onDirectory,
-                  onFile: onFile,
-                ),
-              for (var file in tree.sortedFiles)
-                _TreeFile(file: file, depth: 0, onTap: onFile),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TreeRow extends StatefulWidget {
-  const _TreeRow({
-    required this.node,
-    required this.depth,
-    required this.selected,
-    required this.onDirectory,
-    required this.onFile,
-  });
-
-  final TreeNode node;
-  final int depth;
-  final String? selected;
-  final ValueChanged<String?> onDirectory;
-  final ValueChanged<FileChange> onFile;
-
-  @override
-  State<_TreeRow> createState() => _TreeRowState();
-}
-
-class _TreeRowState extends State<_TreeRow> {
-  // Open at the top, shut further down: a branch that touched one module wants
-  // that module visible, and a repo of forty directories does not want all of
-  // them unfolded at once.
-  late var _open = widget.depth < 1;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var node = widget.node;
-    var isSelected = widget.selected == node.path;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          onTap: () {
-            setState(() => _open = !_open);
-            widget.onDirectory(isSelected ? null : node.path);
-          },
-          child: Container(
-            color: isSelected ? colors.accentSoft : Colors.transparent,
-            padding: EdgeInsets.only(
-              left: FwSpacing.md + widget.depth * FwSpacing.lg,
-              right: FwSpacing.md,
-              top: FwSpacing.xxs,
-              bottom: FwSpacing.xxs,
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  _open ? Icons.expand_more : Icons.chevron_right,
-                  size: 14,
-                  color: colors.mut3,
-                ),
-                Expanded(
+          child: rows.isEmpty
+              ? Center(
                   child: Text(
-                    node.name,
-                    style: context.type.bodySmall,
-                    overflow: TextOverflow.ellipsis,
+                    set.changed.isEmpty
+                        ? 'Nothing to show.'
+                        : 'Nothing matches.',
+                    style: context.type.bodySmall.copyWith(color: colors.mut2),
                   ),
+                )
+              : ListView.builder(
+                  key: changesListKey,
+                  controller: controller,
+                  itemCount: rows.length,
+                  itemBuilder: (context, index) => switch (rows[index]) {
+                    SectionRow(:var label, :var detail) => Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        FwSpacing.md,
+                        FwSpacing.lg,
+                        FwSpacing.md,
+                        FwSpacing.xs,
+                      ),
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              label,
+                              style: context.type.caption,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (detail case var it?) ...[
+                            const Gap(FwSpacing.sm),
+                            Text(
+                              it,
+                              style: context.type.micro.copyWith(
+                                color: colors.mut3,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    NoiseDrawerRow(
+                      :var files,
+                      :var added,
+                      :var removed,
+                      :var open,
+                    ) =>
+                      NoiseDrawerLine(
+                        files: files,
+                        added: added,
+                        removed: removed,
+                        open: open,
+                        onTap: onToggleNoise,
+                      ),
+                    FileRow(
+                      :var file,
+                      :var selected,
+                      :var uncommitted,
+                      :var reason,
+                    ) =>
+                      IndexFileRow(
+                        file: file,
+                        selected: selected,
+                        uncommitted: uncommitted,
+                        reason: reason,
+                        onTap: () => onSelect(file.path),
+                      ),
+                    UntrackedRow(:var entry, :var selected) =>
+                      IndexUntrackedRow(
+                        entry: entry,
+                        selected: selected,
+                        onTap: entry.isDirectory
+                            ? null
+                            : () => onSelect(entry.path),
+                      ),
+                    // The body's rows never reach the index.
+                    HunkRow() ||
+                    DiffLineRow() ||
+                    FileNoticeRow() => const SizedBox.shrink(),
+                  },
                 ),
-                Text(
-                  '${node.totalFiles}',
-                  style: context.type.micro.copyWith(color: colors.mut3),
-                ),
-              ],
-            ),
-          ),
         ),
-        if (_open) ...[
-          for (var child in node.sortedChildren)
-            _TreeRow(
-              node: child,
-              depth: widget.depth + 1,
-              selected: widget.selected,
-              onDirectory: widget.onDirectory,
-              onFile: widget.onFile,
-            ),
-          for (var file in node.sortedFiles)
-            _TreeFile(
-              file: file,
-              depth: widget.depth + 1,
-              onTap: widget.onFile,
-            ),
-        ],
       ],
     );
   }
 }
 
-class _TreeFile extends StatelessWidget {
-  const _TreeFile({
+/// The **body**: one file's diff, or the reason there is not one.
+class _FilePane extends StatelessWidget {
+  const _FilePane({
     required this.file,
-    required this.depth,
-    required this.onTap,
-  });
-
-  final FileChange file;
-  final int depth;
-  final ValueChanged<FileChange> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return InkWell(
-      onTap: () => onTap(file),
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: FwSpacing.md + (depth + 1) * FwSpacing.lg,
-          right: FwSpacing.md,
-          top: FwSpacing.xxs,
-          bottom: FwSpacing.xxs,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                file.path.split('/').last,
-                style: context.type.bodySmall.copyWith(color: colors.mut),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const Gap(FwSpacing.xs),
-            HunkRuler(file: file, width: 36, height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.onClear});
-
-  final String label;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: FwSpacing.sm,
-        vertical: FwSpacing.xxs,
-      ),
-      decoration: BoxDecoration(
-        color: colors.accentSoft,
-        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: context.type.micro,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          InkWell(
-            onTap: onClear,
-            child: Icon(Icons.close, size: 12, color: colors.mut),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The virtualised list. **One `ListView.builder` over one flat row list**, so
-/// a file expanded to four thousand lines costs the screenful you can see.
-class _List extends StatelessWidget {
-  const _List({
-    required this.listKey,
-    required this.set,
-    required this.rows,
+    required this.untracked,
+    required this.missing,
+    required this.uncommitted,
     required this.lines,
     required this.controller,
-    required this.current,
-    required this.onToggle,
-    required this.onToggleNoise,
   });
 
-  final GlobalKey listKey;
-  final ChangeSet set;
-  final List<ChangeRow> rows;
+  final FileChange? file;
+  final UntrackedEntry? untracked;
+
+  /// The path the address named, so a selection that no longer exists can say
+  /// so instead of falling silently back to nothing.
+  final String? missing;
+
+  final Set<String> uncommitted;
   final HunkLineCache lines;
   final ScrollController controller;
-  final String? current;
-  final ValueChanged<FileChange> onToggle;
-  final VoidCallback onToggleNoise;
 
   @override
   Widget build(BuildContext context) {
-    if (rows.isEmpty) {
-      return Center(
-        child: Text(
-          set.changed.isEmpty ? 'Nothing to show.' : 'Nothing matches.',
-          style: context.type.bodySmall.copyWith(color: context.colors.mut2),
-        ),
+    if (file case var it?) {
+      var rows = buildFileRows(it);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _FileHeader(file: it, uncommitted: uncommitted.contains(it.path)),
+          Divider(height: 1, color: context.colors.line),
+          Expanded(
+            child: ListView.builder(
+              key: changesFileKey,
+              controller: controller,
+              itemCount: rows.length,
+              itemBuilder: (context, index) => switch (rows[index]) {
+                HunkRow(:var hunk) => HunkHeaderLine(hunk: hunk),
+                // The one place a byte slice becomes text, and it happens for
+                // the rows the list actually builds.
+                DiffLineRow(:var hunk, :var index) => HunkLineView(
+                  lines: lines,
+                  hunk: hunk,
+                  index: index,
+                ),
+                FileNoticeRow(:var message) => Padding(
+                  padding: const EdgeInsets.all(FwSpacing.xxl),
+                  child: Text(
+                    message,
+                    style: context.type.bodySmall.copyWith(
+                      color: context.colors.mut2,
+                    ),
+                  ),
+                ),
+                _ => const SizedBox.shrink(),
+              },
+            ),
+          ),
+        ],
       );
     }
-    // Same order of work as `buildRows`, which already runs on every build.
-    var indexOf = {for (var i = 0; i < rows.length; i++) rows[i].anchorKey: i};
-    // The `GlobalKey` is on the wrapper rather than on the list, because it is
-    // only ever used to walk *down* to the sliver — and a `ListView` holding a
-    // key a test cannot name is a list a test cannot find.
-    return KeyedSubtree(
-      key: listKey,
-      child: ListView.builder(
-        key: changesListKey,
-        controller: controller,
-        itemCount: rows.length,
-        // **Element identity, not scroll position.** Keyed and index-mapped,
-        // an expanded file that moved from row 12 to row 13 keeps its own
-        // element rather than being rebuilt as whatever is at 12 now.
-        //
-        // It does *not* keep the viewport still, which was worth finding out
-        // by trying: `RenderSliverList` still lays out from the offset it was
-        // given, so a row inserted above still slides what you were reading
-        // down by its height. `_readAnchor` is what handles that.
-        findChildIndexCallback: (key) =>
-            indexOf[(key as ValueKey<String>).value],
-        itemBuilder: (context, index) => KeyedSubtree(
-          key: ValueKey(rows[index].anchorKey),
-          child: _row(context, rows[index]),
+
+    if (untracked case var it?) {
+      return _Empty(
+        title: it.path,
+        // Untracked means git has no other side to compare against — there is
+        // no diff to render, and saying "no changes" would be a lie about a
+        // file that is entirely new.
+        body: it.isDirectory
+            ? 'An untracked directory. Nothing here has been scanned — see the '
+                  'note on the changes list.'
+            : 'Not tracked yet, so there is nothing to compare it against. '
+                  'Every line in it is new.',
+      );
+    }
+
+    if (missing != null) {
+      return _Empty(
+        title: missing!,
+        body:
+            'This file is no longer part of the delta — it may have been '
+            'committed away, reverted, or renamed.',
+      );
+    }
+
+    return const _Empty(
+      title: 'Pick a file',
+      body:
+          'The list on the left is ranked: what a rule pinned comes first, '
+          'then the rest by weight.',
+    );
+  }
+}
+
+/// What the right pane says when it has nothing to draw.
+class _Empty extends StatelessWidget {
+  const _Empty({required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: context.type.bodySmall.copyWith(color: colors.mut),
+              overflow: TextOverflow.ellipsis,
+            ),
+            const Gap(FwSpacing.sm),
+            Text(
+              body,
+              style: context.type.bodySmall.copyWith(color: colors.mut2),
+            ),
+          ],
         ),
       ),
     );
   }
+}
 
-  Widget _row(BuildContext context, ChangeRow row) => switch (row) {
-    SectionRow(:var label, :var detail) => Padding(
-      padding: const EdgeInsets.fromLTRB(
-        FwSpacing.lg,
-        FwSpacing.xl,
-        FwSpacing.lg,
-        FwSpacing.xs,
-      ),
-      child: Row(
-        children: [
-          Text(label, style: context.type.caption),
-          if (detail case var it?) ...[
-            const Gap(FwSpacing.sm),
-            Text(
-              it,
-              style: context.type.micro.copyWith(color: context.colors.mut3),
-            ),
-          ],
-        ],
-      ),
-    ),
-    NoiseDrawerRow(:var files, :var added, :var removed, :var open) =>
-      NoiseDrawerLine(
-        files: files,
-        added: added,
-        removed: removed,
-        open: open,
-        onTap: onToggleNoise,
-      ),
-    FileRow(:var file, :var expanded, :var uncommitted, :var reason) =>
-      ChangeFileRow(
-        file: file,
-        expanded: expanded,
-        uncommitted: uncommitted,
-        reason: reason,
-        isCurrent: file.path == current,
-        onTap: () => onToggle(file),
-      ),
-    HunkRow(:var hunk) => HunkHeaderLine(hunk: hunk),
-    // The one place a byte slice becomes text, and it happens for the rows
-    // the list actually builds.
-    DiffLineRow(:var hunk, :var index) => HunkLineView(
-      lines: lines,
-      hunk: hunk,
-      index: index,
-    ),
-    FileNoticeRow(:var message) => Padding(
+/// The right pane's own header: which file, and what it costs.
+class _FileHeader extends StatelessWidget {
+  const _FileHeader({required this.file, required this.uncommitted});
+
+  final FileChange file;
+  final bool uncommitted;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var slash = file.path.lastIndexOf('/');
+    var directory = slash < 0 ? '' : file.path.substring(0, slash + 1);
+    var name = slash < 0 ? file.path : file.path.substring(slash + 1);
+
+    return Padding(
       padding: const EdgeInsets.fromLTRB(
         FwSpacing.xxl,
-        FwSpacing.sm,
         FwSpacing.lg,
-        FwSpacing.lg,
+        FwSpacing.xxl,
+        FwSpacing.md,
       ),
-      child: Text(
-        message,
-        style: context.type.bodySmall.copyWith(color: context.colors.mut2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // **Name first, directory after it, dimmed** — the same rule the
+          // explorer's card settled on. The name is the column you scan; a
+          // directory-first row leaves the names on a ragged left edge.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(
+                child: Text(
+                  name,
+                  style: context.type.bodyStrong,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                ),
+              ),
+              if (directory.isNotEmpty) ...[
+                const Gap(FwSpacing.sm),
+                Flexible(
+                  child: Text(
+                    directory,
+                    style: context.type.micro.copyWith(color: colors.mut3),
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const Gap(FwSpacing.xs),
+          Row(
+            children: [
+              // **The ruler kept its place, and this is a better one.** It used
+              // to sit on a full-width file row; in a 320 px index there is no
+              // width for it, and here it is directly above the hunks it is
+              // describing — where "the change is all at the top" is a thing
+              // you check before you start scrolling.
+              HunkRuler(file: file, width: 120, height: 6),
+              const Gap(FwSpacing.md),
+              Expanded(
+                child: _FileCounts(file: file, uncommitted: uncommitted),
+              ),
+            ],
+          ),
+        ],
       ),
-    ),
-    UntrackedRow(:var entry) => UntrackedFileLine(entry: entry),
+    );
+  }
+
+  static String _statusWord(ChangeStatus status) => switch (status) {
+    ChangeStatus.added => 'added',
+    ChangeStatus.deleted => 'deleted',
+    ChangeStatus.renamed => 'renamed',
+    ChangeStatus.modified => 'modified',
   };
+}
+
+class _FileCounts extends StatelessWidget {
+  const _FileCounts({required this.file, required this.uncommitted});
+
+  final FileChange file;
+  final bool uncommitted;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Wrap(
+      spacing: FwSpacing.md,
+      children: [
+        Text(
+          _FileHeader._statusWord(file.status),
+          style: context.type.micro.copyWith(color: colors.mut2),
+        ),
+        if (file.oldPath case var from?)
+          Text(
+            'from $from',
+            style: context.type.micro.copyWith(color: colors.mut2),
+          ),
+        Text(
+          '+${file.added}',
+          style: context.type.micro.copyWith(color: colors.grn),
+        ),
+        Text(
+          '-${file.removed}',
+          style: context.type.micro.copyWith(color: colors.red),
+        ),
+        if (uncommitted)
+          Text(
+            'uncommitted',
+            style: context.type.micro.copyWith(color: colors.amber),
+          ),
+        if (file.hunks.isNotEmpty)
+          Text(
+            '${file.hunks.length} '
+            '${file.hunks.length == 1 ? 'hunk' : 'hunks'}',
+            style: context.type.micro.copyWith(color: colors.mut3),
+          ),
+      ],
+    );
+  }
 }
 
 class _Note extends StatelessWidget {
@@ -1182,29 +907,6 @@ class _Note extends StatelessWidget {
       child: Text(
         text,
         style: context.type.bodySmall.copyWith(color: colors.mut),
-      ),
-    );
-  }
-}
-
-/// What the keyboard does, said once, quietly — the same strip the explorer
-/// has, for the same reason.
-class _KeyHints extends StatelessWidget {
-  const _KeyHints();
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Container(
-      height: 22,
-      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.xxl),
-      alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: colors.line)),
-      ),
-      child: Text(
-        '↑↓ move    ↵ open    ←→ close/open    click a file to read it',
-        style: context.type.micro.copyWith(color: colors.mut3),
       ),
     );
   }

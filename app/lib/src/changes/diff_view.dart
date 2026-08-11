@@ -10,25 +10,29 @@ import 'package:flutter/material.dart';
 import '../ui/theme.dart';
 import 'change_set.dart';
 import 'diff_lines.dart';
-import 'hunk_ruler.dart';
 import 'patch_index.dart';
 
-/// A file's own row: what happened to it, where the change sits, and how much.
-class ChangeFileRow extends StatelessWidget {
-  const ChangeFileRow({
+/// A file's row **in the index**: what happened to it, and how much.
+///
+/// Sized for a 320 px column, not a window: name on the first line where the
+/// eye scans, directory dimmed under it, counts hard right. The full-width
+/// version this replaces put the whole path on one line with a ruler and two
+/// 46 px count columns, which is a row that only reads at 1200 px.
+class IndexFileRow extends StatelessWidget {
+  const IndexFileRow({
     required this.file,
-    required this.expanded,
+    required this.selected,
     required this.uncommitted,
-    required this.isCurrent,
     required this.onTap,
     this.reason,
     super.key,
   });
 
   final FileChange file;
-  final bool expanded;
+
+  /// Whether the right pane is showing this file.
+  final bool selected;
   final bool uncommitted;
-  final bool isCurrent;
   final VoidCallback onTap;
 
   /// Why this file was pinned or demoted, in the words the rule was written in.
@@ -37,27 +41,24 @@ class ChangeFileRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    var slash = file.path.lastIndexOf('/');
+    var name = slash < 0 ? file.path : file.path.substring(slash + 1);
+
     return InkWell(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: isCurrent ? colors.accentSoft : Colors.transparent,
-          border: Border(bottom: BorderSide(color: colors.line)),
+          color: selected ? colors.accentSoft : Colors.transparent,
         ),
         padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.lg,
+          horizontal: FwSpacing.md,
           vertical: FwSpacing.sm,
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              expanded ? Icons.expand_more : Icons.chevron_right,
-              size: 14,
-              color: colors.mut3,
-            ),
-            const Gap(FwSpacing.xs),
             SizedBox(
-              width: 14,
+              width: 12,
               child: Text(
                 _letter(file.status),
                 style: context.type.micro.copyWith(color: _tone(colors)),
@@ -69,37 +70,35 @@ class ChangeFileRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    file.path,
+                    name,
                     style: context.type.bodySmall,
                     overflow: TextOverflow.ellipsis,
+                    softWrap: false,
                   ),
                   if (_notes.isNotEmpty)
                     Text(
                       _notes.join(' · '),
                       style: context.type.micro.copyWith(color: colors.mut2),
                       overflow: TextOverflow.ellipsis,
+                      softWrap: false,
                     ),
                 ],
               ),
             ),
-            const Gap(FwSpacing.md),
-            HunkRuler(file: file),
-            const Gap(FwSpacing.md),
-            SizedBox(
-              width: 46,
-              child: Text(
-                '+${file.added}',
-                textAlign: TextAlign.right,
-                style: context.type.micro.copyWith(color: colors.grn),
-              ),
-            ),
-            SizedBox(
-              width: 46,
-              child: Text(
-                '-${file.removed}',
-                textAlign: TextAlign.right,
-                style: context.type.micro.copyWith(color: colors.red),
-              ),
+            const Gap(FwSpacing.sm),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '+${file.added}',
+                  style: context.type.micro.copyWith(color: colors.grn),
+                ),
+                if (file.removed > 0)
+                  Text(
+                    '-${file.removed}',
+                    style: context.type.micro.copyWith(color: colors.red),
+                  ),
+              ],
             ),
           ],
         ),
@@ -111,15 +110,20 @@ class ChangeFileRow extends StatelessWidget {
     // **The rule first.** A row that was pinned has to say what pinned it or
     // the pin is magic, and magic is what people learn to ignore.
     ?reason,
-    // A rename says where it came from: `R` alone is a status nobody can act on.
+    // A rename says where it came from: `R` alone is a status nobody can act
+    // on, and the index is where you decide whether to look.
     if (file.oldPath case var it?) 'from $it',
     if (uncommitted) 'uncommitted',
     if (file.isBinary) 'binary',
-    if (file.hunks.length == 1)
-      '1 hunk'
-    else if (file.hunks.length > 1)
-      '${file.hunks.length} hunks',
+    // The directory last, because it is the part you read only once you have
+    // found the name — and the part most often ellipsised away.
+    if (_directoryOf(file.path) case var it? when it.isNotEmpty) it,
   ];
+
+  static String? _directoryOf(String path) {
+    var slash = path.lastIndexOf('/');
+    return slash < 0 ? null : path.substring(0, slash);
+  }
 
   Color _tone(FwPalette colors) => switch (file.status) {
     ChangeStatus.added => colors.grn,
@@ -372,58 +376,84 @@ class _Gutter extends StatelessWidget {
 }
 
 /// An untracked path, exactly as git reported it.
-class UntrackedFileLine extends StatelessWidget {
-  const UntrackedFileLine({required this.entry, super.key});
+class IndexUntrackedRow extends StatelessWidget {
+  const IndexUntrackedRow({
+    required this.entry,
+    required this.selected,
+    required this.onTap,
+    super.key,
+  });
 
   final UntrackedEntry entry;
+  final bool selected;
+
+  /// Null for a directory, which is the one row here that opens nothing: there
+  /// is no diff behind it and reading it would be the walk this avoids.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: FwSpacing.lg,
-        vertical: FwSpacing.xs,
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 14,
-            child: Text(
-              '?',
-              style: context.type.micro.copyWith(color: colors.mut3),
+    var slash = entry.path.lastIndexOf('/');
+    var name = slash < 0 ? entry.path : entry.path.substring(slash + 1);
+    var notes = [
+      ?entry.reason,
+      if (entry.isDirectory)
+        // **Never a file count.** Counting is the directory walk that keeping
+        // this to one row exists to avoid.
+        'directory, not scanned'
+      else
+        'not tracked yet',
+      // Not for a directory: its own path is already drawn in full above, and
+      // repeating the parent under it reads as two different places.
+      if (slash > 0 && !entry.isDirectory) entry.path.substring(0, slash),
+    ];
+
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: selected ? colors.accentSoft : Colors.transparent,
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: FwSpacing.md,
+          vertical: FwSpacing.sm,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 12,
+              child: Text(
+                '?',
+                style: context.type.micro.copyWith(color: colors.mut3),
+              ),
             ),
-          ),
-          const Gap(FwSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  entry.path,
-                  style: context.type.bodySmall.copyWith(
-                    // A pinned path is being read, not skimmed past.
-                    color: entry.isPinned ? null : colors.mut,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (entry.reason case var it?)
+            const Gap(FwSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    '$it · not tracked yet',
+                    entry.isDirectory ? entry.path : name,
+                    style: context.type.bodySmall.copyWith(
+                      // A pinned path is being read, not skimmed past.
+                      color: entry.isPinned ? null : colors.mut,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                  ),
+                  Text(
+                    notes.join(' · '),
                     style: context.type.micro.copyWith(color: colors.mut2),
                     overflow: TextOverflow.ellipsis,
+                    softWrap: false,
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
-          // **Never a file count.** Counting is the directory walk that keeping
-          // this to one row exists to avoid.
-          if (entry.isDirectory)
-            Text(
-              'directory, not scanned',
-              style: context.type.micro.copyWith(color: colors.mut3),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

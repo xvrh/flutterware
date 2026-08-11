@@ -4,13 +4,12 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/changes/change_rows.dart';
 import 'package:flutterware_app/src/changes/change_set.dart';
-import 'package:flutterware_app/src/changes/changes_tree.dart';
 import 'package:flutterware_app/src/changes/diff_lines.dart';
 import 'package:flutterware_app/src/changes/patch_index.dart';
 import 'package:flutterware_app/src/changes/ranking.dart';
 
-/// The pure-Dart half of the screen: what rows exist, how a hunk becomes lines,
-/// and how paths fold into a tree. All testable without pumping a widget, which
+/// The pure-Dart half of the screen: what the index holds, what a body holds,
+/// and how a hunk becomes lines. All testable without pumping a widget, which
 /// is the point of keeping them out of the view.
 void main() {
   PatchIndex index(String patch) =>
@@ -77,7 +76,7 @@ diff --git a/lib/b.dart b/lib/b.dart
 
     test('nothing ranked draws no headings at all', () {
       // A section header over the only section is furniture.
-      var rows = buildRows(setOf(index(twoFiles)), expanded: {});
+      var rows = buildIndexRows(setOf(index(twoFiles)));
       expect(rows.whereType<SectionRow>(), isEmpty);
       expect(rows.whereType<NoiseDrawerRow>(), isEmpty);
     });
@@ -86,9 +85,8 @@ diff --git a/lib/b.dart b/lib/b.dart
       // Found by photographing a 25-file branch: a lone `Changes` heading sat
       // at the top with the thing it distinguished from below the fold.
       var patch = index(twoFiles);
-      var rows = buildRows(
+      var rows = buildIndexRows(
         setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'})),
-        expanded: {},
       );
       expect(rows.whereType<SectionRow>(), isEmpty);
       expect(rows.whereType<NoiseDrawerRow>(), hasLength(1));
@@ -96,9 +94,8 @@ diff --git a/lib/b.dart b/lib/b.dart
 
     test('a pinned file gets its own section, above everything else', () {
       var patch = index(twoFiles);
-      var rows = buildRows(
+      var rows = buildIndexRows(
         setOf(patch, ranking: rankingOf(patch, attention: {'lib/b.dart'})),
-        expanded: {},
       );
       expect(rows.first, isA<SectionRow>());
       expect((rows.first as SectionRow).label, 'Look here first');
@@ -109,9 +106,8 @@ diff --git a/lib/b.dart b/lib/b.dart
 
     test('the rule that fired reaches the row', () {
       var patch = index(twoFiles);
-      var rows = buildRows(
+      var rows = buildIndexRows(
         setOf(patch, ranking: rankingOf(patch, attention: {'lib/b.dart'})),
-        expanded: {},
       );
       var pinned = rows.whereType<FileRow>().firstWhere(
         (r) => r.file.path == 'lib/b.dart',
@@ -126,7 +122,7 @@ diff --git a/lib/b.dart b/lib/b.dart
     test('noise collapses to one row, and the count is the information', () {
       var patch = index(twoFiles);
       var set = setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'}));
-      var rows = buildRows(set, expanded: {});
+      var rows = buildIndexRows(set);
 
       var drawer = rows.whereType<NoiseDrawerRow>().single;
       expect(drawer.files, 1);
@@ -140,7 +136,7 @@ diff --git a/lib/b.dart b/lib/b.dart
     test('opening the drawer lists them, and never loses one', () {
       var patch = index(twoFiles);
       var set = setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'}));
-      var rows = buildRows(set, expanded: {}, noiseOpen: true);
+      var rows = buildIndexRows(set, noiseOpen: true);
 
       expect(rows.whereType<NoiseDrawerRow>().single.open, isTrue);
       expect(rows.whereType<FileRow>().map((r) => r.file.path), [
@@ -152,15 +148,21 @@ diff --git a/lib/b.dart b/lib/b.dart
       expect(set.changed, hasLength(2));
     });
 
-    test('a noise file still expands to its own diff', () {
+    test('a noise file in the open drawer still has a body to read', () {
       var patch = index(twoFiles);
-      var rows = buildRows(
+      var rows = buildIndexRows(
         setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'})),
-        expanded: {'lib/b.dart'},
         noiseOpen: true,
       );
-      expect(rows.whereType<HunkRow>(), hasLength(1));
-      expect(rows.whereType<DiffLineRow>(), isNotEmpty);
+      expect(
+        rows.whereType<FileRow>().map((r) => r.file.path),
+        contains('lib/b.dart'),
+      );
+      var body = buildFileRows(
+        patch.files.firstWhere((f) => f.path == 'lib/b.dart'),
+      );
+      expect(body.whereType<HunkRow>(), hasLength(1));
+      expect(body.whereType<DiffLineRow>(), isNotEmpty);
     });
 
     test('ordering is per tier, not across the list', () {
@@ -181,7 +183,7 @@ diff --git a/lib/b.dart b/lib/b.dart
       // moment it is for. Found by photographing the screen with a real
       // `attention: ['docs/superpowers/specs/**']` in the config.
       var patch = index(twoFiles);
-      var rows = buildRows(
+      var rows = buildIndexRows(
         setOf(
           patch,
           untracked: const [
@@ -190,7 +192,6 @@ diff --git a/lib/b.dart b/lib/b.dart
             UntrackedEntry.directory('build/'),
           ],
         ),
-        expanded: {},
       );
 
       var first = rows.first as SectionRow;
@@ -226,7 +227,7 @@ diff --git a/lib/b.dart b/lib/b.dart
         patch,
         ranking: rankingOf(patch, attention: {'lib/b.dart'}),
       );
-      var rows = buildRows(set, expanded: {}, visible: {'lib/a.dart'});
+      var rows = buildIndexRows(set, visible: {'lib/a.dart'});
       // Nothing pinned survived the filter, so that heading is gone…
       expect(
         rows.whereType<SectionRow>().map((r) => r.label),
@@ -238,25 +239,25 @@ diff --git a/lib/b.dart b/lib/b.dart
   });
 
   group('rows', () {
-    test('a collapsed file is exactly one row', () {
-      var rows = buildRows(setOf(index(twoFiles)), expanded: {});
+    test('the index is one row per file and never a line of diff', () {
+      var rows = buildIndexRows(setOf(index(twoFiles)));
       expect(rows.whereType<FileRow>(), hasLength(2));
       expect(rows.whereType<DiffLineRow>(), isEmpty);
+      expect(rows.whereType<HunkRow>(), isEmpty);
       expect(rows, hasLength(2));
     });
 
-    test('an expanded file contributes its hunks and every line', () {
+    test('a body is its hunks and every line, and only that file', () {
       var patch = index(twoFiles);
-      var rows = buildRows(setOf(patch), expanded: {'lib/a.dart'});
-
       var a = patch.files.firstWhere((f) => f.path == 'lib/a.dart');
+      var rows = buildFileRows(a);
+
       expect(rows.whereType<HunkRow>(), hasLength(2));
       expect(
         rows.whereType<DiffLineRow>(),
         hasLength(a.hunks.fold<int>(0, (sum, h) => sum + h.displayLines)),
       );
-      // The other file stayed one row.
-      expect(rows.whereType<FileRow>(), hasLength(2));
+      expect(rows.whereType<FileRow>(), isEmpty);
     });
 
     test(
@@ -265,7 +266,9 @@ diff --git a/lib/b.dart b/lib/b.dart
         // The claim the virtualised list rests on: `displayLines` comes off the
         // `@@` header, so scroll extents are right before a byte is read.
         var patch = index(twoFiles);
-        var rows = buildRows(setOf(patch), expanded: {'lib/a.dart'});
+        var rows = buildFileRows(
+          patch.files.firstWhere((f) => f.path == 'lib/a.dart'),
+        );
         var lines = HunkLineCache(patch);
 
         expect(lines.decodedHunks, 0, reason: 'building rows decodes nothing');
@@ -277,10 +280,10 @@ diff --git a/lib/b.dart b/lib/b.dart
       var patch = index(twoFiles);
       var set = setOf(patch, untracked: const [UntrackedEntry('scratch.txt')]);
 
-      var all = buildRows(set, expanded: {});
+      var all = buildIndexRows(set);
       expect(all.whereType<UntrackedRow>(), hasLength(1));
 
-      var filtered = buildRows(set, expanded: {}, visible: {'lib/b.dart'});
+      var filtered = buildIndexRows(set, visible: {'lib/b.dart'});
       expect(filtered.whereType<FileRow>(), hasLength(1));
       expect(
         filtered.whereType<UntrackedRow>(),
@@ -289,12 +292,12 @@ diff --git a/lib/b.dart b/lib/b.dart
       );
     });
 
-    test('a binary file expands to a notice, not to nothing', () {
+    test('a binary file is a notice, not an empty pane', () {
       var patch = index('''
 diff --git a/logo.png b/logo.png
 Binary files a/logo.png and b/logo.png differ
 ''');
-      var rows = buildRows(setOf(patch), expanded: {'logo.png'});
+      var rows = buildFileRows(patch.files.single);
 
       expect(rows.whereType<FileNoticeRow>(), hasLength(1));
       expect(
@@ -310,7 +313,7 @@ similarity index 100%
 rename from old.dart
 rename to new.dart
 ''');
-      var rows = buildRows(setOf(patch), expanded: {'new.dart'});
+      var rows = buildFileRows(patch.files.single);
       expect(
         rows.whereType<FileNoticeRow>().single.message,
         contains('only the path'),
@@ -407,7 +410,7 @@ rename to new.dart
     });
   });
 
-  group('tree', () {
+  group('the filter', () {
     FileChange at(String path) => FileChange(
       path: path,
       status: ChangeStatus.modified,
@@ -417,45 +420,6 @@ rename to new.dart
       byteStart: 0,
       byteEnd: 0,
     );
-
-    test('single-child directories fold into one row', () {
-      // `app/lib/src/motion` is one choice, not four.
-      var tree = buildTree([
-        at('app/lib/src/motion/lane.dart'),
-        at('app/lib/src/motion/timeline.dart'),
-      ]);
-
-      expect(tree.sortedChildren, hasLength(1));
-      expect(tree.sortedChildren.single.name, 'app/lib/src/motion');
-      expect(tree.sortedChildren.single.files, hasLength(2));
-    });
-
-    test('a fork stops the folding', () {
-      var tree = buildTree([at('app/lib/a.dart'), at('app/test/b.dart')]);
-
-      var app = tree.sortedChildren.single;
-      expect(app.name, 'app');
-      expect(app.sortedChildren.map((c) => c.name), ['lib', 'test']);
-    });
-
-    test('counts are totals, not just what is directly inside', () {
-      var tree = buildTree([
-        at('app/lib/a.dart'),
-        at('app/lib/deep/b.dart'),
-        at('app/lib/deep/c.dart'),
-      ]);
-      expect(tree.sortedChildren.single.totalFiles, 3);
-    });
-
-    test('a repo-root file lives at the top', () {
-      var tree = buildTree([at('pubspec.yaml'), at('app/lib/a.dart')]);
-      expect(tree.sortedFiles.map((f) => f.path), ['pubspec.yaml']);
-    });
-
-    test('pathsUnder takes a directory and not its lookalikes', () {
-      var files = [at('app/lib/a.dart'), at('app_extra/lib/b.dart')];
-      expect(pathsUnder(files, 'app'), {'app/lib/a.dart'});
-    });
 
     test('pathsMatching is a plain case-insensitive substring', () {
       var files = [at('app/lib/Motion.dart'), at('app/lib/other.dart')];

@@ -130,16 +130,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('lib/gone.dart'), findsOneWidget);
-    expect(find.text('lib/big.dart'), findsOneWidget);
+    expect(find.text('gone.dart'), findsOneWidget);
+    expect(find.text('big.dart'), findsOneWidget);
     expect(find.text('+140'), findsOneWidget);
     expect(find.text('-88'), findsOneWidget);
 
     // Ranked: the deletion is the line most worth seeing.
-    var rows = tester.widgetList<Text>(find.byType(Text)).toList();
-    var gone = rows.indexWhere((t) => t.data == 'lib/gone.dart');
-    var big = rows.indexWhere((t) => t.data == 'lib/big.dart');
-    expect(gone, lessThan(big));
+    expect(
+      tester.getTopLeft(find.text('gone.dart')).dy,
+      lessThan(tester.getTopLeft(find.text('big.dart')).dy),
+    );
   });
 
   testWidgets('an uncommitted file says so; a rename says where from', (
@@ -249,7 +249,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('lib/a.dart'), findsOneWidget);
+    expect(find.text('a.dart'), findsOneWidget);
 
     fail = true;
     await tester.tap(find.byIcon(Icons.refresh));
@@ -257,7 +257,7 @@ void main() {
 
     expect(find.textContaining('the checkout vanished'), findsOneWidget);
     expect(
-      find.text('lib/a.dart'),
+      find.text('a.dart'),
       findsOneWidget,
       reason: 'a failed reload must not blank what it last said',
     );
@@ -292,12 +292,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('1 low-signal file'), findsOneWidget);
-      expect(find.text('lib/model.g.dart'), findsNothing);
-      expect(find.text('lib/real.dart'), findsOneWidget);
+      expect(find.text('model.g.dart'), findsNothing);
+      expect(find.text('real.dart'), findsOneWidget);
 
       await tester.tap(find.text('1 low-signal file'));
       await tester.pumpAndSettle();
-      expect(find.text('lib/model.g.dart'), findsOneWidget);
+      expect(find.text('model.g.dart'), findsOneWidget);
     });
 
     testWidgets('a pinned file leads, and names the rule that pinned it', (
@@ -323,8 +323,8 @@ void main() {
 
       // The small pinned file is drawn above the 1800-line one — which is the
       // whole claim, since every other sort would invert them.
-      var pinned = tester.getTopLeft(find.text('db/migrations/1.sql'));
-      var big = tester.getTopLeft(find.text('lib/huge.dart'));
+      var pinned = tester.getTopLeft(find.text('1.sql'));
+      var big = tester.getTopLeft(find.text('huge.dart'));
       expect(pinned.dy, lessThan(big.dy));
     });
 

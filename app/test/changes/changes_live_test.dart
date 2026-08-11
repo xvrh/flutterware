@@ -7,8 +7,14 @@ import 'package:flutterware_app/src/changes/ranking.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
-/// **What survives a re-index**, which is the whole difference between a screen
-/// that is live and a screen that punishes you for having scrolled.
+/// **What survives a re-index** — and after the split, the answer is *the thing
+/// you are reading*, by construction.
+///
+/// The old screen needed a scroll anchor for this: index and content were one
+/// list, so an agent creating a file renumbered rows under your eyes and slid
+/// the diff down by 63 px. Measured, fixed, and then deleted — with the panes
+/// separated, a new file changes the left column and the right pane does not
+/// move at all. That is the strongest argument the layout has.
 ///
 /// A live re-probe is indistinguishable here from the refresh button: both go
 /// through `ChangesController.refresh`, and the button is the half a widget
@@ -20,54 +26,59 @@ void main() {
     branch: 'claude/feature',
   );
 
-  FileChange file(String path, {int added = 10}) => FileChange(
+  FileChange file(String path, {int added = 10, int hunks = 1}) => FileChange(
     path: path,
     status: ChangeStatus.modified,
     added: added,
     removed: 0,
     hunks: [
-      HunkSpan(
-        oldStart: 1,
-        oldCount: 1,
-        newStart: 1,
-        newCount: 1,
-        added: 1,
-        removed: 0,
-        byteStart: 0,
-        byteEnd: 0,
-      ),
+      for (var i = 0; i < hunks; i++)
+        HunkSpan(
+          oldStart: 1 + i * 10,
+          oldCount: 1,
+          newStart: 1 + i * 10,
+          newCount: 1,
+          added: 1,
+          removed: 0,
+          byteStart: 0,
+          byteEnd: 0,
+        ),
     ],
     byteStart: 0,
     byteEnd: 0,
   );
 
-  ChangeSet setOf(List<FileChange> files, {Ranking? ranking}) => ChangeSet(
+  ChangeSet setOf(
+    List<FileChange> files, {
+    Ranking? ranking,
+    Set<String> uncommitted = const {},
+  }) => ChangeSet(
     worktreePath: worktree.path,
     patch: PatchIndex.empty,
     base: 'master',
     baseSource: BaseSource.inferred,
     files: files,
     ranking: ranking,
+    uncommitted: uncommitted,
   );
 
-  /// Twenty files, biggest first, so the list is longer than any viewport.
   List<FileChange> twenty() => [
     for (var i = 0; i < 20; i++) file('lib/f$i.dart', added: 100 - i),
   ];
 
   late ChangeSet current;
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(WidgetTester tester, {bool live = false}) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: appTheme,
         home: Scaffold(
           body: ChangesScreen(
             worktree: worktree,
-            // No watch: this file is about what a re-probe does to the screen,
-            // not about what wakes it. A real one on a path that does not exist
-            // would only make the header say so.
-            live: false,
+            // This file is about what a re-probe does to the screen, not about
+            // what wakes it. A real watch on a path that does not exist would
+            // only make the header say so.
+            live: live,
             load: (_) async => current,
           ),
         ),
@@ -82,136 +93,88 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Finder inIndex(String text) => find.descendant(
+    of: find.byKey(changesListKey),
+    matching: find.text(text),
+  );
+
   setUp(() => current = setOf(twenty()));
 
-  testWidgets('a file appearing above does not move what you are reading', (
+  testWidgets('a file appearing does not move what you are reading', (
     tester,
   ) async {
-    // **Measured in a real window first**: one new file is a 63 px row, and an
-    // unchanged pixel offset then points 63 px earlier into the diff you were
-    // reading. Small enough to look like a glitch, large enough to lose your
-    // place — and an agent that just wrote four files does it four times.
     await pump(tester);
-    await tester.drag(find.byKey(changesListKey), const Offset(0, -300));
+    await tester.tap(inIndex('f9.dart'));
     await tester.pumpAndSettle();
+    var before = tester.getTopLeft(find.textContaining('@@').first);
 
-    var before = tester.getTopLeft(find.text('lib/f9.dart'));
     await reprobe(
       tester,
       setOf([file('lib/BIG.dart', added: 999), ...twenty()]),
     );
 
-    expect(find.text('lib/BIG.dart'), findsNothing, reason: 'it is above us');
-    expect(tester.getTopLeft(find.text('lib/f9.dart')), before);
+    expect(inIndex('BIG.dart'), findsOneWidget, reason: 'the index did move');
+    expect(tester.getTopLeft(find.textContaining('@@').first), before);
   });
 
-  testWidgets('and a file disappearing above does not either', (tester) async {
+  testWidgets('the index keeps its own scroll position', (tester) async {
     await pump(tester);
-    await tester.drag(find.byKey(changesListKey), const Offset(0, -300));
+    await tester.drag(find.byKey(changesListKey), const Offset(0, -200));
     await tester.pumpAndSettle();
+    var before = tester.getTopLeft(inIndex('f9.dart'));
 
-    var before = tester.getTopLeft(find.text('lib/f9.dart'));
-    await reprobe(
-      tester,
-      setOf([...twenty()..removeWhere((f) => f.path == 'lib/f0.dart')]),
-    );
-
-    expect(tester.getTopLeft(find.text('lib/f9.dart')), before);
+    // Nothing above it moved, so nothing below it should have either.
+    await reprobe(tester, setOf(twenty()));
+    expect(tester.getTopLeft(inIndex('f9.dart')), before);
   });
 
-  testWidgets('the row you were on going away leaves the offset alone', (
-    tester,
-  ) async {
-    // Nothing to hold on to — the file was committed away or renamed. Guessing
-    // would put you somewhere arbitrary, which is worse than staying put.
-    await pump(tester);
-    await tester.drag(find.byKey(changesListKey), const Offset(0, -300));
-    await tester.pumpAndSettle();
-
-    await reprobe(tester, setOf(twenty().sublist(0, 4)));
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('a re-probe mid-fling does not stop the fling', (tester) async {
-    // **The correction must never take the list away from a hand.** `jumpTo`
-    // ends the current scroll activity, so a flick was stopping dead the next
-    // time the watcher fired — measured at 549 px, frozen there. On a checkout
-    // an agent is writing in that is every two seconds, which is a far worse
-    // screen than the drift the anchor exists to remove.
-    var forty = [
-      for (var i = 0; i < 40; i++) file('lib/g$i.dart', added: 200 - i),
-    ];
-    current = setOf(forty);
-    await pump(tester);
-
-    var list = find.byKey(changesListKey);
-    var position = tester
-        .state<ScrollableState>(
-          find.descendant(of: list, matching: find.byType(Scrollable)),
-        )
-        .position;
-
-    await tester.fling(list, const Offset(0, -400), 3000);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 60));
-    var midFlight = position.pixels;
-    expect(position.activity, isA<BallisticScrollActivity>());
-
-    // The watcher fires, with a file inserted above everything on screen.
-    current = setOf([file('lib/BIG.dart', added: 9999), ...forty]);
-    await tester.tap(
-      find.byTooltip('Read this checkout again'),
-      warnIfMissed: false,
-    );
-    await tester.pump();
-    await tester.pump();
-
-    expect(position.activity, isA<BallisticScrollActivity>());
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(
-      position.pixels,
-      greaterThan(midFlight),
-      reason: 'the fling carried on past where the re-probe found it',
-    );
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets('an expanded file stays expanded, and keeps its lines', (
+  testWidgets('the file you are on survives, and its counts update', (
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.text('lib/f3.dart'));
+    await tester.tap(inIndex('f3.dart'));
     await tester.pumpAndSettle();
     expect(find.textContaining('@@'), findsOneWidget);
 
-    await reprobe(
-      tester,
-      setOf([file('lib/new.dart', added: 500), ...twenty()]),
-    );
+    var grown = [
+      for (var f in twenty())
+        if (f.path == 'lib/f3.dart')
+          file('lib/f3.dart', added: 400, hunks: 3)
+        else
+          f,
+    ];
+    await reprobe(tester, setOf(grown, uncommitted: {'lib/f3.dart'}));
+
+    expect(find.textContaining('@@'), findsNWidgets(3));
     expect(
-      find.textContaining('@@'),
-      findsOneWidget,
-      reason: 'expansion is keyed by path, and the path did not move',
+      find.descendant(
+        of: find.byKey(changesFileKey).hitTestable(),
+        matching: find.text('+400'),
+      ),
+      findsNothing,
+      reason: 'the counts live in the pane header, above the list',
     );
+    expect(find.text('+400'), findsWidgets);
+    expect(find.text('uncommitted'), findsWidgets);
   });
 
-  testWidgets('the filter you typed is still there, caret and all', (
-    tester,
-  ) async {
+  testWidgets('the filter you typed is still there', (tester) async {
     // The explorer learned this the hard way once the watchers landed: a screen
     // that rebuilds every couple of seconds makes a text field unusable if the
     // field's state is rebuilt with it.
     await pump(tester);
     await tester.enterText(find.byType(TextField), 'f1');
     await tester.pumpAndSettle();
-    expect(find.text('lib/f0.dart'), findsNothing);
+    expect(inIndex('f0.dart'), findsNothing);
 
     await reprobe(tester, setOf([file('lib/new.dart'), ...twenty()]));
 
-    var field = tester.widget<TextField>(find.byType(TextField));
-    expect(field.controller?.text ?? _typedText(tester), 'f1');
     expect(
-      find.text('lib/f0.dart'),
+      tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+      'f1',
+    );
+    expect(
+      inIndex('f0.dart'),
       findsNothing,
       reason: 'and it is still filtering, not merely still displaying',
     );
@@ -237,11 +200,11 @@ void main() {
     await pump(tester);
     await tester.tap(find.textContaining('low-signal'));
     await tester.pumpAndSettle();
-    expect(find.text('lib/a.g.dart'), findsOneWidget);
+    expect(inIndex('a.g.dart'), findsOneWidget);
 
     var next = [file('lib/second.dart'), ...noisy];
     await reprobe(tester, setOf(next, ranking: ranked(next)));
-    expect(find.text('lib/a.g.dart'), findsOneWidget);
+    expect(inIndex('a.g.dart'), findsOneWidget);
   });
 
   testWidgets('a live screen says it is watching; a dead one says that', (
@@ -250,24 +213,33 @@ void main() {
     await pump(tester);
     expect(find.text('Watching'), findsNothing, reason: 'live: false');
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: appTheme,
-        home: Scaffold(
-          body: ChangesScreen(worktree: worktree, load: (_) async => current),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    // `/wt/feature` does not exist, so the watch could not be established —
-    // which is exactly the state worth naming, because the screen otherwise
-    // looks live and has stopped being true.
+    // `/wt/feature` does not exist, so the watch cannot be established — which
+    // is exactly the state worth naming, because the screen otherwise looks
+    // live and has stopped being true.
+    await pump(tester, live: true);
     expect(find.text('Not watching'), findsOneWidget);
   });
-}
 
-/// The filter has no controller of its own, so its text is read from the
-/// editable's state.
-String _typedText(WidgetTester tester) =>
-    tester.widget<EditableText>(find.byType(EditableText)).controller.text;
+  testWidgets(
+    'a file that vanished under you says so, and the index moves on',
+    (tester) async {
+      await pump(tester);
+      await tester.tap(inIndex('f3.dart'));
+      await tester.pumpAndSettle();
+
+      await reprobe(
+        tester,
+        setOf([
+          for (var f in twenty())
+            if (f.path != 'lib/f3.dart') f,
+        ]),
+      );
+
+      expect(
+        find.textContaining('no longer part of the delta'),
+        findsOneWidget,
+      );
+      expect(inIndex('f3.dart'), findsNothing);
+    },
+  );
+}
