@@ -23,6 +23,8 @@ import '../../inspect/elements_view.dart';
 import '../../inspect/inspect_dock.dart';
 import '../../ui/capture_button.dart';
 import '../../ui/design/design.dart';
+import '../../ui/menu.dart';
+import '../../ui/split_button.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/popover.dart';
 import '../../ui/popover_menu.dart';
@@ -498,14 +500,21 @@ class _RunHeader extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _SplitAction(
-                  'Hot reload',
-                  Icons.local_fire_department_rounded,
-                  secondaryIcon: Icons.restart_alt,
-                  secondaryTooltip: 'Hot restart',
-                  enabled: state.canReload,
-                  onPressed: () => onControl('reload', handle),
-                  onSecondary: () => onControl('restart', handle),
+                FwSplitButton(
+                  label: 'Hot reload',
+                  icon: Icons.local_fire_department_rounded,
+                  onPressed: state.canReload
+                      ? () => onControl('reload', handle)
+                      : null,
+                  entries: [
+                    MenuItem(
+                      'Hot restart',
+                      icon: Icons.restart_alt,
+                      onSelected: state.canReload
+                          ? () => onControl('restart', handle)
+                          : null,
+                    ),
+                  ],
                 ),
                 const Gap(FwSpacing.xs),
                 _Action(
@@ -2259,93 +2268,6 @@ class _Hint extends StatelessWidget {
       ),
     ),
   );
-}
-
-/// Hot reload with hot restart riding on its shoulder.
-///
-/// One bordered capsule, two segments. Reload is the action you press twenty
-/// times an hour, so it keeps its word; restart differs by a second and by
-/// whether your state survives, is reached for rarely, and earns only an icon
-/// and a tooltip on the attached segment.
-class _SplitAction extends StatelessWidget {
-  const _SplitAction(
-    this.label,
-    this.icon, {
-    required this.secondaryIcon,
-    required this.secondaryTooltip,
-    required this.enabled,
-    required this.onPressed,
-    required this.onSecondary,
-  });
-
-  final String label;
-  final IconData icon;
-  final IconData secondaryIcon;
-  final String secondaryTooltip;
-  final bool enabled;
-  final VoidCallback onPressed;
-  final VoidCallback onSecondary;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var fg = enabled ? colors.accent : colors.mut3;
-
-    Widget segment({required Widget child, required VoidCallback onTap}) {
-      return Tappable.builder(
-        onTap: enabled ? onTap : null,
-        builder: (context, hovered) => Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: FwSpacing.sm,
-            vertical: 5,
-          ),
-          color: hovered && enabled ? colors.hoverOverlay : colors.bg,
-          child: child,
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(left: FwSpacing.xs),
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-          border: Border.all(color: colors.line),
-        ),
-        child: IntrinsicHeight(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              segment(
-                onTap: onPressed,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 14, color: fg),
-                    const Gap(FwSpacing.xs),
-                    Text(
-                      label,
-                      style: context.type.bodySmall.copyWith(color: fg),
-                    ),
-                  ],
-                ),
-              ),
-              VerticalDivider(width: 1, thickness: 1, color: colors.line),
-              Tooltip(
-                message: secondaryTooltip,
-                waitDuration: const Duration(milliseconds: 400),
-                child: segment(
-                  onTap: onSecondary,
-                  child: Icon(secondaryIcon, size: 14, color: fg),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// A control on the run's header — icon and word, not a bare glyph.
