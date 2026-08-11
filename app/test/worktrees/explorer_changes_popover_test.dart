@@ -171,6 +171,36 @@ void main() {
     expect(find.byKey(changesSummaryKey), findsNothing);
   });
 
+  testWidgets('a checkout whose work is all uncommitted still has one', (
+    tester,
+  ) async {
+    // **The case the whole feature exists for, and the one it was missing.**
+    // `ChangeShape` comes from the branch diff, which is keyed by two commit
+    // shas — so a worktree whose agent has written eleven files and committed
+    // none draws no fingerprint bar. Hanging the trigger off the bar therefore
+    // put the popover out of reach for exactly the checkout §1 is about. Found
+    // by looking at a real list with a live agent in it, not by a test.
+    var dirty = ExplorerEntry(
+      worktree: const Worktree(
+        path: '/repo/fresh',
+        gitName: 'fresh',
+        branch: 'fresh',
+      ),
+      facts: WorktreeFacts(
+        git: Fact.fresh(const GitFacts(base: 'master', dirty: 11)),
+        activity: Fact.fresh(
+          ActivityFacts(at: now, source: ActivitySource.commit),
+        ),
+      ),
+    );
+    await pump(tester, [dirty]);
+
+    await tester.tap(find.byTooltip('Which files changed  ·  c'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(changesSummaryKey), findsOneWidget);
+    expect(find.text('fresh_thing.dart'), findsOneWidget);
+  });
+
   testWidgets('a checkout with nothing to show has no trigger', (tester) async {
     // No bar is drawn, so there is nothing to click and nothing to open —
     // which is correct rather than a gap.

@@ -684,19 +684,33 @@ class _ChangesCell extends StatelessWidget {
     // files and no commits of its own. "in sync" is true of the branch and a
     // lie about the worktree, so the dirt is the headline when there is any.
     if (shape == null || shape.isEmpty) {
+      // **The trigger has to be here too, and this is the case it matters
+      // most for.** `ChangeShape` comes from the branch diff, which is keyed by
+      // two commit shas and is therefore committed-only — so a checkout whose
+      // agent has written eleven files and committed none draws no bar. Leaving
+      // the popover off the bar-less row put the *whole* feature out of reach
+      // for exactly the worktree it exists for: uncommitted work is the
+      // interesting work. Found by looking at this list with a live agent in it.
+      var uncommitted = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Dirty(git.dirty),
+          const Gap(FwSpacing.sm),
+          Text(
+            'uncommitted',
+            style: context.type.bodySmall.copyWith(color: colors.mut2),
+          ),
+        ],
+      );
       return _Lines(
         dim: fact.isDim,
         top: git.dirty > 0
-            ? Row(
-                children: [
-                  _Dirty(git.dirty),
-                  const Gap(FwSpacing.sm),
-                  Text(
-                    'uncommitted',
-                    style: context.type.bodySmall.copyWith(color: colors.mut2),
-                  ),
-                ],
+            ? Align(
+                alignment: Alignment.centerLeft,
+                child: popover?.call(uncommitted) ?? uncommitted,
               )
+            // Nothing changed and nothing uncommitted: there is genuinely
+            // nothing to open, so there is nothing to click.
             : Text(
                 'in sync',
                 style: context.type.bodySmall.copyWith(color: colors.mut2),

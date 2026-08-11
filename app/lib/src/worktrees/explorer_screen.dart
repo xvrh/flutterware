@@ -461,7 +461,11 @@ class _KeyHints extends StatelessWidget {
         // The key handler takes either modifier everywhere — being forgiving
         // about that costs nothing — but the hint has to name the one this
         // machine's keyboard actually has on it.
-        '↑↓ move    ↵ detail    '
+        // `c` was built and then left off this strip, which made the popover
+        // undiscoverable twice over: the bar it hangs off looks like a chart,
+        // not a button, and the one place that documents the keyboard did not
+        // mention it. A feature nobody can find is a feature nobody has.
+        '↑↓ move    ↵ detail    c files    '
         '${defaultTargetPlatform == TargetPlatform.macOS ? '⌘↵' : 'ctrl+↵'}'
         ' open    esc clear',
         style: context.type.micro.copyWith(color: colors.mut3),

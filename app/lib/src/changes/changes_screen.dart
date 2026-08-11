@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 import '../shell/worktree.dart';
 import '../ui/theme.dart';
@@ -281,6 +282,77 @@ class _ChangesScreenState extends State<ChangesScreen> {
   /// The rows the last build produced, which is what an anchor index means.
   var _rows = const <ChangeRow>[];
 
+  /// **The keyboard, which this screen did not have.** The explorer has had one
+  /// since it shipped, and arriving here from it by pressing keys only to find
+  /// the keys stop working is the sort of seam that makes a tool feel like two
+  /// tools. Same idiom, deliberately: ↑↓ move, ↵ opens, ←→ close and open.
+  ///
+  /// Attached above the filter field rather than to it, unlike the explorer.
+  /// There the field holds the focus the whole time because typing *is* the
+  /// primary action; here the list is, and a `TextField` that has the focus
+  /// consumes arrows for its caret — which is right, and is why this only sees
+  /// them when the field does not.
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    var files = [
+      for (var row in _rows)
+        if (row is FileRow) row.file,
+    ];
+    if (files.isEmpty) return KeyEventResult.ignored;
+
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowDown:
+        _moveCursor(files, 1);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowUp:
+        _moveCursor(files, -1);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.enter:
+      case LogicalKeyboardKey.numpadEnter:
+        if (_cursorFile(files) case var file?) {
+          _toggle(file);
+          _revealCursor();
+          return KeyEventResult.handled;
+        }
+      case LogicalKeyboardKey.arrowRight:
+        // The tree idiom, and the one that pairs with ← : right opens and never
+        // closes, so holding it walks *into* things rather than flapping one.
+        if (_cursorFile(files) case var file?
+            when !_expanded.contains(file.path)) {
+          _toggle(file);
+          _revealCursor();
+          return KeyEventResult.handled;
+        }
+      case LogicalKeyboardKey.arrowLeft:
+        if (_cursorFile(files) case var file?
+            when _expanded.contains(file.path)) {
+          _toggle(file);
+          _revealCursor();
+          return KeyEventResult.handled;
+        }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  FileChange? _cursorFile(List<FileChange> files) =>
+      switch (files.indexWhere((f) => f.path == _current)) {
+        < 0 => null,
+        var index => files[index],
+      };
+
+  void _moveCursor(List<FileChange> files, int step) {
+    var index = files.indexWhere((f) => f.path == _current);
+    // No cursor yet: the first Down lands on the first file rather than the
+    // second, which is what every list does and what the hand expects.
+    var next = index < 0
+        ? (step > 0 ? 0 : files.length - 1)
+        : (index + step).clamp(0, files.length - 1);
+    setState(() => _current = files[next].path);
+    _revealCursor();
+  }
+
   @override
   void dispose() {
     _changes
@@ -314,6 +386,80 @@ class _ChangesScreenState extends State<ChangesScreen> {
       _current = file.path;
     });
     widget.onPathChanged?.call(opened ? file.path : null);
+  }
+
+  /// **Naming a file opens it.** The tree and the churn map used to scroll to a
+  /// file and leave it shut, which reads as a broken click: you asked for a
+  /// file and got a highlighted one-line row. Picking a name out of either is a
+  /// request to *read* it, and the row itself is still the toggle.
+  ///
+  /// Never a collapse. Clicking `a.dart` in the tree twice means "show me
+  /// a.dart" twice, and closing it the second time is the opposite of the ask.
+  void _open(FileChange file, List<ChangeRow> rows) {
+    if (_expanded.add(file.path)) {
+      widget.onPathChanged?.call(file.path);
+      setState(() {});
+      // The rows it should scroll within are the ones this expansion produces,
+      // which do not exist yet.
+      _pendingJump = file.path;
+      return;
+    }
+    _jumpTo(file, rows);
+  }
+
+  /// Scrolls the cursor row **just** into view, never re-centring it.
+  ///
+  /// Measured rather than estimated: `_jumpTo`'s `index × 34` is fine for "take
+  /// me near that file" and useless for a cursor, because one expanded file
+  /// between here and there is four thousand rows the arithmetic knows nothing
+  /// about. The sliver's own children carry their real offsets; the fallback
+  /// only runs when the target is beyond what is laid out, and then it measures
+  /// again on the next frame, which by then it can.
+  void _revealCursor([int attempt = 0]) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      var index = _rows.indexWhere(
+        (row) => row is FileRow && row.file.path == _current,
+      );
+      if (index < 0) return;
+      var sliver = _sliverOf();
+      if (sliver == null) return;
+
+      for (var child = sliver.firstChild; child != null;) {
+        var data = child.parentData! as SliverMultiBoxAdaptorParentData;
+        if (data.index == index) {
+          var viewport = RenderAbstractViewport.maybeOf(child);
+          if (viewport == null) return;
+          var atTop = viewport.getOffsetToReveal(child, 0).offset;
+          var atBottom = viewport.getOffsetToReveal(child, 1).offset;
+          var want = _scroll.offset.clamp(
+            atBottom < atTop ? atBottom : atTop,
+            atBottom < atTop ? atTop : atBottom,
+          );
+          if ((want - _scroll.offset).abs() > 0.5) {
+            _scroll.jumpTo(
+              want.clamp(
+                _scroll.position.minScrollExtent,
+                _scroll.position.maxScrollExtent,
+              ),
+            );
+          }
+          return;
+        }
+        child = sliver.childAfter(child);
+      }
+
+      // Beyond the laid-out range. Step toward it and measure again — bounded,
+      // because each step lays out the rows the next one needs.
+      if (attempt >= 3) return;
+      _scroll.jumpTo(
+        (index * _rowEstimate).clamp(
+          _scroll.position.minScrollExtent,
+          _scroll.position.maxScrollExtent,
+        ),
+      );
+      _revealCursor(attempt + 1);
+    });
   }
 
   void _jumpTo(FileChange file, List<ChangeRow> rows) {
@@ -367,70 +513,75 @@ class _ChangesScreenState extends State<ChangesScreen> {
       }
     }
 
-    return Column(
-      key: changesScreenKey,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _Header(
-          worktree: widget.worktree,
-          set: set,
-          isLoading: _changes.isLoading,
-          live: widget.live,
-          isWatching: _changes.isWatching,
-          readAt: _changes.readAt,
-          failure: _changes.failure,
-          onRefresh: () => unawaited(_changes.refresh()),
-        ),
-        if (set != null && set.changed.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.xxl,
-              0,
-              FwSpacing.xxl,
-              FwSpacing.lg,
-            ),
-            child: ChurnMap(
-              files: set.changed,
-              visible: visible,
-              current: _current,
-              onTap: (file) => _jumpTo(file, rows),
-            ),
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: Column(
+        key: changesScreenKey,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _Header(
+            worktree: widget.worktree,
+            set: set,
+            isLoading: _changes.isLoading,
+            live: widget.live,
+            isWatching: _changes.isWatching,
+            readAt: _changes.readAt,
+            failure: _changes.failure,
+            onRefresh: () => unawaited(_changes.refresh()),
           ),
-        Divider(height: 1, color: context.colors.line),
-        Expanded(
-          child: set == null
-              ? const SizedBox.shrink()
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(
-                      width: _treeWidth,
-                      child: _TreePane(
-                        set: set,
-                        directory: _directory,
-                        onQuery: (q) => setState(() => _query = q),
-                        onDirectory: (d) => setState(() => _directory = d),
-                        onFile: (file) => _jumpTo(file, rows),
+          if (set != null && set.changed.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                FwSpacing.xxl,
+                0,
+                FwSpacing.xxl,
+                FwSpacing.lg,
+              ),
+              child: ChurnMap(
+                files: set.changed,
+                visible: visible,
+                current: _current,
+                onTap: (file) => _open(file, rows),
+              ),
+            ),
+          Divider(height: 1, color: context.colors.line),
+          Expanded(
+            child: set == null
+                ? const SizedBox.shrink()
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: _treeWidth,
+                        child: _TreePane(
+                          set: set,
+                          directory: _directory,
+                          onQuery: (q) => setState(() => _query = q),
+                          onDirectory: (d) => setState(() => _directory = d),
+                          onFile: (file) => _open(file, rows),
+                        ),
                       ),
-                    ),
-                    VerticalDivider(width: 1, color: context.colors.line),
-                    Expanded(
-                      child: _List(
-                        listKey: _listKey,
-                        set: set,
-                        rows: rows,
-                        lines: _linesFor(set),
-                        controller: _scroll,
-                        current: _current,
-                        onToggle: _toggle,
-                        onToggleNoise: () =>
-                            setState(() => _noiseOpen = !_noiseOpen),
+                      VerticalDivider(width: 1, color: context.colors.line),
+                      Expanded(
+                        child: _List(
+                          listKey: _listKey,
+                          set: set,
+                          rows: rows,
+                          lines: _linesFor(set),
+                          controller: _scroll,
+                          current: _current,
+                          onToggle: _toggle,
+                          onToggleNoise: () =>
+                              setState(() => _noiseOpen = !_noiseOpen),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-        ),
-      ],
+                    ],
+                  ),
+          ),
+          if (set != null && set.changed.isNotEmpty) const _KeyHints(),
+        ],
+      ),
     );
   }
 
@@ -1031,6 +1182,29 @@ class _Note extends StatelessWidget {
       child: Text(
         text,
         style: context.type.bodySmall.copyWith(color: colors.mut),
+      ),
+    );
+  }
+}
+
+/// What the keyboard does, said once, quietly — the same strip the explorer
+/// has, for the same reason.
+class _KeyHints extends StatelessWidget {
+  const _KeyHints();
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Container(
+      height: 22,
+      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.xxl),
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: colors.line)),
+      ),
+      child: Text(
+        '↑↓ move    ↵ open    ←→ close/open    click a file to read it',
+        style: context.type.micro.copyWith(color: colors.mut3),
       ),
     );
   }
