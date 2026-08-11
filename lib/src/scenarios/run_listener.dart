@@ -60,7 +60,6 @@ class ScenarioStepCapture {
   /// The [Shot]'s name, or null for an automatic capture.
   final String? name;
 
-
   final List<String> tags;
 
   /// The image, in [format]: `png`, or `raw` — bare rgba8888 rows,
