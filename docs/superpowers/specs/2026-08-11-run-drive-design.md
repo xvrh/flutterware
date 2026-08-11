@@ -119,7 +119,7 @@ two bindings, differing only where they must:
 | time | fake, `Settle.standard` = 5 fake seconds | wall clock, bounded (§ Settle) |
 | pump | test binding pump | real frames (`LiveWidgetController`) |
 | capture | `_emit` (layer raster, fake-time cheap) | guest screenshot (§ Screenshots) |
-| `enterText` | `testTextInput`, proven | `TextInput.updateEditingValue` (amended by the spike — see § Settle) |
+| `enterText` | `testTextInput`, proven | `EditableTextState.userUpdateTextEditingValue` (amended twice — see § Mobile) |
 
 One place to fix an actionability bug, one Target grammar on the wire, one
 `describeTarget`. `package:flutter_driver` stays out (master-plan decision 9
@@ -194,6 +194,10 @@ place. The focused-`EditableTextState` variant also works and stays as the
 documented fallback. Open on device only: the platform IME's own editing
 state diverges (we never inform it) — harmless on desktop, unverified with a
 soft keyboard up.
+
+**Superseded on 2026-08-11 by the mobile runs (§ Mobile): the divergence is
+real, and the mechanism is now
+`EditableTextState.userUpdateTextEditingValue`.**
 
 ## Screenshots
 
@@ -315,8 +319,12 @@ macOS debug, visible and hidden windows:
    hidden-window frames problem plus its forced-frame fix (§ Settle), the
    most load-bearing finding of the spike.
 
-Still open, needing hardware: one run on a physical phone (compile checked
-from here; input + IME behavior is the question).
+~~Still open, needing hardware: one run on a physical phone (compile checked
+from here; input + IME behavior is the question).~~ **Answered on an emulator
+and a simulator the same evening — § Mobile.** Input works; the IME question
+had a real bug behind it. A physical phone remains unrun (signing), and the
+one thing only hardware can still tell us is whether a *real* iOS device
+suspends harder or sooner than the simulator does.
 
 ## Order of work
 
@@ -466,6 +474,73 @@ launch line, the loop, the refusal grammar, the co-driving rule
 (open with `observe`; the human may have moved the app), and when scenarios
 beat drive.
 
+## Mobile, measured 2026-08-11 (evening)
+
+The spike's one hardware-shaped item — "input + IME behavior on device, one
+afternoon with hardware" — ran against an **Android emulator (API 35)** and
+an **iOS simulator (iPhone 16 Pro, iOS 18.1)**, driving `examples/example`
+over the real MCP wire. A physical iPhone was attached and refused at the
+door: `No Account for Team "B7V224LKE4"`, i.e. Xcode signing on the dev
+machine, reported legibly by the `RunFailure` path and nothing to do with
+this feature.
+
+**The verdict is that the port is free.** Nothing about the launch → guest →
+act path is desktop-shaped: `flutter_test` compiles into iOS and Android
+debug builds, `writeGuestEntrypoint` wraps the same way, the guest
+screenshot (`OffsetLayer.toImage`) is correct under Impeller on both, and
+the numbers are desktop numbers — observe 17–21ms, tap 500–800ms including
+settle, hot reload 190ms on the iOS simulator. Taps, `enterText`, tree,
+texts and the journal all landed on both platforms with no code change.
+
+Three things were wrong, none of them visible from a desktop:
+
+1. **The platform IME diverged, on both platforms.** After `enterText` wrote
+   a sentence, a keystroke from the *platform* — the host keyboard into the
+   iOS soft keyboard, `adb shell input text` on Android — **replaced** the
+   agent's text instead of appending: the platform still held the pre-act
+   value, because `TextInput.updateEditingValue` is control-side and tells
+   only the framework. This breaks co-driving precisely where it is supposed
+   to work, and a desktop run cannot show it (no IME shadow state of its own
+   to disagree). Fixed by moving to
+   `EditableTextState.userUpdateTextEditingValue`, which formats, fires
+   `onChanged`, and pushes `setEditingState` back down the live input
+   connection. Verified on both: the human's next keystrokes now append.
+2. **A backgrounded iOS app hung the call, forever.** iOS suspends the
+   process; the guest is never scheduled, so `ext.flutterware.act` is never
+   dispatched and no answer comes — measured, the MCP client aborted at
+   **1800s**, violating this design's one hard rule. Android is fine and
+   behaves exactly like the hidden macOS window (`lifecycle: paused`,
+   `framesEnabled: false`, forced frames carry it). The guest's own "never
+   hang" guarantee only ever covered a guest that runs, so the deadline
+   belongs on the host: `DriveSession` now bounds the call by what that call
+   asked the guest to spend (settle + act timeout + wait, `scrollTo`'s
+   count-bounded drags allowed for, plus 20s of slack) and, on expiry, asks
+   the VM whether it answers at all — which separates "a verb is wedged"
+   from "the process is not being scheduled". **Two doors, both measured:**
+   the held connection times out at the deadline (23s), and — because a
+   failed probe drops the session — the *next* call times out in the connect
+   instead, 5s in, where the raw `TimeoutException after 0:00:05` said
+   nothing about apps at all. Both now answer with the same sentence,
+   including the surprising part: the step is not lost, a suspended guest
+   runs its request on resume (observed — a tap sent to a backgrounded app
+   landed when the app came forward).
+3. **A focused text field on iOS never settles.** The Cupertino cursor
+   animates, so `transientCallbackCount > 0` forever: every step after a
+   field takes focus burns the whole 800ms budget and reports
+   `settled: false`. Android's cursor blinks on a `Timer` — 152ms, settled.
+   Not fixed: the honest fix is to stop counting the caret ticker as work,
+   and the cheap wrong fix is to stop trusting tickers, which is the probe
+   that makes the hidden-window settle correct. Left as a known cost with a
+   number on it.
+
+Two facts worth stating rather than fixing. **The soft keyboard is invisible
+in the guest screenshot** — the raster is the Flutter layer tree, so the
+agent sees a blank band where the keyboard is (confirmed against a `simctl`
+screenshot of the same moment); the same holds for platform views, which are
+far more common on a phone than on desktop. And **the run must be
+foregrounded to be driven on iOS**, which is not a limitation we can lift:
+waking a suspended app from outside is the OS's call, not ours.
+
 ## Decided by the owner, 2026-08-11
 
 1. **Launched-by-flutterware is an acceptable precondition** for acting;
@@ -483,8 +558,11 @@ beat drive.
 
 ## Open, deliberately
 
-- The `enterText` mechanism — spike question 3.
-- `flutter_test` on-device viability — spike question 1.
+- ~~The `enterText` mechanism — spike question 3.~~ Closed, § Mobile:
+  `userUpdateTextEditingValue`, because the platform has to be told too.
+- ~~`flutter_test` on-device viability — spike question 1.~~ Closed, § Mobile:
+  it compiles and runs on both mobile platforms.
+- Whether the caret ticker should count as pending work (§ Mobile item 3).
 - Journal file format details (one file vs. per-step, rotation) — falls out
   of building it against the panel.
 - The promoted MCP tool's exact shape (one `act` tool vs. `act`+`observe`) —

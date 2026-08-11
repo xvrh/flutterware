@@ -833,7 +833,12 @@ class RunCore extends PluginCore {
               'launched by flutterware (the launch wraps it in the drive '
               'guest); anything else is inspect-only. A refusal still '
               'observes: the error comes back with the screen it happened '
-              "on. Every step is appended to the run's journal.",
+              "on. Every step is appended to the run's journal. On a phone "
+              'the app has to be in the foreground: iOS suspends a '
+              'backgrounded app, which answers nothing until somebody brings '
+              'it back — that comes back as a timeout saying so, never a '
+              'hang. A hidden desktop window is fine, and so is a '
+              'backgrounded Android app.',
           parameters: [
             ..._appSelector,
             const ActionParameter(

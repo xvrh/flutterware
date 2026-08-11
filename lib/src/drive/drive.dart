@@ -175,9 +175,27 @@ class Drive {
     );
   }
 
-  /// Focuses the field at [target] and pushes [text] as one editing value —
-  /// `TextInput.updateEditingValue`, the control-side API, with no input
-  /// control installed so the platform IME stays in place.
+  /// Focuses the field at [target] and sets [text] as one editing value, the
+  /// way a widget reports an edit the user made.
+  ///
+  /// **Both halves have to be told, and that is the whole reason this is not
+  /// `TextInput.updateEditingValue`.** That call is control-side: it pushes a
+  /// value *into* the framework, and the platform's own editing state — the
+  /// `UITextField`/`InputConnection` shadow the IME edits against — never
+  /// hears about it. Measured on both an iOS simulator and an Android
+  /// emulator (2026-08-11): after the agent wrote a sentence, the human's
+  /// next keystroke on the soft keyboard *replaced* it, because as far as the
+  /// platform knew the field was still empty. On a desktop with no soft
+  /// keyboard nobody noticed; on a phone it breaks co-driving, which is the
+  /// workflow this surface exists for.
+  ///
+  /// [EditableTextState.userUpdateTextEditingValue] is the framework's own
+  /// name for "a user edit that did not come from the platform": it runs the
+  /// input formatters, fires `onChanged`, and — through `endBatchEdit` —
+  /// calls `setEditingState` on the live input connection, so the IME's next
+  /// edit is a delta against what is actually on screen. It needs the
+  /// connection to exist, which is what [EditableTextState.requestKeyboard]
+  /// below is for.
   Future<DriveStep> enterText(dynamic target, String text, {Duration? settle}) {
     return _act('enterText', target, settle, (finder) async {
       var editable = find.descendant(
@@ -198,11 +216,12 @@ class Drive {
       state.requestKeyboard();
       // Focus and the input connection apply over a frame; give them one.
       await settleLive(budget: const Duration(milliseconds: 100));
-      TextInput.updateEditingValue(
+      state.userUpdateTextEditingValue(
         TextEditingValue(
           text: text,
           selection: TextSelection.collapsed(offset: text.length),
         ),
+        SelectionChangedCause.keyboard,
       );
     });
   }
