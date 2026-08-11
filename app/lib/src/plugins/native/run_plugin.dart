@@ -467,12 +467,14 @@ class _RunHeader extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Gap(FwSpacing.sm),
-                    // Capability, as a pill rather than a caption. It is the
-                    // one thing on this row that changes what the buttons
-                    // beside it can do, and a grey line of small text said it
-                    // as quietly as everything else.
-                    _CapabilityPill(state: state),
+                    // Capability, as a pill rather than a caption — but only
+                    // when it is news. "reloadable" is the normal state and
+                    // the enabled buttons already say it; the pill appears
+                    // when something is missing.
+                    if (state.tone != _Tone.good) ...[
+                      const Gap(FwSpacing.sm),
+                      _CapabilityPill(state: state),
+                    ],
                     if (!mine) ...[
                       const Gap(FwSpacing.sm),
                       _Tag(handle.worktreeName),
@@ -496,17 +498,14 @@ class _RunHeader extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _Action(
+                _SplitAction(
                   'Hot reload',
-                  Icons.bolt_outlined,
+                  Icons.local_fire_department_rounded,
+                  secondaryIcon: Icons.restart_alt,
+                  secondaryTooltip: 'Hot restart',
                   enabled: state.canReload,
                   onPressed: () => onControl('reload', handle),
-                ),
-                _Action(
-                  'Hot restart',
-                  Icons.refresh_rounded,
-                  enabled: state.canReload,
-                  onPressed: () => onControl('restart', handle),
+                  onSecondary: () => onControl('restart', handle),
                 ),
                 const Gap(FwSpacing.xs),
                 _Action(
@@ -1425,7 +1424,7 @@ IconData _verbIcon(String verb) => switch (verb) {
   'wait' => Icons.hourglass_empty,
   'observe' => Icons.visibility_outlined,
   'navigate' => Icons.route_outlined,
-  'reload' => Icons.bolt_outlined,
+  'reload' => Icons.local_fire_department_outlined,
   'restart' => Icons.restart_alt,
   'stop' => Icons.stop_outlined,
   'launch' => Icons.play_arrow_outlined,
@@ -2262,11 +2261,94 @@ class _Hint extends StatelessWidget {
   );
 }
 
-/// A control on the run's header — icon and word, not a bare glyph.
+/// Hot reload with hot restart riding on its shoulder.
 ///
-/// Labelled because there is room and because `⚡` and `↻` beside each other
-/// are a guess: hot reload and hot restart differ by about a second and by
-/// whether your state survives, which is not something to leave to a tooltip.
+/// One bordered capsule, two segments. Reload is the action you press twenty
+/// times an hour, so it keeps its word; restart differs by a second and by
+/// whether your state survives, is reached for rarely, and earns only an icon
+/// and a tooltip on the attached segment.
+class _SplitAction extends StatelessWidget {
+  const _SplitAction(
+    this.label,
+    this.icon, {
+    required this.secondaryIcon,
+    required this.secondaryTooltip,
+    required this.enabled,
+    required this.onPressed,
+    required this.onSecondary,
+  });
+
+  final String label;
+  final IconData icon;
+  final IconData secondaryIcon;
+  final String secondaryTooltip;
+  final bool enabled;
+  final VoidCallback onPressed;
+  final VoidCallback onSecondary;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var fg = enabled ? colors.accent : colors.mut3;
+
+    Widget segment({required Widget child, required VoidCallback onTap}) {
+      return Tappable.builder(
+        onTap: enabled ? onTap : null,
+        builder: (context, hovered) => Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: FwSpacing.sm,
+            vertical: 5,
+          ),
+          color: hovered && enabled ? colors.hoverOverlay : colors.bg,
+          child: child,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(left: FwSpacing.xs),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          border: Border.all(color: colors.line),
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              segment(
+                onTap: onPressed,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 14, color: fg),
+                    const Gap(FwSpacing.xs),
+                    Text(
+                      label,
+                      style: context.type.bodySmall.copyWith(color: fg),
+                    ),
+                  ],
+                ),
+              ),
+              VerticalDivider(width: 1, thickness: 1, color: colors.line),
+              Tooltip(
+                message: secondaryTooltip,
+                waitDuration: const Duration(milliseconds: 400),
+                child: segment(
+                  onTap: onSecondary,
+                  child: Icon(secondaryIcon, size: 14, color: fg),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A control on the run's header — icon and word, not a bare glyph.
 class _Action extends StatelessWidget {
   const _Action(
     this.label,
