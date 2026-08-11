@@ -38,6 +38,9 @@ class _Fake extends NativePlugin<_FakeCore> {
 
 class _StubLoader implements ManifestLoader {
   @override
+  String? get flutterRoot => null;
+
+  @override
   Future<PluginManifest?> load(String worktreePath) async =>
       PluginManifest.parse(
         '{"version":1,"plugins":[{"id":"a.one","label":"One"}]}',
@@ -137,5 +140,33 @@ void main() {
             .having((e) => e.message, 'message', contains('repo-pty')),
       ),
     );
+  });
+
+  test('a short plugin name canonicalises against the session', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    registerDriveNavigator(shell);
+
+    // `one` is nobody's id — but exactly one declared plugin ends in `.one`,
+    // and landing there beats the silent Overview the shell's fallback draws.
+    GuestDrive.navigator!('fw:///worktrees/~/one');
+    expect(shell.address.plugin, 'a.one');
+  });
+
+  test('unknown plugin: refused with the ids the worktree declares', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    registerDriveNavigator(shell);
+    var before = shell.address;
+
+    expect(
+      () => GuestDrive.navigator!('fw:///worktrees/~/bogus'),
+      throwsA(
+        isA<TargetError>()
+            .having((e) => e.failure, 'failure', TargetFailure.notFound)
+            .having((e) => e.message, 'message', contains('a.one')),
+      ),
+    );
+    expect(shell.address, before);
   });
 }

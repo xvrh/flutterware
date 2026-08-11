@@ -27,6 +27,7 @@ void registerDriveNavigator(ShellController shell) {
         'The current screen is at `${shell.address}`.',
       );
     }
+    address = _canonicalPlugin(shell, address);
     if (shell.go(address) == GoResult.worktreeUnknown) {
       throw TargetError(
         TargetFailure.notFound,
@@ -82,4 +83,42 @@ class _DriveNavigatorScopeState extends State<DriveNavigatorScope> {
 
   @override
   Widget build(BuildContext context) => widget.child ?? const SizedBox();
+}
+
+/// The plugin segment, resolved against what the worktree's session declares.
+///
+/// Without this, `previews` written where `flutterware.previews` is meant is
+/// the worst outcome a navigate can have: [ShellController.go] accepts any
+/// plugin segment, and the shell's fallback for an id the config does not
+/// declare — home, quietly (see [ShellController.selectedPluginId]) — catches
+/// a wrong id just as silently as the reloaded-config case it was written
+/// for. The address bar says what you typed, the body shows Overview, and an
+/// agent reads the ok and moves on. So: a short name that matches exactly one
+/// declared `….<name>` is canonicalised and goes through; anything else that
+/// resolves to no plugin refuses with the declared list, which is the reply
+/// that teaches the grammar.
+///
+/// A worktree whose session has not loaded passes through untouched — its
+/// plugin ids are not knowable yet, and refusing what may be about to become
+/// valid would break `go`'s own promise that opening is the navigation.
+Address _canonicalPlugin(ShellController shell, Address address) {
+  var plugin = address.plugin;
+  if (plugin == null || Address.shellOwned.contains(plugin)) return address;
+  var name = address.worktree;
+  var worktree = name == null ? null : shell.worktreeNamed(name);
+  var session = worktree == null ? null : shell.sessionFor(worktree);
+  if (session == null) return address;
+  if (session.pluginById(plugin) != null) return address;
+  var matches = [
+    for (var candidate in session.plugins)
+      if (candidate.id.endsWith('.$plugin')) candidate.id,
+  ];
+  if (matches.length == 1) return address.copyWith(plugin: matches.single);
+  throw TargetError(
+    TargetFailure.notFound,
+    '`$plugin` is not a plugin this worktree declares'
+    '${matches.isEmpty ? '' : ', and ${matches.join(', ')} all end in it'} — '
+    'it has: ${session.plugins.map((p) => p.id).join(', ')}. '
+    'The current screen is at `${shell.address}`.',
+  );
 }

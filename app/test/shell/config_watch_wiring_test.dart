@@ -80,6 +80,9 @@ class _Fake extends NativePlugin<PluginCore> {
 }
 
 class _StubLoader implements ManifestLoader {
+  @override
+  String? get flutterRoot => null;
+
   _StubLoader(this.file);
 
   /// Reads the file the watcher is watching, so a test "edits the config" by

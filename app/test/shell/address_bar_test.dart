@@ -42,6 +42,9 @@ class _Fake extends NativePlugin<_FakeCore> {
 
 class _StubLoader implements ManifestLoader {
   @override
+  String? get flutterRoot => null;
+
+  @override
   Future<PluginManifest?> load(String path) async => PluginManifest.parse(
     '{"version":1,"plugins":[{"id":"a.deps","label":"Dependencies"}]}',
   );

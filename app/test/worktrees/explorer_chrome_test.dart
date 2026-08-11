@@ -80,6 +80,9 @@ class _StubForge implements ForgeProbe {
 /// go through one, which is the point — a closed worktree has no session at all.
 class _StubLoader implements ManifestLoader {
   @override
+  String? get flutterRoot => null;
+
+  @override
   Future<PluginManifest?> load(String path) async => const PluginManifest([]);
 
   @override
