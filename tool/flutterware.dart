@@ -159,6 +159,14 @@ void main() => Flutterware.configure((fw) {
               description: 'Every devbar plugin, on a demo screen',
             ),
             Entrypoint(
+              'lib/shop_devbar.dart',
+              name: 'Brewline (devbar)',
+              description:
+                  'The shop, with a plugin that pushes a notification into '
+                  'it — the sample for driving an app from the cockpit, '
+                  '`fw` or an agent',
+            ),
+            Entrypoint(
               'lib/ui_book.dart',
               name: 'UI book',
               description: 'The component gallery, no backend',

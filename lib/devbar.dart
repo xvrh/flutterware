@@ -6,6 +6,7 @@ export 'src/devbar/devbar.dart'
         DevbarPlugin,
         DevbarPluginFactory;
 export 'src/devbar/feature_flag.dart' show FeatureFlag, FeatureFlagValue;
+export 'src/devbar/panel_source.dart' show DevbarPanelSource;
 export 'src/ui_catalog/knobs.dart' show Knobs;
 export 'src/devbar/knobs/knobs.dart' show AddDevbarKnobs;
 export 'src/devbar/ui/button.dart'

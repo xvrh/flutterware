@@ -1,65 +1,20 @@
-/// The wire and rendezvous vocabulary shared by the in-server inspector and
-/// its attachers (GUI, `fw`, MCP).
+/// The rendezvous vocabulary: how a tool on this machine *finds* an inspected
+/// Dart server — the run dir, the gates, the `srv-*.json` handles.
 ///
-/// One frame shape in both directions, newline-delimited JSON:
-///
-///     {"ch": "sql", "t": "event", "e": 12, "ts": 1690000000000, "p": {…}}
-///     {"ch": "sql", "t": "req",  "id": 7, "m": "explain", "p": {…}}
-///     {"ch": "sql", "t": "res",  "id": 7, "p": {…}}
-///     {"ch": "sql", "t": "err",  "id": 7, "p": {"message": "…"}}
-///
-/// `ch` is a sub-protocol name. New feature = new channel name; the envelope
-/// itself is expected to stay at [protocolVersion] indefinitely — see
-/// `docs/superpowers/specs/2026-07-30-server-inspection-design.md`.
+/// The wire half lives in `frames.dart` and is re-exported here, so importing
+/// this file still gets the whole protocol. The two are separate files because
+/// only this one needs `dart:io`: an inspector running inside a Flutter app on
+/// a phone has the frames and no filesystem to publish a handle into
+/// (`docs/superpowers/specs/2026-08-11-devbar-run-bridge-design.md`).
 library;
 
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
+import 'frames.dart';
 
-const protocolVersion = 1;
-
-/// Frame keys, spelled once.
-const frameChannel = 'ch';
-const frameType = 't';
-const framePayload = 'p';
-const frameMethod = 'm';
-const frameRequestId = 'id';
-const frameEventId = 'e';
-const frameTimestamp = 'ts';
-const frameCorrelation = 'rid';
-
-const typeEvent = 'event';
-const typeRequest = 'req';
-const typeResponse = 'res';
-const typeError = 'err';
-
-/// The built-in channel. `meta/attach` is the handshake that turns a
-/// connection into an attachment; `replay-done` marks the ring/live boundary;
-/// `meta/detail` fetches an event's lazily-held details (headers, bodies) by
-/// event id — spec decision 11: events stay small, the heavy parts are
-/// fetched when someone actually looks.
-const metaChannel = 'meta';
-const metaAttach = 'attach';
-const metaReplayDone = 'replay-done';
-const metaDetail = 'detail';
-
-String encodeFrame(Map<String, Object?> frame) => '${jsonEncode(frame)}\n';
-
-/// Decodes one line into a frame, or null for anything that is not a JSON
-/// object — a probe's noise, a partial line from a dying peer. The read loops
-/// on both sides ignore null rather than erroring: tolerating garbage is what
-/// makes a connect-and-close liveness knock free.
-Map<String, Object?>? tryDecodeFrame(String line) {
-  try {
-    var decoded = jsonDecode(line);
-    if (decoded is! Map) return null;
-    return decoded.cast<String, Object?>();
-  } on FormatException {
-    return null;
-  }
-}
+export 'frames.dart';
 
 /// `~/.flutterware/run` if it exists, else null — **never created here**.
 ///

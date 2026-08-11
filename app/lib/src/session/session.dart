@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 // Only the equality: this file has its own `firstOrNull`.
 import 'package:collection/collection.dart' show DeepCollectionEquality;
@@ -7,6 +8,7 @@ import 'package:flutterware/plugins.dart';
 
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../constants.dart';
@@ -99,7 +101,8 @@ class Session {
   /// flutterware's own `app/` install, for the cores that need to find the
   /// machinery shipped beside them — the catalog daemon and its native host.
   ///
-  /// Two strategies, in this order, because neither covers both ways `fw` runs:
+  /// Three strategies, in this order, because no one of them covers every way
+  /// `fw` and the MCP server get started:
   ///
   /// - **[appPathEnvironmentKey], recorded by the launcher.** Authoritative, and
   ///   the only thing that can work in production: `fw` is an AOT binary there,
@@ -112,23 +115,87 @@ class Session {
   ///   record anything. `bin/fw.dart` sits two directories below the package
   ///   root, and this is exactly the case where that is true, because it is the
   ///   case where the script *is* a source file.
+  /// - **Resolved from this package's own URI.** For `dart run
+  ///   flutterware_app:fw` and `dart run flutterware_app:mcp` — the form
+  ///   `.mcp.json` uses — where `Platform.script` is a *snapshot* under
+  ///   `.dart_tool/pub/bin/`, two directories above which is `.dart_tool` and
+  ///   not a package at all. Measured, on `a911609e`:
+  ///   `…/.dart_tool/pub/bin/flutterware_app/mcp.dart-<sdk>.snapshot`.
   ///
-  /// The derivation is accepted only if the result looks like a package root, so
-  /// the two cannot be confused: in the AOT case there is no `pubspec.yaml`
-  /// above `bin/`, which is what makes guessing safe to attempt at all.
+  ///   Without this the MCP server resolved null and every catalog action
+  ///   refused with *"appPackageRoot must be flutterware's own app/
+  ///   directory"* — an error that names the symptom and not the invocation,
+  ///   which cost an afternoon before anyone measured it.
   ///
-  /// Null when neither answers — a test driving a session directly. A core that
-  /// needs it then fails naming the path it looked for, rather than spawning
-  /// something against the working directory and timing out.
+  /// A derivation is accepted only if the result is *this* package's root — by
+  /// name, see [_packageRootAbove] — so the strategies cannot be confused with
+  /// each other or with the workspace root. In the AOT case there is no
+  /// `pubspec.yaml` above `bin/` and no package config to resolve against,
+  /// which is what makes guessing safe to attempt at all.
+  ///
+  /// Null when none answer — including under `flutter test`, where the script
+  /// is the runner's and `resolvePackageUriSync` does not answer either. That
+  /// is fine and deliberate: a test that needs one passes `appToolDirectory`
+  /// explicitly. A core that needs it and has none fails naming the path it
+  /// looked for, rather than spawning something against the working directory
+  /// and timing out.
   static Directory? findAppToolDirectory() {
     var recorded = Platform.environment[appPathEnvironmentKey];
     if (recorded != null && recorded.isNotEmpty) return Directory(recorded);
 
-    if (!Platform.script.isScheme('file')) return null;
-    var candidate = p.dirname(p.dirname(p.fromUri(Platform.script)));
-    return File(p.join(candidate, 'pubspec.yaml')).existsSync()
-        ? Directory(candidate)
-        : null;
+    return _packageRootAbove(
+          Platform.script.isScheme('file')
+              ? p.dirname(p.dirname(p.fromUri(Platform.script)))
+              : null,
+        ) ??
+        _packageRootAbove(_ownLibDirectory());
+  }
+
+  /// `<root>/lib` for this very package, or null under AOT, where there is no
+  /// package config to resolve against.
+  static String? _ownLibDirectory() {
+    try {
+      var lib = Isolate.resolvePackageUriSync(
+        Uri.parse('package:flutterware_app/'),
+      );
+      return lib != null && lib.isScheme('file')
+          ? p.dirname(p.fromUri(lib))
+          : null;
+    } on Object {
+      return null;
+    }
+  }
+
+  /// [_packageRootAbove], for the test that pins the wrong-package rejection.
+  ///
+  /// The live resolution cannot be exercised under `flutter test` — neither
+  /// derivation answers there — but the rule it applies can.
+  @visibleForTesting
+  static Directory? debugAppPackageRootAt(String directory) =>
+      _packageRootAbove(directory);
+
+  /// [directory] if it is **flutterware_app's own** package root.
+  ///
+  /// Checking the name, not merely that a `pubspec.yaml` is there: this repo is
+  /// a workspace whose *root* is also a package, so "two directories above the
+  /// script holds a pubspec" is satisfied by `flutterware` itself — and
+  /// silently answering with the wrong package is how the catalog daemon came
+  /// to be looked for at `<repo>/tool/catalog/compiler_daemon.dart`, one
+  /// directory tree away from where it lives.
+  static Directory? _packageRootAbove(String? directory) {
+    if (directory == null) return null;
+    var pubspec = File(p.join(directory, 'pubspec.yaml'));
+    if (!pubspec.existsSync()) return null;
+    try {
+      return RegExp(
+            r'^name:\s*flutterware_app\s*$',
+            multiLine: true,
+          ).hasMatch(pubspec.readAsStringSync())
+          ? Directory(directory)
+          : null;
+    } on FileSystemException {
+      return null;
+    }
   }
 
   /// The manifest [cores] were built from, and what the next load is compared

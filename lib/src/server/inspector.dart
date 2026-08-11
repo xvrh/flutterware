@@ -1,17 +1,19 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:io' as io show pid;
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'info.dart';
+import 'inspector_core.dart';
 import 'protocol.dart';
 
 /// What a command handler receives and returns. A returned map becomes the
 /// response payload as-is; anything else is wrapped as `{"value": …}`.
-typedef ServerCommandHandler =
-    FutureOr<Object?> Function(Map<String, Object?> params);
+///
+/// The server-facing spelling of [InspectorCommandHandler] — the same type,
+/// under the name this library has always published.
+typedef ServerCommandHandler = InspectorCommandHandler;
 
 /// The primitives a Dart server reports through.
 ///
@@ -206,36 +208,51 @@ class FlutterwareServer {
   }
 }
 
-class _RingEvent {
-  _RingEvent(this.id, this.channel, this.time, this.rid, this.payload);
+/// One attached unix-socket connection.
+class _SocketPeer implements InspectorPeer {
+  _SocketPeer(this.socket);
 
-  final int id;
-  final String channel;
-  final DateTime time;
-  final String? rid;
-  final Map<String, Object?> payload;
+  final Socket socket;
 
-  Map<String, Object?> toFrame() => {
-    frameChannel: channel,
-    frameType: typeEvent,
-    frameEventId: id,
-    frameTimestamp: time.millisecondsSinceEpoch,
-    if (rid != null) frameCorrelation: rid,
-    framePayload: payload,
-  };
+  @override
+  void send(Map<String, Object?> frame) => socket.write(encodeFrame(frame));
+
+  @override
+  void close() => socket.destroy();
 }
 
 /// The machinery behind [FlutterwareServer], constructible directly so tests
 /// can point it at a temp dir instead of faking the gates.
+///
+/// **This class is now only the transport**: a unix socket in the run dir, a
+/// `srv-*.json` handle beside it, and the predecessor cleanup that makes a
+/// restart self-healing. The ring, the channels, the handlers, the detail
+/// store and the attach handshake are [InspectorCore], which knows nothing
+/// about sockets and compiles into a Flutter app — see
+/// `docs/superpowers/specs/2026-08-11-devbar-run-bridge-design.md`.
 class ServerInspector {
   ServerInspector._({
     required this.runDir,
     required this.projectRoot,
     required this.name,
-    required this.ringSize,
-    required this.detailsByteCap,
     required this.pid,
-  });
+    required int ringSize,
+    required int detailsByteCap,
+  }) {
+    _core = InspectorCore(
+      ringSize: ringSize,
+      detailsByteCap: detailsByteCap,
+      identity: () => {
+        'name': name,
+        'pid': pid,
+        'projectRoot': projectRoot,
+        'startedAt': startedAt.toUtc().toIso8601String(),
+      },
+      onEvent: (channel, payload) {
+        if (channel == infoChannel) _mirrorInfo(payload);
+      },
+    );
+  }
 
   /// Starts publishing immediately, but asynchronously: events reported while
   /// the socket is still binding only land in the ring, which is where an
@@ -268,21 +285,13 @@ class ServerInspector {
   final String projectRoot;
   final String name;
 
-  /// Kept events per channel; the oldest fall off first.
-  final int ringSize;
-
-  /// Bytes of encoded details kept; the oldest evict first. Bounded in bytes
-  /// rather than entries because one body can outweigh a thousand headers.
-  final int detailsByteCap;
-
   final startedAt = DateTime.now();
 
-  final _ring = <String, Queue<_RingEvent>>{};
-  final _details = <int, String>{};
-  var _detailsBytes = 0;
-  final _handlers = <String, Map<String, ServerCommandHandler>>{};
-  final _attached = <Socket>{};
-  var _nextEventId = 1;
+  /// The ring, the channels, the handlers — everything that is not a socket.
+  /// Private: [ServerInspector]'s published surface does not change because
+  /// its insides were split.
+  late final InspectorCore _core;
+
   var _stopped = false;
 
   ServerSocket? _socket;
@@ -302,37 +311,14 @@ class ServerInspector {
   /// Destroys every attached connection without touching the handle or the
   /// socket — a transient drop, as a test stages it.
   @visibleForTesting
-  void debugDropConnections() {
-    for (var socket in _attached.toList()) {
-      _drop(socket);
-    }
-  }
+  void debugDropConnections() => _core.detachAll();
 
   void addEvent(
     String channel,
     Map<String, Object?> payload, {
     String? rid,
     Map<String, Object?>? details,
-  }) {
-    if (_stopped) return;
-    var event = _RingEvent(
-      _nextEventId++,
-      channel,
-      DateTime.now(),
-      rid,
-      payload,
-    );
-    if (details != null) _stashDetails(event.id, details);
-    var ring = _ring.putIfAbsent(channel, Queue.new);
-    ring.add(event);
-    while (ring.length > ringSize) {
-      ring.removeFirst();
-    }
-    if (channel == infoChannel) _mirrorInfo(payload);
-    if (_attached.isNotEmpty) {
-      _broadcast(encodeFrame(event.toFrame()));
-    }
-  }
+  }) => _core.addEvent(channel, payload, rid: rid, details: details);
 
   String? _mirroredBaseUrl;
   String? _mirroredEnvironment;
@@ -377,30 +363,11 @@ class ServerInspector {
     File(handlePath).writeAsStringSync(jsonEncode(handle.toJson()));
   }
 
-  /// Insertion order is the eviction order: `_details` is a plain map, and
-  /// Dart maps iterate in insertion order, so `keys.first` is the oldest.
-  void _stashDetails(int eventId, Map<String, Object?> details) {
-    String encoded;
-    try {
-      encoded = jsonEncode(details);
-    } on Object {
-      return;
-    }
-    _details[eventId] = encoded;
-    _detailsBytes += encoded.length;
-    while (_detailsBytes > detailsByteCap && _details.length > 1) {
-      var oldest = _details.keys.first;
-      _detailsBytes -= _details.remove(oldest)!.length;
-    }
-  }
-
   void registerHandler(
     String channel,
     String method,
     ServerCommandHandler handler,
-  ) {
-    _handlers.putIfAbsent(channel, () => {})[method] = handler;
-  }
+  ) => _core.registerHandler(channel, method, handler);
 
   Future<void> _publish() async {
     try {
@@ -452,155 +419,30 @@ class ServerInspector {
     }
   }
 
+  /// A connection is not an attachment: the peer is created here so replies
+  /// have somewhere to go, and only [InspectorCore.attach] — reached by a
+  /// `meta/attach` request — puts it on the broadcast list.
   void _onConnection(Socket socket) {
+    var peer = _SocketPeer(socket);
     socket
         .cast<List<int>>()
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen(
-          (line) => _onLine(socket, line),
-          onDone: () => _drop(socket),
-          onError: (Object _) => _drop(socket),
+          (line) {
+            var frame = tryDecodeFrame(line);
+            if (frame != null) _core.handleFrame(peer, frame);
+          },
+          onDone: () => _core.detach(peer),
+          onError: (Object _) => _core.detach(peer),
           cancelOnError: true,
         );
-  }
-
-  void _onLine(Socket socket, String line) {
-    var frame = tryDecodeFrame(line);
-    if (frame == null || frame[frameType] != typeRequest) return;
-    var channel = frame[frameChannel];
-    var method = frame[frameMethod];
-    var id = frame[frameRequestId];
-    if (channel is! String || method is! String || id is! int) return;
-    if (channel == metaChannel && method == metaAttach) {
-      _attach(socket, id);
-      return;
-    }
-    if (channel == metaChannel && method == metaDetail) {
-      var params = frame[framePayload];
-      var eventId = params is Map ? params['event'] : null;
-      var encoded = eventId is int ? _details[eventId] : null;
-      _send(socket, {
-        frameChannel: metaChannel,
-        frameType: typeResponse,
-        frameRequestId: id,
-        framePayload: encoded == null
-            // Honest about the difference between "never captured" and
-            // "captured and evicted": the attacher words them differently.
-            ? {'evicted': true}
-            : {'details': jsonDecode(encoded)},
-      });
-      return;
-    }
-    var handler = _handlers[channel]?[method];
-    if (handler == null) {
-      _send(socket, {
-        frameChannel: channel,
-        frameType: typeError,
-        frameRequestId: id,
-        framePayload: {'message': 'no handler for $channel.$method'},
-      });
-      return;
-    }
-    var params = frame[framePayload];
-    unawaited(
-      _respond(
-        socket,
-        channel,
-        id,
-        handler,
-        params is Map ? params.cast<String, Object?>() : const {},
-      ),
-    );
-  }
-
-  Future<void> _respond(
-    Socket socket,
-    String channel,
-    int id,
-    ServerCommandHandler handler,
-    Map<String, Object?> params,
-  ) async {
-    try {
-      var result = await handler(params);
-      _send(socket, {
-        frameChannel: channel,
-        frameType: typeResponse,
-        frameRequestId: id,
-        framePayload: result is Map
-            ? result.cast<String, Object?>()
-            : {'value': result},
-      });
-    } catch (e) {
-      _send(socket, {
-        frameChannel: channel,
-        frameType: typeError,
-        frameRequestId: id,
-        framePayload: {'message': '$e'},
-      });
-    }
-  }
-
-  /// The handshake that makes connection ≠ attachment: nothing is written to
-  /// a socket that has not asked, so a liveness probe that connects and
-  /// closes costs a read loop and nothing else.
-  void _attach(Socket socket, int id) {
-    var events = _ring.values.expand((q) => q).toList()
-      ..sort((a, b) => a.id.compareTo(b.id));
-    _send(socket, {
-      frameChannel: metaChannel,
-      frameType: typeResponse,
-      frameRequestId: id,
-      framePayload: {
-        'name': name,
-        'pid': pid,
-        'projectRoot': projectRoot,
-        'startedAt': startedAt.toUtc().toIso8601String(),
-        'channels': {..._ring.keys, ..._handlers.keys}.toList()..sort(),
-        'events': events.length,
-      },
-    });
-    for (var event in events) {
-      _send(socket, event.toFrame());
-    }
-    _send(socket, {
-      frameChannel: metaChannel,
-      frameType: typeEvent,
-      framePayload: {'type': metaReplayDone},
-    });
-    _attached.add(socket);
-  }
-
-  void _send(Socket socket, Map<String, Object?> frame) {
-    try {
-      socket.write(encodeFrame(frame));
-    } on Object {
-      _drop(socket);
-    }
-  }
-
-  void _broadcast(String data) {
-    for (var socket in _attached.toList()) {
-      try {
-        socket.write(data);
-      } on Object {
-        _drop(socket);
-      }
-    }
-  }
-
-  void _drop(Socket socket) {
-    _attached.remove(socket);
-    socket.destroy();
   }
 
   Future<void> stop() async {
     if (_stopped) return;
     _stopped = true;
-    for (var socket in _attached.toList()) {
-      socket.destroy();
-    }
-    _attached.clear();
+    _core.stop();
     await _socket?.close();
     for (var path in [_handlePath, _socketPath]) {
       if (path == null) continue;

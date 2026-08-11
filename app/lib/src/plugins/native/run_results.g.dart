@@ -215,3 +215,22 @@ Map<String, dynamic> _$RunActResultToJson(RunActResult instance) =>
       'journal': ?instance.journal,
       'note': ?instance.note,
     };
+
+Map<String, dynamic> _$RunPanelsResultToJson(RunPanelsResult instance) =>
+    <String, dynamic>{
+      'device': instance.device,
+      'entrypoint': instance.entrypoint,
+      'panels': instance.panels,
+      'events': instance.events,
+      'note': ?instance.note,
+    };
+
+Map<String, dynamic> _$RunPanelResultToJson(RunPanelResult instance) =>
+    <String, dynamic>{
+      'device': instance.device,
+      'entrypoint': instance.entrypoint,
+      'panel': instance.panel,
+      'result': instance.result,
+      'knobs': ?instance.knobs,
+      'note': ?instance.note,
+    };

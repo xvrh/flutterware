@@ -3602,6 +3602,47 @@ final resultShapes = <String, ResultShape>{
       },
     ],
   }),
+  'RunPanelResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunPanelResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{'name': 'panel', 'type': 'String'},
+      <String, Object?>{
+        'name': 'result',
+        'type': 'Map<String, Object?>',
+        'doc': 'What the app answered.',
+      },
+      <String, Object?>{
+        'name': 'knobs',
+        'type': 'List<Map<String, Object?>>',
+        'optional': true,
+        'doc':
+            'The panel\'s knobs **after** the call — what the app now holds, which is not always what was asked for: an app may clamp a value or refuse it.',
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
+  'RunPanelsResult': ResultShape.fromJson(<String, Object?>{
+    'type': 'RunPanelsResult',
+    'fields': <Object?>[
+      <String, Object?>{'name': 'device', 'type': 'String'},
+      <String, Object?>{'name': 'entrypoint', 'type': 'String'},
+      <String, Object?>{
+        'name': 'panels',
+        'type': 'List<Map<String, Object?>>',
+        'doc':
+            'One `PanelDescriptor` per panel: its knobs with their live values, its actions with their parameters, its states and its feeds.',
+      },
+      <String, Object?>{
+        'name': 'events',
+        'type': 'Map<String, List<Map<String, Object?>>>',
+        'doc':
+            'Recent feed events, keyed `<panel>/<feed>` — the same channel name the descriptor gives.',
+      },
+      <String, Object?>{'name': 'note', 'type': 'String', 'optional': true},
+    ],
+  }),
   'ScenarioListEntry': ResultShape.fromJson(<String, Object?>{
     'type': 'ScenarioListEntry',
     'fields': <Object?>[

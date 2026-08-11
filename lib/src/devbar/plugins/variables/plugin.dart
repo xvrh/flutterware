@@ -3,13 +3,21 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/devbar.dart';
+import '../../../channels/panels.dart';
 import '../../../utils/value_stream.dart';
 import 'file_store.dart';
+import 'knobs.dart';
 import 'store.dart';
 import 'ui.dart';
 
 /// A plugin for the Devbar to manage variables.
-class VariablesPlugin implements DevbarPlugin {
+///
+/// Descriptor mode as well as widget: it keeps its own tab in the overlay
+/// *and* mirrors every variable to the host as a knob, because a feature flag
+/// is a variable and turning one on from the cockpit is the whole point of the
+/// bridge. See `docs/superpowers/specs/2026-08-11-devbar-run-bridge-design.md`
+/// § Decision 4.
+class VariablesPlugin implements DevbarPlugin, DevbarPanelSource {
   final DevbarState devbar;
   final _variables = ValueStream<List<DevbarVariable>>([]);
   final Map<String, dynamic> overrides;
@@ -19,11 +27,15 @@ class VariablesPlugin implements DevbarPlugin {
     this.devbar, {
     Map<String, dynamic>? overrides,
     VariablesStore? store,
-    String? title,
+    this.title,
   }) : overrides = overrides ?? {},
        store = store ?? InMemoryVariablesStore() {
-    devbar.ui.addTab(Tab(text: title ?? 'Settings'), VariablesPanel(this));
+    devbar.ui.addTab(Tab(text: panelLabel), VariablesPanel(this));
   }
+
+  /// Kept, not just consumed: [panelLabel] names the cockpit's tab with the
+  /// same word the overlay's tab uses.
+  final String? title;
 
   static Future<VariablesPlugin> Function(DevbarState) init({
     Map<String, dynamic>? values,
@@ -136,12 +148,92 @@ class VariablesPlugin implements DevbarPlugin {
   Stream<List<DevbarVariable>> get variables => _variables.stream;
   List<DevbarVariable> get currentVariables => _variables.value;
 
+  @override
+  String get panelId => 'flags';
+
+  @override
+  String get panelLabel => title ?? 'Settings';
+
+  Panel? _panel;
+
+  /// The knobs currently declared, and the subscription watching each one's
+  /// value.
+  final _mirrored = <String, StreamSubscription<Object?>>{};
+
+  @override
+  void describePanel(Panel panel) {
+    _panel = panel;
+    panel.action(presetAction, _preset);
+    _mirror();
+    // The set is not fixed: a variable appears when the widget declaring it
+    // builds and goes when that widget unmounts, so the panel has to follow
+    // rather than snapshot.
+    _variablesSubscription = _variables.stream.listen((_) => _mirror());
+  }
+
+  StreamSubscription<List<DevbarVariable>>? _variablesSubscription;
+
+  void _mirror() {
+    var panel = _panel;
+    if (panel == null) return;
+    var live = <String, DevbarVariable>{
+      for (var variable in _variables.value) variable.key: variable,
+    };
+
+    for (var gone in _mirrored.keys.toList()) {
+      if (live.containsKey(gone)) continue;
+      unawaited(_mirrored.remove(gone)!.cancel());
+      panel.removeKnob(gone);
+    }
+
+    for (var entry in live.entries) {
+      if (_mirrored.containsKey(entry.key)) continue;
+      var variable = entry.value;
+      var described = describeVariable(variable);
+      if (described == null) continue;
+      panel.knob(
+        described,
+        read: () => describeVariable(variable)?.value,
+        write: (value) => writeVariable(variable, value),
+      );
+      // A value can move without the set moving — the app changing its own
+      // flag, or another attacher setting it. Announcing lets the host re-read
+      // rather than show what it last happened to fetch.
+      _mirrored[entry.key] = variable.value.listen((_) => panel.announce());
+    }
+  }
+
+  /// Names a value for a key whether or not anything has declared it yet.
+  Map<String, Object?> _preset(Map<String, Object?> args) {
+    var name = args['name'];
+    if (name is! String || name.isEmpty) {
+      throw ArgumentError('preset needs a `name`');
+    }
+    overrides[name] = args['value'];
+    // Anything already declared under that key re-computes now; anything
+    // declared later picks it up on the way in.
+    for (var variable in _variables.value) {
+      if (variable.key == name) variable._update();
+    }
+    _panel?.announce();
+    return {'preset': name, 'declared': live(name)};
+  }
+
+  /// Whether anything has declared [name] in this run.
+  bool live(String name) =>
+      _variables.value.any((variable) => variable.key == name);
+
   void _storeValue(DevbarVariable devbarVariable, Object? editorValue) {
     store[devbarVariable.definition.key] = editorValue;
   }
 
   @override
   void dispose() {
+    unawaited(_variablesSubscription?.cancel());
+    for (var subscription in _mirrored.values) {
+      unawaited(subscription.cancel());
+    }
+    _mirrored.clear();
     for (var variable in _variables.value) {
       variable._value.dispose();
     }

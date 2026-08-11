@@ -20,6 +20,11 @@ class AppDevbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Devbar(
+      // No `headless:` — the default is right here. Launched through the run
+      // plugin (the normal inner loop: `main_dev.dart` on macos) this GUI now
+      // reports its own variables to the cockpit's App tab, so the overlay is
+      // the surface that is *not* wanted; launched any other way the overlay
+      // is still the only one there is, and it stays.
       plugins: [
         LoggerPlugin.init(),
         LogNetworkPlugin.init(),

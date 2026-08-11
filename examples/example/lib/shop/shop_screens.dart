@@ -2,6 +2,19 @@ import 'package:flutter/material.dart';
 
 import 'shop_app.dart';
 
+/// Leaves whatever you are on and lands on the menu, as the root.
+///
+/// Not `pop`, and not `pushReplacement`. The menu is already the first route —
+/// `WelcomeScreen` gets there by replacing itself — so replacing the top of the
+/// stack with another menu leaves *two*, and the second one wears a back arrow
+/// pointing at the first. Clearing the stack puts you exactly where `Get
+/// started` does.
+void backToMenu(BuildContext context) =>
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const MenuScreen()),
+      (route) => false,
+    );
+
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
 
@@ -195,11 +208,26 @@ class _CartScreenState extends State<CartScreen> {
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: cart.items.isEmpty
-            ? Center(
-                child: Text(
-                  strings.emptyCart,
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        strings.emptyCart,
+                        style: TextStyle(color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ),
+                  // The back arrow already leaves this screen, but an empty
+                  // state whose only exit is the chrome is a weak one: the way
+                  // out should be the thing you came here to do.
+                  FilledButton(
+                    key: ShopKeys.backToMenu,
+                    onPressed: () => backToMenu(context),
+                    child: Text(strings.backToMenu),
+                  ),
+                ],
               )
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -333,9 +361,7 @@ class ConfirmationScreen extends StatelessWidget {
               const Spacer(flex: 3),
               FilledButton(
                 key: ShopKeys.backToMenu,
-                onPressed: () => Navigator.of(context).pushReplacement(
-                  MaterialPageRoute<void>(builder: (_) => const MenuScreen()),
-                ),
+                onPressed: () => backToMenu(context),
                 child: Text(strings.backToMenu),
               ),
             ],

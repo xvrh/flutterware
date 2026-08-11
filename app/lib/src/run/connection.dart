@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:meta/meta.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
@@ -21,6 +22,14 @@ class RunConnection {
 
   /// The app's main isolate, or null when it has none yet.
   final String? isolateId;
+
+  /// A connection over a [service] somebody else stood up, for a test — no
+  /// `getVM`, no registration wait, because a fake VM has nothing to discover.
+  @visibleForTesting
+  static Future<RunConnection> forTesting(
+    VmService service,
+    String isolateId,
+  ) async => RunConnection._(service, isolateId);
 
   final _methods = <String, String>{};
 
@@ -82,6 +91,24 @@ class RunConnection {
   /// `flutterVersion`, `compileExpression`. Empty means the app is up and its
   /// `flutter run` is not.
   Set<String> get registered => _methods.keys.toSet();
+
+  Future<void>? _extensions;
+
+  /// Subscribes to the `Extension` stream, once, and answers when the VM has
+  /// acknowledged it.
+  ///
+  /// **Deliberately not part of [connect].** Flutter posts `Flutter.Frame` on
+  /// this stream for *every frame* it renders
+  /// (`scheduler/binding.dart:_profileFramePostEvent`), so subscribing eagerly
+  /// would drag sixty events a second across the wire for every connected run,
+  /// whether or not anything wanted them. Only a caller that has something to
+  /// listen for pays.
+  Future<void> listenExtensions() =>
+      _extensions ??= service.streamListen(EventStreams.kExtension);
+
+  /// Events posted by the app with `dart:developer`'s `postEvent`. Live only
+  /// after [listenExtensions].
+  Stream<Event> get extensionEvents => service.onExtensionEvent;
 
   bool get canReload => _methods.containsKey(_reloadSources);
   bool get canRestart => _methods.containsKey(_hotRestart);

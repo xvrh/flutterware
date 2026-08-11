@@ -1,0 +1,230 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutterware/src/server/frames.dart';
+import 'package:flutterware/src/server/inspector_core.dart';
+import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
+
+/// A peer that keeps what it was sent, and can be told to start failing.
+class FakePeer implements InspectorPeer {
+  final frames = <Map<String, Object?>>[];
+  var closed = false;
+  var broken = false;
+
+  @override
+  void send(Map<String, Object?> frame) {
+    if (broken) throw StateError('peer is gone');
+    frames.add(frame);
+  }
+
+  @override
+  void close() => closed = true;
+
+  List<Map<String, Object?>> ofType(String type) => [
+    for (var frame in frames)
+      if (frame[frameType] == type) frame,
+  ];
+}
+
+void main() {
+  /// The whole point of the split: an inspector that runs inside a Flutter app
+  /// on a phone cannot bind a socket or write a handle file, so the core and
+  /// the wire vocabulary must not reach for `dart:io` — nor, transitively, for
+  /// anything that does. Checked as an import walk rather than trusted to
+  /// review, because the day this regresses is the day the VM-service
+  /// transport stops compiling for a reason nobody will connect to this file.
+  ///
+  /// See `docs/superpowers/specs/2026-08-11-devbar-run-bridge-design.md`.
+  test('the core and the frames reach nothing platform-bound', () {
+    var forbidden = {'dart:io', 'dart:ffi', 'dart:isolate'};
+    var seen = <String>{};
+    var queue = <String>[p.join('lib', 'src', 'server', 'inspector_core.dart')];
+    var offences = <String>[];
+
+    while (queue.isNotEmpty) {
+      var path = queue.removeLast();
+      if (!seen.add(path)) continue;
+      var source = File(path).readAsStringSync();
+      var directive = RegExp(
+        r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''',
+        multiLine: true,
+      );
+      for (var match in directive.allMatches(source)) {
+        var uri = match.group(1)!;
+        if (forbidden.contains(uri) || uri.startsWith('package:flutter/')) {
+          offences.add('$path imports $uri');
+        } else if (!uri.startsWith('dart:') && !uri.startsWith('package:')) {
+          queue.add(p.normalize(p.join(p.dirname(path), uri)));
+        }
+      }
+    }
+
+    expect(seen, contains(p.join('lib', 'src', 'server', 'frames.dart')));
+    expect(offences, isEmpty);
+  });
+
+  group('core', () {
+    late InspectorCore core;
+
+    setUp(() {
+      core = InspectorCore(identity: () => {'name': 'app'}, ringSize: 3);
+    });
+
+    void attach(FakePeer peer, {int id = 1}) => core.handleFrame(peer, {
+      frameChannel: metaChannel,
+      frameType: typeRequest,
+      frameRequestId: id,
+      frameMethod: metaAttach,
+    });
+
+    test('attach answers identity plus channels, replays, then marks the '
+        'boundary', () {
+      core.addEvent('http', {'path': '/one'});
+      core.addEvent('sql', {'q': 'select 1'}, rid: 'r1');
+
+      var peer = FakePeer();
+      attach(peer);
+
+      var hello = peer.frames.first;
+      expect(hello[frameType], typeResponse);
+      expect(hello[frameRequestId], 1);
+      expect(hello[framePayload], {
+        'name': 'app',
+        'channels': ['http', 'sql'],
+        'events': 2,
+      });
+
+      var events = peer.ofType(typeEvent);
+      expect(events[0][framePayload], {'path': '/one'});
+      expect(events[1][frameCorrelation], 'r1');
+      expect(events.last[framePayload], {'type': metaReplayDone});
+    });
+
+    test('an attached peer gets live events; an unattached one gets none', () {
+      var attached = FakePeer();
+      var knocking = FakePeer();
+      attach(attached);
+      var before = attached.frames.length;
+
+      core.addEvent('log', {'message': 'live'});
+
+      expect(attached.frames.length, before + 1);
+      expect(attached.frames.last[framePayload], {'message': 'live'});
+      expect(knocking.frames, isEmpty);
+    });
+
+    test('a peer that fails a write is dropped, not retried', () {
+      var peer = FakePeer();
+      attach(peer);
+      peer.broken = true;
+
+      core.addEvent('log', {'message': 'one'});
+      expect(peer.closed, isTrue);
+
+      // Un-break it: a dropped peer must stay dropped because the core forgot
+      // it, not because it would still refuse the write.
+      peer.broken = false;
+      var delivered = peer.frames.length;
+      core.addEvent('log', {'message': 'two'});
+      expect(peer.frames, hasLength(delivered));
+    });
+
+    test('handlers run and answer; unknown methods answer err', () async {
+      core.registerHandler('sql', 'explain', (params) => {'plan': params['q']});
+      var peer = FakePeer();
+
+      core.handleFrame(peer, {
+        frameChannel: 'sql',
+        frameType: typeRequest,
+        frameRequestId: 7,
+        frameMethod: 'explain',
+        framePayload: {'q': 'select 1'},
+      });
+      core.handleFrame(peer, {
+        frameChannel: 'sql',
+        frameType: typeRequest,
+        frameRequestId: 8,
+        frameMethod: 'nope',
+      });
+
+      await Future<void>.delayed(Duration.zero);
+      expect(peer.ofType(typeResponse).single[framePayload], {
+        'plan': 'select 1',
+      });
+      expect(peer.ofType(typeError).single[framePayload], {
+        'message': 'no handler for sql.nope',
+      });
+    });
+
+    test('details are held aside and fetched by event id', () {
+      core.addEvent('http', {'path': '/one'}, details: {'body': 'hello'});
+      var peer = FakePeer();
+
+      core.handleFrame(peer, {
+        frameChannel: metaChannel,
+        frameType: typeRequest,
+        frameRequestId: 3,
+        frameMethod: metaDetail,
+        framePayload: {'event': 1},
+      });
+      core.handleFrame(peer, {
+        frameChannel: metaChannel,
+        frameType: typeRequest,
+        frameRequestId: 4,
+        frameMethod: metaDetail,
+        framePayload: {'event': 99},
+      });
+
+      var responses = peer.ofType(typeResponse);
+      expect(responses[0][framePayload], {
+        'details': {'body': 'hello'},
+      });
+      expect(responses[1][framePayload], {'evicted': true});
+    });
+
+    test('onEvent sees every event, before any peer does', () {
+      var seen = <String>[];
+      var reducing = InspectorCore(
+        identity: () => const {},
+        onEvent: (channel, payload) => seen.add('$channel:${payload['n']}'),
+      );
+
+      reducing.addEvent('a', {'n': 1});
+      reducing.addEvent('b', {'n': 2});
+
+      expect(seen, ['a:1', 'b:2']);
+    });
+
+    test('a stopped core takes no more events', () {
+      var peer = FakePeer();
+      attach(peer);
+      var delivered = peer.frames.length;
+      core.stop();
+
+      core.addEvent('log', {'message': 'after'});
+
+      expect(core.isStopped, isTrue);
+      expect(peer.closed, isTrue);
+      expect(peer.frames, hasLength(delivered));
+      // And the event was not merely undeliverable — it never entered the
+      // ring, so a peer attaching to the corpse would not see it either.
+      var later = FakePeer();
+      attach(later, id: 2);
+      expect(later.ofType(typeEvent).single[framePayload], {
+        'type': metaReplayDone,
+      });
+    });
+
+    test('frames survive a JSON round trip', () {
+      var peer = FakePeer();
+      core.addEvent('http', {'path': '/one'});
+      attach(peer);
+
+      for (var frame in peer.frames) {
+        expect(tryDecodeFrame(encodeFrame(frame)), frame);
+      }
+      expect(jsonDecode(jsonEncode(peer.frames.first)), isA<Map>());
+    });
+  });
+}

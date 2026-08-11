@@ -42,6 +42,8 @@ class KnobDescriptor {
     required this.defaultValue,
     this.min,
     this.max,
+    this.step,
+    this.description,
     this.options = const [],
   });
 
@@ -52,6 +54,8 @@ class KnobDescriptor {
     defaultValue: json['default'],
     min: json['min'] as num?,
     max: json['max'] as num?,
+    step: json['step'] as num?,
+    description: json['description'] as String?,
     options: [
       for (var option in json['options'] as List? ?? const []) option as String,
     ],
@@ -74,6 +78,14 @@ class KnobDescriptor {
   final num? min;
   final num? max;
 
+  /// The granularity a slider moves in, when the producer declared one. Absent
+  /// means continuous — a devbar variable declares this, a catalog demo does
+  /// not.
+  final num? step;
+
+  /// What this knob is for, when the producer said. Shown beside the control.
+  final String? description;
+
   /// The labels of a [KnobKind.picker], in the order the demo declared them.
   final List<String> options;
 
@@ -88,6 +100,8 @@ class KnobDescriptor {
     defaultValue: defaultValue,
     min: min,
     max: max,
+    step: step,
+    description: description,
     options: options,
   );
 
@@ -98,6 +112,8 @@ class KnobDescriptor {
     'default': defaultValue,
     if (min != null) 'min': min,
     if (max != null) 'max': max,
+    if (step != null) 'step': step,
+    if (description != null) 'description': description,
     if (options.isNotEmpty) 'options': options,
   };
 }
