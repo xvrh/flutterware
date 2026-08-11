@@ -18,6 +18,7 @@ import 'package:flutterware_app/src/run/inspect.dart';
 import 'package:flutterware_app/src/run/inventory.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
+import 'package:flutterware_app/src/ui/split_button.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 import 'package:flutterware_app/src/utils/daemon/device.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
@@ -145,14 +146,30 @@ void main() {
     expect(find.byType(Image), findsOneWidget);
 
     // The design's tabs, and the header above them — the run named as one
-    // phrase, its capability as a pill, and the controls spelled out.
+    // phrase and the controls spelled out. No capability pill here: this run
+    // is reloadable, which is the normal state; the pill only appears when
+    // something is missing.
     expect(find.text('Screen'), findsOneWidget);
     expect(find.text('Logs'), findsOneWidget);
     expect(find.text('App \u2192 macOS'), findsOneWidget);
-    expect(find.text('reloadable'), findsOneWidget);
+    expect(find.text('reloadable'), findsNothing);
     expect(find.text('Hot reload'), findsOneWidget);
-    expect(find.text('Hot restart'), findsOneWidget);
     expect(find.text('Stop'), findsOneWidget);
+
+    // Hot restart is the split button's alternative, built only while the
+    // menu is open.
+    expect(find.text('Hot restart'), findsNothing);
+    await tester.tap(
+      find.descendant(
+        of: find.ancestor(
+          of: find.text('Hot reload'),
+          matching: find.byType(FwSplitButton),
+        ),
+        matching: find.byIcon(Icons.expand_more),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Hot restart'), findsOneWidget);
   });
 
   testWidgets('the New run page offers only the devices the entry point '
