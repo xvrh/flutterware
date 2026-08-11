@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,40 +7,48 @@ import 'package:flutterware_app/src/changes/changes_summary.dart';
 import 'package:flutterware_app/src/changes/patch_index.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
-import 'package:flutterware_app/src/worktrees/explorer_row.dart';
 import 'package:flutterware_app/src/worktrees/explorer_screen.dart';
 import 'package:flutterware_app/src/worktrees/facts.dart';
 
-/// The third rung's **trigger**, which is the part with a cost.
+/// The third rung, and the gesture that reaches it.
 ///
-/// The row is one tap target that expands, so every new target is subtracted
-/// from that gesture. These pin down which pixels were spent and which were
-/// not.
+/// **Hover shows the card; click goes to the screen.** It used to be a click on
+/// the fingerprint bar, with a `Tooltip` over the cell around it — one target,
+/// two interactions, and the cheap one winning every time. The bar is four
+/// pixels tall, so in a real window every click aimed at it hit the row behind
+/// instead, and the tooltip answered the hover it stole. Both halves of that
+/// are pinned here.
 void main() {
   var now = DateTime(2026, 8, 11, 9);
 
-  ExplorerEntry entry(String branch, {ChangeShape? shape}) => ExplorerEntry(
-    worktree: Worktree(path: '/repo/$branch', gitName: branch, branch: branch),
-    facts: WorktreeFacts(
-      git: Fact.fresh(
-        GitFacts(
-          base: 'master',
-          dirty: 2,
-          changes:
-              shape ??
-              const ChangeShape(
-                files: 4,
-                buckets: [ChangeBucket('lib', added: 90, removed: 12)],
-              ),
+  ExplorerEntry entry(String branch, {ChangeShape? shape, int dirty = 2}) =>
+      ExplorerEntry(
+        worktree: Worktree(
+          path: '/repo/$branch',
+          gitName: branch,
+          branch: branch,
         ),
-      ),
-      activity: Fact.fresh(
-        ActivityFacts(at: now, source: ActivitySource.commit),
-      ),
-    ),
-  );
+        facts: WorktreeFacts(
+          git: Fact.fresh(
+            GitFacts(
+              base: 'master',
+              dirty: dirty,
+              changes:
+                  shape ??
+                  const ChangeShape(
+                    files: 4,
+                    buckets: [ChangeBucket('lib', added: 90, removed: 12)],
+                  ),
+            ),
+          ),
+          activity: Fact.fresh(
+            ActivityFacts(at: now, source: ActivitySource.commit),
+          ),
+        ),
+      );
 
-  /// A checkout with nothing to show: no bar, and so no trigger.
+  /// A checkout with nothing at all to show: no card, because there is nothing
+  /// to put in one.
   ExplorerEntry quiet(String branch) => ExplorerEntry(
     worktree: Worktree(path: '/repo/$branch', gitName: branch, branch: branch),
     facts: WorktreeFacts(
@@ -94,33 +103,91 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('clicking the fingerprint bar opens the ranked list', (
+  /// The cell, found by the counts only it draws.
+  Finder cellOf(String files) =>
+      find.ancestor(of: find.text(files), matching: find.byType(Row)).first;
+
+  /// Rests the pointer on [target] long enough for the card to open.
+  Future<TestGesture> hover(WidgetTester tester, Finder target) async {
+    var gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(gesture.removePointer);
+    await tester.pump();
+    await gesture.moveTo(tester.getCenter(target));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    return gesture;
+  }
+
+  testWidgets('resting on the changes cell shows the ranked list', (
     tester,
   ) async {
     await pump(tester, [entry('alpha')]);
     expect(find.byKey(changesSummaryKey), findsNothing);
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(WorktreeRow),
-        matching: find.byTooltip('Which files changed  ·  c'),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await hover(tester, cellOf('4f'));
 
     expect(find.byKey(changesSummaryKey), findsOneWidget);
     expect(find.text('alpha_thing.dart'), findsOneWidget);
   });
 
-  testWidgets('and does not also expand the row underneath it', (tester) async {
-    // The cost of the trigger, stated: ~100 px of ~1200 stop expanding. That is
-    // deliberate — but the tap must go to exactly one of the two, not both.
+  testWidgets('a pointer passing through does not open anything', (
+    tester,
+  ) async {
+    // The difference between a hover card and a screen that flashes at you.
     await pump(tester, [entry('alpha')]);
-    await tester.tap(find.byTooltip('Which files changed  ·  c'));
+    var gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(gesture.removePointer);
+
+    await gesture.moveTo(tester.getCenter(cellOf('4f')));
+    await tester.pump(const Duration(milliseconds: 150));
+    await gesture.moveTo(const Offset(5, 5));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(changesSummaryKey), findsNothing);
+  });
+
+  testWidgets('leaving the cell shuts it again', (tester) async {
+    await pump(tester, [entry('alpha')]);
+    var gesture = await hover(tester, cellOf('4f'));
+    expect(find.byKey(changesSummaryKey), findsOneWidget);
+
+    await gesture.moveTo(const Offset(5, 5));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.byKey(changesSummaryKey), findsNothing);
+  });
+
+  testWidgets('the card survives the pointer travelling into it', (
+    tester,
+  ) async {
+    // **The classic hover-card bug.** The gap between trigger and card is real
+    // space the pointer has to cross; closing the instant it leaves the trigger
+    // makes the footer link unclickable.
+    await pump(tester, [entry('alpha')]);
+    var gesture = await hover(tester, cellOf('4f'));
+
+    await gesture.moveTo(tester.getCenter(find.byKey(changesSummaryKey)));
+    await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
     expect(find.byKey(changesSummaryKey), findsOneWidget);
-    expect(find.text('PATH'), findsNothing, reason: 'the detail stayed shut');
+    await tester.tap(find.text('Open changes'));
+    await tester.pumpAndSettle();
+    expect(openedChanges, ['alpha']);
+  });
+
+  testWidgets('clicking the cell goes straight to the screen', (tester) async {
+    // The card is what hovering does, so the click is free to mean the next
+    // thing along rather than toggling what is already showing.
+    await pump(tester, [entry('alpha')]);
+    await tester.tap(cellOf('4f'));
+    await tester.pumpAndSettle();
+
+    expect(openedChanges, ['alpha']);
+    expect(find.text('PATH'), findsNothing, reason: 'and the row stayed shut');
   });
 
   testWidgets('the rest of the row still expands', (tester) async {
@@ -129,10 +196,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('PATH'), findsOneWidget);
-    expect(find.byKey(changesSummaryKey), findsNothing);
+    expect(openedChanges, isEmpty);
   });
 
-  testWidgets('c opens it on the cursor row', (tester) async {
+  testWidgets('c opens it on the cursor row, without the hover delay', (
+    tester,
+  ) async {
     await pump(tester, [entry('alpha'), entry('beta')]);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -152,8 +221,6 @@ void main() {
   testWidgets('c with the filter in use types instead of opening', (
     tester,
   ) async {
-    // The filter takes every printable key, so this binding only exists in the
-    // state where the keyboard is driving the list rather than the field.
     await pump(tester, [entry('alpha')]);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.enterText(find.byType(TextField), 'al');
@@ -164,48 +231,39 @@ void main() {
     expect(find.byKey(changesSummaryKey), findsNothing);
   });
 
-  testWidgets('c with no cursor does nothing at all', (tester) async {
-    await pump(tester, [entry('alpha')]);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-    await tester.pumpAndSettle();
-    expect(find.byKey(changesSummaryKey), findsNothing);
-  });
-
   testWidgets('a checkout whose work is all uncommitted still has one', (
     tester,
   ) async {
-    // **The case the whole feature exists for, and the one it was missing.**
-    // `ChangeShape` comes from the branch diff, which is keyed by two commit
-    // shas — so a worktree whose agent has written eleven files and committed
-    // none draws no fingerprint bar. Hanging the trigger off the bar therefore
-    // put the popover out of reach for exactly the checkout §1 is about. Found
-    // by looking at a real list with a live agent in it, not by a test.
-    var dirty = ExplorerEntry(
-      worktree: const Worktree(
-        path: '/repo/fresh',
-        gitName: 'fresh',
-        branch: 'fresh',
-      ),
-      facts: WorktreeFacts(
-        git: Fact.fresh(const GitFacts(base: 'master', dirty: 11)),
-        activity: Fact.fresh(
-          ActivityFacts(at: now, source: ActivitySource.commit),
+    // **The case the whole feature exists for.** `ChangeShape` is the branch
+    // diff, keyed by two commit shas and so committed-only, so a checkout whose
+    // agent has written fifteen files and committed none draws no fingerprint.
+    // Hanging the trigger off the fingerprint put the card out of reach for
+    // exactly the worktree §1 is about.
+    await pump(tester, [
+      ExplorerEntry(
+        worktree: const Worktree(
+          path: '/repo/fresh',
+          gitName: 'fresh',
+          branch: 'fresh',
+        ),
+        facts: WorktreeFacts(
+          git: Fact.fresh(const GitFacts(base: 'master', dirty: 11)),
+          activity: Fact.fresh(
+            ActivityFacts(at: now, source: ActivitySource.commit),
+          ),
         ),
       ),
-    );
-    await pump(tester, [dirty]);
+    ]);
 
-    await tester.tap(find.byTooltip('Which files changed  ·  c'));
-    await tester.pumpAndSettle();
+    await hover(tester, find.text('uncommitted'));
     expect(find.byKey(changesSummaryKey), findsOneWidget);
     expect(find.text('fresh_thing.dart'), findsOneWidget);
   });
 
-  testWidgets('a checkout with nothing to show has no trigger', (tester) async {
-    // No bar is drawn, so there is nothing to click and nothing to open —
-    // which is correct rather than a gap.
+  testWidgets('a checkout with nothing to show stays inert', (tester) async {
     await pump(tester, [quiet('sync')]);
-    expect(find.byTooltip('Which files changed  ·  c'), findsNothing);
+    await hover(tester, find.text('in sync'));
+    expect(find.byKey(changesSummaryKey), findsNothing);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
@@ -213,31 +271,11 @@ void main() {
     expect(find.byKey(changesSummaryKey), findsNothing);
   });
 
-  testWidgets('Open changes reports the checkout and shuts the popover', (
-    tester,
-  ) async {
-    await pump(tester, [entry('alpha')]);
-    await tester.tap(find.byTooltip('Which files changed  ·  c'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Open changes'));
-    await tester.pumpAndSettle();
-
-    expect(openedChanges, ['alpha']);
-    expect(
-      find.byKey(changesSummaryKey),
-      findsNothing,
-      reason: 'a popover left open over the screen it just opened is litter',
-    );
-  });
-
   testWidgets('the keyboard keeps walking the list with a card open', (
     tester,
   ) async {
-    // **The popover must not take the focus.** The explorer's filter field
-    // holds it the whole time, which is what makes `c ↓ c ↓` across several
-    // checkouts possible — and sweeping several checkouts is the case the
-    // whole screen exists for.
+    // The card must not take the focus: the filter field holds it the whole
+    // time, which is what makes `c ↓ c ↓` across checkouts possible.
     await pump(tester, [entry('alpha'), entry('beta')]);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
@@ -248,8 +286,6 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
     await tester.pumpAndSettle();
 
-    // One at a time, unlike the detail: a ranked file list is not comparable,
-    // so two of them over the list is clutter rather than a comparison.
     expect(find.text('beta_thing.dart'), findsOneWidget);
     expect(find.text('alpha_thing.dart'), findsNothing);
   });
@@ -257,9 +293,9 @@ void main() {
   testWidgets('escape shuts the card, and only then the filter', (
     tester,
   ) async {
-    // The card does not hold the focus, so nothing else would close it.
     await pump(tester, [entry('alpha')]);
-    await tester.tap(find.byTooltip('Which files changed  ·  c'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
     await tester.pumpAndSettle();
     expect(find.byKey(changesSummaryKey), findsOneWidget);
 
@@ -267,7 +303,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(changesSummaryKey), findsNothing);
 
-    // With nothing in the way, Escape goes back to meaning what it meant.
     await tester.enterText(find.byType(TextField), 'al');
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
