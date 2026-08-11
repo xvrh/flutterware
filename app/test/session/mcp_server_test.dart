@@ -4,10 +4,12 @@ import 'dart:io';
 
 import 'package:dart_mcp/client.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware_app/src/plugins/native/run_plugin.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/session/cli.dart';
 import 'package:flutterware_app/src/session/mcp_server.dart';
 import 'package:flutterware_app/src/shell/repo_layout.dart';
+import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:stream_channel/stream_channel.dart';
 
 /// What `tool/flutterware.dart` declares, in declared order.
@@ -85,7 +87,29 @@ void main() {
       'flutterware_status',
       'flutterware_actions',
       'flutterware_invoke',
+      'flutterware_act',
     ]);
+  });
+
+  test('flutterware_act funnels into the run plugin and reports its refusal '
+      'as a readable error', () async {
+    // An empty run dir of its own, not the machine's: with a real app
+    // running this would otherwise observe it — or flake on its presence.
+    var runDir = Directory.systemTemp.createTempSync('fw-mcp-act-');
+    RunCore.runDirProvider = () => runDir.path;
+    addTearDown(() {
+      RunCore.runDirProvider = flutterwareRunDir;
+      runDir.deleteSync(recursive: true);
+    });
+
+    var result = await connection.callTool(
+      CallToolRequest(name: 'flutterware_act', arguments: {'verb': 'observe'}),
+    );
+
+    expect(result.isError, isTrue);
+    var text = (result.content.single as TextContent).text;
+    expect(text.toLowerCase(), contains('no'));
+    expect(text, isNot(contains('Unhandled')));
   });
 
   test('status reports every declared plugin, loaded', () async {

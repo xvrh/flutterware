@@ -738,3 +738,118 @@ class RunInspectResult implements PluginResult {
   @override
   Map<String, Object?> toJson() => _$RunInspectResultToJson(this);
 }
+
+/// `act` / `observe` / `navigate` — one drive transaction against a running
+/// app, and the observation that closes it.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class RunActResult implements PluginResult, ProducesArtifacts {
+  RunActResult({
+    required this.device,
+    required this.entrypoint,
+    required this.verb,
+    required this.ok,
+    this.screenshotArtifact,
+    this.worktree,
+    this.target,
+    this.error,
+    this.failure,
+    this.attempts,
+    this.elapsedMs,
+    this.settled,
+    this.settleMs,
+    this.frames,
+    this.framesEnabled,
+    this.lifecycle,
+    this.texts,
+    this.tree,
+    this.nodes,
+    this.screenshot,
+    this.logs,
+    this.errors,
+    this.journal,
+    this.note,
+  });
+
+  final String device;
+  final String entrypoint;
+  final String? worktree;
+
+  final String verb;
+
+  /// The target as the guest described it — the same spelling the refusal
+  /// and the journal use.
+  final String? target;
+
+  /// The verb landed. False means it was refused — and the observation
+  /// fields below still describe the screen the refusal happened on.
+  final bool ok;
+
+  /// The refusal, written to say what to do next.
+  final String? error;
+
+  /// Which way it was refused: `notFound`, `multiple`, `covered`,
+  /// `offscreen`.
+  final String? failure;
+
+  /// Resolve attempts the actionability retry ladder spent; 1 when the first
+  /// try reached the target. A route transition costs a handful.
+  final int? attempts;
+
+  /// The whole transaction: retries + act + settle.
+  final int? elapsedMs;
+
+  /// False means the settle budget ran out with the app still animating — a
+  /// spinner, an infinite animation. Reported, never thrown.
+  final bool? settled;
+
+  final int? settleMs;
+  final int? frames;
+
+  /// False when the platform has the window hidden or occluded: every frame
+  /// was forced, and what a human sees on screen may lag what these fields
+  /// describe.
+  final bool? framesEnabled;
+
+  final String? lifecycle;
+
+  /// Every Text and text field on screen after the settle — the projection an
+  /// agent reasons about next to the picture.
+  final List<String>? texts;
+
+  /// The widget tree, when asked for.
+  final Map<String, Object?>? tree;
+  final int? nodes;
+
+  /// Where the step's PNG was written — under the run's journal directory,
+  /// one file per step.
+  final String? screenshot;
+
+  /// What the app printed during this step — since the previous act call,
+  /// not since launch.
+  final List<RunLogEntry>? logs;
+
+  /// Framework errors this step produced or repeated.
+  final List<RunLogEntry>? errors;
+
+  /// The run's journal file this step was appended to.
+  final String? journal;
+
+  final String? note;
+
+  /// The step's PNG as a job artifact, so a surface that renders images —
+  /// MCP first — shows the moment rather than a path. The JSON keeps the
+  /// path either way.
+  @JsonKey(includeToJson: false)
+  final Artifact? screenshotArtifact;
+
+  @override
+  @JsonKey(includeToJson: false)
+  List<Artifact> get artifacts => [?screenshotArtifact];
+
+  @override
+  Map<String, Object?> toJson() => _$RunActResultToJson(this);
+}

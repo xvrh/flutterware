@@ -46,6 +46,17 @@ Use `app/lib/main_dev.dart` as the entry point in your IDE. It bypasses the env-
 
 `app/lib/main.dart` is the production entry point and **requires** the env vars above; it is not runnable standalone.
 
+## Driving the running GUI (the agent inner loop)
+
+For GUI work, the fastest loop is not restart-and-look — it is *drive*: launch the GUI through the run plugin (which wraps the entry point in the run guest), then alternate code edits with `act`/`observe` transactions against the live window. Design: `docs/superpowers/specs/2026-08-11-run-drive-design.md`.
+
+- **The MCP server.** `.mcp.json` registers `fvm dart run flutterware_app:mcp`, so the server is always built from this checkout — the globally installed `fw` binary can be weeks stale. Tools: `flutterware_status`, `flutterware_actions`, `flutterware_invoke`, `flutterware_act`. Everything they can do is documented in `docs/capabilities.md` (generated). In a fresh worktree the server cannot start until the one-time fvm setup above has run (`.fvm/` starts absent) — an MCP connection failure at session start means that, not a broken server. Without MCP, the same actions are reachable in-process from a `Session` — `app/tool/drive_spike/dogfood.dart` is a working example.
+- **The loop.** Open with `flutterware_act {verb: observe}` — the human may already have the window running, and launching again spawns a second instance that steals the run's handle. Only if the reply says nothing is running: `flutterware_invoke run/launch {package: app, entrypoint: lib/main_dev.dart, device: macos, wait: true}` — the "Studio (dev)" entry point declared in `tool/flutterware.dart`. Then per iteration: edit → `flutterware_invoke run/reload` → `flutterware_act {verb: observe}`. Measured: **~2s per edit-reload-observe round trip**, screenshot plus visible texts in every reply. A hidden window is fully drivable (the settle loop forces frames), so the human minimizing the app changes nothing.
+- **Refusals are instructions.** `multiple` → retry with `{"nth": {"target": …, "index": 0}}`; `notFound` reports the texts of the screen it searched. A wrong-target tap cannot succeed silently. `tree: true` costs thousands of tokens on the real GUI — the texts ride along free; ask for the tree only when you need structure.
+- **`navigate` jumps.** The shell registers the drive navigate handler (`app/lib/src/shell/drive_navigator.dart`), so one call — `flutterware_act {verb: navigate, route: "fw:///worktrees/<worktree>/<plugin>/<segments…>"}` — replaces a tap path through the rail. The grammar is the address bar's own `fw://`; refusals teach it and list the worktrees git knows, and every act reply carries `worktree`, so the route builds from what the last reply already told you.
+- **You are co-driving one app with the human.** Every step lands in the run's journal (`~/.flutterware/run/<key>.journal.jsonl`) and shows in the GUI's Run → Steps tab; the human may have moved the app since your last step, so open with `observe`, never assume the screen is where you left it.
+- **Scenarios vs drive.** Scenarios stay the tool for deterministic, headless flows (milliseconds, FakeAsync). Reach for drive when it must be the real thing: real data, real backend, a real device, or this GUI itself.
+
 ## Test runner architecture (legacy)
 
 The pre-overhaul "test visualizer" still exists in-tree but is unreachable from the shell (`main.dart`); it is slated for a rewrite (master-plan M4, `docs/superpowers/specs/2026-07-30-scenarios-design.md`). Until then:

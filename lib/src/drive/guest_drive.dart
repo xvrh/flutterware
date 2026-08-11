@@ -1,0 +1,321 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:developer' as developer;
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
+
+import '../inspect/guest_errors.dart';
+import '../inspect/guest_inspect.dart';
+import '../inspect/guest_logs.dart';
+import '../scenarios/target.dart';
+import 'drive.dart';
+import 'live_settle.dart';
+import 'resolve.dart';
+
+/// The guest half of the drive wire: one `ext.flutterware.act` extension,
+/// every call a transaction — act, settle, observe — whose reply is the whole
+/// bundle. There is deliberately no separate screenshot-then-tap pair to
+/// correlate: two calls against a live app are two moments, and the gap
+/// between them is where computer-use's bugs live.
+///
+/// Calls are serialized on a queue: two drivers interleave as transactions,
+/// never as overlapping gestures.
+class GuestDrive {
+  GuestDrive({Drive? drive, this.inspector}) : drive = drive ?? Drive();
+
+  final Drive drive;
+
+  /// Wired when the tree rides the bundle; without it `tree` is absent and
+  /// everything else still works.
+  final GuestInspector? inspector;
+
+  /// The `navigate` verb's registration point. A routing system — the app's
+  /// own, or a package like router_outlet — sets this to jump straight to a
+  /// screen; unset, `navigate` refuses loudly rather than tap-hunting.
+  static void Function(String route)? navigator;
+
+  var _queue = Future<void>.value();
+  var _logCursor = 0;
+  var _errorCounts = <String, int>{};
+
+  /// Registers the extension. Call once, before `runApp`.
+  void registerExtensions() {
+    developer.registerExtension('ext.flutterware.act', (method, params) {
+      var completer = Completer<developer.ServiceExtensionResponse>();
+      _queue = _queue.then((_) async {
+        Object? result;
+        try {
+          result = await _dispatch(params);
+        } catch (e, stack) {
+          result = {'error': '$e', 'stack': '$stack'};
+        }
+        // Nothing may escape this callback: an error left in [_queue] would
+        // wedge every later call, which for a long-lived app is forever.
+        developer.ServiceExtensionResponse response;
+        try {
+          response = developer.ServiceExtensionResponse.result(
+            jsonEncode(result),
+          );
+        } catch (e) {
+          response = developer.ServiceExtensionResponse.result(
+            jsonEncode({'error': 'observation was not encodable: $e'}),
+          );
+        }
+        completer.complete(response);
+      });
+      return completer.future;
+    });
+  }
+
+  Future<Map<String, Object?>> _dispatch(Map<String, String> params) async {
+    var settle = _durationOf(params, 'settleMs');
+    var before = _beforeAct();
+    DriveStep? step;
+    String? refusal;
+    TargetFailure? failure;
+    try {
+      step = await _verb(params, settle);
+    } on TargetError catch (error) {
+      // A refusal still observes: the agent needs to see the screen the
+      // refusal happened on, not guess at it.
+      refusal = error.message;
+      failure = error.failure;
+      await settleLive(budget: settle ?? drive.settleBudget);
+    }
+    return {
+      if (step != null) 'step': step.toJson(),
+      'error': ?refusal,
+      if (failure != null) 'failure': failure.name,
+      ...await _observe(params, before),
+    };
+  }
+
+  Future<DriveStep> _verb(Map<String, String> params, Duration? settle) async {
+    var timeout = _durationOf(params, 'actTimeoutMs');
+    if (timeout == null) return _run(params, settle);
+    // Per-call, not a setting: one caller's short deadline must not become
+    // every later caller's.
+    var previous = drive.actTimeout;
+    drive.actTimeout = timeout;
+    try {
+      return await _run(params, settle);
+    } finally {
+      drive.actTimeout = previous;
+    }
+  }
+
+  Future<DriveStep> _run(Map<String, String> params, Duration? settle) async {
+    switch (params['verb']) {
+      case 'tap':
+        return drive.tap(_target(params), settle: settle);
+      case 'longPress':
+        return drive.longPress(_target(params), settle: settle);
+      case 'drag':
+        return drive.drag(
+          _target(params),
+          Offset(
+            double.parse(params['dx'] ?? '0'),
+            double.parse(params['dy'] ?? '0'),
+          ),
+          settle: settle,
+        );
+      case 'scrollTo':
+        return drive.scrollTo(
+          _target(params),
+          within: params['within'] == null
+              ? null
+              : wireTarget(params['within']!),
+          step: double.parse(params['step'] ?? '200'),
+          maxScrolls: int.parse(params['maxScrolls'] ?? '50'),
+          settle: settle,
+        );
+      case 'enterText':
+        return drive.enterText(
+          _target(params),
+          params['text'] ?? '',
+          settle: settle,
+        );
+      case 'back':
+        return drive.back(settle: settle);
+      case 'wait':
+        return drive.wait(
+          _durationOf(params, 'waitMs') ?? const Duration(seconds: 1),
+          settle: settle,
+        );
+      case 'observe':
+        return drive.observe(settle: settle);
+      case 'navigate':
+        var handler = navigator;
+        if (handler == null) {
+          throw TargetError(
+            TargetFailure.notFound,
+            'this app declares no navigation handler — `navigate` needs one. '
+            'A routing system registers it with `GuestDrive.navigator = …`; '
+            'until then, `tap` walks the UI.',
+          );
+        }
+        var watch = Stopwatch()..start();
+        handler(params['route'] ?? '');
+        var result = await settleLive(budget: settle ?? drive.settleBudget);
+        return DriveStep(
+          verb: 'navigate',
+          target: params['route'],
+          settle: result,
+          elapsed: watch.elapsed,
+        );
+      default:
+        throw ArgumentError(
+          'unknown verb ${params['verb']} — one of tap, longPress, drag, '
+          'scrollTo, enterText, back, wait, observe, navigate',
+        );
+    }
+  }
+
+  dynamic _target(Map<String, String> params) {
+    var spec = params['target'];
+    if (spec == null) {
+      throw ArgumentError('this verb needs a `target` parameter');
+    }
+    return wireTarget(spec);
+  }
+
+  Duration? _durationOf(Map<String, String> params, String key) {
+    var ms = params[key];
+    return ms == null ? null : Duration(milliseconds: int.parse(ms));
+  }
+
+  ({int logCursor, Map<String, int> errorCounts}) _beforeAct() =>
+      (logCursor: _logCursor, errorCounts: _errorCounts);
+
+  Future<Map<String, Object?>> _observe(
+    Map<String, String> params,
+    ({int logCursor, Map<String, int> errorCounts}) before,
+  ) async {
+    var binding = WidgetsBinding.instance;
+
+    var logs = GuestLogs.instance.describe();
+    var newLines = [
+      for (var line in logs.lines)
+        if (line.sequence > before.logCursor) line,
+    ];
+    if (logs.lines.isNotEmpty) _logCursor = logs.lines.last.sequence;
+
+    var errors = GuestErrors.instance.describe();
+    var changed = [
+      for (var error in errors.errors)
+        if ((before.errorCounts[error.key] ?? 0) < error.count) error,
+    ];
+    _errorCounts = {for (var error in errors.errors) error.key: error.count};
+
+    return {
+      'lifecycle': binding.lifecycleState?.name,
+      'texts': drive.visibleTexts(),
+      if (params['tree'] != 'false' && inspector != null)
+        'tree': inspector!.read().toJson(),
+      if (params['screenshot'] != 'false')
+        'screenshot': await _screenshot(
+          maxSide: int.tryParse(params['maxSide'] ?? ''),
+        ),
+      if (newLines.isNotEmpty)
+        'logs': [for (var line in newLines) line.toJson()],
+      if (changed.isNotEmpty)
+        'errors': [for (var error in changed) error.toJson()],
+    };
+  }
+
+  /// The root render view, rastered the way a scenario step is — and unlike
+  /// `ext.flutter.inspector.screenshot`, alive in profile mode and correct on
+  /// a hidden window (the settle already forced the frame this photographs).
+  Future<Map<String, Object?>?> _screenshot({int? maxSide}) async {
+    var view = WidgetsBinding.instance.renderViews.firstOrNull;
+    var layer = view?.debugLayer;
+    if (view == null || layer is! OffsetLayer) return null;
+    var pixelRatio = view.flutterView.devicePixelRatio;
+    var physical = view.size * pixelRatio;
+    // The cap scales the render, not a re-encode: base64 over the wire is the
+    // cost being bounded, and an agent reads a 1200px screen as well as a
+    // 3200px one.
+    var scale = 1.0;
+    if (maxSide != null && maxSide > 0) {
+      var longest = math.max(physical.width, physical.height);
+      if (longest > maxSide) scale = maxSide / longest;
+    }
+    var image = await layer.toImage(Offset.zero & physical, pixelRatio: scale);
+    try {
+      var bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (bytes == null) return null;
+      return {
+        'width': image.width,
+        'height': image.height,
+        // Scaled with the render, so `imagePx / pixelRatio` stays the mapping
+        // to logical coordinates whether or not the cap kicked in.
+        'pixelRatio': pixelRatio * scale,
+        'base64': base64Encode(bytes.buffer.asUint8List()),
+      };
+    } finally {
+      image.dispose();
+    }
+  }
+}
+
+/// Parses the wire spelling of a target into the verb-facing value.
+///
+/// A bare JSON string is visible text; an object names one form:
+///
+/// ```json
+/// "Pay"
+/// {"text": "Pay"}
+/// {"key": "shop.next"}
+/// {"label": "Add to cart"}        // semantics label
+/// {"tooltip": "Delete"}
+/// {"containing": "Pay"}           // visible text containing
+/// {"within": {"scope": {"key": "card"}, "child": "Buy"}}
+/// {"nth": {"target": "Buy", "index": 1}}
+/// ```
+///
+/// No node ids yet: acting on "the node I picked in this tree" arrives with
+/// the picker integration, where the id has a tree read to be valid against.
+dynamic wireTarget(String spec) {
+  Object? json;
+  try {
+    json = jsonDecode(spec);
+  } on FormatException {
+    // Bare text that never was JSON — an agent typing `target=Pay` should
+    // not need quoting rules to tap a button.
+    return spec;
+  }
+  return _wireTarget(json);
+}
+
+dynamic _wireTarget(Object? json) {
+  switch (json) {
+    case String():
+      return json;
+    case {'text': String text}:
+      return text;
+    case {'key': String key}:
+      return ValueKey<String>(key);
+    case {'label': String label}:
+      return Target.label(label);
+    case {'tooltip': String message}:
+      return Target.tooltip(message);
+    case {'containing': String text}:
+      return Target.containing(text);
+    case {'within': {'scope': Object scope, 'child': Object child}}:
+      return Target.within(
+        _wireTarget(scope) as Object,
+        _wireTarget(child) as Object,
+      );
+    case {'nth': {'target': Object target, 'index': int index}}:
+      return Target.nth(_wireTarget(target) as Object, index);
+    default:
+      throw ArgumentError(
+        'not a target: $json — a bare string is visible text, or one of '
+        '{"text"}, {"key"}, {"label"}, {"tooltip"}, {"containing"}, '
+        '{"within": {"scope", "child"}}, {"nth": {"target", "index"}}',
+      );
+  }
+}

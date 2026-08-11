@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meta/meta.dart';
 
+import '../drive/resolve.dart';
 import 'events.dart';
 import 'profile.dart';
 import 'run_args.dart';
@@ -517,12 +518,7 @@ class ScenarioTester {
               matchRoot: true,
             );
       if (scrollable.evaluate().isEmpty) {
-        throw ScenarioTargetError(
-          within == null
-              ? 'nothing on screen scrolls, so `s.scrollTo` has nothing to walk.'
-              : 'nothing under $within scrolls, so `s.scrollTo` has nothing to '
-                    'walk.',
-        );
+        throw ScenarioTargetError(_messages.nothingScrolls(within));
       }
       try {
         await tester.scrollUntilVisible(
@@ -535,10 +531,7 @@ class ScenarioTester {
         );
       } on StateError {
         throw ScenarioTargetError(
-          'scrolled $maxScrolls times by $step without reaching '
-          '${describeTarget(target)}. '
-          'Wrong direction (try a negative step), wrong scrollable (name one '
-          'with `within:`), or it is not in this list at all.',
+          _messages.scrollExhausted(maxScrolls, step, describeTarget(target)),
         );
       }
     },
@@ -708,6 +701,26 @@ class ScenarioTester {
       ? error
       : ScenarioFailure(List.of(_branchTrail), error);
 
+  /// The scenario flavor of the shared refusal wording: verbs read as `s.tap`,
+  /// and `s.tester` is offered as the covered escape hatch.
+  static const _messages = TargetMessages(
+    prefix: 's.',
+    coveredEscapeHatch:
+        ' `s.tester` is the raw tester if hitting whatever is on top is the '
+        'point.',
+  );
+
+  /// The actionability ladder every pointer verb climbs — shared with the
+  /// live drive engine (`lib/src/drive/resolve.dart`), which runs the same
+  /// checks with the same wording against a running app.
+  late final TargetResolver _targetResolver = TargetResolver(
+    tester,
+    messages: _messages,
+    pump: () => tester.pump(),
+    ensureSemantics: () => _state.ensureSemantics(tester),
+    describeScreen: _describeVisibleTexts,
+  );
+
   /// Resolves a verb's target and insists it names exactly one widget the
   /// pointer can actually reach.
   ///
@@ -715,79 +728,11 @@ class ScenarioTester {
   /// made *before* the action, so the message can say what to do rather than
   /// dump the matching render objects.
   Future<Finder> _resolve(dynamic target, String verb) async {
-    if (target is Target && target.needsSemantics) {
-      await _state.ensureSemantics(tester);
+    try {
+      return await _targetResolver.resolve(target, verb);
+    } on TargetError catch (error) {
+      throw ScenarioTargetError(error.message);
     }
-    var finder = finderFor(target);
-    var count = finder.evaluate().length;
-    var described = describeTarget(target);
-    if (count == 1) {
-      await _ensureReachable(finder, described, verb);
-      return finder;
-    }
-    if (count == 0) {
-      throw ScenarioTargetError(
-        'nothing matches $described, which `s.$verb` needs. A widget further '
-        'down a lazy list is not built yet — `s.scrollTo` walks to it.\n'
-        'Visible text: ${_describeVisibleTexts()}',
-      );
-    }
-    throw ScenarioTargetError(
-      '$count widgets match $described, and `s.$verb` needs one. '
-      'Narrow it: give the widget a Key and use that, or pass a Finder — '
-      '`finder.first`, `find.descendant(of: …, matching: …)`.',
-    );
-  }
-
-  /// Every pointer verb lands at its target's center, so the target must be
-  /// reachable there — actionability, checked before the action, where
-  /// `flutter_test` prints a console warning after a miss and lets the flow
-  /// sail on from the wrong screen.
-  ///
-  /// Found but unreachable usually means "built but below the fold" — a
-  /// `SingleChildScrollView`, a list child inside cache extent — so the verb
-  /// first scrolls it into view, as the user it stands in for would. That is
-  /// also what keeps one scenario honest across a device matrix: a button
-  /// under the fold of the small phone is above it on the tablet, and neither
-  /// run should need to say so. What scrolling cannot fix is refused loudly:
-  /// covered by another widget, or off screen with nothing scrolling to it.
-  Future<void> _ensureReachable(
-    Finder finder,
-    String described,
-    String verb,
-  ) async {
-    if (_reaches(finder)) return;
-    // On a target with no scrollable ancestor `Scrollable.ensureVisible` is a
-    // no-op, so the recheck decides — no case to distinguish here.
-    await tester.ensureVisible(finder);
-    await tester.pump();
-    if (_reaches(finder)) return;
-    var render = finder.evaluate().single.renderObject! as RenderBox;
-    var center = render.localToGlobal(render.size.center(Offset.zero));
-    var bounds = Offset.zero & tester.binding.renderViews.single.size;
-    throw ScenarioTargetError(
-      bounds.contains(center)
-          ? '$described is on screen, but `s.$verb` at its center would not '
-                'reach it — another widget covers it, or an IgnorePointer/'
-                'AbsorbPointer swallows the pointer. `s.tester` is the raw '
-                'tester if hitting whatever is on top is the point.'
-          : '$described sits off screen at $center and nothing scrolls it '
-                'into view.',
-    );
-  }
-
-  /// Whether a pointer event at the target's center would reach it — the
-  /// check `flutter_test`'s `warnIfMissed` makes, as a boolean.
-  bool _reaches(Finder finder) {
-    var render = finder.evaluate().single.renderObject;
-    // No box to aim at: leave it to the underlying verb, whose own errors
-    // name the shape problem better than a reachability check can.
-    if (render is! RenderBox || !render.hasSize) return true;
-    var center = render.localToGlobal(render.size.center(Offset.zero));
-    var result = tester.hitTestOnBinding(center);
-    return result.path.any(
-      (entry) => isRenderObjectAncestorOfTarget(render, entry.target),
-    );
   }
 
   String _describeVisibleTexts() {
@@ -975,16 +920,7 @@ class ScenarioTester {
   /// The visible text, in tree order — the projection an agent reads next to
   /// the screenshot. `EditableText` too, or what the user just typed into a
   /// `TextField` would be pixels only.
-  List<String> visibleTexts() => [
-    for (var widget in tester.widgetList(
-      find.byWidgetPredicate((w) => w is Text || w is EditableText),
-    ))
-      switch (widget) {
-        Text(:var data, :var textSpan) => data ?? textSpan?.toPlainText() ?? '',
-        EditableText(:var controller) => controller.text,
-        _ => '',
-      },
-  ];
+  List<String> visibleTexts() => visibleTextsOf(tester);
 
   static String _fileSafe(String name) =>
       name.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');

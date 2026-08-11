@@ -10,6 +10,7 @@ import 'src/constants.dart';
 import 'src/context.dart';
 import 'src/plugins/manifest_loader.dart';
 import 'src/plugins/native/registry.dart';
+import 'src/shell/drive_navigator.dart';
 import 'src/shell/shell_controller.dart';
 import 'src/shell/shell_view.dart';
 import 'src/utils/flutter_sdk.dart';
@@ -54,6 +55,7 @@ void main() async {
       dartExecutable: p.join(flutterSdk.root, 'bin', 'dart'),
     ),
   );
+  registerDriveNavigator(shell);
 
   // A capture run is the same window, driven and then closed. It is set up
   // before `runApp` only so the boundary exists in the first frame.

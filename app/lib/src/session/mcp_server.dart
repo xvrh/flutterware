@@ -27,8 +27,8 @@ import 'session.dart';
 /// tools to describe before answering a question about one. So discovery is a
 /// tool (`flutterware_actions`) and invocation is a tool
 /// (`flutterware_invoke`). Individual actions get promoted to their own tool
-/// only when a good name beats a discovery round-trip, and none has earned it
-/// yet.
+/// only when a good name beats a discovery round-trip — which exactly one
+/// has: `flutterware_act`, the drive loop's hot path.
 base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
   FlutterwareMcpServer(
     super.channel, {
@@ -43,11 +43,14 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
              'plugins. Start with flutterware_status; it loads and reports what '
              'every declared plugin knows. Anything that compiles, renders or '
              'spawns a process is an action — list them with '
-             'flutterware_actions and run them with flutterware_invoke.',
+             'flutterware_actions and run them with flutterware_invoke. '
+             'To work on a *running* app, launch it with the run plugin and '
+             'live in flutterware_act: edit, reload, act, observe.',
        ) {
     registerTool(_statusTool, _status);
     registerTool(_actionsTool, _actions);
     registerTool(_invokeTool, _invoke);
+    registerTool(_actTool, _act);
   }
 
   /// Every tool this server exposes, in the order it registers them.
@@ -56,7 +59,12 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
   /// from a hand-kept list — and `mcp_server_test` asserts a connected client
   /// sees exactly these, so the document cannot describe a surface that is not
   /// there.
-  static List<Tool> get tools => [_statusTool, _actionsTool, _invokeTool];
+  static List<Tool> get tools => [
+    _statusTool,
+    _actionsTool,
+    _invokeTool,
+    _actTool,
+  ];
 
   /// Where to resolve the project from. A session walks up to the repo root,
   /// so any directory inside the project works.
@@ -222,11 +230,140 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
       'report': core.report.toJson(includeActions: false),
     };
 
-    // An image artifact comes back as an image, not as a path. An agent
-    // asked to screenshot something wants to *see* it, and a path it cannot
-    // open is the difference between a working tool and a plausible one. The
-    // JSON travels alongside, so the address and the resolved axes are still
-    // there to ask for the same frame again.
+    return _jsonWithImage(session, artifact, summary);
+  });
+
+  /// One drive transaction, promoted to its own tool.
+  ///
+  /// The gui-cli-mcp architecture reserved promotion for "the drive loop,
+  /// decided with a real client in front of us" — this is that loop. An agent
+  /// iterating on a live app calls this every step; making it ride
+  /// flutterware_invoke would cost a discovery round-trip to learn the one
+  /// action the whole session is made of.
+  static final _actTool = Tool(
+    name: 'flutterware_act',
+    description:
+        'One transaction against the running app — the loop tool for live '
+        'work: edit code, hot-reload (flutterware_invoke run.reload), then '
+        'act or observe here. Every reply is one settled moment of the app: '
+        'screenshot, visible texts, what it printed since the last step — '
+        'nothing to correlate. Targets resolve inside the app at act time, '
+        'retry through route transitions, and are refused loudly with the '
+        'screen they were refused on; a silent wrong-target tap cannot '
+        'happen. `settled: false` means the budget ran out with the app '
+        'still animating — normal for a spinner, act anyway. Needs an app '
+        'launched by flutterware (run.launch); every step lands in the '
+        "run's journal, reviewable in the GUI's Steps tab. For flows "
+        'expressible headlessly, scenarios are milliseconds and '
+        'deterministic — reach for this tool when it must be the real '
+        'thing: real backend, real data, real device, or the flutterware '
+        'GUI itself.',
+    inputSchema: Schema.object(
+      properties: {
+        'verb': Schema.string(
+          description:
+              'tap | longPress | drag | scrollTo | enterText | back | wait '
+              '| observe | navigate. observe is the act-less transaction — '
+              'the opening move, and the call after a reload.',
+        ),
+        'target': Schema.string(
+          description:
+              'Bare text matches a visible string. JSON names the rest: '
+              '{"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, '
+              '{"within": {"scope": …, "child": …}}, '
+              '{"nth": {"target": …, "index": …}}.',
+        ),
+        'text': Schema.string(
+          description: 'What enterText types, as one editing value.',
+        ),
+        'route': Schema.string(
+          description:
+              'For navigate — needs the app to have registered a '
+              'navigation handler.',
+        ),
+        'dx': Schema.num(description: 'Drag distance, logical px.'),
+        'dy': Schema.num(
+          description: 'Drag distance; negative moves the finger up.',
+        ),
+        'waitMs': Schema.int(description: 'For wait: real milliseconds.'),
+        'settleMs': Schema.int(
+          description:
+              'Settle budget, default 800. Running out is reported, '
+              'never an error.',
+        ),
+        'tree': Schema.bool(
+          description:
+              'Include the widget tree inline. Off by default — thousands '
+              'of tokens on a real app; the texts ride along either way.',
+        ),
+        'maxSide': Schema.int(
+          description:
+              "Cap the screenshot's longest side in pixels. Default 1200 "
+              'here.',
+        ),
+        'device': Schema.string(
+          description: 'Which device, when more than one app is running.',
+        ),
+        'entrypoint': Schema.string(
+          description: 'Which entry point, when a device runs more than one.',
+        ),
+      },
+      required: ['verb'],
+    ),
+  );
+
+  Future<CallToolResult> _act(CallToolRequest request) =>
+      _withSession((session) async {
+        var arguments = <String, Object?>{
+          for (var key in const [
+            'verb',
+            'target',
+            'text',
+            'route',
+            'dx',
+            'dy',
+            'waitMs',
+            'settleMs',
+            'tree',
+            'maxSide',
+            'device',
+            'entrypoint',
+          ])
+            key: ?request.arguments?[key],
+        };
+        arguments.putIfAbsent('maxSide', () => 1200);
+
+        Job job;
+        try {
+          job = session.invoke('run', 'act', arguments: arguments);
+        } on SessionException catch (e) {
+          return _error('$e');
+        }
+        var result = await job.done;
+        if (!result.ok) return _error(describeJobError(result.error!));
+
+        // Lean on purpose: no report attach. This is the call an agent makes
+        // most; the act result is the whole story of the step.
+        var summary = {
+          'result': switch (result.value) {
+            PluginResult data => data.toJson(),
+            var other => other,
+          },
+        };
+        var artifact = result.artifacts.isEmpty ? null : result.artifacts.first;
+        return _jsonWithImage(session, artifact, summary);
+      });
+
+  /// An image artifact comes back as an image, not as a path. An agent
+  /// asked to screenshot something wants to *see* it, and a path it cannot
+  /// open is the difference between a working tool and a plausible one. The
+  /// JSON travels alongside, so the address and the resolved axes are still
+  /// there to ask for the same frame again.
+  static CallToolResult _jsonWithImage(
+    Session session,
+    Artifact? artifact,
+    Map<String, Object?> summary,
+  ) {
     if (artifact != null && artifact.kind.startsWith('image/')) {
       var file = File(p.join(session.root, artifact.path!));
       if (file.existsSync()) {
@@ -241,9 +378,8 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         );
       }
     }
-
     return _json(summary);
-  });
+  }
 
   /// Compact, unlike the CLI's `--json`.
   ///
