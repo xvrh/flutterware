@@ -62,25 +62,6 @@ final class FileRow extends ChangeRow {
   final String? reason;
 }
 
-/// The collapsed noise tier: **one row standing in for N files**.
-///
-/// A row rather than a filter, because the count is the information. `31
-/// low-signal files` says the branch is mostly generated code; hiding them
-/// silently says the branch is small, which is a different and false claim.
-final class NoiseDrawerRow extends ChangeRow {
-  const NoiseDrawerRow({
-    required this.files,
-    required this.added,
-    required this.removed,
-    required this.open,
-  });
-
-  final int files;
-  final int added;
-  final int removed;
-  final bool open;
-}
-
 /// The `@@` line of an expanded hunk, plus the context git guessed.
 final class HunkRow extends ChangeRow {
   const HunkRow(this.file, this.hunk);
@@ -150,7 +131,6 @@ List<ChangeRow> buildIndexRows(
   ];
 
   var attention = kept(RankTier.attention);
-  var noise = kept(RankTier.noise);
 
   // An untracked file that matched a rule belongs in the pinned section even
   // though it has no diff — see `attentionForUntracked`. Filtering hides it
@@ -176,16 +156,11 @@ List<ChangeRow> buildIndexRows(
   // **The ordinary files are not here.** They are the tree's, which is the
   // whole point of putting one back: a flat list of fifty-three basenames says
   // nothing about the shape of the branch.
-  if (noise.isNotEmpty) {
-    rows.add(
-      NoiseDrawerRow(
-        files: noise.length,
-        added: noise.fold(0, (sum, r) => sum + r.file.added),
-        removed: noise.fold(0, (sum, r) => sum + r.file.removed),
-        open: noiseOpen,
-      ),
-    );
-  }
+  //
+  // Neither is the noise drawer any more: it is a lens at the top of the pane,
+  // where you look, rather than a row below fifty others — which is where the
+  // original one sat, and slice 4 had already found that a control below the
+  // fold labels a distinction nobody can see.
 
   // The pinned ones are drawn above; listing them twice would make the branch
   // look bigger than it is.
@@ -193,9 +168,13 @@ List<ChangeRow> buildIndexRows(
     for (var entry in set.untracked)
       if (!entry.isPinned) entry,
   ];
-  if (rest.isNotEmpty && visible == null) {
+  var keptRest = [
+    for (var entry in rest)
+      if (visible == null || visible.contains(entry.path)) entry,
+  ];
+  if (keptRest.isNotEmpty) {
     rows.add(const SectionRow('Untracked'));
-    for (var entry in rest) {
+    for (var entry in keptRest) {
       rows.add(UntrackedRow(entry, selected: entry.path == selected));
     }
   }
@@ -263,11 +242,15 @@ String _counts(List<RankedFile> files, int untracked) {
 /// A substring rather than a glob: the box is for *finding* a file among fifty,
 /// not for expressing a rule. Rules live in `tool/flutterware.dart` and get to
 /// be globs there, where they are written once and read by a parser.
-Set<String> pathsMatching(List<FileChange> files, String query) {
+///
+/// Takes paths rather than [FileChange]s so an **untracked** entry can be
+/// found too. It could not be, which meant typing `scratch` hid the very file
+/// you were looking for.
+Set<String> pathsMatching(Iterable<String> paths, String query) {
   var needle = query.trim().toLowerCase();
-  if (needle.isEmpty) return {for (var file in files) file.path};
+  if (needle.isEmpty) return paths.toSet();
   return {
-    for (var file in files)
-      if (file.path.toLowerCase().contains(needle)) file.path,
+    for (var path in paths)
+      if (path.toLowerCase().contains(needle)) path,
   };
 }

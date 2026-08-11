@@ -78,18 +78,17 @@ diff --git a/lib/b.dart b/lib/b.dart
       // A section header over the only section is furniture.
       var rows = buildIndexRows(setOf(index(twoFiles)));
       expect(rows.whereType<SectionRow>(), isEmpty);
-      expect(rows.whereType<NoiseDrawerRow>(), isEmpty);
     });
 
-    test('noise alone draws the drawer and no heading above it', () {
+    test('noise alone draws no heading at all', () {
       // Found by photographing a 25-file branch: a lone `Changes` heading sat
-      // at the top with the thing it distinguished from below the fold.
+      // at the top with the thing it distinguished from below the fold. The
+      // drawer that used to be that thing is a lens at the top of the pane now.
       var patch = index(twoFiles);
       var rows = buildIndexRows(
         setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'})),
       );
       expect(rows.whereType<SectionRow>(), isEmpty);
-      expect(rows.whereType<NoiseDrawerRow>(), hasLength(1));
     });
 
     test('a pinned file gets its own section, above everything else', () {
@@ -117,27 +116,22 @@ diff --git a/lib/b.dart b/lib/b.dart
       expect(rows.whereType<FileRow>(), hasLength(1));
     });
 
-    test('noise collapses to one row, and the count is the information', () {
+    test('noise is out of the index until its lens is on', () {
       var patch = index(twoFiles);
       var set = setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'}));
       var rows = buildIndexRows(set);
 
-      var drawer = rows.whereType<NoiseDrawerRow>().single;
-      expect(drawer.files, 1);
-      expect(drawer.open, isFalse);
-      expect(drawer.added, 1);
-      expect(drawer.removed, 1);
-      // Collapsed means the file is nowhere: not a flat row, not in the tree.
+      // Nowhere: not a flat row, not in the tree.
       expect(rows.whereType<FileRow>(), isEmpty);
       expect(treeFiles(set).map((f) => f.path), ['lib/a.dart']);
+      // The count the lens draws is still the truth about the branch.
+      expect(set.ordered(RankTier.noise), hasLength(1));
     });
 
     test('opening the drawer lists them, and never loses one', () {
       var patch = index(twoFiles);
       var set = setOf(patch, ranking: rankingOf(patch, noise: {'lib/b.dart'}));
-      var rows = buildIndexRows(set, noiseOpen: true);
 
-      expect(rows.whereType<NoiseDrawerRow>().single.open, isTrue);
       expect(treeFiles(set, noiseOpen: true).map((f) => f.path), [
         'lib/a.dart',
         'lib/b.dart',
@@ -417,22 +411,20 @@ rename to new.dart
   });
 
   group('the filter', () {
-    FileChange at(String path) => FileChange(
-      path: path,
-      status: ChangeStatus.modified,
-      added: 1,
-      removed: 0,
-      hunks: const [],
-      byteStart: 0,
-      byteEnd: 0,
-    );
-
     test('pathsMatching is a plain case-insensitive substring', () {
-      var files = [at('app/lib/Motion.dart'), at('app/lib/other.dart')];
-      expect(pathsMatching(files, 'motion'), {'app/lib/Motion.dart'});
+      var paths = ['app/lib/Motion.dart', 'app/lib/other.dart'];
+      expect(pathsMatching(paths, 'motion'), {'app/lib/Motion.dart'});
       // Deliberately not fuzzy: `mtn` is not a match anybody asked for.
-      expect(pathsMatching(files, 'mtn'), isEmpty);
-      expect(pathsMatching(files, '  '), hasLength(2));
+      expect(pathsMatching(paths, 'mtn'), isEmpty);
+      expect(pathsMatching(paths, '  '), hasLength(2));
+    });
+
+    test('it takes plain paths, so an untracked file can be found', () {
+      // It used to take `FileChange`s, so an untracked entry was never in the
+      // candidate set — typing `scratch` hid the one file you were after.
+      expect(pathsMatching(['scratch.txt', 'lib/a.dart'], 'scratch'), {
+        'scratch.txt',
+      });
     });
   });
 }

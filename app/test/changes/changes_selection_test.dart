@@ -157,6 +157,118 @@ void main() {
     expect(addressed, isEmpty);
   });
 
+  group('the lenses', () {
+    // **The answer to "filter this huge list down to what matters".** The
+    // pinned band says what a *rule* declared important; these two say what is
+    // fresh and what is skippable, which are the other two questions a
+    // fifty-file branch raises. Counts on both, because the count is the
+    // information: `11 low-signal` says the branch is mostly generated code.
+
+    testWidgets("uncommitted narrows the index to the agent's fresh work", (
+      tester,
+    ) async {
+      current = ChangeSet(
+        worktreePath: worktree.path,
+        patch: PatchIndex.empty,
+        base: 'master',
+        baseSource: BaseSource.inferred,
+        files: [file('lib/fresh.dart'), file('lib/landed.dart')],
+        uncommitted: {'lib/fresh.dart'},
+        untracked: const [UntrackedEntry('scratch.txt')],
+      );
+      await pump(tester);
+      expect(inIndex('landed.dart'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(IndexLens, 'uncommitted'));
+      await tester.pumpAndSettle();
+
+      expect(inIndex('fresh.dart'), findsOneWidget);
+      expect(inIndex('landed.dart'), findsNothing);
+      expect(
+        inIndex('scratch.txt'),
+        findsOneWidget,
+        reason: 'an untracked file is the most uncommitted thing on the screen',
+      );
+    });
+
+    testWidgets('its count includes the untracked, and it toggles back', (
+      tester,
+    ) async {
+      current = ChangeSet(
+        worktreePath: worktree.path,
+        patch: PatchIndex.empty,
+        base: 'master',
+        baseSource: BaseSource.inferred,
+        files: [file('lib/fresh.dart'), file('lib/landed.dart')],
+        uncommitted: {'lib/fresh.dart'},
+        untracked: const [UntrackedEntry('scratch.txt')],
+      );
+      await pump(tester);
+
+      expect(
+        tester
+            .widget<IndexLens>(find.widgetWithText(IndexLens, 'uncommitted'))
+            .count,
+        2,
+      );
+
+      await tester.tap(find.widgetWithText(IndexLens, 'uncommitted'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(IndexLens, 'uncommitted'));
+      await tester.pumpAndSettle();
+      expect(inIndex('landed.dart'), findsOneWidget);
+    });
+
+    testWidgets('a lens that would say nothing is not drawn', (tester) async {
+      // A `0 uncommitted` chip is a control that does nothing, which is worse
+      // than no control — the same rule the section headings follow.
+      current = setOf([file('lib/a.dart')]);
+      await pump(tester);
+      expect(find.byType(IndexLens), findsNothing);
+    });
+
+    testWidgets('the typed filter and a lens compose', (tester) async {
+      current = ChangeSet(
+        worktreePath: worktree.path,
+        patch: PatchIndex.empty,
+        base: 'master',
+        baseSource: BaseSource.inferred,
+        files: [
+          file('lib/fresh.dart'),
+          file('lib/other_fresh.dart'),
+          file('lib/landed.dart'),
+        ],
+        uncommitted: {'lib/fresh.dart', 'lib/other_fresh.dart'},
+      );
+      await pump(tester);
+
+      await tester.tap(find.widgetWithText(IndexLens, 'uncommitted'));
+      await tester.enterText(find.byType(TextField), 'other');
+      await tester.pumpAndSettle();
+
+      expect(inIndex('other_fresh.dart'), findsOneWidget);
+      expect(inIndex('fresh.dart'), findsNothing);
+      expect(inIndex('landed.dart'), findsNothing);
+    });
+
+    testWidgets('typing finds an untracked file, which it could not before', (
+      tester,
+    ) async {
+      // `pathsMatching` took `FileChange`s, so an untracked entry was never in
+      // the candidate set: typing its name hid it.
+      current = setOf(
+        [file('lib/a.dart')],
+        untracked: const [UntrackedEntry('scratch.txt')],
+      );
+      await pump(tester);
+
+      await tester.enterText(find.byType(TextField), 'scratch');
+      await tester.pumpAndSettle();
+      expect(inIndex('scratch.txt'), findsOneWidget);
+      expect(inIndex('a.dart'), findsNothing);
+    });
+  });
+
   testWidgets('the index marks which file the pane is showing', (tester) async {
     await pump(tester, initialPath: 'lib/beta.dart');
     var rows = tester

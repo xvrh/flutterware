@@ -71,11 +71,15 @@ class IndexFileRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // **The same size as the name it sits beside.** At `micro` against
+            // a `bodySmall` name, top-aligning two different glyph boxes puts
+            // the letter visibly off the line — the column reads as ragged for
+            // a reason nobody can point at.
             SizedBox(
               width: 12,
               child: Text(
                 _letter(file.status),
-                style: context.type.micro.copyWith(color: _tone(colors)),
+                style: context.type.bodySmall.copyWith(color: _tone(colors)),
               ),
             ),
             const Gap(FwSpacing.sm),
@@ -107,18 +111,23 @@ class IndexFileRow extends StatelessWidget {
               ),
             ),
             const Gap(FwSpacing.sm),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            // **One line.** Stacked, `+309` over `-22` reads as a count that
+            // wrapped rather than as two halves of one figure — and the row is
+            // already two or three lines tall without help.
+            Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   '+${file.added}',
                   style: context.type.micro.copyWith(color: colors.grn),
                 ),
-                if (file.removed > 0)
+                if (file.removed > 0) ...[
+                  const Gap(FwSpacing.xs),
                   Text(
                     '-${file.removed}',
                     style: context.type.micro.copyWith(color: colors.red),
                   ),
+                ],
               ],
             ),
           ],
@@ -157,26 +166,30 @@ class IndexFileRow extends StatelessWidget {
   };
 }
 
-/// The noise tier, standing behind one row.
+/// A lens over the index: one toggle, one count.
 ///
-/// **A drawer, not a filter.** The count is the information: `31 low-signal
-/// files` says this branch is mostly generated code, and hiding them silently
-/// would say it is a small branch — a different claim, and a false one. One
-/// click opens it, and the header's file count includes them either way.
-class NoiseDrawerLine extends StatelessWidget {
-  const NoiseDrawerLine({
-    required this.files,
-    required this.added,
-    required this.removed,
-    required this.open,
+/// **The count is the information**, which is the argument the noise drawer was
+/// built on and the reason this replaces rather than removes it. `11 low-signal`
+/// says the branch is mostly generated code; hiding them silently would say it
+/// is a small branch, which is a different claim and a false one.
+///
+/// What changed is *where*. The drawer was a row at the bottom of the list —
+/// below fifty others on the branch where it mattered most, which is the same
+/// mistake slice 4 already found with a lone `Changes` heading. A lens sits at
+/// the top, under the filter box, where you are already looking when the
+/// question "can I make this list smaller" occurs to you.
+class IndexLens extends StatelessWidget {
+  const IndexLens({
+    required this.label,
+    required this.count,
+    required this.on,
     required this.onTap,
     super.key,
   });
 
-  final int files;
-  final int added;
-  final int removed;
-  final bool open;
+  final String label;
+  final int count;
+  final bool on;
   final VoidCallback onTap;
 
   @override
@@ -184,43 +197,32 @@ class NoiseDrawerLine extends StatelessWidget {
     var colors = context.colors;
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(
-          FwSpacing.lg,
-          FwSpacing.lg,
-          FwSpacing.lg,
-          FwSpacing.sm,
-        ),
         padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.md,
-          vertical: FwSpacing.sm,
+          horizontal: FwSpacing.sm,
+          vertical: FwSpacing.xxs,
         ),
         decoration: BoxDecoration(
-          color: colors.hoverOverlay,
+          color: on ? colors.accentSoft : Colors.transparent,
           borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          border: Border.all(color: on ? Colors.transparent : colors.line),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              open ? Icons.expand_more : Icons.chevron_right,
-              size: 14,
-              color: colors.mut3,
-            ),
-            const Gap(FwSpacing.xs),
-            Expanded(
-              child: Text(
-                '$files low-signal ${files == 1 ? 'file' : 'files'}',
-                style: context.type.bodySmall.copyWith(color: colors.mut),
+            Text(
+              '$count',
+              style: context.type.micro.copyWith(
+                color: on ? colors.accent : colors.mut,
               ),
             ),
+            const Gap(FwSpacing.xs),
             Text(
-              '+$added',
-              style: context.type.micro.copyWith(color: colors.mut2),
-            ),
-            const Gap(FwSpacing.sm),
-            Text(
-              '-$removed',
-              style: context.type.micro.copyWith(color: colors.mut2),
+              label,
+              style: context.type.micro.copyWith(
+                color: on ? colors.accent : colors.mut2,
+              ),
             ),
           ],
         ),
@@ -443,7 +445,7 @@ class IndexUntrackedRow extends StatelessWidget {
               width: 12,
               child: Text(
                 '?',
-                style: context.type.micro.copyWith(color: colors.mut3),
+                style: context.type.bodySmall.copyWith(color: colors.mut3),
               ),
             ),
             const Gap(FwSpacing.sm),

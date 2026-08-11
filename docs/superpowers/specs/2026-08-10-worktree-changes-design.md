@@ -589,7 +589,7 @@ the wrong one presented as fact.
 │ 53 files  +12.8k −37  ·  1 uncommitted  ·  base master (inferred)         │
 ├────────────────────────┬─────────────────────────────────────────────────┤
 │ ⌕ Filter paths         │ ranking.dart  app/lib/src/changes/               │
-│                        │ ▁▊▊▁▂   modified · +309 −0 · uncommitted · 4 hunks│
+│ [4 uncommitted][11 low-│ ▁▊▊▁▂   modified · +309 −0 · uncommitted · 4 hunks│
 │ Look here first 1 file ├─────────────────────────────────────────────────┤
 │ A 0042_stream_log.sql 8│ @@ -1,6 +1,9 @@ class Ranking {                  │
 │   db/migrations        │  one                                            │
@@ -622,7 +622,24 @@ split is the whole design, and everything below follows from it.
   agent did, which is the index; reading a file is the second question, and one
   you should have asked.
 - **The filter narrows the index only.** It is for finding the next file. A
-  search box that closes the document you are reading is a bug.
+  search box that closes the document you are reading is a bug. It matches
+  untracked paths too, which it did not at first — `pathsMatching` took
+  `FileChange`s, so typing `scratch` hid the one file you were after.
+- **Two lenses under the filter box, each with a count**: *uncommitted* and
+  *low-signal*. They are the answer to "make this list smaller": the pinned
+  band says what a **rule** declared important, and these say what is **fresh**
+  and what is **skippable** — the other two questions a fifty-file branch
+  raises. They compose with the typed filter by intersection.
+  - The *uncommitted* count includes untracked entries, because an untracked
+    file is the most uncommitted thing on the screen.
+  - A lens whose count is zero is not drawn. A `0 uncommitted` chip is a
+    control that does nothing, which is worse than no control.
+  - **This replaced the noise drawer**, and kept its argument: the count is the
+    information — `11 low-signal` says the branch is mostly generated code, and
+    hiding them silently would say it is a small branch. What changed is
+    *where*. The drawer was a row at the bottom of the list, which on the
+    branch where it mattered most sat below fifty others — the same mistake
+    slice 4 had already found with a lone `Changes` heading.
 - **The hunk ruler moved into the pane header**, where there is width for it
   and where it sits directly above the hunks it describes.
 

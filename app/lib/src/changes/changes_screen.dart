@@ -13,6 +13,7 @@ import 'diff_lines.dart';
 import 'diff_view.dart';
 import 'hunk_ruler.dart';
 import 'patch_index.dart';
+import 'ranking.dart';
 
 /// The changes screen's root, so a test can scope to it.
 const changesScreenKey = Key('changes-screen');
@@ -114,6 +115,14 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   var _query = '';
 
+  /// **The lenses.** Two toggles over the index, each with a count: *what has
+  /// this agent not committed yet* and *what did the ranking demote*. They are
+  /// the answer to "filter this list down to what matters" — the pinned band
+  /// says what a rule declared important, and these two say what is *fresh* and
+  /// what is *skippable*, which are the other two questions a fifty-file branch
+  /// raises.
+  var _uncommittedOnly = false;
+
   /// Whether the noise drawer is open. **Off by default and remembered for the
   /// session**, not persisted: the whole value of the drawer is that the
   /// screen opens on the signal.
@@ -177,10 +186,26 @@ class _ChangesScreenState extends State<ChangesScreen> {
     return _lines!;
   }
 
-  /// Null when nothing is filtering.
+  /// Null when nothing is narrowing the index at all.
+  ///
+  /// The typed query and the lenses compose by intersection, so `motion` plus
+  /// *uncommitted* means both, which is what anybody would expect of two
+  /// controls sitting next to each other.
   Set<String>? _visible(ChangeSet set) {
-    if (_query.trim().isEmpty) return null;
-    return pathsMatching(set.changed, _query);
+    Set<String>? visible;
+    if (_query.trim().isNotEmpty) {
+      visible = pathsMatching([
+        ...set.changed.map((f) => f.path),
+        ...set.untracked.map((e) => e.path),
+      ], _query);
+    }
+    if (_uncommittedOnly) {
+      // An untracked file is the most uncommitted thing on the screen, so the
+      // lens would be lying if it hid them.
+      var fresh = {...set.uncommitted, ...set.untracked.map((e) => e.path)};
+      visible = visible == null ? fresh : visible.intersection(fresh);
+    }
+    return visible;
   }
 
   /// Shows [path] in the right pane, from the top.
@@ -259,10 +284,14 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         selected: _selected,
                         visible: _visible(set),
                         noiseOpen: _noiseOpen,
+                        uncommittedOnly: _uncommittedOnly,
                         onQuery: (q) => setState(() => _query = q),
                         onSelect: _show,
                         onToggleNoise: () =>
                             setState(() => _noiseOpen = !_noiseOpen),
+                        onToggleUncommitted: () => setState(
+                          () => _uncommittedOnly = !_uncommittedOnly,
+                        ),
                       ),
                     ),
                     VerticalDivider(width: 1, color: context.colors.line),
@@ -531,7 +560,9 @@ class _IndexPane extends StatelessWidget {
     required this.onQuery,
     required this.onSelect,
     required this.onToggleNoise,
+    required this.onToggleUncommitted,
     required this.noiseOpen,
+    required this.uncommittedOnly,
     required this.visible,
   });
 
@@ -546,7 +577,9 @@ class _IndexPane extends StatelessWidget {
   final ValueChanged<String> onQuery;
   final ValueChanged<String> onSelect;
   final VoidCallback onToggleNoise;
+  final VoidCallback onToggleUncommitted;
   final bool noiseOpen;
+  final bool uncommittedOnly;
   final Set<String>? visible;
 
   @override
@@ -578,6 +611,13 @@ class _IndexPane extends StatelessWidget {
               ),
             ),
           ),
+        ),
+        _LensRow(
+          set: set,
+          noiseOpen: noiseOpen,
+          uncommittedOnly: uncommittedOnly,
+          onToggleNoise: onToggleNoise,
+          onToggleUncommitted: onToggleUncommitted,
         ),
         Expanded(
           child: nothing
@@ -646,14 +686,6 @@ class _IndexPane extends StatelessWidget {
         ],
       ),
     ),
-    NoiseDrawerRow(:var files, :var added, :var removed, :var open) =>
-      NoiseDrawerLine(
-        files: files,
-        added: added,
-        removed: removed,
-        open: open,
-        onTap: onToggleNoise,
-      ),
     FileRow(:var file, :var selected, :var uncommitted, :var reason) =>
       IndexFileRow(
         file: file,
@@ -670,6 +702,65 @@ class _IndexPane extends StatelessWidget {
     // The body's rows never reach the index.
     HunkRow() || DiffLineRow() || FileNoticeRow() => const SizedBox.shrink(),
   };
+}
+
+/// The lenses, drawn only when they would say something.
+///
+/// A `0 uncommitted` chip on a branch with nothing uncommitted is a control
+/// that does nothing, which is worse than no control — the same rule the
+/// section headings follow.
+class _LensRow extends StatelessWidget {
+  const _LensRow({
+    required this.set,
+    required this.noiseOpen,
+    required this.uncommittedOnly,
+    required this.onToggleNoise,
+    required this.onToggleUncommitted,
+  });
+
+  final ChangeSet set;
+  final bool noiseOpen;
+  final bool uncommittedOnly;
+  final VoidCallback onToggleNoise;
+  final VoidCallback onToggleUncommitted;
+
+  @override
+  Widget build(BuildContext context) {
+    var fresh =
+        set.changed.where((f) => set.uncommitted.contains(f.path)).length +
+        set.untracked.length;
+    var noise = set.ordered(RankTier.noise).length;
+    if (fresh == 0 && noise == 0) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        FwSpacing.md,
+        0,
+        FwSpacing.md,
+        FwSpacing.sm,
+      ),
+      child: Wrap(
+        spacing: FwSpacing.xs,
+        runSpacing: FwSpacing.xs,
+        children: [
+          if (fresh > 0)
+            IndexLens(
+              label: 'uncommitted',
+              count: fresh,
+              on: uncommittedOnly,
+              onTap: onToggleUncommitted,
+            ),
+          if (noise > 0)
+            IndexLens(
+              label: 'low-signal',
+              count: noise,
+              on: noiseOpen,
+              onTap: onToggleNoise,
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// One directory, and everything under it.

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/changes/change_set.dart';
 import 'package:flutterware_app/src/changes/changes_screen.dart';
+import 'package:flutterware_app/src/changes/diff_view.dart';
 import 'package:flutterware_app/src/changes/changes_config_cache.dart';
 import 'package:flutterware_app/src/changes/patch_index.dart';
 import 'package:flutterware_app/src/changes/ranking.dart';
@@ -293,7 +294,7 @@ void main() {
             ),
         ]);
 
-    testWidgets('the drawer stands in for the noise, and opens', (
+    testWidgets('the lens stands in for the noise, and lets it in', (
       tester,
     ) async {
       var files = [
@@ -309,11 +310,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('1 low-signal file'), findsOneWidget);
+      // The count is the information — `1 low-signal` says the branch is
+      // mostly generated code, and hiding it silently would say it is a small
+      // branch. What moved is *where*: a lens at the top of the pane, not a row
+      // below fifty others.
+      var lens = tester.widget<IndexLens>(
+        find.widgetWithText(IndexLens, 'low-signal'),
+      );
+      expect(lens.count, 1);
+      expect(lens.on, isFalse);
       expect(find.text('model.g.dart'), findsNothing);
       expect(find.text('real.dart'), findsOneWidget);
 
-      await tester.tap(find.text('1 low-signal file'));
+      await tester.tap(find.text('low-signal'));
       await tester.pumpAndSettle();
       expect(find.text('model.g.dart'), findsOneWidget);
     });
@@ -392,7 +401,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('3 files'), findsOneWidget);
-      expect(find.text('2 low-signal files'), findsOneWidget);
+      expect(
+        tester
+            .widget<IndexLens>(find.widgetWithText(IndexLens, 'low-signal'))
+            .count,
+        2,
+      );
     });
   });
 }
