@@ -9,6 +9,10 @@ import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/address/address_scope.dart';
+import 'package:flutterware_app/src/changes/change_set.dart';
+import 'package:flutterware_app/src/changes/changes_controller.dart';
+import 'package:flutterware_app/src/changes/changes_screen.dart';
+import 'package:flutterware_app/src/changes/patch_index.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/manifest_loader.dart';
 import 'package:flutterware_app/src/plugins/native_plugin.dart';
@@ -893,6 +897,106 @@ void main() {
       await shell.reloadConfig();
       await tester.pumpAndSettle();
       expect(find.byKey(configErrorBannerKey), findsNothing);
+    });
+  });
+
+  /// **The screen that renders for a checkout nobody has opened.** Every other
+  /// place in the window needs a session; this one reads git, so the chrome
+  /// around it has to admit that there is no tab to be in.
+  group('the changes screen, on a closed worktree', () {
+    setUp(() {
+      debugChangesLoader = (path) async => ChangeSet(
+        worktreePath: path,
+        patch: PatchIndex.empty,
+        files: const [
+          FileChange(
+            path: 'lib/agent_wrote_this.dart',
+            status: ChangeStatus.added,
+            added: 12,
+            removed: 0,
+            hunks: [],
+            byteStart: 0,
+            byteEnd: 0,
+          ),
+        ],
+        base: 'main',
+        baseSource: BaseSource.inferred,
+      );
+      addTearDown(() => debugChangesLoader = null);
+    });
+
+    testWidgets('draws without opening the checkout', (tester) async {
+      var shell = await _pumpShell(tester);
+      var closed = shell.closedWorktrees.single;
+
+      shell.selectChanges(closed);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(changesScreenKey), findsOneWidget);
+      expect(find.text('lib/agent_wrote_this.dart'), findsOneWidget);
+      expect(shell.isOpen(closed), isFalse, reason: 'and still no tab for it');
+      expect(find.byKey(worktreeTabKey(closed)), findsNothing);
+    });
+
+    testWidgets('hides the rail, since there is no session to list', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+      expect(find.byKey(sidebarKey), findsOneWidget);
+
+      shell.selectChanges(shell.closedWorktrees.single);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(sidebarKey), findsNothing);
+
+      // And the window preference was not clobbered on the way through: going
+      // back to a checkout with a session brings the rail with it.
+      shell.select(shell.worktrees.first);
+      await tester.pumpAndSettle();
+      expect(find.byKey(sidebarKey), findsOneWidget);
+    });
+
+    testWidgets('lights the pinned tab, because this is that space', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+
+      shell.selectChanges(shell.closedWorktrees.single);
+      await tester.pumpAndSettle();
+
+      expect(shell.inWorktreesSpace, isTrue);
+      expect(find.byKey(explorerTabKey), findsOneWidget);
+    });
+
+    testWidgets('escape goes back to the list', (tester) async {
+      var shell = await _pumpShell(tester);
+      shell.selectChanges(shell.closedWorktrees.single);
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(shell.isExplorer, isTrue);
+    });
+
+    testWidgets('the same address inside an open checkout keeps its rail', (
+      tester,
+    ) async {
+      var shell = await _pumpShell(tester);
+      var other = shell.closedWorktrees.single;
+      await shell.open(other);
+      await tester.pumpAndSettle();
+
+      shell.selectChanges(other);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(changesScreenKey), findsOneWidget);
+      expect(
+        find.byKey(sidebarKey),
+        findsOneWidget,
+        reason: 'an open checkout has plugins to list',
+      );
+      expect(shell.inWorktreesSpace, isFalse);
     });
   });
 }

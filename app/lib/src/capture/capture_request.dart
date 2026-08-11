@@ -205,7 +205,7 @@ class CaptureRequest {
   /// *what is being shown*, which is the plugin and the segments.
   String? _landingError(ShellController shell) => landingError(
     wanted: address,
-    landedPlugin: shell.selectedPluginId,
+    landedPlugin: shell.shownScreenId,
     landedSegments: shell.address.segments,
     declared: shell.selectedSession?.plugins.map((p) => p.id).toList(),
   );

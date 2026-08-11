@@ -55,6 +55,16 @@ class WorktreeFactsController extends ChangeNotifier implements SettleSource {
 
   final WorktreeFactsProbe _probe;
 
+  /// **The repository's one store instance, and it has to be one.**
+  ///
+  /// `WorktreeFactsStore` reads the whole file at `open` and writes the whole
+  /// file at `save`, so two instances over one path are two full copies and
+  /// the last one to save wins. A second opener that wrote something this one
+  /// had not read would have that write silently reverted on the next sweep —
+  /// which is exactly what happened to the changes config until this getter
+  /// existed. Anything else in the window that needs the store takes this.
+  WorktreeFactsStore get store => _probe.store;
+
   Map<String, WorktreeFacts> get facts => _facts;
   var _facts = const <String, WorktreeFacts>{};
 

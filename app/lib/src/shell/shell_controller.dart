@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 
+import '../changes/changes_config_cache.dart';
 import '../context.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/plugin_core.dart';
@@ -89,6 +90,7 @@ class ShellController extends ChangeNotifier {
   /// that pumped the shell was touching the developer's home directory — and
   /// would have raced any other test doing the same.
   final WorktreeFactsController Function(String repoRoot)? _buildWorktreeFacts;
+
   final WorktreeWatcher Function(String repoRoot)? _buildWorktreeWatcher;
 
   /// Injectable so a test can drive a save without a filesystem.
@@ -212,6 +214,13 @@ class ShellController extends ChangeNotifier {
   /// Every worktree git reports, main first.
   List<Worktree> get worktrees => List.unmodifiable(_worktrees);
 
+  /// The main checkout's path — what every repository-wide cache is keyed by.
+  ///
+  /// Deliberately the same value [WorktreeFactsController] is built with, and
+  /// read from the same place, so the changes screen and the explorer cannot
+  /// end up looking at two different cache files for one repository.
+  String? get repoRoot => _worktrees.firstOrNull?.path;
+
   /// The open ones, in the order they were opened — including those still
   /// loading.
   List<Worktree> get openWorktrees => [
@@ -319,6 +328,7 @@ class ShellController extends ChangeNotifier {
     _watcherEvents = watcher.changes.listen((change) async {
       switch (change) {
         case WorktreeChange.git:
+          if (!_gitMoved.isClosed) _gitMoved.add(null);
           await rescanWorktrees();
           await refreshWorktreeFacts();
         case WorktreeChange.agent:
@@ -332,6 +342,21 @@ class ShellController extends ChangeNotifier {
 
   WorktreeWatcher? _worktreeWatcher;
   StreamSubscription<WorktreeChange>? _watcherEvents;
+
+  /// A commit, a staging change, a branch switch, or a worktree appearing —
+  /// **repository-wide**, already coalesced by [WorktreeWatcher].
+  ///
+  /// Exposed because the changes screen needs it and cannot get it from a
+  /// working-tree watch: `git add` and `git commit` write a linked worktree's
+  /// index and HEAD under `<main>/.git/worktrees/<name>/`, which is nowhere
+  /// near the checkout. Committing does not change one byte of the delta —
+  /// it changes which files are marked *uncommitted*, and that is on screen.
+  ///
+  /// A stream rather than a listener list because it must be **live from the
+  /// first frame**: the watcher is built once the main checkout is known,
+  /// which may be after the screen subscribing to this is mounted.
+  Stream<void> get gitMoved => _gitMoved.stream;
+  final _gitMoved = StreamController<void>.broadcast();
 
   /// Re-probes every worktree. What the explorer calls when it appears and when
   /// its refresh button is pressed.
@@ -359,17 +384,87 @@ class ShellController extends ChangeNotifier {
     }
   }
 
+  /// True while the address names the shell's own changes screen.
+  bool get isChangesScreen => address.plugin == Address.shellChanges;
+
+  /// **The worktree the address names, open or not.**
+  ///
+  /// [selected] deliberately resolves `among: openWorktrees`, because every
+  /// other screen in the window needs a session and a worktree without one has
+  /// nothing to show. The changes screen is the first that reads git rather
+  /// than the project, so for it the open ones are the wrong set — and the
+  /// checkout you most want to look at is precisely the one you have not
+  /// opened.
+  Worktree? get addressedWorktree {
+    var name = address.worktree;
+    return name == null ? null : worktreeNamed(name);
+  }
+
+  /// True while the window is showing the worktrees *space* rather than a
+  /// checkout you have open: the explorer itself, or a shell-owned screen about
+  /// a worktree that has no tab.
+  ///
+  /// One concept rather than two tests, because three things derive from it —
+  /// the rail, which pseudo-tab is lit, and what Escape means — and they must
+  /// not be able to disagree.
+  bool get inWorktreesSpace => isExplorer || isUnopenedScreen;
+
+  /// A shell-owned screen showing a worktree nobody has opened.
+  bool get isUnopenedScreen {
+    var worktree = addressedWorktree;
+    return Address.shellSessionless.contains(address.plugin) &&
+        worktree != null &&
+        !isOpen(worktree);
+  }
+
+  /// Moves to `fw:///worktrees/<worktree>/changes/<path…>`, naming one file.
+  ///
+  /// A null [path] is the screen with nothing expanded. The segments are the
+  /// panel's own, as they are for every plugin — the shell splits and joins
+  /// them and reads nothing into them.
+  void selectChangesFile(Worktree worktree, String? path) => go(
+    Address(
+      worktree: worktree.name,
+      plugin: Address.shellChanges,
+      segments: path == null || path.isEmpty ? const [] : path.split('/'),
+    ),
+  );
+
+  /// Moves to `fw:///worktrees/<worktree>/changes`.
+  ///
+  /// [worktree] names one explicitly — which is how the explorer reaches a
+  /// checkout that is not the one the window is on. Without it, the one the
+  /// address already names.
+  void selectChanges([Worktree? worktree]) {
+    var name = worktree?.name ?? address.worktree;
+    if (name == null) return;
+    go(Address(worktree: name, plugin: Address.shellChanges));
+  }
+
   /// The plugin whose panel is mounted, or null when the home or config screen
   /// is.
   String? get selectedPluginId {
     var id = address.plugin;
-    if (id == null || id == Address.shellConfig) return null;
+    if (id == null || Address.shellOwned.contains(id)) return null;
     // A reloaded config may no longer declare it; fall back to home rather than
     // to a panel that cannot be built.
     var session = selectedSession;
     if (session != null && session.pluginById(id) == null) return null;
     return id;
   }
+
+  /// **What the window is showing in the plugin slot**, whether or not it is a
+  /// plugin.
+  ///
+  /// [selectedPluginId] answers a narrower question — *which plugin's panel is
+  /// mounted* — and deliberately returns null for the shell's own screens, so
+  /// the rail does not light a plugin row for them. Anything asking "did we land
+  /// where we were sent" wants this one instead: `fw capture` compared against
+  /// [selectedPluginId] and therefore could never photograph `config`, which was
+  /// a real gap long before a second shell screen existed.
+  String? get shownScreenId => Address.shellOwned.contains(address.plugin)
+      ? address.plugin
+      : selectedPluginId;
 
   /// The selected sub-entry of that plugin — a package path — or null.
   ///
@@ -380,7 +475,8 @@ class ShellController extends ChangeNotifier {
       selectedPluginId == null ? null : address.segments.firstOrNull;
 
   /// True while the selected worktree is showing its home screen.
-  bool get isHome => !isConfigScreen && selectedPluginId == null;
+  bool get isHome =>
+      !isConfigScreen && !isChangesScreen && selectedPluginId == null;
 
   /// Whether the plugin rail is showing.
   ///
@@ -645,6 +741,19 @@ class ShellController extends ChangeNotifier {
     manifest ??= const PluginManifest([]);
     open.error = null;
 
+    // **The one writer.** Running this file is what "opening a worktree" costs,
+    // and the changes screen has to rank checkouts nobody has opened — so the
+    // value it produced is remembered here, stamped with the file it came from.
+    // A manifest that declares no `ChangesConfig` is still worth writing: "this
+    // project says nothing" is an answer.
+    // **Through the explorer's store, never a second one.** See
+    // [WorktreeFactsController.store]: two instances over one file are two
+    // copies of it, and the sweep that runs a second later would write this
+    // entry straight back out again.
+    if (_worktreeFacts?.store case var store?) {
+      rememberChangesConfig(worktree.path, manifest.changes, store);
+    }
+
     var existing = open.session;
     if (existing != null &&
         !existing.isDisposed &&
@@ -802,9 +911,21 @@ class ShellController extends ChangeNotifier {
     var worktree = name == null ? null : worktreeNamed(name);
     if (worktree == null) return GoResult.worktreeUnknown;
 
+    // **The one destination that does not open what it names.** "Opening is the
+    // navigation" holds for every address that needs a session to render, which
+    // until now was all of them. A shell screen that reads git rather than the
+    // project needs none — and the whole reason it exists is to answer a
+    // question about a checkout *before* you decide to spend a subprocess on it.
+    // Opening it here would make the cheap surface expensive, which is the
+    // premise of the explorer the link comes from.
+    //
+    // Not a refusal: the address still resolves, still lands, still draws. It
+    // simply does not grow a tab.
+    var needsSession = !Address.shellSessionless.contains(destination.plugin);
+
     // The tab first, so the resolution below and everything that reads
     // `selected` afterwards can see it.
-    if (!isOpen(worktree)) unawaited(_openTab(worktree));
+    if (needsSession && !isOpen(worktree)) unawaited(_openTab(worktree));
 
     // **Canonicalised on the way in**, so a branch is only ever input. Accepting
     // one and then keeping it would put a name that moves with `git checkout`
@@ -938,6 +1059,7 @@ class ShellController extends ChangeNotifier {
     }
     unawaited(_watcherEvents?.cancel());
     unawaited(_worktreeWatcher?.dispose());
+    unawaited(_gitMoved.close());
     _worktreeFacts?.removeListener(notifyListeners);
     _worktreeFacts?.dispose();
     _address.dispose();

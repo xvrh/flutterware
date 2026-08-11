@@ -14,7 +14,12 @@ import 'package:flutterware_app/src/plugins/registry.dart';
 import 'package:flutterware_app/src/shell/config_load.dart';
 import 'package:flutterware_app/src/shell/shell_controller.dart';
 import 'package:flutterware_app/src/shell/worktree_discovery.dart';
+import 'package:flutterware_app/src/changes/changes_config_cache.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+import 'package:flutterware_app/src/worktrees/facts_controller.dart';
+import 'package:flutterware_app/src/worktrees/facts_probe.dart';
+import 'package:flutterware_app/src/worktrees/facts_store.dart';
+import 'package:path/path.dart' as p;
 
 const _listing =
     'worktree /repo\nbranch refs/heads/main\n\n'
@@ -69,6 +74,7 @@ ShellController _controller({
   String manifest = _manifestJson,
   int manifestExit = 0,
   Map<String, PluginCoreFactory>? cores,
+  WorktreeFactsStore? factsStore,
 }) {
   cores ??= {'a.one': _FakeCore.new, 'a.two': _FakeCore.new};
   _loader = _StubLoader(manifest, manifestExit);
@@ -78,6 +84,14 @@ ShellController _controller({
     registry: _panels(cores.keys),
     coreRegistry: PluginCoreRegistry(cores),
     manifestLoader: _loader,
+    // The shell writes the changes config through the explorer's store, so a
+    // test that wants to read it back injects the controller that holds one.
+    worktreeFacts: factsStore == null
+        ? null
+        : (root) => WorktreeFactsController(
+            repoRoot: root,
+            probe: WorktreeFactsProbe(repoRoot: root, store: factsStore),
+          ),
     discovery: WorktreeDiscovery(
       runProcess: (_, _, {workingDirectory}) async =>
           ProcessResult(0, 0, _currentListing, ''),
@@ -871,5 +885,215 @@ void main() {
         GoResult.worktreeUnknown,
       );
     });
+  });
+
+  /// **The one destination that does not open what it names.**
+  ///
+  /// Every other address in the shell needs a session to render, so `go` opens
+  /// the worktree it is pointed at. The changes screen reads git rather than
+  /// the project, and the whole reason it exists is to answer a question about
+  /// a checkout *before* you decide to spend a config subprocess on it.
+  group('a shell screen that needs no session', () {
+    test('naming it does not open the worktree, or spend a config', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      var loadsAfterStart = _loader.loads;
+      var closed = shell.closedWorktrees.first;
+
+      expect(
+        shell.go(Address(worktree: closed.name, plugin: Address.shellChanges)),
+        GoResult.ok,
+      );
+      await pumpEventQueue();
+
+      expect(shell.isOpen(closed), isFalse, reason: 'no tab was grown');
+      expect(
+        _loader.loads,
+        loadsAfterStart,
+        reason: 'and no config subprocess was spent',
+      );
+      expect(
+        shell.address.toString(),
+        'fw:///worktrees/${closed.name}/changes',
+        reason: 'it still lands where it was told',
+      );
+    });
+
+    test(
+      'the worktree resolves even though `selected` cannot see it',
+      () async {
+        var shell = _controller();
+        await shell.start('/repo');
+        var closed = shell.closedWorktrees.first;
+
+        shell.go(Address(worktree: closed.name, plugin: Address.shellChanges));
+
+        // `selected` resolves among the *open* ones, which is right for every
+        // screen that needs a session and wrong for this one.
+        expect(shell.selected, isNull);
+        expect(shell.addressedWorktree, closed);
+      },
+    );
+
+    test('it is neither the home screen nor a plugin', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      var closed = shell.closedWorktrees.first;
+
+      shell.go(Address(worktree: closed.name, plugin: Address.shellChanges));
+
+      expect(shell.isChangesScreen, isTrue);
+      expect(shell.isHome, isFalse, reason: 'or the rail would light Overview');
+      expect(shell.selectedPluginId, isNull);
+      expect(shell.isConfigScreen, isFalse);
+    });
+
+    test(
+      'an unopened one is in the worktrees space; an open one is not',
+      () async {
+        var shell = _controller();
+        await shell.start('/repo');
+        var closed = shell.closedWorktrees.first;
+
+        shell.go(Address(worktree: closed.name, plugin: Address.shellChanges));
+        expect(shell.isUnopenedScreen, isTrue);
+        expect(
+          shell.inWorktreesSpace,
+          isTrue,
+          reason: 'no rail, and the pinned tab is lit',
+        );
+
+        // The same address, once the checkout has a tab of its own, is an
+        // ordinary place inside that tab.
+        await shell.open(closed);
+        shell.go(Address(worktree: closed.name, plugin: Address.shellChanges));
+        expect(shell.isUnopenedScreen, isFalse);
+        expect(shell.inWorktreesSpace, isFalse);
+      },
+    );
+
+    test('every other address still opens what it names', () async {
+      // The regression that matters: the exemption is for one id, not for
+      // "shell-owned", and certainly not for everything.
+      var shell = _controller();
+      await shell.start('/repo');
+      var closed = shell.closedWorktrees.first;
+
+      shell.go(Address(worktree: closed.name, plugin: Address.shellConfig));
+      expect(
+        shell.isOpen(closed),
+        isTrue,
+        reason: 'the config screen is about the session, so it needs one',
+      );
+    });
+
+    test('a name matching nothing is still unknown', () async {
+      var shell = _controller();
+      await shell.start('/repo');
+      expect(
+        shell.go(Address(worktree: 'nope', plugin: Address.shellChanges)),
+        GoResult.worktreeUnknown,
+      );
+    });
+
+    test(
+      'selectChanges can name a checkout other than the current one',
+      () async {
+        var shell = _controller();
+        await shell.start('/repo');
+        var closed = shell.closedWorktrees.first;
+
+        // How the explorer reaches a row that is not where the window is.
+        shell.selectChanges(closed);
+
+        expect(shell.addressedWorktree, closed);
+        expect(shell.isOpen(closed), isFalse);
+      },
+    );
+  });
+
+  group('running a config remembers what it said about changes', () {
+    late Directory repo;
+    late File cacheFile;
+
+    setUp(() {
+      repo = Directory.systemTemp.createTempSync('fw-shell-changes');
+      File(p.join(repo.path, 'tool', 'flutterware.dart'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('void main() {}');
+      cacheFile = File(p.join(repo.path, '.cache', 'worktrees.json'));
+      _currentListing = 'worktree ${repo.path}\nbranch refs/heads/main\n';
+      addTearDown(() {
+        _currentListing = _listing;
+        repo.deleteSync(recursive: true);
+      });
+    });
+
+    /// A fresh instance each call — so what a test reads back has come off the
+    /// file, not out of the object the shell wrote into.
+    WorktreeFactsStore store() =>
+        WorktreeFactsStore.open(repo.path, at: cacheFile);
+
+    test('the executed value is cached, and reads back fresh', () async {
+      // **One writer.** This is the only place the GUI runs a config, so it is
+      // the only place that can record what the config produced — which is how
+      // a checkout nobody has opened gets ranked by real rules later.
+      var shell = _controller(
+        manifest:
+            '{"version":1,"plugins":[],'
+            '"changes":{"attention":["db/**"],"base":"develop"}}',
+        cores: const {},
+        factsStore: store(),
+      );
+      await shell.start(repo.path);
+
+      var resolved = resolveChangesConfig(repo.path, store());
+      expect(resolved.state, ChangesConfigState.fresh);
+      expect(resolved.config?.attention, ['db/**']);
+      expect(resolved.config?.base, 'develop');
+    });
+
+    test('a config that declares nothing is still recorded', () async {
+      // Otherwise a project with no ranking rules looks permanently unknown,
+      // and the header would keep offering to run a config that already ran.
+      var shell = _controller(
+        manifest: '{"version":1,"plugins":[]}',
+        cores: const {},
+        factsStore: store(),
+      );
+      await shell.start(repo.path);
+
+      expect(
+        resolveChangesConfig(repo.path, store()).state,
+        ChangesConfigState.fresh,
+      );
+    });
+
+    test(
+      'a config that failed to run leaves the last good value alone',
+      () async {
+        var shell = _controller(
+          manifest:
+              '{"version":1,"plugins":[],"changes":{"noise":["*.g.dart"]}}',
+          cores: const {},
+          factsStore: store(),
+        );
+        await shell.start(repo.path);
+        expect(resolveChangesConfig(repo.path, store()).config?.noise, [
+          '*.g.dart',
+        ]);
+
+        // Now break it. Nothing is torn down on a failed load, and the rules the
+        // running plugins came from must survive it too.
+        _loader
+          ..manifest = ''
+          ..exitCode = 1;
+        await shell.reloadConfig();
+
+        expect(resolveChangesConfig(repo.path, store()).config?.noise, [
+          '*.g.dart',
+        ]);
+      },
+    );
   });
 }

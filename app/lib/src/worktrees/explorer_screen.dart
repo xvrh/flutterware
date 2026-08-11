@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../shell/worktree.dart';
+import '../changes/change_set.dart';
 import '../shell/worktree_filter.dart';
 import '../ui/theme.dart';
 import 'explorer_row.dart';
@@ -89,6 +90,9 @@ class WorktreeExplorerView extends StatefulWidget {
     this.onRefresh,
     this.onOpen,
     this.onRemove,
+    this.onOpenChanges,
+    this.repoRoot,
+    this.changesLoad,
   });
 
   final List<ExplorerEntry> entries;
@@ -108,6 +112,19 @@ class WorktreeExplorerView extends StatefulWidget {
   /// checkout — [Worktree.isMain] says it cannot be removed, so the row does
   /// not carry the affordance rather than carrying a disabled one.
   final ValueChanged<ExplorerEntry>? onRemove;
+
+  /// Opens the full changes screen for a checkout — the popover's footer and
+  /// the `⌘⇧D` destination. Deliberately separate from [onOpen]: reading what
+  /// a checkout changed must not cost the config subprocess that opening it
+  /// does, which is the whole reason the changes screen is shell-owned.
+  final ValueChanged<ExplorerEntry>? onOpenChanges;
+
+  /// The main checkout, which keys the cached `ChangesConfig` the popovers
+  /// rank by.
+  final String? repoRoot;
+
+  /// Injected for tests, so pumping the explorer never spawns an isolate.
+  final Future<ChangeSet> Function(String path)? changesLoad;
 
   @override
   State<WorktreeExplorerView> createState() => _WorktreeExplorerViewState();
@@ -131,11 +148,18 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
 
   final _scroll = ScrollController();
 
+  /// Which row's changes popover is open, if any.
+  ///
+  /// **One at a time**, unlike [_expanded]. A detail is comparable and a ranked
+  /// file list is not, so the set that makes the explorer worth having would
+  /// make this one unreadable.
+  String? _changesOpenFor;
+
   /// One key per row, so the cursor can be scrolled into view.
   ///
   /// Keyed by path and reused, because a `GlobalKey` that changed identity
   /// every build would rebuild the row's state with it.
-  final _rowKeys = <String, GlobalKey>{};
+  final _rowKeys = <String, GlobalKey<WorktreeRowState>>{};
 
   /// The filter's node, and the screen's key handling — **the same node**.
   ///
@@ -189,8 +213,30 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
           _toggle(entry.worktree.path);
         }
         return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyC:
+        // **A plain letter, and it can be**: the filter field takes every
+        // printable key, so a bare `c` would type. This one is only reached
+        // when the field is empty *and* a cursor exists — which is the state
+        // where the keyboard is driving the list rather than the filter. Any
+        // other time it falls through and types a `c`, which is what the user
+        // meant.
+        if (widget.query.isNotEmpty || _cursor == null) {
+          return KeyEventResult.ignored;
+        }
+        var row = _rowKeys[_cursor]?.currentState;
+        if (row == null) return KeyEventResult.ignored;
+        row.showChanges();
+        return KeyEventResult.handled;
       case LogicalKeyboardKey.escape:
-        // Clears the filter, and only that. Escape with nothing to clear is
+        // The popover first, because it is the thing most recently in the way.
+        // It does not take the focus (see `WorktreeRow`), so nothing else
+        // would close it.
+        if (_openChangesRow() case var row?) {
+          row.hideChanges();
+          _changesOpenFor = null;
+          return KeyEventResult.handled;
+        }
+        // Then the filter, and only that. Escape with nothing to clear is
         // left alone, so whatever the shell does with it still happens.
         if (widget.query.isEmpty) return KeyEventResult.ignored;
         widget.onQueryChanged?.call('');
@@ -217,6 +263,27 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
         : (index + delta).clamp(0, rows.length - 1);
     setState(() => _cursor = rows[next].$1.worktree.path);
     _revealCursor();
+  }
+
+  /// Shuts whichever popover was open before [path]'s takes over.
+  ///
+  /// The framework dismisses a popover on an outside tap, but the tap that
+  /// opens the *next* one is inside that one's anchor — so without this, two
+  /// rows can hold a card open over the list at once. Found by a test rather
+  /// than by reading the primitive.
+  void _closeChangesExcept(String path) {
+    if (_changesOpenFor case var open? when open != path) {
+      _rowKeys[open]?.currentState?.hideChanges();
+    }
+    _changesOpenFor = path;
+  }
+
+  /// The row currently holding a card open, if any. Asked rather than
+  /// remembered — an outside tap closes a popover without telling anybody, so
+  /// [_changesOpenFor] alone would go stale.
+  WorktreeRowState? _openChangesRow() {
+    var state = _rowKeys[_changesOpenFor]?.currentState;
+    return (state?.changesOpen ?? false) ? state : null;
   }
 
   void _revealCursor() {
@@ -309,6 +376,11 @@ class _WorktreeExplorerViewState extends State<WorktreeExplorerView> {
                         onRemove: worktree.isMain || widget.onRemove == null
                             ? null
                             : () => widget.onRemove!.call(entry),
+                        onOpenChanges: () => widget.onOpenChanges?.call(entry),
+                        repoRoot: widget.repoRoot,
+                        changesLoad: widget.changesLoad,
+                        onChangesOpening: () =>
+                            _closeChangesExcept(worktree.path),
                       );
                     },
                   ),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'address.dart';
+import 'changes_config.dart';
 import 'package.dart';
 import 'plugin.dart';
 
@@ -38,10 +39,22 @@ class PluginDeclaration {
 
 /// The decoded manifest.
 class PluginManifest {
-  const PluginManifest(this.plugins, {this.version = manifestVersion});
+  const PluginManifest(
+    this.plugins, {
+    this.version = manifestVersion,
+    this.changes,
+  });
 
   final int version;
   final List<PluginDeclaration> plugins;
+
+  /// What the project says about ranking its own changes, or null when it says
+  /// nothing.
+  ///
+  /// **Not a plugin**, for the same reason the screen it feeds is not one: it
+  /// has to be readable for a worktree with no session, which is precisely a
+  /// worktree whose plugins have not been resolved.
+  final ChangesConfig? changes;
 
   /// Every package any plugin names, in declaration order, deduplicated.
   ///
@@ -72,6 +85,7 @@ class PluginManifest {
   Map<String, Object?> toJson() => {
     'version': version,
     'plugins': [for (var p in plugins) p.toJson()],
+    'changes': ?changes?.toJson(),
   };
 
   static PluginManifest fromJson(Map<String, Object?> json) {
@@ -99,15 +113,24 @@ class PluginManifest {
       if (!seen.add(plugin.id)) {
         throw FormatException('Plugin id "${plugin.id}" is declared twice.');
       }
-      if (plugin.id == Address.shellConfig) {
+      if (Address.shellOwned.contains(plugin.id)) {
         throw FormatException(
-          'Plugin id "${Address.shellConfig}" is reserved for the shell\'s own '
-          'config screen.',
+          'Plugin id "${plugin.id}" is reserved for one of the shell\'s own '
+          'screens.',
         );
       }
     }
 
-    return PluginManifest(plugins, version: version);
+    return PluginManifest(
+      plugins,
+      version: version,
+      changes: switch (json['changes']) {
+        Map<Object?, Object?> it => ChangesConfig.fromJson(
+          it.cast<String, Object?>(),
+        ),
+        _ => null,
+      },
+    );
   }
 
   static PluginManifest parse(String source) =>
@@ -118,6 +141,23 @@ class PluginManifest {
 class FlutterwareConfig {
   final _plugins = <Plugin>[];
 
+  ChangesConfig? _changes;
+
+  /// Declares how this project's changes should be ranked. See [ChangesConfig].
+  ///
+  /// **Refused twice rather than merged or overwritten.** Two calls would be a
+  /// config with two answers, and either resolution loses one of them silently
+  /// — which is the failure mode that killed the standalone package list.
+  void changes(ChangesConfig config) {
+    if (_changes != null) {
+      throw StateError(
+        'fw.changes was called twice. Declare one ChangesConfig with every '
+        'pattern in it.',
+      );
+    }
+    _changes = config;
+  }
+
   /// Registers a plugin. The same class may be used more than once as long as
   /// the instances have distinct ids.
   void use(Plugin plugin) {
@@ -126,13 +166,14 @@ class FlutterwareConfig {
         'Duplicate plugin id "${plugin.id}". Give one of them a distinct id.',
       );
     }
-    // Refused rather than merely discouraged: `fw:///worktrees/<x>/config` is the
-    // shell's own screen for this file, and a plugin able to take that address
-    // could hide the one place that explains why the file did not load.
-    if (plugin.id == Address.shellConfig) {
+    // Refused rather than merely discouraged: `fw:///worktrees/<x>/config` and
+    // `…/changes` are the shell's own screens, and a plugin able to take one of
+    // those addresses could hide the one place that explains why this file did
+    // not load.
+    if (Address.shellOwned.contains(plugin.id)) {
       throw StateError(
-        'Plugin id "${Address.shellConfig}" is reserved for the shell\'s own '
-        'config screen. Give the plugin a dotted, globally unique id.',
+        'Plugin id "${plugin.id}" is reserved for one of the shell\'s own '
+        'screens. Give the plugin a dotted, globally unique id.',
       );
     }
     _plugins.add(plugin);
@@ -141,7 +182,7 @@ class FlutterwareConfig {
   PluginManifest toManifest() => PluginManifest([
     for (var p in _plugins)
       PluginDeclaration(id: p.id, label: p.label, config: p.config),
-  ]);
+  ], changes: _changes);
 }
 
 /// Entry point for a project's `tool/flutterware.dart`:

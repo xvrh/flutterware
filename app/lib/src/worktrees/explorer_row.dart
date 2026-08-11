@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutterware/plugins.dart';
 
+import '../changes/change_set.dart';
+import '../changes/changes_summary.dart';
 import '../plugins/native/dev_stack_results.dart';
 import '../shell/worktree_filter.dart';
 import '../ui/menu.dart';
@@ -41,6 +43,10 @@ class WorktreeRow extends StatefulWidget {
     this.onToggleExpand,
     this.onOpen,
     this.onRemove,
+    this.onOpenChanges,
+    this.repoRoot,
+    this.changesLoad,
+    this.onChangesOpening,
   });
 
   /// Whether the detail is showing below the row.
@@ -66,6 +72,21 @@ class WorktreeRow extends StatefulWidget {
 
   /// Opens the teardown checklist. Null for the primary checkout.
   final VoidCallback? onRemove;
+
+  /// Opens the full changes screen for this checkout — the popover's footer,
+  /// and where `⌘⇧D` goes.
+  final VoidCallback? onOpenChanges;
+
+  /// The main checkout, which keys the cached `ChangesConfig` the popover ranks
+  /// by. Null ranks by the built-in defaults.
+  final String? repoRoot;
+
+  /// Injected for tests, so pumping a row never spawns an isolate.
+  final Future<ChangeSet> Function(String path)? changesLoad;
+
+  /// Fired just before this row's popover opens, so the screen can shut
+  /// whichever one was open.
+  final VoidCallback? onChangesOpening;
 
   /// Whether these columns are drawn at all.
   ///
@@ -111,7 +132,7 @@ class WorktreeRow extends StatefulWidget {
   final VoidCallback? onOpen;
 
   @override
-  State<WorktreeRow> createState() => _WorktreeRowState();
+  State<WorktreeRow> createState() => WorktreeRowState();
 }
 
 const _rowHeight = 52.0;
@@ -215,8 +236,86 @@ const _nameMinWidth = 220.0;
   );
 }
 
-class _WorktreeRowState extends State<WorktreeRow> {
+class WorktreeRowState extends State<WorktreeRow> {
   var _hovered = false;
+
+  /// The changes popover's handle, captured from its anchor builder.
+  ///
+  /// Held so the *screen* can open it: `c` acts on the cursor row, and the
+  /// keyboard has no pointer to put on a trigger. Null until the row has built
+  /// a cell with a bar in it — a checkout in sync has no bar, and correctly no
+  /// popover to open.
+  PopoverController? _changes;
+
+  /// Opens the ranked file list, if this row has one. Called by the explorer's
+  /// `c` binding.
+  void showChanges() {
+    if (_changes == null) return;
+    widget.onChangesOpening?.call();
+    _changes!.open();
+  }
+
+  /// Shuts it, so the screen can keep **one open at a time**.
+  void hideChanges() => _changes?.close();
+
+  /// Whether this row is the one holding a card open.
+  bool get changesOpen => _changes?.isOpen ?? false;
+
+  /// Wraps the fingerprint bar in its popover.
+  ///
+  /// **The bar is the trigger, and that costs the expand gesture ~100 px of
+  /// ~1200.** The whole row is one tap target that expands, so any new target
+  /// is subtracted from it — and the obvious choice, the changes *cell*, would
+  /// subtract the 220 px column whose expanded content is the detail's widest
+  /// element. The bar is right: it is the one thing on the row that already
+  /// means *changes*, so clicking a chart to see what it is made of is a
+  /// learned idiom rather than a new rule; it sits at a fixed x, so unlike a
+  /// hover-revealed glyph it can be aimed at before the pointer arrives; and
+  /// your eye is already on it, because it is what you were reading when the
+  /// question formed. The other 92% of the row still expands.
+  Widget _buildChangesPopover(Widget bar) => Popover(
+    align: PopoverAlign.start,
+    // **It must not take the focus.** The explorer's filter field holds it the
+    // whole time you are on this screen — that is what lets you type to filter
+    // and arrow through rows without reaching for anything. A popover that
+    // grabbed it would stop Down and Up dead, and sweeping several checkouts
+    // with `c ↓ c ↓` is the motivating case, not an edge one. The screen's
+    // Escape closes this instead.
+    autofocus: false,
+    anchor: (context, controller) {
+      _changes = controller;
+      return MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          // The inner detector wins the arena, so this does not also expand
+          // the row underneath it.
+          onTap: () {
+            // **One at a time, unlike the detail.** Expanded rows stay
+            // expanded because comparing checkouts is what the explorer is
+            // for; a file list is not comparable, and two of them overlapping
+            // the list is clutter rather than a comparison.
+            if (!controller.isOpen) widget.onChangesOpening?.call();
+            controller.toggle();
+          },
+          child: Tooltip(
+            message: 'Which files changed  ·  c',
+            waitDuration: const Duration(milliseconds: 500),
+            child: bar,
+          ),
+        ),
+      );
+    },
+    content: (context, controller) => ChangesSummaryCard(
+      worktreePath: widget.path ?? '',
+      repoRoot: widget.repoRoot,
+      git: widget.facts.git,
+      load: widget.changesLoad,
+      onOpen: () {
+        controller.close();
+        widget.onOpenChanges?.call();
+      },
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -274,6 +373,7 @@ class _WorktreeRowState extends State<WorktreeRow> {
                             child: _ChangesCell(
                               fact: facts.git,
                               scale: widget.scale,
+                              popover: _buildChangesPopover,
                             ),
                           ),
                         if (afford.stack)
@@ -556,10 +656,15 @@ class _Tag extends StatelessWidget {
 }
 
 class _ChangesCell extends StatelessWidget {
-  const _ChangesCell({required this.fact, required this.scale});
+  const _ChangesCell({required this.fact, required this.scale, this.popover});
 
   final Fact<GitFacts> fact;
   final double scale;
+
+  /// Wraps the fingerprint bar in its trigger. Null in a row that has no
+  /// popover to offer — and never reached at all when there is no bar, which is
+  /// what a checkout in sync draws.
+  final Widget Function(Widget bar)? popover;
 
   @override
   Widget build(BuildContext context) {
@@ -626,7 +731,10 @@ class _ChangesCell extends StatelessWidget {
         dim: fact.isDim,
         top: Row(
           children: [
-            _Fingerprint(shape: shape, scale: scale),
+            // A row with nothing to show draws no bar, and therefore has no
+            // trigger — which is correct: there is nothing to open.
+            popover?.call(_Fingerprint(shape: shape, scale: scale)) ??
+                _Fingerprint(shape: shape, scale: scale),
             const Gap(FwSpacing.md),
             Flexible(
               child: Text(
