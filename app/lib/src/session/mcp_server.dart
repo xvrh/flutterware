@@ -246,8 +246,9 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
         'One transaction against the running app — the loop tool for live '
         'work: edit code, hot-reload (flutterware_invoke run.reload), then '
         'act or observe here. Every reply is one settled moment of the app: '
-        'screenshot, visible texts, what it printed since the last step — '
-        'nothing to correlate. Targets resolve inside the app at act time, '
+        'screenshot, visible texts, what it printed since the last step, and '
+        'what the human tapped since the last step (`human`) — nothing to '
+        'correlate. Targets resolve inside the app at act time, '
         'retry through route transitions, and are refused loudly with the '
         'screen they were refused on; a silent wrong-target tap cannot '
         'happen. `settled: false` means the budget ran out with the app '
@@ -275,7 +276,9 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               'Bare text matches a visible string. JSON names the rest: '
               '{"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, '
               '{"within": {"scope": …, "child": …}}, '
-              '{"nth": {"target": …, "index": …}}.',
+              '{"nth": {"target": …, "index": …}}. A reply text ending in … '
+              'was truncated — target it with {"containing": <prefix>}, not '
+              'the truncated string.',
         ),
         'text': Schema.string(
           description: 'What enterText types, as one editing value.',

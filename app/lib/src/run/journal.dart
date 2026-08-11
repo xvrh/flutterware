@@ -11,10 +11,11 @@ import 'handle.dart';
 /// previous hops did (a CLI invocation is a fresh process), and a human
 /// reviews what the AI clicked while they were not looking.
 ///
-/// Tool steps only: acts, reloads, restarts. The format leaves room for
-/// `actor: human` entries, but recording human pointer activity is
-/// deliberately not built — the workflow this serves needs "where are we
-/// now", which is `observe`, not a replay of how the human got there.
+/// Tool steps — acts, reloads, restarts — plus the human's taps between
+/// them: the guest records pointer-ups (`HumanActions`), they ride the next
+/// act reply as a since-last-step delta, and land here as `actor: human`
+/// entries ahead of the step that carried them. No screenshot on those; the
+/// step that follows photographs the screen they produced.
 class JournalEntry {
   JournalEntry({
     required this.at,

@@ -764,6 +764,7 @@ class RunActResult implements PluginResult, ProducesArtifacts {
     this.frames,
     this.framesEnabled,
     this.lifecycle,
+    this.human,
     this.texts,
     this.tree,
     this.nodes,
@@ -815,6 +816,11 @@ class RunActResult implements PluginResult, ProducesArtifacts {
   final bool? framesEnabled;
 
   final String? lifecycle;
+
+  /// What the human did in the app since the previous step — `tap "Pay"`,
+  /// oldest first. Recorded by the guest, journaled as `actor: human`; the
+  /// co-driving premise made legible instead of a silently moved screen.
+  final List<String>? human;
 
   /// Every Text and text field on screen after the settle — the projection an
   /// agent reasons about next to the picture.

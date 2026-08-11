@@ -235,12 +235,21 @@ Three things the journal is *for*:
   the step that closes, exactly the transition-events model: what is in the
   buffer at observe time is what happened on the way here.
 
-What it is **not**, in v1: a recording of human actions. The mechanism is
-known and cheap — a global pointer route
-(`GestureBinding.instance.pointerRouter.addGlobalRoute`), hit-test on
-pointer-up, name the nearest nameable widget — but the owner's workflow
-doesn't need it (the AI needs *where we are*, not *how we got here*), so the
-journal format merely leaves room for entries with `actor: human`.
+~~What it is **not**, in v1: a recording of human actions.~~ **Built,
+2026-08-11 (second pass)** — exactly the mechanism noted below, which held:
+a global pointer route (`lib/src/drive/human_actions.dart`), hit-test on
+pointer-up, the nearest nameable widget from the leaf element's ancestor
+walk, in the targets' own spelling (`"Pay"`, `key 'cart'`). Taps and
+long-presses only — a fling is a dozen pointer sequences and none of them is
+a decision. Pull, like everything on this wire: actions buffer in the guest,
+ride the next act/observe reply as a since-last-step `human` delta, and the
+host journals them as `actor: human` entries *ahead* of the step that
+carried them. The verb's own injected pointers arrive on the same global
+route, so the guest suppresses recording while a transaction is in flight —
+without that, every agent tap would journal twice. Capped (100 per interval)
+with a visible `dropped` entry, per the stated-caps rule. The reply also
+carries the sentences (`RunActResult.human`), so the agent reads "the human
+tapped Pay since your last step" instead of diffing screenshots.
 
 Caps stated rather than discovered, per the transition-events precedent:
 entries per run, bytes per artifact, with visible truncation markers.
@@ -289,7 +298,8 @@ this surface anyway.
 
 ## Not in v1
 
-- Human-action recording (door open in the journal format, mechanism noted).
+- ~~Human-action recording (door open in the journal format, mechanism
+  noted).~~ Built 2026-08-11, second pass — see § The journal.
 - Journeys — named, composable, resilient walk-scripts (cockpit §D10). Still
   parked as the last thing; the ladder's middle rung waits for evidence the
   bottom rung is solid.
@@ -406,7 +416,11 @@ suspends harder or sooner than the simulator does.
    including settle. One honest artifact of that speed: the Steps strip
    polls at 700ms, so the in-flight screenshot showed three steps where the
    journal held five — lag a human never sees and a 2-second robot does.
-   Findings on the strip itself await the owner's eyes on the running app.
+   **Closed, 2026-08-11 (second pass)**: the Steps and Logs tabs now watch
+   their file's directory (the server tracker's pattern) and re-read on the
+   event, debounced 50ms; the poll stays underneath as a slow fallback
+   because a watch can be silently unavailable. Findings on the strip
+   itself await the owner's eyes on the running app.
 
    **Capture's verdict, from evidence:** the debug lane exists already —
    `observe` *is* launch-navigate-photograph, and the loop's screenshots
@@ -460,13 +474,36 @@ Three gaps surfaced, none in the loop itself:
    current address), and not a worktree git knows (the known names listed).
    Verified over the MCP wire against the live window: one `navigate` to
    `fw:///worktrees/<wt>/flutterware.run/<runKey>/steps` landed on the Steps
-   tab of the very run being driven, 1.4s wall. One trade recorded: the
-   handler registers in `main`, so it arrives by hot *restart*, not reload.
+   tab of the very run being driven, 1.4s wall. ~~One trade recorded: the
+   handler registers in `main`, so it arrives by hot *restart*, not
+   reload.~~ **Un-traded, 2026-08-11 (second pass)**: registration moved
+   into the widget tree (`DriveNavigatorScope`, mounted by `ShellApp`),
+   re-registering in `State.reassemble` — so the handler, and any edit to
+   it, arrives with every hot reload, the cadence the rest of the loop
+   already moves at. Both entry points dropped their `main` calls.
 3. **The Logger panel makes `texts` expensive.** Each visible log row
    contributes its full text, and daemon-protocol rows run to hundreds of
    characters — an observe on the Logger screen is ~99 texts, several of
    them essays. Not wrong, but a per-string cap (with an ellipsis) would
-   keep the worst screen from taxing every reply. Undecided; needs a number.
+   keep the worst screen from taxing every reply. ~~Undecided; needs a
+   number.~~ **200, 2026-08-11 (second pass)** — `visibleTextCap` in
+   `resolve.dart`, at the source, so the reply, the refusal messages and
+   the artifacts all tell the same bounded story. Ordinary UI copy passes
+   whole; only essays truncate. The one trap — an agent re-targeting the
+   truncated string — is taught in both tool descriptions: a text ending
+   in `…` is targeted with `{"containing": <prefix>}`.
+
+A fourth gap surfaced by the second pass's own dogfood (2026-08-11):
+**selection was machine-global, and co-driving made that an addressing
+hole.** With the owner's Studio live in one worktree and an agent's in
+another, `_selectApp` saw two `macos/lib/main_dev.dart` runs that no
+device/entrypoint argument could tell apart — every act, reload and stop
+refused. The handle list itself is machine-global *on purpose* — device
+occupancy and the desk name which worktree holds what, and a first
+blanket-scoping attempt broke exactly that test. The same day, the rail/desk
+split (#94) landed `ownHandles`/`isMine` as the general rule — the rail
+lists your runs, the desk jumps to everyone else's — and `_selectApp` now
+selects from `ownHandles`: only this checkout's runs are drivable subjects.
 
 The agent-facing documentation now lives where the next agent starts:
 `CLAUDE.md` gained "Driving the running GUI (the agent inner loop)" — the
@@ -567,4 +604,5 @@ waking a suspended app from outside is the OS's call, not ours.
   of building it against the panel.
 - The promoted MCP tool's exact shape (one `act` tool vs. `act`+`observe`) —
   decide with the first real agent transcript in hand.
-- Human-action entries in the journal — door open, mechanism noted, no date.
+- ~~Human-action entries in the journal — door open, mechanism noted, no
+  date.~~ Built, 2026-08-11 second pass — see § The journal.

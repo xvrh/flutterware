@@ -87,12 +87,12 @@ Run one plugin action. Argument keys are the parameter ids reported by flutterwa
 
 ### `flutterware_act`
 
-One transaction against the running app — the loop tool for live work: edit code, hot-reload (flutterware_invoke run.reload), then act or observe here. Every reply is one settled moment of the app: screenshot, visible texts, what it printed since the last step — nothing to correlate. Targets resolve inside the app at act time, retry through route transitions, and are refused loudly with the screen they were refused on; a silent wrong-target tap cannot happen. `settled: false` means the budget ran out with the app still animating — normal for a spinner, act anyway. Needs an app launched by flutterware (run.launch); every step lands in the run's journal, reviewable in the GUI's Steps tab. On a phone, keep the app in the foreground: iOS suspends a backgrounded app and it answers nothing until somebody brings it back — you get a timeout saying exactly that. A hidden desktop window and a backgrounded Android app both drive fine. For flows expressible headlessly, scenarios are milliseconds and deterministic — reach for this tool when it must be the real thing: real backend, real data, real device, or the flutterware GUI itself.
+One transaction against the running app — the loop tool for live work: edit code, hot-reload (flutterware_invoke run.reload), then act or observe here. Every reply is one settled moment of the app: screenshot, visible texts, what it printed since the last step, and what the human tapped since the last step (`human`) — nothing to correlate. Targets resolve inside the app at act time, retry through route transitions, and are refused loudly with the screen they were refused on; a silent wrong-target tap cannot happen. `settled: false` means the budget ran out with the app still animating — normal for a spinner, act anyway. Needs an app launched by flutterware (run.launch); every step lands in the run's journal, reviewable in the GUI's Steps tab. On a phone, keep the app in the foreground: iOS suspends a backgrounded app and it answers nothing until somebody brings it back — you get a timeout saying exactly that. A hidden desktop window and a backgrounded Android app both drive fine. For flows expressible headlessly, scenarios are milliseconds and deterministic — reach for this tool when it must be the real thing: real backend, real data, real device, or the flutterware GUI itself.
 
 | argument | required | |
 |---|---|---|
 | `verb` | yes | tap \| longPress \| drag \| scrollTo \| enterText \| back \| wait \| observe \| navigate. observe is the act-less transaction — the opening move, and the call after a reload. |
-| `target` | no | Bare text matches a visible string. JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. |
+| `target` | no | Bare text matches a visible string. JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. A reply text ending in … was truncated — target it with {"containing": <prefix>}, not the truncated string. |
 | `text` | no | What enterText types, as one editing value. |
 | `route` | no | For navigate — needs the app to have registered a navigation handler. |
 | `dx` | no | Drag distance, logical px. |
@@ -560,6 +560,7 @@ settleMs: int?
 frames: int?
 framesEnabled: bool?   # False when the platform has the window hidden or occluded: every frame was forced, and what a human sees on screen may lag what these fields describe.
 lifecycle: String?
+human: List<String>?   # What the human did in the app since the previous step — `tap "Pay"`, oldest first.
 texts: List<String>?   # Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.
 tree: Map<String, Object?>?   # The widget tree, when asked for.
 nodes: int?
@@ -581,7 +582,7 @@ note: String?
 | `device` | choice | no | — | Which device the app is on; the only running app when omitted |
 | `entrypoint` | string | no | — | Package-relative path, when one device is running more than one |
 | `verb` | choice | yes | — | What to do |
-| `target` | string | no | — | What to act on. Bare text matches a visible string; JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. Resolved inside the app at act time, and refused loudly on zero or several matches — never a silent wrong-target tap. |
+| `target` | string | no | — | What to act on. Bare text matches a visible string; JSON names the rest: {"key": …}, {"label": …}, {"tooltip": …}, {"containing": …}, {"within": {"scope": …, "child": …}}, {"nth": {"target": …, "index": …}}. Resolved inside the app at act time, and refused loudly on zero or several matches — never a silent wrong-target tap. A reply text ending in … was truncated: target it with {"containing": <prefix>}. |
 | `text` | string | no | — | What enterText types, as one editing value |
 | `dx` | string | no | — | Horizontal drag distance, logical pixels |
 | `dy` | string | no | — | Vertical drag distance. Negative moves the finger up the screen, the touch convention. |
@@ -620,6 +621,7 @@ settleMs: int?
 frames: int?
 framesEnabled: bool?   # False when the platform has the window hidden or occluded: every frame was forced, and what a human sees on screen may lag what these fields describe.
 lifecycle: String?
+human: List<String>?   # What the human did in the app since the previous step — `tap "Pay"`, oldest first.
 texts: List<String>?   # Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.
 tree: Map<String, Object?>?   # The widget tree, when asked for.
 nodes: int?
@@ -672,6 +674,7 @@ settleMs: int?
 frames: int?
 framesEnabled: bool?   # False when the platform has the window hidden or occluded: every frame was forced, and what a human sees on screen may lag what these fields describe.
 lifecycle: String?
+human: List<String>?   # What the human did in the app since the previous step — `tap "Pay"`, oldest first.
 texts: List<String>?   # Every Text and text field on screen after the settle — the projection an agent reasons about next to the picture.
 tree: Map<String, Object?>?   # The widget tree, when asked for.
 nodes: int?

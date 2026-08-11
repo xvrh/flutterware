@@ -175,6 +175,59 @@ void main() {
     expect(readJournal(handle).single.error, contains('drive guest'));
   });
 
+  test('human actions ride the reply, and journal ahead of the step', () async {
+    core.debugAct = (handle, args) async => {
+      'step': {
+        'verb': 'observe',
+        'settle': {'settled': true, 'elapsedMs': 50},
+      },
+      'human': [
+        {'at': '2026-08-11T10:00:00.000Z', 'verb': 'tap', 'target': '"Pay"'},
+        {
+          'at': '2026-08-11T10:00:02.000Z',
+          'verb': 'longPress',
+          'target': "key 'cart'",
+        },
+      ],
+      'texts': <String>[],
+    };
+
+    var result = (await core.invoke('observe'))! as RunActResult;
+
+    expect(result.human, ['tap "Pay"', "longPress key 'cart'"]);
+
+    var entries = readJournal(handle);
+    expect(entries, hasLength(3));
+    expect(entries[0].actor, 'human');
+    expect(entries[0].verb, 'tap');
+    expect(entries[0].target, '"Pay"');
+    expect(entries[0].at, '2026-08-11T10:00:00.000Z');
+    expect(entries[1].actor, 'human');
+    expect(entries[1].verb, 'longPress');
+    expect(entries[2].verb, 'observe', reason: 'the step closes the story');
+    expect(entries[2].actor, 'agent');
+  });
+
+  test('a sibling worktree running the same device/entrypoint pair does not '
+      'make selection ambiguous', () async {
+    var sibling = Directory.systemTemp.createTempSync('fw-act-sibling-');
+    addTearDown(() => sibling.deleteSync(recursive: true));
+    RunHandle(
+      worktree: sibling.path,
+      worktreeName: 'sibling',
+      device: 'macos',
+      entrypoint: 'lib/main.dart',
+      launcherPid: pid,
+      startedAt: DateTime.now(),
+    ).publish(runDir.path);
+    core.debugAct = (handle, args) async => {'texts': <String>[]};
+
+    var result = (await core.invoke('observe'))! as RunActResult;
+
+    expect(result.ok, isTrue, reason: 'the sibling run is not a subject here');
+    expect(result.worktree, '~');
+  });
+
   test('a hidden window is said out loud', () async {
     core.debugAct = (handle, args) async => {
       'step': {

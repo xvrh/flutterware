@@ -2378,6 +2378,13 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
       },
       <String, Object?>{
+        'name': 'human',
+        'type': 'List<String>',
+        'optional': true,
+        'doc':
+            'What the human did in the app since the previous step — `tap "Pay"`, oldest first.',
+      },
+      <String, Object?>{
         'name': 'texts',
         'type': 'List<String>',
         'optional': true,

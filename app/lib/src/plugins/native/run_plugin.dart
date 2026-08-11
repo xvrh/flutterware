@@ -880,6 +880,46 @@ class _Picture extends StatelessWidget {
   }
 }
 
+/// Re-reads a file-backed tab the moment its file changes.
+///
+/// A watch on the file's directory (the pattern the server tracker uses),
+/// debounced because one step is several writes, with a poll underneath: a
+/// watch can be unavailable (directory not there yet, filesystem without
+/// events) and a tab that silently stopped updating would read as a dead run.
+/// The poll runs slow when the watch is live and at the watchless tabs' old
+/// cadence when it is not.
+class _FileRefresh {
+  _FileRefresh(String? path, this.onChanged) {
+    if (path != null) {
+      var directory = File(path).parent;
+      if (directory.existsSync()) {
+        _watch = directory.watch().listen((event) {
+          if (!event.path.startsWith(path)) return;
+          _debounce?.cancel();
+          _debounce = Timer(const Duration(milliseconds: 50), onChanged);
+        }, onError: (_) {});
+      }
+    }
+    _poll = Timer.periodic(
+      _watch != null
+          ? const Duration(seconds: 2)
+          : const Duration(milliseconds: 700),
+      (_) => onChanged(),
+    );
+  }
+
+  final void Function() onChanged;
+  StreamSubscription<FileSystemEvent>? _watch;
+  Timer? _debounce;
+  Timer? _poll;
+
+  void dispose() {
+    _debounce?.cancel();
+    _poll?.cancel();
+    unawaited(_watch?.cancel());
+  }
+}
+
 /// What the launcher wrote, with the app's own output separable from the
 /// build's.
 ///
@@ -898,34 +938,35 @@ class _LogsTab extends StatefulWidget {
 class _LogsTabState extends State<_LogsTab> {
   RunLogSource? _only;
   List<RunLogLine> _lines = const [];
-  Timer? _poll;
-
-  /// Slower than a frame and faster than you can read a line.
-  static const _every = Duration(milliseconds: 700);
+  _FileRefresh? _refresh;
 
   @override
   void initState() {
     super.initState();
     _reread();
-    _poll = Timer.periodic(_every, (_) => _reread());
+    _refresh = _FileRefresh(widget.handle.logPath, _reread);
   }
 
   @override
   void didUpdateWidget(_LogsTab old) {
     super.didUpdateWidget(old);
-    if (old.handle.key != widget.handle.key) _reread();
+    if (old.handle.key != widget.handle.key) {
+      _refresh?.dispose();
+      _refresh = _FileRefresh(widget.handle.logPath, _reread);
+      _reread();
+    }
   }
 
   @override
   void dispose() {
-    _poll?.cancel();
+    _refresh?.dispose();
     super.dispose();
   }
 
   /// **Not in `build`.** A log is a file, the panel rebuilds on every probe and
   /// on every frame of any animation above it, and `RunCore.logOf` says in as
-  /// many words why a panel must not read one from there. A timer is the honest
-  /// shape: the file is polled because nothing pushes it.
+  /// many words why a panel must not read one from there. [_FileRefresh] is
+  /// the honest shape: the file changing is what makes this stale.
   void _reread() {
     if (!mounted) return;
     var lines = widget.core.readLogs(widget.handle, only: _only, tail: 2000);
@@ -1048,13 +1089,13 @@ class _StepsTabState extends State<_StepsTab> {
   /// the tab opens in, and returns to when you select the last row.
   int? _selected;
 
-  Timer? _poll;
+  _FileRefresh? _refresh;
 
   @override
   void initState() {
     super.initState();
     _reread();
-    _poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _reread());
+    _refresh = _FileRefresh(journalPathFor(widget.handle), _reread);
   }
 
   @override
@@ -1062,13 +1103,15 @@ class _StepsTabState extends State<_StepsTab> {
     super.didUpdateWidget(old);
     if (old.handle.key != widget.handle.key) {
       _selected = null;
+      _refresh?.dispose();
+      _refresh = _FileRefresh(journalPathFor(widget.handle), _reread);
       _reread();
     }
   }
 
   @override
   void dispose() {
-    _poll?.cancel();
+    _refresh?.dispose();
     super.dispose();
   }
 

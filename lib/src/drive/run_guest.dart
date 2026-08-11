@@ -7,6 +7,7 @@ import '../inspect/guest_images.dart';
 import '../inspect/guest_inspect.dart';
 import '../inspect/guest_logs.dart';
 import 'guest_drive.dart';
+import 'human_actions.dart';
 
 /// Installs the run guest around a user app's `main` — what the generated
 /// run entrypoint calls.
@@ -37,7 +38,13 @@ FutureOr<void> runGuest(FutureOr<void> Function() appMain) {
       rootOf: () => WidgetsBinding.instance.rootElement,
       entryIdOf: () => null,
     )..registerExtensions();
-    GuestDrive(inspector: inspector).registerExtensions();
+    // The other half of co-driving: the human's taps between tool steps ride
+    // the next reply and land in the journal as `actor: human`.
+    var humanActions = HumanActions()..install();
+    GuestDrive(
+      inspector: inspector,
+      humanActions: humanActions,
+    ).registerExtensions();
     return appMain();
   });
 }
