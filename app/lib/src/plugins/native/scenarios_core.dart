@@ -1572,9 +1572,18 @@ class ScenariosCore extends PluginCore {
   }) {
     return ScenarioRunStep(
       index: step['index']! as int,
+      position: step['position'] as String? ?? '',
       parent: step['parent'] as int?,
       branch: step['branch'] as String?,
       name: step['name'] as String?,
+      action: switch (step['action']) {
+        Map<String, Object?> action => ScenarioStepAction(
+          verb: action['verb']! as String,
+          target: action['target'] as String?,
+          kind: action['kind'] as String?,
+        ),
+        _ => null,
+      },
       auto: step['auto'] == true,
       tags: (step['tags'] as List?)?.cast<String>() ?? const [],
       root: host.worktree.path,

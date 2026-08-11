@@ -719,9 +719,13 @@ Future<Map<String, Object?>> _runOne(
     ..createSync(recursive: true);
 
   scenarioRunListener = (capture) {
+    // The verb and what it was aimed at, which is what an automatic capture
+    // is called now that it is not called `step 3`.
+    var did = [?capture.verb, ?capture.target].join(' ').trim();
+    var label = capture.name ?? (did.isEmpty ? 'step ${capture.index}' : did);
     var base =
         '${directory.path}/${capture.index}-'
-        '${_fileSafe(capture.failure != null ? 'failed' : capture.name ?? 'step ${capture.index}')}';
+        '${_fileSafe(capture.failure != null ? 'failed' : label)}';
     var imagePath = '$base.${capture.format == 'raw' ? 'raw' : 'png'}';
     File(imagePath).writeAsBytesSync(capture.bytes);
     // The tree next to the pixels — the step triple's third leg. Written to a
@@ -775,9 +779,13 @@ Future<Map<String, Object?>> _runOne(
     }
     var step = {
       'index': capture.index,
+      'position': capture.position,
       'parent': ?capture.parent,
       'branch': ?capture.branch,
       if (capture.name != null) 'name': capture.name,
+      // How the target was named, beside the name itself: a comparison reads
+      // it to know how far the label can be trusted, since visible text is
+      // translated where a key is the author's own word.
       'auto': capture.name == null,
       if (capture.tags.isNotEmpty) 'tags': capture.tags,
       'image': imagePath,

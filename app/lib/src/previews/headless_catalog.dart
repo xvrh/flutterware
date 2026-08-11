@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
@@ -306,6 +307,114 @@ class HeadlessCatalog {
     }
   }
 
+  /// Photographs **every** entry against one warm guest, handing each frame to
+  /// [onFrame] as it lands.
+  ///
+  /// The same economics as [auditAll] — the first entry pays a cold compile and
+  /// a guest launch, every one after it is a hot reload and a frame — with the
+  /// picture and the tree taken off that frame instead of only the errors.
+  ///
+  /// Measured on `examples/example`: six entries in **5.6s**, of which 4.3s is
+  /// the first entry's cold compile and guest launch; the rest cost
+  /// **197–329ms** each. That is above [auditAll]'s ~120ms because this
+  /// photographs and reads a tree where that only asks what the build
+  /// reported, and it is the number a comparison's per-entry budget is drawn
+  /// against.
+  ///
+  /// **Streamed, and it has to be.** A phone-sized frame is ~2.5MB of rgba8888,
+  /// so a 200-entry catalog is half a gigabyte if the batch keeps what it
+  /// renders. [onFrame] is therefore required rather than optional and the
+  /// bytes are not retained here: a comparison hashes, diffs and files each
+  /// frame as it arrives, and the caller that wants them all in memory has to
+  /// say so by keeping them.
+  ///
+  /// **Raw, never PNG.** Encoding is ~80% of a 1× capture's cost and a
+  /// comparison reads pixels; only the handful of pictures that reach a screen
+  /// are ever encoded. That is also why this does not go through [observe],
+  /// which writes a file.
+  ///
+  /// An entry the compiler refuses is reported in [CatalogBatch.failed] rather
+  /// than thrown: on a comparison's base side that is "it was already broken",
+  /// which is a result, and one refusal must not cost the other 212 frames.
+  Future<CatalogBatch> captureAll({
+    required Future<void> Function(CatalogFrame frame) onFrame,
+    List<String>? entryIds,
+    CaptureViewport viewport = CaptureViewport.panel,
+    bool wantTree = true,
+  }) async {
+    var (daemon, ready) = await CompilerDaemonClient.connect(
+      dartExecutable: dartExecutable,
+      config: config,
+    );
+    _GuestSession? guest;
+    try {
+      var quarantined = [
+        for (var broken in ready.quarantined)
+          if (entryIds == null || entryIds.contains(broken.entry.id)) broken,
+      ];
+      var servable = [
+        for (var entry in ready.entries)
+          if (entryIds == null || entryIds.contains(entry.id)) entry,
+      ];
+
+      var captured = <String>[];
+      var failed = {
+        for (var broken in quarantined) broken.entry.id: broken.error,
+      };
+
+      for (var entry in servable) {
+        if (guest == null) {
+          var compiled = await daemon.select(entry.id, full: true);
+          if (!compiled.ok) {
+            failed[entry.id] = compiled.error ?? 'did not compile';
+            continue;
+          }
+          guest = await _GuestSession.start(
+            hostPath: ready.hostPath,
+            assetsDir: ready.assetsDir,
+            icuData: ready.icuData,
+            name: ready.sessionId,
+            viewport: viewport,
+          );
+        } else {
+          var compiled = await daemon.select(entry.id);
+          if (!compiled.ok) {
+            failed[entry.id] = compiled.error ?? 'did not compile';
+            continue;
+          }
+          await guest.reload(compiled.dill!);
+        }
+
+        // The picture *is* the settling frame, as in [observe]: nothing here
+        // has to be read before it is taken, so a separate settle would draw a
+        // second frame per entry for nothing.
+        var (image, settled) = await guest.captureImage(
+          pixelRatio: viewport.pixelRatio,
+        );
+        var tree = wantTree ? await guest.readTree(entry.id) : null;
+        var errors = await guest.readErrors(entry.id);
+        captured.add(entry.id);
+        await onFrame(
+          CatalogFrame(
+            entry: entry,
+            rgba: image.getBytes(order: img.ChannelOrder.rgba),
+            width: image.width,
+            height: image.height,
+            tree: tree,
+            errors: errors,
+            settled: settled.settled,
+            seesAnimations: settled.seesAnimations,
+          ),
+        );
+      }
+
+      return CatalogBatch(captured: captured, failed: failed);
+    } finally {
+      await guest?.close();
+      await daemon.close();
+    }
+  }
+
   /// Everything asked about **one** rendered build.
   ///
   /// The point of the whole thing. `tree`, `find`, `at`, `errors` and `logs`
@@ -588,6 +697,75 @@ class CatalogAudit {
   /// What each rendered entry reported, keyed by id. An entry missing from
   /// here is one that failed to compile on its own after the handshake.
   final Map<String, InspectErrors> rendered;
+}
+
+/// One entry's frame, as [HeadlessCatalog.captureAll] hands it over.
+///
+/// Lives exactly as long as the `onFrame` call that receives it: the batch
+/// does not keep [rgba], and a caller that wants it later has to take a copy.
+class CatalogFrame {
+  CatalogFrame({
+    required this.entry,
+    required this.rgba,
+    required this.width,
+    required this.height,
+    required this.tree,
+    required this.errors,
+    this.settled = true,
+    this.seesAnimations = true,
+  });
+
+  final CatalogEntry entry;
+
+  /// rgba8888 rows, [width]×[height]×4 — the composited frame, undecoded and
+  /// unencoded.
+  final Uint8List rgba;
+
+  final int width;
+  final int height;
+
+  /// The tree taken off the same frame, or null when the caller said it did
+  /// not want one. Same build as the pixels, by construction rather than by
+  /// luck — the whole point of [HeadlessCatalog.observe]'s one-render rule.
+  final InspectTree? tree;
+
+  /// What the entry threw while building. A picture with errors is still a
+  /// picture, and on a comparison's base side it is often the answer.
+  final InspectErrors errors;
+
+  /// Whether everything had stopped moving when the shutter fired.
+  ///
+  /// False for a preview that animates forever — a spinner, a shimmer. The
+  /// picture is real; what it is *not* is reproducible, and a comparison that
+  /// reported the resulting difference as a change would be blaming the branch
+  /// for the clock.
+  final bool settled;
+
+  /// Whether the guest could report animations at all.
+  ///
+  /// False for one built from a `package:flutterware` that predates the field —
+  /// which is the base side of a comparison against a checkout older than this
+  /// change. It settles for images only, so its frames can be mid-transition
+  /// while the other side's are not: the two sides differ by their *tooling*,
+  /// and saying so is the only thing that separates that from a finding.
+  final bool seesAnimations;
+}
+
+/// What a whole batch managed to photograph.
+///
+/// Carries no pixels: they went to `onFrame` as they were taken. This is the
+/// index of what happened, which is all that is left to say afterwards.
+class CatalogBatch {
+  CatalogBatch({required this.captured, required this.failed});
+
+  /// Entry ids photographed, in the order they were.
+  final List<String> captured;
+
+  /// Entry id → why nothing was photographed of it. A quarantined entry and
+  /// one that failed its own compile land here alike: the difference matters
+  /// to the compiler and not to a comparison, which reports both as "this side
+  /// could not render it".
+  final Map<String, String> failed;
 }
 
 /// What the compiler could and could not build.
@@ -1016,6 +1194,18 @@ class _GuestSession {
     return values.isEmpty ? declared : await settledKnobs(entryId);
   }
 
+  /// The guest's next frame, decoded and not written anywhere.
+  ///
+  /// What [capture] does minus the PNG: a batch comparing pixels never wants
+  /// the file, and encoding is ~80% of what a 1× capture costs.
+  /// The frame, and what the guest could say about it having stopped moving.
+  Future<(img.Image, ({bool settled, bool seesAnimations}))> captureImage({
+    double pixelRatio = 1,
+  }) async {
+    var settled = await _settle();
+    return (await _capture.capture(pixelRatio: pixelRatio), settled);
+  }
+
   /// Asks the guest to write its next frame, and waits for the ack.
   Future<File> capture(
     String output, {
@@ -1031,7 +1221,7 @@ class _GuestSession {
     /// Logical-to-physical, for turning either of the above into pixels.
     double pixelRatio = 1,
   }) async {
-    await _settleImages();
+    await _settle();
     var image = await _capture.capture(
       crop: crop,
       annotate: annotate,
@@ -1068,20 +1258,43 @@ class _GuestSession {
   /// "not registered yet" as "no answer needed" skips the wait on exactly the
   /// capture most likely to race the decode — intermittently, which is how the
   /// missing images stayed invisible in the first place.
-  Future<void> _settleImages() async {
+  /// Draws frames until nothing is still moving, or until the deadline.
+  ///
+  /// Returns false when it gave up — a looping animation never drains, and a
+  /// picture taken in the middle of one is worth having *and* worth labelling.
+  ///
+  /// `transient` is absent from an older guest's reply and reads as zero, which
+  /// is the old behaviour: images only. That is the graceful half of a version
+  /// skew — the base side of a comparison against a checkout that predates the
+  /// field settles for images alone rather than failing to answer at all.
+  Future<({bool settled, bool seesAnimations})> _settle() async {
     var deadline = Stopwatch()..start();
     var zeros = 0;
+    var seesAnimations = true;
     while (deadline.elapsed < const Duration(seconds: 3)) {
       var report = await _vmService.requireExtension(
         'ext.flutterware.imagesSettled',
       );
-      if (report == null) return;
-      if ((report['pending'] as num? ?? 0) == 0) {
-        if (++zeros >= 2) return;
+      if (report == null) return (settled: true, seesAnimations: true);
+      // Absent from a guest built before the field existed. Reported rather
+      // than silently treated as zero: that guest settles for images alone, so
+      // its frames can be taken mid-transition — and a comparison whose two
+      // sides settle by different rules differs for a reason that is not the
+      // branch's.
+      seesAnimations = report.containsKey('transient');
+      var pending = report['pending'] as num? ?? 0;
+      var transient = report['transient'] as num? ?? 0;
+      if (pending == 0 && transient == 0) {
+        // Twice, because one quiet frame is what the frame *before* an
+        // animation starts also looks like.
+        if (++zeros >= 2) {
+          return (settled: true, seesAnimations: seesAnimations);
+        }
       } else {
         zeros = 0;
       }
     }
+    return (settled: false, seesAnimations: seesAnimations);
   }
 
   Future<void> close() async {

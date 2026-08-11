@@ -89,10 +89,14 @@ class WebAppGenerator {
 // GENERATED — do not edit.
 import 'package:flutter/widgets.dart';
 import 'package:flutter/widget_previews.dart';
+import 'package:flutterware/previews_guest.dart' show withPreviewClock;
 import 'package:flutterware/ui_catalog.dart';
 
 $imports
-void main() {
+// Pinned here for the reason the guest pins it, and pinned *identically*: a
+// page and a panel that disagree about what time it is are two pictures of
+// the same entry that do not match.
+void main() => withPreviewClock(() {
   runApp(
     UICatalog(
       title: ${_literal(title)},
@@ -105,7 +109,7 @@ void main() {
       appBuilder: (context, child) => child,
     ),
   );
-}
+});
 
 // A getter, never a top-level final: the leaves below are widgets, and widgets
 // built once and handed back on every build are the ones that do not rebuild

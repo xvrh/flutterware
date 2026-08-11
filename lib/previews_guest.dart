@@ -12,6 +12,7 @@ library;
 
 export 'src/ui_catalog/guest.dart' show CatalogGuest, CatalogKnobs;
 export 'src/ui_catalog/axes.dart' show CatalogAxes;
+export 'src/ui_catalog/clock.dart' show previewClockOrigin, withPreviewClock;
 export 'src/ui_catalog/guest_keyboard.dart' show GuestKeyboard;
 export 'src/ui_catalog/guest_text_input.dart' show GuestTextInput;
 export 'src/ui_catalog/knob.dart' show KnobDescriptor, KnobKind, KnobReport;

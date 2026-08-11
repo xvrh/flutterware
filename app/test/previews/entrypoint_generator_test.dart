@@ -47,6 +47,34 @@ Widget avatarTileEmpty() => const Placeholder();
   ).readAsStringSync();
   String entrypoint() => File(generator.entrypointPath).readAsStringSync();
 
+  test('the entrypoint pins the clock outside the binding', () {
+    generator.select(members);
+
+    var source = File(generator.entrypointPath).readAsStringSync();
+    // Outside `install`, which is itself outside `ensureInitialized`: the
+    // binding captures `Zone.current` when it sets `onBeginFrame`, so a clock
+    // entered any later would not reach the builds that read it.
+    expect(
+      source,
+      contains(
+        'void main() => withClock(Clock.fixed(DateTime(2026, 1, 1, 9, 41)), '
+        '() => GuestLogs.instance',
+      ),
+    );
+    expect(
+      source.indexOf('withClock('),
+      lessThan(source.indexOf('WidgetsFlutterBinding.ensureInitialized')),
+    );
+    // **`package:clock`, never flutterware's own wrapper.** This file is
+    // compiled against the *target's* `package:flutterware`, which in a
+    // comparison is the base checkout's older copy; a generated call into a
+    // function the framework only just grew fails there, naming a file nobody
+    // wrote. Measured: it broke every preview of every comparison this repo
+    // ran against its own base.
+    expect(source, contains("import 'package:clock/clock.dart';"));
+    expect(source, isNot(contains('withPreviewClock')));
+  });
+
   test('emits the annotation verbatim, never interpreted', () {
     generator.select(members);
     expect(

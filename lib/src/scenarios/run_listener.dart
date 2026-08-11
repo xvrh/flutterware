@@ -9,6 +9,7 @@ import 'motion.dart';
 class ScenarioStepCapture {
   ScenarioStepCapture({
     required this.index,
+    required this.position,
     required this.parent,
     required this.branch,
     required this.name,
@@ -33,6 +34,18 @@ class ScenarioStepCapture {
 
   /// 1-based position in the scenario's capture sequence.
   final int index;
+
+  /// Where this step sits in the scenario's *shape*: the split choices taken
+  /// to reach it, then the count since the last one — `'#2'` on the trunk,
+  /// `'0.1#3'` two splits deep.
+  ///
+  /// A choice is a branch's **index** in its `split`, not its label, so
+  /// renaming a branch leaves every position under it untouched.
+  ///
+  /// [index] counts captures and so shifts for every step after an insertion;
+  /// this shifts only within its own branch segment, which is what makes it
+  /// worth writing down beside the index rather than instead of it.
+  final String position;
 
   /// The [index] of the step this one follows, or null for the first. A
   /// linear scenario chains; a `split` gives one parent several children —
@@ -67,6 +80,10 @@ class ScenarioStepCapture {
   final String? verb;
   final String? target;
 
+  /// How [target] was named — a key, visible text, a type. What a comparison
+  /// reads to know how far it can trust the label: an author's key is theirs
+  /// alone, and visible text is translated, so `tap "Pay"` and `tap "Payer"`
+  /// are one step run under two languages.
   /// What the app did on the way here: everything recorded between the
   /// previous capture and this one, in the order it happened.
   final List<ScenarioEvent> events;

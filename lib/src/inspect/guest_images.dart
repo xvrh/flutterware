@@ -4,7 +4,10 @@ import 'dart:developer' as developer;
 import 'package:flutter/painting.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Answers "has every image this build asked for actually arrived".
+/// Answers "is this frame finished moving".
+///
+/// Two things a capture must not fire in the middle of: an image still
+/// decoding, and an animation still running.
 ///
 /// A capture is a race the images lose: `Image.asset` registers a load during
 /// build, the decode completes asynchronously a few milliseconds later, and a
@@ -44,6 +47,7 @@ class GuestImages {
       return developer.ServiceExtensionResponse.result(
         jsonEncode({
           'pending': PaintingBinding.instance.imageCache.pendingImageCount,
+          'transient': SchedulerBinding.instance.transientCallbackCount,
         }),
       );
     });

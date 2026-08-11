@@ -233,6 +233,7 @@ class ScenarioRunOutcome {
 class ScenarioRunStep {
   ScenarioRunStep({
     required this.index,
+    required this.position,
     required this.auto,
     required this.image,
     required this.format,
@@ -246,6 +247,7 @@ class ScenarioRunStep {
     this.parent,
     this.branch,
     this.name,
+    this.action,
     this.tags = const [],
     this.statusBrightness,
     this.navBrightness,
@@ -270,6 +272,12 @@ class ScenarioRunStep {
   /// 1-based position in the scenario's capture sequence.
   final int index;
 
+  /// Where the step sits in the scenario's *shape* — the `split` choices
+  /// taken to reach it by index, then the count since the last one: `'#2'` on
+  /// the trunk, `'0.1#3'` two splits deep. Unlike [index] it shifts only
+  /// within its own branch when a step is inserted.
+  final String position;
+
   /// The [index] of the step this one follows; null for the scenario's
   /// first. `split` gives one parent several children — these are the flow
   /// graph's edges.
@@ -283,6 +291,10 @@ class ScenarioRunStep {
 
   /// True when nothing named this capture — a collapsible detail step.
   final bool auto;
+
+  /// The verb that produced this capture. What an unnamed step is labelled
+  /// with, in place of its index.
+  final ScenarioStepAction? action;
 
   final List<String> tags;
 
@@ -467,6 +479,30 @@ class ScenarioRunStep {
   final String? failure;
 
   Map<String, Object?> toJson() => _$ScenarioRunStepToJson(this);
+}
+
+/// What a step's verb did — `tap`, and what it acted on.
+///
+/// [target] is already decorated for reading (`#pay`, `"Buy"`); [kind] says
+/// how it was named, which is how much the name can be trusted to stay put —
+/// a key is the author's own word, visible text is translated.
+@JsonSerializable(
+  explicitToJson: true,
+  includeIfNull: false,
+  createFactory: false,
+)
+class ScenarioStepAction {
+  ScenarioStepAction({required this.verb, this.target, this.kind});
+
+  final String verb;
+  final String? target;
+  final String? kind;
+
+  /// `tap #pay`, `back`.
+  @JsonKey(includeToJson: false)
+  String get label => target == null ? verb : '$verb $target';
+
+  Map<String, Object?> toJson() => _$ScenarioStepActionToJson(this);
 }
 
 @JsonSerializable(

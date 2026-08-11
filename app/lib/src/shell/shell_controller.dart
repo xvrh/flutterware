@@ -441,6 +441,31 @@ class ShellController extends ChangeNotifier {
     go(Address(worktree: name, plugin: Address.shellChanges));
   }
 
+  /// Moves to one of the changes screen's tabs, and to what it addresses.
+  ///
+  /// The tab is a segment rather than a query parameter because it is
+  /// *identity*: `changes/previews/demo/card.dart#card` names one preview's
+  /// comparison, and there is nothing that address could mean on another tab.
+  ///
+  /// Distinct from [selectChangesFile], which names a path with no tab in front
+  /// of it — the grammar the file diff had before there were tabs, and which
+  /// still resolves to it. The tabs read anything that is not one of their own
+  /// ids as a path, so both spellings keep working.
+  void selectChangesTab({
+    required String tab,
+    List<String> segments = const [],
+  }) {
+    if (address.worktree case var name?) {
+      go(
+        Address(
+          worktree: name,
+          plugin: Address.shellChanges,
+          segments: [tab, ...segments],
+        ),
+      );
+    }
+  }
+
   /// The plugin whose panel is mounted, or null when the home or config screen
   /// is.
   String? get selectedPluginId {

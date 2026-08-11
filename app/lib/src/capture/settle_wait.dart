@@ -47,6 +47,7 @@ Future<SettleOutcome> waitForSettle(
   Duration quiet = const Duration(milliseconds: 250),
   Duration timeout = const Duration(minutes: 3),
   Duration frameGrace = _frameGrace,
+  void Function(List<String> waiting)? onWaiting,
 }) async {
   var deadline = Stopwatch()..start();
   var quietFor = Stopwatch();
@@ -57,6 +58,7 @@ Future<SettleOutcome> waitForSettle(
         return (settled: true, waitingOn: <String>[]);
       }
     } else {
+      onWaiting?.call(registry.waitingOn);
       quietFor
         ..stop()
         ..reset();
